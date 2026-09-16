@@ -1,0 +1,52 @@
+{
+	"name": "anton-v2",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"scripts": {
+		"dev": "concurrently -k -n api,ui -c blue,magenta \"npm run dev:api\" \"npm run dev:ui\"",
+		"dev:api": "vite dev --host 127.0.0.1 --port 43128 --strictPort",
+		"dev:ui": "vite --config vite.config.ui.ts --host 0.0.0.0 --port 43127 --strictPort",
+		"build": "vite build && vite build --config vite.config.ui.ts",
+		"start": "node dist/server.mjs",
+		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
+		"test": "node --experimental-strip-types --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@flue/react": "^2.0.7",
+		"@flue/runtime": "^2.0.7",
+		"@flue/sdk": "^2.0.7",
+		"@hono/node-server": "^1.19.0",
+		"@libsql/client": "^0.15.9",
+		"@pierre/diffs": "^1.4.2",
+		"@pierre/trees": "1.0.0-beta.6",
+		"@tanstack/react-query": "^5.90.2",
+		"@tanstack/react-router": "^1.131.36",
+		"@xterm/addon-fit": "^0.10.0",
+		"@xterm/xterm": "^5.5.0",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"hono": "^4.7.0",
+		"lucide-react": "^0.544.0",
+		"react": "^19.1.1",
+		"react-dom": "^19.1.1",
+		"tailwind-merge": "^3.3.1",
+		"ws": "^8.18.3"
+	},
+	"devDependencies": {
+		"@flue/cli": "^2.0.7",
+		"@flue/vite": "^2.0.7",
+		"@tailwindcss/vite": "^4.1.13",
+		"@types/node": "^22.10.10",
+		"@types/react": "^19.1.13",
+		"@types/react-dom": "^19.1.9",
+		"@types/ws": "^8.18.1",
+		"@vitejs/plugin-react": "^5.0.2",
+		"concurrently": "^9.2.1",
+		"tailwindcss": "^4.1.13",
+		"typescript": "^7.0.2",
+		"vite": "^8.0.14"
+	}
+}
