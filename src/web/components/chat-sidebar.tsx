@@ -51,6 +51,13 @@ export function ChatSidebar() {
 			</div>
 			<div className="mt-3 px-3 text-xs text-muted-foreground">{project?.repoFullName ?? 'local/anton-v2'}</div>
 			<div className="mt-4 flex-1 overflow-y-auto px-2">
+				{sessionsQuery.isError ? (
+					<p className="px-2 text-sm text-destructive">Could not load chats.</p>
+				) : sessionsQuery.isPending ? (
+					<p className="px-2 text-sm text-muted-foreground">Loading chats…</p>
+				) : sessions.length === 0 ? (
+					<p className="px-2 text-sm text-muted-foreground">No chats yet. Start one to attach the workspace VM.</p>
+				) : null}
 				{Object.entries(grouped).map(([label, items]) =>
 					items.length === 0 ? null : (
 						<section key={label} className="mb-4">

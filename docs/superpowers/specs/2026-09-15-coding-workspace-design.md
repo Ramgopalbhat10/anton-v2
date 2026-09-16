@@ -36,26 +36,28 @@ Success: a returning user opens a session, the VM is ready in seconds (no re-clo
 - **VM:** Modal Sandboxes, filesystem snapshots, Modal Secrets for GitHub tokens. Not Modal Volumes.
 - **Records:** Turso via `@flue/libsql` (Flue `flue_*` tables) plus application tables in the same database.
 - **Blobs:** Tigris (S3) for session logs, agent memory packs, and user artifacts only.
-- **Git / files UI:** `@pierre/diffs` and `@pierre/trees`.
-- **Terminal:** xterm.js attached to a PTY proxied from the Modal sandbox through Hono WebSocket.
+- **Git / files UI:** Pierre PatchDiff for git; a clickable workspace path list + file preview for Files (Pierre FileTree is not the live-VM viewer).
+- **Terminal:** xterm.js attached to a PTY WebSocket on the **UI origin**, not tunneled through the Flue HTTP agent router.
 
 Local fallback when Modal/Turso/Tigris/GitHub/OpenRouter are unset: Flue `local()` sandbox, libSQL file DB, skip blob uploads, skip OAuth (dev user). The production path is Modal + Turso + Tigris.
 
 ## Architecture
 
 ```
-Browser (TanStack Router)
-  ├─ @flue/react ──HTTP/SSE──► Hono /agents/coder/:conversationId
-  ├─ Git / Files REST ────────► Hono /api/vm/:sessionId/*  ──exec/read──► Modal sandbox
-  └─ Terminal WebSocket ──────► Hono /api/vm/:sessionId/pty ────────────► Modal sandbox
+Browser (thin client, same pattern as Cursor agents / Devin)
+  ├─ Chat HTTP/SSE ──► Flue/Hono :43128 /api/agents/coder/:id  ──tools──► sandbox cwd
+  ├─ Git/Files REST ► Flue/Hono /api/vm/:id/{git,fs,file}     ──exec/read► sandbox disk
+  └─ Terminal WS ───► UI Vite :43127 /vm/:id/pty              ──PTY──► bash in sandbox cwd
 
-Hono Node process (must stay alive for in-flight Flue turns)
-  ├─ CodingAgent + useSandbox(modal(snapshot))
+Control plane (must stay alive for in-flight Flue turns)
+  ├─ CodingAgent + one warm sandbox per project
   ├─ GitHub OAuth + GitHub API / gh
   ├─ OpenRouter (model calls stay on the control plane)
-  ├─ Turso (@flue/libsql + app tables)
-  └─ Tigris (logs / memory / artifacts)
+  ├─ Turso (session records only)
+  └─ Tigris (logs / memory / artifacts — never live tree/diff/PTY)
 ```
+
+Cursor, Devin, Codex, and similar coding agents all use this split: the **sandbox disk is the source of truth**. The UI never reconstructs files from chat, object storage, or the LLM. Git is `git` in that tree. The terminal is a real PTY multiplexed over a machine channel. Agent HTTP is only for turns and tools.
 
 Flue requires one live Node owner per agent instance. The UI is not serverless-only. Modal is the VM, not the place we host the web app unless we later deploy this same Node process there.
 
@@ -82,7 +84,7 @@ The shell matches Cursor’s agent web app (`cursor.com/agents/...` and `?app=co
 - **Right VM panel tabs:**
   - **Git:** repo name; `base → current` branch; sub-tabs Diff / Review / Commits. Pierre renders `git diff` / `git show` / `git log` from the sandbox. Empty Diff: “No pushed changes.”
   - **Terminal:** xterm PTY on the sandbox.
-  - **Files:** `@pierre/trees` of the sandbox filesystem; `@pierre/diffs` `File` (or equivalent) for the open file.
+  - **Files:** path list from sandbox `fs` listing; click opens contents via sandbox file read.
 - **Desktop** and **Subscriptions** are not in this slice.
 
 New Chat requires a selected GitHub repo (dialog if none). Opening a session always targets that project’s snapshot lineage.
@@ -103,7 +105,7 @@ Empty / loading / error:
 ### UI units
 
 - `IconRail`, `ChatSidebar`, `Thread` (`useFlueAgent`), `Composer`, `VmPanel`.
-- `GitTab` (Pierre CodeView / FileDiff), `FilesTab` (Pierre FileTree + File), `TerminalTab` (xterm).
+- `GitTab` (Pierre PatchDiff), `FilesTab` (path list + preview), `TerminalTab` (xterm on `/vm/:id/pty`).
 - `RepoPickerDialog`, `GitHubReconnect`.
 
 shadcn primitives: Button, Dialog, Dropdown Menu, Scroll Area, Tooltip, Tabs, Sonner.

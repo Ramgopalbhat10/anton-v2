@@ -7,7 +7,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI.
 - `src/agents/coder.ts` — Coder agent, explorer/tester subagents, `open_pull_request`.
 - `src/app.ts` — Hono route map (sessions, VM proxy, agent mount).
 - `src/db.ts` — Flue conversation persistence (SQLite file).
-- `src/lib/` — sessions, local sandbox, git/fs proxy.
+- `src/lib/` — sessions, local sandbox, git/fs proxy. PTY WebSocket is `vm-ui-plugin.ts` on the UI Vite origin.
 - `src/web/` — TanStack Router UI.
 
 ## Commands

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { after, test } from 'node:test';
-import { gitStatus, listPaths } from '../src/lib/vm-proxy.ts';
+import { gitStatus, listPaths, readWorkspaceFile } from '../src/lib/vm-proxy.ts';
 
 const execFile = promisify(execFileCb);
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-git-'));
@@ -32,4 +32,6 @@ test('gitStatus reports a clean repo with no pushed changes patch', async () => 
 
 	const paths = await listPaths(dir);
 	assert.ok(paths.includes('README.md'));
+	assert.equal(await readWorkspaceFile(dir, 'README.md'), '# changed\n');
+	await assert.rejects(() => readWorkspaceFile(dir, '../escape.txt'));
 });

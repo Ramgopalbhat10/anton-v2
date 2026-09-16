@@ -45,4 +45,13 @@ See `.env.example`. Leave GitHub / Modal / Tigris empty for local mode.
 
 ## Architecture
 
-Flue Vite server (`src/app.ts`) + React 19 UI (`src/web`). Spec: `docs/superpowers/specs/2026-09-15-coding-workspace-design.md`.
+Same machine-channel split as Cursor cloud agents and Devin:
+
+| Surface | Source of truth | Transport |
+| --- | --- | --- |
+| Chat | Flue conversation | HTTP/SSE to the control plane |
+| Git | `git` in the sandbox cwd | REST `/api/vm/:id/git` |
+| Files | sandbox disk | REST `/api/vm/:id/fs` and `/file` |
+| Terminal | PTY in the sandbox | WebSocket `/vm/:id/pty` on the UI origin |
+
+Object storage is not in this path. Tigris is logs/artifacts only. Spec: `docs/superpowers/specs/2026-09-15-coding-workspace-design.md`.
