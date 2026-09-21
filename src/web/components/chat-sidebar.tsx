@@ -42,7 +42,7 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 			<div className="flex h-10 shrink-0 items-center border-b border-border px-3">
 				<div className="truncate text-[13px] font-medium">Anton</div>
 			</div>
-			<div className="px-2 pb-2">
+			<div className="px-2 pb-2 pt-3">
 				<Button
 					className="h-8 w-full justify-start gap-2 px-2 font-normal"
 					variant="outline"

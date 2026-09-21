@@ -32,22 +32,26 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 					{base} → {branch}
 				</div>
 			</div>
-			<div className="flex h-8 shrink-0 items-end gap-1 border-b border-border px-2">
-				{views.map((name) => (
-					<button
-						key={name}
-						type="button"
-						onClick={() => setView(name)}
-						className={cn(
-							'-mb-px flex h-8 items-center border-b px-2 text-[12px]',
-							view === name
-								? 'border-foreground text-foreground'
-								: 'border-transparent text-muted-foreground hover:text-foreground',
-						)}
-					>
-						{name}
-					</button>
-				))}
+			<div className="flex h-10 shrink-0 items-center border-b border-border px-2">
+				<div className="flex h-7 items-center gap-0.5 rounded-lg bg-muted p-0.5" role="tablist" aria-label="Git">
+					{views.map((name) => (
+						<button
+							key={name}
+							type="button"
+							role="tab"
+							aria-selected={view === name}
+							onClick={() => setView(name)}
+							className={cn(
+								'flex h-6 items-center rounded-md px-2.5 text-[12px]',
+								view === name
+									? 'bg-background text-foreground shadow-sm'
+									: 'text-muted-foreground hover:text-foreground',
+							)}
+						>
+							{name}
+						</button>
+					))}
+				</div>
 			</div>
 			<div className="min-h-0 flex-1 overflow-auto">
 				{view === 'Commits' ? (
