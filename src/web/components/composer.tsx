@@ -2,6 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 
 export function Composer({
@@ -20,12 +29,11 @@ export function Composer({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
-	const model = session.data?.session.model ?? models.data?.models[0]?.id;
-	const label = models.data?.models.find((item) => item.id === model)?.label ?? 'Model';
+	const model = session.data?.session.model ?? models.data?.models[0]?.id ?? '';
 
 	return (
 		<form
-			className="shrink-0 px-4 pb-4 pt-2"
+			className="mx-auto flex w-full max-w-3xl shrink-0 flex-col gap-2 px-4 pb-4 pt-2"
 			onSubmit={async (event) => {
 				event.preventDefault();
 				const message = text.trim();
@@ -34,44 +42,43 @@ export function Composer({
 				await onSend(message);
 			}}
 		>
-			<div className="mx-auto flex max-w-3xl flex-col rounded-xl border border-border bg-muted">
-				<textarea
-					value={text}
-					onChange={(event) => setText(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === 'Enter' && !event.shiftKey) {
-							event.preventDefault();
-							event.currentTarget.form?.requestSubmit();
-						}
+			<Textarea
+				value={text}
+				onChange={(event) => setText(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === 'Enter' && !event.shiftKey) {
+						event.preventDefault();
+						event.currentTarget.form?.requestSubmit();
+					}
+				}}
+				placeholder="Ask Anton to change the workspace"
+				rows={2}
+			/>
+			<div className="flex items-center justify-between gap-2">
+				<Select
+					value={model}
+					onValueChange={(value) => {
+						void api.setModel(sessionId, value).then(() => {
+							void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+						});
 					}}
-					placeholder="Ask Anton to change the workspace"
-					rows={2}
-					className="w-full resize-none bg-transparent px-3 pt-3 text-[13px] leading-5 outline-none placeholder:text-muted-foreground"
-				/>
-				<div className="flex h-10 items-center justify-between gap-2 px-2">
-					<label className="min-w-0">
-						<span className="sr-only">Model</span>
-						<select
-							className="h-7 max-w-[11rem] truncate rounded-md bg-transparent px-2 text-[12px] text-muted-foreground outline-none hover:bg-accent"
-							value={model}
-							aria-label={`Model ${label}`}
-							onChange={(event) => {
-								void api.setModel(sessionId, event.target.value).then(() => {
-									void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-								});
-							}}
-						>
+				>
+					<SelectTrigger size="sm" aria-label="Model" className="w-44">
+						<SelectValue placeholder="Model" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectGroup>
 							{(models.data?.models ?? []).map((item) => (
-								<option key={item.id} value={item.id}>
+								<SelectItem key={item.id} value={item.id}>
 									{item.label}
-								</option>
+								</SelectItem>
 							))}
-						</select>
-					</label>
-					<Button type="submit" size="icon" disabled={disabled || !text.trim()} aria-label="Send">
-						<ArrowUp className="size-4" />
-					</Button>
-				</div>
+						</SelectGroup>
+					</SelectContent>
+				</Select>
+				<Button type="submit" size="icon-sm" disabled={disabled || !text.trim()} aria-label="Send">
+					<ArrowUp />
+				</Button>
 			</div>
 		</form>
 	);

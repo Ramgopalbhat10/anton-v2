@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api, type Session } from '@/lib/api';
 import { useCreateChat } from '@/lib/create-chat';
 import { cn } from '@/lib/utils';
@@ -44,7 +49,7 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 			</div>
 			<div className="px-2 pb-2 pt-3">
 				<Button
-					className="h-8 w-full justify-start gap-2 px-2 font-normal"
+					className="w-full justify-start"
 					variant="outline"
 					onClick={() => {
 						create.mutate();
@@ -52,26 +57,32 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 					}}
 					disabled={create.isPending}
 				>
-					<Plus className="size-3.5" />
+					<Plus data-icon="inline-start" />
 					New chat
 				</Button>
 			</div>
 			<div className="flex h-7 items-center px-3 text-[11px] text-muted-foreground">
 				<span className="truncate">{project?.repoFullName ?? 'local/anton-v2'}</span>
 			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+			<ScrollArea className="min-h-0 flex-1">
+				<div className="px-2 pb-2">
 				{sessionsQuery.isError ? (
-					<p className="px-2 py-2 text-[13px] text-destructive">Could not load chats.</p>
+					<Alert variant="destructive">
+						<AlertDescription>Could not load chats.</AlertDescription>
+					</Alert>
 				) : sessionsQuery.isPending ? (
 					<div className="flex flex-col gap-1 px-1">
-						<div className="h-7 animate-pulse rounded-md bg-muted" />
-						<div className="h-7 animate-pulse rounded-md bg-muted" />
-						<div className="h-7 animate-pulse rounded-md bg-muted" />
+						<Skeleton className="h-7" />
+						<Skeleton className="h-7" />
+						<Skeleton className="h-7" />
 					</div>
 				) : sessions.length === 0 ? (
-					<p className="px-2 py-2 text-[13px] leading-5 text-muted-foreground">
-						No chats yet. Start one to attach the workspace VM.
-					</p>
+					<Empty className="border-0 px-2">
+						<EmptyHeader>
+							<EmptyTitle>No chats yet</EmptyTitle>
+							<EmptyDescription>Start one to attach the workspace VM.</EmptyDescription>
+						</EmptyHeader>
+					</Empty>
 				) : null}
 				{Object.entries(grouped).map(([label, items]) =>
 					items.length === 0 ? null : (
@@ -79,16 +90,18 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 							<div className="flex h-7 items-center px-2 text-[11px] text-muted-foreground">{label}</div>
 							<div className="flex flex-col gap-0.5">
 								{items.map((session) => (
+								<Button
+									key={session.id}
+									variant={params.sessionId === session.id ? 'secondary' : 'ghost'}
+									size="sm"
+									className="w-full justify-start"
+									asChild
+								>
 									<Link
-										key={session.id}
 										to="/agents/$sessionId"
 										params={{ sessionId: session.id }}
 										search={{ app: 'code' }}
 										onClick={onNavigate}
-										className={cn(
-											'flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-foreground/90 hover:bg-accent',
-											params.sessionId === session.id && 'bg-accent text-foreground',
-										)}
 									>
 										<span
 											className={cn(
@@ -98,14 +111,18 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 										/>
 										<span className="truncate">{session.title}</span>
 									</Link>
+								</Button>
 								))}
 							</div>
 						</section>
 					),
 				)}
-			</div>
+				</div>
+			</ScrollArea>
 			<div className="flex h-10 shrink-0 items-center gap-2 border-t border-border px-3">
-				<div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">A</div>
+				<Avatar className="size-5">
+					<AvatarFallback>A</AvatarFallback>
+				</Avatar>
 				<span className="truncate text-[12px] text-muted-foreground">Anton Dev</span>
 			</div>
 		</aside>

@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -40,41 +44,52 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 
 	return (
 		<div className="grid h-full min-h-0 grid-cols-[200px_minmax(0,1fr)]">
-			<div className="min-h-0 overflow-auto border-r border-border py-2">
-				{listing.isError ? (
-					<p className="px-3 py-2 text-[13px] text-destructive">VM unavailable</p>
-				) : listing.isPending ? (
-					<p className="px-3 py-2 text-[13px] text-muted-foreground">Reading workspace…</p>
-				) : folders.length === 0 ? (
-					<p className="px-3 py-2 text-[13px] text-muted-foreground">Workspace is empty.</p>
-				) : (
-					folders.map(([dir, paths]) => (
-						<div key={dir} className="mb-2">
-							<div className="flex h-6 items-center px-3 text-[11px] text-muted-foreground">
-								{dir === '/' ? 'workspace' : dir}
-							</div>
-							{paths.map((path) => (
-								<button
-									key={path}
-									type="button"
-									onClick={() => setSelected(path)}
-									className={cn(
-										'mx-1 flex h-7 w-[calc(100%-8px)] items-center truncate rounded-md px-2 text-left text-[13px] hover:bg-accent',
-										selected === path && 'bg-accent',
-									)}
-								>
-									{basename(path)}
-								</button>
-							))}
+			<ScrollArea className="min-h-0 border-r border-border">
+				<div className="flex flex-col gap-2 py-2">
+					{listing.isError ? (
+						<p className="px-3 py-2 text-[13px] text-destructive">VM unavailable</p>
+					) : listing.isPending ? (
+						<div className="flex flex-col gap-1 px-2">
+							<Skeleton className="h-7" />
+							<Skeleton className="h-7" />
 						</div>
-					))
-				)}
-			</div>
+					) : folders.length === 0 ? (
+						<Empty className="border-0">
+							<EmptyHeader>
+								<EmptyTitle>Workspace is empty</EmptyTitle>
+							</EmptyHeader>
+						</Empty>
+					) : (
+						folders.map(([dir, paths]) => (
+							<div key={dir} className="flex flex-col gap-0.5">
+								<div className="flex h-6 items-center px-3 text-[11px] text-muted-foreground">
+									{dir === '/' ? 'workspace' : dir}
+								</div>
+								{paths.map((path) => (
+									<Button
+										key={path}
+										type="button"
+										variant={selected === path ? 'secondary' : 'ghost'}
+										size="sm"
+										className={cn('mx-1 justify-start')}
+										onClick={() => setSelected(path)}
+									>
+										<span className="truncate">{basename(path)}</span>
+									</Button>
+								))}
+							</div>
+						))
+					)}
+				</div>
+			</ScrollArea>
 			<div className="flex min-h-0 min-w-0 flex-col">
 				{file.isError ? (
 					<p className="p-4 text-[13px] text-destructive">Could not read file.</p>
 				) : selected && file.isPending ? (
-					<p className="p-4 text-[13px] text-muted-foreground">Opening {selected}…</p>
+					<div className="flex flex-col gap-2 p-4">
+						<Skeleton className="h-4 w-40" />
+						<Skeleton className="h-24" />
+					</div>
 				) : selected && file.data ? (
 					<>
 						<div className="flex h-8 shrink-0 items-center border-b border-border px-3 font-mono text-[11px] text-muted-foreground">
@@ -83,7 +98,12 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 						<pre className="min-h-0 flex-1 overflow-auto p-4 font-mono text-[12px] leading-5">{file.data.contents}</pre>
 					</>
 				) : (
-					<p className="p-4 text-[13px] text-muted-foreground">Select a file from the tree.</p>
+					<Empty className="h-full border-0">
+						<EmptyHeader>
+							<EmptyTitle>No file open</EmptyTitle>
+							<EmptyDescription>Select a file from the tree.</EmptyDescription>
+						</EmptyHeader>
+					</Empty>
 				)}
 			</div>
 		</div>

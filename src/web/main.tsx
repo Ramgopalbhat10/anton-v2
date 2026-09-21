@@ -8,6 +8,7 @@ import {
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import './styles.css';
 
 const queryClient = new QueryClient();
@@ -15,7 +16,9 @@ const queryClient = new QueryClient();
 const rootRoute = createRootRoute({
 	component: () => (
 		<QueryClientProvider client={queryClient}>
-			<AppShell />
+			<TooltipProvider>
+				<AppShell />
+			</TooltipProvider>
 		</QueryClientProvider>
 	),
 });

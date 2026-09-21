@@ -6,6 +6,7 @@ import { ChatSidebar } from '@/components/chat-sidebar';
 import { IconRail } from '@/components/icon-rail';
 import { Thread } from '@/components/thread';
 import { Button } from '@/components/ui/button';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { VmPanel } from '@/components/vm-panel';
 import { api } from '@/lib/api';
 import { useCreateChat } from '@/lib/create-chat';
@@ -15,8 +16,8 @@ const NavContext = createContext<() => void>(() => {});
 function MenuButton() {
 	const openNav = useContext(NavContext);
 	return (
-		<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open chats" onClick={openNav}>
-			<Menu className="size-4" />
+		<Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Open chats" onClick={openNav}>
+			<Menu />
 		</Button>
 	);
 }
@@ -54,16 +55,18 @@ export function HomePage() {
 				<MenuButton />
 			</header>
 			<div className="flex flex-1 items-center justify-center px-6">
-				<div className="flex max-w-sm flex-col items-center gap-3 text-center">
-					<div className="text-[15px] font-medium text-foreground">Open a workspace</div>
-					<p className="text-[13px] leading-5 text-muted-foreground">
-						A new chat attaches the sandbox. Git, files, and the terminal read that machine directly.
-					</p>
+				<Empty>
+					<EmptyHeader>
+						<EmptyTitle>Open a workspace</EmptyTitle>
+						<EmptyDescription>
+							A new chat attaches the sandbox. Git, files, and the terminal read that machine directly.
+						</EmptyDescription>
+					</EmptyHeader>
 					<Button onClick={() => create.mutate()} disabled={create.isPending}>
 						New chat
 					</Button>
 					{create.isError ? <p className="text-[12px] text-destructive">Could not start a chat.</p> : null}
-				</div>
+				</Empty>
 			</div>
 		</div>
 	);
@@ -95,8 +98,8 @@ export function SessionPage() {
 						<MenuButton />
 						<div className="truncate px-2 text-[13px] font-medium">{session.data?.session.title ?? 'Chat'}</div>
 					</div>
-					<Button variant="ghost" size="icon" aria-label={open ? 'Hide workspace' : 'Show workspace'} onClick={() => setOpen(!open)}>
-						<PanelRight className="size-4" />
+					<Button variant="ghost" size="icon-sm" aria-label={open ? 'Hide workspace' : 'Show workspace'} onClick={() => setOpen(!open)}>
+						<PanelRight />
 					</Button>
 				</header>
 				<Thread sessionId={sessionId} />
