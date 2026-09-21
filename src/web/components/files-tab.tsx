@@ -39,25 +39,27 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 	}, [listing.data?.paths]);
 
 	return (
-		<div className="grid h-full min-h-0 grid-cols-[220px_1fr]">
-			<div className="overflow-auto border-r border-border py-2">
+		<div className="grid h-full min-h-0 grid-cols-[200px_minmax(0,1fr)]">
+			<div className="min-h-0 overflow-auto border-r border-border py-2">
 				{listing.isError ? (
-					<p className="p-3 text-sm text-destructive">VM unavailable</p>
+					<p className="px-3 py-2 text-[13px] text-destructive">VM unavailable</p>
 				) : listing.isPending ? (
-					<p className="p-3 text-sm text-muted-foreground">Reading workspace…</p>
+					<p className="px-3 py-2 text-[13px] text-muted-foreground">Reading workspace…</p>
 				) : folders.length === 0 ? (
-					<p className="p-3 text-sm text-muted-foreground">Workspace is empty.</p>
+					<p className="px-3 py-2 text-[13px] text-muted-foreground">Workspace is empty.</p>
 				) : (
 					folders.map(([dir, paths]) => (
 						<div key={dir} className="mb-2">
-							<div className="px-3 py-1 text-xs text-muted-foreground">{dir === '/' ? 'workspace' : dir}</div>
+							<div className="flex h-6 items-center px-3 text-[11px] text-muted-foreground">
+								{dir === '/' ? 'workspace' : dir}
+							</div>
 							{paths.map((path) => (
 								<button
 									key={path}
 									type="button"
 									onClick={() => setSelected(path)}
 									className={cn(
-										'block w-full truncate px-3 py-1 text-left text-sm hover:bg-accent',
+										'mx-1 flex h-7 w-[calc(100%-8px)] items-center truncate rounded-md px-2 text-left text-[13px] hover:bg-accent',
 										selected === path && 'bg-accent',
 									)}
 								>
@@ -68,18 +70,20 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					))
 				)}
 			</div>
-			<div className="min-h-0 min-w-0 overflow-auto">
+			<div className="flex min-h-0 min-w-0 flex-col">
 				{file.isError ? (
-					<p className="p-4 text-sm text-destructive">Could not read file.</p>
+					<p className="p-4 text-[13px] text-destructive">Could not read file.</p>
 				) : selected && file.isPending ? (
-					<p className="p-4 text-sm text-muted-foreground">Opening {selected}…</p>
+					<p className="p-4 text-[13px] text-muted-foreground">Opening {selected}…</p>
 				) : selected && file.data ? (
-					<div className="flex h-full min-h-0 flex-col">
-						<div className="border-b border-border px-3 py-2 font-mono text-xs text-muted-foreground">{selected}</div>
-						<pre className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5">{file.data.contents}</pre>
-					</div>
+					<>
+						<div className="flex h-8 shrink-0 items-center border-b border-border px-3 font-mono text-[11px] text-muted-foreground">
+							{selected}
+						</div>
+						<pre className="min-h-0 flex-1 overflow-auto p-4 font-mono text-[12px] leading-5">{file.data.contents}</pre>
+					</>
 				) : (
-					<p className="p-4 text-sm text-muted-foreground">Select a file from the tree.</p>
+					<p className="p-4 text-[13px] text-muted-foreground">Select a file from the tree.</p>
 				)}
 			</div>
 		</div>

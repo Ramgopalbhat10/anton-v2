@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowUp } from 'lucide-react';
 import { useState } from 'react';
-import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 
 export function Composer({
 	sessionId,
@@ -13,48 +14,62 @@ export function Composer({
 	onSend: (text: string) => Promise<void>;
 }) {
 	const [text, setText] = useState('');
+	const queryClient = useQueryClient();
 	const models = useQuery({ queryKey: ['models'], queryFn: api.models });
 	const session = useQuery({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
 	const model = session.data?.session.model ?? models.data?.models[0]?.id;
+	const label = models.data?.models.find((item) => item.id === model)?.label ?? 'Model';
 
 	return (
 		<form
-			className="border-t border-border p-3"
+			className="shrink-0 px-4 pb-4 pt-2"
 			onSubmit={async (event) => {
 				event.preventDefault();
 				const message = text.trim();
-				if (!message) return;
+				if (!message || disabled) return;
 				setText('');
 				await onSend(message);
 			}}
 		>
-			<div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-xl border border-border bg-muted px-3 py-2">
+			<div className="mx-auto flex max-w-3xl flex-col rounded-xl border border-border bg-muted">
 				<textarea
 					value={text}
 					onChange={(event) => setText(event.target.value)}
-					placeholder="Add a follow up"
+					onKeyDown={(event) => {
+						if (event.key === 'Enter' && !event.shiftKey) {
+							event.preventDefault();
+							event.currentTarget.form?.requestSubmit();
+						}
+					}}
+					placeholder="Ask Anton to change the workspace"
 					rows={2}
-					className="w-full resize-none bg-transparent text-sm outline-none"
+					className="w-full resize-none bg-transparent px-3 pt-3 text-[13px] leading-5 outline-none placeholder:text-muted-foreground"
 				/>
-				<div className="flex items-center justify-between gap-2">
-					<select
-						className="rounded-md bg-background px-2 py-1 text-xs"
-						value={model}
-						onChange={(event) => {
-							void api.setModel(sessionId, event.target.value);
-						}}
-					>
-						{(models.data?.models ?? []).map((item) => (
-							<option key={item.id} value={item.id}>
-								{item.label}
-							</option>
-						))}
-					</select>
-					<Button type="submit" size="sm" disabled={disabled || !text.trim()}>
-						Send
+				<div className="flex h-10 items-center justify-between gap-2 px-2">
+					<label className="min-w-0">
+						<span className="sr-only">Model</span>
+						<select
+							className="h-7 max-w-[11rem] truncate rounded-md bg-transparent px-2 text-[12px] text-muted-foreground outline-none hover:bg-accent"
+							value={model}
+							aria-label={`Model ${label}`}
+							onChange={(event) => {
+								void api.setModel(sessionId, event.target.value).then(() => {
+									void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+								});
+							}}
+						>
+							{(models.data?.models ?? []).map((item) => (
+								<option key={item.id} value={item.id}>
+									{item.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<Button type="submit" size="icon" disabled={disabled || !text.trim()} aria-label="Send">
+						<ArrowUp className="size-4" />
 					</Button>
 				</div>
 			</div>
