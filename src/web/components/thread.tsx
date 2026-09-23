@@ -16,7 +16,7 @@ export function Thread({ sessionId }: { sessionId: string }) {
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
 				<div className="mx-auto flex max-w-3xl flex-col gap-4">
 					{!health.data?.openRouter ? (
-						<Alert>
+						<Alert className="border-transparent bg-muted">
 							<AlertDescription>
 								Set OPENROUTER_API_KEY in .env to run the coding agent. Git, Files, and Terminal still use the local VM.
 							</AlertDescription>
@@ -33,7 +33,7 @@ export function Thread({ sessionId }: { sessionId: string }) {
 					{agent.messages.map((message) => (
 						<article key={message.id} className="text-[13px] leading-5">
 							{message.role === 'user' ? (
-								<div className="rounded-lg border border-border bg-muted px-3 py-2 text-foreground/90">
+								<div className="rounded-lg bg-muted px-3 py-2 text-foreground/90">
 									{message.parts.map((part, index) =>
 										part.type === 'text' ? (
 											<p key={index} className="whitespace-pre-wrap">
@@ -76,7 +76,7 @@ export function Thread({ sessionId }: { sessionId: string }) {
 						<p className="px-1 text-[12px] text-muted-foreground">Working…</p>
 					) : null}
 					{agent.status === 'error' ? (
-						<Alert variant="destructive">
+						<Alert variant="destructive" className="border-transparent bg-destructive/10">
 							<AlertDescription>
 								The agent turn failed. Check OPENROUTER_API_KEY or retry from the composer.
 							</AlertDescription>

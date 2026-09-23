@@ -1,16 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupTextarea,
+} from '@/components/ui/input-group';
 import { api } from '@/lib/api';
 
 export function Composer({
@@ -30,10 +33,11 @@ export function Composer({
 		queryFn: () => api.session(sessionId),
 	});
 	const model = session.data?.session.model ?? models.data?.models[0]?.id ?? '';
+	const label = models.data?.models.find((item) => item.id === model)?.label ?? 'Model';
 
 	return (
 		<form
-			className="mx-auto flex w-full max-w-3xl shrink-0 flex-col gap-2 px-4 pb-4 pt-2"
+			className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 pt-2"
 			onSubmit={async (event) => {
 				event.preventDefault();
 				const message = text.trim();
@@ -42,44 +46,55 @@ export function Composer({
 				await onSend(message);
 			}}
 		>
-			<Textarea
-				value={text}
-				onChange={(event) => setText(event.target.value)}
-				onKeyDown={(event) => {
-					if (event.key === 'Enter' && !event.shiftKey) {
-						event.preventDefault();
-						event.currentTarget.form?.requestSubmit();
-					}
-				}}
-				placeholder="Ask Anton to change the workspace"
-				rows={2}
-			/>
-			<div className="flex items-center justify-between gap-2">
-				<Select
-					value={model}
-					onValueChange={(value) => {
-						void api.setModel(sessionId, value).then(() => {
-							void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-						});
+			<InputGroup className="border-transparent bg-muted dark:bg-muted">
+				<InputGroupTextarea
+					value={text}
+					onChange={(event) => setText(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === 'Enter' && !event.shiftKey) {
+							event.preventDefault();
+							event.currentTarget.form?.requestSubmit();
+						}
 					}}
-				>
-					<SelectTrigger size="sm" aria-label="Model" className="w-44">
-						<SelectValue placeholder="Model" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectGroup>
-							{(models.data?.models ?? []).map((item) => (
-								<SelectItem key={item.id} value={item.id}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectGroup>
-					</SelectContent>
-				</Select>
-				<Button type="submit" size="icon-sm" disabled={disabled || !text.trim()} aria-label="Send">
-					<ArrowUp />
-				</Button>
-			</div>
+					placeholder="Ask Anton to change the workspace"
+					rows={2}
+				/>
+				<InputGroupAddon align="block-end" className="justify-between">
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<InputGroupButton aria-label="Model">
+								{label}
+								<ChevronDown />
+							</InputGroupButton>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="start" side="top">
+							<DropdownMenuRadioGroup
+								value={model}
+								onValueChange={(value) => {
+									void api.setModel(sessionId, value).then(() => {
+										void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+									});
+								}}
+							>
+								{(models.data?.models ?? []).map((item) => (
+									<DropdownMenuRadioItem key={item.id} value={item.id}>
+										{item.label}
+									</DropdownMenuRadioItem>
+								))}
+							</DropdownMenuRadioGroup>
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<InputGroupButton
+						type="submit"
+						variant="default"
+						size="icon-xs"
+						disabled={disabled || !text.trim()}
+						aria-label="Send"
+					>
+						<ArrowUp />
+					</InputGroupButton>
+				</InputGroupAddon>
+			</InputGroup>
 		</form>
 	);
 }

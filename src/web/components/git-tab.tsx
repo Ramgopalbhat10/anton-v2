@@ -39,9 +39,8 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 			<div className="flex h-10 shrink-0 items-center border-b border-border px-2">
 				<ToggleGroup
 					type="single"
-					variant="outline"
 					size="sm"
-					spacing={0}
+					spacing={1}
 					value={view}
 					onValueChange={(next) => {
 						if (next) setView(next as (typeof views)[number]);
@@ -65,7 +64,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 					) : (
 						<ul>
 							{log.map((entry) => (
-								<li key={entry.sha} className="flex h-10 items-center gap-3 border-b border-border px-3">
+								<li key={entry.sha} className="flex h-9 items-center gap-3 rounded-lg px-3 hover:bg-muted">
 									<Badge variant="secondary">{entry.sha.slice(0, 7)}</Badge>
 									<span className="truncate text-[13px]">{entry.subject}</span>
 								</li>

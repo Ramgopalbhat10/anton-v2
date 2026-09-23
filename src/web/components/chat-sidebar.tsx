@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -50,7 +49,7 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 			<div className="px-2 pb-2 pt-3">
 				<Button
 					className="w-full justify-start"
-					variant="outline"
+					variant="secondary"
 					onClick={() => {
 						create.mutate();
 						onNavigate();
@@ -67,9 +66,7 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 			<ScrollArea className="min-h-0 flex-1">
 				<div className="px-2 pb-2">
 				{sessionsQuery.isError ? (
-					<Alert variant="destructive">
-						<AlertDescription>Could not load chats.</AlertDescription>
-					</Alert>
+					<p className="px-2 py-2 text-[13px] text-destructive">Could not load chats.</p>
 				) : sessionsQuery.isPending ? (
 					<div className="flex flex-col gap-1 px-1">
 						<Skeleton className="h-7" />

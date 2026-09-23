@@ -12,7 +12,7 @@ export function IconRail() {
 			<div className="flex h-10 w-full items-center justify-center">
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<Button variant={home ? 'default' : 'outline'} size="icon-sm" asChild>
+						<Button variant={home ? 'default' : 'secondary'} size="icon-sm" asChild>
 							<Link to="/" aria-label="Home">
 								A
 							</Link>
