@@ -1,7 +1,10 @@
 import { execFile as execFileCb } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { openPullRequest } from './github.ts';
+import { gitAuthArgs } from './sandbox.ts';
 
 const execFile = promisify(execFileCb);
 
@@ -87,13 +90,47 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 	return { branch, upstream, ahead, behind, patch, log };
 }
 
-export async function createLocalPullRequest(cwd: string, title: string): Promise<string> {
-	const status = await git(cwd, ['status', '--porcelain']);
-	if (status.stdout.trim()) {
-		await git(cwd, ['add', '-A']);
-		await git(cwd, ['commit', '-m', title || 'feat: anton agent changes']);
+export async function publishPullRequest(input: {
+	cwd: string;
+	title: string;
+	token: string | null;
+	repoFullName: string | null;
+	defaultBranch: string;
+	fetchImpl?: typeof fetch;
+}): Promise<string> {
+	const title = input.title || 'feat: anton agent changes';
+	const dirty = (await git(input.cwd, ['status', '--porcelain'])).stdout.trim();
+	const current = (await git(input.cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+	if (input.token && input.repoFullName && current === input.defaultBranch) {
+		await gitChecked(input.cwd, ['checkout', '-b', `anton/${randomBytes(4).toString('hex')}`]);
 	}
-	const branch = (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
-	const sha = (await git(cwd, ['rev-parse', '--short', 'HEAD'])).stdout.trim();
-	return `local://${branch}/${sha}`;
+	if (dirty) {
+		await gitChecked(input.cwd, ['add', '-A']);
+		await gitChecked(input.cwd, ['commit', '-m', title]);
+	}
+	const branch = (await git(input.cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+	const sha = (await git(input.cwd, ['rev-parse', '--short', 'HEAD'])).stdout.trim();
+	if (!input.token || !input.repoFullName) return `local://${branch}/${sha}`;
+
+	await execFile('git', [...gitAuthArgs(input.token), 'push', '-u', 'origin', 'HEAD'], { cwd: input.cwd });
+	const pr = await openPullRequest(
+		{
+			token: input.token,
+			repoFullName: input.repoFullName,
+			title,
+			head: branch,
+			base: input.defaultBranch,
+			body: 'Opened by Anton.',
+		},
+		input.fetchImpl,
+	);
+	return pr.url;
+}
+
+async function gitChecked(cwd: string, args: string[]): Promise<string> {
+	const result = await git(cwd, args);
+	if (result.code !== 0) {
+		throw new Error(result.stderr || result.stdout || `git ${args.join(' ')} failed`);
+	}
+	return result.stdout;
 }

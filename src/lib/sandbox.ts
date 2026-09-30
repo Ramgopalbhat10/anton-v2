@@ -20,6 +20,34 @@ async function git(cwd: string, args: string[]): Promise<string> {
 	return stdout.trim();
 }
 
+export function gitAuthArgs(token: string | null): string[] {
+	if (!token) return [];
+	return ['-c', `http.extraHeader=Authorization: Bearer ${token}`];
+}
+
+export async function cloneRepo(input: {
+	projectId: string;
+	cloneUrl: string;
+	token: string | null;
+	defaultBranch: string;
+	userName: string;
+	userEmail: string;
+	workspacesRoot?: string;
+}): Promise<string> {
+	const root = input.workspacesRoot ?? workspacesDir();
+	const cwd = path.join(root, input.projectId.replaceAll('/', '__'));
+	if (existsSync(path.join(cwd, '.git'))) return cwd;
+	mkdirSync(root, { recursive: true });
+	await execFile('git', [...gitAuthArgs(input.token), 'clone', '--branch', input.defaultBranch, input.cloneUrl, cwd]);
+	await git(cwd, ['config', 'user.name', input.userName]);
+	await git(cwd, ['config', 'user.email', input.userEmail]);
+	const remote = await git(cwd, ['remote', 'get-url', 'origin']);
+	if (input.token && remote.includes(input.token)) {
+		throw new Error('Token leaked into git remote');
+	}
+	return cwd;
+}
+
 export async function ensureLocalWorkspace(projectId: string, repoFullName: string): Promise<string> {
 	const cwd = path.join(workspacesDir(), projectId.replaceAll('/', '__'));
 	mkdirSync(cwd, { recursive: true });

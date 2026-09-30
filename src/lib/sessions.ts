@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Client } from '@libsql/client';
+import { ensureAccessToken, githubClientFromEnv, markGitHubReconnect } from './auth.ts';
 import { appDb, migrateAppDb } from './db-app.ts';
 import { env } from './env.ts';
+import { GitHubReconnectError } from './github.ts';
+import { publishPullRequest } from './vm-proxy.ts';
 import { DEFAULT_MODEL, isOpenRouterModel } from './models.ts';
 import {
 	attachLocalSandbox,
+	cloneRepo,
 	ensureLocalWorkspace,
 	getWarmSandbox,
 	releaseSandbox,
@@ -74,28 +78,14 @@ export async function ensureDevProject(db: Client = appDb()): Promise<Project> {
 		args: [projectId],
 	});
 	const row = result.rows[0] as Record<string, unknown>;
-	return {
-		id: String(row.id),
-		userId: String(row.user_id),
-		repoFullName: String(row.repo_full_name),
-		defaultBranch: String(row.default_branch),
-		snapshotImageId: row.snapshot_image_id ? String(row.snapshot_image_id) : null,
-		workspacePath: String(row.workspace_path),
-	};
+	return rowToProject(row);
 }
 
 export async function getProject(id: string, db: Client = appDb()): Promise<Project | null> {
 	const result = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] });
 	const row = result.rows[0] as Record<string, unknown> | undefined;
 	if (!row) return null;
-	return {
-		id: String(row.id),
-		userId: String(row.user_id),
-		repoFullName: String(row.repo_full_name),
-		defaultBranch: String(row.default_branch),
-		snapshotImageId: row.snapshot_image_id ? String(row.snapshot_image_id) : null,
-		workspacePath: String(row.workspace_path),
-	};
+	return rowToProject(row);
 }
 
 export function cwdForConversation(conversationId: string): string | undefined {
@@ -148,10 +138,85 @@ export async function createSession(input: {
 	};
 }
 
-export async function listSessions(db: Client = appDb()): Promise<Session[]> {
+export async function createGitHubProject(
+	input: {
+		userId: string;
+		repoFullName: string;
+		defaultBranch: string;
+		token: string | null;
+		userName: string;
+		userEmail: string;
+		cloneUrl?: string;
+		workspacesRoot?: string;
+	},
+	db: Client = appDb(),
+): Promise<Project> {
 	await migrateAppDb(db);
-	await ensureDevProject(db);
-	const result = await db.execute('SELECT * FROM sessions ORDER BY created_at DESC');
+	const existing = await db.execute({
+		sql: 'SELECT * FROM projects WHERE user_id = ? AND repo_full_name = ?',
+		args: [input.userId, input.repoFullName],
+	});
+	const existingRow = existing.rows[0] as Record<string, unknown> | undefined;
+	if (existingRow) return rowToProject(existingRow);
+
+	const id = randomUUID();
+	const workspacePath = await cloneRepo({
+		projectId: id,
+		cloneUrl: input.cloneUrl ?? `https://github.com/${input.repoFullName}.git`,
+		token: input.token,
+		defaultBranch: input.defaultBranch,
+		userName: input.userName,
+		userEmail: input.userEmail,
+		workspacesRoot: input.workspacesRoot,
+	});
+	const now = new Date().toISOString();
+	await db.execute({
+		sql: `INSERT INTO projects (id, user_id, repo_full_name, default_branch, snapshot_image_id, workspace_path, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		args: [id, input.userId, input.repoFullName, input.defaultBranch, null, workspacePath, now],
+	});
+	const project = await getProject(id, db);
+	if (!project) throw new Error('Project not found');
+	return project;
+}
+
+export async function listProjects(userId: string, db: Client = appDb()): Promise<Project[]> {
+	const result = await db.execute({
+		sql: 'SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC',
+		args: [userId],
+	});
+	return result.rows.map((row) => rowToProject(row as Record<string, unknown>));
+}
+
+export async function projectByWorkspace(cwd: string, db: Client = appDb()): Promise<Project | null> {
+	const result = await db.execute({ sql: 'SELECT * FROM projects WHERE workspace_path = ?', args: [cwd] });
+	const row = result.rows[0] as Record<string, unknown> | undefined;
+	return row ? rowToProject(row) : null;
+}
+
+function rowToProject(row: Record<string, unknown>): Project {
+	return {
+		id: String(row.id),
+		userId: String(row.user_id),
+		repoFullName: String(row.repo_full_name),
+		defaultBranch: String(row.default_branch),
+		snapshotImageId: row.snapshot_image_id ? String(row.snapshot_image_id) : null,
+		workspacePath: String(row.workspace_path),
+	};
+}
+
+export async function listSessions(db: Client = appDb(), userId?: string): Promise<Session[]> {
+	await migrateAppDb(db);
+	if (!userId) await ensureDevProject(db);
+	const result = userId
+		? await db.execute({
+				sql: `SELECT sessions.* FROM sessions
+					JOIN projects ON projects.id = sessions.project_id
+					WHERE projects.user_id = ?
+					ORDER BY sessions.created_at DESC`,
+				args: [userId],
+			})
+		: await db.execute('SELECT * FROM sessions ORDER BY created_at DESC');
 	return result.rows.map((row) => rowToSession(row as Record<string, unknown>));
 }
 
@@ -178,6 +243,58 @@ export async function updateSessionModel(id: string, model: string, db: Client =
 
 export async function setSessionPrUrl(id: string, prUrl: string, db: Client = appDb()): Promise<void> {
 	await db.execute({ sql: 'UPDATE sessions SET pr_url = ? WHERE id = ?', args: [prUrl, id] });
+}
+
+export async function openWorkspacePullRequest(
+	cwd: string,
+	title = 'feat: anton agent changes',
+	db: Client = appDb(),
+): Promise<string> {
+	const project = await projectByWorkspace(cwd, db);
+	const local = async () => {
+		const url = await publishPullRequest({
+			cwd,
+			title,
+			token: null,
+			repoFullName: null,
+			defaultBranch: project?.defaultBranch ?? 'main',
+		});
+		if (project) await attachPullRequest(cwd, url, db);
+		return url;
+	};
+	if (!project) return local();
+	const tokenRow = await db.execute({
+		sql: 'SELECT user_id FROM oauth_tokens WHERE user_id = ?',
+		args: [project.userId],
+	});
+	if (!tokenRow.rows[0]) return local();
+	try {
+		const token = await ensureAccessToken(project.userId, db, githubClientFromEnv());
+		const url = await publishPullRequest({
+			cwd,
+			title,
+			token,
+			repoFullName: project.repoFullName,
+			defaultBranch: project.defaultBranch,
+		});
+		await attachPullRequest(cwd, url, db);
+		return url;
+	} catch (error) {
+		if (error instanceof GitHubReconnectError) await markGitHubReconnect(project.userId, db);
+		throw error;
+	}
+}
+
+export async function attachPullRequest(cwd: string, prUrl: string, db: Client = appDb()): Promise<void> {
+	const result = await db.execute({
+		sql: `SELECT sessions.id FROM sessions
+			JOIN projects ON projects.id = sessions.project_id
+			WHERE projects.workspace_path = ? AND sessions.status = 'running'`,
+		args: [cwd],
+	});
+	for (const row of result.rows) {
+		await setSessionPrUrl(String(row.id), prUrl, db);
+	}
 }
 
 export async function stopSession(id: string, db: Client = appDb()): Promise<Session> {

@@ -27,6 +27,7 @@ export async function migrateAppDb(db = appDb()): Promise<void> {
 			access_token TEXT NOT NULL,
 			refresh_token TEXT,
 			expires_at TEXT,
+			needs_reconnect INTEGER NOT NULL DEFAULT 0,
 			FOREIGN KEY (user_id) REFERENCES users(id)
 		);
 		CREATE TABLE IF NOT EXISTS projects (
@@ -61,6 +62,11 @@ export async function migrateAppDb(db = appDb()): Promise<void> {
 			FOREIGN KEY (session_id) REFERENCES sessions(id)
 		);
 	`);
+	const columns = await db.execute('PRAGMA table_info(oauth_tokens)');
+	const names = new Set(columns.rows.map((row) => String(row.name)));
+	if (!names.has('needs_reconnect')) {
+		await db.execute('ALTER TABLE oauth_tokens ADD COLUMN needs_reconnect INTEGER NOT NULL DEFAULT 0');
+	}
 }
 
 export function resetAppDbForTests(): void {
