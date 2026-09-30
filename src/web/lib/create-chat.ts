@@ -6,7 +6,7 @@ export function useCreateChat() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: () => api.createSession({ title: 'New chat' }),
+		mutationFn: (projectId?: string) => api.createSession({ title: 'New chat', projectId }),
 		onSuccess: (session) => {
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			void navigate({

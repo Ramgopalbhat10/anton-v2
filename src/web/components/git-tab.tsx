@@ -17,6 +17,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 		queryFn: () => api.git(sessionId),
 		refetchInterval: 4000,
 	});
+	const me = useQuery({ queryKey: ['me'], queryFn: api.me });
 
 	if (git.isError) {
 		return <div className="p-4 text-[13px] text-destructive">VM unavailable. Start or retry the session.</div>;
@@ -36,6 +37,14 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 					{base} → {branch}
 				</div>
 			</div>
+			{me.data?.user?.needsReconnect ? (
+				<div className="border-b border-border px-3 py-2 text-[12px]">
+					Push and pull requests need a fresh GitHub login.{' '}
+					<a href="/api/auth/github" className="underline underline-offset-4">
+						Reconnect GitHub
+					</a>
+				</div>
+			) : null}
 			<div className="flex h-10 shrink-0 items-center border-b border-border px-2">
 				<ToggleGroup
 					type="single"

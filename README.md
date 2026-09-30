@@ -26,6 +26,7 @@ Agent API: http://127.0.0.1:43128
 - **New Chat** creates a session and a local git workspace under `data/workspaces/`.
 - Git / Files / Terminal work without an LLM key.
 - Set `OPENROUTER_API_KEY` to talk to the Coder agent (`openrouter/anthropic/claude-sonnet-4` by default).
+- Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to sign in, clone a repository, and open pull requests. Create an OAuth App with callback `http://127.0.0.1:43127/api/auth/github/callback`. Empty values keep the local `dev` project.
 
 ```sh
 npm test
@@ -38,7 +39,7 @@ See `.env.example`. Leave GitHub / Modal / Tigris empty for local mode.
 | Variable | Purpose |
 | --- | --- |
 | `OPENROUTER_API_KEY` | Model gateway |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth (later; empty = local project) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth App. Empty = local project. Callback is `http://127.0.0.1:43127/api/auth/github/callback` |
 | `TURSO_DATABASE_URL` | Session records (default `file:./data/anton.db`) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Snapshot VMs (empty = local directory sandbox) |
 | `TIGRIS_*` | Logs / memory / artifacts only |

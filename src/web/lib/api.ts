@@ -18,6 +18,19 @@ export type Project = {
 	workspacePath: string;
 };
 
+export type AuthUser = {
+	id: string;
+	login: string;
+	avatarUrl: string | null;
+	needsReconnect: boolean;
+};
+
+export type GitHubRepo = {
+	fullName: string;
+	defaultBranch: string;
+	private: boolean;
+};
+
 export type GitPayload = {
 	repo: string;
 	branch: string;
@@ -41,10 +54,18 @@ async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-	health: () => json<{ ok: boolean; openRouter: boolean }>('/api/health'),
+	health: () => json<{ ok: boolean; openRouter: boolean; githubOAuth?: boolean }>('/api/health'),
+	me: () => json<{ oauth: boolean; user: AuthUser | null }>('/api/auth/me'),
+	logout: async () => {
+		const response = await fetch('/api/auth/logout', { method: 'POST' });
+		if (!response.ok) throw new Error(response.statusText);
+	},
+	repos: () => json<{ repos: GitHubRepo[] }>('/api/github/repos'),
+	createProject: (fullName: string) =>
+		json<Project>('/api/projects', { method: 'POST', body: JSON.stringify({ fullName }) }),
 	models: () => json<{ models: Array<{ id: string; label: string }> }>('/api/models'),
-	sessions: () => json<{ sessions: Session[]; project: Project }>('/api/sessions'),
-	createSession: (body?: { title?: string; model?: string }) =>
+	sessions: () => json<{ sessions: Session[]; project: Project | null; projects?: Project[] }>('/api/sessions'),
+	createSession: (body?: { title?: string; model?: string; projectId?: string }) =>
 		json<Session>('/api/sessions', { method: 'POST', body: JSON.stringify(body ?? {}) }),
 	session: (id: string) => json<{ session: Session; project: Project }>(`/api/sessions/${id}`),
 	stopSession: (id: string) => json<Session>(`/api/sessions/${id}/stop`, { method: 'POST' }),

@@ -2,10 +2,10 @@
 
 import { defineSubagent, defineTool, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
+import { ensureAccessToken, githubClientFromEnv } from '../lib/auth.ts';
+import { appDb } from '../lib/db-app.ts';
 import { env } from '../lib/env.ts';
-import { cwdForConversation } from '../lib/sessions.ts';
-import { createLocalPullRequest } from '../lib/vm-proxy.ts';
-import { setSessionPrUrl } from '../lib/sessions.ts';
+import { cwdForConversation, openWorkspacePullRequest, projectByWorkspace } from '../lib/sessions.ts';
 
 function Explorer() {
 	return [
@@ -42,15 +42,10 @@ const tester = defineSubagent({
 const openPullRequest = defineTool({
 	name: 'open_pull_request',
 	description:
-		'Commit remaining changes, then open a pull request. In local mode this creates a commit and returns a local:// reference. With GitHub configured it pushes and opens a PR.',
+		'Commit remaining changes, then open a pull request. In local mode this creates a commit and returns a local:// reference. With GitHub configured it pushes and opens a PR on the session repository.',
 	harness: true,
 	async run({ harness }) {
-		const cwd = harness.sandbox.cwd;
-		const url = await createLocalPullRequest(cwd, 'feat: anton agent changes');
-		const { listSessions } = await import('../lib/sessions.ts');
-		const sessions = await listSessions();
-		const match = sessions.find((session) => session.status === 'running' && session.sandboxId);
-		if (match) await setSessionPrUrl(match.id, url);
+		const url = await openWorkspacePullRequest(harness.sandbox.cwd, 'feat: anton agent changes');
 		return { output: { url, message: 'Recorded pull request target.' } };
 	},
 });
@@ -60,10 +55,19 @@ export function Coder() {
 	useSandbox({
 		async createSandbox({ id }) {
 			const cwd = cwdForConversation(id) ?? process.cwd();
+			let token: string | undefined;
+			const project = await projectByWorkspace(cwd);
+			if (project && project.userId !== 'user_dev') {
+				try {
+					token = await ensureAccessToken(project.userId, appDb(), githubClientFromEnv());
+				} catch {
+					token = undefined;
+				}
+			}
 			return local({
 				cwd,
 				env: {
-					GH_TOKEN: process.env.GITHUB_TOKEN,
+					...(token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {}),
 					OPENROUTER_API_KEY: undefined,
 				},
 			}).createSandbox({ id });

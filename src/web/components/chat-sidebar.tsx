@@ -1,7 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useRef, useState } from 'react';
+import { RepoPicker } from '@/components/repo-picker';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,11 +32,28 @@ function groupSessions(sessions: Session[]) {
 
 export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
 	const params = useParams({ strict: false }) as { sessionId?: string };
+	const queryClient = useQueryClient();
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
+	const me = useQuery({ queryKey: ['me'], queryFn: api.me });
 	const create = useCreateChat();
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const pendingChat = useRef(false);
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	const project = sessionsQuery.data?.project;
+	const projects = sessionsQuery.data?.projects ?? (sessionsQuery.data?.project ? [sessionsQuery.data.project] : []);
+	const storedId = typeof window === 'undefined' ? null : localStorage.getItem('anton.projectId');
+	const project = projects.find((item) => item.id === storedId) ?? sessionsQuery.data?.project ?? projects[0];
 	const grouped = groupSessions(sessions);
+	const oauth = Boolean(me.data?.oauth);
+
+	function newChat() {
+		if (oauth && !project) {
+			pendingChat.current = true;
+			setPickerOpen(true);
+			return;
+		}
+		create.mutate(oauth ? project?.id : undefined);
+		onNavigate();
+	}
 
 	return (
 		<aside
@@ -50,10 +69,7 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 				<Button
 					className="w-full justify-start"
 					variant="secondary"
-					onClick={() => {
-						create.mutate();
-						onNavigate();
-					}}
+					onClick={newChat}
 					disabled={create.isPending}
 				>
 					<Plus data-icon="inline-start" />
@@ -61,7 +77,13 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 				</Button>
 			</div>
 			<div className="flex h-7 items-center px-3 text-[11px] text-muted-foreground">
-				<span className="truncate">{project?.repoFullName ?? 'local/anton-v2'}</span>
+				{oauth ? (
+					<button type="button" className="truncate hover:text-foreground" onClick={() => setPickerOpen(true)}>
+						{project?.repoFullName ?? 'Choose a repository'}
+					</button>
+				) : (
+					<span className="truncate">{project?.repoFullName ?? 'local/anton-v2'}</span>
+				)}
 			</div>
 			<ScrollArea className="min-h-0 flex-1">
 				<div className="px-2 pb-2">
@@ -118,10 +140,49 @@ export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: (
 			</ScrollArea>
 			<div className="flex h-10 shrink-0 items-center gap-2 border-t border-border px-3">
 				<Avatar className="size-5">
-					<AvatarFallback>A</AvatarFallback>
+					{me.data?.user?.avatarUrl ? <AvatarImage src={me.data.user.avatarUrl} alt="" /> : null}
+					<AvatarFallback>{(me.data?.user?.login ?? 'A').slice(0, 1).toUpperCase()}</AvatarFallback>
 				</Avatar>
-				<span className="truncate text-[12px] text-muted-foreground">Anton Dev</span>
+				<span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+					{oauth ? (me.data?.user?.login ?? 'GitHub') : 'Anton Dev'}
+				</span>
+				{me.data?.user?.needsReconnect ? (
+					<a href="/api/auth/github" className="shrink-0 text-[12px] text-foreground underline-offset-4 hover:underline">
+						Reconnect
+					</a>
+				) : null}
+				{oauth ? (
+					<Button
+						variant="ghost"
+						size="xs"
+						onClick={() => {
+							void api.logout().then(() => {
+								localStorage.removeItem('anton.projectId');
+								queryClient.clear();
+								window.location.assign('/');
+							});
+						}}
+					>
+						Log out
+					</Button>
+				) : null}
 			</div>
+			{oauth ? (
+				<RepoPicker
+					open={pickerOpen}
+					onOpenChange={(open) => {
+						setPickerOpen(open);
+						if (!open) pendingChat.current = false;
+					}}
+					onPicked={(projectId) => {
+						const start = pendingChat.current;
+						pendingChat.current = false;
+						if (!start) return;
+						create.mutate(projectId);
+						onNavigate();
+					}}
+				/>
+			) : null}
 		</aside>
 	);
 }
