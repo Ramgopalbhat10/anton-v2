@@ -1,0 +1,333 @@
+/* Signal design system tokens (ported from the Claude Design artifact). */
+/* ============================================================
+   TIER 1 — PRIMITIVES. Raw scales. Components never touch these.
+   ============================================================ */
+:root{
+  /* Neutral ramp — hue 265 at very low chroma: cool enough to read as
+     "screen", warm enough not to look blue. Never pure black. */
+  --neutral-1000:#000000;
+  --neutral-950:#0A0A0B;
+  --neutral-900:#101012;
+  --neutral-850:#16161A;
+  --neutral-800:#1C1C21;
+  --neutral-750:#23232A;
+  --neutral-700:#2C2C34;
+  --neutral-600:#3A3A43;
+  --neutral-500:#4A4A52;
+  --neutral-400:#6E6E78;
+  --neutral-300:#A0A0A8;
+  --neutral-200:#C8C8CE;
+  --neutral-100:#EDEDEF;
+  --neutral-50:#F7F7F8;
+
+  /* Alpha whites — the depth system. Hover, active, and every hairline
+     are alpha, not solid, so they hold up on any surface level. */
+  --alpha-white-3:rgba(255,255,255,0.03);
+  --alpha-white-4:rgba(255,255,255,0.04);
+  --alpha-white-6:rgba(255,255,255,0.06);
+  --alpha-white-7:rgba(255,255,255,0.07);
+  --alpha-white-9:rgba(255,255,255,0.09);
+  --alpha-white-14:rgba(255,255,255,0.14);
+  --alpha-white-24:rgba(255,255,255,0.24);
+  --alpha-black-40:rgba(0,0,0,0.40);
+  --alpha-black-60:rgba(0,0,0,0.60);
+
+  /* Accent ramp — SIGNAL CYAN, the only accent hue in the system.
+     oklch(~0.74 0.11 218). Reads calm on near-black and stays separable
+     from emerald / amber / red at 11px on a 1px border. */
+  --cyan-100:#CBEEF8;
+  --cyan-200:#9EE1F3;
+  --cyan-300:#6FCDE8;
+  --cyan-400:#3FB6D8;
+  --cyan-500:#2C9BBD;
+  --cyan-600:#1F7F9E;
+  --cyan-700:#17627A;
+  --cyan-800:#114A5C;
+  --cyan-900:#0D3644;
+  --cyan-alpha-8:rgba(63,182,216,0.08);
+  --cyan-alpha-12:rgba(63,182,216,0.12);
+  --cyan-alpha-16:rgba(63,182,216,0.16);
+  --cyan-alpha-30:rgba(63,182,216,0.30);
+  --cyan-alpha-40:rgba(63,182,216,0.40);
+
+  /* Semantic ramps. Three hues only — INFO IS THE ACCENT (see below),
+     so the system carries four hues total, not five. */
+  --emerald-300:#63DDA5;
+  --emerald-400:#35C88A;
+  --emerald-500:#22A472;
+  --emerald-alpha-12:rgba(53,200,138,0.12);
+  --emerald-alpha-30:rgba(53,200,138,0.30);
+
+  --amber-300:#F2C173;
+  --amber-400:#E3A63F;
+  --amber-500:#BE8624;
+  --amber-alpha-12:rgba(227,166,63,0.12);
+  --amber-alpha-30:rgba(227,166,63,0.30);
+
+  --red-300:#F58581;
+  --red-400:#E5544F;
+  --red-500:#C13B37;
+  --red-alpha-12:rgba(229,84,79,0.12);
+  --red-alpha-30:rgba(229,84,79,0.30);
+}
+
+/* ============================================================
+   TIER 2 — SEMANTIC. The only layer components are allowed to read.
+   Scoped to [data-theme] so a light theme is a swap of this block
+   alone — no primitive edits, no component edits.
+   ============================================================ */
+:root,[data-theme="dark"]{
+  color-scheme:dark;
+
+  /* Surfaces */
+  --bg-canvas:var(--neutral-950);
+  --bg-surface:var(--neutral-900);
+  --bg-raised:var(--neutral-850);
+  --bg-overlay:var(--neutral-800);
+  --bg-inset:var(--neutral-1000);
+  --bg-hover:var(--alpha-white-4);
+  --bg-active:var(--alpha-white-7);
+  --bg-selected:var(--cyan-alpha-12);
+  --bg-selected-hover:var(--cyan-alpha-16);
+  --bg-disabled:var(--alpha-white-3);
+  --bg-skeleton:var(--alpha-white-6);
+  --bg-scrim:var(--alpha-black-60);
+
+  /* Borders */
+  --border-subtle:var(--alpha-white-6);
+  --border-default:var(--alpha-white-9);
+  --border-strong:var(--alpha-white-14);
+  --border-selected:var(--cyan-alpha-40);
+
+  /* Text */
+  --text-primary:var(--neutral-100);
+  --text-secondary:var(--neutral-300);
+  --text-tertiary:var(--neutral-400);
+  --text-disabled:var(--neutral-500);
+  --text-placeholder:var(--neutral-400);
+  --text-on-accent:#06181F;
+
+  /* Icons — one step quieter than the text they sit beside. */
+  --icon-primary:var(--neutral-200);
+  --icon-secondary:var(--neutral-300);
+  --icon-tertiary:var(--neutral-400);
+  --icon-disabled:var(--neutral-500);
+
+  /* Accent — interactive, selected, focused, active nav. Nothing else. */
+  --accent-base:var(--cyan-400);
+  --accent-hover:var(--cyan-300);
+  --accent-active:var(--cyan-500);
+  --accent-text:var(--cyan-300);
+  --accent-bg-subtle:var(--cyan-alpha-12);
+  --accent-bg-subtle-hover:var(--cyan-alpha-16);
+  --accent-border:var(--cyan-alpha-40);
+  --accent-ring:var(--cyan-alpha-30);
+  --accent-fg:var(--text-on-accent);
+
+  /* Semantic states — each has text / subtle bg / border, so one state
+     renders as text, as a badge, and as a banner with no improvisation. */
+  --success-text:var(--emerald-300);
+  --success-base:var(--emerald-400);
+  --success-bg:var(--emerald-alpha-12);
+  --success-border:var(--emerald-alpha-30);
+
+  --warning-text:var(--amber-300);
+  --warning-base:var(--amber-400);
+  --warning-bg:var(--amber-alpha-12);
+  --warning-border:var(--amber-alpha-30);
+
+  --danger-text:var(--red-300);
+  --danger-base:var(--red-400);
+  --danger-bg:var(--red-alpha-12);
+  --danger-border:var(--red-alpha-30);
+  --danger-hover:var(--red-300);
+  --danger-active:var(--red-500);
+  --danger-fg:#180605;
+
+  /* Info deliberately aliases the accent: "informational" and
+     "interactive" are the same voice — the system talking. */
+  --info-text:var(--accent-text);
+  --info-base:var(--accent-base);
+  --info-bg:var(--accent-bg-subtle);
+  --info-border:var(--accent-border);
+}
+
+/* Syntax palette. Rule: syntax never uses cyan — the accent hue is
+   reserved for interaction, so a highlighted keyword can never be
+   mistaken for a link. Hues run violet → sage → amber → rose, all held
+   at moderate chroma so they stay legible at 12px on --bg-inset. */
+:root,[data-theme="dark"]{
+  --syntax-bg:var(--bg-inset);
+  --syntax-text:var(--neutral-100);
+  --syntax-comment:#5F5F6B;
+  --syntax-punctuation:#8A8A94;
+  --syntax-operator:var(--neutral-300);
+  --syntax-keyword:#B98BE8;
+  --syntax-string:#8FC98D;
+  --syntax-number:#E0AC63;
+  --syntax-function:#DCC98A;
+  --syntax-type:#E58FA8;
+  --syntax-property:#C3C3CC;
+  --syntax-variable:var(--neutral-100);
+  --syntax-tag:#B98BE8;
+  --syntax-attribute:#DCC98A;
+  --syntax-invalid:var(--red-300);
+  --syntax-added:var(--emerald-400);
+  --syntax-added-bg:var(--emerald-alpha-12);
+  --syntax-removed:var(--red-400);
+  --syntax-removed-bg:var(--red-alpha-12);
+  --syntax-line-number:var(--neutral-500);
+  --syntax-line-highlight:var(--alpha-white-4);
+  --syntax-selection:var(--cyan-alpha-16);
+}
+
+/* Type. Geist for everything a human wrote. Geist Mono for everything a
+   machine knows: labels, counts, keys, IDs, timestamps, units, aligned
+   numbers, paths, code. That split is the system's signature — see
+   --font-mono roles in readme.md. Three weights, never more. */
+:root{
+  --font-sans:'Geist Variable','Geist','Geist Fallback',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'Geist Mono Variable','Geist Mono','Geist Mono Fallback',ui-monospace,'SFMono-Regular','Menlo',monospace;
+
+  --weight-regular:400;
+  --weight-medium:500;
+  --weight-semibold:600;
+
+  /* Steps: size / line-height / weight / tracking.
+     Tracking tightens as size grows, loosens at 11px. */
+  --text-micro-size:11px;      --text-micro-line:16px;   --text-micro-weight:var(--weight-medium);   --text-micro-tracking:0.04em;
+  --text-small-size:12px;      --text-small-line:16px;   --text-small-weight:var(--weight-regular);  --text-small-tracking:0.005em;
+  --text-body-size:13px;       --text-body-line:18px;    --text-body-weight:var(--weight-regular);   --text-body-tracking:0em;
+  --text-body-lg-size:14px;    --text-body-lg-line:21px; --text-body-lg-weight:var(--weight-regular);--text-body-lg-tracking:-0.005em;
+  --text-h3-size:16px;         --text-h3-line:22px;      --text-h3-weight:var(--weight-semibold);    --text-h3-tracking:-0.011em;
+  --text-h2-size:20px;         --text-h2-line:26px;      --text-h2-weight:var(--weight-semibold);    --text-h2-tracking:-0.017em;
+  --text-h1-size:24px;         --text-h1-line:30px;      --text-h1-weight:var(--weight-semibold);    --text-h1-tracking:-0.022em;
+
+  /* Mono steps. Uppercase belongs to --text-mono-label only. */
+  --text-mono-label-size:11px; --text-mono-label-line:16px; --text-mono-label-weight:var(--weight-medium);  --text-mono-label-tracking:0.06em;
+  --text-mono-size:12px;       --text-mono-line:16px;       --text-mono-weight:var(--weight-regular);       --text-mono-tracking:0em;
+  --text-mono-code-size:12px;  --text-mono-code-line:18px;  --text-mono-code-weight:var(--weight-regular);  --text-mono-code-tracking:0em;
+
+  --font-feature-tabular:'tnum' 1,'cv01' 1;
+}
+
+/* Space — 4px base, one scale, nothing off it. 2 and 6 exist because a
+   30px control with 13px text needs half-steps for optical centring. */
+:root{
+  --space-0:0px;
+  --space-0-5:2px;
+  --space-1:4px;
+  --space-1-5:6px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:20px;
+  --space-6:24px;
+  --space-8:32px;
+  --space-10:40px;
+  --space-12:48px;
+
+  /* Control sizes. Height / horizontal padding / icon / font / gap.
+     md is the default: 30px, 13px text — dense enough for three stacked
+     toolbars, tall enough to click without aiming. */
+  --control-xs-height:22px; --control-xs-padding:var(--space-1-5); --control-xs-icon:12px; --control-xs-font:var(--text-micro-size); --control-xs-gap:var(--space-1);
+  --control-sm-height:26px; --control-sm-padding:var(--space-2);   --control-sm-icon:14px; --control-sm-font:var(--text-small-size); --control-sm-gap:var(--space-1-5);
+  --control-md-height:30px; --control-md-padding:var(--space-2-5,10px); --control-md-icon:14px; --control-md-font:var(--text-body-size);  --control-md-gap:var(--space-1-5);
+  --control-lg-height:36px; --control-lg-padding:var(--space-3-5,14px); --control-lg-icon:16px; --control-lg-font:var(--text-body-lg-size); --control-lg-gap:var(--space-2);
+
+  /* Square icon-only controls track the same heights. */
+  --control-xs-square:22px;
+  --control-sm-square:26px;
+  --control-md-square:30px;
+  --control-lg-square:36px;
+
+  /* Off-scale halves used only as control padding, never as layout gaps. */
+  --space-2-5:10px;
+  --space-3-5:14px;
+
+  /* Hairline */
+  --border-width:1px;
+  --border-width-strong:2px;
+
+  /* Density anchors reused by rows and panels. */
+  --row-height-dense:28px;
+  --row-height:32px;
+  --panel-padding:var(--space-3);
+  --panel-header-height:38px;
+}
+
+/* Radius — small values only. 4 for anything you type into or press,
+   6 for anything that contains those, 8 for anything that floats above
+   the app, full for round-by-nature. A 5th value would be a tell that
+   the containment rule broke down. */
+:root{
+  --radius-none:0px;
+  --radius-sm:4px;   /* buttons, inputs, badges, kbd */
+  --radius-md:6px;   /* cards, panels, menus, popovers */
+  --radius-lg:8px;   /* modals, command palette */
+  --radius-full:9999px; /* avatars, pills, switch, slider thumb */
+}
+
+/* Elevation is a border + background pair first. Shadow is added ONLY
+   when a layer actually floats over content that is still visible. */
+:root,[data-theme="dark"]{
+  --elevation-0-bg:var(--bg-canvas);      --elevation-0-border:transparent;
+  --elevation-1-bg:var(--bg-surface);     --elevation-1-border:var(--border-subtle);
+  --elevation-2-bg:var(--bg-raised);      --elevation-2-border:var(--border-default);
+  --elevation-3-bg:var(--bg-overlay);     --elevation-3-border:var(--border-strong);
+
+  --shadow-none:none;
+  --shadow-overlay:0 8px 24px -8px var(--alpha-black-60),0 2px 6px -2px var(--alpha-black-40);
+  --shadow-modal:0 24px 56px -16px rgba(0,0,0,0.72),0 4px 12px -4px var(--alpha-black-40);
+  --shadow-inset-hairline:inset 0 0 0 1px var(--border-default);
+}
+
+/* Motion — three durations, one curve. Nothing animates that would delay
+   the next keystroke; transforms and opacity only. */
+:root{
+  /* hover, press, checkbox, switch */
+  --duration-micro:80ms;
+  /* expand, tab change, inline reveal */
+  --duration-standard:120ms;
+  /* popover, menu, modal enter */
+  --duration-overlay:180ms;
+  --ease-out:cubic-bezier(0.25,1,0.5,1);
+  --transition-micro:var(--duration-micro) var(--ease-out);
+  --transition-standard:var(--duration-standard) var(--ease-out);
+  --transition-overlay:var(--duration-overlay) var(--ease-out);
+
+  /* Focus ring — one treatment everywhere. A 1px accent edge plus a 3px
+     accent wash: the wash makes it visible on --bg-overlay, the edge
+     makes it visible against an accent-filled button. :focus-visible only. */
+  --focus-ring-width:1px;
+  --focus-ring-offset:0px;
+  --focus-ring:0 0 0 var(--focus-ring-width) var(--accent-base),0 0 0 4px var(--accent-ring);
+  --focus-ring-inset:inset 0 0 0 1px var(--accent-base),0 0 0 3px var(--accent-ring);
+}
+@media (prefers-reduced-motion:reduce){
+  :root{
+    --duration-micro:0ms;
+    --duration-standard:0ms;
+    --duration-overlay:0ms;
+  }
+}
+
+
+/* App-level overrides from the reference: flatter neutral greys. */
+:root,
+[data-theme='dark'] {
+	--bg-canvas: #0a0a0a;
+	--bg-surface: #111111;
+	--bg-raised: #161616;
+	--bg-overlay: #1e1e1e;
+	--bg-inset: #000000;
+	--text-secondary: #ababab;
+	--text-tertiary: #8e8e8e;
+	--text-disabled: #7a7a7a;
+	--text-placeholder: #8e8e8e;
+	--icon-tertiary: #8e8e8e;
+	--icon-disabled: #7a7a7a;
+	--neutral-700: #2a2a2a;
+	--neutral-750: #222222;
+	--neutral-800: #1e1e1e;
+}

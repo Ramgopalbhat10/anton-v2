@@ -1,126 +1,227 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
-import { Plus } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { CircleAlert, CircleCheck, List, PanelLeft, Plus, Search, Square, X } from 'lucide-react';
+import { useState } from 'react';
+import { Avatar, Icon, IconBtn, SectionLabel, Spinner } from '@/components/signal';
 import { api, type Session } from '@/lib/api';
-import { useCreateChat } from '@/lib/create-chat';
+import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-function groupSessions(sessions: Session[]) {
-	const now = Date.now();
-	const buckets: Record<string, Session[]> = {
-		Today: [],
-		Yesterday: [],
-		'Last 7 days': [],
-		'Last 30 days': [],
-	};
-	for (const session of sessions) {
-		const age = now - new Date(session.createdAt).getTime();
-		if (age < 24 * 60 * 60 * 1000) buckets.Today.push(session);
-		else if (age < 48 * 60 * 60 * 1000) buckets.Yesterday.push(session);
-		else if (age < 7 * 24 * 60 * 60 * 1000) buckets['Last 7 days'].push(session);
-		else buckets['Last 30 days'].push(session);
-	}
-	return buckets;
+export function Logo({ size = 20 }: { size?: number }) {
+	return (
+		<div
+			className="flex shrink-0 items-center justify-center rounded-md bg-(--accent-base) text-[11px] font-semibold text-(--accent-fg)"
+			style={{ width: size, height: size }}
+		>
+			A
+		</div>
+	);
 }
 
-export function ChatSidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
+/** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task. */
+export function SidebarRail({ onExpand }: { onExpand: () => void }) {
+	const navigate = useNavigate();
+	return (
+		<nav className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-(--border-subtle) bg-(--bg-surface) py-2 md:flex">
+			<div className="mb-2">
+				<Logo />
+			</div>
+			<IconBtn icon={PanelLeft} size="sm" label="Show sidebar" onClick={onExpand} />
+			<IconBtn icon={Plus} size="sm" label="New task" onClick={() => void navigate({ to: '/' })} />
+		</nav>
+	);
+}
+
+function RecentIcon({ session }: { session: Session }) {
+	if (session.status === 'error') {
+		return <Icon icon={CircleAlert} size={12} className="text-(--danger-text)" />;
+	}
+	return <Icon icon={CircleCheck} size={12} className="text-(--success-text)" />;
+}
+
+export function ChatSidebar({
+	open,
+	onNavigate,
+	onCollapse,
+	onOpenPalette,
+}: {
+	open: boolean;
+	onNavigate: () => void;
+	onCollapse: () => void;
+	onOpenPalette: () => void;
+}) {
 	const params = useParams({ strict: false }) as { sessionId?: string };
+	const queryClient = useQueryClient();
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
-	const create = useCreateChat();
+	const stop = useMutation({
+		mutationFn: (id: string) => api.stopSession(id),
+		onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+	});
+	const [searching, setSearching] = useState(false);
+	const [query, setQuery] = useState('');
 	const sessions = sessionsQuery.data?.sessions ?? [];
 	const project = sessionsQuery.data?.project;
-	const grouped = groupSessions(sessions);
+	const repo = project?.repoFullName ?? 'local/anton-v2';
+	const running = sessions.filter((session) => session.status === 'running' || session.status === 'starting');
+	const recent = sessions
+		.filter((session) => session.status === 'stopped' || session.status === 'error')
+		.filter((session) => session.title.toLowerCase().includes(query.trim().toLowerCase()));
 
 	return (
 		<aside
 			className={cn(
-				'w-[260px] shrink-0 flex-col border-r border-border bg-sidebar',
-				open ? 'fixed inset-y-0 left-12 z-30 flex shadow-2xl md:static md:shadow-none' : 'hidden md:flex',
+				'w-60 min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-(--bg-surface)',
+				open ? 'fixed inset-y-0 left-0 z-30 flex shadow-(--shadow-modal) md:static md:shadow-none' : 'hidden md:flex',
 			)}
 		>
-			<div className="flex h-10 shrink-0 items-center border-b border-border px-3">
-				<div className="truncate text-[13px] font-medium">Anton</div>
+			<div className="flex h-11 shrink-0 items-center gap-1.5 pr-2 pl-3">
+				<Logo />
+				<div className="min-w-0 truncate text-[13px] font-medium">{repo.split('/').pop()}</div>
+				<div className="min-w-1 flex-[1_1_4px]" />
+				<IconBtn icon={Search} size="xs" label="Command palette" onClick={onOpenPalette} />
+				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
+				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
-			<div className="px-2 pb-2 pt-3">
-				<Button
-					className="w-full justify-start"
-					variant="secondary"
-					onClick={() => {
-						create.mutate();
-						onNavigate();
-					}}
-					disabled={create.isPending}
+
+			<div className="px-2 pb-2">
+				<Link
+					to="/"
+					onClick={onNavigate}
+					className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-(--bg-overlay) text-[13px] font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) focus-visible:shadow-(--focus-ring)"
 				>
-					<Plus data-icon="inline-start" />
-					New chat
-				</Button>
+					<Icon icon={Plus} />
+					<span>New task</span>
+				</Link>
 			</div>
-			<div className="flex h-7 items-center px-3 text-[11px] text-muted-foreground">
-				<span className="truncate">{project?.repoFullName ?? 'local/anton-v2'}</span>
+
+			<div className="flex flex-col gap-0.5 px-2 py-1">
+				<Link
+					to="/"
+					activeOptions={{ exact: true }}
+					onClick={onNavigate}
+					className="group relative flex h-[30px] items-center gap-2 rounded-lg px-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6)"
+				>
+					<Icon icon={List} className="text-(--icon-tertiary)" />
+					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
+					<div className="text-[11px] text-(--text-tertiary)">{sessions.length}</div>
+				</Link>
 			</div>
-			<ScrollArea className="min-h-0 flex-1">
-				<div className="px-2 pb-2">
-				{sessionsQuery.isError ? (
-					<p className="px-2 py-2 text-[13px] text-destructive">Could not load chats.</p>
-				) : sessionsQuery.isPending ? (
-					<div className="flex flex-col gap-1 px-1">
-						<Skeleton className="h-7" />
-						<Skeleton className="h-7" />
-						<Skeleton className="h-7" />
-					</div>
-				) : sessions.length === 0 ? (
-					<Empty className="border-0 px-2">
-						<EmptyHeader>
-							<EmptyTitle>No chats yet</EmptyTitle>
-							<EmptyDescription>Start one to attach the workspace VM.</EmptyDescription>
-						</EmptyHeader>
-					</Empty>
-				) : null}
-				{Object.entries(grouped).map(([label, items]) =>
-					items.length === 0 ? null : (
-						<section key={label} className="mb-3">
-							<div className="flex h-7 items-center px-2 text-[11px] text-muted-foreground">{label}</div>
-							<div className="flex flex-col gap-0.5">
-								{items.map((session) => (
-								<Button
-									key={session.id}
-									variant={params.sessionId === session.id ? 'secondary' : 'ghost'}
-									size="sm"
-									className="w-full justify-start"
-									asChild
-								>
+
+			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<div className="flex items-center gap-0.5 pt-4 pr-1.5 pb-1.5 pl-4">
+					<SectionLabel className="flex-1">Running</SectionLabel>
+				</div>
+				<div className="flex flex-col gap-0.5 px-2">
+					{sessionsQuery.isError ? (
+						<div className="px-2 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
+					) : sessionsQuery.isPending ? (
+						<div className="flex flex-col gap-1 px-1">
+							<div className="h-11 rounded-lg bg-(--bg-skeleton)" />
+						</div>
+					) : running.length === 0 ? (
+						<div className="px-2 py-1.5 text-[12px] text-(--text-disabled)">Nothing is running.</div>
+					) : (
+						running.map((session) => {
+							const active = params.sessionId === session.id;
+							return (
+								<div key={session.id} className="group relative flex h-11 items-center rounded-lg hover:bg-(--bg-hover)">
+									{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
 									<Link
 										to="/agents/$sessionId"
 										params={{ sessionId: session.id }}
 										search={{ app: 'code' }}
 										onClick={onNavigate}
+										className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-1.5 pl-2 outline-none focus-visible:shadow-(--focus-ring)"
 									>
-										<span
-											className={cn(
-												'size-1.5 shrink-0 rounded-full',
-												session.status === 'running' ? 'bg-foreground' : 'bg-muted-foreground/40',
-											)}
-										/>
-										<span className="truncate">{session.title}</span>
+										<span className="inline-flex shrink-0 text-(--accent-text)">
+											<Spinner />
+										</span>
+										<div className="flex min-w-0 flex-1 flex-col gap-px">
+											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
+											<div className="truncate text-[11px] tracking-[0.02em] text-(--text-tertiary)">
+												{age(session.createdAt)} · {repo}
+											</div>
+										</div>
 									</Link>
-								</Button>
-								))}
-							</div>
-						</section>
-					),
-				)}
+									<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-hover:flex group-focus-within:flex">
+										<IconBtn
+											icon={Square}
+											size="xs"
+											label="Stop sandbox"
+											onClick={() => stop.mutate(session.id)}
+											disabled={stop.isPending}
+										/>
+									</div>
+								</div>
+							);
+						})
+					)}
 				</div>
-			</ScrollArea>
-			<div className="flex h-10 shrink-0 items-center gap-2 border-t border-border px-3">
-				<Avatar className="size-5">
-					<AvatarFallback>A</AvatarFallback>
-				</Avatar>
-				<span className="truncate text-[12px] text-muted-foreground">Anton Dev</span>
+
+				{searching ? (
+					<div className="mx-2 mt-3.5 mb-1.5 ml-3 flex h-7 items-center gap-2 rounded-lg bg-(--bg-raised) px-2">
+						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+						<input
+							autoFocus
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === 'Escape') {
+									setQuery('');
+									setSearching(false);
+								}
+							}}
+							placeholder="Search recent tasks"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none"
+						/>
+						<button
+							type="button"
+							aria-label="Close search"
+							onClick={() => {
+								setQuery('');
+								setSearching(false);
+							}}
+							className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)"
+						>
+							<Icon icon={X} size={12} />
+						</button>
+					</div>
+				) : (
+					<div className="flex items-center gap-0.5 pt-4 pr-1.5 pb-1.5 pl-4">
+						<SectionLabel className="min-w-0 flex-1">Recent</SectionLabel>
+						<IconBtn icon={Search} size="xs" label="Search recent tasks" onClick={() => setSearching(true)} />
+					</div>
+				)}
+				<div className="flex flex-col gap-0.5 px-2 pb-2">
+					{recent.length === 0 ? (
+						<div className="px-2 py-1.5 text-[12px] text-(--text-disabled)">
+							{query ? 'No recent task matches that search.' : 'Stopped tasks show up here.'}
+						</div>
+					) : (
+						recent.map((session) => (
+							<Link
+								key={session.id}
+								to="/agents/$sessionId"
+								params={{ sessionId: session.id }}
+								search={{ app: 'code' }}
+								onClick={onNavigate}
+								className={cn(
+									'relative flex h-[30px] items-center gap-2 rounded-lg pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+									params.sessionId === session.id && 'bg-(--alpha-white-6) text-(--text-primary)',
+								)}
+							>
+								<RecentIcon session={session} />
+								<div className="min-w-0 flex-1 truncate text-[13px]">{session.title}</div>
+								<div className="shrink-0 text-[11px] text-(--text-disabled)">{age(session.createdAt)}</div>
+							</Link>
+						))
+					)}
+				</div>
+			</div>
+
+			<div className="flex shrink-0 items-center gap-2 p-2">
+				<Avatar name="Anton Dev" />
+				<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">Anton Dev</div>
 			</div>
 		</aside>
 	);

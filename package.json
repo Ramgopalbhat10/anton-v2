@@ -19,6 +19,7 @@
 		"@flue/runtime": "^2.0.7",
 		"@flue/sdk": "^2.0.7",
 		"@fontsource-variable/geist": "^5.3.0",
+		"@fontsource-variable/geist-mono": "^5.3.0",
 		"@hono/node-server": "^1.19.0",
 		"@libsql/client": "^0.15.9",
 		"@pierre/diffs": "^1.4.2",
