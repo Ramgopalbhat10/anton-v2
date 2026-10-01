@@ -8,6 +8,7 @@ function toRecord(row: Row): SessionRecord {
 	return {
 		id: String(row.id),
 		projectId: String(row.project_id),
+		repo: String(row.repo ?? ''),
 		title: String(row.title),
 		model: String(row.model),
 		branch: String(row.branch ?? ''),
@@ -23,6 +24,8 @@ function toRecord(row: Row): SessionRecord {
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'branch' | 'baseBranch' | 'baseSha'>;
+
+const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';
 
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
@@ -45,13 +48,13 @@ export async function insertSession(session: NewSession): Promise<void> {
 
 export async function listSessionRecords(): Promise<SessionRecord[]> {
 	const db = await appDb();
-	const result = await db.execute('SELECT * FROM sessions WHERE base_sha IS NOT NULL ORDER BY created_at DESC');
+	const result = await db.execute(`${SELECT} WHERE s.base_sha IS NOT NULL ORDER BY s.created_at DESC`);
 	return result.rows.map((row) => toRecord(row as Row));
 }
 
 export async function getSessionRecord(id: string): Promise<SessionRecord | null> {
 	const db = await appDb();
-	const result = await db.execute({ sql: 'SELECT * FROM sessions WHERE id = ?', args: [id] });
+	const result = await db.execute({ sql: `${SELECT} WHERE s.id = ?`, args: [id] });
 	return result.rows[0] ? toRecord(result.rows[0] as Row) : null;
 }
 

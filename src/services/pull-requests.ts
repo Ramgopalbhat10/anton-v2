@@ -4,6 +4,7 @@ import { getProviders } from '../providers/index.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { commitAndPush } from './git.ts';
 import { machineFor } from './workspace.ts';
+import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 
 /**
  * Commits the task's work, pushes its branch and opens (or finds) the pull
@@ -12,7 +13,7 @@ import { machineFor } from './workspace.ts';
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new Error('Session not found');
+	if (!session || !project) throw new NotFoundError('Session not found');
 	const { git } = getProviders();
 	const machine = await machineFor(id);
 	const pushed = await commitAndPush(machine, {
@@ -21,7 +22,7 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 		message: input.title,
 		auth: git.gitAuthEnv(),
 	});
-	if (!pushed) throw new Error('There are no changes to open a pull request with.');
+	if (!pushed) throw new InvalidInputError('There are no changes to open a pull request with.');
 	const url = await git.openPullRequest({
 		repo: project.repoFullName,
 		head: session.branch,

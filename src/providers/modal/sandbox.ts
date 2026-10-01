@@ -100,7 +100,8 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 		async stop(state) {
 			const { sandboxId } = JSON.parse(state) as State;
 			const sandbox = await client.sandboxes.fromId(sandboxId).catch(() => null);
-			await sandbox?.terminate();
+			// Wait for shutdown, so a stopped task never reads as running.
+			await sandbox?.terminate({ wait: true });
 		},
 		async snapshot(machine) {
 			const sandbox = sandboxes.get(machine);
@@ -124,10 +125,10 @@ function modalMachine(sandbox: Sandbox): Machine {
 				env: options.env,
 				timeoutMs: options.timeoutMs,
 			});
-			if (options.stdin) {
-				await process.stdin.writeBytes(options.stdin);
-			}
-			await process.closeStdin();
+			// Closing the stream sends EOF after the bytes written; closeStdin() would send it at offset 0.
+			const stdin = process.stdin.getWriter();
+			if (options.stdin) await stdin.write(options.stdin);
+			await stdin.close();
 			const [stdout, stderr, exitCode] = await Promise.all([
 				process.stdout.readBytes(),
 				process.stderr.readBytes(),

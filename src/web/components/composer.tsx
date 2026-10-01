@@ -59,7 +59,7 @@ export function Composer({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
-	const model = session.data?.session.model ?? models.data?.models[0]?.id ?? '';
+	const model = session.data?.model ?? models.data?.models[0]?.id ?? '';
 
 	return (
 		<form

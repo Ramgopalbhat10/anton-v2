@@ -1,22 +1,28 @@
-import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, ChevronRight, PanelRight, Plus, X } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { FilesTab } from '@/components/files-tab';
-import { GitTab } from '@/components/git-tab';
+import { GitTab, useChanges } from '@/components/git-tab';
+import { LibraryTab } from '@/components/library-tab';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
-import { api } from '@/lib/api';
-import { parsePatch } from '@/lib/diff';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
 export const panels = [
 	{ name: 'Changes', desc: 'Every file the agent edited, as a diff' },
 	{ name: 'Terminal', desc: 'The sandbox shell and its command output' },
-	{ name: 'Files', desc: 'Browse the repository at the working branch' },
+	{ name: 'Files', desc: 'Browse the repository on the task branch' },
+	{ name: 'Library', desc: 'Reports, screenshots and exports the agent saved' },
 ] as const;
 
 export type PanelName = (typeof panels)[number]['name'];
+
+const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
+	Changes: GitTab,
+	Terminal: TerminalTab,
+	Files: FilesTab,
+	Library: LibraryTab,
+};
 
 function PanelTab({
 	name,
@@ -78,12 +84,7 @@ export function VmPanel({
 	onClose: () => void;
 }) {
 	const [menuOpen, setMenuOpen] = useState(false);
-	const git = useQuery({
-		queryKey: ['git', sessionId],
-		queryFn: () => api.git(sessionId),
-		refetchInterval: 4000,
-	});
-	const changed = git.data ? parsePatch(git.data.patch).length : 0;
+	const changed = useChanges(sessionId).files.length;
 
 	function show(name: PanelName) {
 		if (!tabs.includes(name)) onTabsChange([...tabs, name]);
@@ -100,6 +101,7 @@ export function VmPanel({
 	}
 
 	const current = active && tabs.includes(active) ? active : null;
+	const View = current ? VIEWS[current] : null;
 
 	return (
 		<section className="flex min-w-0 flex-[1_1_46%] flex-col overflow-hidden border-(--border-subtle) md:min-w-[280px] md:border-l">
@@ -171,9 +173,7 @@ export function VmPanel({
 						</div>
 					</div>
 				) : null}
-				{current === 'Changes' ? <GitTab sessionId={sessionId} /> : null}
-				{current === 'Terminal' ? <TerminalTab sessionId={sessionId} /> : null}
-				{current === 'Files' ? <FilesTab sessionId={sessionId} /> : null}
+				{View ? <View sessionId={sessionId} /> : null}
 			</div>
 		</section>
 	);

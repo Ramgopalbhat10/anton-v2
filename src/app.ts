@@ -3,12 +3,13 @@ import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
+import { InvalidInputError, statusOf } from './core/errors.ts';
+import { publishUpgradeHandler } from './core/upgrades.ts';
 import { MODELS } from './lib/models.ts';
 import { getProviders } from './providers/index.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects } from './services/projects.ts';
 import {
-	NotFoundError,
 	createSession,
 	getSession,
 	listSessions,
@@ -17,26 +18,31 @@ import {
 	setModel,
 	stopSession,
 } from './services/sessions.ts';
+import { handleTerminalUpgrade } from './services/terminal.ts';
 
 const app = new Hono();
 
+publishUpgradeHandler(handleTerminalUpgrade);
+
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
-	if (!result.success) throw new BadRequest(result.issues.map((issue) => issue.message).join('; '));
+	if (!result.success) throw new InvalidInputError(result.issues.map((issue) => issue.message).join('; '));
 	return result.output;
 }
 
-class BadRequest extends Error {}
+/** Images render inline; everything else downloads, so agent-written HTML never runs on this origin. */
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+const contentType = (path: string) => IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
-function bytes(c: Context, data: Uint8Array | null) {
+function bytes(c: Context, data: Uint8Array | null, type = 'application/octet-stream') {
 	if (!data) return c.json({ error: 'Not found' }, 404);
-	return c.body(data as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': 'application/octet-stream' });
+	return c.body(data as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff' });
 }
 
 app.onError((error, c) => {
-	const status = error instanceof NotFoundError ? 404 : error instanceof BadRequest ? 400 : 500;
-	if (status === 500) console.error('[anton]', error);
-	return c.json({ error: error.message }, status);
+	const status = statusOf(error);
+	if (status >= 500) console.error('[anton]', error);
+	return c.json({ error: error.message }, status as 400);
 });
 
 // Each prompt reads the session's current model before the agent renders.
@@ -88,6 +94,9 @@ app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req
 app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));
 app.get('/api/sessions/:id/file', async (c) => bytes(c, await readFile(c.req.param('id'), c.req.query('path') ?? '')));
 app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req.param('id'))));
-app.get('/api/sessions/:id/output', async (c) => bytes(c, await readOutputFile(c.req.param('id'), c.req.query('path') ?? '')));
+app.get('/api/sessions/:id/output', async (c) => {
+	const path = c.req.query('path') ?? '';
+	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));
+});
 
 export default app;

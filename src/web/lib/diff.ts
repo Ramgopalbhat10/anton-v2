@@ -11,12 +11,11 @@ export type FileDiff = {
 };
 
 /**
- * Parse a unified `git diff` patch into per-file line lists. When the same
- * path appears more than once (upstream, staged and unstaged diffs are
- * concatenated), the hunks are kept together under one entry.
+ * Parse a unified `git diff` patch into per-file line lists. Binary patches
+ * list the file with no lines.
  */
 export function parsePatch(patch: string): FileDiff[] {
-	const files = new Map<string, FileDiff>();
+	const files: FileDiff[] = [];
 	let current: FileDiff | null = null;
 	let oldLine = 0;
 	let newLine = 0;
@@ -25,8 +24,8 @@ export function parsePatch(patch: string): FileDiff[] {
 		if (raw.startsWith('diff --git ')) {
 			const match = / b\/(.+)$/.exec(raw);
 			const path = match?.[1] ?? raw.slice(11);
-			current = files.get(path) ?? { path, status: 'M', added: 0, removed: 0, lines: [] };
-			files.set(path, current);
+			current = { path, status: 'M', added: 0, removed: 0, lines: [] };
+			files.push(current);
 			continue;
 		}
 		if (!current) continue;
@@ -50,5 +49,5 @@ export function parsePatch(patch: string): FileDiff[] {
 			oldLine++;
 		}
 	}
-	return [...files.values()];
+	return files;
 }

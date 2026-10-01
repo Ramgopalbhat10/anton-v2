@@ -7,8 +7,8 @@ import { isKnownModel } from '../lib/models.ts';
 import { getProviders } from '../providers/index.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
+import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 
-export class NotFoundError extends Error {}
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -90,7 +90,7 @@ export async function isRunning(id: string): Promise<boolean> {
 }
 
 export async function setModel(id: string, model: string): Promise<Session> {
-	if (!isKnownModel(model)) throw new Error('Unknown model');
+	if (!isKnownModel(model)) throw new InvalidInputError('Unknown model');
 	await updateSession(id, { model });
 	models.set(id, model);
 	return getSession(id);

@@ -290,8 +290,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const messages = agent.messages.filter(
 		(message) => message.settlement || (message.display === 'visible' && message.role !== 'system'),
 	);
-	const project = session.data?.project;
-	const meta = project ? [project.repoFullName, project.defaultBranch] : [];
+	const meta = session.data ? [session.data.repo, session.data.branch] : [];
 	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
 
 	useEffect(() => {
@@ -311,7 +310,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 				<div className="mx-auto flex max-w-[700px] flex-col gap-5">
 					{health.data && !health.data.openRouter ? (
 						<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
-							Set OPENROUTER_API_KEY in .env to run the coding agent. Changes, Files, and Terminal still use the local VM.
+							Set OPENROUTER_API_KEY to run the coding agent. Changes, Files, Library and Terminal still work.
 						</div>
 					) : null}
 					{messages.length === 0 && !busy ? (

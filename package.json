@@ -8,9 +8,9 @@
 	"scripts": {
 		"dev": "concurrently -k -n api,ui -c blue,magenta \"npm run dev:api\" \"npm run dev:ui\"",
 		"dev:api": "vite dev --host 127.0.0.1 --port 43128 --strictPort",
-		"dev:ui": "vite --config vite.config.ui.ts --host 0.0.0.0 --port 43127 --strictPort",
+		"dev:ui": "vite --config vite.config.ui.ts --host 127.0.0.1 --port 43127 --strictPort",
 		"build": "vite build && vite build --config vite.config.ui.ts",
-		"start": "node dist/server.mjs",
+		"start": "node src/server.ts",
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
 		"test": "node --experimental-strip-types --test tests/*.test.ts"
 	},

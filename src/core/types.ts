@@ -13,6 +13,8 @@ export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 export type Session = {
 	id: string;
 	projectId: string;
+	/** `owner/name` of the project's repository. */
+	repo: string;
 	title: string;
 	model: string;
 	/** The branch the task works on, created from `baseSha`. */

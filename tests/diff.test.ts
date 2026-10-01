@@ -33,8 +33,11 @@ test('parsePatch splits files with stats, status and line numbers', () => {
 	assert.equal(docs.added, 2);
 });
 
-test('parsePatch merges repeated paths from concatenated diffs', () => {
-	const files = parsePatch(`${patch}\n${patch}`);
-	assert.equal(files.length, 2);
-	assert.equal(files[0].added, 2);
+test('parsePatch lists a binary file without lines', () => {
+	const [image] = parsePatch(
+		['diff --git a/logo.png b/logo.png', 'new file mode 100644', 'index 0000000..1b2c3d4', 'GIT binary patch', 'literal 4', 'LcmZQzWMT#Y01f~L', '', 'literal 0', 'HcmV?d00001', ''].join('\n'),
+	);
+	assert.equal(image.path, 'logo.png');
+	assert.equal(image.status, 'A');
+	assert.deepEqual([image.added, image.removed, image.lines.length], [0, 0, 0]);
 });

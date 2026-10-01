@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
-import { attachTerminal } from './services/terminal.ts';
+import { routeUpgrades } from './core/upgrades.ts';
 
 /**
  * Production entry: the built Flue application, the built UI, and the
@@ -22,7 +22,7 @@ site.get('/*', serveStatic({ path: './dist/client/index.html' }));
 const server = serve({ fetch: site.fetch, port, serverOptions: { requestTimeout: 0 } }, () =>
 	console.log(`[anton] listening on http://localhost:${port}`),
 );
-attachTerminal(server as Server);
+routeUpgrades(server as Server, '/vm/');
 
 async function shutdown(code: number): Promise<void> {
 	server.close();

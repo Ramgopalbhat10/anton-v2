@@ -6,6 +6,7 @@ import { Icon, Kbd } from '@/components/signal';
 import { api } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
+import { chooseProject, useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 
 type Entry = { id: string; label: string; meta: string; running: boolean; onSelect: () => void };
@@ -15,6 +16,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	const navigate = useNavigate();
 	const create = useCreateChat();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, enabled: open });
+	const project = chooseProject(useProjects().data?.projects ?? []);
 	const [query, setQuery] = useState('');
 	const [index, setIndex] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
@@ -45,7 +47,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 			.map((session) => ({
 				id: session.id,
 				label: session.title,
-				meta: age(session.createdAt),
+				meta: `${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
 				running: session.status === 'running' || session.status === 'starting',
 				onSelect: () => {
 					onClose();
@@ -59,7 +61,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	function start() {
 		onClose();
 		const prompt = query.trim();
-		if (prompt) create.mutate({ prompt });
+		if (prompt && project) create.mutate({ prompt, projectId: project.id });
 		else void navigate({ to: '/' });
 	}
 

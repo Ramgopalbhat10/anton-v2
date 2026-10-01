@@ -7,6 +7,7 @@ import { type Checkpoint, type SavedOutput, readBlob, readCheckpoint, readCheckp
 import { type FileChange, type LogEntry, changes, listFiles, repoDir } from './git.ts';
 import type { Machine } from '../core/ports.ts';
 import { liveMachine } from './workspace.ts';
+import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 
 /**
  * Where a task's files are read from, best first: its running machine, its
@@ -33,7 +34,7 @@ type Context = {
 async function context(id: string): Promise<Context> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new Error('Session not found');
+	if (!session || !project) throw new NotFoundError('Session not found');
 	const [machine, checkpoint] = await Promise.all([liveMachine(id), readCheckpoint(id)]);
 	const source: Source = machine ? 'live' : checkpoint ? 'saved' : 'base';
 	return {
@@ -85,9 +86,9 @@ export async function fileTree(id: string): Promise<FileTree> {
 
 async function savedOrBase(ctx: Context, path: string): Promise<Uint8Array> {
 	const saved = ctx.checkpoint?.files.find((file) => file.path === path);
-	if (saved?.status === 'D') throw new Error('File was deleted');
-	if (saved?.blob) return (await readBlob(saved.blob)) ?? Promise.reject(new Error('Saved file is missing'));
-	if (saved) throw new Error('File too large to preview');
+	if (saved?.status === 'D') throw new NotFoundError('File was deleted');
+	if (saved?.blob) return (await readBlob(saved.blob)) ?? Promise.reject(new NotFoundError('Saved file is missing'));
+	if (saved) throw new InvalidInputError('File too large to preview');
 	return getProviders().git.file(ctx.repo, ctx.baseSha, path);
 }
 

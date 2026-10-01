@@ -1,4 +1,4 @@
-import type { IncomingMessage, Server } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import { saveCheckpoint } from './checkpoints.ts';
@@ -17,6 +17,17 @@ export function isSameOrigin(request: IncomingMessage): boolean {
 
 type Control = { type: 'resize'; cols: number; rows: number };
 
+/** A resize with sane bounds, or null for anything else. */
+function parseControl(raw: string): Control | null {
+	try {
+		const control = JSON.parse(raw) as Partial<Control>;
+		const valid = control.type === 'resize' && [control.cols, control.rows].every((n) => Number.isInteger(n) && n! > 0 && n! < 1000);
+		return valid ? (control as Control) : null;
+	} catch {
+		return null;
+	}
+}
+
 async function bridge(socket: WebSocket, id: string, size: { cols: number; rows: number }): Promise<void> {
 	const machine = await machineFor(id);
 	invalidateRunning();
@@ -25,8 +36,8 @@ async function bridge(socket: WebSocket, id: string, size: { cols: number; rows:
 	pty.onExit(() => socket.close());
 	socket.on('message', (data: RawData, isBinary: boolean) => {
 		if (isBinary) return pty.write(new Uint8Array(data as Buffer));
-		const control = JSON.parse(String(data)) as Control;
-		if (control.type === 'resize') void pty.resize(control.cols, control.rows).catch(() => undefined);
+		const control = parseControl(String(data));
+		if (control) void pty.resize(control.cols, control.rows).catch(() => undefined);
 	});
 	socket.on('close', () => {
 		pty.close();
@@ -34,27 +45,25 @@ async function bridge(socket: WebSocket, id: string, size: { cols: number; rows:
 	});
 }
 
+const wss = new WebSocketServer({ noServer: true });
+
 /**
- * Serves `/vm/:id/pty` on an HTTP server: binary frames carry keystrokes and
+ * Handles an upgrade to `/vm/:id/pty`: binary frames carry keystrokes and
  * output, text frames carry `{ type: 'resize' }`. Opening a terminal is an
  * explicit request for a machine, so it starts one when needed.
  */
-export function attachTerminal(server: Server): void {
-	const wss = new WebSocketServer({ noServer: true });
-	server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-		const url = new URL(request.url ?? '/', 'http://localhost');
-		const match = PATH.exec(url.pathname);
-		if (!match) return;
-		if (!isSameOrigin(request)) {
-			socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
-			return;
-		}
-		const size = { cols: Number(url.searchParams.get('cols')) || 80, rows: Number(url.searchParams.get('rows')) || 24 };
-		wss.handleUpgrade(request, socket, head, (ws) => {
-			bridge(ws, match[1], size).catch((error: unknown) => {
-				ws.send(new TextEncoder().encode(`\r\n${error instanceof Error ? error.message : String(error)}\r\n`));
-				ws.close(1011);
-			});
+export function handleTerminalUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
+	const url = new URL(request.url ?? '/', 'http://localhost');
+	const match = PATH.exec(url.pathname);
+	if (!match || !isSameOrigin(request)) {
+		socket.end(`HTTP/1.1 ${match ? '403 Forbidden' : '404 Not Found'}\r\n\r\n`);
+		return;
+	}
+	const size = { cols: Number(url.searchParams.get('cols')) || 80, rows: Number(url.searchParams.get('rows')) || 24 };
+	wss.handleUpgrade(request, socket, head, (ws) => {
+		bridge(ws, match[1], size).catch((error: unknown) => {
+			ws.send(new TextEncoder().encode(`\r\n${error instanceof Error ? error.message : String(error)}\r\n`));
+			ws.close(1011);
 		});
 	});
 }

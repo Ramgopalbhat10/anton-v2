@@ -3,6 +3,7 @@
 import { type AgentProps, defineSubagent, defineTool, useAgentFinish, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
+import { thinkingFor } from '../lib/models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
@@ -45,7 +46,8 @@ const tester = defineSubagent({
 });
 
 export function Coder({ id }: AgentProps) {
-	useModel(modelFor(id));
+	const model = modelFor(id);
+	useModel(model, { thinkingLevel: thinkingFor(model) });
 	useSandbox({
 		async createSandbox() {
 			const machine = await machineFor(id);

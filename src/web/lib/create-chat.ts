@@ -2,23 +2,22 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api } from '@/lib/api';
 import { setPendingPrompt } from '@/lib/pending-prompt';
+import { rememberProject } from '@/lib/projects';
 
 function titleFrom(prompt: string): string {
 	const line = prompt.trim().split('\n')[0] ?? '';
 	return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line;
 }
 
-/** Create a session and open it; a prompt becomes its title and first message. */
+/** Create a task on a repo and branch and open it; a prompt becomes its title and first message. */
 export function useCreateChat() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: async (input?: { prompt?: string; model?: string }) => {
-			const prompt = input?.prompt?.trim();
-			const session = await api.createSession({
-				title: prompt ? titleFrom(prompt) : 'New chat',
-				model: input?.model,
-			});
+		mutationFn: async ({ prompt: raw, ...input }: { projectId: string; branch?: string; model?: string; prompt?: string }) => {
+			const prompt = raw?.trim();
+			const session = await api.createSession({ ...input, title: prompt ? titleFrom(prompt) : 'New task' });
+			rememberProject(input.projectId);
 			if (prompt) setPendingPrompt(session.id, prompt);
 			return session;
 		},

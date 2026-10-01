@@ -52,7 +52,7 @@ export function ChatSidebar({
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string };
 	const queryClient = useQueryClient();
-	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
+	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: 5000 });
 	const stop = useMutation({
 		mutationFn: (id: string) => api.stopSession(id),
 		onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }),
@@ -60,8 +60,6 @@ export function ChatSidebar({
 	const [searching, setSearching] = useState(false);
 	const [query, setQuery] = useState('');
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	const project = sessionsQuery.data?.project;
-	const repo = project?.repoFullName ?? 'local/anton-v2';
 	const running = sessions.filter((session) => session.status === 'running' || session.status === 'starting');
 	const recent = sessions
 		.filter((session) => session.status === 'stopped' || session.status === 'error')
@@ -76,7 +74,7 @@ export function ChatSidebar({
 		>
 			<div className="flex h-11 shrink-0 items-center gap-1.5 pr-2 pl-3">
 				<Logo />
-				<div className="min-w-0 truncate text-[13px] font-medium">{repo.split('/').pop()}</div>
+				<div className="min-w-0 truncate text-[13px] font-medium">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
 				<IconBtn icon={Search} size="xs" label="Command palette" onClick={onOpenPalette} />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
@@ -139,7 +137,7 @@ export function ChatSidebar({
 										<div className="flex min-w-0 flex-1 flex-col gap-px">
 											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
 											<div className="truncate text-[11px] tracking-[0.02em] text-(--text-tertiary)">
-												{age(session.createdAt)} · {repo}
+												{age(session.createdAt)} · {session.repo.split('/').pop()}
 											</div>
 										</div>
 									</Link>

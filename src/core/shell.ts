@@ -1,4 +1,5 @@
 import type { ExecOptions, ExecResult, Machine } from './ports.ts';
+import { InvalidInputError } from './errors.ts';
 
 export function quote(value: string): string {
 	return `'${value.replaceAll("'", `'\\''`)}'`;
@@ -33,7 +34,7 @@ export class CommandError extends Error {
 export function safeRelativePath(input: string): string {
 	const parts = input.split('/').filter((part) => part !== '' && part !== '.');
 	if (parts.length === 0 || input.startsWith('/') || parts.includes('..')) {
-		throw new Error(`Invalid path: ${input}`);
+		throw new InvalidInputError(`Invalid path: ${input}`);
 	}
 	return parts.join('/');
 }

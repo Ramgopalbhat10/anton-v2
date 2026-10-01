@@ -134,7 +134,7 @@ export function SessionPage() {
 					<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 						<MenuButton />
 						<div className="min-w-[100px] flex-auto truncate text-[13px] font-medium">
-							{session.data?.session.title ?? 'Task'}
+							{session.data?.title ?? 'Task'}
 						</div>
 						{status ? (
 							<div className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`}>
