@@ -1,127 +1,93 @@
 import { createAgentRouter } from '@flue/runtime/routing';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
+import { type Context, Hono } from 'hono';
+import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
-import { migrateAppDb } from './lib/db-app.ts';
-import { hasOpenRouter } from './lib/env.ts';
-import { OPENROUTER_MODELS } from './lib/models.ts';
+import { config } from './config.ts';
+import { MODELS } from './lib/models.ts';
+import { getProviders } from './providers/index.ts';
+import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
+import { addProject, branches, projects } from './services/projects.ts';
 import {
+	NotFoundError,
 	createSession,
-	ensureDevProject,
-	getProject,
 	getSession,
 	listSessions,
+	primeModel,
+	resumeSession,
+	setModel,
 	stopSession,
-	updateSessionModel,
-} from './lib/sessions.ts';
-import { gitStatus, listPaths, readWorkspaceFile } from './lib/vm-proxy.ts';
+} from './services/sessions.ts';
 
 const app = new Hono();
 
-let ready: Promise<void> | null = null;
-function ensureReady() {
-	ready ??= (async () => {
-		await migrateAppDb();
-		await ensureDevProject();
-	})();
-	return ready;
+async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
+	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
+	if (!result.success) throw new BadRequest(result.issues.map((issue) => issue.message).join('; '));
+	return result.output;
 }
 
-app.use(
-	'*',
-	cors({
-		origin: ['http://127.0.0.1:43127', 'http://localhost:43127'],
-		allowHeaders: ['Content-Type', 'Authorization'],
-		allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-	}),
-);
+class BadRequest extends Error {}
 
-app.use('*', async (c, next) => {
-	await ensureReady();
-	return next();
+function bytes(c: Context, data: Uint8Array | null) {
+	if (!data) return c.json({ error: 'Not found' }, 404);
+	return c.body(data as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': 'application/octet-stream' });
+}
+
+app.onError((error, c) => {
+	const status = error instanceof NotFoundError ? 404 : error instanceof BadRequest ? 400 : 500;
+	if (status === 500) console.error('[anton]', error);
+	return c.json({ error: error.message }, status);
 });
 
+// Each prompt reads the session's current model before the agent renders.
+app.post('/api/agents/coder/:id', async (c, next) => {
+	await primeModel(c.req.param('id'));
+	await next();
+});
 app.route('/api/agents/coder', createAgentRouter(Coder) as never);
 
 app.get('/api/health', (c) =>
 	c.json({
 		ok: true,
-		name: 'anton-v2',
-		openRouter: hasOpenRouter(),
+		openRouter: config.hasOpenRouter(),
+		providers: { sandbox: getProviders().sandbox.name, store: getProviders().store.name, git: getProviders().git.name },
 	}),
 );
 
-app.get('/api/models', (c) => c.json({ models: OPENROUTER_MODELS }));
+app.get('/api/models', (c) => c.json({ models: MODELS }));
 
-app.get('/api/sessions', async (c) => {
-	const sessions = await listSessions();
-	const project = await ensureDevProject();
-	return c.json({ sessions, project });
+app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
+app.post('/api/projects', async (c) => {
+	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
+	return c.json(await addProject(repo));
 });
+app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
+app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
 app.post('/api/sessions', async (c) => {
-	const body = await c.req.json().catch(() => ({}));
-	const session = await createSession({
-		projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
-		model: typeof body.model === 'string' ? body.model : undefined,
-		title: typeof body.title === 'string' ? body.title : undefined,
-	});
-	return c.json(session);
+	const input = await body(
+		c,
+		v.object({
+			projectId: v.string(),
+			branch: v.optional(v.string()),
+			model: v.optional(v.string()),
+			title: v.optional(v.pipe(v.string(), v.maxLength(200))),
+		}),
+	);
+	return c.json(await createSession(input));
 });
-
-app.get('/api/sessions/:id', async (c) => {
-	const session = await getSession(c.req.param('id'));
-	if (!session) return c.json({ error: 'Session not found' }, 404);
-	const project = await getProject(session.projectId);
-	return c.json({ session, project });
-});
-
+app.get('/api/sessions/:id', async (c) => c.json(await getSession(c.req.param('id'))));
 app.patch('/api/sessions/:id', async (c) => {
-	const body = await c.req.json().catch(() => ({}));
-	if (typeof body.model === 'string') {
-		const session = await updateSessionModel(c.req.param('id'), body.model);
-		return c.json(session);
-	}
-	return c.json({ error: 'Nothing to update' }, 400);
+	const { model } = await body(c, v.object({ model: v.string() }));
+	return c.json(await setModel(c.req.param('id'), model));
 });
+app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
+app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 
-app.post('/api/sessions/:id/stop', async (c) => {
-	const session = await stopSession(c.req.param('id'));
-	return c.json(session);
-});
-
-app.get('/api/vm/:id/git', async (c) => {
-	const session = await getSession(c.req.param('id'));
-	if (!session) return c.json({ error: 'Session not found' }, 404);
-	const project = await getProject(session.projectId);
-	if (!project) return c.json({ error: 'Project not found' }, 404);
-	if (session.status !== 'running') return c.json({ error: 'VM unavailable' }, 409);
-	const git = await gitStatus(project.workspacePath);
-	return c.json({
-		repo: project.repoFullName,
-		...git,
-	});
-});
-
-app.get('/api/vm/:id/fs', async (c) => {
-	const session = await getSession(c.req.param('id'));
-	if (!session) return c.json({ error: 'Session not found' }, 404);
-	const project = await getProject(session.projectId);
-	if (!project) return c.json({ error: 'Project not found' }, 404);
-	if (session.status !== 'running') return c.json({ error: 'VM unavailable' }, 409);
-	const paths = await listPaths(project.workspacePath);
-	return c.json({ cwd: project.workspacePath, paths });
-});
-
-app.get('/api/vm/:id/file', async (c) => {
-	const session = await getSession(c.req.param('id'));
-	if (!session) return c.json({ error: 'Session not found' }, 404);
-	const project = await getProject(session.projectId);
-	if (!project) return c.json({ error: 'Project not found' }, 404);
-	const rel = c.req.query('path');
-	if (!rel) return c.json({ error: 'path required' }, 400);
-	const contents = await readWorkspaceFile(project.workspacePath, rel);
-	return c.json({ path: rel, contents });
-});
+app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'))));
+app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));
+app.get('/api/sessions/:id/file', async (c) => bytes(c, await readFile(c.req.param('id'), c.req.query('path') ?? '')));
+app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req.param('id'))));
+app.get('/api/sessions/:id/output', async (c) => bytes(c, await readOutputFile(c.req.param('id'), c.req.query('path') ?? '')));
 
 export default app;

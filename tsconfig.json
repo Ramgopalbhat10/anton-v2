@@ -15,14 +15,25 @@
 		"skipLibCheck": true,
 		"noEmit": true,
 		"paths": {
-			"@/*": ["./src/web/*"]
-		}
+			"@/*": [
+				"./src/web/*"
+			]
+		},
+		"erasableSyntaxOnly": true
 	},
 	"include": [
 		"src/app.ts",
 		"src/db.ts",
+		"src/server.ts",
+		"src/config.ts",
 		"src/agents",
+		"src/core",
+		"src/db",
+		"src/dev",
+		"src/flue",
 		"src/lib",
+		"src/providers",
+		"src/services",
 		"tests"
 	]
 }
