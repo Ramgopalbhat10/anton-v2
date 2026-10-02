@@ -7,6 +7,7 @@ import {
 	setProvider,
 	useAgentFinish,
 	useModel,
+	useResponseFinish,
 	useSandbox,
 	useSubagent,
 	useTool,
@@ -19,6 +20,7 @@ import { repoDir } from '../services/git.ts';
 import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
+import { recordUsage, toUsage } from '../services/usage.ts';
 import { loadedModels } from '../services/models.ts';
 import { machineFor } from '../services/workspace.ts';
 
@@ -105,6 +107,12 @@ export function Coder({ id }: AgentProps) {
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 	useAgentFinish(async () => {
 		await saveCheckpoint(id, await machineFor(id)).catch((error: unknown) => console.warn('[anton] checkpoint failed', error));
+	});
+	// Each reply carries its own usage for the thread; the task keeps a running total.
+	useResponseFinish(({ response }) => {
+		const usage = toUsage(response.usage);
+		recordUsage(id, usage);
+		return { usage };
 	});
 	return [
 		'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',

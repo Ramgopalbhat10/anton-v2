@@ -44,7 +44,11 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** Model tokens and cost (US dollars) across every finished response. */
+	usage: Usage;
 };
+
+export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 
 /** A stored session row, before the live status is joined in. */
 export type SessionRecord = Omit<Session, 'status' | 'working'> & {

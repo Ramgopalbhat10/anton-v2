@@ -1,6 +1,7 @@
 import { ArrowUpRight, Check, ChevronRight, PanelRight, Plus, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { FilesTab } from '@/components/files-tab';
+import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
 import { LibraryTab } from '@/components/library-tab';
 import { PreviewTab } from '@/components/preview-tab';
@@ -15,6 +16,7 @@ export const panels = [
 	{ name: 'Files', desc: 'Browse the repository on the task branch' },
 	{ name: 'Preview', desc: 'The app the agent is running, live from the sandbox' },
 	{ name: 'Library', desc: 'Reports, screenshots and exports the agent saved' },
+	{ name: 'History', desc: 'Earlier states of the files, to compare or restore' },
 ] as const;
 
 export type PanelName = (typeof panels)[number]['name'];
@@ -25,6 +27,7 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	Files: FilesTab,
 	Preview: PreviewTab,
 	Library: LibraryTab,
+	History: HistoryTab,
 };
 
 function PanelTab({

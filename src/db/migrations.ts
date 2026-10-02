@@ -34,6 +34,12 @@ const migrations: string[][] = [
 		`ALTER TABLE projects ADD COLUMN preview_ports TEXT`,
 		`ALTER TABLE projects ADD COLUMN base_image TEXT`,
 	],
+	// 5: model tokens and cost per task.
+	[
+		`ALTER TABLE sessions ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE sessions ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE sessions ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

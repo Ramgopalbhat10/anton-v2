@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api, type PullRequest, type Session } from '@/lib/api';
+import { dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const STATE: Record<NonNullable<PullRequest['state']>, { label: string; tone: string }> = {
@@ -37,6 +38,20 @@ export function PullRequestChip({ session }: { session: Session }) {
 			{state ? <span className={cn('hidden sm:inline', state.tone)}>{state.label}</span> : null}
 			<Icon icon={ArrowUpRight} size={12} className="text-(--icon-tertiary)" />
 		</a>
+	);
+}
+
+/** What the task has spent on its model so far; nothing until a response finishes. */
+export function UsageChip({ session }: { session: Session }) {
+	const { inputTokens, outputTokens, cost } = session.usage;
+	if (inputTokens + outputTokens === 0) return null;
+	return (
+		<span
+			className="hidden shrink-0 text-[12px] whitespace-nowrap text-(--text-tertiary) sm:inline"
+			title={`${inputTokens.toLocaleString()} input and ${outputTokens.toLocaleString()} output tokens`}
+		>
+			{tokens(inputTokens + outputTokens)} · {dollars(cost)}
+		</span>
 	);
 }
 

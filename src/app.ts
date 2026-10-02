@@ -23,7 +23,9 @@ import {
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
+import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
+import { restoreCheckpoint } from './services/restore.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
@@ -129,6 +131,12 @@ app.delete('/api/sessions/:id', async (c) => {
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
+app.get('/api/sessions/:id/checkpoints', async (c) => c.json({ checkpoints: await listCheckpoints(c.req.param('id')) }));
+app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
+	const patch = await readCheckpointPatchAt(c.req.param('id'), c.req.param('at'));
+	return c.json({ at: c.req.param('at'), patch });
+});
+app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 

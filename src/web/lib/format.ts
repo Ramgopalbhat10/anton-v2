@@ -22,3 +22,17 @@ export function elapsed(ms: number): string {
 export function clock(iso: string): string {
 	return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
+
+/** Token counts at a glance: "840", "12.3K", "1.2M". */
+export function tokens(count: number): string {
+	if (count < 1000) return String(count);
+	if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}K`;
+	return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
+/** US dollars, with enough digits that small model costs do not read as zero. */
+export function dollars(amount: number): string {
+	if (amount === 0) return '$0';
+	if (amount < 0.001) return '<$0.001';
+	return `$${amount.toFixed(amount < 1 ? 3 : 2)}`;
+}

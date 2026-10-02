@@ -38,7 +38,14 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** Model tokens and cost (US dollars) across every finished response. */
+	usage: Usage;
 };
+
+export type Usage = { inputTokens: number; outputTokens: number; cost: number };
+
+/** One distinct state of the task's files, newest first in the timeline. */
+export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
 /** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
 export type ProjectSettings = {
@@ -123,6 +130,10 @@ export const api = {
 	editSession: (id: string, change: Partial<ModelChoice> & { title?: string }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
+	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
+	checkpoint: (id: string, at: string) => json<{ at: string; patch: string | null }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}`),
+	restoreCheckpoint: (id: string, at: string) =>
+		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	/** Stops the agent's current turn and anything queued behind it. */
