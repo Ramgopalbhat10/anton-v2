@@ -69,7 +69,9 @@ export function Composer({
 	const choice = { model: session.data?.model ?? models.data?.default ?? '', reasoning: session.data?.reasoning ?? null };
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
-	const ready = (text.trim() || images.length > 0) && !blind;
+	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: 30_000 });
+	const blocked = budget.data?.blocked ?? null;
+	const ready = (text.trim() || images.length > 0) && !blind && !blocked;
 
 	return (
 		<form
@@ -113,9 +115,9 @@ export function Composer({
 					rows={2}
 					className="w-full resize-none border-0 bg-transparent p-0 text-[13px] leading-[19px] text-(--text-primary) outline-none"
 				/>
-				{blind || notice ? (
-					<div className="text-[12px] text-(--warning-text)">
-						{blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : notice}
+				{blocked || blind || notice ? (
+					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
+						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : notice)}
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">

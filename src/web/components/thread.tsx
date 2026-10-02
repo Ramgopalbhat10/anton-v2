@@ -389,7 +389,9 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
-								The agent turn failed{agent.error?.message ? `: ${agent.error.message}` : ''}. Check OPENROUTER_API_KEY or send the message again.
+								{agent.error?.message
+								? `The agent turn failed: ${agent.error.message}`
+								: 'The agent turn failed. Check OPENROUTER_API_KEY or send the message again.'}
 							</Notice>
 						) : null}
 					</div>

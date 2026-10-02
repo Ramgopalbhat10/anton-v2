@@ -26,6 +26,8 @@ import {
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
 import { restoreCheckpoint } from './services/restore.ts';
+import { assertWithinBudget, budget, setLimits } from './services/budget.ts';
+import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
@@ -37,6 +39,7 @@ publishUpgradeHandler(handleTerminalUpgrade);
 observe(recordAgentEvent);
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
+scheduleCleanup();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
@@ -59,8 +62,9 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// Each prompt reads the session's current model before the agent renders.
+// Each prompt is checked against the spending caps, then reads the session's current model before the agent renders.
 app.post('/api/agents/coder/:id', async (c, next) => {
+	await assertWithinBudget(c.req.param('id'));
 	await primeModel(c.req.param('id'));
 	await next();
 });
@@ -73,6 +77,16 @@ app.get('/api/health', (c) =>
 		providers: { sandbox: getProviders().sandbox.name, store: getProviders().store.name, git: getProviders().git.name },
 	}),
 );
+
+app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
+const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
+app.put('/api/settings/limits', async (c) => {
+	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));
+	await setLimits(next);
+	return c.json(await budget());
+});
+app.get('/api/storage', async (c) => c.json(await storageView()));
+app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
 app.get('/api/models', async (c) => c.json({ models: await listModels(), default: config.model }));
 

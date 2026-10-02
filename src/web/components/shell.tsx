@@ -126,6 +126,7 @@ export function SessionPage() {
 	useEffect(() => {
 		void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 		void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+		void queryClient.invalidateQueries({ queryKey: ['budget'] });
 	}, [agent.status, queryClient, sessionId]);
 
 	function setOpen(next: boolean) {

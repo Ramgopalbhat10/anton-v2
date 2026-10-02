@@ -73,7 +73,8 @@ export type SandboxProvider = {
 	snapshot(machine: Machine): Promise<string>;
 };
 
-export type StoredObject = { key: string; size: number };
+/** `modifiedAt` is milliseconds since the epoch. */
+export type StoredObject = { key: string; size: number; modifiedAt: number };
 
 export type ObjectStore = {
 	readonly name: string;
