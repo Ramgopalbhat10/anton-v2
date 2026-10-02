@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Composer } from '@/components/composer';
+import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, Spinner } from '@/components/signal';
 import { api } from '@/lib/api';
 import { elapsed } from '@/lib/format';
@@ -34,6 +35,12 @@ function field(input: unknown, key: string): string {
 		return typeof value === 'string' ? value : value == null ? '' : String(value);
 	}
 	return '';
+}
+
+/** The tool returns `{ url }`; the runtime may wrap it as `{ output: { url } }`. */
+function pullRequestUrl(output: unknown): string {
+	const record = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
+	return field(record, 'url') || field(record.output, 'url');
 }
 
 function lineCount(text: string) {
@@ -105,8 +112,22 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 					</>
 				),
 			};
-		case 'open_pull_request':
-			return { icon: GitPullRequest, body: <>Opened a pull request</> };
+		case 'open_pull_request': {
+			const url = pullRequestUrl(part.state === 'output-available' ? part.output : undefined);
+			return {
+				icon: GitPullRequest,
+				body: url ? (
+					<>
+						Opened{' '}
+						<a href={url} target="_blank" rel="noreferrer" className="text-(--accent-text) underline underline-offset-2">
+							{url.replace(/^https:\/\/github\.com\//, '')}
+						</a>
+					</>
+				) : (
+					<>Opening a pull request</>
+				),
+			};
+		}
 		default:
 			return { icon: Wrench, body: <>Called <Em>{part.toolName}</Em></> };
 	}
@@ -124,24 +145,6 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 		}
 	}
 	return blocks;
-}
-
-/** Markdown-lite: `code` spans render as inline code; everything else stays prose. */
-function Prose({ text }: { text: string }) {
-	const pieces = text.split(/(`[^`\n]+`)/g);
-	return (
-		<div className="text-[13px] leading-5 whitespace-pre-wrap text-pretty text-(--text-primary)">
-			{pieces.map((piece, index) =>
-				piece.startsWith('`') && piece.endsWith('`') && piece.length > 2 ? (
-					<code key={index} className="sg-code">
-						{piece.slice(1, -1)}
-					</code>
-				) : (
-					<Fragment key={index}>{piece}</Fragment>
-				),
-			)}
-		</div>
-	);
 }
 
 function ThoughtRow({ part }: { part: ReasoningPart }) {
@@ -258,7 +261,7 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 			</div>
 			{blocks.map((block, index) =>
 				block.kind === 'text' ? (
-					<Prose key={index} text={block.text} />
+					<Markdown key={index} text={block.text} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} />
 				),
@@ -343,7 +346,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 					) : null}
 				</div>
 			</div>
-			<Composer busy={busy} onSend={(text) => agent.sendMessage(text)} sessionId={sessionId} />
+			<Composer busy={busy} onSend={(text) => agent.sendMessage(text)} onStop={() => api.stopAgent(sessionId)} sessionId={sessionId} />
 		</div>
 	);
 }

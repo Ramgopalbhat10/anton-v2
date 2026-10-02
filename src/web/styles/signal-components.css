@@ -67,3 +67,27 @@
 .sg-btn,.sg-icon-btn{border-radius:8px}
 .sg-kbd,.sg-kbd-group__plus,.sg-avatar{font-family:var(--font-sans)}
 .sg-btn svg{stroke-width:1.5}
+
+/* Agent replies rendered from markdown, in body type. */
+.sg-markdown{font-size:var(--text-body-size);line-height:20px;color:var(--text-primary);text-wrap:pretty;overflow-wrap:anywhere}
+.sg-markdown>:first-child{margin-top:0}
+.sg-markdown>:last-child{margin-bottom:0}
+.sg-markdown p,.sg-markdown ul,.sg-markdown ol,.sg-markdown pre,.sg-markdown table,.sg-markdown blockquote{margin:0 0 10px}
+.sg-markdown h1,.sg-markdown h2,.sg-markdown h3,.sg-markdown h4{margin:16px 0 6px;font-weight:var(--weight-semibold);color:var(--text-primary)}
+.sg-markdown h1{font-size:var(--text-h3-size);line-height:var(--text-h3-line)}
+.sg-markdown h2,.sg-markdown h3,.sg-markdown h4{font-size:var(--text-body-lg-size);line-height:var(--text-body-lg-line)}
+.sg-markdown ul,.sg-markdown ol{padding-left:20px}
+.sg-markdown ul{list-style:disc}
+.sg-markdown ol{list-style:decimal}
+.sg-markdown li{margin:2px 0}
+.sg-markdown li>p{margin:0}
+.sg-markdown a{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+.sg-markdown strong{font-weight:var(--weight-semibold)}
+.sg-markdown blockquote{padding-left:10px;border-left:2px solid var(--border-strong);color:var(--text-secondary)}
+.sg-markdown hr{margin:14px 0;border:0;border-top:1px solid var(--border-subtle)}
+.sg-markdown :not(pre)>code{font-family:var(--font-mono);font-size:var(--text-mono-size);padding:1px 4px;border-radius:var(--radius-sm);background:var(--alpha-white-6);border:1px solid var(--border-subtle)}
+.sg-markdown pre{overflow-x:auto;padding:10px 12px;border-radius:var(--radius-md);background:var(--bg-inset);font-family:var(--font-mono);font-size:var(--text-mono-code-size);line-height:var(--text-mono-code-line);color:var(--text-secondary)}
+.sg-markdown table{display:block;overflow-x:auto;border-collapse:collapse;font-size:var(--text-small-size)}
+.sg-markdown th,.sg-markdown td{padding:5px 10px;border:1px solid var(--border-subtle);text-align:left;vertical-align:top}
+.sg-markdown th{font-weight:var(--weight-medium);background:var(--alpha-white-4)}
+.sg-markdown input[type=checkbox]{margin-right:6px;vertical-align:-1px}
