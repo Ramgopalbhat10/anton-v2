@@ -67,12 +67,14 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 			.map(([key, value]) => [key, value ?? project.env[key]] as const)
 			.filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
 	);
-	const tokens = new Map(project.mcpServers.map((server) => [server.name, server.auth]));
+	// A token stays only with the host it was given for, so pointing a server at a new host never sends it there.
+	const keyOf = (name: string, url: string) => `${name} ${URL.canParse(url) ? new URL(url).origin : url}`;
+	const tokens = new Map(project.mcpServers.map((server) => [keyOf(server.name, server.url), server.auth]));
 	const mcpServers = (change.mcpServers ?? project.mcpServers).map(({ name, url, tools, auth }) => ({
 		name,
 		url,
 		tools,
-		auth: auth === '' ? null : (auth ?? tokens.get(name) ?? null),
+		auth: auth === '' ? null : (auth ?? tokens.get(keyOf(name, url)) ?? null),
 	}));
 	await setProjectSettings(id, {
 		...change,

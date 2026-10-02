@@ -1,15 +1,27 @@
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Issue, Reasoning } from '../core/ports.ts';
 import type { Project } from '../core/types.ts';
-import { type Automation, deleteAutomation, getAutomation, insertAutomation, listAutomations, updateAutomation } from '../db/automations.ts';
+import {
+	type Automation,
+	claimIssue,
+	deleteAutomation,
+	getAutomation,
+	insertAutomation,
+	issueTasks,
+	listAutomations,
+	releaseIssue,
+	setIssueTask,
+	updateAutomation,
+} from '../db/automations.ts';
 import { getProject } from '../db/projects.ts';
 import { getProviders } from '../providers/index.ts';
+import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 
-/** At most this many issues become tasks per run, so labeling a backlog does not start them all at once. */
-const ISSUES_PER_RUN = 3;
+/** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
+const ISSUES_AT_ONCE = 3;
 const HOUR_MS = 60 * 60_000;
 
 export type AutomationInput = { kind: Automation['kind']; label?: string | null; everyHours?: number | null; prompt: string; model?: string | null; reasoning?: Reasoning | null };
@@ -80,15 +92,20 @@ const running = new Set<string>();
 const runners: Record<Automation['kind'], (automation: Automation, project: Project, run: Run) => Promise<Partial<Automation>>> = {
 	async issues(automation, project, { now }) {
 		const issues = await getProviders().git.listIssues(project.repoFullName, automation.label ?? '');
-		const fresh = issues.filter((issue) => !automation.seen.includes(issue.number)).slice(0, ISSUES_PER_RUN);
-		const seen = [...automation.seen];
-		for (const issue of fresh) {
-			await startTask(automation, `#${issue.number} ${issue.title}`.slice(0, 200), issuePrompt(issue, automation.prompt));
-			seen.push(issue.number);
-			// Saved per issue, so a failure later in the run never starts a second task for this one.
-			await updateAutomation(automation.id, { seen });
+		const taken = await issueTasks(project.id);
+		const room = ISSUES_AT_ONCE - taken.sessions.filter(isWorking).length;
+		for (const issue of issues.filter((item) => !taken.issues.has(item.number)).slice(0, Math.max(room, 0))) {
+			// Claimed first, so another automation, a recreated one or Run now never starts a second task for it.
+			if (!(await claimIssue(project.id, issue.number, automation.id))) continue;
+			const id = await startTask(automation, `#${issue.number} ${issue.title}`.slice(0, 200), issuePrompt(issue, automation.prompt)).catch(
+				async (error: unknown) => {
+					await releaseIssue(project.id, issue.number);
+					throw error;
+				},
+			);
+			await setIssueTask(project.id, issue.number, id);
 		}
-		return { seen, lastRunAt: new Date(now).toISOString() };
+		return { lastRunAt: new Date(now).toISOString() };
 	},
 	async schedule(automation, _project, { now, force }) {
 		// The first run comes one interval after the schedule is added; Run now starts one sooner.
@@ -105,13 +122,13 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
  * early. Errors are kept on the automation for the settings page.
  */
 export async function runAutomation(id: string, { now = Date.now(), force = false } = {}): Promise<Automation> {
-	const automation = await existing(id);
-	const project = await getProject(automation.projectId);
-	if (!project) throw new NotFoundError('Project not found');
-	// Run now and the timer can meet; one run at a time keeps an issue from starting two tasks.
-	if (running.has(id)) return automation;
+	// Run now and the timer can meet; one run at a time, reading the automation only once it holds the turn.
+	if (running.has(id)) return existing(id);
 	running.add(id);
 	try {
+		const automation = await existing(id);
+		const project = await getProject(automation.projectId);
+		if (!project) throw new NotFoundError('Project not found');
 		const update = await runners[automation.kind](automation, project, { now, force });
 		await updateAutomation(id, { lastError: null, ...update });
 	} catch (error) {

@@ -76,7 +76,8 @@ export function openRouterCatalog({ apiUrl, ttlMs }: OpenRouterOptions): ModelCa
 	let cached: { at: number; models: Promise<ModelInfo[]> } | undefined;
 
 	async function fetchModels(): Promise<ModelInfo[]> {
-		const response = await fetch(`${apiUrl}/models`);
+		// Bounded, as startup waits for it to load the tasks' models.
+		const response = await fetch(`${apiUrl}/models`, { signal: AbortSignal.timeout(15_000) });
 		if (!response.ok) throw new Error(`OpenRouter /models: ${response.status}`);
 		const { data } = (await response.json()) as { data: OpenRouterModel[] };
 		return data.filter(isAgentModel).map(toModelInfo);

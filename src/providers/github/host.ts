@@ -1,18 +1,35 @@
 import type { CheckResult, GitHost, PullRequestComment, PullRequestInput, PullRequestState, RepoInfo } from '../../core/ports.ts';
 
+/** Requests that take longer than this fail, so a stuck connection never stalls the headless loop. */
+const TIMEOUT_MS = 30_000;
+/** Lists longer than this many pages are cut, oldest pages first kept. */
+const MAX_PAGES = 10;
+
 const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
 
 type PullRequest = { state: 'open' | 'closed'; draft: boolean; merged_at: string | null; head: { sha: string } };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
-type Comment = { id: number; user: { login: string } | null; body: string | null; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
+type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
 
-const PASSING = new Set(['success', 'neutral', 'skipped']);
+const FAILING = new Set(['failure', 'timed_out', 'startup_failure']);
+
+/** Cancelled, stale and waiting-for-approval runs are not failures of the code. */
+function statusOf(run: CheckRun): CheckResult['status'] {
+	if (run.status !== 'completed') return 'pending';
+	if (FAILING.has(run.conclusion ?? '')) return 'failed';
+	return run.conclusion === 'success' ? 'passed' : 'skipped';
+}
 
 function checkOf(run: CheckRun): CheckResult {
-	const status = run.status !== 'completed' ? 'pending' : PASSING.has(run.conclusion ?? '') ? 'passed' : 'failed';
+	const status = statusOf(run);
 	const summary = (run.output?.title || run.output?.summary || run.conclusion || '').trim().slice(0, 500);
 	return { name: run.name, status, summary, url: run.html_url };
 }
+
+const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+/** People who can push to the repo, and apps installed on it; anyone else could steer the agent from a public repo. */
+const isTrusted = (comment: Comment) => TRUSTED.has(comment.author_association ?? '') || comment.user?.type === 'Bot';
 
 function commentOf(kind: string, comment: Comment): PullRequestComment {
 	return {
@@ -41,8 +58,10 @@ export type GitHubOptions = { token: string; apiUrl: string };
 
 /** GitHub over its REST API, authenticated with one token. */
 export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
+	/** `path` is under the API, or a full URL GitHub returned for a next page. */
 	async function call(path: string, init: RequestInit & { accept?: string } = {}): Promise<Response> {
-		const response = await fetch(`${apiUrl}${path}`, {
+		const response = await fetch(path.startsWith(apiUrl) ? path : `${apiUrl}${path}`, {
+			signal: AbortSignal.timeout(TIMEOUT_MS),
 			...init,
 			headers: {
 				Accept: init.accept ?? 'application/vnd.github+json',
@@ -58,6 +77,18 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		return response;
 	}
 	const json = async <T>(path: string, init?: RequestInit & { accept?: string }) => (await call(path, init)).json() as Promise<T>;
+
+	/** Every page of a list, following GitHub's `next` links. */
+	async function all<T>(path: string): Promise<T[]> {
+		const items: T[] = [];
+		let next: string | null = path;
+		for (let page = 0; next && page < MAX_PAGES; page += 1) {
+			const response = await call(next);
+			items.push(...((await response.json()) as T[]));
+			next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get('link') ?? '')?.[1] ?? null;
+		}
+		return items;
+	}
 
 	async function existingPullRequest({ repo, head }: PullRequestInput): Promise<string | null> {
 		const owner = repo.split('/')[0];
@@ -117,8 +148,8 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			return stateOf(await json<PullRequest>(`/repos/${repo}/pulls/${number}`));
 		},
 		async listIssues(fullName, label) {
-			const issues = await json<Array<{ number: number; title: string; body: string | null; html_url: string; pull_request?: unknown }>>(
-				`/repos/${fullName}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=50`,
+			const issues = await all<{ number: number; title: string; body: string | null; html_url: string; pull_request?: unknown }>(
+				`/repos/${fullName}/issues?state=open&labels=${encodeURIComponent(label)}&sort=created&direction=asc&per_page=100`,
 			);
 			return issues
 				.filter((issue) => !issue.pull_request)
@@ -127,18 +158,21 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		async pullRequestActivity(url) {
 			const { repo, number } = pullOf(url);
 			const pull = await json<PullRequest>(`/repos/${repo}/pulls/${number}`);
+			const state = stateOf(pull);
+			// A finished pull request needs nothing more, so its checks and comments are not fetched.
+			if (state === 'merged' || state === 'closed') return { state, headSha: pull.head.sha, checks: [], comments: [] };
 			const [runs, notes, lineNotes, reviews] = await Promise.all([
 				json<{ check_runs: CheckRun[] }>(`/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`),
-				json<Comment[]>(`/repos/${repo}/issues/${number}/comments?per_page=100`),
-				json<Comment[]>(`/repos/${repo}/pulls/${number}/comments?per_page=100`),
-				json<Comment[]>(`/repos/${repo}/pulls/${number}/reviews?per_page=100`),
+				all<Comment>(`/repos/${repo}/issues/${number}/comments?per_page=100`),
+				all<Comment>(`/repos/${repo}/pulls/${number}/comments?per_page=100`),
+				all<Comment>(`/repos/${repo}/pulls/${number}/reviews?per_page=100`),
 			]);
 			const comments = [
-				...notes.map((comment) => commentOf('comment', comment)),
-				...lineNotes.map((comment) => commentOf('line', comment)),
-				...reviews.map((review) => commentOf('review', review)),
+				...notes.filter(isTrusted).map((comment) => commentOf('comment', comment)),
+				...lineNotes.filter(isTrusted).map((comment) => commentOf('line', comment)),
+				...reviews.filter(isTrusted).map((review) => commentOf('review', review)),
 			].filter((comment) => comment.body);
-			return { state: stateOf(pull), headSha: pull.head.sha, checks: runs.check_runs.map(checkOf), comments };
+			return { state, headSha: pull.head.sha, checks: runs.check_runs.map(checkOf), comments };
 		},
 	};
 }

@@ -95,8 +95,8 @@ const { toUsage } = await import('../src/services/usage.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
-const { addAutomation, runAutomation, runDueAutomations } = await import('../src/services/automations.ts');
-const { followUp, MAX_FOLLOW_UPS } = await import('../src/services/follow-ups.ts');
+const { addAutomation, removeAutomation, runAutomation, runDueAutomations } = await import('../src/services/automations.ts');
+const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/follow-ups.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 
 const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
@@ -551,18 +551,39 @@ test('automations start one task per labeled issue and run schedules when due', 
 		['1', '2', '3', '4'],
 		'each issue starts one task, ever',
 	);
+	const twin = await addAutomation(project.id, { kind: 'issues', label: 'anton', prompt: '' });
+	await removeAutomation(fromIssues.id);
+	const again = await addAutomation(project.id, { kind: 'issues', label: 'anton', prompt: '' });
+	await Promise.all([runAutomation(twin.id), runAutomation(again.id), runAutomation(again.id, { force: true })]);
+	assert.equal(delivered.length, 4, 'no issue starts a second task, whichever automation finds it');
+
+	issues = [...issues, issue(5), issue(6), issue(7), issue(8)];
+	const busy = delivered.slice(0, 3).map((item) => item.id);
+	for (const id of busy) recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId: 'issue' });
+	await runAutomation(again.id);
+	assert.equal(delivered.length, 4, 'waits while three issue tasks are working');
+	recordAgentEvent({ type: 'submission_settled', instanceId: busy[0], submissionId: 'issue' });
+	await runAutomation(again.id);
+	assert.deepEqual(
+		delivered.slice(4).map((item) => item.text.match(/#(\d+)/)?.[1]),
+		['5'],
+		'starts one when one finishes',
+	);
+	for (const id of busy.slice(1)) recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId: 'issue' });
+	await removeAutomation(twin.id);
+	await removeAutomation(again.id);
 
 	const schedule = await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Update the dependencies\nand run the tests.' });
 	const now = Date.parse(schedule.createdAt) + 24 * 60 * 60_000;
 	await runAutomation(schedule.id, { now: now - 60_000 });
-	assert.equal(delivered.length, 4, 'the first run is one interval after it was added');
+	assert.equal(delivered.length, 5, 'the first run is one interval after it was added');
 	const ran = await runAutomation(schedule.id, { now });
-	assert.equal(delivered.length, 5);
-	assert.equal((await sessions.getSession(delivered[4].id)).title, 'Update the dependencies');
+	assert.equal(delivered.length, 6);
+	assert.equal((await sessions.getSession(delivered[5].id)).title, 'Update the dependencies');
 	await runAutomation(schedule.id, { now: now + 60 * 60_000 });
-	assert.equal(delivered.length, 5, 'not due again within the day');
+	assert.equal(delivered.length, 6, 'not due again within the day');
 	await runAutomation(schedule.id, { now: now + 60 * 60_000, force: true });
-	assert.equal(delivered.length, 6, 'Run now starts it early');
+	assert.equal(delivered.length, 7, 'Run now starts it early');
 	assert.ok(ran.lastRunAt);
 
 	deliveryFails = true;
@@ -574,7 +595,7 @@ test('automations start one task per labeled issue and run schedules when due', 
 
 	await setLimits({ dailyUsd: 0, taskUsd: null });
 	await runDueAutomations(now + 48 * 60 * 60_000);
-	assert.equal(delivered.length, 6, 'nothing starts past the daily cap');
+	assert.equal(delivered.length, 7, 'nothing starts past the daily cap');
 	await setLimits({ dailyUsd: null, taskUsd: null });
 });
 
@@ -614,10 +635,18 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 
 	await updateSession(session.id, { followState: JSON.stringify({ sha: null, seen: [], sent: MAX_FOLLOW_UPS }) });
 	assert.equal(await followUp(await record()), false, 'stops after the most it may send');
+	await resetFollowUps(session.id);
+	assert.equal(await followUp(await record()), true, 'a person writing lets it follow up again');
+	activity = { ...activity, state: 'merged' };
+	assert.equal(await followUp(await record()), false);
+	activity = { ...activity, state: 'open', headSha: 'sha-3' };
+	assert.equal(await followUp(await record()), false, 'a merged pull request is never looked at again');
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/10' });
+	assert.equal(await followUp(await record()), true, 'a new pull request starts afresh');
 	await updateSession(session.id, { followState: null });
 	await updateSettings(project.id, { ...(await getProject(project.id))!, env: {}, followUps: false });
 	assert.equal(await followUp(await record()), false, 'off in the repo settings');
-	assert.equal(delivered.length, 3);
+	assert.equal(delivered.length, 5);
 });
 
 test('MCP server tokens are kept on save and never shown', async () => {
@@ -630,6 +659,9 @@ test('MCP server tokens are kept on save and never shown', async () => {
 
 	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: null, tools: ['search'] }] });
 	assert.equal((await getProject(project.id))!.mcpServers[0].auth, 'secret-token', 'a server saved without a token keeps its own');
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://elsewhere.example.test/v2', auth: null, tools: ['search'] }] });
+	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'a token never follows a server to a new host');
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: 'secret-token', tools: ['search'] }] });
 	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: '', tools: ['search'] }] });
 	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'an empty token removes it');
 });

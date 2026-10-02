@@ -1,7 +1,7 @@
 import type { CheckResult, PullRequestActivity, PullRequestComment } from '../core/ports.ts';
 import type { SessionRecord } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
-import { listSessionRecords, updateSession } from '../db/sessions.ts';
+import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
@@ -10,10 +10,20 @@ import { budget } from './budget.ts';
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
 
-/** What has been handled: the last head commit whose failures were sent, the comments sent, and how many messages. */
-type FollowState = { sha: string | null; seen: string[]; sent: number };
+/**
+ * What has been handled on one pull request: the last head commit whose
+ * failures were sent, the comments sent, how many messages since a person
+ * last wrote, and whether it is merged or closed.
+ */
+type FollowState = { url?: string; sha: string | null; seen: string[]; sent: number; done?: boolean };
 
 const initial: FollowState = { sha: null, seen: [], sent: 0 };
+
+/** The state for the task's current pull request; a new pull request starts afresh. */
+function stateFor(session: SessionRecord): FollowState {
+	const state = session.followState ? (JSON.parse(session.followState) as FollowState) : initial;
+	return state.url === undefined || state.url === session.prUrl ? state : initial;
+}
 
 /** Deploy and status bots comment on every push; review bots leave reviews and line comments, which are kept. */
 const isNoise = (comment: PullRequestComment) => comment.author.endsWith('[bot]') && comment.id.startsWith('comment-');
@@ -59,15 +69,28 @@ export function nextFollowUp(url: string, activity: PullRequestActivity, state: 
 export async function followUp(session: SessionRecord): Promise<boolean> {
 	if (!session.prUrl || isWorking(session.id)) return false;
 	const project = await getProject(session.projectId);
-	const state = session.followState ? (JSON.parse(session.followState) as FollowState) : initial;
-	if (!project?.followUps || state.sent >= MAX_FOLLOW_UPS) return false;
+	const state = stateFor(session);
+	if (!project?.followUps || state.done || state.sent >= MAX_FOLLOW_UPS) return false;
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
-	if (activity.state === 'merged' || activity.state === 'closed') return false;
+	const save = (next: FollowState) => updateSession(session.id, { followState: JSON.stringify({ ...next, url: session.prUrl }) });
+	if (activity.state === 'merged' || activity.state === 'closed') {
+		// Never looked at again, so finished tasks cost no requests on every poll.
+		await save({ ...state, done: true });
+		return false;
+	}
 	const next = nextFollowUp(session.prUrl, activity, state);
 	if (!next.message) return false;
 	await sendToAgent(session.id, next.message);
-	await updateSession(session.id, { followState: JSON.stringify(next.state) });
+	await save(next.state);
 	return true;
+}
+
+/** A person wrote to the task, so its agent may again follow up on its own up to the limit. */
+export async function resetFollowUps(id: string): Promise<void> {
+	const session = await getSessionRecord(id);
+	if (!session?.followState) return;
+	const state = stateFor(session);
+	if (state.sent > 0) await updateSession(id, { followState: JSON.stringify({ ...state, sent: 0 }) });
 }
 
 /** Checks every task with a pull request; one failing never stops the rest. */

@@ -53,7 +53,9 @@ const migrations: string[][] = [
 		`ALTER TABLE projects ADD COLUMN follow_ups INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN mcp_json TEXT`,
 		`ALTER TABLE sessions ADD COLUMN follow_json TEXT`,
-		`CREATE TABLE IF NOT EXISTS automations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, kind TEXT NOT NULL, label TEXT, every_hours INTEGER, prompt TEXT NOT NULL, model TEXT, reasoning TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_run_at TEXT, last_error TEXT, seen_json TEXT, created_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS automations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, kind TEXT NOT NULL, label TEXT, every_hours INTEGER, prompt TEXT NOT NULL, model TEXT, reasoning TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_run_at TEXT, last_error TEXT, created_at TEXT NOT NULL)`,
+		// One row per issue that has a task, so no issue starts two, whichever automation finds it.
+		`CREATE TABLE IF NOT EXISTS issue_tasks (project_id TEXT NOT NULL, issue_number INTEGER NOT NULL, automation_id TEXT NOT NULL, session_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY (project_id, issue_number))`,
 	],
 ];
 

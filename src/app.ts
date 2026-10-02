@@ -27,7 +27,8 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint } from './services/restore.ts';
 import { recordTurnUsage } from './services/usage.ts';
-import { primeAgent, setAgentDelivery } from './services/agent-runner.ts';
+import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
+import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
 import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled } from './services/automations.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
@@ -50,6 +51,8 @@ observe((event) => {
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
+// Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
+await primeAllAgents().catch((error: unknown) => console.warn('[anton] could not load task models', error));
 scheduleHeadlessWork();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
@@ -75,11 +78,13 @@ app.onError((error, c) => {
 
 // A prompt needs a task, waits while its files are being restored, and is checked against
 // the spending caps; then the agent loads the task's model and MCP servers before it renders.
+// A person writing also lets the agent follow up on its pull request again.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
 	await assertWithinBudget(id);
+	await resetFollowUps(id);
 	await primeAgent(id);
 	await next();
 });
