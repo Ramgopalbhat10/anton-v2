@@ -1,4 +1,4 @@
-import { observe } from '@flue/runtime';
+import { dispatch, observe } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
@@ -19,13 +19,15 @@ import {
 	listSessions,
 	deleteSession,
 	editSession,
-	primeModel,
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
 import { restoreCheckpoint } from './services/restore.ts';
+import { primeAgent, setAgentDelivery } from './services/agent-runner.ts';
+import { scheduleHeadlessWork } from './services/headless.ts';
+import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled } from './services/automations.ts';
 import { assertWithinBudget, budget, setLimits } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -40,6 +42,8 @@ observe(recordAgentEvent);
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 scheduleCleanup();
+setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
+scheduleHeadlessWork();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
@@ -62,10 +66,10 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// Each prompt is checked against the spending caps, then reads the session's current model before the agent renders.
+// Each prompt is checked against the spending caps, then loads the task's model and MCP servers before the agent renders.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	await assertWithinBudget(c.req.param('id'));
-	await primeModel(c.req.param('id'));
+	await primeAgent(c.req.param('id'));
 	await next();
 });
 app.route('/api/agents/coder', createAgentRouter(Coder) as never);
@@ -107,9 +111,48 @@ app.put('/api/projects/:id/settings', async (c) => {
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
 			previewPorts: v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))), v.maxLength(8)),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
+			followUps: v.optional(v.boolean()),
+			mcpServers: v.optional(
+				v.pipe(
+					v.array(
+						v.object({
+							name: v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _')),
+							url: v.pipe(v.string(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
+							auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
+							tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
+						}),
+					),
+					v.maxLength(10),
+					v.check((servers) => new Set(servers.map((server) => server.name)).size === servers.length, 'Each server needs its own name'),
+				),
+			),
 		}),
 	);
 	return c.json(await updateSettings(c.req.param('id'), change));
+});
+app.get('/api/projects/:id/automations', async (c) => c.json({ automations: await automations(c.req.param('id')) }));
+app.post('/api/projects/:id/automations', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			kind: v.picklist(['issues', 'schedule']),
+			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
+			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			prompt: v.pipe(v.string(), v.maxLength(20_000)),
+			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
+			reasoning: v.optional(v.nullable(REASONING)),
+		}),
+	);
+	return c.json(await addAutomation(c.req.param('id'), input));
+});
+app.patch('/api/automations/:id', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	return c.json(await setAutomationEnabled(c.req.param('id'), enabled));
+});
+app.post('/api/automations/:id/run', async (c) => c.json(await runAutomation(c.req.param('id'), { force: true })));
+app.delete('/api/automations/:id', async (c) => {
+	await removeAutomation(c.req.param('id'));
+	return c.json({ ok: true });
 });
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 

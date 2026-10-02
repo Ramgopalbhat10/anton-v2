@@ -1,0 +1,79 @@
+import type { CheckResult, PullRequestActivity, PullRequestComment } from '../core/ports.ts';
+import type { SessionRecord } from '../core/types.ts';
+import { getProject } from '../db/projects.ts';
+import { listSessionRecords, updateSession } from '../db/sessions.ts';
+import { getProviders } from '../providers/index.ts';
+import { isWorking } from './activity.ts';
+import { sendToAgent } from './agent-runner.ts';
+import { budget } from './budget.ts';
+
+/** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
+export const MAX_FOLLOW_UPS = 5;
+
+/** What has been handled: the last head commit whose failures were sent, the comments sent, and how many messages. */
+type FollowState = { sha: string | null; seen: string[]; sent: number };
+
+const initial: FollowState = { sha: null, seen: [], sent: 0 };
+
+/** Deploy and status bots comment on every push; review bots leave reviews and line comments, which are kept. */
+const isNoise = (comment: PullRequestComment) => comment.author.endsWith('[bot]') && comment.id.startsWith('comment-');
+
+function checksMessage(url: string, sha: string, failed: CheckResult[]): string {
+	return [
+		`Checks failed on your pull request (${url}) at ${sha.slice(0, 7)}:`,
+		...failed.map((check) => `- ${check.name}: ${check.summary || 'failed'} (${check.url})`),
+		'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+	].join('\n');
+}
+
+function commentsMessage(url: string, comments: PullRequestComment[]): string {
+	return [
+		`New comments on your pull request (${url}):`,
+		...comments.map((comment, index) => {
+			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
+			return `${index + 1}. @${comment.author}${where}: ${comment.body.replace(/\n/g, '\n   ')}`;
+		}),
+		'Address each one, then call open_pull_request to update the pull request. If you disagree with one, say why in your reply.',
+	].join('\n');
+}
+
+/** What to tell the agent about the pull request now, and the state that records it as handled. */
+export function nextFollowUp(url: string, activity: PullRequestActivity, state: FollowState): { message: string | null; state: FollowState } {
+	const settled = !activity.checks.some((check) => check.status === 'pending');
+	const failed = activity.checks.filter((check) => check.status === 'failed');
+	const reportChecks = settled && failed.length > 0 && state.sha !== activity.headSha;
+	const fresh = activity.comments.filter((comment) => !state.seen.includes(comment.id) && !isNoise(comment));
+	const parts = [...(reportChecks ? [checksMessage(url, activity.headSha, failed)] : []), ...(fresh.length ? [commentsMessage(url, fresh)] : [])];
+	if (parts.length === 0) return { message: null, state };
+	return {
+		message: parts.join('\n\n'),
+		state: {
+			sha: reportChecks ? activity.headSha : state.sha,
+			seen: [...state.seen, ...fresh.map((comment) => comment.id)].slice(-500),
+			sent: state.sent + 1,
+		},
+	};
+}
+
+/** Sends the agent anything new on its pull request: failed checks on the latest commit, and new comments. */
+export async function followUp(session: SessionRecord): Promise<boolean> {
+	if (!session.prUrl || isWorking(session.id)) return false;
+	const project = await getProject(session.projectId);
+	const state = session.followState ? (JSON.parse(session.followState) as FollowState) : initial;
+	if (!project?.followUps || state.sent >= MAX_FOLLOW_UPS) return false;
+	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
+	if (activity.state === 'merged' || activity.state === 'closed') return false;
+	const next = nextFollowUp(session.prUrl, activity, state);
+	if (!next.message) return false;
+	await sendToAgent(session.id, next.message);
+	await updateSession(session.id, { followState: JSON.stringify(next.state) });
+	return true;
+}
+
+/** Checks every task with a pull request; one failing never stops the rest. */
+export async function runFollowUps(): Promise<void> {
+	if ((await budget()).blocked) return;
+	for (const session of (await listSessionRecords()).filter((record) => record.prUrl)) {
+		await followUp(session).catch((error: unknown) => console.warn(`[anton] follow-up for ${session.id} failed`, error));
+	}
+}

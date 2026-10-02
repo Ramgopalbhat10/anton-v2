@@ -228,3 +228,47 @@ export function PickerChip({
 		</button>
 	);
 }
+
+/** An on/off switch with its label; the whole row toggles. */
+export function Switch({
+	checked,
+	onChange,
+	label,
+	disabled,
+	className,
+}: {
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+	label: ReactNode;
+	disabled?: boolean;
+	className?: string;
+}) {
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={checked}
+			disabled={disabled}
+			onClick={() => onChange(!checked)}
+			className={cn(
+				'flex items-center gap-2 rounded-md text-[13px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring) disabled:opacity-50',
+				className,
+			)}
+		>
+			<span
+				className={cn(
+					'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors duration-(--duration-micro)',
+					checked ? 'bg-(--accent-base)' : 'bg-(--neutral-600)',
+				)}
+			>
+				<span
+					className={cn(
+						'absolute top-0.5 size-3 rounded-full bg-white transition-transform duration-(--duration-micro)',
+						checked ? 'translate-x-3.5' : 'translate-x-0.5',
+					)}
+				/>
+			</span>
+			{label}
+		</button>
+	);
+}
