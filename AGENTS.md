@@ -16,3 +16,5 @@ Anton v2 is a Flue 2.0 coding agent with a React UI.
 - `npm run dev` — UI on :43127, API on :43128
 - `npx flue run src/agents/coder.ts --message "Say ready."` (needs an LLM key)
 - `npx flue docs search <query>`
+
+Checked end to end on Modal.
