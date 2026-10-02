@@ -115,8 +115,8 @@ export function SettingsPage() {
 						title="Spending caps"
 						help={
 							<>
-								Once a cap is reached, Anton stops taking new messages until the next day or until you raise it. A reply already running
-								finishes. Costs come from OpenRouter's listed prices, so cached tokens may make the real bill a little lower.
+								Once a cap is reached, Anton stops the reply that crossed it and takes no new messages until the next day or until you
+								raise it. Costs come from OpenRouter's listed prices, so cached tokens may make the real bill a little lower.
 								{budget.data ? ` Spent today: ${dollars(budget.data.today)}.` : ''}
 							</>
 						}

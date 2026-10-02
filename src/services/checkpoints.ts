@@ -87,8 +87,42 @@ export async function readCheckpointPatch(id: string): Promise<string> {
 /** Identifies the files and commits a checkpoint holds, ignoring when it was taken. */
 const stateOf = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.files, checkpoint.log.map((entry) => entry.sha)]);
 
+/** Checkpoints being written, and the blob sweep that holds new ones back while it runs. */
+let writing = 0;
+let sweep: Promise<unknown> | null = null;
+
+/**
+ * Runs `work` while no checkpoint is being written. A checkpoint reuses blobs
+ * it finds already stored, so a sweep running alongside could remove one it
+ * is about to point at.
+ */
+export async function whileNoCheckpointIsWritten<T>(work: () => Promise<T>): Promise<T> {
+	while (sweep) await sweep.catch(() => undefined);
+	const run = (async () => {
+		while (writing > 0) await new Promise((resolve) => setTimeout(resolve, 50));
+		return work();
+	})();
+	sweep = run;
+	try {
+		return await run;
+	} finally {
+		sweep = null;
+	}
+}
+
 /** Records the task's current files, diff and outputs. Safe to call repeatedly. */
 export async function saveCheckpoint(id: string, machine: Machine): Promise<Checkpoint> {
+	// Checked and counted in the same tick, so a sweep starting now waits for this one.
+	while (sweep) await sweep.catch(() => undefined);
+	writing++;
+	try {
+		return await writeCheckpoint(id, machine);
+	} finally {
+		writing--;
+	}
+}
+
+async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new Error(`Session ${id} not found`);
 	const { store } = getProviders();

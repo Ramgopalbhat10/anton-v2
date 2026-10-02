@@ -1,5 +1,6 @@
 import { getSessionRecord, spentSince } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
+import { stopAgent } from './activity.ts';
 
 /** Spending caps in US dollars; null means no cap. */
 export type Limits = { dailyUsd: number | null; taskUsd: number | null };
@@ -43,8 +44,13 @@ export async function budget(sessionId?: string, now = new Date()): Promise<Budg
 	return { limits: caps, today, task, blocked: reason(caps, today, task) };
 }
 
-/** Refuses a new message once a cap is reached. A reply already running finishes. */
+/** Refuses a new message once a cap is reached. */
 export async function assertWithinBudget(sessionId: string): Promise<void> {
 	const { blocked } = await budget(sessionId);
 	if (blocked) throw new BudgetError(blocked);
+}
+
+/** Stops a reply that has gone over a cap, so a runaway loop ends at its next model call rather than when it finishes. */
+export async function stopIfOverBudget(sessionId: string): Promise<void> {
+	if ((await budget(sessionId)).blocked) await stopAgent(sessionId);
 }

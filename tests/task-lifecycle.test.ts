@@ -492,6 +492,8 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 
 	await store.put('sessions/gone-task/checkpoint.json', '{}');
 	await store.put('blobs/unused', 'nobody points here');
+	// An output the agent wrote is not a manifest, whatever its name.
+	await store.put(`sessions/${session.id}/outputs/report.json`, 'not a checkpoint');
 	for (let index = 0; index < 52; index += 1) {
 		await store.put(`sessions/${session.id}/checkpoints/2000-01-01T00:00:${String(index).padStart(2, '0')}.000Z.json`, '{"files":[],"log":[]}');
 	}
@@ -523,6 +525,24 @@ test('stopping a task stops its working agent', async () => {
 	await sessions.deleteSession(session.id);
 	assert.deepEqual(aborted, [session.id]);
 	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+});
+
+test('a reply that crosses a spending cap is stopped at its next model call', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const { stopIfOverBudget } = await import('../src/services/budget.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Runaway' });
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'loop' });
+	await setLimits({ dailyUsd: null, taskUsd: 1 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [], 'under the cap it keeps going');
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 10, cost: 1.5 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	await setLimits({ dailyUsd: null, taskUsd: null });
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'loop' });
 });
 
 test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {

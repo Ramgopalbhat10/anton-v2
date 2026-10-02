@@ -28,7 +28,7 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint } from './services/restore.ts';
 import { recordTurnUsage } from './services/usage.ts';
-import { assertWithinBudget, budget, setLimits } from './services/budget.ts';
+import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
@@ -40,7 +40,9 @@ const REASONING = v.picklist(REASONING_LEVELS);
 publishUpgradeHandler(handleTerminalUpgrade);
 observe((event) => {
 	recordAgentEvent(event);
-	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0]);
+	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
+		.then((id) => (id ? stopIfOverBudget(id) : undefined))
+		.catch((error: unknown) => console.warn('[anton] spending check failed', error));
 });
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));

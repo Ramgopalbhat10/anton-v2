@@ -3,7 +3,7 @@ import { text } from '../core/shell.ts';
 import { listSessionRecords } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
-import type { Checkpoint } from './checkpoints.ts';
+import { type Checkpoint, whileNoCheckpointIsWritten } from './checkpoints.ts';
 
 /** The timeline shows this many entries, so older ones only take space. */
 const KEEP_CHECKPOINTS = 50;
@@ -19,6 +19,12 @@ function sessionOf(key: string): string {
 	return key.split('/')[1] ?? '';
 }
 
+/** Only checkpoint manifests list blobs; a task's outputs may be JSON files too. */
+function isManifest(key: string): boolean {
+	const [, , name, entry] = key.split('/');
+	return (name === 'checkpoint.json' && entry === undefined) || (name === 'checkpoints' && entry?.endsWith('.json') === true);
+}
+
 /** History entries beyond the newest ones kept: each manifest and its diff. */
 function surplusHistory(objects: StoredObject[]): StoredObject[] {
 	const entries = objects.filter((object) => object.key.split('/')[2] === 'checkpoints');
@@ -27,14 +33,29 @@ function surplusHistory(objects: StoredObject[]): StoredObject[] {
 	return entries.filter((object) => dropped.has(object.key.replace(/\.(json|patch)$/, '')));
 }
 
-async function referencedBlobs(store: ObjectStore, manifests: StoredObject[]): Promise<Set<string>> {
+/** Blobs the kept manifests point at. A manifest that cannot be read keeps everything, as nothing is known to be unused. */
+async function referencedBlobs(store: ObjectStore, manifests: StoredObject[]): Promise<Set<string> | null> {
 	const used = new Set<string>();
 	for (const manifest of manifests) {
 		const bytes = await store.get(manifest.key);
-		const checkpoint = bytes ? (JSON.parse(text(bytes)) as Checkpoint) : null;
-		for (const file of checkpoint?.files ?? []) if (file.blob) used.add(file.blob);
+		if (!bytes) continue;
+		let checkpoint: Checkpoint;
+		try {
+			checkpoint = JSON.parse(text(bytes)) as Checkpoint;
+		} catch {
+			return null;
+		}
+		for (const file of checkpoint.files ?? []) if (file.blob) used.add(file.blob);
 	}
 	return used;
+}
+
+/** Blobs no kept checkpoint uses, read while no checkpoint is being written so none is in use unseen. */
+async function unusedBlobs(store: ObjectStore, dropped: Set<string>, now: number): Promise<StoredObject[]> {
+	const manifests = (await store.list('sessions/')).filter((object) => isManifest(object.key) && !dropped.has(object.key));
+	const used = await referencedBlobs(store, manifests);
+	if (!used) return [];
+	return (await store.list('blobs/')).filter((blob) => !used.has(blob.key) && now - blob.modifiedAt > BLOB_GRACE_MS);
 }
 
 /**
@@ -52,11 +73,13 @@ export async function cleanUpStorage(now = Date.now()): Promise<CleanupResult> {
 	);
 	const surplus = [...bySession.values()].flatMap(surplusHistory);
 	const dropped = new Set([...orphaned, ...surplus].map((object) => object.key));
-	const manifests = sessionObjects.filter((object) => !dropped.has(object.key) && object.key.endsWith('.json'));
-	const used = await referencedBlobs(store, manifests);
-	const unused = (await store.list('blobs/')).filter((blob) => !used.has(blob.key) && now - blob.modifiedAt > BLOB_GRACE_MS);
+	for (const object of [...orphaned, ...surplus]) await store.remove(object.key);
+	const unused = await whileNoCheckpointIsWritten(async () => {
+		const found = await unusedBlobs(store, dropped, now);
+		for (const blob of found) await store.remove(blob.key);
+		return found;
+	});
 	const removing = [...orphaned, ...surplus, ...unused];
-	for (const object of removing) await store.remove(object.key);
 	const result = { at: new Date(now).toISOString(), removed: removing.length, freedBytes: removing.reduce((sum, object) => sum + object.size, 0) };
 	await setSetting('lastCleanup', result);
 	return result;
