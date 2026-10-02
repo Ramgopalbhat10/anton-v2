@@ -4,8 +4,9 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 
 ## Layout
 
-- `src/core/ports.ts` — the interfaces every provider implements (sandbox, object store, git host).
-- `src/providers/` — Modal, local, S3, disk and GitHub implementations; `index.ts` picks them from config.
+- `src/core/ports.ts` — the interfaces every provider implements (sandbox, object store, git host, model catalog).
+- `src/providers/` — Modal, local, S3, disk, GitHub and OpenRouter implementations; `index.ts` picks them from config.
+- `src/flue/` — adapters into Flue: the machine sandbox driver, and `live-models.ts`, which lets any model in the live catalog resolve.
 - `src/services/` — task lifecycle: sessions, workspace (acquire and set up a machine), git, checkpoints, files (live, saved or base views), pull requests, terminal.
 - `src/db/` — libSQL client, versioned migrations, queries.
 - `src/agents/coder.ts` — Coder agent, explorer/tester subagents, `open_pull_request`.

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { CircleAlert, CircleCheck, Folder, GitBranch, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { ModelPicker, useModels } from '@/components/composer';
+import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
 import {
 	Btn,
@@ -17,7 +17,7 @@ import {
 	SectionLabel,
 	Spinner,
 } from '@/components/signal';
-import { api, type Project, type Session } from '@/lib/api';
+import { api, type ModelChoice, type Project, type Session } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
@@ -115,7 +115,7 @@ function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => void; o
 
 export function Launcher() {
 	const [prompt, setPrompt] = useState('');
-	const [model, setModel] = useState('');
+	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [adding, setAdding] = useState(false);
@@ -124,7 +124,7 @@ export function Launcher() {
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 	const project = chooseProject(projects.data?.projects ?? [], projectId);
-	const chosenModel = model || models.data?.models[0]?.id || '';
+	const model = choice.model ?? models.data?.default ?? '';
 	const chosenBranch = branch || project?.defaultBranch || '';
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
 
@@ -135,7 +135,13 @@ export function Launcher() {
 
 	function start() {
 		if (create.isPending || !project) return;
-		create.mutate({ prompt, projectId: project.id, branch: chosenBranch || undefined, model: chosenModel || undefined });
+		create.mutate({
+			prompt,
+			projectId: project.id,
+			branch: chosenBranch || undefined,
+			model: model || undefined,
+			reasoning: choice.reasoning ?? undefined,
+		});
 	}
 
 	return (
@@ -178,7 +184,12 @@ export function Launcher() {
 						<div className="flex flex-wrap items-center gap-1.5">
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />
-							<ModelPicker value={chosenModel} onChange={setModel} height={28} side="bottom" />
+							<ModelPicker
+								value={{ model, reasoning: choice.reasoning ?? null }}
+								onChange={(change) => setChoice((current) => ({ ...current, ...change }))}
+								height={28}
+								side="bottom"
+							/>
 							<div className="min-w-0 flex-[1_1_8px]" />
 							<Btn type="submit" variant="primary" icon={Play} disabled={create.isPending || !project}>
 								{create.isPending ? 'Starting…' : 'Start task'}

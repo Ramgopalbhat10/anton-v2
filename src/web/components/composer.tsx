@@ -1,47 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useState } from 'react';
-import { IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip } from '@/components/signal';
-import { api } from '@/lib/api';
-
-export function useModels() {
-	return useQuery({ queryKey: ['models'], queryFn: api.models });
-}
-
-/** Chip label: "Claude Sonnet 4" reads as "Sonnet 4". */
-export function shortModel(label: string) {
-	return label.replace(/^(Claude|Anthropic)\s+/i, '');
-}
-
-export function ModelPicker({
-	value,
-	onChange,
-	height,
-	side = 'top',
-}: {
-	value: string;
-	onChange: (model: string) => void;
-	height?: 26 | 28;
-	side?: 'top' | 'bottom';
-}) {
-	const models = useModels();
-	const items = models.data?.models ?? [];
-	const label = items.find((item) => item.id === value)?.label ?? 'Model';
-	return (
-		<Menu>
-			<MenuTrigger asChild>
-				<PickerChip icon={Cpu} label={shortModel(label)} height={height} aria-label="Model" />
-			</MenuTrigger>
-			<MenuContent align="start" side={side} className="min-w-[220px]">
-				{items.map((item) => (
-					<MenuItem key={item.id} checked={item.id === value} onSelect={() => onChange(item.id)}>
-						{item.label}
-					</MenuItem>
-				))}
-			</MenuContent>
-		</Menu>
-	);
-}
+import { ModelPicker, useModels } from '@/components/model-picker';
+import { IconBtn, Kbd } from '@/components/signal';
+import { api, type Session } from '@/lib/api';
 
 export function Composer({
 	sessionId,
@@ -59,7 +21,7 @@ export function Composer({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
-	const model = session.data?.model ?? models.data?.models[0]?.id ?? '';
+	const choice = { model: session.data?.model ?? models.data?.default ?? '', reasoning: session.data?.reasoning ?? null };
 
 	return (
 		<form
@@ -88,11 +50,11 @@ export function Composer({
 				/>
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<ModelPicker
-						value={model}
-						onChange={(value) => {
-							void api.setModel(sessionId, value).then(() => {
-								void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-							});
+						value={choice}
+						onChange={(change) => {
+							// Show the choice at once; the server's copy replaces it when it lands.
+							queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
+							void api.setModel(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
 						}}
 					/>
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled)">

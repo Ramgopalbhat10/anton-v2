@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import { createClient } from '@libsql/client';
-import type { GitHost } from '../src/core/ports.ts';
+import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -42,6 +42,28 @@ const fakeHost: GitHost = {
 	},
 };
 
+const model = (id: string, reasoning: ModelInfo['reasoning'], defaultReasoning: ModelInfo['reasoning'][number]): ModelInfo => ({
+	id,
+	name: id,
+	vendor: 'Test',
+	description: '',
+	createdAt: 0,
+	contextLength: 128_000,
+	maxOutput: null,
+	price: { input: 0, output: 0 },
+	vision: false,
+	reasoning,
+	defaultReasoning,
+});
+const fakeCatalog: ModelCatalog = {
+	name: 'fake',
+	list: async () => [
+		model('openrouter/~deepseek/deepseek-flash-latest', ['low', 'high', 'max'], 'high'),
+		model('openrouter/moonshotai/kimi-k2.6', ['off', 'low', 'medium', 'high'], 'medium'),
+		model('openrouter/plain/no-reasoning', [], 'off'),
+	],
+};
+
 const { useDatabase } = await import('../src/db/client.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
@@ -58,6 +80,7 @@ setProviders({
 	sandbox: localSandboxProvider(path.join(dir, 'data')),
 	store: diskStore(path.join(dir, 'data', 'objects')),
 	git: fakeHost,
+	models: fakeCatalog,
 });
 
 const text = (bytes: Uint8Array | null) => new TextDecoder().decode(bytes ?? new Uint8Array());
@@ -106,10 +129,24 @@ test('a task runs, checkpoints, stops, stays viewable, and opens a pull request'
 	assert.equal((await sessions.getSession(session.id)).prUrl, url);
 });
 
-test('the model picker changes the model the agent reads', async () => {
+test('the model and reasoning picker change what the agent reads', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, model: 'openrouter/moonshotai/kimi-k2.6' });
-	assert.equal(sessions.modelFor(session.id), 'openrouter/moonshotai/kimi-k2.6');
-	await sessions.setModel(session.id, 'openrouter/anthropic/claude-haiku-4.5');
-	assert.equal(sessions.modelFor(session.id), 'openrouter/anthropic/claude-haiku-4.5');
+	await sessions.primeModel(session.id);
+	assert.deepEqual(sessions.modelFor(session.id), { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'medium' });
+
+	await sessions.setModel(session.id, { model: 'openrouter/~deepseek/deepseek-flash-latest', reasoning: 'max' });
+	await sessions.primeModel(session.id);
+	assert.deepEqual(sessions.modelFor(session.id), { model: 'openrouter/~deepseek/deepseek-flash-latest', reasoning: 'max' });
+
+	// A level the new model does not offer falls back to its default.
+	await sessions.setModel(session.id, { reasoning: 'off' });
+	await sessions.primeModel(session.id);
+	assert.equal(sessions.modelFor(session.id).reasoning, 'high');
+
+	await sessions.setModel(session.id, { model: 'openrouter/plain/no-reasoning' });
+	await sessions.primeModel(session.id);
+	assert.equal(sessions.modelFor(session.id).reasoning, 'off');
+
+	await assert.rejects(() => sessions.setModel(session.id, { model: 'openrouter/made/up' }), /Unknown model/);
 });

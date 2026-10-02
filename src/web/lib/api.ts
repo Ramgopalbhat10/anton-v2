@@ -1,11 +1,33 @@
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
+export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Reasoning = (typeof REASONING_LEVELS)[number];
+
+export type ModelInfo = {
+	id: string;
+	name: string;
+	vendor: string;
+	description: string;
+	createdAt: number;
+	contextLength: number;
+	maxOutput: number | null;
+	/** US dollars per million tokens. */
+	price: { input: number; output: number };
+	vision: boolean;
+	reasoning: Reasoning[];
+	defaultReasoning: Reasoning;
+};
+
+/** A task's model and reasoning level; null reasoning runs the model's default. */
+export type ModelChoice = { model: string; reasoning: Reasoning | null };
+
 export type Session = {
 	id: string;
 	projectId: string;
 	repo: string;
 	title: string;
 	model: string;
+	reasoning: Reasoning | null;
 	branch: string;
 	baseBranch: string;
 	baseSha: string;
@@ -68,16 +90,18 @@ export const outputUrl = (id: string, path: string) => `/api/sessions/${id}/outp
 export const api = {
 	health: () =>
 		json<{ ok: boolean; openRouter: boolean; providers: { sandbox: string; store: string; git: string } }>('/api/health'),
-	models: () => json<{ models: Array<{ id: string; label: string }> }>('/api/models'),
+	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
-	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string }) => post<Session>('/api/sessions', body),
+	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning }) =>
+		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
-	setModel: (id: string, model: string) => json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ model }) }),
+	setModel: (id: string, change: Partial<ModelChoice>) =>
+		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	changes: (id: string) => json<ChangesPayload>(`/api/sessions/${id}/changes`),
 	files: (id: string) => json<FilesPayload>(`/api/sessions/${id}/files`),
 	file: async (id: string, path: string) =>

@@ -1,10 +1,11 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { GitHost, ObjectStore, SandboxProvider } from '../core/ports.ts';
+import type { GitHost, ModelCatalog, ObjectStore, SandboxProvider } from '../core/ports.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
+import { openRouterCatalog } from './openrouter/catalog.ts';
 import { s3Store } from './s3/store.ts';
 
 /** Add a provider by adding one entry; choose it with ANTON_SANDBOX / ANTON_STORE. */
@@ -24,7 +25,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 	return make();
 }
 
-export type Providers = { sandbox: SandboxProvider; store: ObjectStore; git: GitHost };
+export type Providers = { sandbox: SandboxProvider; store: ObjectStore; git: GitHost; models: ModelCatalog };
 
 let providers: Providers | undefined;
 
@@ -33,6 +34,7 @@ export function getProviders(): Providers {
 		sandbox: pick('sandbox', sandboxes, config.sandbox),
 		store: pick('store', stores, config.store),
 		git: githubHost(config.github),
+		models: openRouterCatalog(config.openrouter),
 	};
 	return providers;
 }

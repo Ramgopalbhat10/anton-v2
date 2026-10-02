@@ -4,9 +4,10 @@ import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
 import { InvalidInputError, statusOf } from './core/errors.ts';
+import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
-import { MODELS } from './lib/models.ts';
 import { getProviders } from './providers/index.ts';
+import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects } from './services/projects.ts';
 import {
@@ -21,6 +22,8 @@ import {
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
 const app = new Hono();
+
+const REASONING = v.picklist(REASONING_LEVELS);
 
 publishUpgradeHandler(handleTerminalUpgrade);
 
@@ -60,7 +63,7 @@ app.get('/api/health', (c) =>
 	}),
 );
 
-app.get('/api/models', (c) => c.json({ models: MODELS }));
+app.get('/api/models', async (c) => c.json({ models: await listModels(), default: config.model }));
 
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
 app.post('/api/projects', async (c) => {
@@ -77,6 +80,7 @@ app.post('/api/sessions', async (c) => {
 			projectId: v.string(),
 			branch: v.optional(v.string()),
 			model: v.optional(v.string()),
+			reasoning: v.optional(REASONING),
 			title: v.optional(v.pipe(v.string(), v.maxLength(200))),
 		}),
 	);
@@ -84,8 +88,8 @@ app.post('/api/sessions', async (c) => {
 });
 app.get('/api/sessions/:id', async (c) => c.json(await getSession(c.req.param('id'))));
 app.patch('/api/sessions/:id', async (c) => {
-	const { model } = await body(c, v.object({ model: v.string() }));
-	return c.json(await setModel(c.req.param('id'), model));
+	const change = await body(c, v.object({ model: v.optional(v.string()), reasoning: v.optional(v.nullable(REASONING)) }));
+	return c.json(await setModel(c.req.param('id'), change));
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));

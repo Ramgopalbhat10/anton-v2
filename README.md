@@ -40,6 +40,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `SandboxProvider` | `modal`, `local` | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set) |
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
+| `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models`, cached for an hour) | |
 
 ## Environment
 
@@ -54,7 +55,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ANTON_IDLE_MINUTES` | Stop a sandbox after this many idle minutes (default 15) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
-| `ANTON_MODEL` | Default model |
+| `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
 
 Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
 
@@ -63,7 +64,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | Path | What it is |
 | --- | --- |
 | `src/core/` | Ports, shared types, shell helpers, errors |
-| `src/providers/` | Modal, local, S3, disk and GitHub implementations |
+| `src/providers/` | Modal, local, S3, disk, GitHub and OpenRouter implementations |
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |

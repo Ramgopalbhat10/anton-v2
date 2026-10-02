@@ -3,12 +3,12 @@ import type { Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
-import { isKnownModel } from '../lib/models.ts';
 import { getProviders } from '../providers/index.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
-
+import type { Reasoning } from '../core/ports.ts';
+import { findModel, reasoningFor } from './models.ts';
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -36,19 +36,29 @@ function present(record: SessionRecord, running: Set<string>): Session {
 	return { ...session, status: statusOf(record, running) };
 }
 
+export type ModelChoice = { model: string; reasoning: Reasoning };
+
 /**
  * The agent function renders synchronously, so it reads each session's
- * model from here. Filled on create, on change, and before every prompt.
+ * model and reasoning level from here. Filled before every prompt.
  */
-const models = new Map<string, string>();
+const choices = new Map<string, ModelChoice>();
 
-export function modelFor(id: string): string {
-	return models.get(id) ?? config.model;
+export function modelFor(id: string): ModelChoice {
+	return choices.get(id) ?? { model: config.model, reasoning: 'off' };
 }
 
+/** Loads the session's choice and the model list the agent resolves it against. */
 export async function primeModel(id: string): Promise<void> {
 	const record = await getSessionRecord(id);
-	if (record) models.set(id, record.model);
+	if (!record) return;
+	const info = await findModel(record.model).catch(() => undefined);
+	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning) });
+}
+
+async function knownModel(model: string): Promise<string> {
+	if (!(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+	return model;
 }
 
 function slug(title: string): string {
@@ -61,16 +71,22 @@ function slug(title: string): string {
 	);
 }
 
-export async function createSession(input: { projectId: string; branch?: string; model?: string; title?: string }): Promise<Session> {
+export async function createSession(input: {
+	projectId: string;
+	branch?: string;
+	model?: string;
+	reasoning?: Reasoning;
+	title?: string;
+}): Promise<Session> {
 	const project = await getProject(input.projectId);
 	if (!project) throw new NotFoundError('Project not found');
 	const baseBranch = input.branch || project.defaultBranch;
 	const baseSha = await getProviders().git.resolveRef(project.repoFullName, baseBranch);
 	const id = randomUUID();
 	const title = input.title?.trim() || 'New task';
-	const model = input.model && isKnownModel(input.model) ? input.model : config.model;
-	await insertSession({ id, projectId: project.id, title, model, baseBranch, baseSha, branch: `anton/${slug(title)}-${id.slice(0, 6)}` });
-	models.set(id, model);
+	const model = input.model ? await knownModel(input.model) : config.model;
+	const branch = `anton/${slug(title)}-${id.slice(0, 6)}`;
+	await insertSession({ id, projectId: project.id, title, model, reasoning: input.reasoning ?? null, baseBranch, baseSha, branch });
 	return getSession(id);
 }
 
@@ -89,10 +105,10 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-export async function setModel(id: string, model: string): Promise<Session> {
-	if (!isKnownModel(model)) throw new InvalidInputError('Unknown model');
-	await updateSession(id, { model });
-	models.set(id, model);
+/** Changes the task's model or reasoning level; it applies from the next prompt. */
+export async function setModel(id: string, change: { model?: string; reasoning?: Reasoning | null }): Promise<Session> {
+	const model = change.model && (await knownModel(change.model));
+	await updateSession(id, { ...(model ? { model } : {}), ...('reasoning' in change ? { reasoning: change.reasoning } : {}) });
 	return getSession(id);
 }
 

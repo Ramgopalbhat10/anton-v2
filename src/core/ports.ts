@@ -100,3 +100,31 @@ export type GitHost = {
 	gitAuthEnv(): Record<string, string>;
 	openPullRequest(input: PullRequestInput): Promise<string>;
 };
+
+/** How hard a model reasons before answering, from none to the most it offers. */
+export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Reasoning = (typeof REASONING_LEVELS)[number];
+
+export type ModelInfo = {
+	/** The agent's model specifier, `<gateway>/<model>`. */
+	id: string;
+	name: string;
+	vendor: string;
+	description: string;
+	/** Unix milliseconds the model was published. */
+	createdAt: number;
+	contextLength: number;
+	maxOutput: number | null;
+	/** US dollars per million tokens. */
+	price: { input: number; output: number };
+	vision: boolean;
+	/** Levels the model accepts, weakest first; empty when it cannot reason. */
+	reasoning: Reasoning[];
+	defaultReasoning: Reasoning;
+};
+
+/** The models an LLM gateway offers for agent work (tool calling, text out). */
+export type ModelCatalog = {
+	readonly name: string;
+	list(): Promise<ModelInfo[]>;
+};

@@ -1,3 +1,5 @@
+import type { Reasoning } from './ports.ts';
+
 export type Project = {
 	id: string;
 	repoFullName: string;
@@ -17,6 +19,8 @@ export type Session = {
 	repo: string;
 	title: string;
 	model: string;
+	/** Chosen reasoning level; null runs the model's default. */
+	reasoning: Reasoning | null;
 	/** The branch the task works on, created from `baseSha`. */
 	branch: string;
 	baseBranch: string;

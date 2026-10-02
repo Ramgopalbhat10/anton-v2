@@ -1,11 +1,11 @@
 import path from 'node:path';
-import { DEFAULT_MODEL } from './lib/models.ts';
 
 const read = (name: string, fallback = ''): string => process.env[name]?.trim() || fallback;
 
 /** Every setting Anton reads from the environment, in one place. */
 export const config = {
-	model: read('ANTON_MODEL', DEFAULT_MODEL),
+	/** Model for new tasks, as `<gateway>/<model id>`. */
+	model: read('ANTON_MODEL', 'openrouter/~deepseek/deepseek-flash-latest'),
 	dataDir: path.resolve(read('ANTON_DATA_DIR', 'data')),
 	databaseUrl: read('TURSO_DATABASE_URL', 'file:./data/anton.db'),
 	databaseToken: read('TURSO_AUTH_TOKEN'),
@@ -29,6 +29,11 @@ export const config = {
 	github: {
 		token: read('ANTON_GITHUB_TOKEN'),
 		apiUrl: read('ANTON_GITHUB_API_URL', 'https://api.github.com'),
+	},
+	openrouter: {
+		apiUrl: read('ANTON_OPENROUTER_API_URL', 'https://openrouter.ai/api/v1'),
+		/** How long the model list is cached before it is fetched again. */
+		ttlMs: 60 * 60_000,
 	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** Warm repo images older than this are rebuilt on the next task. */

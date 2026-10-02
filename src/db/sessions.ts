@@ -1,3 +1,4 @@
+import type { Reasoning } from '../core/ports.ts';
 import type { SessionRecord } from '../core/types.ts';
 import { appDb } from './client.ts';
 
@@ -11,6 +12,7 @@ function toRecord(row: Row): SessionRecord {
 		repo: String(row.repo ?? ''),
 		title: String(row.title),
 		model: String(row.model),
+		reasoning: optional(row.reasoning) as Reasoning | null,
 		branch: String(row.branch ?? ''),
 		baseBranch: String(row.base_branch ?? ''),
 		baseSha: String(row.base_sha ?? ''),
@@ -23,20 +25,21 @@ function toRecord(row: Row): SessionRecord {
 	};
 }
 
-export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'branch' | 'baseBranch' | 'baseSha'>;
+export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha'>;
 
 const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';
 
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, title, branch, base_branch, base_sha, created_at)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, created_at)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId,
 			session.id,
 			session.model,
+			session.reasoning,
 			session.title,
 			session.branch,
 			session.baseBranch,
@@ -60,6 +63,7 @@ export async function getSessionRecord(id: string): Promise<SessionRecord | null
 
 const columns = {
 	model: 'model',
+	reasoning: 'reasoning',
 	prUrl: 'pr_url',
 	machineState: 'machine_state',
 	checkpointAt: 'checkpoint_at',

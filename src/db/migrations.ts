@@ -25,6 +25,8 @@ const migrations: string[][] = [
 		`DROP TABLE IF EXISTS oauth_tokens`,
 		`DROP TABLE IF EXISTS artifacts`,
 	],
+	// 3: per-task reasoning level; null means the model's default.
+	[`ALTER TABLE sessions ADD COLUMN reasoning TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

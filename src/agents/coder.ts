@@ -1,14 +1,28 @@
 'use agent';
 
-import { type AgentProps, defineSubagent, defineTool, useAgentFinish, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
+import {
+	type AgentProps,
+	defineSubagent,
+	defineTool,
+	setProvider,
+	useAgentFinish,
+	useModel,
+	useSandbox,
+	useSubagent,
+	useTool,
+} from '@flue/runtime';
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
-import { thinkingFor } from '../lib/models.ts';
+import { liveOpenRouterProvider } from '../flue/live-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
+import { loadedModels } from '../services/models.ts';
 import { machineFor } from '../services/workspace.ts';
+
+// Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
+setProvider(liveOpenRouterProvider(loadedModels));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
 const OUTPUTS = '../outputs';
@@ -46,8 +60,8 @@ const tester = defineSubagent({
 });
 
 export function Coder({ id }: AgentProps) {
-	const model = modelFor(id);
-	useModel(model, { thinkingLevel: thinkingFor(model) });
+	const { model, reasoning } = modelFor(id);
+	useModel(model, { thinkingLevel: reasoning });
 	useSandbox({
 		async createSandbox() {
 			const machine = await machineFor(id);
