@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { CircleAlert, CircleCheck, List, PanelLeft, Plus, Search, Square, X } from 'lucide-react';
+import { List, PanelLeft, Plus, Search, Square, X } from 'lucide-react';
 import { useState } from 'react';
-import { Avatar, Icon, IconBtn, SectionLabel, Spinner } from '@/components/signal';
-import { api, type Session } from '@/lib/api';
+import { Avatar, Icon, IconBtn, SectionLabel } from '@/components/signal';
+import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
+import { api } from '@/lib/api';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -32,13 +33,6 @@ export function SidebarRail({ onExpand }: { onExpand: () => void }) {
 	);
 }
 
-function RecentIcon({ session }: { session: Session }) {
-	if (session.status === 'error') {
-		return <Icon icon={CircleAlert} size={12} className="text-(--danger-text)" />;
-	}
-	return <Icon icon={CircleCheck} size={12} className="text-(--success-text)" />;
-}
-
 export function ChatSidebar({
 	open,
 	onNavigate,
@@ -60,9 +54,9 @@ export function ChatSidebar({
 	const [searching, setSearching] = useState(false);
 	const [query, setQuery] = useState('');
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	const running = sessions.filter((session) => session.status === 'running' || session.status === 'starting');
+	const running = sessions.filter(isLive);
 	const recent = sessions
-		.filter((session) => session.status === 'stopped' || session.status === 'error')
+		.filter((session) => !isLive(session))
 		.filter((session) => session.title.toLowerCase().includes(query.trim().toLowerCase()));
 
 	return (
@@ -132,12 +126,12 @@ export function ChatSidebar({
 										className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-1.5 pl-2 outline-none focus-visible:shadow-(--focus-ring)"
 									>
 										<span className="inline-flex shrink-0 text-(--accent-text)">
-											<Spinner />
+											<TaskStatusIcon session={session} />
 										</span>
 										<div className="flex min-w-0 flex-1 flex-col gap-px">
 											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
 											<div className="truncate text-[11px] tracking-[0.02em] text-(--text-tertiary)">
-												{age(session.createdAt)} · {session.repo.split('/').pop()}
+												{liveLabel(session)} · {age(session.createdAt)} · {session.repo.split('/').pop()}
 											</div>
 										</div>
 									</Link>
@@ -208,7 +202,7 @@ export function ChatSidebar({
 									params.sessionId === session.id && 'bg-(--alpha-white-6) text-(--text-primary)',
 								)}
 							>
-								<RecentIcon session={session} />
+								<TaskStatusIcon session={session} size={12} />
 								<div className="min-w-0 flex-1 truncate text-[13px]">{session.title}</div>
 								<div className="shrink-0 text-[11px] text-(--text-disabled)">{age(session.createdAt)}</div>
 							</Link>

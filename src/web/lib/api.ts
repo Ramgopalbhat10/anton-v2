@@ -32,6 +32,8 @@ export type Session = {
 	baseBranch: string;
 	baseSha: string;
 	status: SessionStatus;
+	/** The agent is working on a message right now. */
+	working: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;

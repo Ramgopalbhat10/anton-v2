@@ -48,7 +48,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				id: session.id,
 				label: session.title,
 				meta: `${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
-				running: session.status === 'running' || session.status === 'starting',
+				running: session.working || session.status === 'starting',
 				onSelect: () => {
 					onClose();
 					void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
