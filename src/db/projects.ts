@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { Project } from '../core/types.ts';
+import type { Project, ProjectSettings } from '../core/types.ts';
 import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
 const optional = (value: unknown) => (value == null ? null : String(value));
+const parsed = <T>(value: unknown, fallback: T): T => (value == null ? fallback : (JSON.parse(String(value)) as T));
+
+/** Ports most dev servers use: Next and CRA, Vite, Astro, and the usual generic one. */
+export const DEFAULT_PREVIEW_PORTS = [3000, 5173, 4321, 8080];
 
 function toProject(row: Row): Project {
 	return {
@@ -12,6 +16,10 @@ function toProject(row: Row): Project {
 		defaultBranch: String(row.default_branch),
 		warmImage: optional(row.snapshot_image_id),
 		warmedAt: optional(row.warmed_at),
+		env: parsed<Record<string, string>>(row.env_json, {}),
+		setupScript: String(row.setup_script ?? ''),
+		previewPorts: parsed<number[]>(row.preview_ports, DEFAULT_PREVIEW_PORTS),
+		baseImage: optional(row.base_image),
 	};
 }
 
@@ -47,5 +55,26 @@ export async function setWarmImage(id: string, image: string): Promise<void> {
 	await db.execute({
 		sql: 'UPDATE projects SET snapshot_image_id = ?, warmed_at = ? WHERE id = ?',
 		args: [image, new Date().toISOString(), id],
+	});
+}
+
+/** Saves the settings; a new base image also drops the warm image, which was built from the old one. */
+export async function setProjectSettings(id: string, settings: ProjectSettings): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: `UPDATE projects SET env_json = ?, setup_script = ?, preview_ports = ?,
+			snapshot_image_id = CASE WHEN base_image IS ? THEN snapshot_image_id END,
+			warmed_at = CASE WHEN base_image IS ? THEN warmed_at END,
+			base_image = ?, updated_at = ? WHERE id = ?`,
+		args: [
+			JSON.stringify(settings.env),
+			settings.setupScript,
+			JSON.stringify(settings.previewPorts),
+			settings.baseImage,
+			settings.baseImage,
+			settings.baseImage,
+			new Date().toISOString(),
+			id,
+		],
 	});
 }

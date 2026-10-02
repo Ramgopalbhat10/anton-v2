@@ -40,11 +40,22 @@ export type Session = {
 	createdAt: string;
 };
 
+/** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
+export type ProjectSettings = {
+	envKeys: string[];
+	setupScript: string;
+	previewPorts: number[];
+	baseImage: string | null;
+};
+
 export type Project = {
 	id: string;
 	repoFullName: string;
 	defaultBranch: string;
-};
+} & ProjectSettings;
+
+/** A settings save: a variable set to null keeps its stored value; one left out is removed. */
+export type SettingsChange = Omit<ProjectSettings, 'envKeys'> & { env: Record<string, string | null> };
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';
@@ -63,6 +74,9 @@ export type ChangesPayload = {
 };
 
 export type PullRequest = { url: string; state: 'open' | 'draft' | 'merged' | 'closed' | null };
+
+export type Preview = { port: number; url: string | null; listening: boolean };
+export type PreviewsPayload = { live: boolean; previews: Preview[] };
 
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
@@ -97,6 +111,8 @@ export const api = {
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
+	updateProjectSettings: (id: string, change: SettingsChange) =>
+		json<Project>(`/api/projects/${id}/settings`, { method: 'PUT', body: JSON.stringify(change) }),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
 	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning }) =>
@@ -107,6 +123,7 @@ export const api = {
 	editSession: (id: string, change: Partial<ModelChoice> & { title?: string }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
+	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	/** Stops the agent's current turn and anything queued behind it. */
 	stopAgent: async (id: string) => void (await request(`/api/agents/coder/${id}/abort`, { method: 'POST' })),

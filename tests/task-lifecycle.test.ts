@@ -75,7 +75,10 @@ const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts
 const { recordAgentEvent } = await import('../src/services/activity.ts');
 const { handleTerminalUpgrade } = await import('../src/services/terminal.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
-const { addProject } = await import('../src/services/projects.ts');
+const { addProject, updateSettings } = await import('../src/services/projects.ts');
+const { getProject, setWarmImage } = await import('../src/db/projects.ts');
+const { previewsView } = await import('../src/services/previews.ts');
+const { takeScreenshot } = await import('../src/services/browser.ts');
 const sessions = await import('../src/services/sessions.ts');
 const files = await import('../src/services/files.ts');
 const { forgetMachine, machineFor } = await import('../src/services/workspace.ts');
@@ -282,4 +285,95 @@ test('a task can be renamed, shows its pull request, and can be deleted', async 
 	await assert.rejects(() => sessions.getSession(session.id), /not found/);
 	sessions.invalidateRunning();
 	assert.ok(!(await local.running()).has(session.id), 'its machine is stopped');
+});
+
+test('repo settings reach the sandbox: variables, setup script and preview ports', async () => {
+	const project = await addProject('acme/settings');
+	const server = createServer((_request, response) => response.end('ok'));
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	after(() => server.close());
+	const port = (server.address() as AddressInfo).port;
+
+	const first = await updateSettings(project.id, {
+		env: { GREETING: 'hello', TOKEN: 'secret' },
+		setupScript: 'echo "$GREETING" > setup-ran.txt',
+		previewPorts: [port, 9],
+		baseImage: '  ',
+	});
+	assert.deepEqual(first.envKeys, ['GREETING', 'TOKEN']);
+	assert.ok(!('env' in first), 'values never leave the server');
+	assert.equal(first.baseImage, null);
+	// A kept variable is sent as null; one left out is removed.
+	const saved = await updateSettings(project.id, { ...first, env: { GREETING: null } });
+	assert.deepEqual(saved.envKeys, ['GREETING']);
+	// The warm image survives other changes; a new base image drops it.
+	await setWarmImage(project.id, 'warm-1');
+	await updateSettings(project.id, { ...saved, env: { GREETING: null } });
+	assert.equal((await getProject(project.id))?.warmImage, 'warm-1');
+	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: 'python:3.13' });
+	assert.equal((await getProject(project.id))?.warmImage, null);
+	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: null });
+
+	const session = await sessions.createSession({ projectId: project.id, title: 'Settings' });
+	assert.deepEqual(await previewsView(session.id), { live: false, previews: [] });
+	sessions.invalidateRunning();
+	assert.ok(!(await local.running()).has(session.id), 'looking at previews starts nothing');
+
+	const machine = await machineFor(session.id);
+	assert.equal((await run(machine, 'cat setup-ran.txt')).trim(), 'hello');
+	assert.equal((await run(machine, 'echo "$GREETING|${TOKEN:-gone}|$ANTON_PREVIEW_PORTS"')).trim(), `hello|gone|${port} 9`);
+	assert.deepEqual(await previewsView(session.id), {
+		live: true,
+		previews: [
+			{ port, url: `http://localhost:${port}`, listening: true },
+			{ port: 9, url: 'http://localhost:9', listening: false },
+		],
+	});
+});
+
+test('a failing setup script fails the task setup', async () => {
+	const project = await addProject('acme/broken-setup');
+	await updateSettings(project.id, { env: {}, setupScript: 'echo nope >&2; exit 4', previewPorts: [], baseImage: null });
+	const session = await sessions.createSession({ projectId: project.id, title: 'Broken' });
+	await assert.rejects(() => machineFor(session.id), /nope/);
+});
+
+const browserReady = (() => {
+	try {
+		const root = execFileSync('npm', ['root', '-g'], { encoding: 'utf8' }).trim();
+		execFileSync('node', ['-e', "require('fs').accessSync(require('playwright').chromium.executablePath())"], {
+			env: { ...process.env, NODE_PATH: root },
+		});
+		return Boolean(process.env.PLAYWRIGHT_BROWSERS_PATH);
+	} catch {
+		return false;
+	}
+})();
+
+test('the screenshot tool saves a page to the Library', { skip: !browserReady && 'needs a global playwright with chromium' }, async () => {
+	const project = await addProject('acme/screens');
+	await updateSettings(project.id, {
+		env: { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? '' },
+		setupScript: '',
+		previewPorts: [],
+		baseImage: null,
+	});
+	const server = createServer((_request, response) => {
+		response.setHeader('Content-Type', 'text/html');
+		response.end('<title>Demo app</title><h1>Hello</h1><script>console.error("boom")</script>');
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	after(() => server.close());
+	const session = await sessions.createSession({ projectId: project.id, title: 'Screens' });
+	const machine = await machineFor(session.id);
+
+	const shot = await takeScreenshot(machine, { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, name: 'Home Page!' });
+	assert.equal(shot.path, '../outputs/screenshots/home-page.png');
+	assert.equal(shot.title, 'Demo app');
+	assert.equal(shot.status, 200);
+	assert.ok(shot.errors.some((error) => error.includes('boom')));
+	await saveCheckpoint(session.id, machine);
+	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === 'screenshots/home-page.png'));
+	const png = await files.readOutputFile(session.id, 'screenshots/home-page.png');
+	assert.deepEqual([...(png ?? new Uint8Array()).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'a PNG file');
 });

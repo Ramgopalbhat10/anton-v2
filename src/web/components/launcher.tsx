@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { Folder, GitBranch, Play, Plus } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
@@ -22,6 +22,7 @@ import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
 
 function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[]; value?: Project; onChange: (id: string) => void; onAdd: () => void }) {
+	const navigate = useNavigate();
 	return (
 		<Menu>
 			<MenuTrigger asChild>

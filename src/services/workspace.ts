@@ -1,4 +1,5 @@
 import type { Machine, MachineOrigin } from '../core/ports.ts';
+import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
 import { config } from '../config.ts';
@@ -37,6 +38,12 @@ function refreshWarmImage(machine: Machine, project: Project): void {
 
 type Context = { machine: Machine; session: SessionRecord; project: Project };
 
+/** The repo's own setup, after dependencies and on the task branch. A failure fails the task's setup. */
+async function runSetupScript(machine: Machine, project: Project): Promise<void> {
+	if (!project.setupScript.trim()) return;
+	await run(machine, project.setupScript, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
+}
+
 /** Puts the repo on the task branch: from a prepared image, or cloned from scratch. */
 const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
 	async image({ machine, session }) {
@@ -74,6 +81,7 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	const { machine, session } = context;
 	if (await isReady(machine, session, origin)) return;
 	await setup[origin === 'image' ? 'image' : 'clone'](context);
+	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 }
 
@@ -90,15 +98,19 @@ async function provision(id: string): Promise<Machine> {
 		key: id,
 		state: session.machineState,
 		image: warmImageFor(project),
+		baseImage: project.baseImage,
+		ports: project.previewPorts,
 	});
+	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
+	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...project.env });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
-		await prepare({ machine: acquired.machine, session, project }, acquired.origin);
+		await prepare({ machine, session, project }, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
 	}
-	return acquired.machine;
+	return machine;
 }
 
 const machines = new Map<string, Promise<Machine>>();

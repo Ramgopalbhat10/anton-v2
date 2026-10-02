@@ -27,6 +27,13 @@ const migrations: string[][] = [
 	],
 	// 3: per-task reasoning level; null means the model's default.
 	[`ALTER TABLE sessions ADD COLUMN reasoning TEXT`],
+	// 4: per-repo environment, setup script, preview ports and base image.
+	[
+		`ALTER TABLE projects ADD COLUMN env_json TEXT`,
+		`ALTER TABLE projects ADD COLUMN setup_script TEXT`,
+		`ALTER TABLE projects ADD COLUMN preview_ports TEXT`,
+		`ALTER TABLE projects ADD COLUMN base_image TEXT`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

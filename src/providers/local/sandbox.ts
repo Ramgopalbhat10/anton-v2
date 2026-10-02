@@ -7,6 +7,8 @@ import { quote } from '../../core/shell.ts';
 
 const RUNNING_MARKER = '.anton-running';
 
+const OUTPUT_GRACE_MS = 1000;
+
 /** Only what a shell needs; host secrets never reach a task. */
 function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 	const pick = (name: string) => (process.env[name] ? { [name]: process.env[name] as string } : {});
@@ -85,16 +87,24 @@ function localMachine(root: string): Machine {
 				child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
 				child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
 				child.on('error', reject);
+				// A server started in the background keeps the output open; stop waiting for it soon after the shell exits.
+				child.on('exit', () => setTimeout(() => (child.stdout.destroy(), child.stderr.destroy()), OUTPUT_GRACE_MS).unref());
 				child.on('close', (code) =>
-					resolve({ stdout: new Uint8Array(Buffer.concat(out)), stderr: Buffer.concat(err).toString('utf8'), exitCode: code ?? 124 }),
+					resolve({
+						stdout: new Uint8Array(Buffer.concat(out)),
+						stderr: Buffer.concat(err).toString('utf8'),
+						exitCode: code ?? child.exitCode ?? 124,
+					}),
 				);
 				child.stdin.end(options.stdin ?? undefined);
 			});
 		},
-		async openPty({ cols, rows, cwd }): Promise<Pty> {
+		/** Dev servers in a local task listen on this computer. */
+		previewUrl: async (port) => `http://localhost:${port}`,
+		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
 			const ttyFile = path.join(root, `.anton-tty-${randomUUID()}`);
 			const child = spawn('script', ['-qfc', `tty > ${quote(ttyFile)}; cd ${quote(cwd)}; exec bash -l`, '/dev/null'], {
-				env: shellEnv(),
+				env: shellEnv(env),
 			});
 			const resize = async (c: number, r: number) => {
 				await this.exec(`test -f ${quote(ttyFile)} && stty -F "$(cat ${quote(ttyFile)})" rows ${r} cols ${c}`);

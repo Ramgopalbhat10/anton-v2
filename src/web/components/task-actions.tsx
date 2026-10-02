@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, GitPullRequest, MoreHorizontal, Pencil, Square, Trash2 } from 'lucide-react';
+import { ArrowUpRight, GitPullRequest, MoreHorizontal, Pencil, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
@@ -85,7 +85,7 @@ export function TaskTitle({ session, editing, onEditingChange }: { session?: Ses
 }
 
 /**
- * Rename, ask for a pull request, stop the sandbox, or delete the task.
+ * Rename, ask for a pull request, open the repo's settings, stop the sandbox, or delete the task.
  * Delete asks twice inside the menu, so a stray click never loses a task.
  */
 export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: Session; onRename: () => void; onAskForPullRequest: () => void }) {

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { type App, type Image, ModalClient, type Sandbox } from 'modal';
-import type { Acquired, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider } from '../../core/ports.ts';
+import type { Acquired, AcquireRequest, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider } from '../../core/ports.ts';
 import { quote } from '../../core/shell.ts';
 
 export type ModalOptions = {
 	app: string;
 	baseImage: string;
+	/** Installed into every new image so the agent's screenshot tool starts fast. */
+	browserPackage: string;
 	idleTimeoutMs: number;
 	cpu: number;
 	memoryMiB: number;
@@ -17,9 +19,11 @@ const ROOT = '/workspace';
 const TAG = 'anton-task';
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 /** Toolchain every task gets. The image is cached by Modal after the first build. */
-const TOOLCHAIN = [
+const toolchain = (browserPackage: string) => [
 	'RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep python3 python3-pip python3-venv ca-certificates procps less && rm -rf /var/lib/apt/lists/*',
-	'RUN corepack enable',
+	'RUN command -v corepack >/dev/null && corepack enable || true',
+	// Images without Node skip the browser; the screenshot tool then says what is missing.
+	`RUN command -v npm >/dev/null && npm install -g ${browserPackage} && playwright install --with-deps chromium || true`,
 	`RUN mkdir -p ${ROOT}/outputs`,
 ];
 
@@ -30,13 +34,13 @@ const TOOLCHAIN = [
  */
 export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	const client = new ModalClient();
-	const sandboxes = new WeakMap<Machine, Sandbox>();
 	let app: Promise<App> | undefined;
 	const appRef = () => (app ??= client.apps.fromName(options.app, { createIfMissing: true }));
 	const nameFor = (key: string) => `task-${key}`;
 
-	async function create(key: string, image: Image): Promise<Sandbox> {
+	async function create(key: string, image: Image, ports: number[]): Promise<Sandbox> {
 		return client.sandboxes.create(await appRef(), image, {
+			encryptedPorts: ports,
 			name: nameFor(key),
 			tags: { [TAG]: key },
 			workdir: ROOT,
@@ -60,34 +64,29 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	}
 
 	/** Where a new sandbox starts from, best first: the task's own last state, a prepared image, the toolchain. */
-	async function startingImage(state: State | null, image: string | null): Promise<[Image, MachineOrigin]> {
+	async function startingImage(state: State | null, request: AcquireRequest): Promise<[Image, MachineOrigin]> {
 		const resumed = await exitImage(state);
 		if (resumed) return [resumed, 'resumed'];
-		if (image) return [await client.images.fromId(image), 'image'];
-		return [client.images.fromRegistry(options.baseImage).dockerfileCommands(TOOLCHAIN), 'base'];
-	}
-
-	function remember(sandbox: Sandbox): Machine {
-		const machine = modalMachine(sandbox);
-		sandboxes.set(machine, sandbox);
-		return machine;
+		if (request.image) return [await client.images.fromId(request.image), 'image'];
+		const base = client.images.fromRegistry(request.baseImage ?? options.baseImage);
+		return [base.dockerfileCommands(toolchain(options.browserPackage)), 'base'];
 	}
 
 	function acquired(sandbox: Sandbox, origin: MachineOrigin): Acquired {
-		return { machine: remember(sandbox), origin, state: JSON.stringify({ sandboxId: sandbox.sandboxId } satisfies State) };
+		return { machine: modalMachine(sandbox), origin, state: JSON.stringify({ sandboxId: sandbox.sandboxId } satisfies State) };
 	}
 
 	return {
 		name: 'modal',
-		async acquire({ key, state, image }) {
-			const running = await findRunning(key);
+		async acquire(request) {
+			const running = await findRunning(request.key);
 			if (running) return acquired(running, 'live');
-			const [startImage, origin] = await startingImage(state ? (JSON.parse(state) as State) : null, image);
-			return acquired(await create(key, startImage), origin);
+			const [startImage, origin] = await startingImage(request.state ? (JSON.parse(request.state) as State) : null, request);
+			return acquired(await create(request.key, startImage, request.ports), origin);
 		},
 		async find(key) {
 			const running = await findRunning(key);
-			return running && remember(running);
+			return running && modalMachine(running);
 		},
 		async running() {
 			const keys = new Set<string>();
@@ -104,10 +103,30 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 			await sandbox?.terminate({ wait: true });
 		},
 		async snapshot(machine) {
-			const sandbox = sandboxes.get(machine);
-			if (!sandbox) throw new Error('Unknown machine');
+			// A machine's id is its sandbox id, so wrapped machines snapshot too.
+			const sandbox = await client.sandboxes.fromId(machine.id);
 			const image = await sandbox.snapshotFilesystem({ timeoutMs: 300_000, ttlMs: null });
 			return image.imageId;
+		},
+	};
+}
+
+/** How long output may keep arriving after the shell exits; a server started in the background holds the stream open forever. */
+const OUTPUT_GRACE_MS = 1000;
+
+/** Reads a stream as it arrives; `settle` waits briefly for the end, then keeps what came. */
+function collect(stream: ReadableStream<Uint8Array>): { settle: () => Promise<Uint8Array> } {
+	const reader = stream.getReader();
+	const chunks: Uint8Array[] = [];
+	const done = (async () => {
+		for (let next = await reader.read(); !next.done; next = await reader.read()) chunks.push(next.value);
+	})().catch(() => undefined);
+	return {
+		async settle() {
+			const timer = new Promise((resolve) => setTimeout(resolve, OUTPUT_GRACE_MS));
+			await Promise.race([done, timer]);
+			void reader.cancel().catch(() => undefined);
+			return new Uint8Array(Buffer.concat(chunks));
 		},
 	};
 }
@@ -129,16 +148,20 @@ function modalMachine(sandbox: Sandbox): Machine {
 			const stdin = process.stdin.getWriter();
 			if (options.stdin) await stdin.write(options.stdin);
 			await stdin.close();
-			const [stdout, stderr, exitCode] = await Promise.all([
-				process.stdout.readBytes(),
-				process.stderr.readBytes(),
-				process.wait(),
-			]);
+			const out = collect(process.stdout);
+			const err = collect(process.stderr);
+			const exitCode = await process.wait();
+			const [stdout, stderr] = await Promise.all([out.settle(), err.settle()]);
 			return { stdout, stderr: new TextDecoder().decode(stderr), exitCode };
 		},
-		async openPty({ cols, rows, cwd }): Promise<Pty> {
+		async previewUrl(port) {
+			const tunnels = await sandbox.tunnels(10_000).catch(() => ({}) as Record<number, { url: string }>);
+			return tunnels[port]?.url ?? null;
+		},
+		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
 			const ttyFile = `/tmp/anton-tty-${randomUUID()}`;
 			const process = await sandbox.exec(['bash', '-c', `tty > ${ttyFile}; cd ${quote(cwd)}; exec bash -l`], {
+				env,
 				pty: true,
 				mode: 'binary',
 				stdout: 'pipe',

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
 	Bot,
+	Camera,
 	ChevronDown,
 	ChevronRight,
 	CircleAlert,
@@ -16,11 +17,11 @@ import {
 	Wrench,
 	Zap,
 } from 'lucide-react';
-import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { createContext, Fragment, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, Spinner } from '@/components/signal';
-import { api } from '@/lib/api';
+import { api, outputUrl } from '@/lib/api';
 import { elapsed } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 
@@ -41,6 +42,16 @@ function field(input: unknown, key: string): string {
 function pullRequestUrl(output: unknown): string {
 	const record = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
 	return field(record, 'url') || field(record.output, 'url');
+}
+
+/** The task whose thread is showing, for links into its Library. */
+const SessionId = createContext('');
+
+/** The screenshot tool returns a path relative to the repo; the Library lists it relative to outputs. */
+function screenshotPath(part: ToolPart): string {
+	if (part.state !== 'output-available') return '';
+	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
+	return (field(record, 'path') || field(record.output, 'path')).replace(/^\.\.\/outputs\//, '');
 }
 
 function lineCount(text: string) {
@@ -128,6 +139,8 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 				),
 			};
 		}
+		case 'screenshot':
+			return { icon: Camera, body: <>Took a screenshot of <Em>{field(input, 'url')}</Em></> };
 		default:
 			return { icon: Wrench, body: <>Called <Em>{part.toolName}</Em></> };
 	}
@@ -176,6 +189,8 @@ function ToolRow({ part }: { part: ToolPart }) {
 	const failed = part.state === 'output-error';
 	const output = part.toolName === 'bash' && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
 	const command = field(part.input, 'command');
+	const sessionId = useContext(SessionId);
+	const image = part.toolName === 'screenshot' ? screenshotPath(part) : '';
 	return (
 		<>
 			<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-[12px] text-(--text-tertiary)">
@@ -187,6 +202,11 @@ function ToolRow({ part }: { part: ToolPart }) {
 				<span className="truncate">{body}</span>
 			</div>
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
+			{image ? (
+				<a href={outputUrl(sessionId, image)} target="_blank" rel="noreferrer" className="mx-1 mb-1 ml-6 block w-fit">
+					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-md border border-(--border-subtle)" />
+				</a>
+			) : null}
 			{output ? (
 				<div className="px-1 pt-1 pb-0.5">
 					<div className="max-h-56 overflow-auto rounded-md bg-(--bg-inset) px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">
@@ -308,45 +328,47 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	}, [agent.messages]);
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
-				<div className="mx-auto flex max-w-[700px] flex-col gap-5">
-					{health.data && !health.data.openRouter ? (
-						<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
-							Set OPENROUTER_API_KEY to run the coding agent. Changes, Files, Library and Terminal still work.
-						</div>
-					) : null}
-					{messages.length === 0 && !busy ? (
-						<EmptyState
-							icon={Zap}
-							title="Workspace is ready"
-							body="Describe the outcome you want. Anton works in the sandbox on the right and shows every step here."
-							className="mt-[12vh]"
-						/>
-					) : null}
-					{messages.map((message) =>
-						message.settlement ? (
-							<SettlementNotice key={message.id} message={message} />
-						) : message.role === 'user' ? (
-							<UserMessage key={message.id} message={message} meta={meta} />
-						) : (
-							<AssistantMessage key={message.id} message={message} live={busy && message === lastAssistant} />
-						),
-					)}
-					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-						<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
-							<Spinner size={12} />
-							<span>Starting the agent</span>
-						</div>
-					) : null}
-					{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
-						<Notice>
-							The agent turn failed{agent.error?.message ? `: ${agent.error.message}` : ''}. Check OPENROUTER_API_KEY or send the message again.
-						</Notice>
-					) : null}
+		<SessionId.Provider value={sessionId}>
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+				<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
+					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
+						{health.data && !health.data.openRouter ? (
+							<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
+								Set OPENROUTER_API_KEY to run the coding agent. Changes, Files, Library and Terminal still work.
+							</div>
+						) : null}
+						{messages.length === 0 && !busy ? (
+							<EmptyState
+								icon={Zap}
+								title="Workspace is ready"
+								body="Describe the outcome you want. Anton works in the sandbox on the right and shows every step here."
+								className="mt-[12vh]"
+							/>
+						) : null}
+						{messages.map((message) =>
+							message.settlement ? (
+								<SettlementNotice key={message.id} message={message} />
+							) : message.role === 'user' ? (
+								<UserMessage key={message.id} message={message} meta={meta} />
+							) : (
+								<AssistantMessage key={message.id} message={message} live={busy && message === lastAssistant} />
+							),
+						)}
+						{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
+							<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
+								<Spinner size={12} />
+								<span>Starting the agent</span>
+							</div>
+						) : null}
+						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
+							<Notice>
+								The agent turn failed{agent.error?.message ? `: ${agent.error.message}` : ''}. Check OPENROUTER_API_KEY or send the message again.
+							</Notice>
+						) : null}
+					</div>
 				</div>
+				<Composer busy={busy} onSend={(text) => agent.sendMessage(text)} onStop={() => api.stopAgent(sessionId)} sessionId={sessionId} />
 			</div>
-			<Composer busy={busy} onSend={(text) => agent.sendMessage(text)} onStop={() => api.stopAgent(sessionId)} sessionId={sessionId} />
-		</div>
+		</SessionId.Provider>
 	);
 }
