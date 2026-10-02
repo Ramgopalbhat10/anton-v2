@@ -9,7 +9,7 @@ import { appDb } from './db/client.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
-import { recordAgentEvent } from './services/activity.ts';
+import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects, updateSettings } from './services/projects.ts';
@@ -64,7 +64,9 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 	await primeModel(c.req.param('id'));
 	await next();
 });
-app.route('/api/agents/coder', createAgentRouter(Coder) as never);
+const agents = createAgentRouter(Coder);
+app.route('/api/agents/coder', agents as never);
+setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
 
 app.get('/api/health', (c) =>
 	c.json({
@@ -91,7 +93,11 @@ app.put('/api/projects/:id/settings', async (c) => {
 				v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
 			),
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
-			previewPorts: v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))), v.maxLength(8)),
+			previewPorts: v.pipe(
+				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),
+				v.maxLength(8),
+				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
+			),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
 		}),
 	);

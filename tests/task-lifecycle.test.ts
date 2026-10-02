@@ -88,7 +88,8 @@ const { toUsage } = await import('../src/services/usage.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 
-useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
+const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
+useDatabase(database);
 // Counts shells, so a test can tell whether one was opened.
 let shellsOpened = 0;
 const local = localSandboxProvider(path.join(dir, 'data'));
@@ -208,6 +209,27 @@ test('setup that fails part way runs again on the next start', async () => {
 	await sessions.stopSession(session.id);
 });
 
+test('a machine without the setup marker counts as set up only for tasks older than the marker', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Marker' });
+	const machine = await machineFor(session.id);
+	const unmark = async () => {
+		await machine.exec(`echo work > ${machine.root}/repo/work.txt && rm ${machine.root}/.anton-ready`);
+		await database.execute({ sql: 'UPDATE sessions SET checkpoint_at = ? WHERE id = ?', args: [new Date().toISOString(), session.id] });
+		forgetMachine(session.id);
+	};
+	// A checkpoint saved after a setup that never finished must not make the machine count as ready.
+	await unmark();
+	const redone = await machineFor(session.id);
+	assert.equal((await run(redone, 'test -e work.txt && echo yes || echo no')).trim(), 'no', 'setup ran again');
+
+	await database.execute({ sql: 'UPDATE sessions SET legacy_setup = 1 WHERE id = ?', args: [session.id] });
+	await unmark();
+	const legacy = await machineFor(session.id);
+	assert.equal((await run(legacy, 'cat work.txt')).trim(), 'work', "an older task's machine is reused as is");
+	await sessions.stopSession(session.id);
+});
+
 test('a task reads as working while its agent has a message in flight', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id });
@@ -315,6 +337,8 @@ test('repo settings reach the sandbox: variables, setup script and preview ports
 	assert.equal((await getProject(project.id))?.warmImage, 'warm-1');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: 'python:3.13' });
 	assert.equal((await getProject(project.id))?.warmImage, null);
+	await setWarmImage(project.id, 'built-on-the-old-base', null);
+	assert.equal((await getProject(project.id))?.warmImage, null, 'a snapshot of the old base is not kept');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: null });
 
 	const session = await sessions.createSession({ projectId: project.id, title: 'Settings' });
@@ -430,4 +454,18 @@ test('a task adds up the tokens and cost of its responses', async () => {
 	assert.equal(totals.inputTokens, 300);
 	assert.equal(totals.outputTokens, 40);
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
+});
+
+test('stopping a task stops its working agent', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Abort' });
+	await sessions.stopSession(session.id);
+	assert.deepEqual(aborted, [], 'an idle agent is left alone');
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'busy' });
+	await sessions.deleteSession(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
 });

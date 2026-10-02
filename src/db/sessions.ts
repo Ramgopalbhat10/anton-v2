@@ -23,6 +23,7 @@ function toRecord(row: Row): SessionRecord {
 		failed: row.status === 'error',
 		machineState: optional(row.machine_state),
 		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
+		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 	};
 }
 

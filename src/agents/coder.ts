@@ -22,7 +22,7 @@ import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { recordUsage, toUsage } from '../services/usage.ts';
 import { loadedModels } from '../services/models.ts';
-import { machineFor } from '../services/workspace.ts';
+import { liveMachine, machineFor } from '../services/workspace.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -105,8 +105,14 @@ export function Coder({ id }: AgentProps) {
 		}),
 	);
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
+	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	useAgentFinish(async () => {
-		await saveCheckpoint(id, await machineFor(id)).catch((error: unknown) => console.warn('[anton] checkpoint failed', error));
+		try {
+			const machine = await liveMachine(id);
+			if (machine) await saveCheckpoint(id, machine);
+		} catch (error) {
+			console.warn('[anton] checkpoint failed', error);
+		}
 	});
 	// Each reply carries its own usage for the thread; the task keeps a running total.
 	useResponseFinish(({ response }) => {
