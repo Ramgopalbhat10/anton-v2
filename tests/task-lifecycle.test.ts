@@ -44,6 +44,7 @@ const fakeHost: GitHost = {
 		pullRequests.push(input.head);
 		return 'https://example.test/pull/1';
 	},
+	pullRequestState: async () => 'open',
 };
 
 const model = (id: string, reasoning: ModelInfo['reasoning'], defaultReasoning: ModelInfo['reasoning'][number]): ModelInfo => ({
@@ -79,7 +80,7 @@ const sessions = await import('../src/services/sessions.ts');
 const files = await import('../src/services/files.ts');
 const { forgetMachine, machineFor } = await import('../src/services/workspace.ts');
 const { saveCheckpoint } = await import('../src/services/checkpoints.ts');
-const { openPullRequest } = await import('../src/services/pull-requests.ts');
+const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 // Counts shells, so a test can tell whether one was opened.
@@ -159,20 +160,20 @@ test('the model and reasoning picker change what the agent reads', async () => {
 	await sessions.primeModel(session.id);
 	assert.deepEqual(sessions.modelFor(session.id), { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'medium' });
 
-	await sessions.setModel(session.id, { model: 'openrouter/~deepseek/deepseek-flash-latest', reasoning: 'max' });
+	await sessions.editSession(session.id, { model: 'openrouter/~deepseek/deepseek-flash-latest', reasoning: 'max' });
 	await sessions.primeModel(session.id);
 	assert.deepEqual(sessions.modelFor(session.id), { model: 'openrouter/~deepseek/deepseek-flash-latest', reasoning: 'max' });
 
 	// A level the new model does not offer falls back to its default.
-	await sessions.setModel(session.id, { reasoning: 'off' });
+	await sessions.editSession(session.id, { reasoning: 'off' });
 	await sessions.primeModel(session.id);
 	assert.equal(sessions.modelFor(session.id).reasoning, 'high');
 
-	await sessions.setModel(session.id, { model: 'openrouter/plain/no-reasoning' });
+	await sessions.editSession(session.id, { model: 'openrouter/plain/no-reasoning' });
 	await sessions.primeModel(session.id);
 	assert.equal(sessions.modelFor(session.id).reasoning, 'off');
 
-	await assert.rejects(() => sessions.setModel(session.id, { model: 'openrouter/made/up' }), /Unknown model/);
+	await assert.rejects(() => sessions.editSession(session.id, { model: 'openrouter/made/up' }), /Unknown model/);
 });
 
 test('setup that fails part way runs again on the next start', async () => {
@@ -259,4 +260,26 @@ test('a terminal closed while its machine starts opens no shell', async () => {
 	server.close();
 	assert.equal(shellsOpened, before);
 	await sessions.stopSession(session.id);
+});
+
+test('a task can be renamed, shows its pull request, and can be deleted', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Old name' });
+	assert.equal((await sessions.editSession(session.id, { title: '  New name ' })).title, 'New name');
+	assert.equal(await pullRequestView(session.id), null);
+
+	const machine = await machineFor(session.id);
+	await machine.exec(`echo change > ${machine.root}/repo/change.txt`);
+	await saveCheckpoint(session.id, machine);
+	const url = await openPullRequest(session.id, { title: 'Change', body: '' });
+	assert.deepEqual(await pullRequestView(session.id), { url, state: 'open' });
+
+	const store = diskStore(path.join(dir, 'data', 'objects'));
+	assert.ok((await store.list(`sessions/${session.id}/`)).length > 0);
+	await sessions.deleteSession(session.id);
+	assert.deepEqual(await store.list(`sessions/${session.id}/`), []);
+	assert.ok(!(await sessions.listSessions()).some((task) => task.id === session.id));
+	await assert.rejects(() => sessions.getSession(session.id), /not found/);
+	sessions.invalidateRunning();
+	assert.ok(!(await local.running()).has(session.id), 'its machine is stopped');
 });

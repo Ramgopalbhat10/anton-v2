@@ -17,11 +17,13 @@ import {
 	createSession,
 	getSession,
 	listSessions,
+	deleteSession,
+	editSession,
 	primeModel,
 	resumeSession,
-	setModel,
 	stopSession,
 } from './services/sessions.ts';
+import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
 const app = new Hono();
@@ -94,11 +96,23 @@ app.post('/api/sessions', async (c) => {
 });
 app.get('/api/sessions/:id', async (c) => c.json(await getSession(c.req.param('id'))));
 app.patch('/api/sessions/:id', async (c) => {
-	const change = await body(c, v.object({ model: v.optional(v.string()), reasoning: v.optional(v.nullable(REASONING)) }));
-	return c.json(await setModel(c.req.param('id'), change));
+	const change = await body(
+		c,
+		v.object({
+			title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+			model: v.optional(v.string()),
+			reasoning: v.optional(v.nullable(REASONING)),
+		}),
+	);
+	return c.json(await editSession(c.req.param('id'), change));
+});
+app.delete('/api/sessions/:id', async (c) => {
+	await deleteSession(c.req.param('id'));
+	return c.body(null, 204);
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
+app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 
 app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'))));
 app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));

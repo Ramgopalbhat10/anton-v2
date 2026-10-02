@@ -100,3 +100,10 @@ export async function readOutput(id: string, path: string): Promise<Uint8Array |
 export async function readBlob(key: string): Promise<Uint8Array | null> {
 	return getProviders().store.get(key);
 }
+
+/** Removes everything saved under the task. Blobs are shared between tasks, so they stay. */
+export async function deleteCheckpoints(id: string): Promise<void> {
+	const { store } = getProviders();
+	const objects = await store.list(`sessions/${id}/`);
+	await Promise.all(objects.map((object) => store.remove(object.key)));
+}

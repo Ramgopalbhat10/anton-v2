@@ -62,6 +62,7 @@ export async function getSessionRecord(id: string): Promise<SessionRecord | null
 }
 
 const columns = {
+	title: 'title',
 	model: 'model',
 	reasoning: 'reasoning',
 	prUrl: 'pr_url',
@@ -83,4 +84,9 @@ export async function updateSession(id: string, update: SessionUpdate): Promise<
 	if (sets.length === 0) return;
 	const db = await appDb();
 	await db.execute({ sql: `UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`, args: [...args, id] });
+}
+
+export async function deleteSessionRecord(id: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'DELETE FROM sessions WHERE id = ?', args: [id] });
 }

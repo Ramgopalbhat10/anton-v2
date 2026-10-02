@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
 import { getProject } from '../db/projects.ts';
-import { getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
+import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
-import { saveCheckpoint } from './checkpoints.ts';
+import { deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
@@ -107,10 +107,17 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-/** Changes the task's model or reasoning level; it applies from the next prompt. */
-export async function setModel(id: string, change: { model?: string; reasoning?: Reasoning | null }): Promise<Session> {
+export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null };
+
+/** Renames the task or changes its model or reasoning level; a model change applies from the next prompt. */
+export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));
-	await updateSession(id, { ...(model ? { model } : {}), ...('reasoning' in change ? { reasoning: change.reasoning } : {}) });
+	const title = change.title?.trim();
+	await updateSession(id, {
+		...(title ? { title } : {}),
+		...(model ? { model } : {}),
+		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
+	});
 	return getSession(id);
 }
 
@@ -133,4 +140,14 @@ export async function stopSession(id: string): Promise<Session> {
 	forgetMachine(id);
 	invalidateRunning();
 	return getSession(id);
+}
+
+/**
+ * Stops the task's machine and removes its record and saved checkpoints.
+ * The pushed branch and any pull request stay on the git host.
+ */
+export async function deleteSession(id: string): Promise<void> {
+	await stopSession(id);
+	await deleteCheckpoints(id);
+	await deleteSessionRecord(id);
 }

@@ -1,16 +1,18 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { GitPullRequest, PanelRight } from 'lucide-react';
+import { FileDiff, PanelRight } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
 import { Btn, IconBtn } from '@/components/signal';
+import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
 import { type PanelName, VmPanel } from '@/components/vm-panel';
-import { api } from '@/lib/api';
+import { api, type Session } from '@/lib/api';
+import { useTaskNotifications } from '@/lib/notifications';
 
 function readCollapsed() {
 	try {
@@ -25,6 +27,7 @@ export function AppShell() {
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
+	useTaskNotifications();
 
 	useEffect(() => {
 		try {
@@ -81,6 +84,13 @@ export function HomePage() {
 	return <Launcher />;
 }
 
+/** The agent opens and updates pull requests itself, through its open_pull_request tool. */
+function pullRequestAsk(session: Session): string {
+	return session.prUrl
+		? 'Commit and push the latest changes to the pull request.'
+		: 'Open a pull request with the changes on this branch. Write a clear title and a short description.';
+}
+
 type StatusTone = { label: string; text: string; dot: string };
 
 function statusFor(agent: UseFlueAgentResult): StatusTone | null {
@@ -101,6 +111,7 @@ export function SessionPage() {
 	const navigate = useNavigate();
 	const open = search.app !== 'closed';
 	const [expanded, setExpanded] = useState(false);
+	const [renaming, setRenaming] = useState(false);
 	const [tabs, setTabs] = useState<PanelName[]>(['Changes', 'Terminal', 'Files']);
 	const [active, setActive] = useState<PanelName | null>('Changes');
 	const session = useQuery({
@@ -109,6 +120,11 @@ export function SessionPage() {
 	});
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
+	const queryClient = useQueryClient();
+	// The sidebar polls; refresh it the moment this task's agent starts or stops instead.
+	useEffect(() => {
+		void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+	}, [agent.status, queryClient]);
 
 	function setOpen(next: boolean) {
 		if (!next) setExpanded(false);
@@ -133,18 +149,24 @@ export function SessionPage() {
 				<div className={open ? 'hidden min-h-0 min-w-[340px] flex-[1_1_54%] flex-col md:flex' : 'flex min-h-0 min-w-0 flex-1 flex-col'}>
 					<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 						<MenuButton />
-						<div className="min-w-[100px] flex-auto truncate text-[13px] font-medium">
-							{session.data?.title ?? 'Task'}
-						</div>
+						<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
 						{status ? (
 							<div className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`}>
 								<span className={`size-1.5 shrink-0 rounded-full ${status.dot}`} />
 								{status.label}
 							</div>
 						) : null}
-						<Btn variant="ghost" size="sm" icon={GitPullRequest} onClick={() => showPanel('Changes')}>
+						{session.data ? <PullRequestChip session={session.data} /> : null}
+						<Btn variant="ghost" size="sm" icon={FileDiff} onClick={() => showPanel('Changes')}>
 							Review
 						</Btn>
+						{session.data ? (
+							<TaskMenu
+								session={session.data}
+								onRename={() => setRenaming(true)}
+								onAskForPullRequest={() => void agent.sendMessage(pullRequestAsk(session.data))}
+							/>
+						) : null}
 						{!open ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={() => setOpen(true)} /> : null}
 					</header>
 					<Thread sessionId={sessionId} agent={agent} />

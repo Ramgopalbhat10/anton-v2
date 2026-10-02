@@ -48,6 +48,9 @@ export function s3Store(options: S3Options): ObjectStore {
 			const response = await send(urlFor(key));
 			return response.status === 404 ? null : new Uint8Array(await response.arrayBuffer());
 		},
+		async remove(key) {
+			await send(urlFor(key), { method: 'DELETE' });
+		},
 		has: async (key) => (await send(urlFor(key), { method: 'HEAD' })).status !== 404,
 		async list(prefix) {
 			const all: StoredObject[] = [];

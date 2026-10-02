@@ -62,6 +62,8 @@ export type ChangesPayload = {
 	log: Array<{ sha: string; subject: string; at: string }>;
 };
 
+export type PullRequest = { url: string; state: 'open' | 'draft' | 'merged' | 'closed' | null };
+
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
@@ -102,8 +104,12 @@ export const api = {
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
-	setModel: (id: string, change: Partial<ModelChoice>) =>
+	editSession: (id: string, change: Partial<ModelChoice> & { title?: string }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
+	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
+	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
+	/** Stops the agent's current turn and anything queued behind it. */
+	stopAgent: async (id: string) => void (await request(`/api/agents/coder/${id}/abort`, { method: 'POST' })),
 	changes: (id: string) => json<ChangesPayload>(`/api/sessions/${id}/changes`),
 	files: (id: string) => json<FilesPayload>(`/api/sessions/${id}/files`),
 	file: async (id: string, path: string) =>

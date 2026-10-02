@@ -75,6 +75,8 @@ export type ObjectStore = {
 	get(key: string): Promise<Uint8Array | null>;
 	has(key: string): Promise<boolean>;
 	list(prefix: string): Promise<StoredObject[]>;
+	/** Deletes one object; a missing key is not an error. */
+	remove(key: string): Promise<void>;
 };
 
 export type RepoInfo = { fullName: string; defaultBranch: string; private: boolean };
@@ -86,6 +88,8 @@ export type PullRequestInput = {
 	title: string;
 	body: string;
 };
+
+export type PullRequestState = 'open' | 'draft' | 'merged' | 'closed';
 
 export type GitHost = {
 	readonly name: string;
@@ -99,6 +103,8 @@ export type GitHost = {
 	/** Environment that authenticates git commands Anton runs itself. Never given to the agent. */
 	gitAuthEnv(): Record<string, string>;
 	openPullRequest(input: PullRequestInput): Promise<string>;
+	/** The state of a pull request this host opened, by its URL. */
+	pullRequestState(url: string): Promise<PullRequestState>;
 };
 
 /** How hard a model reasons before answering, from none to the most it offers. */
