@@ -60,9 +60,13 @@ const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
  */
 const readyFile = (machine: Machine) => `${machine.root}/.anton-ready`;
 
-/** Machines set up before the marker existed: the task's own machine, once it has saved a checkpoint. */
+/**
+ * Machines of tasks created before the marker existed: their own machine,
+ * once it has saved a checkpoint. Newer tasks always get the marker, so a
+ * checkpoint saved after a failed or stopped setup never counts as ready.
+ */
 const setUpBeforeMarker = (session: SessionRecord, origin: MachineOrigin) =>
-	(origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
+	session.legacySetup && (origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
 
 async function isReady(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<boolean> {
 	const marker = await machine.exec(`cat ${quote(readyFile(machine))}`);
@@ -113,10 +117,16 @@ export function machineFor(id: string): Promise<Machine> {
 	const pending = provision(id);
 	machines.set(id, pending);
 	starting.add(id);
-	pending.then(
-		() => setTimeout(() => machines.delete(id), CACHE_MS).unref(),
-		() => machines.delete(id),
-	).finally(() => starting.delete(id));
+	// Only this start's own entry is cleared: after Stop and Resume a newer start may own the id.
+	const current = () => machines.get(id) === pending;
+	pending
+		.then(
+			() => setTimeout(() => current() && machines.delete(id), CACHE_MS).unref(),
+			() => current() && machines.delete(id),
+		)
+		.finally(() => {
+			if (current() || !machines.has(id)) starting.delete(id);
+		});
 	return pending;
 }
 

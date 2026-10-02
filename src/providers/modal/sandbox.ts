@@ -159,7 +159,13 @@ function modalMachine(sandbox: Sandbox): Machine {
 					})().catch(() => undefined);
 				},
 				onExit: (listener) => exitListeners.push(listener),
-				close: () => void writer.write(new TextEncoder().encode('\u0004exit\n')).catch(() => undefined),
+				// A program in the foreground (a dev server, an editor) would swallow `exit`, so hang up everything on the terminal.
+				close: () => {
+					void writer.write(new TextEncoder().encode('\u0004exit\n')).catch(() => undefined);
+					void sandbox
+						.exec(['bash', '-c', `t=$(cat ${ttyFile} 2>/dev/null) && for p in /proc/[0-9]*; do [ "$(readlink $p/fd/0 2>/dev/null)" = "$t" ] && kill -HUP "\${p#/proc/}"; done; rm -f ${ttyFile}`])
+						.catch(() => undefined);
+				},
 			};
 		},
 	};
