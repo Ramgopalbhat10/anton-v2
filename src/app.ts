@@ -9,7 +9,7 @@ import { appDb } from './db/client.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
-import { recordAgentEvent } from './services/activity.ts';
+import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects, updateSettings } from './services/projects.ts';
@@ -62,7 +62,9 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 	await primeModel(c.req.param('id'));
 	await next();
 });
-app.route('/api/agents/coder', createAgentRouter(Coder) as never);
+const agents = createAgentRouter(Coder);
+app.route('/api/agents/coder', agents as never);
+setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
 
 app.get('/api/health', (c) =>
 	c.json({

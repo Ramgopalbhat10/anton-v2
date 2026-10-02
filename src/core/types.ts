@@ -50,4 +50,6 @@ export type Session = {
 export type SessionRecord = Omit<Session, 'status' | 'working'> & {
 	failed: boolean;
 	machineState: string | null;
+	/** Created before setup wrote a marker, so a machine without one may still be set up. */
+	legacySetup: boolean;
 };

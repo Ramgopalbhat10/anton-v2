@@ -22,6 +22,7 @@ function toRecord(row: Row): SessionRecord {
 		createdAt: String(row.created_at),
 		failed: row.status === 'error',
 		machineState: optional(row.machine_state),
+		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 	};
 }
 

@@ -85,7 +85,8 @@ const { forgetMachine, machineFor } = await import('../src/services/workspace.ts
 const { saveCheckpoint } = await import('../src/services/checkpoints.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 
-useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
+const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
+useDatabase(database);
 // Counts shells, so a test can tell whether one was opened.
 let shellsOpened = 0;
 const local = localSandboxProvider(path.join(dir, 'data'));
@@ -202,6 +203,27 @@ test('setup that fails part way runs again on the next start', async () => {
 	forgetMachine(session.id);
 	const again = await machineFor(session.id);
 	assert.equal((await run(again, 'cat kept.txt')).trim(), 'kept');
+	await sessions.stopSession(session.id);
+});
+
+test('a machine without the setup marker counts as set up only for tasks older than the marker', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Marker' });
+	const machine = await machineFor(session.id);
+	const unmark = async () => {
+		await machine.exec(`echo work > ${machine.root}/repo/work.txt && rm ${machine.root}/.anton-ready`);
+		await database.execute({ sql: 'UPDATE sessions SET checkpoint_at = ? WHERE id = ?', args: [new Date().toISOString(), session.id] });
+		forgetMachine(session.id);
+	};
+	// A checkpoint saved after a setup that never finished must not make the machine count as ready.
+	await unmark();
+	const redone = await machineFor(session.id);
+	assert.equal((await run(redone, 'test -e work.txt && echo yes || echo no')).trim(), 'no', 'setup ran again');
+
+	await database.execute({ sql: 'UPDATE sessions SET legacy_setup = 1 WHERE id = ?', args: [session.id] });
+	await unmark();
+	const legacy = await machineFor(session.id);
+	assert.equal((await run(legacy, 'cat work.txt')).trim(), 'work', "an older task's machine is reused as is");
 	await sessions.stopSession(session.id);
 });
 
@@ -376,4 +398,18 @@ test('the screenshot tool saves a page to the Library', { skip: !browserReady &&
 	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === 'screenshots/home-page.png'));
 	const png = await files.readOutputFile(session.id, 'screenshots/home-page.png');
 	assert.deepEqual([...(png ?? new Uint8Array()).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'a PNG file');
+});
+
+test('stopping a task stops its working agent', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Abort' });
+	await sessions.stopSession(session.id);
+	assert.deepEqual(aborted, [], 'an idle agent is left alone');
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'busy' });
+	await sessions.deleteSession(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
 });
