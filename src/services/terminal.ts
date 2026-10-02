@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
+import type { Pty } from '../core/ports.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { repoDir } from './git.ts';
 import { invalidateRunning } from './sessions.ts';
@@ -15,7 +16,8 @@ export function isSameOrigin(request: IncomingMessage): boolean {
 	return new URL(origin).host === request.headers.host;
 }
 
-type Control = { type: 'resize'; cols: number; rows: number };
+type Size = { cols: number; rows: number };
+type Control = Size & { type: 'resize' };
 
 /** A resize with sane bounds, or null for anything else. */
 function parseControl(raw: string): Control | null {
@@ -28,10 +30,22 @@ function parseControl(raw: string): Control | null {
 	}
 }
 
-async function bridge(socket: WebSocket, id: string, size: { cols: number; rows: number }): Promise<void> {
-	const machine = await machineFor(id);
-	invalidateRunning();
-	const pty = await machine.openPty({ ...size, cwd: repoDir(machine) });
+/**
+ * What the browser sent before the shell existed. Starting a machine can take
+ * minutes, and keystrokes or resizes sent meanwhile must not be dropped.
+ */
+function earlyFrames(socket: WebSocket, size: Size) {
+	const state = { size, input: [] as Uint8Array[], closed: false };
+	const onMessage = (data: RawData, isBinary: boolean) => {
+		if (isBinary) state.input.push(new Uint8Array(data as Buffer));
+		else state.size = parseControl(String(data)) ?? state.size;
+	};
+	socket.on('message', onMessage);
+	socket.once('close', () => (state.closed = true));
+	return { state, stop: () => socket.off('message', onMessage) };
+}
+
+function connect(socket: WebSocket, pty: Pty): void {
 	pty.onData((chunk) => socket.readyState === socket.OPEN && socket.send(chunk));
 	pty.onExit(() => socket.close());
 	socket.on('message', (data: RawData, isBinary: boolean) => {
@@ -39,6 +53,22 @@ async function bridge(socket: WebSocket, id: string, size: { cols: number; rows:
 		const control = parseControl(String(data));
 		if (control) void pty.resize(control.cols, control.rows).catch(() => undefined);
 	});
+}
+
+async function bridge(socket: WebSocket, id: string, size: Size): Promise<void> {
+	const early = earlyFrames(socket, size);
+	const machine = await machineFor(id);
+	invalidateRunning();
+	// The user left while the machine started; opening a shell now would leak it.
+	if (early.state.closed) return;
+	const opened = early.state.size;
+	const pty = await machine.openPty({ ...opened, cwd: repoDir(machine) });
+	early.stop();
+	if (early.state.closed) return pty.close();
+	connect(socket, pty);
+	const { size: latest, input } = early.state;
+	if (latest !== opened) void pty.resize(latest.cols, latest.rows).catch(() => undefined);
+	for (const chunk of input) pty.write(chunk);
 	socket.on('close', () => {
 		pty.close();
 		void saveCheckpoint(id, machine).catch((error: unknown) => console.warn('[anton] checkpoint after terminal failed', error));
