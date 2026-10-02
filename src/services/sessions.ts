@@ -4,7 +4,7 @@ import { config } from '../config.ts';
 import { getProject } from '../db/projects.ts';
 import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { isWorking } from './activity.ts';
+import { isWorking, stopAgent } from './activity.ts';
 import { deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
@@ -34,7 +34,7 @@ function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 }
 
 function present(record: SessionRecord, running: Set<string>): Session {
-	const { failed: _failed, machineState: _state, followState: _follow, ...session } = record;
+	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, ...session } = record;
 	return { ...session, status: statusOf(record, running), working: isWorking(record.id) };
 }
 
@@ -132,6 +132,7 @@ export async function resumeSession(id: string): Promise<Session> {
 export async function stopSession(id: string): Promise<Session> {
 	const record = await getSessionRecord(id);
 	if (!record) throw new NotFoundError('Session not found');
+	await stopAgent(id);
 	const machine = await liveMachine(id);
 	if (machine && record.machineState) {
 		await saveCheckpoint(id, machine).catch((error: unknown) => console.warn('[anton] checkpoint before stop failed', error));

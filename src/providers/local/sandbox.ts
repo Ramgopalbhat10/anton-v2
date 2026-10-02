@@ -7,6 +7,7 @@ import { quote } from '../../core/shell.ts';
 
 const RUNNING_MARKER = '.anton-running';
 
+/** How long the output may stay quiet after the shell exits before exec stops waiting for it. */
 const OUTPUT_GRACE_MS = 1000;
 
 /** Only what a shell needs; host secrets never reach a task. */
@@ -84,18 +85,41 @@ function localMachine(root: string): Machine {
 				});
 				const out: Buffer[] = [];
 				const err: Buffer[] = [];
-				child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-				child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-				child.on('error', reject);
-				// A server started in the background keeps the output open; stop waiting for it soon after the shell exits.
-				child.on('exit', () => setTimeout(() => (child.stdout.destroy(), child.stderr.destroy()), OUTPUT_GRACE_MS).unref());
-				child.on('close', (code) =>
+				let lastChunkAt = Date.now();
+				let settled = false;
+				// Output after settling is read and dropped, so a background process never blocks or dies writing it.
+				const collect = (into: Buffer[]) => (chunk: Buffer) => {
+					if (settled) return;
+					into.push(chunk);
+					lastChunkAt = Date.now();
+				};
+				child.stdout.on('data', collect(out));
+				child.stderr.on('data', collect(err));
+				const finish = (code: number | null) => {
+					if (settled) return;
+					settled = true;
+					// A server started in the background may hold the pipes for good; they must not keep Anton's process alive.
+					(child.stdout as unknown as { unref?: () => void }).unref?.();
+					(child.stderr as unknown as { unref?: () => void }).unref?.();
+					child.unref();
 					resolve({
 						stdout: new Uint8Array(Buffer.concat(out)),
 						stderr: Buffer.concat(err).toString('utf8'),
 						exitCode: code ?? child.exitCode ?? 124,
-					}),
-				);
+					});
+				};
+				child.on('error', reject);
+				// A server started in the background keeps the output open: stop waiting once it has been quiet for a moment.
+				child.on('exit', (code) => {
+					const check = () => {
+						const quiet = Date.now() - lastChunkAt;
+						if (quiet >= OUTPUT_GRACE_MS) finish(code);
+						else setTimeout(check, OUTPUT_GRACE_MS - quiet);
+					};
+					lastChunkAt = Math.max(lastChunkAt, Date.now());
+					setTimeout(check, OUTPUT_GRACE_MS);
+				});
+				child.on('close', (code) => finish(code));
 				child.stdin.end(options.stdin ?? undefined);
 			});
 		},

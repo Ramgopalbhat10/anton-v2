@@ -99,7 +99,8 @@ const { addAutomation, runAutomation, runDueAutomations } = await import('../src
 const { followUp, MAX_FOLLOW_UPS } = await import('../src/services/follow-ups.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 
-useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
+const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
+useDatabase(database);
 // Messages Anton sends to agents on its own, in place of the running agent.
 const delivered: Array<{ id: string; text: string }> = [];
 let deliveryFails = false;
@@ -226,6 +227,27 @@ test('setup that fails part way runs again on the next start', async () => {
 	await sessions.stopSession(session.id);
 });
 
+test('a machine without the setup marker counts as set up only for tasks older than the marker', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Marker' });
+	const machine = await machineFor(session.id);
+	const unmark = async () => {
+		await machine.exec(`echo work > ${machine.root}/repo/work.txt && rm ${machine.root}/.anton-ready`);
+		await database.execute({ sql: 'UPDATE sessions SET checkpoint_at = ? WHERE id = ?', args: [new Date().toISOString(), session.id] });
+		forgetMachine(session.id);
+	};
+	// A checkpoint saved after a setup that never finished must not make the machine count as ready.
+	await unmark();
+	const redone = await machineFor(session.id);
+	assert.equal((await run(redone, 'test -e work.txt && echo yes || echo no')).trim(), 'no', 'setup ran again');
+
+	await database.execute({ sql: 'UPDATE sessions SET legacy_setup = 1 WHERE id = ?', args: [session.id] });
+	await unmark();
+	const legacy = await machineFor(session.id);
+	assert.equal((await run(legacy, 'cat work.txt')).trim(), 'work', "an older task's machine is reused as is");
+	await sessions.stopSession(session.id);
+});
+
 test('a task reads as working while its agent has a message in flight', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id });
@@ -333,6 +355,8 @@ test('repo settings reach the sandbox: variables, setup script and preview ports
 	assert.equal((await getProject(project.id))?.warmImage, 'warm-1');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: 'python:3.13' });
 	assert.equal((await getProject(project.id))?.warmImage, null);
+	await setWarmImage(project.id, 'built-on-the-old-base', null);
+	assert.equal((await getProject(project.id))?.warmImage, null, 'a snapshot of the old base is not kept');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: null });
 
 	const session = await sessions.createSession({ projectId: project.id, title: 'Settings' });
@@ -389,13 +413,14 @@ test('the screenshot tool saves a page to the Library', { skip: !browserReady &&
 	const machine = await machineFor(session.id);
 
 	const shot = await takeScreenshot(machine, { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, name: 'Home Page!' });
-	assert.equal(shot.path, '../outputs/screenshots/home-page.png');
+	assert.match(shot.path, /^\.\.\/outputs\/screenshots\/home-page-\d+\.png$/);
+	const shotFile = shot.path.replace('../outputs/', '');
 	assert.equal(shot.title, 'Demo app');
 	assert.equal(shot.status, 200);
 	assert.ok(shot.errors.some((error) => error.includes('boom')));
 	await saveCheckpoint(session.id, machine);
-	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === 'screenshots/home-page.png'));
-	const png = await files.readOutputFile(session.id, 'screenshots/home-page.png');
+	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === shotFile));
+	const png = await files.readOutputFile(session.id, shotFile);
 	assert.deepEqual([...(png ?? new Uint8Array()).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'a PNG file');
 });
 
@@ -483,6 +508,8 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 
 	await store.put('sessions/gone-task/checkpoint.json', '{}');
 	await store.put('blobs/unused', 'nobody points here');
+	// An output the agent wrote is not a manifest, whatever its name.
+	await store.put(`sessions/${session.id}/outputs/report.json`, 'not a checkpoint');
 	for (let index = 0; index < 52; index += 1) {
 		await store.put(`sessions/${session.id}/checkpoints/2000-01-01T00:00:${String(index).padStart(2, '0')}.000Z.json`, '{"files":[],"log":[]}');
 	}
@@ -605,4 +632,77 @@ test('MCP server tokens are kept on save and never shown', async () => {
 	assert.equal((await getProject(project.id))!.mcpServers[0].auth, 'secret-token', 'a server saved without a token keeps its own');
 	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: '', tools: ['search'] }] });
 	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'an empty token removes it');
+});
+
+test('stopping a task stops its working agent', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Abort' });
+	await sessions.stopSession(session.id);
+	assert.deepEqual(aborted, [], 'an idle agent is left alone');
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'busy' });
+	await sessions.deleteSession(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+});
+
+test('a reply that crosses a spending cap is stopped at its next model call', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const { stopIfOverBudget } = await import('../src/services/budget.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Runaway' });
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'loop' });
+	await setLimits({ dailyUsd: null, taskUsd: 1 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [], 'under the cap it keeps going');
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 10, cost: 1.5 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	await setLimits({ dailyUsd: null, taskUsd: null });
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'loop' });
+});
+
+test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Odd files' });
+	const machine = await machineFor(session.id);
+	await run(machine, `mkdir shared && echo conf > shared/conf && ln -s shared/conf link && ln -s shared dirlink && printf 'é\\n' > 'café.txt' && echo q > 'a"b.txt' && printf '#!/bin/sh\\necho hi\\n' > run.sh && chmod +x run.sh`);
+	const saved = await saveCheckpoint(session.id, machine);
+	assert.deepEqual(
+		saved.files.map((file) => [file.path, file.mode]).sort(),
+		[
+			['a"b.txt', '100644'],
+			['café.txt', '100644'],
+			['dirlink', '120000'],
+			['link', '120000'],
+			['run.sh', '100755'],
+			['shared/conf', '100644'],
+		],
+	);
+	// Everything changes: links become files, a file becomes a directory.
+	await run(machine, `rm link dirlink run.sh 'café.txt' && echo plain > link && mkdir -p run.sh && echo x > run.sh/inner && rm run.sh/inner`);
+	await restoreCheckpoint(session.id, saved.at);
+	assert.equal((await run(machine, 'readlink link')).trim(), 'shared/conf');
+	assert.equal((await run(machine, 'readlink dirlink')).trim(), 'shared');
+	assert.equal((await run(machine, 'cat shared/conf')).trim(), 'conf', 'the link target was not written through');
+	assert.equal((await run(machine, './run.sh')).trim(), 'hi');
+	assert.equal((await run(machine, "cat 'café.txt'")).trim(), 'é');
+	assert.equal((await run(machine, 'git diff --cached --name-only')).trim(), '', "the agent's index is untouched");
+});
+
+test('usage is counted for every model call, as it ends', async () => {
+	const { recordTurnUsage } = await import('../src/services/usage.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Per call' });
+	const call = (cost: number) => ({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0, cost: { total: cost } });
+	await recordTurnUsage({ type: 'turn', instanceId: session.id, response: { usage: call(0.01) } });
+	await recordTurnUsage({ type: 'turn', instanceId: session.id, response: { usage: call(0.02) } });
+	await recordTurnUsage({ type: 'turn_start', instanceId: session.id });
+	const { usage } = await sessions.getSession(session.id);
+	assert.equal(usage.inputTokens, 20);
+	assert.ok(Math.abs(usage.cost - 0.03) < 1e-9);
 });

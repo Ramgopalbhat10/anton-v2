@@ -93,9 +93,14 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
 			return {
 				GIT_TERMINAL_PROMPT: '0',
-				GIT_CONFIG_COUNT: '1',
+				// Hooks and fsmonitor in the agent's repo must not run while the token is in the environment.
+				GIT_CONFIG_COUNT: '3',
 				GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
 				GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+				GIT_CONFIG_KEY_1: 'core.hooksPath',
+				GIT_CONFIG_VALUE_1: '/dev/null',
+				GIT_CONFIG_KEY_2: 'core.fsmonitor',
+				GIT_CONFIG_VALUE_2: 'false',
 			};
 		},
 		async openPullRequest(input) {

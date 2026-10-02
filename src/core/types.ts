@@ -62,4 +62,6 @@ export type SessionRecord = Omit<Session, 'status' | 'working'> & {
 	machineState: string | null;
 	/** What follow-ups on the task's pull request have already handled, as JSON. */
 	followState: string | null;
+	/** Created before setup wrote a marker, so a machine without one may still be set up. */
+	legacySetup: boolean;
 };

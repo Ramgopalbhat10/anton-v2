@@ -21,10 +21,10 @@ import { repoDir } from '../services/git.ts';
 import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
-import { recordUsage, toUsage } from '../services/usage.ts';
+import { toUsage } from '../services/usage.ts';
 import { mcpServersFor } from '../services/agent-runner.ts';
 import { loadedModels } from '../services/models.ts';
-import { machineFor } from '../services/workspace.ts';
+import { liveMachine, machineFor } from '../services/workspace.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -117,15 +117,18 @@ export function Coder({ id }: AgentProps) {
 		});
 	}
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
+	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	useAgentFinish(async () => {
-		await saveCheckpoint(id, await machineFor(id)).catch((error: unknown) => console.warn('[anton] checkpoint failed', error));
+		try {
+			const machine = await liveMachine(id);
+			if (machine) await saveCheckpoint(id, machine);
+		} catch (error) {
+			console.warn('[anton] checkpoint failed', error);
+		}
 	});
 	// Each reply carries its own usage for the thread; the task keeps a running total.
-	useResponseFinish(({ response }) => {
-		const usage = toUsage(response.usage);
-		recordUsage(id, usage);
-		return { usage };
-	});
+	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
+	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	return [
 		'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 		'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',

@@ -4,12 +4,13 @@ import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
-import { InvalidInputError, statusOf } from './core/errors.ts';
+import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
+import { getSessionRecord } from './db/sessions.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
-import { recordAgentEvent } from './services/activity.ts';
+import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects, updateSettings } from './services/projects.ts';
@@ -24,11 +25,12 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { restoreCheckpoint } from './services/restore.ts';
+import { isRestoring, restoreCheckpoint } from './services/restore.ts';
+import { recordTurnUsage } from './services/usage.ts';
 import { primeAgent, setAgentDelivery } from './services/agent-runner.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
 import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled } from './services/automations.ts';
-import { assertWithinBudget, budget, setLimits } from './services/budget.ts';
+import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
@@ -38,7 +40,12 @@ const app = new Hono();
 const REASONING = v.picklist(REASONING_LEVELS);
 
 publishUpgradeHandler(handleTerminalUpgrade);
-observe(recordAgentEvent);
+observe((event) => {
+	recordAgentEvent(event);
+	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
+		.then((id) => (id ? stopIfOverBudget(id) : undefined))
+		.catch((error: unknown) => console.warn('[anton] spending check failed', error));
+});
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 scheduleCleanup();
@@ -66,13 +73,19 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// Each prompt is checked against the spending caps, then loads the task's model and MCP servers before the agent renders.
+// A prompt needs a task, waits while its files are being restored, and is checked against
+// the spending caps; then the agent loads the task's model and MCP servers before it renders.
 app.post('/api/agents/coder/:id', async (c, next) => {
-	await assertWithinBudget(c.req.param('id'));
-	await primeAgent(c.req.param('id'));
+	const id = c.req.param('id');
+	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
+	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
+	await assertWithinBudget(id);
+	await primeAgent(id);
 	await next();
 });
-app.route('/api/agents/coder', createAgentRouter(Coder) as never);
+const agents = createAgentRouter(Coder);
+app.route('/api/agents/coder', agents as never);
+setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
 
 app.get('/api/health', (c) =>
 	c.json({
@@ -109,7 +122,11 @@ app.put('/api/projects/:id/settings', async (c) => {
 				v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
 			),
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
-			previewPorts: v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))), v.maxLength(8)),
+			previewPorts: v.pipe(
+				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),
+				v.maxLength(8),
+				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
+			),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
 			followUps: v.optional(v.boolean()),
 			mcpServers: v.optional(
@@ -188,9 +205,13 @@ app.delete('/api/sessions/:id', async (c) => {
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
-app.get('/api/sessions/:id/checkpoints', async (c) => c.json({ checkpoints: await listCheckpoints(c.req.param('id')) }));
+app.get('/api/sessions/:id/checkpoints', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ checkpoints: await listCheckpoints(id) });
+});
 app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
-	const patch = await readCheckpointPatchAt(c.req.param('id'), c.req.param('at'));
+	const { id } = await getSession(c.req.param('id'));
+	const patch = await readCheckpointPatchAt(id, c.req.param('at'));
 	return c.json({ at: c.req.param('at'), patch });
 });
 app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));

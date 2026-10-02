@@ -27,12 +27,12 @@ function warmImageFor(project: Project): string | null {
 	return fresh ? project.warmImage : null;
 }
 
-/** Saves a reusable image of the cloned, installed repo in the background. */
+/** Saves a reusable image of the set-up repo in the background, once setup has finished. */
 function refreshWarmImage(machine: Machine, project: Project): void {
 	if (warmImageFor(project)) return;
 	void getProviders()
 		.sandbox.snapshot(machine)
-		.then((image) => setWarmImage(project.id, image))
+		.then((image) => setWarmImage(project.id, image, project.baseImage))
 		.catch((error: unknown) => console.warn('[anton] warm image failed', error));
 }
 
@@ -54,7 +54,6 @@ const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
 		const { git } = getProviders();
 		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
 		await installDependencies(machine);
-		refreshWarmImage(machine, project);
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, git.gitAuthEnv());
 	},
 };
@@ -67,9 +66,13 @@ const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
  */
 const readyFile = (machine: Machine) => `${machine.root}/.anton-ready`;
 
-/** Machines set up before the marker existed: the task's own machine, once it has saved a checkpoint. */
+/**
+ * Machines of tasks created before the marker existed: their own machine,
+ * once it has saved a checkpoint. Newer tasks always get the marker, so a
+ * checkpoint saved after a failed or stopped setup never counts as ready.
+ */
 const setUpBeforeMarker = (session: SessionRecord, origin: MachineOrigin) =>
-	(origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
+	session.legacySetup && (origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
 
 async function isReady(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<boolean> {
 	const marker = await machine.exec(`cat ${quote(readyFile(machine))}`);
@@ -83,6 +86,8 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	await setup[origin === 'image' ? 'image' : 'clone'](context);
 	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
+	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
+	if (origin !== 'image') refreshWarmImage(machine, context.project);
 }
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {
@@ -125,10 +130,16 @@ export function machineFor(id: string): Promise<Machine> {
 	const pending = provision(id);
 	machines.set(id, pending);
 	starting.add(id);
-	pending.then(
-		() => setTimeout(() => machines.delete(id), CACHE_MS).unref(),
-		() => machines.delete(id),
-	).finally(() => starting.delete(id));
+	// Only this start's own entry is cleared: after Stop and Resume a newer start may own the id.
+	const current = () => machines.get(id) === pending;
+	pending
+		.then(
+			() => setTimeout(() => current() && machines.delete(id), CACHE_MS).unref(),
+			() => current() && machines.delete(id),
+		)
+		.finally(() => {
+			if (current() || !machines.has(id)) starting.delete(id);
+		});
 	return pending;
 }
 

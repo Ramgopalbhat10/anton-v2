@@ -27,26 +27,28 @@ const migrations: string[][] = [
 	],
 	// 3: per-task reasoning level; null means the model's default.
 	[`ALTER TABLE sessions ADD COLUMN reasoning TEXT`],
-	// 4: per-repo environment, setup script, preview ports and base image.
+	// 4: tasks that exist now were set up before the setup marker, so their machines carry none.
+	[`ALTER TABLE sessions ADD COLUMN legacy_setup INTEGER NOT NULL DEFAULT 0`, `UPDATE sessions SET legacy_setup = 1`],
+	// 5: per-repo environment, setup script, preview ports and base image.
 	[
 		`ALTER TABLE projects ADD COLUMN env_json TEXT`,
 		`ALTER TABLE projects ADD COLUMN setup_script TEXT`,
 		`ALTER TABLE projects ADD COLUMN preview_ports TEXT`,
 		`ALTER TABLE projects ADD COLUMN base_image TEXT`,
 	],
-	// 5: model tokens and cost per task.
+	// 6: model tokens and cost per task.
 	[
 		`ALTER TABLE sessions ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sessions ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sessions ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0`,
 	],
-	// 6: every response's cost, for daily spending caps; and app-wide settings.
+	// 7: every response's cost, for daily spending caps; and app-wide settings.
 	[
 		`CREATE TABLE IF NOT EXISTS usage_log (session_id TEXT NOT NULL, at TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cost_usd REAL NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS usage_log_at ON usage_log (at)`,
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 	],
-	// 7: tasks that start themselves, follow-ups on the agent's pull requests, and MCP servers.
+	// 8: tasks that start themselves, follow-ups on the agent's pull requests, and MCP servers.
 	[
 		`ALTER TABLE projects ADD COLUMN follow_ups INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN mcp_json TEXT`,

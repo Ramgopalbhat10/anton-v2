@@ -55,7 +55,11 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'mcpSer
 	mcpServers?: Array<Omit<McpServer, 'auth'> & { auth?: string | null }>;
 };
 
-/** Saves the repo's settings. New tasks use them; running tasks keep theirs until their sandbox restarts. */
+/**
+ * Saves the repo's settings. New tasks use them. Running tasks get variable
+ * changes from their next command batch; preview ports and the base image
+ * apply once their sandbox restarts.
+ */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
 	const env = Object.fromEntries(
