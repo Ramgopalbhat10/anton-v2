@@ -53,7 +53,8 @@ export function Composer({
 	const attach = async (files: File[]) => {
 		if (files.length === 0) return;
 		const read = await readImages(files, MAX_IMAGES - images.length);
-		setImages((current) => [...current, ...read.images]);
+		// Clamped here too: two quick pastes both read the count from before either landed.
+		setImages((current) => [...current, ...read.images].slice(0, MAX_IMAGES));
 		setNotice(read.rejected);
 	};
 	const stop = async () => {
@@ -80,11 +81,19 @@ export function Composer({
 				event.preventDefault();
 				if (!ready) return;
 				const sent = images;
+				const typed = text;
 				askToNotify();
 				setText('');
 				setImages([]);
 				setNotice(null);
-				await onSend(text.trim() || IMAGE_ONLY, sent);
+				try {
+					await onSend(text.trim() || IMAGE_ONLY, sent);
+				} catch (error) {
+					// Put the draft back so nothing typed is lost, and say why it did not go.
+					setText((current) => current || typed);
+					setImages((current) => (current.length ? current : sent));
+					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+				}
 			}}
 		>
 			<div

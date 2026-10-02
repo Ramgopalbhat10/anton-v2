@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { listMachineFiles, readMachineFile } from '../core/machine-fs.ts';
 import type { Machine, ObjectStore } from '../core/ports.ts';
-import { text } from '../core/shell.ts';
+import { quote, text } from '../core/shell.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { type FileChange, type LogEntry, changes, repoDir } from './git.ts';
@@ -48,9 +48,13 @@ async function saveBlob(store: ObjectStore, bytes: Uint8Array): Promise<string> 
 	return key;
 }
 
+export const SYMLINK_MODE = '120000';
+
+/** A symlink is saved as its target, never followed: it may point at a directory or nowhere. */
 async function saveFile(store: ObjectStore, machine: Machine, change: FileChange): Promise<SavedFile> {
 	if (change.status === 'D') return { ...change, blob: null };
-	const bytes = await readMachineFile(machine, `${repoDir(machine)}/${change.path}`);
+	const path = `${repoDir(machine)}/${change.path}`;
+	const bytes = change.mode === SYMLINK_MODE ? (await machine.exec(`readlink -n -- ${quote(path)}`)).stdout : await readMachineFile(machine, path);
 	return { ...change, blob: bytes.length <= MAX_FILE_BYTES ? await saveBlob(store, bytes) : null };
 }
 

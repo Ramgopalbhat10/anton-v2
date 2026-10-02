@@ -19,11 +19,14 @@ export type Commenting = {
 type CodeLine = Exclude<DiffLine, { kind: 'hunk' }>;
 const sideOf = (line: CodeLine): ReviewComment['side'] => (line.kind === 'remove' ? 'old' : 'new');
 
-function CommentCard({ comment, onRemove }: { comment: ReviewComment; onRemove: () => void }) {
+function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
 		<div className="sticky left-2 my-1 ml-11 flex w-[min(480px,70vw)] items-start gap-2 rounded-md bg-(--bg-raised) px-2.5 py-1.5 font-sans">
 			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--accent-text)" />
-			<div className="min-w-0 flex-1 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-primary)">{comment.text}</div>
+			<div className="min-w-0 flex-1 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-primary)">
+				{outdated ? <div className="text-(--text-tertiary)">Line {comment.line} has changed since this comment</div> : null}
+				{comment.text}
+			</div>
 			<IconBtn icon={X} size="xs" label="Delete comment" onClick={onRemove} />
 		</div>
 	);
@@ -73,7 +76,7 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					type="button"
 					aria-label={`Comment on line ${line.number}`}
 					onClick={onComment}
-					className="absolute top-px left-1 hidden size-4 items-center justify-center rounded-sm bg-(--accent-base) text-(--text-on-accent) group-hover:inline-flex focus-visible:inline-flex"
+					className="absolute top-px left-1 inline-flex size-4 items-center justify-center rounded-sm bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
 				>
 					<Icon icon={Plus} size={11} />
 				</button>
@@ -94,11 +97,16 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 
 export function DiffBlock({ file, commenting }: { file: FileDiff; commenting?: Commenting }) {
 	const [copied, setCopied] = useState(false);
-	const [draft, setDraft] = useState<number | null>(null);
+	// The line being commented on, by its number, so a refetch that shifts the diff keeps the form on its line.
+	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
 	const text = file.lines
 		.map((line) => (line.kind === 'hunk' ? `@@ ${line.text} @@` : `${line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}${line.text}`))
 		.join('\n');
-	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => comment.side === sideOf(line) && comment.line === line.number);
+	// A comment stays on its line only while that line still reads the same.
+	const matches = (comment: ReviewComment, line: CodeLine) => comment.side === sideOf(line) && comment.line === line.number && comment.code === line.text;
+	const codeLines = file.lines.filter((line): line is CodeLine => line.kind !== 'hunk');
+	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => matches(comment, line));
+	const outdated = (commenting?.comments ?? []).filter((comment) => !codeLines.some((line) => matches(comment, line)));
 	return (
 		<div className="overflow-hidden rounded-lg bg-(--bg-inset)">
 			<div className="flex h-8 items-center gap-2 bg-(--bg-raised) pr-1.5 pl-3">
@@ -117,19 +125,23 @@ export function DiffBlock({ file, commenting }: { file: FileDiff; commenting?: C
 			</div>
 			<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[18px]">
 				<div className="min-w-max">
+					{outdated.map((comment, at) => (
+						<CommentCard key={`outdated-${at}`} comment={comment} outdated onRemove={() => commenting?.onRemove(comment)} />
+					))}
 					{file.lines.map((line, index) =>
 						line.kind === 'hunk' ? (
-							<div key={index} className="flex text-(--text-disabled)">
+							<div key={`hunk-${index}`} className="flex text-(--text-disabled)">
 								<span className="w-11 shrink-0 pr-2.5 text-right">@@</span>
 								<span className="whitespace-pre">{line.text}</span>
 							</div>
 						) : (
-							<Fragment key={index}>
-								<CodeRow line={line} onComment={commenting ? () => setDraft(index) : undefined} />
+							// Keyed by the line, not its position, so an open comment form keeps its text when the diff refreshes.
+							<Fragment key={`${sideOf(line)}-${line.number}`}>
+								<CodeRow line={line} onComment={commenting ? () => setDraft({ side: sideOf(line), line: line.number }) : undefined} />
 								{on(line).map((comment, at) => (
 									<CommentCard key={at} comment={comment} onRemove={() => commenting?.onRemove(comment)} />
 								))}
-								{commenting && draft === index ? (
+								{commenting && draft?.side === sideOf(line) && draft.line === line.number ? (
 									<CommentForm
 										onCancel={() => setDraft(null)}
 										onSave={(body) => {
@@ -214,6 +226,7 @@ export function DiffList({ files, review, empty }: { files: FileDiff[]; review?:
 				})}
 			</div>
 			<DiffBlock
+				key={current.path}
 				file={current}
 				commenting={
 					review && {
@@ -231,13 +244,14 @@ export function DiffList({ files, review, empty }: { files: FileDiff[]; review?:
 function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> }) {
 	const send = useContext(SendToAgent);
 	const [sending, setSending] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	if (review.comments.length === 0) return null;
 	const count = review.comments.length;
 	return (
 		<div className="sticky bottom-0 flex items-center gap-2 rounded-lg bg-(--bg-raised) py-1.5 pr-1.5 pl-3 shadow-(--shadow-overlay)">
 			<Icon icon={MessageSquare} size={12} className="text-(--accent-text)" />
 			<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
-				{count} {count === 1 ? 'comment' : 'comments'} for the agent
+				{error ?? `${count} ${count === 1 ? 'comment' : 'comments'} for the agent`}
 			</span>
 			<Btn size="xs" variant="ghost" onClick={review.clear}>
 				Discard
@@ -248,10 +262,15 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 				icon={Send}
 				disabled={!send || sending}
 				onClick={async () => {
+					// Only what was sent is cleared; a comment added meanwhile stays for the next send.
+					const sent = review.comments;
 					setSending(true);
+					setError(null);
 					try {
-						await send?.(reviewMessage(review.comments));
-						review.clear();
+						await send?.(reviewMessage(sent));
+						review.removeAll(sent);
+					} catch (failure) {
+						setError(failure instanceof Error ? `Not sent: ${failure.message}` : 'Not sent');
 					} finally {
 						setSending(false);
 					}
