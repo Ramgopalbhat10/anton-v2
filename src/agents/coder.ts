@@ -19,7 +19,7 @@ import { repoDir } from '../services/git.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { loadedModels } from '../services/models.ts';
-import { machineFor } from '../services/workspace.ts';
+import { liveMachine, machineFor } from '../services/workspace.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -84,8 +84,14 @@ export function Coder({ id }: AgentProps) {
 		}),
 	);
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
+	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	useAgentFinish(async () => {
-		await saveCheckpoint(id, await machineFor(id)).catch((error: unknown) => console.warn('[anton] checkpoint failed', error));
+		try {
+			const machine = await liveMachine(id);
+			if (machine) await saveCheckpoint(id, machine);
+		} catch (error) {
+			console.warn('[anton] checkpoint failed', error);
+		}
 	});
 	return [
 		'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',

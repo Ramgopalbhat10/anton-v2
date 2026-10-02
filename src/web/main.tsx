@@ -32,6 +32,8 @@ const indexRoute = createRoute({
 const sessionRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/agents/$sessionId',
+	// A fresh page per task, so drafts and panel state never carry over to another task.
+	remountDeps: ({ params }) => params.sessionId,
 	validateSearch: (search: Record<string, unknown>): { app?: 'code' | 'closed' } => ({
 		app: search.app === 'closed' ? 'closed' : 'code',
 	}),

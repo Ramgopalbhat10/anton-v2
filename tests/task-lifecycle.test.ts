@@ -305,3 +305,17 @@ test('a task can be renamed, shows its pull request, and can be deleted', async 
 	sessions.invalidateRunning();
 	assert.ok(!(await local.running()).has(session.id), 'its machine is stopped');
 });
+
+test('stopping a task stops its working agent', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Abort' });
+	await sessions.stopSession(session.id);
+	assert.deepEqual(aborted, [], 'an idle agent is left alone');
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'busy' });
+	await sessions.deleteSession(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+});

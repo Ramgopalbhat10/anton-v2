@@ -19,6 +19,19 @@ export function recordAgentEvent({ type, instanceId, submissionId }: AgentEvent)
 	}
 }
 
+type Abort = (id: string) => Promise<void>;
+let abortAgent: Abort = async () => undefined;
+
+/** The app registers how to stop an agent, so services never import the agent module. */
+export function setAgentAbort(abort: Abort): void {
+	abortAgent = abort;
+}
+
+/** Stops the task's agent if it is working, so nothing keeps running for a stopped or deleted task. */
+export async function stopAgent(id: string): Promise<void> {
+	if (inFlight.has(id)) await abortAgent(id).catch((error: unknown) => console.warn('[anton] could not stop the agent', error));
+}
+
 /** True while the task's agent is working on a message. */
 export function isWorking(id: string): boolean {
 	return inFlight.has(id);
