@@ -26,8 +26,9 @@ export function useReviewComments(sessionId: string) {
 	}, [comments, sessionId]);
 	const add = useCallback((comment: ReviewComment) => setComments((current) => [...current, comment]), []);
 	const remove = useCallback((comment: ReviewComment) => setComments((current) => current.filter((item) => item !== comment)), []);
+	const removeAll = useCallback((sent: ReviewComment[]) => setComments((current) => current.filter((item) => !sent.includes(item))), []);
 	const clear = useCallback(() => setComments([]), []);
-	return { comments, add, remove, clear };
+	return { comments, add, remove, removeAll, clear };
 }
 
 const snippet = (code: string) => (code.trim().length > 120 ? `${code.trim().slice(0, 117)}...` : code.trim());

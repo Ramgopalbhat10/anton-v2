@@ -395,13 +395,14 @@ test('the screenshot tool saves a page to the Library', { skip: !browserReady &&
 	const machine = await machineFor(session.id);
 
 	const shot = await takeScreenshot(machine, { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, name: 'Home Page!' });
-	assert.equal(shot.path, '../outputs/screenshots/home-page.png');
+	assert.match(shot.path, /^\.\.\/outputs\/screenshots\/home-page-\d+\.png$/);
+	const shotFile = shot.path.replace('../outputs/', '');
 	assert.equal(shot.title, 'Demo app');
 	assert.equal(shot.status, 200);
 	assert.ok(shot.errors.some((error) => error.includes('boom')));
 	await saveCheckpoint(session.id, machine);
-	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === 'screenshots/home-page.png'));
-	const png = await files.readOutputFile(session.id, 'screenshots/home-page.png');
+	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === shotFile));
+	const png = await files.readOutputFile(session.id, shotFile);
 	assert.deepEqual([...(png ?? new Uint8Array()).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'a PNG file');
 });
 
@@ -468,4 +469,45 @@ test('stopping a task stops its working agent', async () => {
 	await sessions.deleteSession(session.id);
 	assert.deepEqual(aborted, [session.id]);
 	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+});
+
+test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Odd files' });
+	const machine = await machineFor(session.id);
+	await run(machine, `mkdir shared && echo conf > shared/conf && ln -s shared/conf link && ln -s shared dirlink && printf 'é\\n' > 'café.txt' && echo q > 'a"b.txt' && printf '#!/bin/sh\\necho hi\\n' > run.sh && chmod +x run.sh`);
+	const saved = await saveCheckpoint(session.id, machine);
+	assert.deepEqual(
+		saved.files.map((file) => [file.path, file.mode]).sort(),
+		[
+			['a"b.txt', '100644'],
+			['café.txt', '100644'],
+			['dirlink', '120000'],
+			['link', '120000'],
+			['run.sh', '100755'],
+			['shared/conf', '100644'],
+		],
+	);
+	// Everything changes: links become files, a file becomes a directory.
+	await run(machine, `rm link dirlink run.sh 'café.txt' && echo plain > link && mkdir -p run.sh && echo x > run.sh/inner && rm run.sh/inner`);
+	await restoreCheckpoint(session.id, saved.at);
+	assert.equal((await run(machine, 'readlink link')).trim(), 'shared/conf');
+	assert.equal((await run(machine, 'readlink dirlink')).trim(), 'shared');
+	assert.equal((await run(machine, 'cat shared/conf')).trim(), 'conf', 'the link target was not written through');
+	assert.equal((await run(machine, './run.sh')).trim(), 'hi');
+	assert.equal((await run(machine, "cat 'café.txt'")).trim(), 'é');
+	assert.equal((await run(machine, 'git diff --cached --name-only')).trim(), '', "the agent's index is untouched");
+});
+
+test('usage is counted for every model call, as it ends', async () => {
+	const { recordTurnUsage } = await import('../src/services/usage.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Per call' });
+	const call = (cost: number) => ({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0, cost: { total: cost } });
+	await recordTurnUsage({ type: 'turn', instanceId: session.id, response: { usage: call(0.01) } });
+	await recordTurnUsage({ type: 'turn', instanceId: session.id, response: { usage: call(0.02) } });
+	await recordTurnUsage({ type: 'turn_start', instanceId: session.id });
+	const { usage } = await sessions.getSession(session.id);
+	assert.equal(usage.inputTokens, 20);
+	assert.ok(Math.abs(usage.cost - 0.03) < 1e-9);
 });

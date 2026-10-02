@@ -5,7 +5,7 @@ import { quote, run } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
-import { type SavedFile, readBlob, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
+import { SYMLINK_MODE, type SavedFile, readBlob, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
 import { type FileChange, changes, repoDir } from './git.ts';
 import { machineFor } from './workspace.ts';
 
@@ -24,8 +24,24 @@ async function resetToBase(machine: Machine, baseSha: string, files: FileChange[
 	const added = files.filter((file) => file.status === 'A').map((file) => file.path);
 	const existing = files.filter((file) => file.status !== 'A').map((file) => file.path);
 	await eachBatch(machine, 'rm -f', added);
-	// A partial clone may fetch base blobs on demand, which needs Anton's credentials.
-	await eachBatch(machine, `git checkout ${baseSha}`, existing, getProviders().git.gitAuthEnv());
+	// Only the working tree, so the agent's index is untouched. A partial clone may fetch base blobs on demand, which needs Anton's credentials.
+	await eachBatch(machine, `git restore --source=${baseSha} --worktree`, existing, getProviders().git.gitAuthEnv());
+}
+
+/**
+ * Writes one file as saved: a symlink as a link, an executable with its bit.
+ * Whatever is at the path goes first, so a write never follows a symlink out
+ * of place, and an empty directory left by the reset makes way for the file.
+ */
+async function writeFile(machine: Machine, path: string, file: SavedFile, bytes: Uint8Array): Promise<void> {
+	const dir = path.slice(0, path.lastIndexOf('/'));
+	await run(machine, `mkdir -p ${quote(dir)} && { if [ -d ${quote(path)} ] && [ ! -L ${quote(path)} ]; then rmdir ${quote(path)}; else rm -f ${quote(path)}; fi; }`);
+	if (file.mode === SYMLINK_MODE) {
+		await run(machine, `ln -s -- "$(cat)" ${quote(path)}`, { stdin: bytes });
+		return;
+	}
+	await writeMachineFile(machine, path, bytes);
+	if (file.mode === '100755') await run(machine, `chmod +x ${quote(path)}`);
 }
 
 /** Writes the checkpoint's version of each file; returns those too large to have been saved. */
@@ -39,11 +55,16 @@ async function applyFiles(machine: Machine, files: SavedFile[]): Promise<string[
 			skipped.push(file.path);
 			continue;
 		}
-		const path = `${root}/${file.path}`;
-		await run(machine, `mkdir -p ${quote(path.slice(0, path.lastIndexOf('/')))}`);
-		await writeMachineFile(machine, path, bytes);
+		await writeFile(machine, `${root}/${file.path}`, file, bytes);
 	}
 	return skipped;
+}
+
+/** Tasks whose files are being restored; their agent takes no new messages until it finishes. */
+const restoring = new Set<string>();
+
+export function isRestoring(id: string): boolean {
+	return restoring.has(id);
 }
 
 /**
@@ -53,15 +74,21 @@ async function applyFiles(machine: Machine, files: SavedFile[]): Promise<string[
  */
 export async function restoreCheckpoint(id: string, at: string): Promise<RestoreResult> {
 	if (isWorking(id)) throw new ConflictError('Stop the agent before restoring a checkpoint');
-	const session = await getSessionRecord(id);
-	const target = session && (await readCheckpointAt(id, at));
-	if (!session || !target) throw new NotFoundError('Checkpoint not found');
-	const machine = await machineFor(id);
-	await saveCheckpoint(id, machine);
-	const keep = new Set(target.files.map((file) => file.path));
-	const current = (await changes(machine, session.baseSha)).files;
-	await resetToBase(machine, session.baseSha, current.filter((file) => !keep.has(file.path)));
-	const skipped = await applyFiles(machine, target.files);
-	await saveCheckpoint(id, machine);
-	return { at, skipped };
+	if (restoring.has(id)) throw new ConflictError('A restore is already running');
+	restoring.add(id);
+	try {
+		const session = await getSessionRecord(id);
+		const target = session && (await readCheckpointAt(id, at));
+		if (!session || !target) throw new NotFoundError('Checkpoint not found');
+		const machine = await machineFor(id);
+		await saveCheckpoint(id, machine);
+		const keep = new Set(target.files.map((file) => file.path));
+		const current = (await changes(machine, session.baseSha)).files;
+		await resetToBase(machine, session.baseSha, current.filter((file) => !keep.has(file.path)));
+		const skipped = await applyFiles(machine, target.files);
+		await saveCheckpoint(id, machine);
+		return { at, skipped };
+	} finally {
+		restoring.delete(id);
+	}
 }
