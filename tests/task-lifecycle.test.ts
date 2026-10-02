@@ -334,6 +334,8 @@ test('repo settings reach the sandbox: variables, setup script and preview ports
 	assert.equal((await getProject(project.id))?.warmImage, 'warm-1');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: 'python:3.13' });
 	assert.equal((await getProject(project.id))?.warmImage, null);
+	await setWarmImage(project.id, 'built-on-the-old-base', null);
+	assert.equal((await getProject(project.id))?.warmImage, null, 'a snapshot of the old base is not kept');
 	await updateSettings(project.id, { ...saved, env: { GREETING: null }, baseImage: null });
 
 	const session = await sessions.createSession({ projectId: project.id, title: 'Settings' });

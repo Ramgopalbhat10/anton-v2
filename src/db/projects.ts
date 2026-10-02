@@ -50,11 +50,15 @@ export async function upsertProject(repoFullName: string, defaultBranch: string)
 	return toProject(result.rows[0] as Row);
 }
 
-export async function setWarmImage(id: string, image: string): Promise<void> {
+/**
+ * Saves a warm image built on `baseImage`; skipped when the base image changed
+ * while the snapshot was being taken, since the image is built on the old one.
+ */
+export async function setWarmImage(id: string, image: string, baseImage: string | null = null): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: 'UPDATE projects SET snapshot_image_id = ?, warmed_at = ? WHERE id = ?',
-		args: [image, new Date().toISOString(), id],
+		sql: 'UPDATE projects SET snapshot_image_id = ?, warmed_at = ? WHERE id = ? AND base_image IS ?',
+		args: [image, new Date().toISOString(), id, baseImage],
 	});
 }
 

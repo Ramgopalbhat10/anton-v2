@@ -50,7 +50,7 @@ function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows
 					/>
 					<input
 						type="password"
-						autoComplete="off"
+						autoComplete="new-password"
 						value={row.value}
 						onChange={(event) => update(index, { value: event.target.value })}
 						placeholder={row.stored ? 'Saved. Type to replace' : 'value'}
@@ -80,7 +80,12 @@ function SettingsForm({ project }: { project: Project }) {
 	const [ports, setPorts] = useState(project.previewPorts.join(', '));
 	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
 	const save = useMutation({
-		mutationFn: () => api.updateProjectSettings(project.id, toChange(variables, setupScript, ports, baseImage)),
+		mutationFn: async () => {
+			const names = variables.map((row) => row.name.trim()).filter(Boolean);
+			// Two rows with one name would let an empty new row replace the stored value.
+			if (new Set(names).size !== names.length) throw new Error('Each variable needs its own name.');
+			return api.updateProjectSettings(project.id, toChange(variables, setupScript, ports, baseImage));
+		},
 		onSuccess: (saved) => {
 			setVariables(saved.envKeys.map((name) => ({ name, value: '', stored: true })));
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });

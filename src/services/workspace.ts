@@ -27,12 +27,12 @@ function warmImageFor(project: Project): string | null {
 	return fresh ? project.warmImage : null;
 }
 
-/** Saves a reusable image of the cloned, installed repo in the background. */
+/** Saves a reusable image of the set-up repo in the background, once setup has finished. */
 function refreshWarmImage(machine: Machine, project: Project): void {
 	if (warmImageFor(project)) return;
 	void getProviders()
 		.sandbox.snapshot(machine)
-		.then((image) => setWarmImage(project.id, image))
+		.then((image) => setWarmImage(project.id, image, project.baseImage))
 		.catch((error: unknown) => console.warn('[anton] warm image failed', error));
 }
 
@@ -54,7 +54,6 @@ const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
 		const { git } = getProviders();
 		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
 		await installDependencies(machine);
-		refreshWarmImage(machine, project);
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, git.gitAuthEnv());
 	},
 };
@@ -87,6 +86,8 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	await setup[origin === 'image' ? 'image' : 'clone'](context);
 	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
+	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
+	if (origin !== 'image') refreshWarmImage(machine, context.project);
 }
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {

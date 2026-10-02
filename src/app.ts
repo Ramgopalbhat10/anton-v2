@@ -91,7 +91,11 @@ app.put('/api/projects/:id/settings', async (c) => {
 				v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
 			),
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
-			previewPorts: v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))), v.maxLength(8)),
+			previewPorts: v.pipe(
+				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),
+				v.maxLength(8),
+				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
+			),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
 		}),
 	);

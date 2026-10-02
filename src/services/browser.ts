@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { config } from '../config.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
@@ -50,12 +51,13 @@ export async function takeScreenshot(machine: Machine, input: ScreenshotInput): 
 	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
 	const file = `screenshots/${slug(input.name ?? '') || `shot-${Date.now()}`}.png`;
 	const out = `${machine.root}/outputs/${file}`;
-	const script = `/tmp/anton-screenshot.cjs`;
+	// Its own script per call, so two screenshots at once never read each other's half-written file.
+	const script = `/tmp/anton-screenshot-${randomUUID()}.cjs`;
 	await writeMachineFile(machine, script, new TextEncoder().encode(SCRIPT));
 	const args = JSON.stringify({ url: input.url, out, width: input.width ?? 1280, height: input.height ?? 800, fullPage: input.fullPage ?? false });
 	const stdout = await run(machine, `mkdir -p ${quote(`${machine.root}/outputs/screenshots`)} && NODE_PATH="$(npm root -g)" node ${script} ${quote(args)}`, {
 		timeoutMs: 90_000,
-	});
+	}).finally(() => machine.exec(`rm -f ${script}`).catch(() => undefined));
 	const report = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as Omit<Screenshot, 'path'>;
 	return { path: `../outputs/${file}`, ...report };
 }
