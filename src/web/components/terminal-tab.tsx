@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Btn } from '@/components/signal';
+import { useRefreshTask } from '@/components/source-bar';
 import { api } from '@/lib/api';
 
 /** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
@@ -32,7 +33,7 @@ const theme = {
 	brightWhite: '#f7f7f8',
 };
 
-function Shell({ sessionId }: { sessionId: string }) {
+function Shell({ sessionId, onConnected }: { sessionId: string; onConnected: () => void }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -43,7 +44,6 @@ function Shell({ sessionId }: { sessionId: string }) {
 			fontSize: 12,
 			lineHeight: 1.5,
 			fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace",
-			convertEol: true,
 			theme,
 		});
 		const fit = new FitAddon();
@@ -56,30 +56,27 @@ function Shell({ sessionId }: { sessionId: string }) {
 			} catch {}
 		};
 		refit();
-		term.write('Connecting to the sandbox…\r\n');
+		term.write('Starting the sandbox. A stopped task takes a few seconds to resume…\r\n');
 
+		// Binary frames carry keystrokes and output; text frames carry resizes.
 		const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-		const socket = new WebSocket(`${protocol}://${window.location.host}/vm/${sessionId}/pty`);
+		const socket = new WebSocket(`${protocol}://${window.location.host}/vm/${sessionId}/pty?cols=${term.cols}&rows=${term.rows}`);
 		socket.binaryType = 'arraybuffer';
-		socket.onopen = () => {
-			term.write('Connected.\r\n');
-		};
-		socket.onerror = () => {
-			term.write('WebSocket error. Is the UI dev server running?\r\n');
-		};
-		socket.onclose = () => {
-			term.write('\r\n[disconnected]\r\n');
-		};
+		const encoder = new TextEncoder();
+		let connected = false;
+		const send = (data: string | Uint8Array<ArrayBuffer>) => socket.readyState === WebSocket.OPEN && socket.send(data);
 		socket.onmessage = (event) => {
-			if (typeof event.data === 'string') {
-				term.write(event.data);
-				return;
+			if (!connected) {
+				connected = true;
+				term.reset();
+				onConnected();
 			}
 			term.write(new Uint8Array(event.data as ArrayBuffer));
 		};
-		term.onData((data) => {
-			if (socket.readyState === WebSocket.OPEN) socket.send(data);
-		});
+		socket.onerror = () => term.write('\r\nCould not reach the terminal server.\r\n');
+		socket.onclose = () => term.write('\r\n[disconnected]\r\n');
+		term.onData((data) => send(encoder.encode(data)));
+		term.onResize(({ cols, rows }) => send(JSON.stringify({ type: 'resize', cols, rows })));
 		const observer = new ResizeObserver(refit);
 		observer.observe(el);
 
@@ -88,27 +85,30 @@ function Shell({ sessionId }: { sessionId: string }) {
 			socket.close();
 			term.dispose();
 		};
-	}, [sessionId]);
+	}, [sessionId, onConnected]);
 
 	return <div ref={containerRef} className="h-full min-h-0 min-w-0" />;
 }
 
+/** Opening the terminal is an explicit request for a sandbox, so it starts one when the task is stopped. */
 export function TerminalTab({ sessionId }: { sessionId: string }) {
 	const [generation, setGeneration] = useState(0);
-	const files = useQuery({ queryKey: ['files', sessionId], queryFn: () => api.files(sessionId) });
-	const cwd = files.data?.cwd.split('/').pop();
+	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const onConnected = useRefreshTask(sessionId);
+	const label = ['Sandbox', session.data?.repo.split('/').pop(), health.data?.providers.sandbox].filter(Boolean).join(' · ');
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-2">
 			<div className="flex h-7 shrink-0 items-center gap-2 text-[11px] tracking-[0.04em] text-(--text-disabled)">
-				<span className="truncate uppercase">Sandbox{cwd ? ` · ${cwd}` : ''} · Local shell</span>
+				<span className="truncate uppercase">{label}</span>
 				<div className="flex-1" />
 				<Btn variant="ghost" size="xs" icon={RotateCw} onClick={() => setGeneration((current) => current + 1)}>
 					Restart
 				</Btn>
 			</div>
 			<div className="min-h-0 flex-1 overflow-hidden rounded-lg bg-(--bg-inset) p-3">
-				<Shell key={generation} sessionId={sessionId} />
+				<Shell key={generation} sessionId={sessionId} onConnected={onConnected} />
 			</div>
 		</div>
 	);

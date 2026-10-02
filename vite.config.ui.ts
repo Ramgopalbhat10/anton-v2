@@ -1,25 +1,25 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { antonVmUiPlugin } from './src/lib/vm-ui-plugin.ts';
+
+const api = 'http://127.0.0.1:43128';
 
 export default defineConfig({
 	root: 'src/web',
-	plugins: [react(), tailwindcss(), antonVmUiPlugin()],
+	plugins: [react(), tailwindcss()],
 	resolve: {
 		alias: {
 			'@': new URL('./src/web', import.meta.url).pathname,
 		},
 	},
 	server: {
-		host: '0.0.0.0',
+		host: '127.0.0.1',
 		port: 43127,
 		strictPort: true,
 		proxy: {
-			'/api': {
-				target: 'http://127.0.0.1:43128',
-				changeOrigin: true,
-			},
+			'/api': { target: api, changeOrigin: true },
+			// Host stays as the browser sent it, so the terminal's same-origin check passes.
+			'/vm': { target: api, ws: true },
 		},
 	},
 	build: {

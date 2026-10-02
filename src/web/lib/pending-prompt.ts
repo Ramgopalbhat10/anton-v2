@@ -1,12 +1,21 @@
-/** A prompt typed on the launcher, waiting for its new session's thread to send it. */
-const pending = new Map<string, string>();
+/**
+ * A prompt typed on the launcher, waiting for its new task's thread to send
+ * it. Kept in sessionStorage so a reload before the thread loads keeps it.
+ */
+const key = (sessionId: string) => `anton.pending.${sessionId}`;
 
 export function setPendingPrompt(sessionId: string, prompt: string) {
-	pending.set(sessionId, prompt);
+	try {
+		sessionStorage.setItem(key(sessionId), prompt);
+	} catch {}
 }
 
 export function takePendingPrompt(sessionId: string): string | undefined {
-	const prompt = pending.get(sessionId);
-	pending.delete(sessionId);
-	return prompt;
+	try {
+		const prompt = sessionStorage.getItem(key(sessionId)) ?? undefined;
+		sessionStorage.removeItem(key(sessionId));
+		return prompt;
+	} catch {
+		return undefined;
+	}
 }
