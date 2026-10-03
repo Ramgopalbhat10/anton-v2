@@ -200,8 +200,15 @@ export const api = {
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
 };
 
-/** Live views refresh often; saved and base views only change when the machine starts. */
-export const refreshFor = (source: Source | undefined) => (source === 'live' ? 4000 : 15000);
+/**
+ * Pages refetch when the server says something changed (see live-updates.ts).
+ * Polling is only a safety net, for changes nobody announces: a sandbox
+ * stopping when idle, or files edited from the terminal.
+ */
+export const SAFETY_NET_MS = 60_000;
+
+/** A live sandbox can change under the terminal, so its views are checked more often. */
+export const refreshFor = (source: Source | undefined) => (source === 'live' ? 15_000 : SAFETY_NET_MS);
 
 /** The branch a task works on, or the one it reads from while it has no workspace. */
 export const branchLabel = (session: Session) => (session.workspace ? session.branch : `${session.baseBranch} (read-only)`);

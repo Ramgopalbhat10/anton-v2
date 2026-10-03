@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { useRefreshTask } from '@/components/source-bar';
 import { Btn, DiffStat, EmptyState, Spinner } from '@/components/signal';
-import { api, type CheckpointSummary } from '@/lib/api';
+import { api, type CheckpointSummary, SAFETY_NET_MS } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
 import { age, clock } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -88,7 +88,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 /** Every distinct state of the task's files, one per agent response that changed something. */
 export function HistoryTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
-	const timeline = useQuery({ queryKey: ['checkpoints', sessionId], queryFn: () => api.checkpoints(sessionId), refetchInterval: 15000 });
+	const timeline = useQuery({ queryKey: ['checkpoints', sessionId], queryFn: () => api.checkpoints(sessionId), refetchInterval: SAFETY_NET_MS });
 	const entries = timeline.data?.checkpoints ?? [];
 	const current = entries.find((entry) => entry.at === selected);
 

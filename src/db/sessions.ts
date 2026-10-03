@@ -1,5 +1,6 @@
 import type { Reasoning } from '../core/ports.ts';
 import type { SessionRecord, Usage } from '../core/types.ts';
+import { announce } from '../core/changes.ts';
 import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
@@ -77,6 +78,7 @@ export async function insertSession(session: NewSession): Promise<void> {
 			new Date().toISOString(),
 		],
 	});
+	announce({ kind: 'sessions' });
 }
 
 export async function listSessionRecords(): Promise<SessionRecord[]> {
@@ -119,9 +121,11 @@ export async function updateSession(id: string, update: SessionUpdate): Promise<
 	if (sets.length === 0) return;
 	const db = await appDb();
 	await db.execute({ sql: `UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`, args: [...args, id] });
+	announce({ kind: 'task', id, what: 'state' });
 }
 
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM sessions WHERE id = ?', args: [id] });
+	announce({ kind: 'sessions' });
 }

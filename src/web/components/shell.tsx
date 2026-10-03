@@ -1,5 +1,5 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -12,6 +12,7 @@ import { PullRequestChip, TaskMenu, TaskTitle, UsageChip } from '@/components/ta
 import { Thread } from '@/components/thread';
 import { type PanelName, VmPanel } from '@/components/vm-panel';
 import { api, type Session } from '@/lib/api';
+import { useLiveUpdates } from '@/lib/live-updates';
 import { useTaskNotifications } from '@/lib/notifications';
 import { SendToAgent } from '@/lib/review';
 
@@ -29,6 +30,7 @@ export function AppShell() {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
 	useTaskNotifications();
+	useLiveUpdates();
 
 	useEffect(() => {
 		try {
@@ -121,13 +123,6 @@ export function SessionPage() {
 	});
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
-	const queryClient = useQueryClient();
-	// The sidebar polls; refresh it and the task's totals the moment its agent starts or stops instead.
-	useEffect(() => {
-		void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-		void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-		void queryClient.invalidateQueries({ queryKey: ['budget'] });
-	}, [agent.status, queryClient, sessionId]);
 
 	function setOpen(next: boolean) {
 		if (!next) setExpanded(false);

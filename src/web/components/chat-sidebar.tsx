@@ -4,13 +4,13 @@ import { List, PanelLeft, Plus, Search, Settings, Square, X } from 'lucide-react
 import { useState } from 'react';
 import { Avatar, Icon, IconBtn, SectionLabel } from '@/components/signal';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
-import { api } from '@/lib/api';
+import { api, SAFETY_NET_MS } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** Today's spend against the daily cap, so it is visible before it blocks anything. */
 function SpentToday() {
-	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: 30_000 });
+	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	if (!budget.data) return null;
 	const { today, limits } = budget.data;
 	return (
@@ -59,7 +59,7 @@ export function ChatSidebar({
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string };
 	const queryClient = useQueryClient();
-	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: 5000 });
+	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const stop = useMutation({
 		mutationFn: (id: string) => api.stopSession(id),
 		onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }),
