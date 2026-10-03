@@ -1,8 +1,11 @@
 import type { McpServer, Project, ProjectSettings } from '../core/types.ts';
 import { config } from '../config.ts';
-import { getProject, listProjects, setProjectSettings, upsertProject } from '../db/projects.ts';
+import { announce } from '../core/changes.ts';
+import { deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
+import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { deleteSession } from './sessions.ts';
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 
@@ -27,11 +30,21 @@ export async function addProject(fullName: string): Promise<ProjectView> {
 	return present(await upsertProject(repo.fullName, repo.defaultBranch));
 }
 
-/** Known repositories; seeds ANTON_DEFAULT_REPO the first time. */
+/** Known repositories; seeds ANTON_DEFAULT_REPO the first time, so removing it later keeps it removed. */
 export async function projects(): Promise<ProjectView[]> {
 	const known = await listProjects();
-	if (known.length > 0 || !config.defaultRepo) return known.map(present);
-	return [await addProject(config.defaultRepo)];
+	if (known.length > 0 || !config.defaultRepo || (await getSetting('seededDefaultRepo', false))) return known.map(present);
+	const seeded = await addProject(config.defaultRepo);
+	await setSetting('seededDefaultRepo', true);
+	return [seeded];
+}
+
+/** Removes a repository and everything Anton keeps for it: its tasks (machines and history too) and its automations. */
+export async function removeProject(id: string): Promise<void> {
+	await existing(id);
+	for (const sessionId of await projectSessionIds(id)) await deleteSession(sessionId);
+	await deleteProjectRecord(id);
+	announce({ kind: 'sessions' });
 }
 
 async function existing(id: string): Promise<Project> {

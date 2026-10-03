@@ -143,6 +143,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 
 	return {
 		name: 'github',
+		async accountName() {
+			if (!token) return null;
+			const user = await json<{ login: string; name: string | null }>('/user');
+			return user.name?.trim() || user.login;
+		},
 		async getRepo(fullName): Promise<RepoInfo> {
 			const repo = await json<{ full_name: string; default_branch: string; private: boolean }>(`/repos/${fullName}`);
 			return { fullName: repo.full_name, defaultBranch: repo.default_branch, private: repo.private };

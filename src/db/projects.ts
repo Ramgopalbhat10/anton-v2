@@ -104,3 +104,18 @@ export async function appendProjectMemory(id: string, line: string, maxLength: n
 	});
 	return result.rowsAffected === 1;
 }
+
+/** Ids of every task on the repo, finished setting up or not. */
+export async function projectSessionIds(id: string): Promise<string[]> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT id FROM sessions WHERE project_id = ?', args: [id] });
+	return result.rows.map((row) => String(row.id));
+}
+
+/** Removes the repo with its automations and issue claims, and any task rows its caller has not already deleted. */
+export async function deleteProjectRecord(id: string): Promise<void> {
+	const db = await appDb();
+	const tables = ['automations', 'issue_tasks', 'sessions'];
+	const statements = tables.map((table) => ({ sql: `DELETE FROM ${table} WHERE project_id = ?`, args: [id] }));
+	await db.batch([...statements, { sql: 'DELETE FROM projects WHERE id = ?', args: [id] }], 'write');
+}
