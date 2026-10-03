@@ -13,10 +13,10 @@ export function triggerAt(text: string, caret: number): Trigger | null {
 export const SHOWN = 8;
 
 /** Paths whose file name starts with the query first, then any path containing it. */
-export function matchPaths(paths: string[], query: string): string[] {
+export function matchPaths(paths: string[], query: string, limit = SHOWN): string[] {
 	const wanted = query.toLowerCase();
 	const name = (path: string) => path.slice(path.lastIndexOf('/') + 1).toLowerCase();
 	const starts = paths.filter((path) => name(path).startsWith(wanted));
 	const contains = paths.filter((path) => !name(path).startsWith(wanted) && path.toLowerCase().includes(wanted));
-	return [...starts, ...contains].slice(0, SHOWN);
+	return [...starts, ...contains].slice(0, limit);
 }

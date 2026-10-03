@@ -15,3 +15,12 @@ test('files whose name starts with the query come first', () => {
 	assert.deepEqual(matchPaths(paths, 'app'), ['src/app.ts', 'tests/app.test.ts', 'src/core/mapper.ts']);
 	assert.deepEqual(matchPaths(paths, 'WEB/'), ['src/web/main.tsx']);
 });
+
+test('a file gets its language from the extension or a well-known name', async () => {
+	const { languageFor } = await import('../src/web/lib/highlight.ts');
+	const known = { ts: 1, dockerfile: 1, makefile: 1, json: 1 };
+	assert.equal(languageFor('src/app.ts', known), 'ts');
+	assert.equal(languageFor('Makefile', known), 'makefile');
+	assert.equal(languageFor('docker/Dockerfile.dev', known), 'dockerfile');
+	assert.equal(languageFor('notes.unknownext', known), null);
+});
