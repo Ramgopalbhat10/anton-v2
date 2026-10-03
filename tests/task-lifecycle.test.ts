@@ -58,6 +58,7 @@ const fakeHost: GitHost = {
 	listIssues: async () => issues,
 	pullRequestActivity: async () => activity,
 	accountName: async () => 'Ada Lovelace',
+	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
 };
 // What the fake GitHub reports; tests change these.
 let issues: Issue[] = [];
@@ -1053,4 +1054,27 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 	assert.ok(!(await projects()).some((item) => item.id === project.id));
 	await assert.rejects(() => removeProject(project.id), /not found/);
 	assert.equal(await profileName(), 'Ada Lovelace');
+});
+
+test('one file goes back to the base branch, and the repo picker leaves out added repos', async () => {
+	const { revertFile } = await import('../src/services/restore.ts');
+	const { addableRepos } = await import('../src/services/projects.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Revert one' });
+	const machine = await machineFor(session.id);
+	const original = await run(machine, 'cat README.md');
+	await run(machine, 'echo changed >> README.md && echo new > added.txt');
+	await revertFile(session.id, 'README.md');
+	assert.equal(await run(machine, 'cat README.md'), original);
+	assert.equal((await run(machine, 'cat added.txt')).trim(), 'new', 'other changes stay');
+	await revertFile(session.id, 'added.txt');
+	assert.equal((await run(machine, 'test -e added.txt || echo gone')).trim(), 'gone', 'an added file is removed');
+	await assert.rejects(() => revertFile(session.id, 'README.md'), /no changes/);
+	await assert.rejects(() => revertFile(session.id, '../etc/passwd'), /Invalid path/);
+	const checkpoints = await listCheckpoints(session.id);
+	assert.ok(checkpoints.length >= 2, 'each revert can be undone from the timeline');
+
+	const offered = await addableRepos();
+	assert.ok(!offered.includes('acme/demo'), 'an added repo is not offered again');
+	assert.ok(offered.includes('acme/other'));
 });

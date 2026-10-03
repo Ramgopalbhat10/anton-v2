@@ -1,7 +1,7 @@
 import { ConflictError, NotFoundError } from '../core/errors.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
-import { quote, run } from '../core/shell.ts';
+import { quote, run, safeRelativePath } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { SYMLINK_MODE, type SavedFile, readBlob, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
@@ -87,6 +87,29 @@ export async function restoreCheckpoint(id: string, at: string): Promise<Restore
 		const skipped = await applyFiles(machine, target.files);
 		await saveCheckpoint(id, machine);
 		return { at, skipped };
+	} finally {
+		restoring.delete(id);
+	}
+}
+
+/**
+ * Puts one changed file back as it is at the base commit, removing it if the
+ * task added it. Checkpointed before and after, so the timeline can undo it.
+ */
+export async function revertFile(id: string, rawPath: string): Promise<void> {
+	const path = safeRelativePath(rawPath);
+	if (isWorking(id)) throw new ConflictError('Stop the agent before reverting a file');
+	if (restoring.has(id)) throw new ConflictError('A restore is already running');
+	restoring.add(id);
+	try {
+		const session = await getSessionRecord(id);
+		if (!session) throw new NotFoundError('Task not found');
+		const machine = await machineFor(id);
+		const file = (await changes(machine, session.baseSha)).files.find((change) => change.path === path);
+		if (!file) throw new NotFoundError(`${path} has no changes to revert`);
+		await saveCheckpoint(id, machine);
+		await resetToBase(machine, session.baseSha, [file]);
+		await saveCheckpoint(id, machine);
 	} finally {
 		restoring.delete(id);
 	}
