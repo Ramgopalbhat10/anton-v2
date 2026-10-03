@@ -4,6 +4,7 @@ import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
+import { Reviewer } from './agents/reviewer.ts';
 import { config } from './config.ts';
 import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
@@ -44,6 +45,7 @@ import { addAutomation, automations, removeAutomation, runAutomation, setAutomat
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
+import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
@@ -70,6 +72,7 @@ observe((event) => {
 appDb().catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
+setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, message: text })), 'reviewer');
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -119,7 +122,12 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
-setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
+// The reviewer is never served over HTTP; its router only stops it.
+const reviewers = createAgentRouter(Reviewer);
+setAgentAbort(async (id) => {
+	const path = `/${encodeURIComponent(id)}/abort`;
+	await Promise.all([agents.request(path, { method: 'POST' }), reviewers.request(path, { method: 'POST' })]);
+});
 
 /** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
 const HEARTBEAT_MS = 25_000;
@@ -200,7 +208,15 @@ app.put('/api/settings/sandbox', async (c) => {
 });
 app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
 app.put('/api/settings/general', async (c) => {
-	const next = await body(c, v.object({ model: v.nullable(v.pipe(v.string(), v.minLength(1))), reasoning: v.nullable(REASONING), planMode: v.boolean() }));
+	const next = await body(
+		c,
+		v.object({
+			model: v.nullable(v.pipe(v.string(), v.minLength(1))),
+			reasoning: v.nullable(REASONING),
+			planMode: v.boolean(),
+			reviewPullRequests: v.boolean(),
+		}),
+	);
 	return c.json(await setGeneralSettings(next));
 });
 app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
@@ -354,6 +370,7 @@ app.delete('/api/sessions/:id', async (c) => {
 	await deleteSession(c.req.param('id'));
 	return c.body(null, 204);
 });
+app.post('/api/sessions/:id/review', async (c) => c.json({ started: await requestReview(c.req.param('id'), { automatic: false }) }));
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 app.get('/api/sessions/:id/checkpoints', async (c) => {

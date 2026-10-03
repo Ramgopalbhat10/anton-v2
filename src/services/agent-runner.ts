@@ -71,15 +71,18 @@ export async function primeAllAgents(): Promise<void> {
 }
 
 type Deliver = (id: string, text: string) => Promise<void>;
-let deliver: Deliver | null = null;
+/** The agents a task has: the coder it talks to, and the reviewer that reads its pull requests. Both run on the task's machine and caps. */
+export type AgentName = 'coder' | 'reviewer';
+const deliveries = new Map<AgentName, Deliver>();
 
-/** The app registers how to deliver a message to the agent, so services never import the agent module. */
-export function setAgentDelivery(next: Deliver): void {
-	deliver = next;
+/** The app registers how to deliver a message to each agent, so services never import the agent modules. */
+export function setAgentDelivery(next: Deliver, agent: AgentName = 'coder'): void {
+	deliveries.set(agent, next);
 }
 
-/** Sends a message nobody typed (an issue, a schedule, a failed check) to a task's agent, within the caps. */
-export async function sendToAgent(id: string, text: string): Promise<void> {
+/** Sends a message nobody typed (an issue, a schedule, a failed check, a review request) to one of a task's agents, within the caps. */
+export async function sendToAgent(id: string, text: string, agent: AgentName = 'coder'): Promise<void> {
+	const deliver = deliveries.get(agent);
 	if (!deliver) throw new Error('Agent delivery is not set up');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored');
 	await assertWithinBudget(id);

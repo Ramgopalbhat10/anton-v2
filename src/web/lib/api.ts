@@ -179,7 +179,7 @@ export type SandboxSettings = {
 };
 export type SandboxView = { settings: SandboxSettings; defaultBaseImage: string; provider: string };
 /** How a new task starts when the launcher does not say; null model is the server's default. */
-export type GeneralSettings = { model: string | null; reasoning: Reasoning | null; planMode: boolean };
+export type GeneralSettings = { model: string | null; reasoning: Reasoning | null; planMode: boolean; reviewPullRequests: boolean };
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
@@ -295,6 +295,7 @@ export const api = {
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
+	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */
 	stopAgent: async (id: string) => void (await request(`/api/agents/coder/${id}/abort`, { method: 'POST' })),
 	changes: (id: string) => json<ChangesPayload>(`/api/sessions/${id}/changes`),

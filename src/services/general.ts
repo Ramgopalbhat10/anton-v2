@@ -11,12 +11,14 @@ export type GeneralSettings = {
 	/** Null uses the model's own default. */
 	reasoning: Reasoning | null;
 	planMode: boolean;
+	/** A reviewer agent reads each pull request the agent opens or updates and comments on it. */
+	reviewPullRequests: boolean;
 };
 
 const KEY = 'general';
 
 export async function generalSettings(): Promise<GeneralSettings> {
-	return { model: null, reasoning: null, planMode: false, ...(await getSetting<Partial<GeneralSettings>>(KEY, {})) };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, ...(await getSetting<Partial<GeneralSettings>>(KEY, {})) };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {

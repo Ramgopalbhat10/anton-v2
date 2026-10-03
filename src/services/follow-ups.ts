@@ -6,6 +6,7 @@ import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
+import { CLEAN_MARK } from './code-review.ts';
 import { logProblem } from './log.ts';
 
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
@@ -26,8 +27,11 @@ function stateFor(session: SessionRecord): FollowState {
 	return state.url === undefined || state.url === session.prUrl ? state : initial;
 }
 
-/** Deploy and status bots comment on every push; review bots leave reviews and line comments, which are kept. */
-const isNoise = (comment: PullRequestComment) => comment.author.endsWith('[bot]') && comment.id.startsWith('comment-');
+/**
+ * Deploy and status bots comment on every push; review bots leave reviews and
+ * line comments, which are kept. Anton's own review that found nothing asks nothing.
+ */
+const isNoise = (comment: PullRequestComment) => (comment.author.endsWith('[bot]') && comment.id.startsWith('comment-')) || comment.body.includes(CLEAN_MARK);
 
 function checksMessage(url: string, sha: string, failed: CheckResult[]): string {
 	return [
