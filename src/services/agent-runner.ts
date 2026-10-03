@@ -1,3 +1,4 @@
+import { config } from '../config.ts';
 import { ConflictError } from '../core/errors.ts';
 import type { McpServer } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
@@ -12,8 +13,18 @@ import { primeModel } from './sessions.ts';
  */
 const servers = new Map<string, McpServer[]>();
 
+/** Web search and fetch for every task, unless turned off or a repo server already uses the name. */
+function webServer(repoServers: McpServer[]): McpServer[] {
+	if (config.web.mcpUrl === 'off' || repoServers.some((server) => server.name === WEB)) return [];
+	return [{ name: WEB, url: config.web.mcpUrl, auth: config.web.apiKey || null, tools: ['web_search', 'web_fetch'] }];
+}
+
+const WEB = 'web';
+
+/** The MCP servers a task's agent connects to: web search, then its repo's own. */
 export function mcpServersFor(id: string): McpServer[] {
-	return servers.get(id) ?? [];
+	const repoServers = servers.get(id) ?? [];
+	return [...webServer(repoServers), ...repoServers];
 }
 
 /** Tasks that have had a machine: the agent works there rather than starting read-only. */

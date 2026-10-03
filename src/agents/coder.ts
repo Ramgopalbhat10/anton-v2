@@ -165,11 +165,14 @@ function useWorkspace(id: string) {
 	);
 }
 
+const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
 	'When the task needs more (editing files, running commands or tests, installing anything, or opening a pull request), call start_workspace first, then carry on.',
 	'Do not start a workspace for questions you can answer by reading.',
+	WEB_HINT,
 	'Be concise, and point to files and lines.',
 ].join(' ');
 
@@ -182,6 +185,7 @@ const WORKSPACE_PROMPT = [
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	'Check UI changes with the screenshot tool, then read the image to see the result.',
+	WEB_HINT,
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
@@ -198,7 +202,7 @@ export function Coder({ id }: AgentProps) {
 	const workspace = started || hasWorkspace(id);
 	if (workspace) useWorkspace(id);
 	else useReadOnlyRepo(id, () => setStarted(true));
-	// The repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
+	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({
 			name: server.name,

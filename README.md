@@ -25,7 +25,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 ## How a task runs
 
 1. **Create.** Anton resolves the branch to a commit and names a task branch `anton/<title>-<id>`. Nothing starts yet.
-2. **Start.** A task starts read-only. Anton downloads the repo at the task's commit once, keeps it on its own disk, and the agent answers questions from it with `list_files`, `search_code` and `read_file`. That needs no sandbox, clone or branch. When the work needs edits, commands or a pull request, the agent calls `start_workspace`. Opening the terminal also starts the sandbox. A sandbox comes from, best first: the task's running sandbox, its snapshot from when it last stopped, the repo's warm image (dependencies installed, refreshed weekly), or a fresh clone.
+2. **Start.** A task starts read-only. Anton downloads the repo at the task's commit once, keeps it on its own disk, and the agent answers questions from it with `list_files`, `search_code` and `read_file`. That needs no sandbox, clone or branch. When the work needs edits, commands or a pull request, the agent calls `start_workspace`. Opening the terminal also starts the sandbox. A sandbox comes from, best first: the task's running sandbox, its snapshot from when it last stopped, the repo's warm image (dependencies installed, refreshed weekly), or a fresh clone. In both modes the agent can search the web and read pages through Parallel's free search MCP server.
 3. **Work.** The agent edits files in `/workspace/repo` and saves deliverables (reports, screenshots) to `/workspace/outputs`.
 4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
 5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.
@@ -55,6 +55,8 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ANTON_IDLE_MINUTES` | Stop a sandbox after this many idle minutes (default 15) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
+| `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |
+| `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
 
 Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
