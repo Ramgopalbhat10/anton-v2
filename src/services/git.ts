@@ -1,7 +1,8 @@
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
 
-export type FileChange = { path: string; status: 'A' | 'M' | 'D' };
+/** `mode` is git's file mode in the working tree: 100755 for executables, 120000 for symlinks. */
+export type FileChange = { path: string; status: 'A' | 'M' | 'D'; mode?: string };
 export type LogEntry = { sha: string; subject: string; at: string };
 export type Changes = { patch: string; files: FileChange[]; log: LogEntry[] };
 
@@ -31,11 +32,11 @@ export async function checkoutTaskBranch(machine: Machine, branch: string, sha: 
 export async function changes(machine: Machine, baseSha: string): Promise<Changes> {
 	const cwd = repoDir(machine);
 	const [names, patch, log] = await Promise.all([
-		run(machine, withScratchIndex(`git diff --cached --no-renames --name-status ${baseSha}`), { cwd }),
+		run(machine, withScratchIndex(`git diff --cached --no-renames --raw -z ${baseSha}`), { cwd }),
 		run(machine, withScratchIndex(`git diff --cached --no-renames --binary ${baseSha}`), { cwd }),
 		run(machine, `git log --format='%H%x09%s%x09%cI' ${baseSha}..HEAD`, { cwd }),
 	]);
-	return { patch, files: parseNameStatus(names), log: parseLog(log) };
+	return { patch, files: parseRaw(names), log: parseLog(log) };
 }
 
 /** Tracked files plus new ones that are not ignored. */
@@ -57,14 +58,21 @@ export async function commitAndPush(
 	return true;
 }
 
-export function parseNameStatus(out: string): FileChange[] {
-	return out
-		.split('\n')
-		.filter(Boolean)
-		.map((line) => {
-			const [status, path] = line.split('\t');
-			return { path, status: (status[0] === 'A' || status[0] === 'D' ? status[0] : 'M') as FileChange['status'] };
-		});
+/**
+ * Parses `git diff --raw -z`: a `:oldmode newmode oldsha newsha status` field
+ * then the path, NUL-separated, so any file name comes through as is.
+ */
+export function parseRaw(out: string): FileChange[] {
+	const fields = out.split('\0');
+	const changes: FileChange[] = [];
+	for (let index = 0; index + 1 < fields.length; index += 2) {
+		const [, mode, , , status] = fields[index].split(' ');
+		const path = fields[index + 1];
+		if (!status || !path) continue;
+		const kind = (status[0] === 'A' || status[0] === 'D' ? status[0] : 'M') as FileChange['status'];
+		changes.push(kind === 'D' ? { path, status: kind } : { path, status: kind, mode });
+	}
+	return changes;
 }
 
 export function parseLog(out: string): LogEntry[] {

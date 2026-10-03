@@ -21,8 +21,8 @@ import { createContext, Fragment, type ReactNode, useContext, useEffect, useRef,
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, Spinner } from '@/components/signal';
-import { api, outputUrl } from '@/lib/api';
-import { elapsed } from '@/lib/format';
+import { api, outputUrl, type Usage } from '@/lib/api';
+import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
@@ -251,10 +251,22 @@ function StepsCard({ steps, live }: { steps: Step[]; live: boolean }) {
 	);
 }
 
+type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
+
 function UserMessage({ message, meta }: { message: FlueConversationMessage; meta: string[] }) {
 	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
 		<div className="flex flex-col items-end gap-1.5">
+			{images.length > 0 ? (
+				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
+					{images.map((image, index) => (
+						<a key={image.id ?? index} href={image.url} target="_blank" rel="noreferrer">
+							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-lg border border-(--border-subtle)" />
+						</a>
+					))}
+				</div>
+			) : null}
 			<div className="max-w-[520px] rounded-[12px_12px_4px_12px] bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty">
 				{text}
 			</div>
@@ -270,8 +282,15 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 	);
 }
 
+/** The usage the agent attached when the response finished, if any. */
+function usageOf(message: FlueConversationMessage): Usage | null {
+	const usage = message.metadata?.usage as Usage | undefined;
+	return usage && typeof usage.inputTokens === 'number' ? usage : null;
+}
+
 function AssistantMessage({ message, live }: { message: FlueConversationMessage; live: boolean }) {
 	const blocks = toBlocks(message.parts);
+	const usage = usageOf(message);
 	if (blocks.length === 0 && !live) return null;
 	return (
 		<div className="flex flex-col gap-3">
@@ -286,6 +305,14 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} />
 				),
 			)}
+			{usage && !live ? (
+				<div
+					className="text-[11px] text-(--text-disabled)"
+					title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}
+				>
+					{tokens(usage.inputTokens + usage.outputTokens)} tokens · {dollars(usage.cost)}
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -367,7 +394,16 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 					</div>
 				</div>
-				<Composer busy={busy} onSend={(text) => agent.sendMessage(text)} onStop={() => api.stopAgent(sessionId)} sessionId={sessionId} />
+				<Composer
+					busy={busy}
+					onSend={(text, images) =>
+						agent.sendMessage(text, {
+							images: images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename })),
+						})
+					}
+					onStop={() => api.stopAgent(sessionId)}
+					sessionId={sessionId}
+				/>
 			</div>
 		</SessionId.Provider>
 	);

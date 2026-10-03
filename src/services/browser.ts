@@ -49,7 +49,8 @@ const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').r
 /** Screenshots a page from inside the machine into its outputs, so it shows in the Library. */
 export async function takeScreenshot(machine: Machine, input: ScreenshotInput): Promise<Screenshot> {
 	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
-	const file = `screenshots/${slug(input.name ?? '') || `shot-${Date.now()}`}.png`;
+	// Unique per call, so an earlier screenshot in the conversation never shows a later image.
+	const file = `screenshots/${slug(input.name ?? '') || 'shot'}-${Date.now()}.png`;
 	const out = `${machine.root}/outputs/${file}`;
 	// Its own script per call, so two screenshots at once never read each other's half-written file.
 	const script = `/tmp/anton-screenshot-${randomUUID()}.cjs`;

@@ -15,7 +15,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 
 ## Rules
 
-- Viewing a task (files, changes, library) never starts a sandbox; only a prompt, the terminal or Resume does.
+- Viewing a task (files, changes, library) never starts a sandbox; only a prompt, the terminal, Resume or restoring a checkpoint does.
 - Git credentials stay in Anton: pass `git.gitAuthEnv()` only to commands Anton runs, never to the agent's shell.
 - New outside services go behind a port in `src/core/ports.ts`, not called directly from services.
 

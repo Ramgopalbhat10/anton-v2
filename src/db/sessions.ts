@@ -1,5 +1,5 @@
 import type { Reasoning } from '../core/ports.ts';
-import type { SessionRecord } from '../core/types.ts';
+import type { SessionRecord, Usage } from '../core/types.ts';
 import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
@@ -22,8 +22,18 @@ function toRecord(row: Row): SessionRecord {
 		createdAt: String(row.created_at),
 		failed: row.status === 'error',
 		machineState: optional(row.machine_state),
+		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 	};
+}
+
+/** Adds one response's usage to the task's totals. */
+export async function addSessionUsage(id: string, usage: Usage): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?',
+		args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
+	});
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha'>;

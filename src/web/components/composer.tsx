@@ -1,10 +1,34 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Square } from 'lucide-react';
-import { useState } from 'react';
+import { ImagePlus, Send, Square, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { IconBtn, Kbd } from '@/components/signal';
+import { Icon, IconBtn, Kbd } from '@/components/signal';
 import { api, type Session } from '@/lib/api';
+import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
+
+/** Sent when a message is only images, since the agent always gets text. */
+const IMAGE_ONLY = 'Look at the attached image.';
+
+function Thumbnails({ images, onRemove }: { images: ImageAttachment[]; onRemove: (id: string) => void }) {
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{images.map((image) => (
+				<div key={image.id} className="relative size-14 overflow-hidden rounded-md border border-(--border-subtle)">
+					<img src={image.preview} alt={image.filename} className="size-full object-cover" />
+					<button
+						type="button"
+						aria-label={`Remove ${image.filename}`}
+						onClick={() => onRemove(image.id)}
+						className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-sm bg-(--bg-scrim) text-(--text-primary)"
+					>
+						<Icon icon={X} size={10} />
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
 
 /**
  * Messages sent while the agent works join its current turn: it reads them
@@ -18,11 +42,21 @@ export function Composer({
 }: {
 	sessionId: string;
 	busy?: boolean;
-	onSend: (text: string) => Promise<void>;
+	onSend: (text: string, images: ImageAttachment[]) => Promise<void>;
 	onStop: () => Promise<void>;
 }) {
 	const [text, setText] = useState('');
+	const [images, setImages] = useState<ImageAttachment[]>([]);
+	const [notice, setNotice] = useState<string | null>(null);
 	const [stopping, setStopping] = useState(false);
+	const picker = useRef<HTMLInputElement>(null);
+	const attach = async (files: File[]) => {
+		if (files.length === 0) return;
+		const read = await readImages(files, MAX_IMAGES - images.length);
+		// Clamped here too: two quick pastes both read the count from before either landed.
+		setImages((current) => [...current, ...read.images].slice(0, MAX_IMAGES));
+		setNotice(read.rejected);
+	};
 	const stop = async () => {
 		setStopping(true);
 		await onStop().finally(() => setStopping(false));
@@ -34,20 +68,41 @@ export function Composer({
 		queryFn: () => api.session(sessionId),
 	});
 	const choice = { model: session.data?.model ?? models.data?.default ?? '', reasoning: session.data?.reasoning ?? null };
+	const model = models.data?.models.find((item) => item.id === choice.model);
+	const blind = images.length > 0 && model !== undefined && !model.vision;
+	const ready = (text.trim() || images.length > 0) && !blind;
 
 	return (
 		<form
 			className="shrink-0 px-4 pt-1 pb-4"
 			onSubmit={async (event) => {
 				event.preventDefault();
-				const message = text.trim();
-				if (!message) return;
+				if (!ready) return;
+				const sent = images;
+				const typed = text;
 				askToNotify();
 				setText('');
-				await onSend(message);
+				setImages([]);
+				setNotice(null);
+				try {
+					await onSend(text.trim() || IMAGE_ONLY, sent);
+				} catch (error) {
+					// Put the draft back so nothing typed is lost, and say why it did not go.
+					setText((current) => current || typed);
+					setImages((current) => (current.length ? current : sent));
+					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+				}
 			}}
 		>
-			<div className="mx-auto flex max-w-[700px] flex-col gap-2 rounded-xl bg-(--bg-surface) px-3 pt-3 pb-2">
+			<div
+				className="mx-auto flex max-w-[700px] flex-col gap-2 rounded-xl bg-(--bg-surface) px-3 pt-3 pb-2"
+				onDragOver={(event) => event.preventDefault()}
+				onDrop={(event) => {
+					event.preventDefault();
+					void attach([...event.dataTransfer.files]);
+				}}
+			>
+				{images.length > 0 ? <Thumbnails images={images} onRemove={(id) => setImages((current) => current.filter((image) => image.id !== id))} /> : null}
 				<textarea
 					value={text}
 					onChange={(event) => setText(event.target.value)}
@@ -57,11 +112,34 @@ export function Composer({
 							event.currentTarget.form?.requestSubmit();
 						}
 					}}
+					onPaste={(event) => {
+						const files = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
+						if (files.length === 0) return;
+						event.preventDefault();
+						void attach(files);
+					}}
 					placeholder={busy ? 'Add to what the agent is doing' : 'Ask Anton to change the workspace'}
 					rows={2}
 					className="w-full resize-none border-0 bg-transparent p-0 text-[13px] leading-[19px] text-(--text-primary) outline-none"
 				/>
+				{blind || notice ? (
+					<div className="text-[12px] text-(--warning-text)">
+						{blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : notice}
+					</div>
+				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
+					<input
+						ref={picker}
+						type="file"
+						accept="image/png,image/jpeg,image/gif,image/webp"
+						multiple
+						hidden
+						onChange={(event) => {
+							void attach([...(event.target.files ?? [])]);
+							event.target.value = '';
+						}}
+					/>
+					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
 					<ModelPicker
 						value={choice}
 						onChange={(change) => {
@@ -77,7 +155,7 @@ export function Composer({
 					{busy ? (
 						<IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} />
 					) : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!text.trim()} />
+					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
 				</div>
 			</div>
 		</form>

@@ -4,8 +4,9 @@ import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
-import { InvalidInputError, statusOf } from './core/errors.ts';
+import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
+import { getSessionRecord } from './db/sessions.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
@@ -23,7 +24,10 @@ import {
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
+import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
+import { isRestoring, restoreCheckpoint } from './services/restore.ts';
+import { recordTurnUsage } from './services/usage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
@@ -32,7 +36,10 @@ const app = new Hono();
 const REASONING = v.picklist(REASONING_LEVELS);
 
 publishUpgradeHandler(handleTerminalUpgrade);
-observe(recordAgentEvent);
+observe((event) => {
+	recordAgentEvent(event);
+	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0]);
+});
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 
@@ -58,8 +65,12 @@ app.onError((error, c) => {
 });
 
 // Each prompt reads the session's current model before the agent renders.
+// A prompt needs a task, and waits while that task's files are being restored.
 app.post('/api/agents/coder/:id', async (c, next) => {
-	await primeModel(c.req.param('id'));
+	const id = c.req.param('id');
+	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
+	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
+	await primeModel(id);
 	await next();
 });
 const agents = createAgentRouter(Coder);
@@ -135,6 +146,16 @@ app.delete('/api/sessions/:id', async (c) => {
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
+app.get('/api/sessions/:id/checkpoints', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ checkpoints: await listCheckpoints(id) });
+});
+app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const patch = await readCheckpointPatchAt(id, c.req.param('at'));
+	return c.json({ at: c.req.param('at'), patch });
+});
+app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 

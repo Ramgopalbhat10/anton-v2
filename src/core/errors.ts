@@ -7,6 +7,11 @@ export class InvalidInputError extends Error {
 	readonly status = 400;
 }
 
+/** The request is fine but the task is not in a state to take it. */
+export class ConflictError extends Error {
+	readonly status = 409;
+}
+
 /** The HTTP status for any thrown value: its own `status` when it has one, else 500. */
 export function statusOf(error: unknown): number {
 	const status = (error as { status?: unknown } | null)?.status;

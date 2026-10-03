@@ -7,6 +7,7 @@ import {
 	setProvider,
 	useAgentFinish,
 	useModel,
+	useResponseFinish,
 	useSandbox,
 	useSubagent,
 	useTool,
@@ -19,6 +20,7 @@ import { repoDir } from '../services/git.ts';
 import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
+import { toUsage } from '../services/usage.ts';
 import { loadedModels } from '../services/models.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 
@@ -112,6 +114,9 @@ export function Coder({ id }: AgentProps) {
 			console.warn('[anton] checkpoint failed', error);
 		}
 	});
+	// Each reply carries its own usage for the thread; the task keeps a running total.
+	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
+	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	return [
 		'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 		'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
