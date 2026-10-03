@@ -170,6 +170,8 @@ export type GitHost = {
 	pullRequestActivity(url: string): Promise<PullRequestActivity>;
 	/** The display name of the account Anton acts as on the host, or null when it has none. */
 	accountName(): Promise<string | null>;
+	/** `owner/name` of the repos Anton's account can reach, most recently pushed first. */
+	listRepos(): Promise<string[]>;
 };
 
 export type Issue = { number: number; title: string; body: string; url: string };

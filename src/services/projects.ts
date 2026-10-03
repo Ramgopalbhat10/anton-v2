@@ -35,6 +35,13 @@ export async function addProject(fullName: string): Promise<ProjectView> {
 	return present(await upsertProject(repo.fullName, repo.defaultBranch));
 }
 
+/** Repos Anton's account can reach that are not added yet, most recently pushed first. */
+export async function addableRepos(): Promise<string[]> {
+	const [reachable, known] = await Promise.all([getProviders().git.listRepos(), listProjects()]);
+	const added = new Set(known.map((project) => project.repoFullName.toLowerCase()));
+	return reachable.filter((name) => !added.has(name.toLowerCase()));
+}
+
 /** Known repositories; seeds ANTON_DEFAULT_REPO the first time, so removing it later keeps it removed. */
 export async function projects(): Promise<ProjectView[]> {
 	const known = await listProjects();
