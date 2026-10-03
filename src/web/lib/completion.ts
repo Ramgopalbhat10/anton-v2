@@ -20,3 +20,13 @@ export function matchPaths(paths: string[], query: string, limit = SHOWN): strin
 	const contains = paths.filter((path) => !name(path).startsWith(wanted) && path.toLowerCase().includes(wanted));
 	return [...starts, ...contains].slice(0, limit);
 }
+
+/** Where a saved command's prompt takes what is typed after `/name`. */
+export const ARGUMENTS = '$ARGUMENTS';
+
+/** `/name what follows` becomes the saved prompt with what follows in place of $ARGUMENTS; any other message is left as it is. */
+export function expandCommand(text: string, commands: Array<{ name: string; prompt: string }>): string {
+	const match = /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
+	const command = match && commands.find((item) => item.name === match[1] && item.prompt.includes(ARGUMENTS));
+	return command ? command.prompt.replaceAll(ARGUMENTS, (match[2] ?? '').trim()) : text;
+}

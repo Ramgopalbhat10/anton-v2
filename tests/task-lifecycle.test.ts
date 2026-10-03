@@ -59,6 +59,7 @@ const fakeHost: GitHost = {
 	pullRequestActivity: async () => activity,
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	accountName: async () => 'Ada Lovelace',
+	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
 };
 /** Resolves once `ready` holds, for work a service starts without waiting on it. */
 async function waitFor(ready: () => boolean): Promise<void> {
@@ -1116,4 +1117,65 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 	assert.ok(!(await projects()).some((item) => item.id === project.id));
 	await assert.rejects(() => removeProject(project.id), /not found/);
 	assert.equal(await profileName(), 'Ada Lovelace');
+});
+
+test("a task's agent gets the repo's skills and installed plugins' skills, the repo's winning a name", async () => {
+	const { installPlugin, pluginsView, primeSkills, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/plugins.ts');
+	const skillMd = (name: string) => `---\nname: ${name}\ndescription: Use when asked to ${name}.\n---\nDo ${name} carefully.\n`;
+	git(seed, 'checkout', '-q', '-b', 'with-skills');
+	for (const [file, content] of Object.entries({
+		'.agents/skills/release/SKILL.md': skillMd('release'),
+		'.claude/skills/triage/SKILL.md': skillMd('triage'),
+		'AGENTS.md': 'Run npm test before committing.',
+		'tools/skills/release/SKILL.md': skillMd('release'),
+		'tools/skills/lint/SKILL.md': skillMd('lint'),
+		'tools/skills/lint/rules.md': 'No semicolons.',
+	})) {
+		execFileSync('mkdir', ['-p', path.dirname(path.join(seed, file))]);
+		writeFileSync(path.join(seed, file), content);
+	}
+	git(seed, 'add', '.');
+	git(seed, 'commit', '-q', '-m', 'skills');
+	git(seed, 'push', '-q', remote, 'with-skills');
+	git(seed, 'checkout', '-q', 'main');
+
+	const plugin = (await installPlugin({ address: 'https://github.com/acme/demo/tree/with-skills/tools' })).id;
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Skills', branch: 'with-skills' });
+	await primeSkills(session.id);
+	assert.deepEqual(skillsFor(session.id, false).map((skill) => skill.name), ['release', 'triage', 'lint'], "the plugin's release yields to the repo's");
+	assert.deepEqual(skillsFor(session.id, true).map((skill) => skill.name), ['triage', 'lint'], 'with a sandbox, the runtime reads .agents/skills itself');
+	assert.equal(skillsFor(session.id, false)[2].files['rules.md'], 'No semicolons.');
+	assert.match(repoInstructionsFor(session.id), /Run npm test/);
+
+	await setEnabled(plugin, false);
+	await primeSkills(session.id);
+	assert.deepEqual(skillsFor(session.id, false).map((skill) => skill.name), ['release', 'triage']);
+	assert.deepEqual((await pluginsView())[0].skills.map((skill) => skill.active), [false, false]);
+	await removePlugin(plugin);
+	assert.equal((await pluginsView()).length, 0);
+	await assert.rejects(() => installPlugin({ address: 'https://github.com/acme/demo/tree/main' }), /no skills/);
+});
+
+test('one file goes back to the base branch, and the repo picker leaves out added repos', async () => {
+	const { revertFile } = await import('../src/services/restore.ts');
+	const { addableRepos } = await import('../src/services/projects.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Revert one' });
+	const machine = await machineFor(session.id);
+	const original = await run(machine, 'cat README.md');
+	await run(machine, 'echo changed >> README.md && echo new > added.txt');
+	await revertFile(session.id, 'README.md');
+	assert.equal(await run(machine, 'cat README.md'), original);
+	assert.equal((await run(machine, 'cat added.txt')).trim(), 'new', 'other changes stay');
+	await revertFile(session.id, 'added.txt');
+	assert.equal((await run(machine, 'test -e added.txt || echo gone')).trim(), 'gone', 'an added file is removed');
+	await assert.rejects(() => revertFile(session.id, 'README.md'), /no changes/);
+	await assert.rejects(() => revertFile(session.id, '../etc/passwd'), /Invalid path/);
+	const checkpoints = await listCheckpoints(session.id);
+	assert.ok(checkpoints.length >= 2, 'each revert can be undone from the timeline');
+
+	const offered = await addableRepos();
+	assert.ok(!offered.includes('acme/demo'), 'an added repo is not offered again');
+	assert.ok(offered.includes('acme/other'));
 });

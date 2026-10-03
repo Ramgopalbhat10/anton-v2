@@ -17,13 +17,14 @@ import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { profileName } from './services/profile.ts';
-import { addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
+import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { defaultModel, generalSettings, setGeneralSettings } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
+import { catalog, installPlugin, marketplaces, pluginsView, removePlugin, sessionSkills, setEnabled, setMarketplaces } from './services/plugins.ts';
 import {
 	createSession,
 	getSession,
@@ -35,7 +36,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { isRestoring, restoreCheckpoint } from './services/restore.ts';
+import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
@@ -218,6 +219,32 @@ app.put('/api/settings/general', async (c) => {
 	);
 	return c.json(await setGeneralSettings(next));
 });
+app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
+app.put('/api/settings/marketplaces', async (c) => {
+	const input = await body(c, v.object({ marketplaces: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), v.maxLength(20)) }));
+	return c.json({ marketplaces: await setMarketplaces(input.marketplaces) });
+});
+app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '') }));
+app.post('/api/plugins', async (c) => {
+	const input = await body(
+		c,
+		v.union([
+			v.object({ marketplace: v.pipe(v.string(), v.minLength(1)), name: v.pipe(v.string(), v.minLength(1)) }),
+			v.object({ address: v.pipe(v.string(), v.trim(), v.minLength(1)) }),
+		]),
+	);
+	await installPlugin(input);
+	return c.json({ plugins: await pluginsView() });
+});
+app.patch('/api/plugins/:id', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	await setEnabled(c.req.param('id'), enabled);
+	return c.json({ plugins: await pluginsView() });
+});
+app.delete('/api/plugins/:id', async (c) => {
+	await removePlugin(c.req.param('id'));
+	return c.json({ plugins: await pluginsView() });
+});
 app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
 app.put('/api/settings/guardrails', async (c) => c.json(await setGuardrails(await body(c, v.object({ hideSecrets: v.boolean() })))));
 app.get('/api/secrets', async (c) => c.json(await secretsView()));
@@ -238,6 +265,7 @@ app.get('/api/models', async (c) => c.json({ models: await listModels(), default
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
+app.get('/api/repos', async (c) => c.json({ repos: await addableRepos() }));
 app.post('/api/projects', async (c) => {
 	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
 	return c.json(await addProject(repo));
@@ -310,6 +338,7 @@ app.delete('/api/automations/:id', async (c) => {
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
+app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));
 app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,
@@ -354,6 +383,11 @@ app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
 	return c.json({ at: c.req.param('at'), patch });
 });
 app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
+app.post('/api/sessions/:id/revert', async (c) => {
+	const { path } = await body(c, v.object({ path: v.pipe(v.string(), v.minLength(1)) }));
+	await revertFile(c.req.param('id'), path);
+	return c.json({ ok: true });
+});
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 

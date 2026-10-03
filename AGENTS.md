@@ -9,6 +9,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - `src/flue/` — adapters into Flue: the machine sandbox driver, and `live-models.ts`, which lets any model in the live catalog resolve.
 - `src/services/` — task lifecycle: sessions, workspace (acquire and set up a machine), git, checkpoints, files (live, saved or base views), pull requests, terminal, previews, and the browser behind the screenshot tool. Headless work (`headless.ts`) polls every five minutes for automations (labeled issues, schedules) and pull request follow-ups; both reach the agent through `agent-runner.ts`, which also enforces the spending caps (`budget.ts`).
 - `src/db/` — libSQL client, versioned migrations, queries.
+- `src/core/plugins.ts` reads skills, plugins and marketplaces (Agent Skills, Claude Code, Devin, Codex, Cursor, Agent Plugins); `src/services/plugins.ts` installs them and gives each task its skills (the repo's own first, then installed plugins).
 - `src/agents/coder.ts` — Coder agent: read-only repo tools until `start_workspace`, then the sandbox, explorer/tester subagents and `open_pull_request`.
 - `src/agents/reviewer.ts` — Reviewer agent: after each push (`code-review.ts`) it reads the pull request in the task's sandbox without writing and posts a review on GitHub; follow-ups bring its findings back to the Coder.
 - `src/app.ts` — Hono routes. `src/server.ts` — production server (API, UI, terminal WebSocket).
@@ -27,6 +28,6 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - `npm test` (server) and `npm run test:ui` (React components, in `tests/ui/`)
 - `npm run check:types`
 - `npm run dev` — UI on :43127, API on :43128
-- `npm run build && npm start` — production on `PORT`
+- `npm run build && npm start` — production on `PORT`; `npm run start:backup` does the same under Litestream, which restores and streams both SQLite files to Tigris (`litestream.yml`)
 - `npx flue run src/agents/coder.ts --message "Say ready."` (needs an LLM key)
 - `npx flue docs search <query>`
