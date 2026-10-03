@@ -18,7 +18,9 @@ test('an OpenRouter model maps to the catalog shape', () => {
 	const info = toModelInfo(flash);
 	assert.equal(info.id, 'openrouter/~deepseek/deepseek-flash-latest');
 	assert.deepEqual([info.vendor, info.name], ['DeepSeek', 'DeepSeek Flash Latest']);
-	assert.deepEqual(info.price, { input: 0.02, output: 0.42 });
+	assert.deepEqual(info.price, { input: 0.02, output: 0.42, cacheRead: 0.02, cacheWrite: 0.02 }, 'unlisted cache prices cost like input');
+	const cached = toModelInfo({ ...flash, pricing: { ...flash.pricing, input_cache_read: '0.000000002', input_cache_write: '0.00000003' } });
+	assert.deepEqual([cached.price.cacheRead, cached.price.cacheWrite], [0.002, 0.03]);
 	assert.deepEqual(info.reasoning, ['low', 'high', 'max']);
 	assert.equal(info.defaultReasoning, 'high');
 	assert.equal(info.vision, true);

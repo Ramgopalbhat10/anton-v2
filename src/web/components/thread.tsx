@@ -228,7 +228,7 @@ function StepsCard({ steps, live }: { steps: Step[]; live: boolean }) {
 	const [open, setOpen] = useState(true);
 	const tools = steps.filter((step): step is ToolPart => step.type === 'dynamic-tool');
 	const duration = tools.reduce((sum, step) => sum + (step.durationMs ?? 0), 0);
-	const label = live ? 'Working' : duration > 0 ? `Worked for ${elapsed(duration)}` : 'Worked';
+	const label = live ? 'Working' : duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
 		<div className="overflow-hidden rounded-lg bg-(--bg-surface)">
 			<button

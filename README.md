@@ -60,6 +60,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |
 | `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
+| `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
 
 Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
 

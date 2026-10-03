@@ -10,7 +10,7 @@ export type OpenRouterModel = {
 	created?: number;
 	context_length?: number | null;
 	architecture?: { input_modalities?: string[]; output_modalities?: string[] };
-	pricing?: { prompt?: string; completion?: string };
+	pricing?: { prompt?: string; completion?: string; input_cache_read?: string; input_cache_write?: string };
 	top_provider?: { max_completion_tokens?: number | null };
 	supported_parameters?: string[];
 	reasoning?: { mandatory?: boolean; default_enabled?: boolean; supported_efforts?: string[]; default_effort?: string } | null;
@@ -46,6 +46,17 @@ const summary = (text: string) => (/^.*?[.!?](?=\s|$)/s.exec(text)?.[0] ?? text)
 
 const perMillion = (price: string | undefined) => Math.max(0, Number(price ?? 0) * 1_000_000);
 
+/** A cache price the model does not list is charged like any prompt token. */
+function prices(pricing: NonNullable<OpenRouterModel['pricing']>): ModelInfo['price'] {
+	const input = perMillion(pricing.prompt);
+	return {
+		input,
+		output: perMillion(pricing.completion),
+		cacheRead: pricing.input_cache_read === undefined ? input : perMillion(pricing.input_cache_read),
+		cacheWrite: pricing.input_cache_write === undefined ? input : perMillion(pricing.input_cache_write),
+	};
+}
+
 /** Agent work needs live tool calls and text out; batch-only variants and other models are left out. */
 export function isAgentModel(model: OpenRouterModel): boolean {
 	const out = model.architecture?.output_modalities ?? ['text'];
@@ -61,7 +72,7 @@ export function toModelInfo(model: OpenRouterModel): ModelInfo {
 		createdAt: (model.created ?? 0) * 1000,
 		contextLength: model.context_length ?? 0,
 		maxOutput: model.top_provider?.max_completion_tokens ?? null,
-		price: { input: perMillion(model.pricing?.prompt), output: perMillion(model.pricing?.completion) },
+		price: prices(model.pricing ?? {}),
 		vision: model.architecture?.input_modalities?.includes('image') ?? false,
 		reasoning,
 		defaultReasoning: defaultLevel(model, reasoning),
