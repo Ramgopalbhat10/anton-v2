@@ -72,7 +72,7 @@ export function TaskTitle({ session, editing, onEditingChange }: { session?: Ses
 				type="button"
 				onClick={() => session && onEditingChange(true)}
 				title="Rename task"
-				className="min-w-[100px] flex-auto truncate text-left text-[13px] font-medium outline-none"
+				className="min-w-[60px] flex-auto truncate text-left text-[13px] font-medium outline-none"
 			>
 				{rename.isPending ? rename.variables : title}
 			</button>
