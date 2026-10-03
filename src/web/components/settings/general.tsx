@@ -43,7 +43,20 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
-			<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. New tasks start this way." />
+			<Block title="Pull requests">
+				<SettingRow
+					title="Review pull requests"
+					help="Each time the agent opens or updates a pull request, a reviewer agent reads the change and comments on GitHub; with follow-ups on, the agent then fixes what it found. It follows the repository's REVIEW.md if there is one, and stops after three reviews of one pull request."
+				>
+					<Switch
+						checked={settings.reviewPullRequests}
+						disabled={save.isPending}
+						onChange={(reviewPullRequests) => save.mutate({ reviewPullRequests })}
+						label={<span className="sr-only">Review pull requests</span>}
+					/>
+				</SettingRow>
+			</Block>
+			<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
 		</div>
 	);
 }
@@ -52,7 +65,7 @@ export function GeneralPage() {
 	const settings = useGeneralSettings();
 	return (
 		<>
-			<PageHeading title="General">How a new task starts when you do not choose on the launcher.</PageHeading>
+			<PageHeading title="General">How a new task starts when you do not choose on the launcher, and how its pull requests are reviewed.</PageHeading>
 			{settings.data ? <Form settings={settings.data} /> : <Spinner size={12} />}
 		</>
 	);

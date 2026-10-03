@@ -32,6 +32,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
 5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.
 6. **Pull request.** The agent calls `open_pull_request`; Anton commits in the sandbox, then rebuilds those commits on GitHub through its API (same hashes), so the token never enters a sandbox the agent has used. Anton's token is used inside a sandbox only to clone during setup, before the agent starts.
+7. **Review.** Each time the agent opens or updates a pull request, a second agent, the reviewer, reads the change in the same sandbox without changing anything. It follows the repo's `REVIEW.md` if there is one, and posts its findings on GitHub as a review with line comments. With follow-ups on, the agent then fixes them. Automatic reviews stop after three on one pull request; **Review the pull request** in the task menu asks for another, and Settings › General turns automatic reviews off.
 
 ## Providers
 
@@ -73,6 +74,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |
+| `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
 | `src/app.ts` | HTTP routes |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
 | `src/web/` | React UI |

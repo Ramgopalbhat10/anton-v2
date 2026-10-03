@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, GitPullRequest, MoreHorizontal, Pencil, Settings, Square, Trash2 } from 'lucide-react';
+import { ArrowUpRight, GitPullRequest, MoreHorizontal, Pencil, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
@@ -100,7 +100,7 @@ export function TaskTitle({ session, editing, onEditingChange }: { session?: Ses
 }
 
 /**
- * Rename, ask for a pull request, open the repo's settings, stop the sandbox, or delete the task.
+ * Rename, ask for a pull request or a review of it, open the repo's settings, stop the sandbox, or delete the task.
  * Delete asks twice inside the menu, so a stray click never loses a task.
  */
 export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: Session; onRename: () => void; onAskForPullRequest: () => void }) {
@@ -109,6 +109,7 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 	const [confirming, setConfirming] = useState(false);
 	const refresh = () => void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 	const stop = useMutation({ mutationFn: () => api.stopSession(session.id), onSuccess: refresh });
+	const review = useMutation({ mutationFn: () => api.reviewPullRequest(session.id), onSuccess: refresh });
 	const remove = useMutation({
 		mutationFn: async () => {
 			if (session.working) await api.stopAgent(session.id).catch(() => undefined);
@@ -121,7 +122,13 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 	});
 
 	return (
-		<Menu onOpenChange={(open) => !open && setConfirming(false)}>
+		<Menu
+			onOpenChange={(open) => {
+				if (open) return;
+				setConfirming(false);
+				review.reset();
+			}}
+		>
 			<MenuTrigger asChild>
 				<IconBtn icon={MoreHorizontal} size="sm" label="Task actions" />
 			</MenuTrigger>
@@ -132,6 +139,19 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 				<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>
 					{session.prUrl ? 'Update the pull request' : 'Open a pull request'}
 				</MenuItem>
+				{session.prUrl ? (
+					// Stays open, so it can say the review started or why it could not.
+					<MenuItem
+						icon={ScanSearch}
+						disabled={review.isPending || review.isSuccess || session.working}
+						onSelect={(event) => {
+							event.preventDefault();
+							review.mutate();
+						}}
+					>
+						{review.isPending ? 'Starting the review…' : review.isSuccess ? 'Reviewing; it comments on GitHub' : review.isError ? review.error.message : 'Review the pull request'}
+					</MenuItem>
+				) : null}
 				<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/settings/repos/$projectId', params: { projectId: session.projectId } })}>
 					Repository settings
 				</MenuItem>
