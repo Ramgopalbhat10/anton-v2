@@ -7,6 +7,9 @@ import { quote } from '../../core/shell.ts';
 
 const RUNNING_MARKER = '.anton-running';
 
+/** How long the output may stay quiet after the shell exits before exec stops waiting for it. */
+const OUTPUT_GRACE_MS = 1000;
+
 /** Only what a shell needs; host secrets never reach a task. */
 function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 	const pick = (name: string) => (process.env[name] ? { [name]: process.env[name] as string } : {});
@@ -82,19 +85,50 @@ function localMachine(root: string): Machine {
 				});
 				const out: Buffer[] = [];
 				const err: Buffer[] = [];
-				child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-				child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
+				let lastChunkAt = Date.now();
+				let settled = false;
+				// Output after settling is read and dropped, so a background process never blocks or dies writing it.
+				const collect = (into: Buffer[]) => (chunk: Buffer) => {
+					if (settled) return;
+					into.push(chunk);
+					lastChunkAt = Date.now();
+				};
+				child.stdout.on('data', collect(out));
+				child.stderr.on('data', collect(err));
+				const finish = (code: number | null) => {
+					if (settled) return;
+					settled = true;
+					// A server started in the background may hold the pipes for good; they must not keep Anton's process alive.
+					(child.stdout as unknown as { unref?: () => void }).unref?.();
+					(child.stderr as unknown as { unref?: () => void }).unref?.();
+					child.unref();
+					resolve({
+						stdout: new Uint8Array(Buffer.concat(out)),
+						stderr: Buffer.concat(err).toString('utf8'),
+						exitCode: code ?? child.exitCode ?? 124,
+					});
+				};
 				child.on('error', reject);
-				child.on('close', (code) =>
-					resolve({ stdout: new Uint8Array(Buffer.concat(out)), stderr: Buffer.concat(err).toString('utf8'), exitCode: code ?? 124 }),
-				);
+				// A server started in the background keeps the output open: stop waiting once it has been quiet for a moment.
+				child.on('exit', (code) => {
+					const check = () => {
+						const quiet = Date.now() - lastChunkAt;
+						if (quiet >= OUTPUT_GRACE_MS) finish(code);
+						else setTimeout(check, OUTPUT_GRACE_MS - quiet);
+					};
+					lastChunkAt = Math.max(lastChunkAt, Date.now());
+					setTimeout(check, OUTPUT_GRACE_MS);
+				});
+				child.on('close', (code) => finish(code));
 				child.stdin.end(options.stdin ?? undefined);
 			});
 		},
-		async openPty({ cols, rows, cwd }): Promise<Pty> {
+		/** Dev servers in a local task listen on this computer. */
+		previewUrl: async (port) => `http://localhost:${port}`,
+		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
 			const ttyFile = path.join(root, `.anton-tty-${randomUUID()}`);
 			const child = spawn('script', ['-qfc', `tty > ${quote(ttyFile)}; cd ${quote(cwd)}; exec bash -l`, '/dev/null'], {
-				env: shellEnv(),
+				env: shellEnv(env),
 			});
 			const resize = async (c: number, r: number) => {
 				await this.exec(`test -f ${quote(ttyFile)} && stty -F "$(cat ${quote(ttyFile)})" rows ${r} cols ${c}`);

@@ -10,7 +10,7 @@ import { s3Store } from './s3/store.ts';
 
 /** Add a provider by adding one entry; choose it with ANTON_SANDBOX / ANTON_STORE. */
 const sandboxes: Record<string, () => SandboxProvider> = {
-	modal: () => modalSandboxProvider(config.modal),
+	modal: () => modalSandboxProvider({ ...config.modal, browserPackage: config.browserPackage }),
 	local: () => localSandboxProvider(config.dataDir),
 };
 

@@ -7,6 +7,18 @@ export type Project = {
 	/** Image with the repo cloned and dependencies installed, if one was built. */
 	warmImage: string | null;
 	warmedAt: string | null;
+} & ProjectSettings;
+
+/** How a repo's tasks are set up. Changing any of it retires the warm image. */
+export type ProjectSettings = {
+	/** Variables every command in the repo's tasks sees: the agent's, the terminal's and setup's. */
+	env: Record<string, string>;
+	/** Runs in the repo after dependencies install, before the agent starts. */
+	setupScript: string;
+	/** Ports a dev server can listen on to get a preview URL. */
+	previewPorts: number[];
+	/** Container image to start from instead of the default, such as `python:3.12`. */
+	baseImage: string | null;
 };
 
 /** What the machine is doing right now, from the sandbox provider. */

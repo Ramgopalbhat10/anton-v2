@@ -12,7 +12,7 @@ import { getProviders } from './providers/index.ts';
 import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
-import { addProject, branches, projects } from './services/projects.ts';
+import { addProject, branches, projects, updateSettings } from './services/projects.ts';
 import {
 	createSession,
 	getSession,
@@ -23,6 +23,7 @@ import {
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
+import { previewsView } from './services/previews.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
@@ -80,6 +81,26 @@ app.post('/api/projects', async (c) => {
 	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
 	return c.json(await addProject(repo));
 });
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+app.put('/api/projects/:id/settings', async (c) => {
+	const change = await body(
+		c,
+		v.object({
+			env: v.pipe(
+				v.record(v.pipe(v.string(), v.regex(ENV_NAME, 'Variable names use letters, digits and underscores')), v.nullable(v.string())),
+				v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
+			),
+			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
+			previewPorts: v.pipe(
+				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),
+				v.maxLength(8),
+				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
+			),
+			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
+		}),
+	);
+	return c.json(await updateSettings(c.req.param('id'), change));
+});
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
@@ -114,6 +135,7 @@ app.delete('/api/sessions/:id', async (c) => {
 });
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
+app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 
 app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'))));

@@ -34,7 +34,9 @@ export type Machine = {
 	readonly root: string;
 	/** Runs a command through `bash -lc`. */
 	exec(command: string, options?: ExecOptions): Promise<ExecResult>;
-	openPty(size: { cols: number; rows: number; cwd: string }): Promise<Pty>;
+	openPty(options: { cols: number; rows: number; cwd: string; env?: Record<string, string> }): Promise<Pty>;
+	/** A URL the user's browser can open for a server listening on `port`, or null when none is exposed. */
+	previewUrl(port: number): Promise<string | null>;
 };
 
 /** How a machine came to be: decides how much setup the workspace still needs. */
@@ -47,6 +49,10 @@ export type AcquireRequest = {
 	state: string | null;
 	/** A prepared image to start from when there is nothing to resume. */
 	image: string | null;
+	/** Registry image for a fresh machine; null uses the provider's default. */
+	baseImage: string | null;
+	/** Ports to expose for previews. Fixed when the machine starts. */
+	ports: number[];
 };
 
 export type Acquired = {

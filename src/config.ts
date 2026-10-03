@@ -36,6 +36,8 @@ export const config = {
 		ttlMs: 60 * 60_000,
 	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
+	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
+	browserPackage: 'playwright@1.56.1',
 	/** Warm repo images older than this are rebuilt on the next task. */
 	warmImageMaxAgeMs: Number(read('ANTON_WARM_IMAGE_DAYS', '7')) * 86_400_000,
 	hasOpenRouter: () => Boolean(process.env.OPENROUTER_API_KEY),

@@ -1,4 +1,5 @@
 import type { Machine, MachineOrigin } from '../core/ports.ts';
+import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
 import { config } from '../config.ts';
@@ -26,16 +27,22 @@ function warmImageFor(project: Project): string | null {
 	return fresh ? project.warmImage : null;
 }
 
-/** Saves a reusable image of the cloned, installed repo in the background. */
+/** Saves a reusable image of the set-up repo in the background, once setup has finished. */
 function refreshWarmImage(machine: Machine, project: Project): void {
 	if (warmImageFor(project)) return;
 	void getProviders()
 		.sandbox.snapshot(machine)
-		.then((image) => setWarmImage(project.id, image))
+		.then((image) => setWarmImage(project.id, image, project.baseImage))
 		.catch((error: unknown) => console.warn('[anton] warm image failed', error));
 }
 
 type Context = { machine: Machine; session: SessionRecord; project: Project };
+
+/** The repo's own setup, after dependencies and on the task branch. A failure fails the task's setup. */
+async function runSetupScript(machine: Machine, project: Project): Promise<void> {
+	if (!project.setupScript.trim()) return;
+	await run(machine, project.setupScript, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
+}
 
 /** Puts the repo on the task branch: from a prepared image, or cloned from scratch. */
 const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
@@ -47,7 +54,6 @@ const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
 		const { git } = getProviders();
 		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
 		await installDependencies(machine);
-		refreshWarmImage(machine, project);
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, git.gitAuthEnv());
 	},
 };
@@ -78,7 +84,10 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	const { machine, session } = context;
 	if (await isReady(machine, session, origin)) return;
 	await setup[origin === 'image' ? 'image' : 'clone'](context);
+	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
+	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
+	if (origin !== 'image') refreshWarmImage(machine, context.project);
 }
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {
@@ -94,15 +103,19 @@ async function provision(id: string): Promise<Machine> {
 		key: id,
 		state: session.machineState,
 		image: warmImageFor(project),
+		baseImage: project.baseImage,
+		ports: project.previewPorts,
 	});
+	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
+	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...project.env });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
-		await prepare({ machine: acquired.machine, session, project }, acquired.origin);
+		await prepare({ machine, session, project }, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
 	}
-	return acquired.machine;
+	return machine;
 }
 
 const machines = new Map<string, Promise<Machine>>();

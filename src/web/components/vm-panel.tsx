@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { FilesTab } from '@/components/files-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
 import { LibraryTab } from '@/components/library-tab';
+import { PreviewTab } from '@/components/preview-tab';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ export const panels = [
 	{ name: 'Changes', desc: 'Every file the agent edited, as a diff' },
 	{ name: 'Terminal', desc: 'The sandbox shell and its command output' },
 	{ name: 'Files', desc: 'Browse the repository on the task branch' },
+	{ name: 'Preview', desc: 'The app the agent is running, live from the sandbox' },
 	{ name: 'Library', desc: 'Reports, screenshots and exports the agent saved' },
 ] as const;
 
@@ -21,6 +23,7 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	Changes: GitTab,
 	Terminal: TerminalTab,
 	Files: FilesTab,
+	Preview: PreviewTab,
 	Library: LibraryTab,
 };
 
@@ -155,7 +158,7 @@ export function VmPanel({
 				</div>
 			</div>
 
-			<div className={cn('min-h-0 flex-1', current === 'Terminal' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3')}>
+			<div className={cn('min-h-0 flex-1', current === 'Terminal' || current === 'Preview' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3')}>
 				{current === null ? (
 					<div className="flex min-h-full items-center justify-center px-2 py-6">
 						<div className="flex w-full max-w-80 flex-col gap-0.5">
