@@ -11,6 +11,7 @@ import {
 	FileText,
 	FolderSearch,
 	GitPullRequest,
+	Globe,
 	ListChecks,
 	Pencil,
 	Search,
@@ -51,11 +52,39 @@ function pullRequestUrl(output: unknown): string {
 /** The task whose thread is showing, for links into its Library. */
 const SessionId = createContext('');
 
-/** The screenshot tool returns a path relative to the repo; the Library lists it relative to outputs. */
+/** The screenshot and browser tools return a path relative to the repo; the Library lists it relative to outputs. */
 function screenshotPath(part: ToolPart): string {
 	if (part.state !== 'output-available') return '';
 	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
-	return (field(record, 'path') || field(record.output, 'path')).replace(/^\.\.\/outputs\//, '');
+	const key = part.toolName === 'browser' ? 'screenshot' : 'path';
+	return (field(record, key) || field(record.output, key)).replace(/^\.\.\/outputs\//, '');
+}
+
+/** One browser step as a sentence: what was done, and to what. */
+function browserStep(input: unknown) {
+	const target = <Em>{field(input, 'target')}</Em>;
+	switch (field(input, 'action')) {
+		case 'open':
+			return <>Opened <Em>{field(input, 'url')}</Em></>;
+		case 'click':
+			return <>Clicked {target}</>;
+		case 'type':
+			return <>Typed <Em>{field(input, 'text')}</Em> into {target}</>;
+		case 'select':
+			return <>Chose <Em>{field(input, 'text')}</Em> in {target}</>;
+		case 'press':
+			return <>Pressed <Em>{field(input, 'key')}</Em></>;
+		case 'hover':
+			return <>Hovered over {target}</>;
+		case 'scroll':
+			return <>Scrolled the page</>;
+		case 'back':
+			return <>Went back</>;
+		case 'wait':
+			return <>Waited{field(input, 'target') ? <> for {target}</> : null}</>;
+		default:
+			return <>Looked at the page</>;
+	}
 }
 
 function lineCount(text: string) {
@@ -145,6 +174,8 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 		}
 		case 'screenshot':
 			return { icon: Camera, body: <>Took a screenshot of <Em>{field(input, 'url')}</Em></> };
+		case 'browser':
+			return { icon: Globe, body: browserStep(input) };
 		default:
 			return { icon: Wrench, body: <>Called <Em>{part.toolName}</Em></> };
 	}
@@ -196,7 +227,7 @@ function ToolRow({ part }: { part: ToolPart }) {
 	const output = part.toolName === 'bash' && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
 	const command = field(part.input, 'command');
 	const sessionId = useContext(SessionId);
-	const image = part.toolName === 'screenshot' ? screenshotPath(part) : '';
+	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
 	return (
 		<>
 			<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-[12px] text-(--text-tertiary)">

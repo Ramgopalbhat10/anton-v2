@@ -19,7 +19,7 @@ import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
-import { takeScreenshot } from '../services/browser.ts';
+import { browse, takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
@@ -131,7 +131,7 @@ function useStartWorkspace(id: string, startWorkspace: () => void) {
 
 /**
  * The sandbox and everything that needs it: shell and file tools, subagents,
- * pull requests and screenshots. In plan mode the file tools cannot write and
+ * pull requests, and a browser to use web apps in. In plan mode the file tools cannot write and
  * there is no pull request.
  */
 function useWorkspace(id: string, planning: boolean) {
@@ -144,6 +144,7 @@ function useWorkspace(id: string, planning: boolean) {
 	useSubagent(explorer);
 	useSubagent(tester);
 	if (!planning) useOpenPullRequest(id);
+	useTool(browserTool(id));
 	useTool(
 		defineTool({
 			name: 'screenshot',
@@ -162,6 +163,37 @@ function useWorkspace(id: string, planning: boolean) {
 			},
 		}),
 	);
+}
+
+const BROWSER_ACTIONS = ['open', 'click', 'type', 'select', 'press', 'hover', 'scroll', 'back', 'wait', 'look'] as const;
+
+/** One step in a browser tab inside the sandbox that stays open between steps, for checking a web app the way a person would. */
+function browserTool(id: string) {
+	return defineTool({
+		name: 'browser',
+		description:
+			'Use a web page in a browser inside the sandbox, one step per call: open a URL, click, type, select, press a key, hover, scroll, go back, wait, or look. ' +
+			'The tab stays open between calls, so the page keeps its state. Each call returns the URL, title, any failure, console errors, ' +
+			'and the page as an accessibility tree (roles, names, text). Target elements with Playwright selectors from that tree, such as ' +
+			'role=button[name="Save"], role=textbox[name="Email"], text=Sign in, or CSS. Pass screenshot to save a PNG to the outputs folder; read it to see the page.',
+		input: v.object({
+			action: v.picklist(BROWSER_ACTIONS),
+			url: v.optional(v.pipe(v.string(), v.description('For open: usually a dev server in the sandbox, such as http://localhost:3000'))),
+			target: v.optional(v.pipe(v.string(), v.description('The element to act on, as a Playwright selector'))),
+			text: v.optional(v.pipe(v.string(), v.description('For type: what to enter, replacing what is there. For select: the option'))),
+			submit: v.optional(v.pipe(v.boolean(), v.description('For type: press Enter afterwards'))),
+			key: v.optional(v.pipe(v.string(), v.description('For press: such as Enter, Escape, Tab or Control+a'))),
+			amount: v.optional(v.pipe(v.number(), v.description('For scroll: pixels down, negative for up'))),
+			ms: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(15_000), v.description('For wait without a target'))),
+			screenshot: v.optional(v.pipe(v.string(), v.description('Save a screenshot after the step, under this short name'))),
+			fullPage: v.optional(v.boolean()),
+			width: v.optional(v.pipe(v.number(), v.integer(), v.minValue(320), v.maxValue(2560))),
+			height: v.optional(v.pipe(v.number(), v.integer(), v.minValue(320), v.maxValue(2560))),
+		}),
+		async run({ data }) {
+			return { output: await browse(await machineFor(id), data) };
+		},
+	});
 }
 
 function useOpenPullRequest(id: string) {
@@ -232,7 +264,7 @@ const WORKSPACE_PROMPT = [
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
-	'Check UI changes with the screenshot tool, then read the image to see the result.',
+	'Check UI changes in the browser: open the page, click and type through what you changed, and take a screenshot to read; use the screenshot tool for a quick full-page capture.',
 	WEB_HINT,
 	'Be concise. Explain what you changed.',
 ].join(' ');
