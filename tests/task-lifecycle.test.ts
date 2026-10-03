@@ -102,7 +102,7 @@ const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint }
 const { assertWithinBudget, budget, setLimits } = await import('../src/services/budget.ts');
 const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
-const { toUsage } = await import('../src/services/usage.ts');
+const { toUsage, usageView } = await import('../src/services/usage.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
@@ -491,6 +491,20 @@ test('a task adds up the tokens and cost of its responses', async () => {
 	assert.equal(totals.inputTokens, 300);
 	assert.equal(totals.outputTokens, 40);
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
+});
+
+test('spend this month breaks down by repository and model, and outlives a deleted task', async () => {
+	const project = await addProject('acme/breakdown');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Breakdown', model: 'openrouter/plain/no-reasoning' });
+	await addSessionUsage(session.id, { inputTokens: 100, outputTokens: 50, cost: 0.3 });
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 5, cost: 0.2 });
+	await sessions.deleteSession(session.id);
+	const view = await usageView();
+	const repo = view.byRepo.find((row) => row.key === 'acme/breakdown');
+	assert.equal(repo?.tokens, 165);
+	assert.ok(Math.abs((repo?.cost ?? 0) - 0.5) < 1e-9);
+	assert.ok(view.byModel.some((row) => row.key === 'openrouter/plain/no-reasoning' && Math.abs(row.cost - 0.5) < 1e-9));
+	assert.ok(view.month >= view.today && view.today >= 0.5);
 });
 
 test('spending caps stop new messages once today or a task has spent enough', async () => {

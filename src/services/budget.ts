@@ -25,7 +25,7 @@ export class BudgetError extends Error {
 export const limits = () => getSetting<Limits>('limits', DEFAULT_LIMITS);
 export const setLimits = (next: Limits) => setSetting('limits', next);
 
-function startOfToday(now: Date): Date {
+export function startOfToday(now: Date): Date {
 	const day = new Date(now);
 	day.setHours(0, 0, 0, 0);
 	return day;

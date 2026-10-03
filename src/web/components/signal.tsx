@@ -272,3 +272,15 @@ export function Switch({
 		</button>
 	);
 }
+
+const BAR_TONE = { accent: 'bg-(--accent-base)', warning: 'bg-(--warning-base)', danger: 'bg-(--danger-base)' } as const;
+
+/** A thin meter: how much of something is used, from 0 to 100. */
+export function ProgressBar({ value, tone = 'accent', label }: { value: number; tone?: keyof typeof BAR_TONE; label: string }) {
+	const clamped = Math.min(100, Math.max(0, value));
+	return (
+		<div role="progressbar" aria-label={label} aria-valuenow={Math.round(clamped)} aria-valuemin={0} aria-valuemax={100} className="h-1 w-full overflow-hidden rounded-full bg-(--neutral-750)">
+			<div className={cn('h-full rounded-full transition-[width] duration-(--duration-micro)', BAR_TONE[tone])} style={{ width: `${clamped}%` }} />
+		</div>
+	);
+}

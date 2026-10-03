@@ -31,7 +31,7 @@ import {
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint } from './services/restore.ts';
-import { recordTurnUsage } from './services/usage.ts';
+import { recordTurnUsage, usageView } from './services/usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
@@ -146,6 +146,7 @@ app.get('/api/health', (c) =>
 );
 
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
+app.get('/api/usage', async (c) => c.json(await usageView()));
 const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
 app.put('/api/settings/limits', async (c) => {
 	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));

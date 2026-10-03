@@ -136,6 +136,9 @@ export type PreviewsPayload = { live: boolean; previews: Preview[] };
 /** Spending caps in US dollars; null means no cap. */
 export type Limits = { dailyUsd: number | null; taskUsd: number | null };
 export type Budget = { limits: Limits; today: number; task: number | null; blocked: string | null };
+/** Spend this month by one key; `key` is null for a removed repository or spend logged before it was recorded. */
+export type SpendRow = { key: string | null; tokens: number; cost: number };
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[] };
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
@@ -170,6 +173,7 @@ export const api = {
 	health: () =>
 		json<{ ok: boolean; openRouter: boolean; providers: { sandbox: string; store: string; git: string } }>('/api/health'),
 	budget: (sessionId?: string) => json<Budget>(`/api/budget${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
+	usage: () => json<UsageView>('/api/usage'),
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),
 	cleanUpStorage: () => post<CleanupResult>('/api/storage/cleanup'),
