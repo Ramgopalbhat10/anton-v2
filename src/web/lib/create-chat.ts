@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api, type Reasoning } from '@/lib/api';
+import { askToNotify } from '@/lib/notifications';
 import { setPendingPrompt } from '@/lib/pending-prompt';
 import { rememberProject } from '@/lib/projects';
 
@@ -15,6 +16,7 @@ export function useCreateChat() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: async ({ prompt: raw, ...input }: { projectId: string; branch?: string; model?: string; reasoning?: Reasoning; prompt?: string }) => {
+			askToNotify();
 			const prompt = raw?.trim();
 			const session = await api.createSession({ ...input, title: prompt ? titleFrom(prompt) : 'New task' });
 			rememberProject(input.projectId);

@@ -5,6 +5,7 @@ import { saveCheckpoint } from './checkpoints.ts';
 import { commitAndPush } from './git.ts';
 import { machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import type { PullRequestState } from '../core/ports.ts';
 
 /**
  * Commits the task's work, pushes its branch and opens (or finds) the pull
@@ -33,4 +34,16 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 	await updateSession(id, { prUrl: url });
 	await saveCheckpoint(id, machine);
 	return url;
+}
+
+export type PullRequestView = { url: string; state: PullRequestState | null };
+
+/** The task's pull request and its state on the git host, or null before one is opened. */
+export async function pullRequestView(id: string): Promise<PullRequestView | null> {
+	const session = await getSessionRecord(id);
+	if (!session) throw new NotFoundError('Session not found');
+	if (!session.prUrl) return null;
+	// The link is still worth showing when the host can't be reached.
+	const state = await getProviders().git.pullRequestState(session.prUrl).catch(() => null);
+	return { url: session.prUrl, state };
 }

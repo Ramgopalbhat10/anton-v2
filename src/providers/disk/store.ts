@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ObjectStore } from '../../core/ports.ts';
 
@@ -25,6 +25,7 @@ export function diskStore(dir: string): ObjectStore {
 			await writeFile(file, body);
 		},
 		get: (key) => readFile(fileFor(key)).then((buffer) => new Uint8Array(buffer), () => null),
+		remove: (key) => rm(fileFor(key), { force: true }),
 		has: (key) => stat(fileFor(key)).then(() => true, () => false),
 		async list(prefix) {
 			const files = await walk(fileFor(prefix));

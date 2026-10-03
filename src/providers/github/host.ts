@@ -1,4 +1,14 @@
-import type { GitHost, PullRequestInput, RepoInfo } from '../../core/ports.ts';
+import type { GitHost, PullRequestInput, PullRequestState, RepoInfo } from '../../core/ports.ts';
+
+const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
+
+type PullRequest = { state: 'open' | 'closed'; draft: boolean; merged_at: string | null };
+
+function stateOf(pull: PullRequest): PullRequestState {
+	if (pull.merged_at) return 'merged';
+	if (pull.state === 'closed') return 'closed';
+	return pull.draft ? 'draft' : 'open';
+}
 
 export type GitHubOptions = { token: string; apiUrl: string };
 
@@ -74,6 +84,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				body: JSON.stringify({ title: input.title, body: input.body, head: input.head, base: input.base }),
 			});
 			return created.html_url;
+		},
+		async pullRequestState(url) {
+			const match = PULL_URL.exec(url);
+			if (!match) throw new Error(`Not a GitHub pull request URL: ${url}`);
+			return stateOf(await json<PullRequest>(`/repos/${match[1]}/pulls/${match[2]}`));
 		},
 	};
 }
