@@ -9,6 +9,8 @@ let ready: Promise<Client> | undefined;
 export function appDb(): Promise<Client> {
 	ready ??= (async () => {
 		client = createClient({ url: config.databaseUrl, authToken: config.databaseToken || undefined });
+		// WAL lets Litestream stream every write to storage (scripts/start-with-backup.sh); it stays set in the file.
+		if (config.databaseUrl.startsWith('file:')) await client.execute('PRAGMA journal_mode = WAL');
 		await migrate(client);
 		return client;
 	})();
