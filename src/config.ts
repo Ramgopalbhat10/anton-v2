@@ -35,6 +35,12 @@ export const config = {
 		/** How long the model list is cached before it is fetched again. */
 		ttlMs: 60 * 60_000,
 	},
+	/** Parallel's search MCP server gives every task web_search and web_fetch; free without a key. `off` turns it off. */
+	web: {
+		mcpUrl: read('ANTON_WEB_MCP_URL', 'https://search.parallel.ai/mcp'),
+		/** Optional, for higher rate limits. */
+		apiKey: read('PARALLEL_API_KEY'),
+	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',
