@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads';
 import { config } from '../config.ts';
 import { NotFoundError } from '../core/errors.ts';
 import { safeRelativePath } from '../core/shell.ts';
+import type { RepoFiles } from '../core/plugins.ts';
 import { readTar } from '../core/tar.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
@@ -107,6 +108,16 @@ export function snapshot(repo: string, sha: string): Promise<Snapshot> {
 		pending.catch(() => loaded.delete(key));
 	}
 	return pending;
+}
+
+/** A repo's files at `sha` for reading skills and plugins; files too large to keep read as missing. */
+export async function snapshotFiles(repo: string, sha: string): Promise<RepoFiles> {
+	const { dir, entries } = await snapshot(repo, sha);
+	const stored = new Set(entries.filter((entry) => entry.stored).map((entry) => entry.path));
+	return {
+		paths: [...stored],
+		read: async (file) => (stored.has(file) ? new Uint8Array(await readFile(path.join(dir, 'files', file))) : null),
+	};
 }
 
 async function snapshotFor(id: string): Promise<Snapshot> {

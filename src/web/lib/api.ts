@@ -54,6 +54,30 @@ export type LogEntry = { at: string; level: 'warn' | 'error'; message: string; d
 /** A saved prompt, typed as `/name` in the composer. */
 export type Command = { name: string; prompt: string };
 
+/** Where a plugin lives on GitHub; a null ref is the repository's default branch. */
+export type PluginSource = { repo: string; path: string; ref: string | null };
+
+/** An installed plugin: skills every task's agent can use, kept as they were when installed. */
+export type Plugin = {
+	id: string;
+	name: string;
+	description: string;
+	source: PluginSource;
+	sha: string;
+	marketplace: string | null;
+	/** A skill is inactive when its plugin is off, or an earlier plugin has a skill by that name. */
+	skills: Array<{ name: string; description: string; active: boolean }>;
+	/** MCP servers the plugin declares; Anton does not run them. */
+	mcpServers: string[];
+	skipped: string[];
+	enabled: boolean;
+	installedAt: string;
+};
+
+export type CatalogItem = { id: string; name: string; description: string; source: PluginSource; skills: string[] | null; installed: boolean };
+
+export type SkillSummary = { name: string; description: string };
+
 /** One distinct state of the task's files, newest first in the timeline. */
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
@@ -232,6 +256,15 @@ export const api = {
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
 	removeProject: async (id: string) => void (await request(`/api/projects/${id}`, { method: 'DELETE' })),
 	logs: () => json<{ logs: LogEntry[] }>('/api/logs'),
+	plugins: () => json<{ plugins: Plugin[]; marketplaces: string[] }>('/api/plugins'),
+	saveMarketplaces: (marketplaces: string[]) =>
+		json<{ marketplaces: string[] }>('/api/settings/marketplaces', { method: 'PUT', body: JSON.stringify({ marketplaces }) }),
+	catalog: (repo: string) => json<{ entries: CatalogItem[] }>(`/api/marketplaces/catalog?repo=${encodeURIComponent(repo)}`),
+	installPlugin: (input: { marketplace: string; name: string } | { address: string }) => post<{ plugins: Plugin[] }>('/api/plugins', input),
+	setPluginEnabled: (id: string, enabled: boolean) =>
+		json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+	removePlugin: (id: string) => json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'DELETE' }),
+	sessionSkills: (id: string) => json<{ skills: SkillSummary[] }>(`/api/sessions/${id}/skills`),
 	commands: () => json<{ commands: Command[] }>('/api/settings/commands'),
 	saveCommands: (commands: Command[]) =>
 		json<{ commands: Command[] }>('/api/settings/commands', { method: 'PUT', body: JSON.stringify({ commands }) }),

@@ -23,6 +23,7 @@ import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services
 import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
+import { catalog, installPlugin, marketplaces, pluginsView, removePlugin, sessionSkills, setEnabled, setMarketplaces } from './services/plugins.ts';
 import {
 	createSession,
 	getSession,
@@ -202,6 +203,32 @@ app.put('/api/settings/general', async (c) => {
 	const next = await body(c, v.object({ model: v.nullable(v.pipe(v.string(), v.minLength(1))), reasoning: v.nullable(REASONING), planMode: v.boolean() }));
 	return c.json(await setGeneralSettings(next));
 });
+app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
+app.put('/api/settings/marketplaces', async (c) => {
+	const input = await body(c, v.object({ marketplaces: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), v.maxLength(20)) }));
+	return c.json({ marketplaces: await setMarketplaces(input.marketplaces) });
+});
+app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '') }));
+app.post('/api/plugins', async (c) => {
+	const input = await body(
+		c,
+		v.union([
+			v.object({ marketplace: v.pipe(v.string(), v.minLength(1)), name: v.pipe(v.string(), v.minLength(1)) }),
+			v.object({ address: v.pipe(v.string(), v.trim(), v.minLength(1)) }),
+		]),
+	);
+	await installPlugin(input);
+	return c.json({ plugins: await pluginsView() });
+});
+app.patch('/api/plugins/:id', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	await setEnabled(c.req.param('id'), enabled);
+	return c.json({ plugins: await pluginsView() });
+});
+app.delete('/api/plugins/:id', async (c) => {
+	await removePlugin(c.req.param('id'));
+	return c.json({ plugins: await pluginsView() });
+});
 app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
 app.put('/api/settings/guardrails', async (c) => c.json(await setGuardrails(await body(c, v.object({ hideSecrets: v.boolean() })))));
 app.get('/api/secrets', async (c) => c.json(await secretsView()));
@@ -295,6 +322,7 @@ app.delete('/api/automations/:id', async (c) => {
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
+app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));
 app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,

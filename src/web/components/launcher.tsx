@@ -21,6 +21,7 @@ import {
 } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, branchLabel, type ModelChoice, type Project } from '@/lib/api';
+import { expandCommand } from '@/lib/completion';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
@@ -150,6 +151,7 @@ export function Launcher() {
 	// No task yet, so no files to point at; saved commands work here too.
 	const suggestions = useSuggestions({ text: prompt, setText: setPrompt, box: () => box.current });
 	const [adding, setAdding] = useState(false);
+	const queryClient = useQueryClient();
 	const create = useCreateChat();
 	const models = useModels();
 	const projects = useProjects();
@@ -168,10 +170,11 @@ export function Launcher() {
 		setBranch('');
 	}
 
-	function start() {
+	async function start() {
 		if (create.isPending || !project) return;
+		const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] }));
 		create.mutate({
-			prompt,
+			prompt: expandCommand(prompt, saved.commands),
 			projectId: project.id,
 			branch: chosenBranch || undefined,
 			model: model || undefined,
@@ -200,7 +203,7 @@ export function Launcher() {
 						className="relative flex flex-col gap-3 rounded-xl bg-(--bg-surface) px-4 pt-4 pb-2.5"
 						onSubmit={(event) => {
 							event.preventDefault();
-							start();
+							void start();
 						}}
 					>
 						<textarea
@@ -217,7 +220,7 @@ export function Launcher() {
 								if (suggestions.onKeyDown(event)) return;
 								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 									event.preventDefault();
-									start();
+									void start();
 								}
 							}}
 							placeholder="Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test."
