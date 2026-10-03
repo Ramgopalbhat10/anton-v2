@@ -23,7 +23,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 
 ## Commands
 
-- `npm test`
+- `npm test` (server) and `npm run test:ui` (React components, in `tests/ui/`)
 - `npm run check:types`
 - `npm run dev` — UI on :43127, API on :43128
 - `npm run build && npm start` — production on `PORT`

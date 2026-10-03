@@ -152,14 +152,15 @@ export function SessionPage() {
 							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
 							{status ? (
 								<div className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`}>
-									<span className={`size-1.5 shrink-0 rounded-full ${status.dot}`} />
-									{status.label}
+									<span className={`size-1.5 shrink-0 rounded-full ${status.dot}`} title={status.label} />
+									<span className="hidden sm:inline">{status.label}</span>
 								</div>
 							) : null}
 							{session.data ? <UsageChip session={session.data} /> : null}
 							{session.data ? <PullRequestChip session={session.data} /> : null}
-							<Btn variant="ghost" size="sm" icon={FileDiff} onClick={() => showPanel('Changes')}>
-								Review
+							{/* On a phone the header keeps only icons, so the menu and panel buttons stay on screen. */}
+							<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
+								<span className="hidden sm:inline">Review</span>
 							</Btn>
 							{session.data ? (
 								<TaskMenu

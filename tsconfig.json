@@ -35,5 +35,6 @@
 		"src/providers",
 		"src/services",
 		"tests"
-	]
+	],
+	"exclude": ["tests/ui"]
 }

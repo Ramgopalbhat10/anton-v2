@@ -176,7 +176,7 @@ export function Composer({
 					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
 					<ModelPicker value={choice} onChange={edit} />
 					<PlanToggle on={planning} onChange={(planMode) => edit({ planMode })} />
-					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled)">
+					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
 						<span className="truncate">{busy ? 'Send to the running agent' : 'Send'}</span>
 						<Kbd keys="enter" size="sm" />
 					</div>
