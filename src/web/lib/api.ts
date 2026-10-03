@@ -159,6 +159,19 @@ export type GeneralSettings = { model: string | null; reasoning: Reasoning | nul
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
+/** A pull request the agent opened, grouped by who it waits on. */
+export type ReviewGroup = 'failing' | 'checking' | 'ready' | 'merged' | 'closed' | 'unknown';
+export type ReviewItem = {
+	sessionId: string;
+	title: string;
+	repo: string;
+	url: string;
+	group: ReviewGroup;
+	draft: boolean;
+	checks: { passed: number; failed: number; pending: number };
+	comments: number;
+	createdAt: string;
+};
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
@@ -207,6 +220,7 @@ export const api = {
 	saveGuardrails: (guardrails: Guardrails) => json<Guardrails>('/api/settings/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
 	secrets: () => json<SecretsView>('/api/secrets'),
 	saveSharedEnv: (env: Record<string, string | null>) => json<SecretsView>('/api/secrets/shared', { method: 'PUT', body: JSON.stringify({ env }) }),
+	reviews: () => json<{ reviews: ReviewItem[] }>('/api/reviews'),
 	stopAllSandboxes: () => post<{ stopped: number }>('/api/compute/stop-all'),
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),

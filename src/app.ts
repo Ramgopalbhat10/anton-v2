@@ -20,6 +20,7 @@ import { addProject, branches, projects, rebuildPreparedImage, removeProject, up
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { defaultModel, generalSettings, setGeneralSettings } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
+import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
 import {
@@ -209,6 +210,7 @@ app.put('/api/secrets/shared', async (c) => {
 	return c.json(await setSharedEnv(env));
 });
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
+app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
 app.get('/api/compute', async (c) => c.json(await computeView()));
 app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));

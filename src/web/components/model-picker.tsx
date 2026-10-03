@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDownUp, Brain, Check, ChevronDown, Eye, Search } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, useMemo, useRef, useState } from 'react';
-import { Icon, Spinner } from '@/components/signal';
+import { FilterChip, Icon, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type Reasoning } from '@/lib/api';
 import {
 	costTier,
@@ -163,24 +163,6 @@ function Details({ model }: { model?: ModelInfo }) {
 			<span className="truncate text-(--text-secondary)">{model.name}</span>
 			<span className="shrink-0 font-mono">{facts.join(' · ')}</span>
 		</div>
-	);
-}
-
-function FilterChip({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
-	return (
-		<button
-			type="button"
-			aria-pressed={on}
-			onClick={onToggle}
-			className={cn(
-				'h-[22px] shrink-0 rounded-full px-2 text-[11px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
-				on
-					? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
-					: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',
-			)}
-		>
-			{label}
-		</button>
 	);
 }
 

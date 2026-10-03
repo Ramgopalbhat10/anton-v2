@@ -11,7 +11,9 @@ import { createRoot } from 'react-dom/client';
 import { RepoSettingsPage } from '@/components/repo-settings';
 import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
+import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
+import { TasksPage } from '@/components/tasks-page';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import './styles.css';
 
@@ -42,6 +44,18 @@ const sessionRoute = createRoute({
 		app: search.app === 'closed' ? 'closed' : 'code',
 	}),
 	component: SessionPage,
+});
+
+const tasksRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/tasks',
+	component: TasksPage,
+});
+
+const reviewsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/reviews',
+	component: ReviewsPage,
 });
 
 const settingsRoute = createRoute({
@@ -80,6 +94,8 @@ const oldRepoSettingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
 	indexRoute,
 	sessionRoute,
+	tasksRoute,
+	reviewsRoute,
 	oldRepoSettingsRoute,
 	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, repoSettingsRoute]),
 ]);

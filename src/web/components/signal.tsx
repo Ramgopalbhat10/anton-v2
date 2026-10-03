@@ -297,3 +297,22 @@ const BADGE_TONE = {
 export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
 	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
 }
+
+/** A filter that toggles on and off, in a row of them. */
+export function FilterChip({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+	return (
+		<button
+			type="button"
+			aria-pressed={on}
+			onClick={onToggle}
+			className={cn(
+				'h-[22px] shrink-0 rounded-full px-2 text-[11px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
+				on
+					? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
+					: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{label}
+		</button>
+	);
+}

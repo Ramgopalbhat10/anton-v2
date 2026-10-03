@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
+import { CircleCheck, GitPullRequest, List, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SECTIONS } from '@/components/settings/sections';
 import { Icon, Kbd } from '@/components/signal';
@@ -11,6 +11,11 @@ import { chooseProject, useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 
 type Entry = { id: string; label: string; meta: string; icon: LucideIcon; onSelect: () => void };
+
+const PAGES = [
+	{ to: '/tasks', label: 'Tasks', icon: List },
+	{ to: '/reviews', label: 'Reviews', icon: GitPullRequest },
+] as const;
 
 /** ⌘K palette: describe a task to start it, or jump to an existing one. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -66,7 +71,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				void navigate({ to: '/settings/$section', params: { section: section.id } });
 			},
 		}));
-		return [...tasks, ...settings];
+		const pages = PAGES.filter((page) => needle && page.label.toLowerCase().includes(needle)).map((page) => ({
+			...page,
+			id: `page-${page.to}`,
+			meta: 'Page',
+			onSelect: () => {
+				onClose();
+				void navigate({ to: page.to });
+			},
+		}));
+		return [...tasks, ...pages, ...settings];
 	}, [sessions.data, query, navigate, onClose]);
 
 	if (!open) return null;

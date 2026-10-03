@@ -598,6 +598,32 @@ test('shared variables reach every repo under its own, and their values stay out
 	await setSharedEnv({});
 });
 
+test('the review queue groups the agent\'s pull requests by what each waits on', async () => {
+	const { reviewQueue } = await import('../src/services/reviews.ts');
+	const project = await addProject('acme/demo');
+	const opened = async (title: string, state: PullRequestActivity) => {
+		const session = await sessions.createSession({ projectId: project.id, title });
+		const url = `https://example.test/acme/demo/pull/${session.id.slice(0, 6)}`;
+		await updateSession(session.id, { prUrl: url });
+		activity = state;
+		await reviewQueue();
+		return { id: session.id, url };
+	};
+	const check = (status: 'passed' | 'failed' | 'pending') => ({ name: status, status, summary: '', url: '' });
+	const ready = await opened('Ready', { state: 'open', headSha: 'a', checks: [check('passed')], comments: [] });
+	const failing = await opened('Failing', { state: 'draft', headSha: 'b', checks: [check('passed'), check('failed')], comments: [] });
+	const merged = await opened('Merged', { state: 'merged', headSha: 'c', checks: [], comments: [] });
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+
+	const queue = (await reviewQueue()).filter((item) => [ready.id, failing.id, merged.id].includes(item.sessionId));
+	assert.deepEqual(
+		queue.map((item) => [item.title, item.group, item.draft]),
+		[['Ready', 'ready', false], ['Failing', 'failing', true], ['Merged', 'merged', false]],
+	);
+	assert.deepEqual(queue[1].checks, { passed: 1, failed: 1, pending: 0 });
+	for (const item of queue) await sessions.deleteSession(item.sessionId);
+});
+
 test('spending caps stop new messages once today or a task has spent enough', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Budget' });
