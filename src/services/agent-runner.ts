@@ -16,12 +16,20 @@ export function mcpServersFor(id: string): McpServer[] {
 	return servers.get(id) ?? [];
 }
 
-/** Loads what the agent reads while it renders: the task's model and its repo's MCP servers. */
+/** Tasks that have had a machine: the agent works there rather than starting read-only. */
+const workspaces = new Set<string>();
+
+export function hasWorkspace(id: string): boolean {
+	return workspaces.has(id);
+}
+
+/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers and whether it has a machine. */
 export async function primeAgent(id: string): Promise<void> {
 	await primeModel(id);
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);
+	if (session?.machineState) workspaces.add(id);
 }
 
 /**

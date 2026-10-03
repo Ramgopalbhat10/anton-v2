@@ -7,6 +7,7 @@ test('Coder declares explorer, tester, and open_pull_request without useSandbox 
 	assert.match(source, /name: 'explorer'/);
 	assert.match(source, /name: 'tester'/);
 	assert.match(source, /name: 'open_pull_request'/);
+	for (const tool of ['list_files', 'read_file', 'search_code', 'start_workspace']) assert.match(source, new RegExp(`name: '${tool}'`));
 	const explorerFn = source.slice(source.indexOf('function Explorer'), source.indexOf('function Tester'));
 	const testerFn = source.slice(source.indexOf('function Tester'), source.indexOf('const explorer'));
 	assert.doesNotMatch(explorerFn, /useSandbox/);

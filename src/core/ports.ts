@@ -128,6 +128,8 @@ export type GitHost = {
 	resolveRef(fullName: string, ref: string): Promise<string>;
 	/** Every file path in the tree at a commit. */
 	tree(fullName: string, sha: string): Promise<string[]>;
+	/** The repo's files at a commit as a gzipped tar stream, every entry under one top-level folder. */
+	archive(fullName: string, sha: string): Promise<ReadableStream<Uint8Array>>;
 	file(fullName: string, sha: string, path: string): Promise<Uint8Array>;
 	cloneUrl(fullName: string): string;
 	/**

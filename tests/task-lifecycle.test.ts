@@ -33,12 +33,18 @@ git(seed, 'push', '-q', remote, 'main');
 const pullRequests: string[] = [];
 let cloneFrom = remote;
 const pushes = bareRemote(remote);
+/** Commits whose files were downloaded for read-only tasks. */
+const archives: string[] = [];
 const fakeHost: GitHost = {
 	name: 'fake',
 	getRepo: async (fullName) => ({ fullName, defaultBranch: 'main', private: false }),
 	listBranches: async () => ['main'],
 	resolveRef: async (_repo, ref) => git(remote, 'rev-parse', ref),
 	tree: async (_repo, sha) => git(remote, 'ls-tree', '-r', '--name-only', sha).split('\n'),
+	archive: async (_repo, sha) => {
+		archives.push(sha);
+		return new Blob([execFileSync('git', ['archive', '--format=tar.gz', '--prefix=acme-demo-snapshot/', sha], { cwd: remote })]).stream();
+	},
 	file: async (_repo, sha, file) => new TextEncoder().encode(`${git(remote, 'show', `${sha}:${file}`)}\n`),
 	cloneUrl: () => cloneFrom,
 	gitAuthEnv: () => ({}),
@@ -743,6 +749,49 @@ test('pushes rebuild the agent\'s own commits on the host with the same hashes, 
 	await machine.exec('git reset -q --hard "$(git hash-object -t commit -w --stdin)"', { cwd: repo, stdin: new TextEncoder().encode(odd) });
 	await assert.rejects(() => openPullRequest(session.id, { title: 'Third', body: '' }), /"encoding" header/);
 	assert.equal(git(remote, 'log', '-1', '--format=%s', record.branch), 'Second', 'the branch is left as it was');
+});
+
+test('a task reads the repo without a sandbox, clone or branch', async () => {
+	const { listRepoFiles, readRepoFile, searchRepo } = await import('../src/services/repo-snapshot.ts');
+	// A branch of the fake GitHub with folders, a long path, a link and a file too large to keep.
+	const work = path.join(dir, 'snapshot-seed');
+	execFileSync('git', ['clone', '-q', remote, work]);
+	const deep = `src/${'nested/'.repeat(20)}deep.ts`;
+	execFileSync('mkdir', ['-p', path.join(work, path.dirname(deep))]);
+	writeFileSync(path.join(work, deep), 'export const answer = 42;\n');
+	writeFileSync(path.join(work, 'src', 'app.ts'), 'import { answer } from "./deep";\nconsole.log(Answer);\n');
+	writeFileSync(path.join(work, 'big.bin'), Buffer.alloc(2 * 1024 * 1024, 1));
+	execFileSync('ln', ['-s', 'README.md', path.join(work, 'readme-link')]);
+	git(work, 'add', '.');
+	git(work, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'snapshot files');
+	git(work, 'push', '-q', 'origin', 'HEAD:refs/heads/snapshot-test');
+
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Question', branch: 'snapshot-test' });
+	const before = archives.length;
+	const listing = await listRepoFiles(session.id, {});
+	assert.match(listing, /^README\.md$/m);
+	assert.match(listing, new RegExp(`^${deep}$`, 'm'), 'long paths come through whole');
+	assert.match(listing, /^readme-link -> README\.md$/m);
+	assert.equal(await listRepoFiles(session.id, { glob: '*.ts' }), `src/app.ts\n${deep}`);
+	assert.equal(await listRepoFiles(session.id, { path: 'src', glob: 'app.*' }), 'src/app.ts');
+	assert.equal(await readRepoFile(session.id, 'src/app.ts'), '1\timport { answer } from "./deep";\n2\tconsole.log(Answer);\n3\t');
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 2, 1), /^2\tconsole\.log\(Answer\);\n\(lines 2-2 of 3; read on with offset 3\)$/);
+	assert.match(await readRepoFile(session.id, 'big.bin'), /too large to read without a workspace/);
+	assert.match(await readRepoFile(session.id, 'readme-link'), /link to README\.md/);
+	assert.match(await readRepoFile(session.id, 'missing.ts'), /does not exist/);
+	await assert.rejects(() => readRepoFile(session.id, '../../etc/passwd'));
+	assert.equal(await searchRepo(session.id, { pattern: 'answer' }), `src/app.ts:1: import { answer } from "./deep";\n${deep}:1: export const answer = 42;`);
+	assert.equal(await searchRepo(session.id, { pattern: 'ANSWER\\)', ignoreCase: true }), 'src/app.ts:2: console.log(Answer);');
+	assert.match(await searchRepo(session.id, { pattern: '(' }), /Invalid pattern/);
+	assert.equal(archives.length, before + 1, 'downloaded once, then read from disk');
+
+	const record = (await sessions.getSession(session.id))!;
+	assert.equal(record.workspace, false, 'no workspace, so no branch');
+	assert.ok(!(await local.running()).has(session.id), 'no sandbox was started');
+	await machineFor(session.id);
+	assert.equal((await sessions.getSession(session.id)).workspace, true);
+	await sessions.stopSession(session.id);
 });
 
 test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {

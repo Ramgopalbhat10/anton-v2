@@ -21,7 +21,7 @@ import { createContext, Fragment, type ReactNode, useContext, useEffect, useRef,
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, Spinner } from '@/components/signal';
-import { api, outputUrl, type Usage } from '@/lib/api';
+import { api, branchLabel, outputUrl, type Usage } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 
@@ -340,7 +340,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const messages = agent.messages.filter(
 		(message) => message.settlement || (message.display === 'visible' && message.role !== 'system'),
 	);
-	const meta = session.data ? [session.data.repo, session.data.branch] : [];
+	const meta = session.data ? [session.data.repo, branchLabel(session.data)] : [];
 	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
 
 	useEffect(() => {

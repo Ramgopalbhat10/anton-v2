@@ -2,7 +2,7 @@ import type { CheckResult, CommitData, CommitSource, GitHost, PullRequestComment
 
 /** Requests that take longer than this fail, so a stuck connection never stalls the headless loop. */
 const TIMEOUT_MS = 30_000;
-/** A file upload may take longer than an ordinary request. */
+/** A file upload or a repo download may take longer than an ordinary request. */
 const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 /** Lists longer than this many pages are cut, oldest pages first kept. */
 const MAX_PAGES = 10;
@@ -157,6 +157,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		async tree(fullName, sha) {
 			const tree = await json<{ tree: Array<{ path: string; type: string }> }>(`/repos/${fullName}/git/trees/${sha}?recursive=1`);
 			return tree.tree.filter((entry) => entry.type === 'blob').map((entry) => entry.path);
+		},
+		async archive(fullName, sha) {
+			const response = await call(`/repos/${fullName}/tarball/${sha}`, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
+			if (!response.body) throw new Error(`GitHub sent no archive for ${fullName}@${sha}`);
+			return response.body;
 		},
 		async file(fullName, sha, path) {
 			const encoded = path.split('/').map(encodeURIComponent).join('/');

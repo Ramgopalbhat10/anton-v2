@@ -46,6 +46,8 @@ export type Session = {
 	status: SessionStatus;
 	/** The agent is working on a message right now. */
 	working: boolean;
+	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
+	workspace: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;
@@ -57,7 +59,7 @@ export type Session = {
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 
 /** A stored session row, before the live status is joined in. */
-export type SessionRecord = Omit<Session, 'status' | 'working'> & {
+export type SessionRecord = Omit<Session, 'status' | 'working' | 'workspace'> & {
 	failed: boolean;
 	machineState: string | null;
 	/** What follow-ups on the task's pull request have already handled, as JSON. */
