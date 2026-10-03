@@ -5,13 +5,15 @@ type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' |
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
 function staleFor(change: Change): QueryKey[] {
-	if (change.kind === 'sessions') return [['sessions'], ['budget']];
+	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute']];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id]];
 	if (change.what === 'files') return files;
 	return [
 		['sessions'],
 		['budget'],
+		['usage'],
+		['compute'],
 		['session', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],

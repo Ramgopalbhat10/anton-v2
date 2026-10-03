@@ -77,6 +77,8 @@ export type Project = {
 	defaultBranch: string;
 	/** Notes every task's agent reads, one per line. */
 	memory: string;
+	/** When the image new tasks start from (repo cloned, dependencies installed) was built; null when there is none. */
+	warmedAt: string | null;
 } & ProjectSettings;
 
 /**
@@ -134,6 +136,42 @@ export type PreviewsPayload = { live: boolean; previews: Preview[] };
 /** Spending caps in US dollars; null means no cap. */
 export type Limits = { dailyUsd: number | null; taskUsd: number | null };
 export type Budget = { limits: Limits; today: number; task: number | null; blocked: string | null };
+/** Spend this month by one key; `key` is null for a removed repository or spend logged before it was recorded. */
+export type SpendRow = { key: string | null; tokens: number; cost: number };
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[] };
+export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
+export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
+export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
+/** What every new sandbox gets; see Settings › Sandboxes and Images. */
+export type SandboxSettings = {
+	cpu: number;
+	memoryMiB: number;
+	idleMinutes: number;
+	lifetimeHours: number;
+	region: 'us' | 'eu' | 'ap' | null;
+	allowedDomains: string[];
+	baseImage: string | null;
+	warmImageDays: number;
+};
+export type SandboxView = { settings: SandboxSettings; defaultBaseImage: string; provider: string };
+/** How a new task starts when the launcher does not say; null model is the server's default. */
+export type GeneralSettings = { model: string | null; reasoning: Reasoning | null; planMode: boolean };
+export type Guardrails = { hideSecrets: boolean };
+/** Variable names only; values never leave the server. */
+export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
+/** A pull request the agent opened, grouped by who it waits on. */
+export type ReviewGroup = 'failing' | 'checking' | 'ready' | 'merged' | 'closed' | 'unknown';
+export type ReviewItem = {
+	sessionId: string;
+	title: string;
+	repo: string;
+	url: string;
+	group: ReviewGroup;
+	draft: boolean;
+	checks: { passed: number; failed: number; pending: number };
+	comments: number;
+	createdAt: string;
+};
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
@@ -168,6 +206,22 @@ export const api = {
 	health: () =>
 		json<{ ok: boolean; openRouter: boolean; providers: { sandbox: string; store: string; git: string } }>('/api/health'),
 	budget: (sessionId?: string) => json<Budget>(`/api/budget${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
+	usage: () => json<UsageView>('/api/usage'),
+	connections: () => json<{ connections: Connection[] }>('/api/connections'),
+	compute: () => json<ComputeView>('/api/compute'),
+	sandboxSettings: () => json<SandboxView>('/api/settings/sandbox'),
+	saveSandboxSettings: (settings: SandboxSettings) =>
+		json<SandboxView>('/api/settings/sandbox', { method: 'PUT', body: JSON.stringify(settings) }),
+	rebuildPreparedImage: (projectId: string) => post<Project>(`/api/projects/${projectId}/prepared-image/rebuild`),
+	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
+	saveGeneralSettings: (settings: GeneralSettings) =>
+		json<GeneralSettings>('/api/settings/general', { method: 'PUT', body: JSON.stringify(settings) }),
+	guardrails: () => json<Guardrails>('/api/settings/guardrails'),
+	saveGuardrails: (guardrails: Guardrails) => json<Guardrails>('/api/settings/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
+	secrets: () => json<SecretsView>('/api/secrets'),
+	saveSharedEnv: (env: Record<string, string | null>) => json<SecretsView>('/api/secrets/shared', { method: 'PUT', body: JSON.stringify({ env }) }),
+	reviews: () => json<{ reviews: ReviewItem[] }>('/api/reviews'),
+	stopAllSandboxes: () => post<{ stopped: number }>('/api/compute/stop-all'),
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),
 	cleanUpStorage: () => post<CleanupResult>('/api/storage/cleanup'),

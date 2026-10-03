@@ -4,12 +4,16 @@ import {
 	createRootRoute,
 	createRoute,
 	createRouter,
+	redirect,
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RepoSettingsPage } from '@/components/repo-settings';
-import { SettingsPage } from '@/components/settings-page';
+import { SectionPage, SettingsLayout } from '@/components/settings/layout';
+import { SettingsOverview } from '@/components/settings/overview';
+import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
+import { TasksPage } from '@/components/tasks-page';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import './styles.css';
 
@@ -42,19 +46,59 @@ const sessionRoute = createRoute({
 	component: SessionPage,
 });
 
-const repoSettingsRoute = createRoute({
+const tasksRoute = createRoute({
 	getParentRoute: () => rootRoute,
-	path: '/repos/$projectId',
-	component: RepoSettingsPage,
+	path: '/tasks',
+	component: TasksPage,
+});
+
+const reviewsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/reviews',
+	component: ReviewsPage,
 });
 
 const settingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/settings',
-	component: SettingsPage,
+	component: SettingsLayout,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sessionRoute, repoSettingsRoute, settingsRoute]);
+const settingsIndexRoute = createRoute({
+	getParentRoute: () => settingsRoute,
+	path: '/',
+	component: SettingsOverview,
+});
+
+const settingsSectionRoute = createRoute({
+	getParentRoute: () => settingsRoute,
+	path: '$section',
+	component: SectionPage,
+});
+
+const repoSettingsRoute = createRoute({
+	getParentRoute: () => settingsRoute,
+	path: 'repos/$projectId',
+	component: RepoSettingsPage,
+});
+
+/** Repository settings used to live at /repos/:id. */
+const oldRepoSettingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/repos/$projectId',
+	beforeLoad: ({ params }) => {
+		throw redirect({ to: '/settings/repos/$projectId', params });
+	},
+});
+
+const routeTree = rootRoute.addChildren([
+	indexRoute,
+	sessionRoute,
+	tasksRoute,
+	reviewsRoute,
+	oldRepoSettingsRoute,
+	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, repoSettingsRoute]),
+]);
 const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

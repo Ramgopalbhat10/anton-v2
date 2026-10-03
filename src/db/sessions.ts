@@ -40,8 +40,9 @@ export async function addSessionUsage(id: string, usage: Usage, at = new Date())
 				args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
 			},
 			{
-				sql: 'INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?)',
-				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost],
+				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model)
+					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), (SELECT model FROM sessions WHERE id = ?))`,
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, id],
 			},
 		],
 		'write',
@@ -53,6 +54,23 @@ export async function spentSince(since: Date): Promise<number> {
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage_log WHERE at >= ?', args: [since.toISOString()] });
 	return Number(result.rows[0]?.cost ?? 0);
+}
+
+/** Spend since a time grouped by one key; `key` is null for responses logged before it was recorded. */
+export type SpendRow = { key: string | null; tokens: number; cost: number };
+
+const GROUPS = { repo: 'p.repo_full_name', model: 'u.model' } as const;
+
+/** Dollars and tokens since `since`, by repository or by model, most spent first. */
+export async function spendBy(group: keyof typeof GROUPS, since: Date): Promise<SpendRow[]> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `SELECT ${GROUPS[group]} AS key, SUM(u.input_tokens + u.output_tokens) AS tokens, SUM(u.cost_usd) AS cost
+			FROM usage_log u LEFT JOIN projects p ON p.id = u.project_id
+			WHERE u.at >= ? GROUP BY 1 ORDER BY cost DESC`,
+		args: [since.toISOString()],
+	});
+	return result.rows.map((row) => ({ key: row.key == null ? null : String(row.key), tokens: Number(row.tokens), cost: Number(row.cost) }));
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'>;

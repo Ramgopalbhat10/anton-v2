@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, Loader, Plus, Search } from 'lucide-react';
+import { CircleCheck, GitPullRequest, List, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SECTIONS } from '@/components/settings/sections';
 import { Icon, Kbd } from '@/components/signal';
 import { api } from '@/lib/api';
 import { age } from '@/lib/format';
@@ -9,7 +10,12 @@ import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 
-type Entry = { id: string; label: string; meta: string; running: boolean; onSelect: () => void };
+type Entry = { id: string; label: string; meta: string; icon: LucideIcon; onSelect: () => void };
+
+const PAGES = [
+	{ to: '/tasks', label: 'Tasks', icon: List },
+	{ to: '/reviews', label: 'Reviews', icon: GitPullRequest },
+] as const;
 
 /** ⌘K palette: describe a task to start it, or jump to an existing one. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -41,19 +47,40 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 	const jumps = useMemo<Entry[]>(() => {
 		const needle = query.trim().toLowerCase();
-		return (sessions.data?.sessions ?? [])
+		const tasks = (sessions.data?.sessions ?? [])
 			.filter((session) => !needle || session.title.toLowerCase().includes(needle))
 			.slice(0, 8)
 			.map((session) => ({
 				id: session.id,
 				label: session.title,
 				meta: `${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
-				running: session.working || session.status === 'starting',
+				icon: session.working || session.status === 'starting' ? Loader : CircleCheck,
 				onSelect: () => {
 					onClose();
 					void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
 				},
 			}));
+		// Settings pages only once something is typed, so the list stays about tasks.
+		const settings = SECTIONS.filter((section) => needle && section.label.toLowerCase().includes(needle)).map((section) => ({
+			id: `settings-${section.id}`,
+			label: section.label,
+			meta: 'Settings',
+			icon: section.icon,
+			onSelect: () => {
+				onClose();
+				void navigate({ to: '/settings/$section', params: { section: section.id } });
+			},
+		}));
+		const pages = PAGES.filter((page) => needle && page.label.toLowerCase().includes(needle)).map((page) => ({
+			...page,
+			id: `page-${page.to}`,
+			meta: 'Page',
+			onSelect: () => {
+				onClose();
+				void navigate({ to: page.to });
+			},
+		}));
+		return [...tasks, ...pages, ...settings];
 	}, [sessions.data, query, navigate, onClose]);
 
 	if (!open) return null;
@@ -137,7 +164,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 								index === position + 1 && 'bg-(--bg-hover) text-(--text-primary)',
 							)}
 						>
-							<Icon icon={entry.running ? Loader : CircleCheck} size={12} className="text-(--icon-tertiary)" />
+							<Icon icon={entry.icon} size={12} className="text-(--icon-tertiary)" />
 							<div className="min-w-0 flex-1 truncate text-[13px]">{entry.label}</div>
 							<div className="text-[11px] whitespace-nowrap text-(--text-disabled)">{entry.meta}</div>
 						</button>

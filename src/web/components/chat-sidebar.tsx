@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { List, PanelLeft, Plus, Search, Settings, Square, X } from 'lucide-react';
+import { GitPullRequest, List, PanelLeft, Plus, Search, Settings, Square, X } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Icon, IconBtn, SectionLabel } from '@/components/signal';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+const NAV_ROW =
+	'group relative flex h-[30px] items-center gap-2 rounded-lg px-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6)';
 
 /** Today's spend against the daily cap, so it is visible before it blocks anything. */
 function SpentToday() {
@@ -102,15 +105,14 @@ export function ChatSidebar({
 			</div>
 
 			<div className="flex flex-col gap-0.5 px-2 py-1">
-				<Link
-					to="/"
-					activeOptions={{ exact: true }}
-					onClick={onNavigate}
-					className="group relative flex h-[30px] items-center gap-2 rounded-lg px-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6)"
-				>
+				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<Icon icon={List} className="text-(--icon-tertiary)" />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
 					<div className="text-[11px] text-(--text-tertiary)">{sessions.length}</div>
+				</Link>
+				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
+					<Icon icon={GitPullRequest} className="text-(--icon-tertiary)" />
+					<div className="min-w-0 flex-1 truncate text-[13px]">Reviews</div>
 				</Link>
 			</div>
 

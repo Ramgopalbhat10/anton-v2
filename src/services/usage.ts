@@ -1,5 +1,6 @@
 import type { Usage } from '../core/types.ts';
-import { addSessionUsage } from '../db/sessions.ts';
+import { addSessionUsage, type SpendRow, spendBy, spentSince } from '../db/sessions.ts';
+import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
 
 /** What the runtime reports for one response; cached prompt tokens are still prompt tokens. */
@@ -25,4 +26,19 @@ export async function recordTurnUsage(event: TurnEvent): Promise<string | null> 
 	if (event.type !== 'turn' || !event.instanceId || !event.response?.usage) return null;
 	await recordUsage(event.instanceId, toUsage(event.response.usage));
 	return event.instanceId;
+}
+
+function startOfMonth(now: Date): Date {
+	const day = startOfToday(now);
+	day.setDate(1);
+	return day;
+}
+
+/** What has been spent this month, in total and by repository and model, from the server's local midnight on the 1st. */
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[] };
+
+export async function usageView(now = new Date()): Promise<UsageView> {
+	const since = startOfMonth(now);
+	const [today, month, byRepo, byModel] = await Promise.all([spentSince(startOfToday(now)), spentSince(since), spendBy('repo', since), spendBy('model', since)]);
+	return { since: since.toISOString(), today, month, byRepo, byModel };
 }

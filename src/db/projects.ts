@@ -65,6 +65,18 @@ export async function setWarmImage(id: string, image: string, baseImage: string 
 	});
 }
 
+/** Drops the prepared images of repos on the default base image, after the default changes. */
+export async function retireDefaultWarmImages(): Promise<void> {
+	const db = await appDb();
+	await db.execute('UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE base_image IS NULL');
+}
+
+/** Drops one repo's prepared image, so its next task builds a fresh one. */
+export async function clearWarmImage(id: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE id = ?', args: [id] });
+}
+
 /** Saves the settings; a new base image also drops the warm image, which was built from the old one. */
 export async function setProjectSettings(id: string, settings: ProjectSettings): Promise<void> {
 	const db = await appDb();

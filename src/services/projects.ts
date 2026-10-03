@@ -1,10 +1,11 @@
 import type { McpServer, Project, ProjectSettings } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
-import { deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
+import { clearWarmImage, deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { mergeEnv } from './secrets.ts';
 import { deleteSession } from './sessions.ts';
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
@@ -12,12 +13,16 @@ const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 /** An MCP server as the browser sees it: whether it has a token, never the token. */
 export type McpServerView = Omit<McpServer, 'auth'> & { hasAuth: boolean };
 
-/** What the browser sees of a repo: variable names and whether servers have tokens, never the secrets. */
-export type ProjectView = Omit<Project, 'env' | 'warmImage' | 'warmedAt' | 'mcpServers'> & { envKeys: string[]; mcpServers: McpServerView[] };
+/**
+ * What the browser sees of a repo: variable names and whether servers have
+ * tokens, never the secrets; when its prepared image was built, not the image.
+ */
+export type ProjectView = Omit<Project, 'env' | 'warmImage' | 'mcpServers'> & { envKeys: string[]; mcpServers: McpServerView[] };
 
-function present({ env, warmImage: _image, warmedAt: _at, mcpServers, ...project }: Project): ProjectView {
+function present({ env, warmImage, warmedAt, mcpServers, ...project }: Project): ProjectView {
 	return {
 		...project,
+		warmedAt: warmImage ? warmedAt : null,
 		envKeys: Object.keys(env).sort(),
 		mcpServers: mcpServers.map(({ auth, ...server }) => ({ ...server, hasAuth: Boolean(auth) })),
 	};
@@ -75,11 +80,7 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'mcpSer
  */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
-	const env = Object.fromEntries(
-		Object.entries(change.env)
-			.map(([key, value]) => [key, value ?? project.env[key]] as const)
-			.filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
-	);
+	const env = mergeEnv(project.env, change.env);
 	// A token stays only with the host it was given for, so pointing a server at a new host never sends it there.
 	const keyOf = (name: string, url: string) => `${name} ${URL.canParse(url) ? new URL(url).origin : url}`;
 	const tokens = new Map(project.mcpServers.map((server) => [keyOf(server.name, server.url), server.auth]));
@@ -96,5 +97,12 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 		mcpServers,
 		baseImage: change.baseImage?.trim() || null,
 	});
+	return present(await existing(id));
+}
+
+/** Drops the repo's prepared image, so its next task clones and installs from scratch and saves a new one. */
+export async function rebuildPreparedImage(id: string): Promise<ProjectView> {
+	await existing(id);
+	await clearWarmImage(id);
 	return present(await existing(id));
 }

@@ -1,6 +1,7 @@
 import { type FileStat, type Sandbox, type SandboxDriver, sandboxFromDriver } from '@flue/runtime';
 import { readMachineFile, writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
+import { redactor } from '../core/redact.ts';
 import { CommandError, quote, text } from '../core/shell.ts';
 
 type ShellOptions = { cwd?: string; env?: Record<string, string>; timeoutMs?: number; signal?: AbortSignal };
@@ -8,8 +9,17 @@ type ShellOptions = { cwd?: string; env?: Record<string, string>; timeoutMs?: nu
 /**
  * Adapts any `Machine` to Flue's sandbox contract, so the agent is provider-agnostic.
  * While `canWrite` says no, the file tools refuse to write; it is asked at each call.
+ * The values of `secrets` are replaced by their names in command output, so
+ * the agent does not read them back by accident and repeat them; files are
+ * read as they are, so an edit never writes a placeholder over a real value.
  */
-export function machineSandbox(machine: Machine, cwd: string, canWrite: () => boolean = () => true): Sandbox {
+export function machineSandbox(
+	machine: Machine,
+	cwd: string,
+	canWrite: () => boolean = () => true,
+	secrets: Record<string, string> = {},
+): Sandbox {
+	const hide = redactor(secrets);
 	function writable(): void {
 		if (!canWrite()) throw new Error('Plan mode is on: nothing can be changed until the user approves your plan. Call propose_plan instead.');
 	}
@@ -23,7 +33,7 @@ export function machineSandbox(machine: Machine, cwd: string, canWrite: () => bo
 	const driver: SandboxDriver = {
 		async exec(command: string, options?: ShellOptions) {
 			const result = await machine.exec(command, options);
-			return { stdout: text(result.stdout), stderr: result.stderr, exitCode: result.exitCode };
+			return { stdout: hide(text(result.stdout)), stderr: hide(result.stderr), exitCode: result.exitCode };
 		},
 		readFile: async (path) => text(await readMachineFile(machine, path)),
 		readFileBuffer: (path) => readMachineFile(machine, path),

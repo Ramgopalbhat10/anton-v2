@@ -272,3 +272,47 @@ export function Switch({
 		</button>
 	);
 }
+
+const BAR_TONE = { accent: 'bg-(--accent-base)', warning: 'bg-(--warning-base)', danger: 'bg-(--danger-base)' } as const;
+
+/** A thin meter: how much of something is used, from 0 to 100. */
+export function ProgressBar({ value, tone = 'accent', label }: { value: number; tone?: keyof typeof BAR_TONE; label: string }) {
+	const clamped = Math.min(100, Math.max(0, value));
+	return (
+		<div role="progressbar" aria-label={label} aria-valuenow={Math.round(clamped)} aria-valuemin={0} aria-valuemax={100} className="h-1 w-full overflow-hidden rounded-full bg-(--neutral-750)">
+			<div className={cn('h-full rounded-full transition-[width] duration-(--duration-micro)', BAR_TONE[tone])} style={{ width: `${clamped}%` }} />
+		</div>
+	);
+}
+
+const BADGE_TONE = {
+	neutral: 'bg-(--bg-raised) text-(--text-secondary)',
+	accent: 'bg-(--accent-bg) text-(--accent-text)',
+	success: 'bg-(--success-bg) text-(--success-text)',
+	warning: 'bg-(--warning-bg) text-(--warning-text)',
+	danger: 'bg-(--danger-bg) text-(--danger-text)',
+} as const;
+
+/** A short status word on a row: Connected, Default, Failing. */
+export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
+	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
+}
+
+/** A filter that toggles on and off, in a row of them. */
+export function FilterChip({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+	return (
+		<button
+			type="button"
+			aria-pressed={on}
+			onClick={onToggle}
+			className={cn(
+				'h-[22px] shrink-0 rounded-full px-2 text-[11px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
+				on
+					? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
+					: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{label}
+		</button>
+	);
+}

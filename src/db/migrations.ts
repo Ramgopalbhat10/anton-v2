@@ -61,6 +61,12 @@ const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN plan_mode INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE automations ADD COLUMN plan_first INTEGER NOT NULL DEFAULT 0`],
 	// 10: notes about the repo that every task's agent reads, kept by the agent and the user.
 	[`ALTER TABLE projects ADD COLUMN memory TEXT NOT NULL DEFAULT ''`],
+	// 11: each response's repository and model, so spend can be broken down even after a task is deleted.
+	[
+		`ALTER TABLE usage_log ADD COLUMN project_id TEXT`,
+		`ALTER TABLE usage_log ADD COLUMN model TEXT`,
+		`UPDATE usage_log SET project_id = (SELECT project_id FROM sessions WHERE sessions.id = usage_log.session_id), model = (SELECT model FROM sessions WHERE sessions.id = usage_log.session_id)`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

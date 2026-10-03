@@ -42,6 +42,20 @@ export type Machine = {
 /** How a machine came to be: decides how much setup the workspace still needs. */
 export type MachineOrigin = 'live' | 'resumed' | 'image' | 'base';
 
+/** How big a new machine is, how long it may live, and what it may reach. Providers that cannot apply one ignore it. */
+export type SandboxResources = {
+	cpu: number;
+	memoryMiB: number;
+	/** Shut down after this long with nothing running. */
+	idleTimeoutMs: number;
+	/** Shut down this long after starting, whatever it is doing. */
+	lifetimeMs: number;
+	/** Regions to start in; empty lets the provider choose. */
+	regions: string[];
+	/** Domains outbound requests may reach, `*.` wildcards allowed; empty allows all. */
+	allowedDomains: string[];
+};
+
 export type AcquireRequest = {
 	/** Stable task key; providers use it to find a running machine. */
 	key: string;
@@ -53,6 +67,8 @@ export type AcquireRequest = {
 	baseImage: string | null;
 	/** Ports to expose for previews. Fixed when the machine starts. */
 	ports: number[];
+	/** Applied to a machine that starts; a running one keeps what it started with. */
+	resources: SandboxResources;
 };
 
 export type Acquired = {

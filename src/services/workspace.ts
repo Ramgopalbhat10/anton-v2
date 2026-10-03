@@ -3,12 +3,13 @@ import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
-import { config } from '../config.ts';
 import { getProject, setWarmImage } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
+import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
+import { envFor } from './secrets.ts';
 
 /** First lockfile found decides how dependencies are installed. */
 const INSTALLERS: Array<[lockfile: string, command: string]> = [
@@ -24,8 +25,8 @@ async function installDependencies(machine: Machine): Promise<void> {
 	if (result.exitCode !== 0) logProblem('warn', 'Dependency install failed', result.stderr.slice(-500));
 }
 
-function warmImageFor(project: Project): string | null {
-	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < config.warmImageMaxAgeMs;
+function warmImageFor(project: Project, settings: SandboxSettings): string | null {
+	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < settings.warmImageDays * 86_400_000;
 	return fresh ? project.warmImage : null;
 }
 
@@ -35,7 +36,7 @@ function warmImageFor(project: Project): string | null {
  * from it, and their setup runs there with Anton's credentials.
  */
 async function refreshWarmImage(machine: Machine, project: Project): Promise<void> {
-	if (warmImageFor(project)) return;
+	if (warmImageFor(project, await sandboxSettings())) return;
 	await getProviders()
 		.sandbox.snapshot(machine)
 		.then((image) => setWarmImage(project.id, image, project.baseImage))
@@ -112,7 +113,14 @@ const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resum
  */
 async function acquireReady(session: SessionRecord, project: Project): Promise<{ acquired: Acquired; ready: boolean }> {
 	const { sandbox } = getProviders();
-	const request = { key: session.id, image: warmImageFor(project), baseImage: project.baseImage, ports: project.previewPorts };
+	const settings = await sandboxSettings();
+	const request = {
+		key: session.id,
+		image: warmImageFor(project, settings),
+		baseImage: project.baseImage ?? settings.baseImage,
+		ports: project.previewPorts,
+		resources: resourcesFrom(settings),
+	};
 	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
 	const ready = await isReady(acquired.machine, session, acquired.origin);
 	if (ready || !isUsed(acquired.origin)) return { acquired, ready };
@@ -124,7 +132,7 @@ async function provision(id: string): Promise<Machine> {
 	const { session, project } = await load(id);
 	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
-	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...project.env });
+	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...(await envFor(project)) });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
 		if (!ready) await prepare({ machine, session, project }, acquired.origin);

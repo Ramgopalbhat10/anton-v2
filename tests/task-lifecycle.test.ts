@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import type { GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
+import type { AcquireRequest, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
 import { bareRemote } from './bare-remote.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
@@ -102,7 +102,11 @@ const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint }
 const { assertWithinBudget, budget, setLimits } = await import('../src/services/budget.ts');
 const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
-const { toUsage } = await import('../src/services/usage.ts');
+const { toUsage, usageView } = await import('../src/services/usage.ts');
+const { connections } = await import('../src/services/connections.ts');
+const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox-settings.ts');
+const { rebuildPreparedImage } = await import('../src/services/projects.ts');
+const { computeView, stopAllSandboxes } = await import('../src/services/compute.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
@@ -130,10 +134,13 @@ const countShells = (machine: Machine): Machine => ({
 		return machine.openPty(size);
 	},
 });
+/** What the last machine start asked for. */
+let lastAcquire: AcquireRequest | undefined;
 setProviders({
 	sandbox: {
 		...local,
 		acquire: async (request) => {
+			lastAcquire = request;
 			const acquired = await local.acquire(request);
 			return { ...acquired, machine: countShells(acquired.machine) };
 		},
@@ -491,6 +498,130 @@ test('a task adds up the tokens and cost of its responses', async () => {
 	assert.equal(totals.inputTokens, 300);
 	assert.equal(totals.outputTokens, 40);
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
+});
+
+test('spend this month breaks down by repository and model, and outlives a deleted task', async () => {
+	const project = await addProject('acme/breakdown');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Breakdown', model: 'openrouter/plain/no-reasoning' });
+	await addSessionUsage(session.id, { inputTokens: 100, outputTokens: 50, cost: 0.3 });
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 5, cost: 0.2 });
+	await sessions.deleteSession(session.id);
+	const view = await usageView();
+	const repo = view.byRepo.find((row) => row.key === 'acme/breakdown');
+	assert.equal(repo?.tokens, 165);
+	assert.ok(Math.abs((repo?.cost ?? 0) - 0.5) < 1e-9);
+	assert.ok(view.byModel.some((row) => row.key === 'openrouter/plain/no-reasoning' && Math.abs(row.cost - 0.5) < 1e-9));
+	assert.ok(view.month >= view.today && view.today >= 0.5);
+});
+
+test('connections are checked through the ports, and Compute lists and stops running sandboxes', async () => {
+	const byId = Object.fromEntries((await connections()).map((connection) => [connection.id, connection]));
+	assert.equal(byId.sandbox?.state, 'ok');
+	assert.match(byId.sandbox?.detail ?? '', /running now/);
+	assert.equal(byId.store?.state, 'ok');
+	assert.equal(byId.database?.state, 'ok');
+	assert.ok(byId.git?.state === 'off' || /Ada Lovelace/.test(byId.git?.detail ?? ''));
+
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Compute' });
+	await sessions.resumeSession(session.id);
+	assert.ok((await computeView()).running.some((task) => task.id === session.id));
+	const { stopped } = await stopAllSandboxes();
+	assert.ok(stopped >= 1);
+	assert.equal((await computeView()).running.length, 0);
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
+test('sandbox settings reach new machines, and a new default base image retires prepared images', async () => {
+	const project = await addProject('acme/demo');
+	const before = await sandboxSettings();
+	await setWarmImage(project.id, 'image-old');
+	await setSandboxSettings({ ...before, cpu: 4, memoryMiB: 8192, region: 'eu', idleMinutes: 30, allowedDomains: ['registry.npmjs.org'], baseImage: 'python:3.12' });
+	assert.equal((await getProject(project.id))?.warmImage, null, 'the old default image is retired');
+
+	const session = await sessions.createSession({ projectId: project.id, title: 'Sizes' });
+	await sessions.resumeSession(session.id);
+	assert.equal(lastAcquire?.baseImage, 'python:3.12');
+	assert.deepEqual({ ...lastAcquire?.resources, allowedDomains: undefined }, { cpu: 4, memoryMiB: 8192, idleTimeoutMs: 30 * 60_000, lifetimeMs: 24 * 3_600_000, regions: ['eu'], allowedDomains: undefined });
+	assert.ok(lastAcquire?.resources.allowedDomains.includes('registry.npmjs.org') && lastAcquire.resources.allowedDomains.includes('github.com'));
+	await sessions.stopSession(session.id);
+
+	await setWarmImage(project.id, 'image-new');
+	assert.equal((await rebuildPreparedImage(project.id)).warmedAt, null);
+	await setSandboxSettings(before);
+});
+
+test('General settings decide how a new task starts when the launcher does not say', async () => {
+	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const project = await addProject('acme/demo');
+	const before = await generalSettings();
+	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true });
+
+	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
+	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
+	// Another model starts at its own default level; an explicit choice wins over the defaults.
+	const other = await sessions.createSession({ projectId: project.id, title: 'Other', model: 'openrouter/plain/no-reasoning', planMode: false });
+	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
+	await sessions.deleteSession(plain.id);
+	await sessions.deleteSession(other.id);
+	await setGeneralSettings(before);
+});
+
+test('shared variables reach every repo under its own, and their values stay out of what the agent reads', async () => {
+	const { secretsView, setSharedEnv, setGuardrails, secretsToHide } = await import('../src/services/secrets.ts');
+	const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
+	const project = await addProject('acme/secrets');
+	const settings = await updateSettings(project.id, { env: { API_KEY: 'repo-key-123456' }, setupScript: '', previewPorts: [], baseImage: null });
+	await setSharedEnv({ API_KEY: 'shared-key-123456', SHARED_TOKEN: 'shared-token-abcdef', SHORT: 'yes' });
+	// Null keeps a stored value; a variable left out is removed.
+	const view = await setSharedEnv({ API_KEY: null, SHARED_TOKEN: null });
+	assert.deepEqual(view.shared, ['API_KEY', 'SHARED_TOKEN']);
+	assert.deepEqual(view.repos.find((repo) => repo.projectId === project.id)?.names, ['API_KEY']);
+	assert.ok(!JSON.stringify(view).includes('123456'), 'values never leave the server');
+
+	const session = await sessions.createSession({ projectId: project.id, title: 'Secrets' });
+	const machine = await machineFor(session.id);
+	assert.equal((await run(machine, 'echo "$API_KEY|$SHARED_TOKEN|${SHORT:-gone}"')).trim(), 'repo-key-123456|shared-token-abcdef|gone');
+
+	const sandbox = machineSandbox(machine, `${machine.root}/repo`, () => true, await secretsToHide(session.id));
+	const shown = await sandbox.exec('echo "$API_KEY $SHARED_TOKEN" && echo "$SHARED_TOKEN" >&2 && echo "$SHARED_TOKEN" > token.txt');
+	assert.equal(shown.stdout.trim(), '[API_KEY hidden] [SHARED_TOKEN hidden]');
+	assert.equal(shown.stderr.trim(), '[SHARED_TOKEN hidden]');
+	assert.equal((await sandbox.readFile(`${machine.root}/repo/token.txt`)).trim(), 'shared-token-abcdef', 'files are read as they are');
+
+	await setGuardrails({ hideSecrets: false });
+	assert.deepEqual(await secretsToHide(session.id), {});
+	await setGuardrails({ hideSecrets: true });
+	await sessions.deleteSession(session.id);
+	await updateSettings(project.id, { ...settings, env: {} });
+	await setSharedEnv({});
+});
+
+test('the review queue groups the agent\'s pull requests by what each waits on', async () => {
+	const { reviewQueue } = await import('../src/services/reviews.ts');
+	const project = await addProject('acme/demo');
+	const opened = async (title: string, state: PullRequestActivity) => {
+		const session = await sessions.createSession({ projectId: project.id, title });
+		const url = `https://example.test/acme/demo/pull/${session.id.slice(0, 6)}`;
+		await updateSession(session.id, { prUrl: url });
+		activity = state;
+		await reviewQueue();
+		return { id: session.id, url };
+	};
+	const check = (status: 'passed' | 'failed' | 'pending') => ({ name: status, status, summary: '', url: '' });
+	const ready = await opened('Ready', { state: 'open', headSha: 'a', checks: [check('passed')], comments: [] });
+	const failing = await opened('Failing', { state: 'draft', headSha: 'b', checks: [check('passed'), check('failed')], comments: [] });
+	const merged = await opened('Merged', { state: 'merged', headSha: 'c', checks: [], comments: [] });
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+
+	const queue = (await reviewQueue()).filter((item) => [ready.id, failing.id, merged.id].includes(item.sessionId));
+	assert.deepEqual(
+		queue.map((item) => [item.title, item.group, item.draft]),
+		[['Ready', 'ready', false], ['Failing', 'failing', true], ['Merged', 'merged', false]],
+	);
+	assert.deepEqual(queue[1].checks, { passed: 1, failed: 1, pending: 0 });
+	for (const item of queue) await sessions.deleteSession(item.sessionId);
 });
 
 test('spending caps stop new messages once today or a task has spent enough', async () => {

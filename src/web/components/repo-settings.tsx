@@ -3,13 +3,13 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
-import { MenuButton } from '@/components/nav';
+import { PageHeading } from '@/components/settings/parts';
 import { Btn, EmptyState, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
 import { api, type Project, type SettingsChange } from '@/lib/api';
 import { useProjects } from '@/lib/projects';
 
 /** A variable row; a stored one keeps its value unless a new one is typed. */
-type Variable = { name: string; value: string; stored: boolean };
+export type Variable = { name: string; value: string; stored: boolean };
 
 /** An MCP server row; `token` is only what was typed, since a stored token is never sent back. */
 type Server = { name: string; url: string; token: string; hasAuth: boolean; tools: string };
@@ -36,10 +36,18 @@ function parsePorts(text: string): number[] {
 
 type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; followUps: boolean; servers: Server[] };
 
+export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
+
+/** The rows as a change for the server: null keeps a stored value. */
+export function toEnv(variables: Variable[]): Record<string, string | null> {
+	const named = variables.filter((row) => row.name.trim());
+	// Two rows with one name would let an empty new row replace the stored value.
+	if (new Set(named.map((row) => row.name.trim())).size !== named.length) throw new Error('Each variable needs its own name.');
+	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
+}
+
 function toChange({ variables, setupScript, ports, baseImage, followUps, servers }: Draft): SettingsChange {
-	const env = Object.fromEntries(
-		variables.filter((row) => row.name.trim()).map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]),
-	);
+	const env = toEnv(variables);
 	const mcpServers = servers
 		.filter((row) => row.name.trim() || row.url.trim())
 		.map((row) => ({
@@ -52,7 +60,7 @@ function toChange({ variables, setupScript, ports, baseImage, followUps, servers
 	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, followUps, mcpServers };
 }
 
-function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
+export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
 	const update = (index: number, patch: Partial<Variable>) => onChange(rows.map((row, at) => (at === index ? { ...row, ...patch } : row)));
 	return (
 		<div className="flex flex-col gap-1.5">
@@ -147,21 +155,16 @@ function ServersEditor({ rows, onChange }: { rows: Server[]; onChange: (rows: Se
 
 function SettingsForm({ project }: { project: Project }) {
 	const queryClient = useQueryClient();
-	const [variables, setVariables] = useState<Variable[]>(project.envKeys.map((name) => ({ name, value: '', stored: true })));
+	const [variables, setVariables] = useState(() => storedVariables(project.envKeys));
 	const [setupScript, setSetupScript] = useState(project.setupScript);
 	const [ports, setPorts] = useState(project.previewPorts.join(', '));
 	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
 	const [followUps, setFollowUps] = useState(project.followUps);
 	const [servers, setServers] = useState(() => toServers(project));
 	const save = useMutation({
-		mutationFn: async () => {
-			const names = variables.map((row) => row.name.trim()).filter(Boolean);
-			// Two rows with one name would let an empty new row replace the stored value.
-			if (new Set(names).size !== names.length) throw new Error('Each variable needs its own name.');
-			return api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, followUps, servers }));
-		},
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, followUps, servers })),
 		onSuccess: (saved) => {
-			setVariables(saved.envKeys.map((name) => ({ name, value: '', stored: true })));
+			setVariables(storedVariables(saved.envKeys));
 			setServers(toServers(saved));
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
 		},
@@ -177,7 +180,7 @@ function SettingsForm({ project }: { project: Project }) {
 		>
 			<Section
 				title="Environment variables"
-				help="Set in every command the agent runs and in the terminal. Values are stored by Anton and never shown again. Git credentials are not needed here."
+				help="Set in every command the agent runs and in the terminal, over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
 			>
 				<VariablesEditor rows={variables} onChange={setVariables} />
 			</Section>
@@ -277,7 +280,7 @@ function RemoveRepo({ project }: { project: Project }) {
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-			void navigate({ to: '/' });
+			void navigate({ to: '/settings/$section', params: { section: 'repos' } });
 		},
 	});
 	return (
@@ -298,52 +301,45 @@ function RemoveRepo({ project }: { project: Project }) {
 
 /** Per-repository sandbox settings; tasks already running keep theirs until their sandbox restarts. */
 export function RepoSettingsPage() {
-	const { projectId } = useParams({ from: '/repos/$projectId' });
+	const { projectId } = useParams({ from: '/settings/repos/$projectId' });
 	const projects = useProjects();
 	const project = projects.data?.projects.find((item) => item.id === projectId);
-	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium text-(--text-secondary) md:pl-4">
-				<MenuButton />
-				{project ? `${project.repoFullName} settings` : 'Repository settings'}
-			</header>
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-8 pb-12 md:px-6">
-				<div className="mx-auto flex max-w-[660px] flex-col gap-6">
-					{projects.isPending ? (
-						<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
-							<Spinner size={12} />
-							Loading
-						</div>
-					) : project ? (
-						<>
-							<SettingsForm key={project.id} project={project} />
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Memory</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
-								</p>
-								<MemoryEditor key={project.id} project={project} />
-							</div>
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Automations</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
-								</p>
-								<Automations projectId={project.id} />
-							</div>
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Remove</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
-								</p>
-								<RemoveRepo project={project} />
-							</div>
-						</>
-					) : (
-						<EmptyState title="Repository not found" body={projects.error?.message} />
-					)}
-				</div>
+	if (projects.isPending) {
+		return (
+			<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+				<Spinner size={12} />
+				Loading
 			</div>
-		</div>
+		);
+	}
+	if (!project) return <EmptyState title="Repository not found" body={projects.error?.message} />;
+	return (
+		<>
+			<PageHeading title={project.repoFullName}>
+				What every new sandbox for this repository gets. Tasks already running keep theirs until their sandbox restarts.
+			</PageHeading>
+			<SettingsForm key={project.id} project={project} />
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Memory</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
+				</p>
+				<MemoryEditor key={project.id} project={project} />
+			</div>
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Automations</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
+				</p>
+				<Automations projectId={project.id} />
+			</div>
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Remove</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
+				</p>
+				<RemoveRepo project={project} />
+			</div>
+		</>
 	);
 }

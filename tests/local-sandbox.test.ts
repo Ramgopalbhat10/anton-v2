@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-local-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 test('a command returns when it leaves a server running in the background', async () => {
-	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg', state: null, image: null, baseImage: null, ports: [] });
+	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg', state: null, image: null, baseImage: null, ports: [], resources: { cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] } });
 	const started = Date.now();
 	// The background job keeps the shell's output open, as `npm run dev &` does.
 	const result = await machine.exec('sleep 20 & echo started');
@@ -20,7 +20,7 @@ test('a command returns when it leaves a server running in the background', asyn
 });
 
 test('a background server that logs to the shell keeps running after the command returns', async () => {
-	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg-log', state: null, image: null, baseImage: null, ports: [] });
+	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg-log', state: null, image: null, baseImage: null, ports: [], resources: { cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] } });
 	const server = `require('http').createServer((q, s) => { console.log('hit', q.url); s.end('ok'); }).listen(43391)`;
 	await machine.exec(`node -e ${JSON.stringify(server)} & sleep 0.5; echo started`);
 	await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -32,7 +32,7 @@ test('a background server that logs to the shell keeps running after the command
 });
 
 test('output that keeps arriving after the shell exits is read in full', async () => {
-	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg-out', state: null, image: null, baseImage: null, ports: [] });
+	const { machine } = await localSandboxProvider(dir).acquire({ key: 'bg-out', state: null, image: null, baseImage: null, ports: [], resources: { cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] } });
 	// The background writer outlives the shell but keeps writing; every byte it writes before going quiet counts.
 	const result = await machine.exec('(for i in 1 2 3; do sleep 0.6; echo line$i; done) & echo first');
 	assert.deepEqual(new TextDecoder().decode(result.stdout).trim().split('\n'), ['first', 'line1', 'line2', 'line3']);
