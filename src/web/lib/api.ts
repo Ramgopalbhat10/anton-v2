@@ -48,6 +48,9 @@ export type Session = {
 
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 
+/** A problem from background work, newest first. */
+export type LogEntry = { at: string; level: 'warn' | 'error'; message: string; detail: string | null; sessionId: string | null };
+
 /** A saved prompt, typed as `/name` in the composer. */
 export type Command = { name: string; prompt: string };
 
@@ -171,6 +174,7 @@ export const api = {
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
+	logs: () => json<{ logs: LogEntry[] }>('/api/logs'),
 	commands: () => json<{ commands: Command[] }>('/api/settings/commands'),
 	saveCommands: (commands: Command[]) =>
 		json<{ commands: Command[] }>('/api/settings/commands', { method: 'PUT', body: JSON.stringify({ commands }) }),

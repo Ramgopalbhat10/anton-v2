@@ -11,6 +11,7 @@ import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { findModel, reasoningFor } from './models.ts';
+import { logProblem } from './log.ts';
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -140,7 +141,7 @@ export async function stopSession(id: string): Promise<Session> {
 	await stopAgent(id);
 	const machine = await liveMachine(id);
 	if (machine && record.machineState) {
-		await saveCheckpoint(id, machine).catch((error: unknown) => console.warn('[anton] checkpoint before stop failed', error));
+		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
 		await getProviders().sandbox.stop(record.machineState);
 	}
 	forgetMachine(id);

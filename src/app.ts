@@ -39,6 +39,7 @@ import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './servi
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
+import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 
 const app = new Hono();
 
@@ -47,16 +48,17 @@ const REASONING = v.picklist(REASONING_LEVELS);
 publishUpgradeHandler(handleTerminalUpgrade);
 observe((event) => {
 	recordAgentEvent(event);
+	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
 		.then((id) => (id ? stopIfOverBudget(id) : undefined))
-		.catch((error: unknown) => console.warn('[anton] spending check failed', error));
+		.catch((error: unknown) => logProblem('warn', 'Spending check failed', error));
 });
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
-appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
+appDb().catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
-await primeAllAgents().catch((error: unknown) => console.warn('[anton] could not load task models', error));
+await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
@@ -76,7 +78,7 @@ function bytes(c: Context, data: Uint8Array | null, type = 'application/octet-st
 
 app.onError((error, c) => {
 	const status = statusOf(error);
-	if (status >= 500) console.error('[anton]', error);
+	if (status >= 500) logProblem('error', `${c.req.method} ${c.req.path} failed`, error);
 	return c.json({ error: error.message }, status as 400);
 });
 
@@ -152,6 +154,7 @@ app.put('/api/settings/commands', async (c) => {
 	);
 	return c.json({ commands: await setCommands(input.commands) });
 });
+app.get('/api/logs', (c) => c.json({ logs: recentProblems() }));
 app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 

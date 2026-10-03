@@ -29,6 +29,7 @@ import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapsh
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
+import { logProblem } from '../services/log.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -278,7 +279,7 @@ export function Coder({ id }: AgentProps) {
 			const machine = await liveMachine(id);
 			if (machine) await saveCheckpoint(id, machine);
 		} catch (error) {
-			console.warn('[anton] checkpoint failed', error);
+			logProblem('warn', 'Checkpoint failed', error, id);
 		}
 	});
 	// Shown on the reply; the task's totals are counted per model call from the runtime's events.

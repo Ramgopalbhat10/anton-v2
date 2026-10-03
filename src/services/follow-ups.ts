@@ -6,6 +6,7 @@ import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
+import { logProblem } from './log.ts';
 
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
@@ -97,6 +98,6 @@ export async function resetFollowUps(id: string): Promise<void> {
 export async function runFollowUps(): Promise<void> {
 	if ((await budget()).blocked) return;
 	for (const session of (await listSessionRecords()).filter((record) => record.prUrl)) {
-		await followUp(session).catch((error: unknown) => console.warn(`[anton] follow-up for ${session.id} failed`, error));
+		await followUp(session).catch((error: unknown) => logProblem('warn', 'Pull request follow-up failed', error, session.id));
 	}
 }

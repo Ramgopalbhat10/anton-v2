@@ -1,5 +1,6 @@
 import { runDueAutomations } from './automations.ts';
 import { runFollowUps } from './follow-ups.ts';
+import { logProblem } from './log.ts';
 
 /** How often Anton looks for labeled issues, due schedules and news on its pull requests. */
 const POLL_MS = 5 * 60_000;
@@ -11,8 +12,8 @@ export function scheduleHeadlessWork(): void {
 	const tick = async () => {
 		if (busy) return;
 		busy = true;
-		await runDueAutomations().catch((error: unknown) => console.warn('[anton] automations failed', error));
-		await runFollowUps().catch((error: unknown) => console.warn('[anton] follow-ups failed', error));
+		await runDueAutomations().catch((error: unknown) => logProblem('warn', 'Automations failed', error));
+		await runFollowUps().catch((error: unknown) => logProblem('warn', 'Follow-ups failed', error));
 		busy = false;
 	};
 	setTimeout(() => void tick(), 30_000).unref();

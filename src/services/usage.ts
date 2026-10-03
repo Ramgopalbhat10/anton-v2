@@ -1,5 +1,6 @@
 import type { Usage } from '../core/types.ts';
 import { addSessionUsage } from '../db/sessions.ts';
+import { logProblem } from './log.ts';
 
 /** What the runtime reports for one response; cached prompt tokens are still prompt tokens. */
 type ResponseUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } };
@@ -10,7 +11,7 @@ export function toUsage(usage: ResponseUsage): Usage {
 
 /** Adds usage to the task's totals; a failed write only loses the count. */
 export async function recordUsage(id: string, usage: Usage): Promise<void> {
-	await addSessionUsage(id, usage).catch((error: unknown) => console.warn('[anton] usage not recorded', error));
+	await addSessionUsage(id, usage).catch((error: unknown) => logProblem('warn', 'Usage not recorded', error, id));
 }
 
 type TurnEvent = { type: string; instanceId?: string; response?: { usage?: ResponseUsage } };
