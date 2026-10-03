@@ -42,6 +42,12 @@ const migrations: string[][] = [
 		`ALTER TABLE sessions ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sessions ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0`,
 	],
+	// 7: every response's cost, for daily spending caps; and app-wide settings.
+	[
+		`CREATE TABLE IF NOT EXISTS usage_log (session_id TEXT NOT NULL, at TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cost_usd REAL NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS usage_log_at ON usage_log (at)`,
+		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

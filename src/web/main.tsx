@@ -8,6 +8,7 @@ import {
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RepoSettingsPage } from '@/components/repo-settings';
+import { SettingsPage } from '@/components/settings-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import './styles.css';
@@ -47,7 +48,13 @@ const repoSettingsRoute = createRoute({
 	component: RepoSettingsPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sessionRoute, repoSettingsRoute]);
+const settingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/settings',
+	component: SettingsPage,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, sessionRoute, repoSettingsRoute, settingsRoute]);
 const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

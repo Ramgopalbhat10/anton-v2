@@ -1,12 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { List, PanelLeft, Plus, Search, Square, X } from 'lucide-react';
+import { List, PanelLeft, Plus, Search, Settings, Square, X } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Icon, IconBtn, SectionLabel } from '@/components/signal';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api } from '@/lib/api';
-import { age } from '@/lib/format';
+import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+/** Today's spend against the daily cap, so it is visible before it blocks anything. */
+function SpentToday() {
+	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: 30_000 });
+	if (!budget.data) return null;
+	const { today, limits } = budget.data;
+	return (
+		<span className={cn('shrink-0 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')} title="Spent today">
+			{dollars(today)}
+			{limits.dailyUsd !== null ? ` / $${limits.dailyUsd}` : ''}
+		</span>
+	);
+}
 
 export function Logo({ size = 20 }: { size?: number }) {
 	return (
@@ -214,6 +227,10 @@ export function ChatSidebar({
 			<div className="flex shrink-0 items-center gap-2 p-2">
 				<Avatar name="Anton Dev" />
 				<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">Anton Dev</div>
+				<SpentToday />
+				<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
+					<Icon icon={Settings} size={14} />
+				</Link>
 			</div>
 		</aside>
 	);

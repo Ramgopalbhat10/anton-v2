@@ -28,6 +28,8 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint } from './services/restore.ts';
 import { recordTurnUsage } from './services/usage.ts';
+import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
+import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 
@@ -38,10 +40,13 @@ const REASONING = v.picklist(REASONING_LEVELS);
 publishUpgradeHandler(handleTerminalUpgrade);
 observe((event) => {
 	recordAgentEvent(event);
-	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0]);
+	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
+		.then((id) => (id ? stopIfOverBudget(id) : undefined))
+		.catch((error: unknown) => console.warn('[anton] spending check failed', error));
 });
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
+scheduleCleanup();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
@@ -64,12 +69,13 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// Each prompt reads the session's current model before the agent renders.
-// A prompt needs a task, and waits while that task's files are being restored.
+// A prompt needs a task, waits while its files are being restored, and is checked
+// against the spending caps; then the agent reads the task's current model.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
+	await assertWithinBudget(id);
 	await primeModel(id);
 	await next();
 });
@@ -84,6 +90,16 @@ app.get('/api/health', (c) =>
 		providers: { sandbox: getProviders().sandbox.name, store: getProviders().store.name, git: getProviders().git.name },
 	}),
 );
+
+app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
+const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
+app.put('/api/settings/limits', async (c) => {
+	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));
+	await setLimits(next);
+	return c.json(await budget());
+});
+app.get('/api/storage', async (c) => c.json(await storageView()));
+app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
 app.get('/api/models', async (c) => c.json({ models: await listModels(), default: config.model }));
 

@@ -85,6 +85,12 @@ export type PullRequest = { url: string; state: 'open' | 'draft' | 'merged' | 'c
 export type Preview = { port: number; url: string | null; listening: boolean };
 export type PreviewsPayload = { live: boolean; previews: Preview[] };
 
+/** Spending caps in US dollars; null means no cap. */
+export type Limits = { dailyUsd: number | null; taskUsd: number | null };
+export type Budget = { limits: Limits; today: number; task: number | null; blocked: string | null };
+export type CleanupResult = { at: string; removed: number; freedBytes: number };
+export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
+
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
@@ -115,6 +121,10 @@ export const outputUrl = (id: string, path: string) => `/api/sessions/${id}/outp
 export const api = {
 	health: () =>
 		json<{ ok: boolean; openRouter: boolean; providers: { sandbox: string; store: string; git: string } }>('/api/health'),
+	budget: (sessionId?: string) => json<Budget>(`/api/budget${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
+	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
+	storage: () => json<StorageView>('/api/storage'),
+	cleanUpStorage: () => post<CleanupResult>('/api/storage/cleanup'),
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),

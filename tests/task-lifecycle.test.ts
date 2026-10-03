@@ -82,7 +82,9 @@ const { takeScreenshot } = await import('../src/services/browser.ts');
 const sessions = await import('../src/services/sessions.ts');
 const files = await import('../src/services/files.ts');
 const { forgetMachine, machineFor } = await import('../src/services/workspace.ts');
-const { listCheckpoints, readCheckpointPatchAt, saveCheckpoint } = await import('../src/services/checkpoints.ts');
+const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint } = await import('../src/services/checkpoints.ts');
+const { assertWithinBudget, budget, setLimits } = await import('../src/services/budget.ts');
+const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
 const { toUsage } = await import('../src/services/usage.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
@@ -457,6 +459,60 @@ test('a task adds up the tokens and cost of its responses', async () => {
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
 });
 
+test('spending caps stop new messages once today or a task has spent enough', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Budget' });
+	await setLimits({ dailyUsd: null, taskUsd: null });
+	const spentBefore = (await budget()).today;
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 10, cost: 0.5 });
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 10, cost: 0.25 }, new Date(Date.now() - 2 * 86_400_000));
+	assert.ok(Math.abs((await budget()).today - spentBefore - 0.5) < 1e-9, 'only today counts toward the day');
+	await assertWithinBudget(session.id);
+
+	await setLimits({ dailyUsd: null, taskUsd: 0.7 });
+	const capped = await budget(session.id);
+	assert.equal(capped.task, 0.75);
+	assert.match(capped.blocked ?? '', /task's spending cap of \$0\.7/);
+	await assert.rejects(() => assertWithinBudget(session.id), (error: Error & { status?: number }) => error.status === 429);
+
+	await setLimits({ dailyUsd: spentBefore + 0.4, taskUsd: null });
+	assert.match((await budget()).blocked ?? '', /Today's spending cap/);
+	await setLimits({ dailyUsd: null, taskUsd: null });
+	assert.equal((await budget(session.id)).blocked, null);
+});
+
+test('storage cleanup removes deleted tasks, old history and unused file contents', async () => {
+	const store = diskStore(path.join(dir, 'data', 'objects'));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Storage' });
+	const machine = await machineFor(session.id);
+	await run(machine, 'echo kept > kept.txt');
+	await saveCheckpoint(session.id, machine);
+	const kept = (await readCheckpoint(session.id))!.files[0].blob!;
+
+	await store.put('sessions/gone-task/checkpoint.json', '{}');
+	await store.put('blobs/unused', 'nobody points here');
+	// An output the agent wrote is not a manifest, whatever its name.
+	await store.put(`sessions/${session.id}/outputs/report.json`, 'not a checkpoint');
+	for (let index = 0; index < 52; index += 1) {
+		await store.put(`sessions/${session.id}/checkpoints/2000-01-01T00:00:${String(index).padStart(2, '0')}.000Z.json`, '{"files":[],"log":[]}');
+	}
+	// Too new to remove: it may belong to a checkpoint still being written.
+	const early = await cleanUpStorage(Date.now());
+	assert.ok(await store.has('blobs/unused'));
+	assert.ok(!(await store.has('sessions/gone-task/checkpoint.json')));
+	assert.ok(early.removed >= 3);
+
+	const later = await cleanUpStorage(Date.now() + 2 * 60 * 60_000);
+	assert.ok(!(await store.has('blobs/unused')));
+	assert.ok(await store.has(kept), 'contents a checkpoint uses stay');
+	assert.ok(later.removed >= 1);
+	const history = (await store.list(`sessions/${session.id}/checkpoints/`)).filter((object) => object.key.endsWith('.json'));
+	assert.equal(history.length, 50);
+	assert.ok((await listCheckpoints(session.id)).some((entry) => entry.files === 1), 'the newest real entry survives');
+	assert.equal((await storageView()).lastCleanup?.at, later.at);
+});
+
 test('stopping a task stops its working agent', async () => {
 	const { setAgentAbort } = await import('../src/services/activity.ts');
 	const aborted: string[] = [];
@@ -469,6 +525,24 @@ test('stopping a task stops its working agent', async () => {
 	await sessions.deleteSession(session.id);
 	assert.deepEqual(aborted, [session.id]);
 	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+});
+
+test('a reply that crosses a spending cap is stopped at its next model call', async () => {
+	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const { stopIfOverBudget } = await import('../src/services/budget.ts');
+	const aborted: string[] = [];
+	setAgentAbort(async (id) => void aborted.push(id));
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Runaway' });
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'loop' });
+	await setLimits({ dailyUsd: null, taskUsd: 1 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [], 'under the cap it keeps going');
+	await addSessionUsage(session.id, { inputTokens: 10, outputTokens: 10, cost: 1.5 });
+	await stopIfOverBudget(session.id);
+	assert.deepEqual(aborted, [session.id]);
+	await setLimits({ dailyUsd: null, taskUsd: null });
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'loop' });
 });
 
 test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {

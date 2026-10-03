@@ -27,13 +27,29 @@ function toRecord(row: Row): SessionRecord {
 	};
 }
 
-/** Adds one response's usage to the task's totals. */
-export async function addSessionUsage(id: string, usage: Usage): Promise<void> {
+/** Adds one response's usage to the task's totals and to the log daily caps are counted from. */
+export async function addSessionUsage(id: string, usage: Usage, at = new Date()): Promise<void> {
 	const db = await appDb();
-	await db.execute({
-		sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?',
-		args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
-	});
+	await db.batch(
+		[
+			{
+				sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?',
+				args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
+			},
+			{
+				sql: 'INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?)',
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost],
+			},
+		],
+		'write',
+	);
+}
+
+/** Dollars spent on every task since `since`. */
+export async function spentSince(since: Date): Promise<number> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage_log WHERE at >= ?', args: [since.toISOString()] });
+	return Number(result.rows[0]?.cost ?? 0);
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha'>;

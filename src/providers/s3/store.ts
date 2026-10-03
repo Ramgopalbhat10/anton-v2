@@ -34,6 +34,7 @@ export function s3Store(options: S3Options): ObjectStore {
 		const objects = [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)].map(([, body]) => ({
 			key: decodeXml(/<Key>([\s\S]*?)<\/Key>/.exec(body)?.[1] ?? ''),
 			size: Number(/<Size>(\d+)<\/Size>/.exec(body)?.[1] ?? 0),
+			modifiedAt: Date.parse(/<LastModified>([\s\S]*?)<\/LastModified>/.exec(body)?.[1] ?? '') || 0,
 		}));
 		const next = /<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null;
 		return [objects, next && decodeXml(next)];

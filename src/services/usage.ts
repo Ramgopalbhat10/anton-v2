@@ -18,8 +18,10 @@ type TurnEvent = { type: string; instanceId?: string; response?: { usage?: Respo
 /**
  * Counts every model call as it ends: the agent's, its subagents' and
  * compaction's, including calls in a response that is later stopped or fails.
+ * Returns the task it counted against, if any.
  */
-export async function recordTurnUsage(event: TurnEvent): Promise<void> {
-	if (event.type !== 'turn' || !event.instanceId || !event.response?.usage) return;
+export async function recordTurnUsage(event: TurnEvent): Promise<string | null> {
+	if (event.type !== 'turn' || !event.instanceId || !event.response?.usage) return null;
 	await recordUsage(event.instanceId, toUsage(event.response.usage));
+	return event.instanceId;
 }

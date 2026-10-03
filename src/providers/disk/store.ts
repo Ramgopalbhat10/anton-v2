@@ -30,10 +30,10 @@ export function diskStore(dir: string): ObjectStore {
 		async list(prefix) {
 			const files = await walk(fileFor(prefix));
 			return Promise.all(
-				files.map(async (file) => ({
-					key: path.relative(dir, file).split(path.sep).join('/'),
-					size: (await stat(file)).size,
-				})),
+				files.map(async (file) => {
+					const info = await stat(file);
+					return { key: path.relative(dir, file).split(path.sep).join('/'), size: info.size, modifiedAt: info.mtimeMs };
+				}),
 			);
 		},
 	};
