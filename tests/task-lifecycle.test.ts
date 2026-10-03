@@ -105,7 +105,7 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { addProject, updateSettings } = await import('../src/services/projects.ts');
 const { getProject, setWarmImage } = await import('../src/db/projects.ts');
 const { previewsView } = await import('../src/services/previews.ts');
-const { takeScreenshot } = await import('../src/services/browser.ts');
+const { browse, closeBrowser, takeScreenshot } = await import('../src/services/browser.ts');
 const sessions = await import('../src/services/sessions.ts');
 const files = await import('../src/services/files.ts');
 const { forgetMachine, machineFor } = await import('../src/services/workspace.ts');
@@ -460,6 +460,39 @@ test('the screenshot tool saves a page to the Library', { skip: !browserReady &&
 	assert.ok((await files.outputsView(session.id)).outputs.some((output) => output.path === shotFile));
 	const png = await files.readOutputFile(session.id, shotFile);
 	assert.deepEqual([...(png ?? new Uint8Array()).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'a PNG file');
+});
+
+test('the browser keeps one tab open while the agent types and clicks through a page', { skip: !browserReady && 'needs a global playwright with chromium' }, async () => {
+	const project = await addProject('acme/browsed');
+	await updateSettings(project.id, {
+		env: { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? '' },
+		setupScript: '',
+		previewPorts: [],
+		baseImage: null,
+	});
+	const server = createServer((_request, response) => {
+		response.setHeader('Content-Type', 'text/html');
+		response.end(
+			'<title>Greeter</title><label>Name <input id="name"></label><button onclick="document.querySelector(\'p\').textContent = \'Hello, \' + document.querySelector(\'#name\').value">Greet</button><p></p>',
+		);
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	after(() => server.close());
+	const session = await sessions.createSession({ projectId: project.id, title: 'Browse' });
+	const machine = await machineFor(session.id);
+	after(() => closeBrowser(machine));
+
+	const opened = await browse(machine, { action: 'open', url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/` });
+	assert.equal(opened.title, 'Greeter');
+	assert.equal(opened.status, 200);
+	assert.match(opened.snapshot, /button "Greet"/);
+	await browse(machine, { action: 'type', target: 'role=textbox[name="Name"]', text: 'Ada' });
+	const greeted = await browse(machine, { action: 'click', target: 'role=button[name="Greet"]', screenshot: 'Greeted' });
+	assert.match(greeted.snapshot, /Hello, Ada/, 'the page kept what was typed in the step before');
+	assert.match(greeted.screenshot ?? '', /^\.\.\/outputs\/screenshots\/greeted-\d+\.png$/);
+	const missing = await browse(machine, { action: 'click', target: 'role=button[name="Nowhere"]' });
+	assert.ok(missing.problem, 'a step that fails says why');
+	assert.match(missing.snapshot, /Hello, Ada/, 'and still describes the page');
 });
 
 test('the checkpoint timeline keeps distinct states, and restoring one puts its files back', async () => {
