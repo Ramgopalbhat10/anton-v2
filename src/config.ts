@@ -15,7 +15,10 @@ export const config = {
 	modal: {
 		app: read('ANTON_MODAL_APP', 'anton'),
 		baseImage: read('ANTON_BASE_IMAGE', 'node:22-bookworm'),
-		idleTimeoutMs: Number(read('ANTON_IDLE_MINUTES', '15')) * 60_000,
+	},
+	/** Defaults for Settings › Sandboxes until it is saved. */
+	sandboxDefaults: {
+		idleMinutes: Number(read('ANTON_IDLE_MINUTES', '15')),
 		cpu: Number(read('ANTON_SANDBOX_CPU', '1')),
 		memoryMiB: Number(read('ANTON_SANDBOX_MEMORY_MIB', '2048')),
 	},
@@ -44,7 +47,7 @@ export const config = {
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',
-	/** Warm repo images older than this are rebuilt on the next task. */
-	warmImageMaxAgeMs: Number(read('ANTON_WARM_IMAGE_DAYS', '7')) * 86_400_000,
+	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */
+	warmImageDays: Number(read('ANTON_WARM_IMAGE_DAYS', '7')),
 	hasOpenRouter: () => Boolean(process.env.OPENROUTER_API_KEY),
 };

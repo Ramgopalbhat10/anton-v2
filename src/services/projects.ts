@@ -1,7 +1,7 @@
 import type { McpServer, Project, ProjectSettings } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
-import { deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
+import { clearWarmImage, deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
@@ -100,5 +100,12 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 		mcpServers,
 		baseImage: change.baseImage?.trim() || null,
 	});
+	return present(await existing(id));
+}
+
+/** Drops the repo's prepared image, so its next task clones and installs from scratch and saves a new one. */
+export async function rebuildPreparedImage(id: string): Promise<ProjectView> {
+	await existing(id);
+	await clearWarmImage(id);
 	return present(await existing(id));
 }

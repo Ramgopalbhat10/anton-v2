@@ -1,5 +1,7 @@
+import type { LucideIcon } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { SectionLabel } from '@/components/signal';
+import { Icon, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
 export const FIELD =
@@ -58,4 +60,51 @@ export function SaveState({ pending, success, error, saved = 'Saved.' }: { pendi
 	if (error) return <span className="text-[12px] text-(--danger-text)">{error.message}</span>;
 	if (success && !pending) return <span className="text-[12px] text-(--success-text)">{saved}</span>;
 	return null;
+}
+
+/** A labelled dropdown of fixed choices; a value outside them shows as `fallback`. */
+export function Select<T extends string | number | null>({
+	label,
+	icon,
+	value,
+	options,
+	onChange,
+	help,
+	fallback = 'Custom',
+}: {
+	label: string;
+	icon: LucideIcon;
+	value: T;
+	options: Array<{ value: T; label: string }>;
+	onChange: (value: T) => void;
+	help?: ReactNode;
+	fallback?: string;
+}) {
+	const current = options.find((option) => option.value === value);
+	return (
+		<div className="flex min-w-0 flex-col gap-1.5">
+			<SectionLabel>{label}</SectionLabel>
+			<Menu>
+				<MenuTrigger asChild>
+					<button
+						type="button"
+						aria-label={label}
+						className="flex h-[30px] items-center gap-2 rounded-lg bg-(--bg-overlay) px-2.5 text-left text-[13px] whitespace-nowrap text-(--text-primary) outline-none hover:bg-(--neutral-700) focus-visible:shadow-(--focus-ring)"
+					>
+						<Icon icon={icon} size={12} className="text-(--icon-tertiary)" />
+						<span className="min-w-0 flex-1 truncate">{current?.label ?? fallback}</span>
+						<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary)" />
+					</button>
+				</MenuTrigger>
+				<MenuContent align="start" className="min-w-[220px]">
+					{options.map((option) => (
+						<MenuItem key={String(option.value)} checked={option.value === value} onSelect={() => onChange(option.value)}>
+							{option.label}
+						</MenuItem>
+					))}
+				</MenuContent>
+			</Menu>
+			{help ? <div className="text-[12px] text-pretty text-(--text-disabled)">{help}</div> : null}
+		</div>
+	);
 }

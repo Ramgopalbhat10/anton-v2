@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import type { GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
+import type { AcquireRequest, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
 import { bareRemote } from './bare-remote.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
@@ -104,6 +104,8 @@ const { cleanUpStorage, storageView } = await import('../src/services/storage.ts
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
 const { toUsage, usageView } = await import('../src/services/usage.ts');
 const { connections } = await import('../src/services/connections.ts');
+const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox-settings.ts');
+const { rebuildPreparedImage } = await import('../src/services/projects.ts');
 const { computeView, stopAllSandboxes } = await import('../src/services/compute.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
@@ -132,10 +134,13 @@ const countShells = (machine: Machine): Machine => ({
 		return machine.openPty(size);
 	},
 });
+/** What the last machine start asked for. */
+let lastAcquire: AcquireRequest | undefined;
 setProviders({
 	sandbox: {
 		...local,
 		acquire: async (request) => {
+			lastAcquire = request;
 			const acquired = await local.acquire(request);
 			return { ...acquired, machine: countShells(acquired.machine) };
 		},
@@ -525,6 +530,25 @@ test('connections are checked through the ports, and Compute lists and stops run
 	assert.ok(stopped >= 1);
 	assert.equal((await computeView()).running.length, 0);
 	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
+test('sandbox settings reach new machines, and a new default base image retires prepared images', async () => {
+	const project = await addProject('acme/demo');
+	const before = await sandboxSettings();
+	await setWarmImage(project.id, 'image-old');
+	await setSandboxSettings({ ...before, cpu: 4, memoryMiB: 8192, region: 'eu', idleMinutes: 30, allowedDomains: ['registry.npmjs.org'], baseImage: 'python:3.12' });
+	assert.equal((await getProject(project.id))?.warmImage, null, 'the old default image is retired');
+
+	const session = await sessions.createSession({ projectId: project.id, title: 'Sizes' });
+	await sessions.resumeSession(session.id);
+	assert.equal(lastAcquire?.baseImage, 'python:3.12');
+	assert.deepEqual({ ...lastAcquire?.resources, allowedDomains: undefined }, { cpu: 4, memoryMiB: 8192, idleTimeoutMs: 30 * 60_000, lifetimeMs: 24 * 3_600_000, regions: ['eu'], allowedDomains: undefined });
+	assert.ok(lastAcquire?.resources.allowedDomains.includes('registry.npmjs.org') && lastAcquire.resources.allowedDomains.includes('github.com'));
+	await sessions.stopSession(session.id);
+
+	await setWarmImage(project.id, 'image-new');
+	assert.equal((await rebuildPreparedImage(project.id)).warmedAt, null);
+	await setSandboxSettings(before);
 });
 
 test('spending caps stop new messages once today or a task has spent enough', async () => {

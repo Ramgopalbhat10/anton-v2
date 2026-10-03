@@ -142,6 +142,18 @@ export type UsageView = { since: string; today: number; month: number; byRepo: S
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
+/** What every new sandbox gets; see Settings › Sandboxes and Images. */
+export type SandboxSettings = {
+	cpu: number;
+	memoryMiB: number;
+	idleMinutes: number;
+	lifetimeHours: number;
+	region: 'us' | 'eu' | 'ap' | null;
+	allowedDomains: string[];
+	baseImage: string | null;
+	warmImageDays: number;
+};
+export type SandboxView = { settings: SandboxSettings; defaultBaseImage: string; provider: string };
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
@@ -179,6 +191,10 @@ export const api = {
 	usage: () => json<UsageView>('/api/usage'),
 	connections: () => json<{ connections: Connection[] }>('/api/connections'),
 	compute: () => json<ComputeView>('/api/compute'),
+	sandboxSettings: () => json<SandboxView>('/api/settings/sandbox'),
+	saveSandboxSettings: (settings: SandboxSettings) =>
+		json<SandboxView>('/api/settings/sandbox', { method: 'PUT', body: JSON.stringify(settings) }),
+	rebuildPreparedImage: (projectId: string) => post<Project>(`/api/projects/${projectId}/prepared-image/rebuild`),
 	stopAllSandboxes: () => post<{ stopped: number }>('/api/compute/stop-all'),
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),

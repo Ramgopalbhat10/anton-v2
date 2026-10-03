@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { type App, type Image, ModalClient, type Sandbox } from 'modal';
-import type { Acquired, AcquireRequest, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider } from '../../core/ports.ts';
+import type { Acquired, AcquireRequest, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider, SandboxResources } from '../../core/ports.ts';
 import { quote } from '../../core/shell.ts';
 
 export type ModalOptions = {
@@ -8,16 +8,12 @@ export type ModalOptions = {
 	baseImage: string;
 	/** Installed into every new image so the agent's screenshot tool starts fast. */
 	browserPackage: string;
-	idleTimeoutMs: number;
-	cpu: number;
-	memoryMiB: number;
 };
 
 type State = { sandboxId: string };
 
 const ROOT = '/workspace';
 const TAG = 'anton-task';
-const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 /** Toolchain every task gets. The image is cached by Modal after the first build. */
 const toolchain = (browserPackage: string) => [
 	'RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep python3 python3-pip python3-venv ca-certificates procps less && rm -rf /var/lib/apt/lists/*',
@@ -38,16 +34,18 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	const appRef = () => (app ??= client.apps.fromName(options.app, { createIfMissing: true }));
 	const nameFor = (key: string) => `task-${key}`;
 
-	async function create(key: string, image: Image, ports: number[]): Promise<Sandbox> {
+	async function create(key: string, image: Image, ports: number[], resources: SandboxResources): Promise<Sandbox> {
 		return client.sandboxes.create(await appRef(), image, {
 			encryptedPorts: ports,
 			name: nameFor(key),
 			tags: { [TAG]: key },
 			workdir: ROOT,
-			timeoutMs: MAX_LIFETIME_MS,
-			idleTimeoutMs: options.idleTimeoutMs,
-			cpu: options.cpu,
-			memoryMiB: options.memoryMiB,
+			timeoutMs: resources.lifetimeMs,
+			idleTimeoutMs: resources.idleTimeoutMs,
+			cpu: resources.cpu,
+			memoryMiB: resources.memoryMiB,
+			...(resources.regions.length ? { regions: resources.regions } : {}),
+			...(resources.allowedDomains.length ? { outboundDomainAllowlist: resources.allowedDomains } : {}),
 			experimentalOptions: { enable_exit_snapshot: true },
 		});
 	}
@@ -82,7 +80,7 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 			const running = await findRunning(request.key);
 			if (running) return acquired(running, 'live');
 			const [startImage, origin] = await startingImage(request.state ? (JSON.parse(request.state) as State) : null, request);
-			return acquired(await create(request.key, startImage, request.ports), origin);
+			return acquired(await create(request.key, startImage, request.ports, request.resources), origin);
 		},
 		async find(key) {
 			const running = await findRunning(key);

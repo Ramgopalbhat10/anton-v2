@@ -16,7 +16,8 @@ import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { profileName } from './services/profile.ts';
-import { addProject, branches, projects, removeProject, updateSettings } from './services/projects.ts';
+import { addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
+import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
 import {
@@ -168,6 +169,27 @@ app.put('/api/settings/commands', async (c) => {
 	);
 	return c.json({ commands: await setCommands(input.commands) });
 });
+const sandboxView = async () => ({ settings: await sandboxSettings(), defaultBaseImage: config.modal.baseImage, provider: getProviders().sandbox.name });
+app.get('/api/settings/sandbox', async (c) => c.json(await sandboxView()));
+app.put('/api/settings/sandbox', async (c) => {
+	const domain = v.pipe(v.string(), v.trim(), v.toLowerCase(), v.regex(/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/, 'Allowed domains look like registry.npmjs.org or *.example.com'));
+	const next = await body(
+		c,
+		v.object({
+			cpu: v.pipe(v.number(), v.minValue(0.25), v.maxValue(64)),
+			memoryMiB: v.pipe(v.number(), v.integer(), v.minValue(512), v.maxValue(262_144)),
+			idleMinutes: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(24 * 60)),
+			lifetimeHours: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(24)),
+			region: v.nullable(v.picklist(REGIONS)),
+			allowedDomains: v.pipe(v.array(domain), v.maxLength(100)),
+			baseImage: v.nullable(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
+			warmImageDays: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(90)),
+		}),
+	);
+	await setSandboxSettings(next);
+	return c.json(await sandboxView());
+});
+app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
 app.get('/api/compute', async (c) => c.json(await computeView()));
 app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));
