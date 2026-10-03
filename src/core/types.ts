@@ -26,6 +26,8 @@ export type Session = {
 	baseBranch: string;
 	baseSha: string;
 	status: SessionStatus;
+	/** The agent is working on a message right now. */
+	working: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;
@@ -33,7 +35,9 @@ export type Session = {
 };
 
 /** A stored session row, before the live status is joined in. */
-export type SessionRecord = Omit<Session, 'status'> & {
+export type SessionRecord = Omit<Session, 'status' | 'working'> & {
 	failed: boolean;
 	machineState: string | null;
+	/** Created before setup wrote a marker, so a machine without one may still be set up. */
+	legacySetup: boolean;
 };

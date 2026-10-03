@@ -1,12 +1,15 @@
+import { observe } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
 import { InvalidInputError, statusOf } from './core/errors.ts';
+import { appDb } from './db/client.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
+import { recordAgentEvent } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects } from './services/projects.ts';
@@ -26,6 +29,9 @@ const app = new Hono();
 const REASONING = v.picklist(REASONING_LEVELS);
 
 publishUpgradeHandler(handleTerminalUpgrade);
+observe(recordAgentEvent);
+// Migrate at boot, so a broken database shows in the log now rather than on the first request.
+appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));

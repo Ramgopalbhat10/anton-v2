@@ -4,6 +4,7 @@ import { config } from '../config.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
+import { isWorking } from './activity.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
@@ -25,15 +26,16 @@ export function invalidateRunning(): void {
 	runningCache = undefined;
 }
 
+/** A failed setup reads as an error even while its machine is still up. */
 function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 	if (isStarting(record.id)) return 'starting';
-	if (running.has(record.id)) return 'running';
-	return record.failed ? 'error' : 'stopped';
+	if (record.failed) return 'error';
+	return running.has(record.id) ? 'running' : 'stopped';
 }
 
 function present(record: SessionRecord, running: Set<string>): Session {
-	const { failed: _failed, machineState: _state, ...session } = record;
-	return { ...session, status: statusOf(record, running) };
+	const { failed: _failed, machineState: _state, legacySetup: _legacy, ...session } = record;
+	return { ...session, status: statusOf(record, running), working: isWorking(record.id) };
 }
 
 export type ModelChoice = { model: string; reasoning: Reasoning };

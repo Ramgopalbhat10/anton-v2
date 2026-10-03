@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleAlert, CircleCheck, Folder, GitBranch, Play, Plus } from 'lucide-react';
+import { Folder, GitBranch, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
 import {
 	Btn,
-	Icon,
 	Menu,
 	MenuContent,
 	MenuItem,
@@ -15,18 +14,12 @@ import {
 	MenuTrigger,
 	PickerChip,
 	SectionLabel,
-	Spinner,
 } from '@/components/signal';
-import { api, type ModelChoice, type Project, type Session } from '@/lib/api';
+import { TaskStatusIcon } from '@/components/task-status';
+import { api, type ModelChoice, type Project } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
-
-function StatusIcon({ session }: { session: Session }) {
-	if (session.status === 'running' || session.status === 'starting') return <Spinner />;
-	if (session.status === 'error') return <Icon icon={CircleAlert} className="text-(--danger-text)" />;
-	return <Icon icon={CircleCheck} className="text-(--success-text)" />;
-}
 
 function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[]; value?: Project; onChange: (id: string) => void; onAdd: () => void }) {
 	return (
@@ -219,7 +212,7 @@ export function Launcher() {
 									className="flex h-11 items-center gap-2.5 rounded-lg px-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 								>
 									<span className="inline-flex text-(--icon-tertiary)">
-										<StatusIcon session={session} />
+										<TaskStatusIcon session={session} />
 									</span>
 									<div className="flex min-w-0 flex-1 flex-col gap-px">
 										<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>

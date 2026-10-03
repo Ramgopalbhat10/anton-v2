@@ -1,5 +1,5 @@
 import type { Machine, MachineOrigin } from '../core/ports.ts';
-import { quote } from '../core/shell.ts';
+import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
 import { config } from '../config.ts';
 import { getProject, setWarmImage } from '../db/projects.ts';
@@ -37,15 +37,13 @@ function refreshWarmImage(machine: Machine, project: Project): void {
 
 type Context = { machine: Machine; session: SessionRecord; project: Project };
 
-/** What each kind of new machine still needs before the task can use it. */
-const setup: Record<MachineOrigin, (context: Context) => Promise<void>> = {
-	live: async () => {},
-	resumed: async () => {},
+/** Puts the repo on the task branch: from a prepared image, or cloned from scratch. */
+const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
 	async image({ machine, session }) {
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, getProviders().git.gitAuthEnv());
 		await installDependencies(machine);
 	},
-	async base({ machine, session, project }) {
+	async clone({ machine, session, project }) {
 		const { git } = getProviders();
 		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
 		await installDependencies(machine);
@@ -53,6 +51,35 @@ const setup: Record<MachineOrigin, (context: Context) => Promise<void>> = {
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, git.gitAuthEnv());
 	},
 };
+
+/**
+ * Written when setup finishes, holding the task id. A machine without it was
+ * interrupted mid-setup (a failure or a restart), so setup runs again rather
+ * than handing the agent a half-cloned repo. Images made from another task
+ * carry that task's id, so they never count.
+ */
+const readyFile = (machine: Machine) => `${machine.root}/.anton-ready`;
+
+/**
+ * Machines of tasks created before the marker existed: their own machine,
+ * once it has saved a checkpoint. Newer tasks always get the marker, so a
+ * checkpoint saved after a failed or stopped setup never counts as ready.
+ */
+const setUpBeforeMarker = (session: SessionRecord, origin: MachineOrigin) =>
+	session.legacySetup && (origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
+
+async function isReady(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<boolean> {
+	const marker = await machine.exec(`cat ${quote(readyFile(machine))}`);
+	if (marker.exitCode !== 0) return setUpBeforeMarker(session, origin);
+	return text(marker.stdout).trim() === session.id;
+}
+
+async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
+	const { machine, session } = context;
+	if (await isReady(machine, session, origin)) return;
+	await setup[origin === 'image' ? 'image' : 'clone'](context);
+	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
+}
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {
 	const session = await getSessionRecord(id);
@@ -70,7 +97,7 @@ async function provision(id: string): Promise<Machine> {
 	});
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
-		await setup[acquired.origin]({ machine: acquired.machine, session, project });
+		await prepare({ machine: acquired.machine, session, project }, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
@@ -90,10 +117,16 @@ export function machineFor(id: string): Promise<Machine> {
 	const pending = provision(id);
 	machines.set(id, pending);
 	starting.add(id);
-	pending.then(
-		() => setTimeout(() => machines.delete(id), CACHE_MS).unref(),
-		() => machines.delete(id),
-	).finally(() => starting.delete(id));
+	// Only this start's own entry is cleared: after Stop and Resume a newer start may own the id.
+	const current = () => machines.get(id) === pending;
+	pending
+		.then(
+			() => setTimeout(() => current() && machines.delete(id), CACHE_MS).unref(),
+			() => current() && machines.delete(id),
+		)
+		.finally(() => {
+			if (current() || !machines.has(id)) starting.delete(id);
+		});
 	return pending;
 }
 
