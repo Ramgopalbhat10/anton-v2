@@ -57,6 +57,8 @@ const migrations: string[][] = [
 		// One row per issue that has a task, so no issue starts two, whichever automation finds it.
 		`CREATE TABLE IF NOT EXISTS issue_tasks (project_id TEXT NOT NULL, issue_number INTEGER NOT NULL, automation_id TEXT NOT NULL, session_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY (project_id, issue_number))`,
 	],
+	// 9: plan mode per task, and automations whose tasks plan first and wait for approval.
+	[`ALTER TABLE sessions ADD COLUMN plan_mode INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE automations ADD COLUMN plan_first INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

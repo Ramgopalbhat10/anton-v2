@@ -15,7 +15,17 @@ export function useCreateChat() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: async ({ prompt: raw, ...input }: { projectId: string; branch?: string; model?: string; reasoning?: Reasoning; prompt?: string }) => {
+		mutationFn: async ({
+			prompt: raw,
+			...input
+		}: {
+			projectId: string;
+			branch?: string;
+			model?: string;
+			reasoning?: Reasoning;
+			planMode?: boolean;
+			prompt?: string;
+		}) => {
 			askToNotify();
 			const prompt = raw?.trim();
 			const session = await api.createSession({ ...input, title: prompt ? titleFrom(prompt) : 'New task' });

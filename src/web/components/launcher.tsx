@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
 import { useState } from 'react';
+import { PlanToggle } from '@/components/composer';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
 import {
@@ -112,6 +113,7 @@ export function Launcher() {
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
+	const [planMode, setPlanMode] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const create = useCreateChat();
 	const models = useModels();
@@ -135,6 +137,7 @@ export function Launcher() {
 			branch: chosenBranch || undefined,
 			model: model || undefined,
 			reasoning: choice.reasoning ?? undefined,
+			planMode,
 		});
 	}
 
@@ -184,6 +187,7 @@ export function Launcher() {
 								height={28}
 								side="bottom"
 							/>
+							<PlanToggle on={planMode} onChange={setPlanMode} />
 							<div className="min-w-0 flex-[1_1_8px]" />
 							<Btn type="submit" variant="primary" icon={Play} disabled={create.isPending || !project}>
 								{create.isPending ? 'Starting…' : 'Start task'}

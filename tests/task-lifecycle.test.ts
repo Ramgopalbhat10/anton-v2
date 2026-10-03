@@ -834,3 +834,34 @@ test('usage is counted for every model call, as it ends', async () => {
 	assert.equal(usage.inputTokens, 20);
 	assert.ok(Math.abs(usage.cost - 0.03) < 1e-9);
 });
+
+test('plan mode: the agent cannot write until the plan is approved, and plan-first automations start in it', async () => {
+	const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
+	const { isPlanning, primeAgent } = await import('../src/services/agent-runner.ts');
+	const project = await addProject('acme/planned');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Plan it', planMode: true });
+	assert.equal(session.planMode, true);
+	await primeAgent(session.id);
+	assert.equal(isPlanning(session.id), true);
+
+	const machine = await machineFor(session.id);
+	const sandbox = machineSandbox(machine, `${machine.root}/repo`, () => !isPlanning(session.id));
+	await assert.rejects(() => sandbox.writeFile(`${machine.root}/repo/new.txt`, 'hi\n'), /Plan mode is on/);
+	await assert.rejects(() => sandbox.rm(`${machine.root}/repo/README.md`), /Plan mode is on/);
+	assert.match(await sandbox.readFile(`${machine.root}/repo/README.md`), /# demo/, 'reading still works');
+
+	// Approving turns plan mode off, and the agent sees it from the next message.
+	await sessions.editSession(session.id, { planMode: false });
+	await primeAgent(session.id);
+	assert.equal(isPlanning(session.id), false);
+	await sandbox.writeFile(`${machine.root}/repo/new.txt`, 'hi\n');
+	assert.equal(await run(machine, 'cat new.txt'), 'hi\n');
+	await sessions.deleteSession(session.id);
+
+	const automation = await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Tidy the README.', planFirst: true });
+	assert.equal(automation.planFirst, true);
+	delivered.length = 0;
+	await runAutomation(automation.id, { force: true });
+	assert.equal((await sessions.getSession(delivered[0].id)).planMode, true);
+	await removeAutomation(automation.id);
+});

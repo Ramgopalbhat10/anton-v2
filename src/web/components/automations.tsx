@@ -53,6 +53,7 @@ function AutomationRow({ automation }: { automation: Automation }) {
 			<div className="text-[11px] text-(--text-disabled)">
 				{lastRun(automation)}
 				{automation.model ? ` · ${automation.model.replace(/^openrouter\//, '')}` : ''}
+				{automation.planFirst ? ' · plans first' : ''}
 			</div>
 			{error ? <div className="text-[12px] text-(--danger-text)">{error}</div> : null}
 		</div>
@@ -81,6 +82,7 @@ function AddAutomation({ projectId, onDone }: { projectId: string; onDone: () =>
 	const [hours, setHours] = useState('24');
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<ModelChoice | null>(null);
+	const [planFirst, setPlanFirst] = useState(false);
 	const model = choice ?? { model: models.data?.default ?? '', reasoning: null };
 	const input: AutomationInput = {
 		kind,
@@ -89,6 +91,7 @@ function AddAutomation({ projectId, onDone }: { projectId: string; onDone: () =>
 		prompt,
 		model: choice?.model ?? null,
 		reasoning: choice?.reasoning ?? null,
+		planFirst,
 	};
 	const ready = kind === 'issues' ? Boolean(input.label) : Number.isInteger(input.everyHours) && (input.everyHours ?? 0) >= 1 && prompt.trim() !== '';
 	const add = useMutation({
@@ -125,6 +128,11 @@ function AddAutomation({ projectId, onDone }: { projectId: string; onDone: () =>
 				rows={3}
 				placeholder={kind === 'issues' ? 'Extra instructions for every issue (optional)' : 'What the agent should do each time'}
 				className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+			/>
+			<Switch
+				checked={planFirst}
+				onChange={setPlanFirst}
+				label={<span className="text-[12px] text-(--text-secondary)">Plan first, and wait for my approval before changing code</span>}
 			/>
 			<div className="flex flex-wrap items-center gap-2">
 				<ModelPicker value={model} side="bottom" onChange={(change) => setChoice({ ...model, reasoning: null, ...change })} />
