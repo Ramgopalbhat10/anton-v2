@@ -29,7 +29,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 3. **Work.** The agent edits files in `/workspace/repo` and saves deliverables (reports, screenshots) to `/workspace/outputs`.
 4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
 5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.
-6. **Pull request.** The agent calls `open_pull_request`; Anton commits and pushes with its own token, passed only to the clone and push commands it runs. The token is never written into the sandbox or given to the agent's shell.
+6. **Pull request.** The agent calls `open_pull_request`; Anton commits in the sandbox, then rebuilds those commits on GitHub through its API (same hashes), so the token never enters a sandbox the agent has used. Anton's token is used inside a sandbox only to clone during setup, before the agent starts.
 
 ## Providers
 

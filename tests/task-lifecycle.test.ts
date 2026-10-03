@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import type { GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
+import { bareRemote } from './bare-remote.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -31,6 +32,7 @@ git(seed, 'push', '-q', remote, 'main');
 
 const pullRequests: string[] = [];
 let cloneFrom = remote;
+const pushes = bareRemote(remote);
 const fakeHost: GitHost = {
 	name: 'fake',
 	getRepo: async (fullName) => ({ fullName, defaultBranch: 'main', private: false }),
@@ -40,6 +42,8 @@ const fakeHost: GitHost = {
 	file: async (_repo, sha, file) => new TextEncoder().encode(`${git(remote, 'show', `${sha}:${file}`)}\n`),
 	cloneUrl: () => cloneFrom,
 	gitAuthEnv: () => ({}),
+	branchHead: pushes.branchHead,
+	pushCommits: pushes.pushCommits,
 	openPullRequest: async (input) => {
 		pullRequests.push(input.head);
 		return 'https://example.test/pull/1';
@@ -224,6 +228,13 @@ test('setup that fails part way runs again on the next start', async () => {
 	forgetMachine(session.id);
 	const again = await machineFor(session.id);
 	assert.equal((await run(again, 'cat kept.txt')).trim(), 'kept');
+
+	// A used machine that lost its marker could hold anything (a fake git, say), so setup runs on a fresh one.
+	await again.exec(`echo planted > ${again.root}/planted.txt && rm ${again.root}/.anton-ready`);
+	forgetMachine(session.id);
+	const fresh = await machineFor(session.id);
+	assert.equal((await fresh.exec(`cat ${fresh.root}/planted.txt`)).exitCode, 1, 'nothing from the used machine is left');
+	assert.equal((await run(fresh, 'git branch --show-current')).trim(), session.branch);
 	await sessions.stopSession(session.id);
 });
 
@@ -696,6 +707,42 @@ test('a reply that crosses a spending cap is stopped at its next model call', as
 	assert.deepEqual(aborted, [session.id]);
 	await setLimits({ dailyUsd: null, taskUsd: null });
 	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'loop' });
+});
+
+test('pushes rebuild the agent\'s own commits on the host with the same hashes, sending each once', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Pushes' });
+	const record = (await getSessionRecord(session.id))!;
+	const machine = await machineFor(session.id);
+	const repo = `${machine.root}/repo`;
+	// Commits the way an agent might: its own name, a far-off time zone, odd files, a removal and a merge.
+	const commit = (message: string, date: string) =>
+		run(machine, `GIT_AUTHOR_DATE=${date} GIT_COMMITTER_DATE=${date} git -c user.name='Agent Ä' -c user.email=a@example.test commit -q -m ${JSON.stringify(message)}`);
+	await run(machine, `printf 'run\\n' > 'tool.sh' && chmod +x tool.sh && ln -s README.md link && printf x > 'with space\ttab.txt' && git rm -q old.txt && git add -A`);
+	await commit('Add tools\n\nWith a body.', '2026-10-03T06:20:01+05:30');
+	await run(machine, 'git checkout -q -b side HEAD~1 && printf side > side.txt && git add side.txt');
+	await commit('Side work', '2026-10-03T01:00:00-07:00');
+	await run(machine, `git checkout -q ${record.branch} && git -c user.name=Agent -c user.email=a@example.test merge -q --no-edit side`);
+
+	await openPullRequest(session.id, { title: 'First', body: '' });
+	const head = git(remote, 'rev-parse', record.branch);
+	assert.equal(head, (await run(machine, 'git rev-parse HEAD')).trim(), 'the host has the very same commits');
+	assert.equal(git(remote, 'show', `${record.branch}:side.txt`), 'side');
+	assert.equal(git(remote, 'ls-tree', record.branch, 'tool.sh').split(' ')[0], '100755');
+	assert.equal(git(remote, 'ls-tree', record.branch, 'link').split(' ')[0], '120000');
+	const sent = pushes.received.length;
+
+	await run(machine, 'printf more > more.txt');
+	await openPullRequest(session.id, { title: 'Second', body: '' });
+	assert.equal(pushes.received.length, sent + 1, 'only the new commit is sent');
+	assert.equal(git(remote, 'log', '-1', '--format=%s', record.branch), 'Second');
+
+	// A header the host would drop, such as a signature, would change the hash: refused, not pushed changed.
+	const raw = await run(machine, 'git cat-file commit HEAD');
+	const odd = raw.replace('\n\n', '\nencoding ISO-8859-1\n\n').replace('Second', 'Odd');
+	await machine.exec('git reset -q --hard "$(git hash-object -t commit -w --stdin)"', { cwd: repo, stdin: new TextEncoder().encode(odd) });
+	await assert.rejects(() => openPullRequest(session.id, { title: 'Third', body: '' }), /"encoding" header/);
+	assert.equal(git(remote, 'log', '-1', '--format=%s', record.branch), 'Second', 'the branch is left as it was');
 });
 
 test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {

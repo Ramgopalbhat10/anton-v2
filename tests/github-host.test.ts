@@ -57,3 +57,63 @@ test('a merged pull request is not read any further', async () => {
 	assert.equal(activity.state, 'merged');
 	assert.deepEqual(asked, ['/repos/acme/demo/pulls/8']);
 });
+
+test('a push rebuilds missing commits through the API and then moves the branch', async () => {
+	const calls: string[] = [];
+	const sent: Record<string, unknown> = {};
+	globalThis.fetch = (async (input: string | URL, init: RequestInit = {}) => {
+		const route = `${init.method ?? 'GET'} ${String(input).slice(API.length)}`;
+		calls.push(route);
+		if (init.body) sent[route] = JSON.parse(String(init.body));
+		const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+		if (route === 'GET /repos/acme/demo/git/commits/aaa') return reply({ sha: 'aaa' });
+		if (route === 'GET /repos/acme/demo/git/commits/bbb') return reply({ message: 'Not Found' }, 404);
+		if (route === 'POST /repos/acme/demo/git/blobs') return reply({ sha: 'blob1' }, 201);
+		if (route === 'POST /repos/acme/demo/git/trees') return reply({ sha: 'tree-b' }, 201);
+		if (route === 'POST /repos/acme/demo/git/commits') return reply({ sha: 'bbb' }, 201);
+		if (route === 'GET /repos/acme/demo/git/ref/heads/anton/fix') return reply({ message: 'Not Found' }, 404);
+		if (route === 'POST /repos/acme/demo/git/refs') return reply({}, 201);
+		return reply({ message: 'unexpected' }, 500);
+	}) as typeof fetch;
+	const read: string[] = [];
+	const source = {
+		async commit(sha: string) {
+			read.push(sha);
+			const who = { name: 'Agent', email: 'a@example.test', date: '2026-10-03T06:20:01+05:30' };
+			return {
+				sha,
+				tree: 'tree-b',
+				parents: ['aaa'],
+				parentTree: 'tree-a',
+				author: who,
+				committer: who,
+				message: 'Fix\n',
+				changes: [
+					{ path: 'a.txt', mode: '100644', sha: 'blob1' },
+					{ path: 'gone.txt', mode: '100644', sha: null },
+				],
+			};
+		},
+		blob: async () => new TextEncoder().encode('hello\n'),
+	};
+	await githubHost({ token: 't', apiUrl: API }).pushCommits({ repo: 'acme/demo', branch: 'anton/fix', head: 'bbb', commits: ['aaa', 'bbb'], source });
+	assert.deepEqual(read, ['bbb'], 'a commit the host has is not sent again');
+	assert.deepEqual(sent['POST /repos/acme/demo/git/blobs'], { content: Buffer.from('hello\n').toString('base64'), encoding: 'base64' });
+	assert.deepEqual(sent['POST /repos/acme/demo/git/trees'], {
+		base_tree: 'tree-a',
+		tree: [
+			{ path: 'a.txt', mode: '100644', type: 'blob', sha: 'blob1' },
+			{ path: 'gone.txt', mode: '100644', type: 'blob', sha: null },
+		],
+	});
+	assert.deepEqual(sent['POST /repos/acme/demo/git/refs'], { ref: 'refs/heads/anton/fix', sha: 'bbb' }, 'a new branch is created');
+
+	// A host that builds a different commit (one the agent signed, say) stops the push before the branch moves.
+	const wrong = { ...source, commit: async (sha: string) => ({ ...(await source.commit(sha)), sha: 'ccc' }) };
+	calls.length = 0;
+	await assert.rejects(
+		() => githubHost({ token: 't', apiUrl: API }).pushCommits({ repo: 'acme/demo', branch: 'anton/fix', head: 'ccc', commits: ['bbb'], source: wrong }),
+		/recreated commit ccc/,
+	);
+	assert.ok(!calls.some((call) => call.includes('/git/refs')), 'the branch is left alone');
+});

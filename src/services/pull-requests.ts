@@ -8,8 +8,9 @@ import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { PullRequestState } from '../core/ports.ts';
 
 /**
- * Commits the task's work, pushes its branch and opens (or finds) the pull
- * request. Anton holds the git credentials; the agent never sees them.
+ * Commits the task's work, sends its branch to the host and opens (or finds)
+ * the pull request. Anton pushes through the host's API with its own
+ * credentials, so they never enter the machine the agent works in.
  */
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {
 	const session = await getSessionRecord(id);
@@ -17,11 +18,11 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 	if (!session || !project) throw new NotFoundError('Session not found');
 	const { git } = getProviders();
 	const machine = await machineFor(id);
-	const pushed = await commitAndPush(machine, {
+	const pushed = await commitAndPush(machine, git, {
+		repo: project.repoFullName,
 		branch: session.branch,
 		baseSha: session.baseSha,
 		message: input.title,
-		auth: git.gitAuthEnv(),
 	});
 	if (!pushed) throw new InvalidInputError('There are no changes to open a pull request with.');
 	const url = await git.openPullRequest({
