@@ -3,6 +3,7 @@ import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
+import { useSuggestions } from '@/components/suggestions';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
@@ -66,6 +67,8 @@ export function Composer({
 	const [notice, setNotice] = useState<string | null>(null);
 	const [stopping, setStopping] = useState(false);
 	const picker = useRef<HTMLInputElement>(null);
+	const box = useRef<HTMLTextAreaElement>(null);
+	const suggestions = useSuggestions({ text, setText, sessionId, box: () => box.current });
 	const attach = async (files: File[]) => {
 		if (files.length === 0) return;
 		const read = await readImages(files, MAX_IMAGES - images.length);
@@ -119,18 +122,25 @@ export function Composer({
 			}}
 		>
 			<div
-				className="mx-auto flex max-w-[700px] flex-col gap-2 rounded-xl bg-(--bg-surface) px-3 pt-3 pb-2"
+				className="relative mx-auto flex max-w-[700px] flex-col gap-2 rounded-xl bg-(--bg-surface) px-3 pt-3 pb-2"
 				onDragOver={(event) => event.preventDefault()}
 				onDrop={(event) => {
 					event.preventDefault();
 					void attach([...event.dataTransfer.files]);
 				}}
 			>
+				{suggestions.list ? <div className="absolute right-0 bottom-full left-0 mb-1.5">{suggestions.list}</div> : null}
 				{images.length > 0 ? <Thumbnails images={images} onRemove={(id) => setImages((current) => current.filter((image) => image.id !== id))} /> : null}
 				<textarea
+					ref={box}
 					value={text}
-					onChange={(event) => setText(event.target.value)}
+					onChange={(event) => {
+						setText(event.target.value);
+						suggestions.track(event.target);
+					}}
+					onSelect={(event) => suggestions.track(event.currentTarget)}
 					onKeyDown={(event) => {
+						if (suggestions.onKeyDown(event)) return;
 						if (event.key === 'Enter' && !event.shiftKey) {
 							event.preventDefault();
 							event.currentTarget.form?.requestSubmit();

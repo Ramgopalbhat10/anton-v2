@@ -48,6 +48,9 @@ export type Session = {
 
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 
+/** A saved prompt, typed as `/name` in the composer. */
+export type Command = { name: string; prompt: string };
+
 /** One distinct state of the task's files, newest first in the timeline. */
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
@@ -168,6 +171,9 @@ export const api = {
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
+	commands: () => json<{ commands: Command[] }>('/api/settings/commands'),
+	saveCommands: (commands: Command[]) =>
+		json<{ commands: Command[] }>('/api/settings/commands', { method: 'PUT', body: JSON.stringify({ commands }) }),
 	saveMemory: (id: string, memory: string) =>
 		json<{ memory: string }>(`/api/projects/${id}/memory`, { method: 'PUT', body: JSON.stringify({ memory }) }),
 	updateProjectSettings: (id: string, change: SettingsChange) =>

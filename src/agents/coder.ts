@@ -209,6 +209,8 @@ const proposePlan = defineTool({
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
+const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
+
 const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
 
 const READ_ONLY_PROMPT = [
@@ -282,5 +284,5 @@ export function Coder({ id }: AgentProps) {
 	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
 	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${REMEMBER_HINT}${memoryPrompt(memoryFor(id))}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${MENTION_HINT} ${REMEMBER_HINT}${memoryPrompt(memoryFor(id))}`;
 }
