@@ -145,28 +145,48 @@ function collect(stream: ReadableStream<Uint8Array>): { settle: () => Promise<Ui
 	};
 }
 
+const EXEC_TAG = 'ANTON_EXEC';
+
+/** Modal cannot cancel an exec, so a stopped command's processes are found by their tag and killed. */
+async function killTagged(sandbox: Sandbox, tag: string): Promise<void> {
+	const script = `for p in /proc/[0-9]*; do tr '\\0' '\\n' < $p/environ 2>/dev/null | grep -qx ${EXEC_TAG}=${tag} && kill -KILL "\${p#/proc/}"; done`;
+	await sandbox
+		.exec(['bash', '-c', script])
+		.then((process) => process.wait())
+		.catch(() => undefined);
+}
+
 function modalMachine(sandbox: Sandbox): Machine {
 	return {
 		id: sandbox.sandboxId,
 		root: ROOT,
 		async exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
+			// Every process the command starts inherits the tag, so Stop can find and end them all.
+			const tag = randomUUID();
 			const process = await sandbox.exec(['bash', '-lc', command], {
 				mode: 'binary',
 				stdout: 'pipe',
 				stderr: 'pipe',
 				workdir: options.cwd,
-				env: options.env,
+				env: { ...options.env, [EXEC_TAG]: tag },
 				timeoutMs: options.timeoutMs,
 			});
-			// Closing the stream sends EOF after the bytes written; closeStdin() would send it at offset 0.
-			const stdin = process.stdin.getWriter();
-			if (options.stdin) await stdin.write(options.stdin);
-			await stdin.close();
-			const out = collect(process.stdout);
-			const err = collect(process.stderr);
-			const exitCode = await process.wait();
-			const [stdout, stderr] = await Promise.all([out.settle(), err.settle()]);
-			return { stdout, stderr: new TextDecoder().decode(stderr), exitCode };
+			const stop = () => void killTagged(sandbox, tag);
+			if (options.signal?.aborted) stop();
+			options.signal?.addEventListener('abort', stop, { once: true });
+			try {
+				// Closing the stream sends EOF after the bytes written; closeStdin() would send it at offset 0.
+				const stdin = process.stdin.getWriter();
+				if (options.stdin) await stdin.write(options.stdin);
+				await stdin.close();
+				const out = collect(process.stdout);
+				const err = collect(process.stderr);
+				const exitCode = await process.wait();
+				const [stdout, stderr] = await Promise.all([out.settle(), err.settle()]);
+				return { stdout, stderr: new TextDecoder().decode(stderr), exitCode };
+			} finally {
+				options.signal?.removeEventListener('abort', stop);
+			}
 		},
 		async previewUrl(port) {
 			const tunnels = await sandbox.tunnels(10_000).catch(() => ({}) as Record<number, { url: string }>);

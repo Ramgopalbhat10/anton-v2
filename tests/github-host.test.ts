@@ -34,6 +34,9 @@ test('pull request activity keeps only trusted comments, reads every page and ig
 				],
 			},
 		},
+		'/repos/acme/demo/commits/abc/status?per_page=100': {
+			body: { statuses: [{ context: 'ci/circle', state: 'error', description: 'Build errored', target_url: 'u5' }] },
+		},
 		'/repos/acme/demo/issues/7/comments?per_page=100': { body: [note(1, 'owner', 'OWNER'), note(2, 'stranger', 'NONE')], next: '/repos/acme/demo/issues/7/comments?per_page=100&page=2' },
 		'/repos/acme/demo/issues/7/comments?per_page=100&page=2': { body: [note(3, 'teammate', 'COLLABORATOR'), note(4, 'review-bot[bot]', 'NONE', 'Bot')] },
 		[`${pull}/comments?per_page=100`]: { body: [] },
@@ -47,7 +50,8 @@ test('pull request activity keeps only trusted comments, reads every page and ig
 	);
 	assert.deepEqual(
 		activity.checks.map((check) => check.status),
-		['failed', 'skipped', 'skipped', 'passed'],
+		['failed', 'skipped', 'skipped', 'passed', 'failed'],
+		'commit statuses count as checks too',
 	);
 });
 

@@ -71,7 +71,7 @@ const model = (id: string, reasoning: ModelInfo['reasoning'], defaultReasoning: 
 	createdAt: 0,
 	contextLength: 128_000,
 	maxOutput: null,
-	price: { input: 0, output: 0 },
+	price: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	vision: false,
 	reasoning,
 	defaultReasoning,

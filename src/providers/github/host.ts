@@ -10,6 +10,7 @@ const MAX_PAGES = 10;
 const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
 
 type PullRequest = { state: 'open' | 'closed'; draft: boolean; merged_at: string | null; head: { sha: string } };
+type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
 type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
 
@@ -26,6 +27,12 @@ function checkOf(run: CheckRun): CheckResult {
 	const status = statusOf(run);
 	const summary = (run.output?.title || run.output?.summary || run.conclusion || '').trim().slice(0, 500);
 	return { name: run.name, status, summary, url: run.html_url };
+}
+
+/** CI that reports through the older commit status API instead of check runs. */
+function statusCheckOf(status: CommitStatus): CheckResult {
+	const states: Record<CommitStatus['state'], CheckResult['status']> = { error: 'failed', failure: 'failed', pending: 'pending', success: 'passed' };
+	return { name: status.context, status: states[status.state], summary: (status.description ?? '').trim().slice(0, 500), url: status.target_url ?? '' };
 }
 
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -225,8 +232,9 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			const state = stateOf(pull);
 			// A finished pull request needs nothing more, so its checks and comments are not fetched.
 			if (state === 'merged' || state === 'closed') return { state, headSha: pull.head.sha, checks: [], comments: [] };
-			const [runs, notes, lineNotes, reviews] = await Promise.all([
+			const [runs, statuses, notes, lineNotes, reviews] = await Promise.all([
 				json<{ check_runs: CheckRun[] }>(`/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`),
+				json<{ statuses: CommitStatus[] }>(`/repos/${repo}/commits/${pull.head.sha}/status?per_page=100`),
 				all<Comment>(`/repos/${repo}/issues/${number}/comments?per_page=100`),
 				all<Comment>(`/repos/${repo}/pulls/${number}/comments?per_page=100`),
 				all<Comment>(`/repos/${repo}/pulls/${number}/reviews?per_page=100`),
@@ -236,7 +244,8 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				...lineNotes.filter(isTrusted).map((comment) => commentOf('line', comment)),
 				...reviews.filter(isTrusted).map((review) => commentOf('review', review)),
 			].filter((comment) => comment.body);
-			return { state, headSha: pull.head.sha, checks: runs.check_runs.map(checkOf), comments };
+			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
+			return { state, headSha: pull.head.sha, checks, comments };
 		},
 	};
 }

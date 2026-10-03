@@ -184,8 +184,8 @@ export type ModelInfo = {
 	createdAt: number;
 	contextLength: number;
 	maxOutput: number | null;
-	/** US dollars per million tokens. */
-	price: { input: number; output: number };
+	/** US dollars per million tokens; `cacheRead` and `cacheWrite` are for prompt tokens read from or written to the provider's cache. */
+	price: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	vision: boolean;
 	/** Levels the model accepts, weakest first; empty when it cannot reason. */
 	reasoning: Reasoning[];

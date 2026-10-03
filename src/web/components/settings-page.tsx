@@ -212,7 +212,7 @@ export function SettingsPage() {
 						help={
 							<>
 								Once a cap is reached, Anton stops the reply that crossed it and takes no new messages until the next day or until you
-								raise it. Costs come from OpenRouter's listed prices, so cached tokens may make the real bill a little lower.
+								raise it. Costs come from OpenRouter's listed prices, including its cache prices, so the real bill may differ slightly.
 								{budget.data ? ` Spent today: ${dollars(budget.data.today)}.` : ''}
 							</>
 						}

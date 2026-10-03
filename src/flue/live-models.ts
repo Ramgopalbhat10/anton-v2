@@ -21,7 +21,7 @@ function toPiModel(info: ModelInfo, catalog: readonly OpenRouterModel[]): OpenRo
 		// Mandatory reasoning has no "off"; send nothing rather than `effort: none`.
 		...(info.reasoning.length && !info.reasoning.includes('off') ? { thinkingLevelMap: { off: null } } : {}),
 		input: info.vision ? ['text', 'image'] : ['text'],
-		cost: { input: info.price.input, output: info.price.output, cacheRead: 0, cacheWrite: 0 },
+		cost: info.price,
 		contextWindow: info.contextLength,
 		maxTokens: info.maxOutput ?? 32_768,
 		compat: sibling?.compat ?? DEFAULT_COMPAT,
