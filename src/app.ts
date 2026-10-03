@@ -39,6 +39,8 @@ import { addAutomation, automations, removeAutomation, runAutomation, setAutomat
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
+import { computeView, stopAllSandboxes } from './services/compute.ts';
+import { connections } from './services/connections.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 
@@ -166,6 +168,9 @@ app.put('/api/settings/commands', async (c) => {
 	);
 	return c.json({ commands: await setCommands(input.commands) });
 });
+app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
+app.get('/api/compute', async (c) => c.json(await computeView()));
+app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));
 app.get('/api/logs', (c) => c.json({ logs: recentProblems() }));
 app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));

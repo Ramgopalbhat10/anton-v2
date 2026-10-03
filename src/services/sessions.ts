@@ -17,7 +17,8 @@ import { logProblem } from './log.ts';
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
 const RUNNING_CACHE_MS = 5_000;
 
-function runningKeys(): Promise<Set<string>> {
+/** Keys of the sandboxes running now, asked of the provider at most every few seconds. */
+export function runningKeys(): Promise<Set<string>> {
 	if (!runningCache || Date.now() - runningCache.at > RUNNING_CACHE_MS) {
 		runningCache = { at: Date.now(), keys: getProviders().sandbox.running().catch(() => new Set<string>()) };
 	}

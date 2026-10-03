@@ -284,3 +284,16 @@ export function ProgressBar({ value, tone = 'accent', label }: { value: number; 
 		</div>
 	);
 }
+
+const BADGE_TONE = {
+	neutral: 'bg-(--bg-raised) text-(--text-secondary)',
+	accent: 'bg-(--accent-bg) text-(--accent-text)',
+	success: 'bg-(--success-bg) text-(--success-text)',
+	warning: 'bg-(--warning-bg) text-(--warning-text)',
+	danger: 'bg-(--danger-bg) text-(--danger-text)',
+} as const;
+
+/** A short status word on a row: Connected, Default, Failing. */
+export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
+	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
+}

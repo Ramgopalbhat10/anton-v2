@@ -103,6 +103,8 @@ const { assertWithinBudget, budget, setLimits } = await import('../src/services/
 const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
 const { toUsage, usageView } = await import('../src/services/usage.ts');
+const { connections } = await import('../src/services/connections.ts');
+const { computeView, stopAllSandboxes } = await import('../src/services/compute.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
@@ -505,6 +507,24 @@ test('spend this month breaks down by repository and model, and outlives a delet
 	assert.ok(Math.abs((repo?.cost ?? 0) - 0.5) < 1e-9);
 	assert.ok(view.byModel.some((row) => row.key === 'openrouter/plain/no-reasoning' && Math.abs(row.cost - 0.5) < 1e-9));
 	assert.ok(view.month >= view.today && view.today >= 0.5);
+});
+
+test('connections are checked through the ports, and Compute lists and stops running sandboxes', async () => {
+	const byId = Object.fromEntries((await connections()).map((connection) => [connection.id, connection]));
+	assert.equal(byId.sandbox?.state, 'ok');
+	assert.match(byId.sandbox?.detail ?? '', /running now/);
+	assert.equal(byId.store?.state, 'ok');
+	assert.equal(byId.database?.state, 'ok');
+	assert.ok(byId.git?.state === 'off' || /Ada Lovelace/.test(byId.git?.detail ?? ''));
+
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Compute' });
+	await sessions.resumeSession(session.id);
+	assert.ok((await computeView()).running.some((task) => task.id === session.id));
+	const { stopped } = await stopAllSandboxes();
+	assert.ok(stopped >= 1);
+	assert.equal((await computeView()).running.length, 0);
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
 });
 
 test('spending caps stop new messages once today or a task has spent enough', async () => {
