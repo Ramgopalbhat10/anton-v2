@@ -8,6 +8,7 @@ import { getProject, setWarmImage } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
+import { logProblem } from './log.ts';
 
 /** First lockfile found decides how dependencies are installed. */
 const INSTALLERS: Array<[lockfile: string, command: string]> = [
@@ -20,7 +21,7 @@ const INSTALLERS: Array<[lockfile: string, command: string]> = [
 async function installDependencies(machine: Machine): Promise<void> {
 	const script = INSTALLERS.map(([file, command]) => `if [ -f ${quote(file)} ]; then ${command}; exit $?; fi`).join('\n');
 	const result = await machine.exec(script, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
-	if (result.exitCode !== 0) console.warn(`[anton] dependency install failed: ${result.stderr.slice(-500)}`);
+	if (result.exitCode !== 0) logProblem('warn', 'Dependency install failed', result.stderr.slice(-500));
 }
 
 function warmImageFor(project: Project): string | null {
@@ -38,7 +39,7 @@ async function refreshWarmImage(machine: Machine, project: Project): Promise<voi
 	await getProviders()
 		.sandbox.snapshot(machine)
 		.then((image) => setWarmImage(project.id, image, project.baseImage))
-		.catch((error: unknown) => console.warn('[anton] warm image failed', error));
+		.catch((error: unknown) => logProblem('warn', 'Warm image failed', error));
 }
 
 type Context = { machine: Machine; session: SessionRecord; project: Project };

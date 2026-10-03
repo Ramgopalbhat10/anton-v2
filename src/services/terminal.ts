@@ -6,6 +6,7 @@ import { saveCheckpoint } from './checkpoints.ts';
 import { repoDir } from './git.ts';
 import { invalidateRunning } from './sessions.ts';
 import { machineFor } from './workspace.ts';
+import { logProblem } from './log.ts';
 
 const PATH = /^\/vm\/([\w-]+)\/pty$/;
 
@@ -71,7 +72,7 @@ async function bridge(socket: WebSocket, id: string, size: Size): Promise<void> 
 	for (const chunk of input) pty.write(chunk);
 	socket.on('close', () => {
 		pty.close();
-		void saveCheckpoint(id, machine).catch((error: unknown) => console.warn('[anton] checkpoint after terminal failed', error));
+		void saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint after terminal failed', error, id));
 	});
 }
 

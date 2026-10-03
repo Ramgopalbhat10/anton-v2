@@ -4,6 +4,7 @@ import { listSessionRecords } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { type Checkpoint, whileNoCheckpointIsWritten } from './checkpoints.ts';
+import { logProblem } from './log.ts';
 
 /** The timeline shows this many entries, so older ones only take space. */
 const KEEP_CHECKPOINTS = 50;
@@ -99,6 +100,6 @@ export function scheduleCleanup(): void {
 		if (last && Date.now() - Date.parse(last.at) < DAY_MS) return;
 		await cleanUpStorage();
 	};
-	setTimeout(() => void run().catch((error: unknown) => console.warn('[anton] storage cleanup failed', error)), 60_000).unref();
-	setInterval(() => void run().catch((error: unknown) => console.warn('[anton] storage cleanup failed', error)), 60 * 60_000).unref();
+	setTimeout(() => void run().catch((error: unknown) => logProblem('warn', 'Storage cleanup failed', error)), 60_000).unref();
+	setInterval(() => void run().catch((error: unknown) => logProblem('warn', 'Storage cleanup failed', error)), 60 * 60_000).unref();
 }

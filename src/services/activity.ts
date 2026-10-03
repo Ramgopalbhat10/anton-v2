@@ -1,5 +1,6 @@
 import { announce } from '../core/changes.ts';
 import { liveMachine } from './workspace.ts';
+import { logProblem } from './log.ts';
 
 /**
  * Which tasks have an agent response in flight, learned from the agent
@@ -33,7 +34,7 @@ export function setAgentAbort(abort: Abort): void {
 
 /** Stops the task's agent if it is working, so nothing keeps running for a stopped or deleted task. */
 export async function stopAgent(id: string): Promise<void> {
-	if (inFlight.has(id)) await abortAgent(id).catch((error: unknown) => console.warn('[anton] could not stop the agent', error));
+	if (inFlight.has(id)) await abortAgent(id).catch((error: unknown) => logProblem('warn', 'Could not stop the agent', error, id));
 }
 
 /** True while the task's agent is working on a message. */
