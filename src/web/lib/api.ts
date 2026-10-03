@@ -34,6 +34,8 @@ export type Session = {
 	status: SessionStatus;
 	/** The agent is working on a message right now. */
 	working: boolean;
+	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
+	workspace: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;
@@ -196,3 +198,6 @@ export const api = {
 
 /** Live views refresh often; saved and base views only change when the machine starts. */
 export const refreshFor = (source: Source | undefined) => (source === 'live' ? 4000 : 15000);
+
+/** The branch a task works on, or the one it reads from while it has no workspace. */
+export const branchLabel = (session: Session) => (session.workspace ? session.branch : `${session.baseBranch} (read-only)`);

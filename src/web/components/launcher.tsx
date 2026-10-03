@@ -16,7 +16,7 @@ import {
 	SectionLabel,
 } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
-import { api, type ModelChoice, type Project } from '@/lib/api';
+import { api, branchLabel, type ModelChoice, type Project } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
@@ -218,7 +218,7 @@ export function Launcher() {
 									<div className="flex min-w-0 flex-1 flex-col gap-px">
 										<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
 										<div className="truncate text-[11px] text-(--text-disabled)">
-											{session.repo} · {session.branch}
+											{session.repo} · {branchLabel(session)}
 										</div>
 									</div>
 									<div className="text-[11px] whitespace-nowrap text-(--text-tertiary)">

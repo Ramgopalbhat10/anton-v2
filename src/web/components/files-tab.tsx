@@ -3,7 +3,7 @@ import { ChevronLeft, Folder, FolderOpen } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SourceBar } from '@/components/source-bar';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
-import { api, refreshFor } from '@/lib/api';
+import { api, branchLabel, refreshFor } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type TreeNode = { name: string; path: string; children: Map<string, TreeNode>; file: boolean };
@@ -165,7 +165,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		return <FileView sessionId={sessionId} path={selected} status={changes.get(selected)} onBack={() => setSelected(null)} />;
 	}
 
-	const heading = session.data ? `${session.data.repo.split('/').pop()}/${session.data.branch}` : '';
+	const heading = session.data ? `${session.data.repo.split('/').pop()}/${branchLabel(session.data)}` : '';
 
 	return (
 		<div className="flex flex-col gap-1">

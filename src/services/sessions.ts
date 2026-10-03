@@ -35,7 +35,7 @@ function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 
 function present(record: SessionRecord, running: Set<string>): Session {
 	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, ...session } = record;
-	return { ...session, status: statusOf(record, running), working: isWorking(record.id) };
+	return { ...session, status: statusOf(record, running), working: isWorking(record.id), workspace: record.machineState !== null };
 }
 
 export type ModelChoice = { model: string; reasoning: Reasoning };

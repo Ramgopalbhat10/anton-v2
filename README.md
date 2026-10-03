@@ -25,7 +25,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 ## How a task runs
 
 1. **Create.** Anton resolves the branch to a commit and names a task branch `anton/<title>-<id>`. Nothing starts yet.
-2. **Start.** The first message (or opening the terminal) acquires a sandbox, best first: the task's running sandbox, its snapshot from when it last stopped, the repo's warm image (dependencies installed, refreshed weekly), or a fresh clone.
+2. **Start.** A task starts read-only. Anton downloads the repo at the task's commit once, keeps it on its own disk, and the agent answers questions from it with `list_files`, `search_code` and `read_file`. That needs no sandbox, clone or branch. When the work needs edits, commands or a pull request, the agent calls `start_workspace`. Opening the terminal also starts the sandbox. A sandbox comes from, best first: the task's running sandbox, its snapshot from when it last stopped, the repo's warm image (dependencies installed, refreshed weekly), or a fresh clone.
 3. **Work.** The agent edits files in `/workspace/repo` and saves deliverables (reports, screenshots) to `/workspace/outputs`.
 4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
 5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.

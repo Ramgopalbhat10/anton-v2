@@ -9,13 +9,13 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - `src/flue/` — adapters into Flue: the machine sandbox driver, and `live-models.ts`, which lets any model in the live catalog resolve.
 - `src/services/` — task lifecycle: sessions, workspace (acquire and set up a machine), git, checkpoints, files (live, saved or base views), pull requests, terminal, previews, and the browser behind the screenshot tool. Headless work (`headless.ts`) polls every five minutes for automations (labeled issues, schedules) and pull request follow-ups; both reach the agent through `agent-runner.ts`, which also enforces the spending caps (`budget.ts`).
 - `src/db/` — libSQL client, versioned migrations, queries.
-- `src/agents/coder.ts` — Coder agent, explorer/tester subagents, `open_pull_request`.
+- `src/agents/coder.ts` — Coder agent: read-only repo tools until `start_workspace`, then the sandbox, explorer/tester subagents and `open_pull_request`.
 - `src/app.ts` — Hono routes. `src/server.ts` — production server (API, UI, terminal WebSocket).
 - `src/web/` — TanStack Router UI.
 
 ## Rules
 
-- Viewing a task (files, changes, library) never starts a sandbox; only a prompt (typed, or sent by an automation or follow-up), the terminal, Resume or restoring a checkpoint does.
+- Viewing a task (files, changes, library) never starts a sandbox. A task starts read-only: the agent answers from a snapshot of the repo on Anton's side (`repo-snapshot.ts`) and starts its sandbox with `start_workspace` only when it must edit or run code. The terminal, Resume and restoring a checkpoint also start one; a task that has had a machine keeps using it.
 - Git credentials stay out of machines the agent has used: `git.gitAuthEnv()` is only for setup, before the agent or terminal gets the machine, and pushes go through the git host's API (`pushCommits`), never `git push` in the sandbox.
 - New outside services go behind a port in `src/core/ports.ts`, not called directly from services.
 - Services never import the agent; messages Anton sends on its own go through `sendToAgent` in `agent-runner.ts`, so the caps apply to them too.
