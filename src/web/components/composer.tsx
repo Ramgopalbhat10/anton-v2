@@ -6,6 +6,7 @@ import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { useSuggestions } from '@/components/suggestions';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
+import { expandCommand } from '@/lib/completion';
 import { askToNotify } from '@/lib/notifications';
 
 /** Sent when a message is only images, since the agent always gets text. */
@@ -112,7 +113,8 @@ export function Composer({
 				setImages([]);
 				setNotice(null);
 				try {
-					await onSend(text.trim() || IMAGE_ONLY, sent);
+					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
+					await onSend(expandCommand(text.trim(), saved.commands) || IMAGE_ONLY, sent);
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
 					setText((current) => current || typed);

@@ -11,6 +11,7 @@ import {
 	usePersistentState,
 	useResponseFinish,
 	useSandbox,
+	useSkill,
 	useSubagent,
 	useTool,
 } from '@flue/runtime';
@@ -25,6 +26,7 @@ import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import { hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
 import { remember } from '../services/memory.ts';
+import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
@@ -194,6 +196,16 @@ function useRemember(id: string) {
 	);
 }
 
+/** The repo's own skills and the installed plugins' skills; the agent loads one when a task matches its description. */
+function useSkills(id: string, workspace: boolean) {
+	for (const skill of skillsFor(id, workspace)) useSkill(skill);
+}
+
+/** The repo's AGENTS.md and CLAUDE.md while read-only; with a sandbox, the runtime reads them from the repo itself. */
+function repoInstructionsPrompt(instructions: string): string {
+	return instructions ? `\n\nThe repository's own instructions for agents (AGENTS.md, CLAUDE.md):\n${instructions}` : '';
+}
+
 /** The repo's notes, as part of the instructions; written by earlier tasks and the user. */
 function memoryPrompt(memory: string): string {
 	return memory ? `\n\nNotes about this repository from earlier tasks and the user (they may be out of date; trust the code):\n${memory}` : '';
@@ -210,6 +222,8 @@ const proposePlan = defineTool({
 });
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
+
+const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start.';
 
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
 
@@ -263,6 +277,7 @@ export function Coder({ id }: AgentProps) {
 	else useReadOnlyRepo(id, planning ? null : () => setStarted(true));
 	if (planning) useTool(proposePlan);
 	useRemember(id);
+	useSkills(id, workspace);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({
@@ -286,5 +301,6 @@ export function Coder({ id }: AgentProps) {
 	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
 	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${MENTION_HINT} ${REMEMBER_HINT}${memoryPrompt(memoryFor(id))}`;
+	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}`;
 }

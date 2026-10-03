@@ -24,3 +24,16 @@ test('a file gets its language from the extension or a well-known name', async (
 	assert.equal(languageFor('docker/Dockerfile.dev', known), 'dockerfile');
 	assert.equal(languageFor('notes.unknownext', known), null);
 });
+
+test('a command with $ARGUMENTS takes what follows its name; anything else is sent as typed', async () => {
+	const { expandCommand } = await import('../src/web/lib/completion.ts');
+	const commands = [
+		{ name: 'fix', prompt: 'Fix issue #$ARGUMENTS and add a test that covers $ARGUMENTS.' },
+		{ name: 'review', prompt: 'Review this branch.' },
+	];
+	assert.equal(expandCommand('/fix 142', commands), 'Fix issue #142 and add a test that covers 142.');
+	assert.equal(expandCommand('/fix\n142 and 143', commands), 'Fix issue #142 and 143 and add a test that covers 142 and 143.');
+	assert.equal(expandCommand('/review now', commands), '/review now', 'a prompt without $ARGUMENTS was filled in when picked');
+	assert.equal(expandCommand('/pdf merge these', commands), '/pdf merge these', 'a skill stays as typed for the agent');
+	assert.equal(expandCommand('please /fix 1', commands), 'please /fix 1');
+});

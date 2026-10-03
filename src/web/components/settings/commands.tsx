@@ -62,8 +62,8 @@ export function CommandsPage() {
 	return (
 		<>
 			<PageHeading title="Commands">
-				Prompts you reuse. Type <code>/</code> and the name at the start of a message to fill it in. Type <code>@</code> in a task's message to point
-				the agent at a file.
+				Prompts you reuse. Type <code>/</code> and the name at the start of a message to fill it in. Put <code>$ARGUMENTS</code> in a prompt to fill in
+				what you type after the name, as in <code>/fix 142</code>. Type <code>@</code> in a task's message to point the agent at a file.
 			</PageHeading>
 			{commands.data ? <Commands saved={commands.data.commands} /> : <Spinner size={12} />}
 		</>

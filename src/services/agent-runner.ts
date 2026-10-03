@@ -4,6 +4,7 @@ import type { McpServer } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
+import { primeSkills } from './plugins.ts';
 import { isRestoring } from './restore.ts';
 import { primeModel } from './sessions.ts';
 
@@ -48,7 +49,7 @@ export function isPlanning(id: string): boolean {
 	return planning.has(id);
 }
 
-/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers and notes, whether it has a machine and whether it is planning. */
+/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, notes and skills, whether it has a machine and whether it is planning. */
 export async function primeAgent(id: string): Promise<void> {
 	await primeModel(id);
 	const session = await getSessionRecord(id);
@@ -58,6 +59,7 @@ export async function primeAgent(id: string): Promise<void> {
 	if (session?.machineState) workspaces.add(id);
 	if (session?.planMode) planning.add(id);
 	else planning.delete(id);
+	await primeSkills(id);
 }
 
 /**

@@ -67,6 +67,10 @@ const migrations: string[][] = [
 		`ALTER TABLE usage_log ADD COLUMN model TEXT`,
 		`UPDATE usage_log SET project_id = (SELECT project_id FROM sessions WHERE sessions.id = usage_log.session_id), model = (SELECT model FROM sessions WHERE sessions.id = usage_log.session_id)`,
 	],
+	// 12: installed plugins, each a set of skills every task's agent can use; kept whole, so a task never waits on GitHub for them.
+	[
+		`CREATE TABLE IF NOT EXISTS plugins (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL, source_json TEXT NOT NULL, sha TEXT NOT NULL, marketplace TEXT, skills_json TEXT NOT NULL, mcp_json TEXT NOT NULL, skipped_json TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, installed_at TEXT NOT NULL)`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {
