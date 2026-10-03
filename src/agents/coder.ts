@@ -25,6 +25,7 @@ import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import { hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
 import { remember } from '../services/memory.ts';
+import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
@@ -136,8 +137,8 @@ function useStartWorkspace(id: string, startWorkspace: () => void) {
 function useWorkspace(id: string, planning: boolean) {
 	useSandbox({
 		async createSandbox() {
-			const machine = await machineFor(id);
-			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id));
+			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
+			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 	});
 	useSubagent(explorer);

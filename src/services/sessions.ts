@@ -10,6 +10,7 @@ import { deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
+import { generalSettings } from './general.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
 
@@ -92,9 +93,13 @@ export async function createSession(input: {
 	const baseSha = await getProviders().git.resolveRef(project.repoFullName, baseBranch);
 	const id = randomUUID();
 	const title = input.title?.trim() || 'New task';
-	const model = input.model ? await knownModel(input.model) : config.model;
+	const general = await generalSettings();
+	// The default reasoning level belongs to the default model; another model starts at its own default.
+	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
+	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
 	const branch = `anton/${slug(title)}-${id.slice(0, 6)}`;
-	await insertSession({ id, projectId: project.id, title, model, reasoning: input.reasoning ?? null, baseBranch, baseSha, branch, planMode: input.planMode ?? false });
+	const planMode = input.planMode ?? general.planMode;
+	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch, planMode });
 	return getSession(id);
 }
 

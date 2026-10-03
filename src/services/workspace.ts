@@ -9,6 +9,7 @@ import { getProviders } from '../providers/index.ts';
 import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
+import { envFor } from './secrets.ts';
 
 /** First lockfile found decides how dependencies are installed. */
 const INSTALLERS: Array<[lockfile: string, command: string]> = [
@@ -131,7 +132,7 @@ async function provision(id: string): Promise<Machine> {
 	const { session, project } = await load(id);
 	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
-	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...project.env });
+	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...(await envFor(project)) });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
 		if (!ready) await prepare({ machine, session, project }, acquired.origin);

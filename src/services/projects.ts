@@ -5,6 +5,7 @@ import { clearWarmImage, deleteProjectRecord, getProject, listProjects, projectS
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { mergeEnv } from './secrets.ts';
 import { deleteSession } from './sessions.ts';
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
@@ -79,11 +80,7 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'mcpSer
  */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
-	const env = Object.fromEntries(
-		Object.entries(change.env)
-			.map(([key, value]) => [key, value ?? project.env[key]] as const)
-			.filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
-	);
+	const env = mergeEnv(project.env, change.env);
 	// A token stays only with the host it was given for, so pointing a server at a new host never sends it there.
 	const keyOf = (name: string, url: string) => `${name} ${URL.canParse(url) ? new URL(url).origin : url}`;
 	const tokens = new Map(project.mcpServers.map((server) => [keyOf(server.name, server.url), server.auth]));

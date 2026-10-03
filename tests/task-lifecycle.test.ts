@@ -551,6 +551,53 @@ test('sandbox settings reach new machines, and a new default base image retires 
 	await setSandboxSettings(before);
 });
 
+test('General settings decide how a new task starts when the launcher does not say', async () => {
+	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const project = await addProject('acme/demo');
+	const before = await generalSettings();
+	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true });
+
+	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
+	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
+	// Another model starts at its own default level; an explicit choice wins over the defaults.
+	const other = await sessions.createSession({ projectId: project.id, title: 'Other', model: 'openrouter/plain/no-reasoning', planMode: false });
+	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
+	await sessions.deleteSession(plain.id);
+	await sessions.deleteSession(other.id);
+	await setGeneralSettings(before);
+});
+
+test('shared variables reach every repo under its own, and their values stay out of what the agent reads', async () => {
+	const { secretsView, setSharedEnv, setGuardrails, secretsToHide } = await import('../src/services/secrets.ts');
+	const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
+	const project = await addProject('acme/secrets');
+	const settings = await updateSettings(project.id, { env: { API_KEY: 'repo-key-123456' }, setupScript: '', previewPorts: [], baseImage: null });
+	await setSharedEnv({ API_KEY: 'shared-key-123456', SHARED_TOKEN: 'shared-token-abcdef', SHORT: 'yes' });
+	// Null keeps a stored value; a variable left out is removed.
+	const view = await setSharedEnv({ API_KEY: null, SHARED_TOKEN: null });
+	assert.deepEqual(view.shared, ['API_KEY', 'SHARED_TOKEN']);
+	assert.deepEqual(view.repos.find((repo) => repo.projectId === project.id)?.names, ['API_KEY']);
+	assert.ok(!JSON.stringify(view).includes('123456'), 'values never leave the server');
+
+	const session = await sessions.createSession({ projectId: project.id, title: 'Secrets' });
+	const machine = await machineFor(session.id);
+	assert.equal((await run(machine, 'echo "$API_KEY|$SHARED_TOKEN|${SHORT:-gone}"')).trim(), 'repo-key-123456|shared-token-abcdef|gone');
+
+	const sandbox = machineSandbox(machine, `${machine.root}/repo`, () => true, await secretsToHide(session.id));
+	const shown = await sandbox.exec('echo "$API_KEY $SHARED_TOKEN" && echo "$SHARED_TOKEN" >&2 && echo "$SHARED_TOKEN" > token.txt');
+	assert.equal(shown.stdout.trim(), '[API_KEY hidden] [SHARED_TOKEN hidden]');
+	assert.equal(shown.stderr.trim(), '[SHARED_TOKEN hidden]');
+	assert.equal((await sandbox.readFile(`${machine.root}/repo/token.txt`)).trim(), 'shared-token-abcdef', 'files are read as they are');
+
+	await setGuardrails({ hideSecrets: false });
+	assert.deepEqual(await secretsToHide(session.id), {});
+	await setGuardrails({ hideSecrets: true });
+	await sessions.deleteSession(session.id);
+	await updateSettings(project.id, { ...settings, env: {} });
+	await setSharedEnv({});
+});
+
 test('spending caps stop new messages once today or a task has spent enough', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Budget' });

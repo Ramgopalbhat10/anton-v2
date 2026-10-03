@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { useSuggestions } from '@/components/suggestions';
 import { ModelPicker, useModels } from '@/components/model-picker';
+import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import {
 	Btn,
@@ -119,7 +120,7 @@ export function Launcher() {
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
-	const [planMode, setPlanMode] = useState(false);
+	const [planChoice, setPlanMode] = useState<boolean | null>(null);
 	const box = useRef<HTMLTextAreaElement>(null);
 	// No task yet, so no files to point at; saved commands work here too.
 	const suggestions = useSuggestions({ text: prompt, setText: setPrompt, box: () => box.current });
@@ -129,7 +130,11 @@ export function Launcher() {
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 	const project = chooseProject(projects.data?.projects ?? [], projectId);
+	const general = useGeneralSettings();
 	const model = choice.model ?? models.data?.default ?? '';
+	// Picking a model sets its reasoning to null, so the default level only rides with the default model.
+	const reasoning = choice.reasoning !== undefined ? choice.reasoning : (general.data?.reasoning ?? null);
+	const planMode = planChoice ?? general.data?.planMode ?? false;
 	const chosenBranch = branch || project?.defaultBranch || '';
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
 
@@ -145,7 +150,7 @@ export function Launcher() {
 			projectId: project.id,
 			branch: chosenBranch || undefined,
 			model: model || undefined,
-			reasoning: choice.reasoning ?? undefined,
+			reasoning: reasoning ?? undefined,
 			planMode,
 		});
 	}
@@ -198,7 +203,7 @@ export function Launcher() {
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />
 							<ModelPicker
-								value={{ model, reasoning: choice.reasoning ?? null }}
+								value={{ model, reasoning }}
 								onChange={(change) => setChoice((current) => ({ ...current, ...change }))}
 								height={28}
 								side="bottom"

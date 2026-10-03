@@ -18,6 +18,8 @@ import { changesView, fileTree, outputsView, readFile, readOutputFile } from './
 import { profileName } from './services/profile.ts';
 import { addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
+import { defaultModel, generalSettings, setGeneralSettings } from './services/general.ts';
+import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
 import {
@@ -48,6 +50,11 @@ import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 const app = new Hono();
 
 const REASONING = v.picklist(REASONING_LEVELS);
+/** Variables from the browser; null keeps a stored value. */
+const ENV = v.pipe(
+	v.record(v.pipe(v.string(), v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Variable names use letters, digits and underscores')), v.nullable(v.string())),
+	v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
+);
 
 publishUpgradeHandler(handleTerminalUpgrade);
 observe((event) => {
@@ -189,6 +196,18 @@ app.put('/api/settings/sandbox', async (c) => {
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
 });
+app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
+app.put('/api/settings/general', async (c) => {
+	const next = await body(c, v.object({ model: v.nullable(v.pipe(v.string(), v.minLength(1))), reasoning: v.nullable(REASONING), planMode: v.boolean() }));
+	return c.json(await setGeneralSettings(next));
+});
+app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
+app.put('/api/settings/guardrails', async (c) => c.json(await setGuardrails(await body(c, v.object({ hideSecrets: v.boolean() })))));
+app.get('/api/secrets', async (c) => c.json(await secretsView()));
+app.put('/api/secrets/shared', async (c) => {
+	const { env } = await body(c, v.object({ env: ENV }));
+	return c.json(await setSharedEnv(env));
+});
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
 app.get('/api/compute', async (c) => c.json(await computeView()));
@@ -197,7 +216,7 @@ app.get('/api/logs', (c) => c.json({ logs: recentProblems() }));
 app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
-app.get('/api/models', async (c) => c.json({ models: await listModels(), default: config.model }));
+app.get('/api/models', async (c) => c.json({ models: await listModels(), default: await defaultModel() }));
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
@@ -214,15 +233,11 @@ app.put('/api/projects/:id/memory', async (c) => {
 	await saveMemory(c.req.param('id'), memory);
 	return c.json({ memory: memory.trim() });
 });
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 app.put('/api/projects/:id/settings', async (c) => {
 	const change = await body(
 		c,
 		v.object({
-			env: v.pipe(
-				v.record(v.pipe(v.string(), v.regex(ENV_NAME, 'Variable names use letters, digits and underscores')), v.nullable(v.string())),
-				v.check((env) => Object.keys(env).length <= 100, 'At most 100 variables'),
-			),
+			env: ENV,
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
 			previewPorts: v.pipe(
 				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),

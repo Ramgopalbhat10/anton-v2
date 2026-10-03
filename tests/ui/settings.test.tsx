@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
 	sessions: vi.fn(async () => ({ sessions: [] })),
 	storage: vi.fn(async () => ({ objects: 0, bytes: 0, lastCleanup: null })),
 	projects: vi.fn(async () => ({ projects: [] })),
+	secrets: vi.fn(async () => ({ shared: ['NPM_TOKEN'], repos: [{ projectId: 'p1', repo: 'acme/web', names: ['API_KEY', 'DB_URL'] }] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -50,5 +51,13 @@ describe('Settings', () => {
 		document.body.innerHTML = '';
 		open('/settings/nope');
 		expect(await screen.findByText('No such settings page')).toBeTruthy();
+	});
+
+	it('shows secret names, never values, for every repository and each one', async () => {
+		open('/settings/secrets');
+		expect(await screen.findByDisplayValue('NPM_TOKEN')).toBeTruthy();
+		expect(screen.getByPlaceholderText('Saved. Type to replace')).toBeTruthy();
+		expect(screen.getByText('acme/web').closest('a')?.getAttribute('href')).toBe('/settings/repos/p1');
+		expect(screen.getByText('API_KEY · DB_URL')).toBeTruthy();
 	});
 });
