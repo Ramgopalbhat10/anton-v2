@@ -48,11 +48,17 @@ export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
 /** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
+/** An MCP server the agent can use; its token is never sent back, only whether it has one. */
+export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean };
+
 export type ProjectSettings = {
 	envKeys: string[];
 	setupScript: string;
 	previewPorts: number[];
 	baseImage: string | null;
+	/** Whether the agent hears about failed checks and new comments on its pull requests. */
+	followUps: boolean;
+	mcpServers: McpServer[];
 };
 
 export type Project = {
@@ -61,8 +67,34 @@ export type Project = {
 	defaultBranch: string;
 } & ProjectSettings;
 
-/** A settings save: a variable set to null keeps its stored value; one left out is removed. */
-export type SettingsChange = Omit<ProjectSettings, 'envKeys'> & { env: Record<string, string | null> };
+/**
+ * A settings save: a variable set to null keeps its stored value and one left
+ * out is removed; a server's token set to null keeps the stored one and an
+ * empty one removes it.
+ */
+export type SettingsChange = Omit<ProjectSettings, 'envKeys' | 'mcpServers'> & {
+	env: Record<string, string | null>;
+	mcpServers: Array<Omit<McpServer, 'hasAuth'> & { auth: string | null }>;
+};
+
+/** A way tasks start on their own: from issues with a label, or every few hours. */
+export type Automation = {
+	id: string;
+	projectId: string;
+	kind: 'issues' | 'schedule';
+	label: string | null;
+	everyHours: number | null;
+	prompt: string;
+	model: string | null;
+	reasoning: Reasoning | null;
+	enabled: boolean;
+	lastRunAt: string | null;
+	lastError: string | null;
+	seen: number[];
+	createdAt: string;
+};
+
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning'>;
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';
@@ -130,6 +162,12 @@ export const api = {
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
 	updateProjectSettings: (id: string, change: SettingsChange) =>
 		json<Project>(`/api/projects/${id}/settings`, { method: 'PUT', body: JSON.stringify(change) }),
+	automations: (projectId: string) => json<{ automations: Automation[] }>(`/api/projects/${projectId}/automations`),
+	addAutomation: (projectId: string, input: AutomationInput) => post<Automation>(`/api/projects/${projectId}/automations`, input),
+	setAutomationEnabled: (id: string, enabled: boolean) =>
+		json<Automation>(`/api/automations/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+	runAutomation: (id: string) => post<Automation>(`/api/automations/${id}/run`),
+	deleteAutomation: async (id: string) => void (await request(`/api/automations/${id}`, { method: 'DELETE' })),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
 	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning }) =>

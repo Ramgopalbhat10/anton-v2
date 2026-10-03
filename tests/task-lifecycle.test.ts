@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import type { GitHost, Machine, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
+import type { GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -45,7 +45,12 @@ const fakeHost: GitHost = {
 		return 'https://example.test/pull/1';
 	},
 	pullRequestState: async () => 'open',
+	listIssues: async () => issues,
+	pullRequestActivity: async () => activity,
 };
+// What the fake GitHub reports; tests change these.
+let issues: Issue[] = [];
+let activity: PullRequestActivity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 
 const model = (id: string, reasoning: ModelInfo['reasoning'], defaultReasoning: ModelInfo['reasoning'][number]): ModelInfo => ({
 	id,
@@ -89,9 +94,20 @@ const { restoreCheckpoint } = await import('../src/services/restore.ts');
 const { toUsage } = await import('../src/services/usage.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
+const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
+const { addAutomation, removeAutomation, runAutomation, runDueAutomations } = await import('../src/services/automations.ts');
+const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/follow-ups.ts');
+const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 
 const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
 useDatabase(database);
+// Messages Anton sends to agents on its own, in place of the running agent.
+const delivered: Array<{ id: string; text: string }> = [];
+let deliveryFails = false;
+setAgentDelivery(async (id, text) => {
+	if (deliveryFails) throw new Error('agent unavailable');
+	delivered.push({ id, text });
+});
 // Counts shells, so a test can tell whether one was opened.
 let shellsOpened = 0;
 const local = localSandboxProvider(path.join(dir, 'data'));
@@ -511,6 +527,143 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 	assert.equal(history.length, 50);
 	assert.ok((await listCheckpoints(session.id)).some((entry) => entry.files === 1), 'the newest real entry survives');
 	assert.equal((await storageView()).lastCleanup?.at, later.at);
+});
+
+test('automations start one task per labeled issue and run schedules when due', async () => {
+	const project = await addProject('acme/automated');
+	const issue = (number: number): Issue => ({ number, title: `Bug ${number}`, body: `Steps for ${number}`, url: `https://example.test/issues/${number}` });
+	issues = [issue(1), issue(2), issue(3), issue(4)];
+	await assert.rejects(() => addAutomation(project.id, { kind: 'issues', label: ' ', prompt: '' }), /label/);
+	const fromIssues = await addAutomation(project.id, { kind: 'issues', label: 'anton', prompt: 'Keep the change small.' });
+	delivered.length = 0;
+
+	const first = await runAutomation(fromIssues.id);
+	assert.deepEqual(first.seen, [1, 2, 3], 'at most three issues per run');
+	assert.equal(first.lastError, null);
+	assert.equal(delivered.length, 3);
+	assert.match(delivered[0].text, /Resolve GitHub issue #1: Bug 1[\s\S]*Steps for 1[\s\S]*Keep the change small\.[\s\S]*Closes #1/);
+	assert.equal((await sessions.getSession(delivered[0].id)).title, '#1 Bug 1');
+
+	await runAutomation(fromIssues.id);
+	await runAutomation(fromIssues.id);
+	assert.deepEqual(
+		delivered.map((item) => item.text.match(/#(\d+)/)?.[1]),
+		['1', '2', '3', '4'],
+		'each issue starts one task, ever',
+	);
+	const twin = await addAutomation(project.id, { kind: 'issues', label: 'anton', prompt: '' });
+	await removeAutomation(fromIssues.id);
+	const again = await addAutomation(project.id, { kind: 'issues', label: 'anton', prompt: '' });
+	await Promise.all([runAutomation(twin.id), runAutomation(again.id), runAutomation(again.id, { force: true })]);
+	assert.equal(delivered.length, 4, 'no issue starts a second task, whichever automation finds it');
+
+	issues = [...issues, issue(5), issue(6), issue(7), issue(8)];
+	const busy = delivered.slice(0, 3).map((item) => item.id);
+	for (const id of busy) recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId: 'issue' });
+	await runAutomation(again.id);
+	assert.equal(delivered.length, 4, 'waits while three issue tasks are working');
+	recordAgentEvent({ type: 'submission_settled', instanceId: busy[0], submissionId: 'issue' });
+	await runAutomation(again.id);
+	assert.deepEqual(
+		delivered.slice(4).map((item) => item.text.match(/#(\d+)/)?.[1]),
+		['5'],
+		'starts one when one finishes',
+	);
+	for (const id of busy.slice(1)) recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId: 'issue' });
+	await removeAutomation(twin.id);
+	await removeAutomation(again.id);
+
+	const schedule = await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Update the dependencies\nand run the tests.' });
+	const now = Date.parse(schedule.createdAt) + 24 * 60 * 60_000;
+	await runAutomation(schedule.id, { now: now - 60_000 });
+	assert.equal(delivered.length, 5, 'the first run is one interval after it was added');
+	const ran = await runAutomation(schedule.id, { now });
+	assert.equal(delivered.length, 6);
+	assert.equal((await sessions.getSession(delivered[5].id)).title, 'Update the dependencies');
+	await runAutomation(schedule.id, { now: now + 60 * 60_000 });
+	assert.equal(delivered.length, 6, 'not due again within the day');
+	await runAutomation(schedule.id, { now: now + 60 * 60_000, force: true });
+	assert.equal(delivered.length, 7, 'Run now starts it early');
+	assert.ok(ran.lastRunAt);
+
+	deliveryFails = true;
+	const tasksBefore = (await sessions.listSessions()).length;
+	const failed = await runAutomation(schedule.id, { force: true });
+	deliveryFails = false;
+	assert.equal(failed.lastError, 'agent unavailable');
+	assert.equal((await sessions.listSessions()).length, tasksBefore, 'a task its agent never got is removed');
+
+	await setLimits({ dailyUsd: 0, taskUsd: null });
+	await runDueAutomations(now + 48 * 60 * 60_000);
+	assert.equal(delivered.length, 7, 'nothing starts past the daily cap');
+	await setLimits({ dailyUsd: null, taskUsd: null });
+});
+
+test('follow-ups tell the agent about failed checks and new comments on its pull request', async () => {
+	const project = await addProject('acme/followed');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Follow' });
+	const record = async () => (await getSessionRecord(session.id))!;
+	delivered.length = 0;
+	assert.equal(await followUp(await record()), false, 'no pull request yet');
+
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/9' });
+	const failing = { name: 'test', status: 'failed', summary: '2 tests failed', url: 'https://example.test/checks/1' } as const;
+	activity = { state: 'open', headSha: 'sha-1', checks: [failing, { name: 'lint', status: 'pending', summary: '', url: '' }], comments: [] };
+	assert.equal(await followUp(await record()), false, 'waits for every check to finish');
+
+	activity = { ...activity, checks: [failing] };
+	assert.equal(await followUp(await record()), true);
+	assert.match(delivered[0].text, /Checks failed[\s\S]*sha-1[\s\S]*test: 2 tests failed/);
+	assert.equal(await followUp(await record()), false, 'a commit is reported once');
+
+	activity = {
+		...activity,
+		comments: [
+			{ id: 'comment-1', author: 'deploy-preview[bot]', body: 'Preview ready', path: null, line: null, at: '' },
+			{ id: 'line-2', author: 'reviewer', body: 'Rename this', path: 'src/a.ts', line: 4, at: '' },
+		],
+	};
+	assert.equal(await followUp(await record()), true);
+	assert.match(delivered[1].text, /@reviewer on src\/a\.ts line 4: Rename this/);
+	assert.doesNotMatch(delivered[1].text, /Preview ready/, 'status bots are left out');
+
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'busy' });
+	activity = { ...activity, headSha: 'sha-2' };
+	assert.equal(await followUp(await record()), false, 'never interrupts a working agent');
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+	assert.equal(await followUp(await record()), true, 'a new commit that fails is reported');
+
+	await updateSession(session.id, { followState: JSON.stringify({ sha: null, seen: [], sent: MAX_FOLLOW_UPS }) });
+	assert.equal(await followUp(await record()), false, 'stops after the most it may send');
+	await resetFollowUps(session.id);
+	assert.equal(await followUp(await record()), true, 'a person writing lets it follow up again');
+	activity = { ...activity, state: 'merged' };
+	assert.equal(await followUp(await record()), false);
+	activity = { ...activity, state: 'open', headSha: 'sha-3' };
+	assert.equal(await followUp(await record()), false, 'a merged pull request is never looked at again');
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/10' });
+	assert.equal(await followUp(await record()), true, 'a new pull request starts afresh');
+	await updateSession(session.id, { followState: null });
+	await updateSettings(project.id, { ...(await getProject(project.id))!, env: {}, followUps: false });
+	assert.equal(await followUp(await record()), false, 'off in the repo settings');
+	assert.equal(delivered.length, 5);
+});
+
+test('MCP server tokens are kept on save and never shown', async () => {
+	const project = await addProject('acme/mcp');
+	const stored = (await getProject(project.id))!;
+	const base = { ...stored, env: {} };
+	const saved = await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test', auth: 'secret-token', tools: [] }] });
+	assert.deepEqual(saved.mcpServers, [{ name: 'docs', url: 'https://mcp.example.test', tools: [], hasAuth: true }]);
+	assert.ok(!JSON.stringify(saved).includes('secret-token'));
+
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: null, tools: ['search'] }] });
+	assert.equal((await getProject(project.id))!.mcpServers[0].auth, 'secret-token', 'a server saved without a token keeps its own');
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://elsewhere.example.test/v2', auth: null, tools: ['search'] }] });
+	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'a token never follows a server to a new host');
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: 'secret-token', tools: ['search'] }] });
+	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: '', tools: ['search'] }] });
+	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'an empty token removes it');
 });
 
 test('stopping a task stops its working agent', async () => {

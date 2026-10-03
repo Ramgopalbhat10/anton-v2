@@ -6,6 +6,7 @@ import {
 	defineTool,
 	setProvider,
 	useAgentFinish,
+	useMcpConnection,
 	useModel,
 	useResponseFinish,
 	useSandbox,
@@ -21,6 +22,7 @@ import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
+import { mcpServersFor } from '../services/agent-runner.ts';
 import { loadedModels } from '../services/models.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 
@@ -104,6 +106,16 @@ export function Coder({ id }: AgentProps) {
 			},
 		}),
 	);
+	// The repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
+	for (const server of mcpServersFor(id)) {
+		useMcpConnection({
+			name: server.name,
+			url: server.url,
+			...(server.auth ? { auth: server.auth } : {}),
+			...(server.tools.length ? { tools: server.tools } : {}),
+			optional: true,
+		});
+	}
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	useAgentFinish(async () => {

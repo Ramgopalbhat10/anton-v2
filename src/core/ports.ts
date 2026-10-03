@@ -112,7 +112,25 @@ export type GitHost = {
 	openPullRequest(input: PullRequestInput): Promise<string>;
 	/** The state of a pull request this host opened, by its URL. */
 	pullRequestState(url: string): Promise<PullRequestState>;
+	/** Open issues carrying `label`, oldest first. Pull requests are not issues here. */
+	listIssues(fullName: string, label: string): Promise<Issue[]>;
+	/** A pull request's checks on its head commit and every comment and review on it; only its state once it is merged or closed. */
+	pullRequestActivity(url: string): Promise<PullRequestActivity>;
 };
+
+export type Issue = { number: number; title: string; body: string; url: string };
+
+/** `failed` only when the check ran and failed; a cancelled, stale or neutral one is `skipped`. */
+export type CheckResult = { name: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; summary: string; url: string };
+
+/**
+ * A comment, a line comment or a review with a body; `path` and `line` only
+ * for line comments. Only from people who can push to the repo and from apps
+ * installed on it.
+ */
+export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string };
+
+export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[] };
 
 /** How hard a model reasons before answering, from none to the most it offers. */
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;

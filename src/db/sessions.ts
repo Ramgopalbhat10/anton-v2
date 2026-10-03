@@ -22,6 +22,7 @@ function toRecord(row: Row): SessionRecord {
 		createdAt: String(row.created_at),
 		failed: row.status === 'error',
 		machineState: optional(row.machine_state),
+		followState: optional(row.follow_json),
 		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 	};
@@ -96,6 +97,7 @@ const columns = {
 	machineState: 'machine_state',
 	checkpointAt: 'checkpoint_at',
 	errorMessage: 'error_message',
+	followState: 'follow_json',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean };

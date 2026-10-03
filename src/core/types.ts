@@ -9,7 +9,10 @@ export type Project = {
 	warmedAt: string | null;
 } & ProjectSettings;
 
-/** How a repo's tasks are set up. Changing any of it retires the warm image. */
+/** A remote MCP server whose tools the agent gets; `auth` is sent as a Bearer token. */
+export type McpServer = { name: string; url: string; auth: string | null; tools: string[] };
+
+/** How a repo's tasks are set up. Changing the base image retires the warm image. */
 export type ProjectSettings = {
 	/** Variables every command in the repo's tasks sees: the agent's, the terminal's and setup's. */
 	env: Record<string, string>;
@@ -19,6 +22,9 @@ export type ProjectSettings = {
 	previewPorts: number[];
 	/** Container image to start from instead of the default, such as `python:3.12`. */
 	baseImage: string | null;
+	/** The agent fixes failed checks and answers review comments on its pull requests by itself. */
+	followUps: boolean;
+	mcpServers: McpServer[];
 };
 
 /** What the machine is doing right now, from the sandbox provider. */
@@ -54,6 +60,8 @@ export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 export type SessionRecord = Omit<Session, 'status' | 'working'> & {
 	failed: boolean;
 	machineState: string | null;
+	/** What follow-ups on the task's pull request have already handled, as JSON. */
+	followState: string | null;
 	/** Created before setup wrote a marker, so a machine without one may still be set up. */
 	legacySetup: boolean;
 };

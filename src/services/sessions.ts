@@ -34,7 +34,7 @@ function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 }
 
 function present(record: SessionRecord, running: Set<string>): Session {
-	const { failed: _failed, machineState: _state, legacySetup: _legacy, ...session } = record;
+	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, ...session } = record;
 	return { ...session, status: statusOf(record, running), working: isWorking(record.id) };
 }
 

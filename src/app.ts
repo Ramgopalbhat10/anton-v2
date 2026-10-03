@@ -1,4 +1,4 @@
-import { observe } from '@flue/runtime';
+import { dispatch, observe } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import * as v from 'valibot';
@@ -20,7 +20,6 @@ import {
 	listSessions,
 	deleteSession,
 	editSession,
-	primeModel,
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
@@ -28,6 +27,10 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint } from './services/restore.ts';
 import { recordTurnUsage } from './services/usage.ts';
+import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
+import { resetFollowUps } from './services/follow-ups.ts';
+import { scheduleHeadlessWork } from './services/headless.ts';
+import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled } from './services/automations.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -47,6 +50,10 @@ observe((event) => {
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb().catch((error: unknown) => console.error('[anton] database migration failed', error));
 scheduleCleanup();
+setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
+// Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
+await primeAllAgents().catch((error: unknown) => console.warn('[anton] could not load task models', error));
+scheduleHeadlessWork();
 
 async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
 	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
@@ -69,14 +76,16 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// A prompt needs a task, waits while its files are being restored, and is checked
-// against the spending caps; then the agent reads the task's current model.
+// A prompt needs a task, waits while its files are being restored, and is checked against
+// the spending caps; then the agent loads the task's model and MCP servers before it renders.
+// A person writing also lets the agent follow up on its pull request again.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
 	await assertWithinBudget(id);
-	await primeModel(id);
+	await resetFollowUps(id);
+	await primeAgent(id);
 	await next();
 });
 const agents = createAgentRouter(Coder);
@@ -124,9 +133,48 @@ app.put('/api/projects/:id/settings', async (c) => {
 				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
 			),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
+			followUps: v.optional(v.boolean()),
+			mcpServers: v.optional(
+				v.pipe(
+					v.array(
+						v.object({
+							name: v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _')),
+							url: v.pipe(v.string(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
+							auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
+							tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
+						}),
+					),
+					v.maxLength(10),
+					v.check((servers) => new Set(servers.map((server) => server.name)).size === servers.length, 'Each server needs its own name'),
+				),
+			),
 		}),
 	);
 	return c.json(await updateSettings(c.req.param('id'), change));
+});
+app.get('/api/projects/:id/automations', async (c) => c.json({ automations: await automations(c.req.param('id')) }));
+app.post('/api/projects/:id/automations', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			kind: v.picklist(['issues', 'schedule']),
+			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
+			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			prompt: v.pipe(v.string(), v.maxLength(20_000)),
+			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
+			reasoning: v.optional(v.nullable(REASONING)),
+		}),
+	);
+	return c.json(await addAutomation(c.req.param('id'), input));
+});
+app.patch('/api/automations/:id', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	return c.json(await setAutomationEnabled(c.req.param('id'), enabled));
+});
+app.post('/api/automations/:id/run', async (c) => c.json(await runAutomation(c.req.param('id'), { force: true })));
+app.delete('/api/automations/:id', async (c) => {
+	await removeAutomation(c.req.param('id'));
+	return c.json({ ok: true });
 });
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
