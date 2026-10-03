@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Folder, FolderOpen } from 'lucide-react';
+import { ChevronLeft, Folder, FolderOpen, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SourceBar } from '@/components/source-bar';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, branchLabel, refreshFor } from '@/lib/api';
+import { matchPaths } from '@/lib/completion';
+import { highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 
 type TreeNode = { name: string; path: string; children: Map<string, TreeNode>; file: boolean };
@@ -102,6 +104,13 @@ function asText(bytes: Uint8Array): string | null {
 function FileView({ sessionId, path, status, onBack }: { sessionId: string; path: string; status?: string; onBack: () => void }) {
 	const file = useQuery({ queryKey: ['file', sessionId, path], queryFn: () => api.file(sessionId, path) });
 	const contents = file.data ? asText(file.data) : '';
+	const colored = useQuery({
+		queryKey: ['highlight', sessionId, path, file.dataUpdatedAt],
+		queryFn: () => highlight(contents ?? '', path),
+		enabled: Boolean(contents),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+	const tokens = colored.data ?? null;
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex h-7 items-center gap-2">
@@ -129,7 +138,15 @@ function FileView({ sessionId, path, status, onBack }: { sessionId: string; path
 							{contents.split('\n').map((line, index) => (
 								<div key={index} className="flex">
 									<span className="w-11 shrink-0 pr-2.5 text-right text-(--text-disabled)">{index + 1}</span>
-									<span className="pr-3 pl-2 whitespace-pre text-(--text-secondary)">{line}</span>
+									<span className="pr-3 pl-2 whitespace-pre text-(--text-secondary)">
+										{tokens?.[index]
+											? tokens[index].map((token, at) => (
+													<span key={at} style={{ color: token.color }}>
+														{token.content}
+													</span>
+												))
+											: line}
+									</span>
 								</div>
 							))}
 						</div>
@@ -140,8 +157,36 @@ function FileView({ sessionId, path, status, onBack }: { sessionId: string; path
 	);
 }
 
+/** Paths that match a search, as a flat list. */
+function Matches({ paths, onOpen, statusOf }: { paths: string[]; onOpen: (path: string) => void; statusOf: (path: string) => string | undefined }) {
+	if (paths.length === 0) return <div className="px-2 py-1.5 text-[12px] text-(--text-tertiary)">No files match.</div>;
+	return (
+		<div className="flex flex-col gap-px">
+			{paths.map((path) => {
+				const status = statusOf(path);
+				const slash = path.lastIndexOf('/');
+				return (
+					<button
+						type="button"
+						key={path}
+						onClick={() => onOpen(path)}
+						className="flex h-[26px] items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+					>
+						<span className="shrink-0 text-[12px] text-(--text-secondary)">{path.slice(slash + 1)}</span>
+						<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+						{status ? <span className={cn('text-[11px]', STATUS_TONE[status])}>{status}</span> : null}
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+const MATCHES_SHOWN = 200;
+
 export function FilesTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
+	const [query, setQuery] = useState('');
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const listing = useQuery({
@@ -172,6 +217,19 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 			<SourceBar sessionId={sessionId} source={listing.data?.source} at={listing.data?.at}>
 				<span className="truncate text-(--text-disabled) uppercase">{heading}</span>
 			</SourceBar>
+			<label className="mb-1 flex h-8 items-center gap-2 rounded-lg bg-(--bg-surface) px-2.5 focus-within:shadow-(--focus-ring)">
+				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+				<input
+					value={query}
+					onChange={(event) => setQuery(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === 'Escape') setQuery('');
+					}}
+					placeholder="Find a file"
+					aria-label="Find a file"
+					className="min-w-0 flex-1 bg-transparent text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+				/>
+			</label>
 			{listing.isError ? (
 				<EmptyState title="Files unavailable" body={listing.error.message} />
 			) : listing.isPending ? (
@@ -179,6 +237,8 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					<Spinner size={12} />
 					Listing files
 				</div>
+			) : query.trim() ? (
+				<Matches paths={matchPaths(listing.data.paths, query.trim(), MATCHES_SHOWN)} onOpen={setSelected} statusOf={(path) => changes.get(path)} />
 			) : tree.children.size === 0 ? (
 				<EmptyState icon={Folder} title="Repository is empty" body="Files the agent creates show up here." />
 			) : (
