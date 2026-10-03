@@ -881,3 +881,25 @@ test('open pages hear about task changes as they happen', async () => {
 	assert.deepEqual(heard.slice(0, 5), ['sessions', `state ${session.id}`, `state ${session.id}`, `files ${session.id}`, `state ${session.id}`]);
 	assert.equal(heard.at(-1), 'sessions', 'deleting a task changes the list');
 });
+
+test('repo memory: the agent adds notes, the user edits them, and every task reads them', async () => {
+	const { remember, saveMemory, MAX_MEMORY } = await import('../src/services/memory.ts');
+	const { memoryFor, primeAgent } = await import('../src/services/agent-runner.ts');
+	const project = await addProject('acme/remembered');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Learn' });
+	assert.match(await remember(session.id, 'Tests need   Docker\nrunning.'), /Saved/);
+	await Promise.all([remember(session.id, 'Use pnpm, not npm.'), remember(session.id, 'Migrations live in db/.')]);
+	const notes = (await getProject(project.id))!.memory.split('\n');
+	assert.equal(notes[0], '- Tests need Docker running.');
+	assert.equal(notes.length, 3, 'notes saved at once all land');
+
+	const next = await sessions.createSession({ projectId: project.id, title: 'Use it' });
+	await primeAgent(next.id);
+	assert.match(memoryFor(next.id), /Use pnpm, not npm\./);
+
+	await saveMemory(project.id, '- Only this.\n');
+	assert.equal((await getProject(project.id))!.memory, '- Only this.');
+	await saveMemory(project.id, 'x'.repeat(MAX_MEMORY - 20));
+	assert.match(await remember(session.id, 'One more fact that does not fit.'), /full/);
+	await assert.rejects(() => saveMemory(project.id, 'x'.repeat(MAX_MEMORY + 1)), /under/);
+});

@@ -27,6 +27,13 @@ export function mcpServersFor(id: string): McpServer[] {
 	return [...webServer(repoServers), ...repoServers];
 }
 
+/** Each task's repo notes, read into the agent's instructions. */
+const memories = new Map<string, string>();
+
+export function memoryFor(id: string): string {
+	return memories.get(id) ?? '';
+}
+
 /** Tasks that have had a machine: the agent works there rather than starting read-only. */
 const workspaces = new Set<string>();
 
@@ -41,12 +48,13 @@ export function isPlanning(id: string): boolean {
 	return planning.has(id);
 }
 
-/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, whether it has a machine and whether it is planning. */
+/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers and notes, whether it has a machine and whether it is planning. */
 export async function primeAgent(id: string): Promise<void> {
 	await primeModel(id);
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);
+	memories.set(id, project?.memory ?? '');
 	if (session?.machineState) workspaces.add(id);
 	if (session?.planMode) planning.add(id);
 	else planning.delete(id);

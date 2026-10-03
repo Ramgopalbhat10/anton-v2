@@ -16,6 +16,7 @@ import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects, updateSettings } from './services/projects.ts';
+import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import {
 	createSession,
 	getSession,
@@ -146,6 +147,11 @@ app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
 app.post('/api/projects', async (c) => {
 	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
 	return c.json(await addProject(repo));
+});
+app.put('/api/projects/:id/memory', async (c) => {
+	const { memory } = await body(c, v.object({ memory: v.pipe(v.string(), v.maxLength(MAX_MEMORY)) }));
+	await saveMemory(c.req.param('id'), memory);
+	return c.json({ memory: memory.trim() });
 });
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 app.put('/api/projects/:id/settings', async (c) => {

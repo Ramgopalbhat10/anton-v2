@@ -23,7 +23,8 @@ import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { hasWorkspace, isPlanning, mcpServersFor } from '../services/agent-runner.ts';
+import { hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
+import { remember } from '../services/memory.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
@@ -177,6 +178,25 @@ function useOpenPullRequest(id: string) {
 	);
 }
 
+/** Adds a note to the repo's memory, which every later task reads. */
+function useRemember(id: string) {
+	useTool(
+		defineTool({
+			name: 'remember',
+			description:
+				'Save one short, lasting fact about this repository for future tasks: how to run or test it, a convention, a gotcha you hit. ' +
+				'Not details of this task, and nothing secret.',
+			input: v.object({ note: v.pipe(v.string(), v.minLength(1), v.description('One line')) }),
+			run: async ({ data }) => ({ output: await remember(id, data.note) }),
+		}),
+	);
+}
+
+/** The repo's notes, as part of the instructions; written by earlier tasks and the user. */
+function memoryPrompt(memory: string): string {
+	return memory ? `\n\nNotes about this repository from earlier tasks and the user (they may be out of date; trust the code):\n${memory}` : '';
+}
+
 /** Plan mode's way out: the plan is shown with an Approve button, and approving it turns plan mode off. */
 const proposePlan = defineTool({
 	name: 'propose_plan',
@@ -186,6 +206,8 @@ const proposePlan = defineTool({
 	}),
 	run: async () => ({ output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' }),
 });
+
+const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
 const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
 
@@ -236,6 +258,7 @@ export function Coder({ id }: AgentProps) {
 	if (workspace) useWorkspace(id, planning);
 	else useReadOnlyRepo(id, planning ? null : () => setStarted(true));
 	if (planning) useTool(proposePlan);
+	useRemember(id);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({
@@ -259,5 +282,5 @@ export function Coder({ id }: AgentProps) {
 	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
 	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
-	return planning ? `${prompt} ${PLAN_PROMPT}` : prompt;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${REMEMBER_HINT}${memoryPrompt(memoryFor(id))}`;
 }

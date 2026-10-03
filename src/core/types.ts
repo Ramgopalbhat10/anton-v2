@@ -7,6 +7,8 @@ export type Project = {
 	/** Image with the repo cloned and dependencies installed, if one was built. */
 	warmImage: string | null;
 	warmedAt: string | null;
+	/** Notes about the repo every task's agent reads: one per line, added by the agent or written by the user. */
+	memory: string;
 } & ProjectSettings;
 
 /** A remote MCP server whose tools the agent gets; `auth` is sent as a Bearer token. */

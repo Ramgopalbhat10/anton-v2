@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Plus, X } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
 import { MenuButton } from '@/components/nav';
 import { Btn, EmptyState, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
@@ -231,6 +231,42 @@ function SettingsForm({ project }: { project: Project }) {
 	);
 }
 
+/** The repo's notes, saved on their own: the agent adds to them while the settings form is open. */
+function MemoryEditor({ project }: { project: Project }) {
+	const queryClient = useQueryClient();
+	const [memory, setMemory] = useState(project.memory);
+	const [base, setBase] = useState(project.memory);
+	// Notes the agent added since the page loaded show up, unless you are editing.
+	useEffect(() => {
+		if (memory === base) setMemory(project.memory);
+		setBase(project.memory);
+	}, [project.memory]);
+	const save = useMutation({
+		mutationFn: () => api.saveMemory(project.id, memory),
+		onSuccess: (saved) => {
+			setMemory(saved.memory);
+			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+		},
+	});
+	return (
+		<div className="flex flex-col gap-2">
+			<textarea
+				value={memory}
+				onChange={(event) => setMemory(event.target.value)}
+				rows={6}
+				placeholder="- Run the tests with npm test; they need Docker."
+				className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+			/>
+			<div className="flex items-center gap-3">
+				<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
+					{save.isPending ? 'Saving…' : 'Save notes'}
+				</Btn>
+				{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+			</div>
+		</div>
+	);
+}
+
 /** Per-repository sandbox settings; tasks already running keep theirs until their sandbox restarts. */
 export function RepoSettingsPage() {
 	const { projectId } = useParams({ from: '/repos/$projectId' });
@@ -252,6 +288,13 @@ export function RepoSettingsPage() {
 					) : project ? (
 						<>
 							<SettingsForm key={project.id} project={project} />
+							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+								<SectionLabel>Memory</SectionLabel>
+								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+									Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
+								</p>
+								<MemoryEditor key={project.id} project={project} />
+							</div>
 							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
 								<SectionLabel>Automations</SectionLabel>
 								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">

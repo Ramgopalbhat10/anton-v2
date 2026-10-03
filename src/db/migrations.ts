@@ -59,6 +59,8 @@ const migrations: string[][] = [
 	],
 	// 9: plan mode per task, and automations whose tasks plan first and wait for approval.
 	[`ALTER TABLE sessions ADD COLUMN plan_mode INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE automations ADD COLUMN plan_first INTEGER NOT NULL DEFAULT 0`],
+	// 10: notes about the repo that every task's agent reads, kept by the agent and the user.
+	[`ALTER TABLE projects ADD COLUMN memory TEXT NOT NULL DEFAULT ''`],
 ];
 
 export async function migrate(db: Client): Promise<void> {
