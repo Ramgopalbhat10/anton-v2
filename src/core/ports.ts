@@ -152,6 +152,8 @@ export type GitHost = {
 	listIssues(fullName: string, label: string): Promise<Issue[]>;
 	/** A pull request's checks on its head commit and every comment and review on it; only its state once it is merged or closed. */
 	pullRequestActivity(url: string): Promise<PullRequestActivity>;
+	/** The display name of the account Anton acts as on the host, or null when it has none. */
+	accountName(): Promise<string | null>;
 };
 
 export type Issue = { number: number; title: string; body: string; url: string };

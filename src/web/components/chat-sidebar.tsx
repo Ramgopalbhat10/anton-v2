@@ -59,6 +59,8 @@ export function ChatSidebar({
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string };
 	const queryClient = useQueryClient();
+	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
+	const name = profile.data?.name ?? 'You';
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const stop = useMutation({
 		mutationFn: (id: string) => api.stopSession(id),
@@ -225,8 +227,8 @@ export function ChatSidebar({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-2 p-2">
-				<Avatar name="Anton Dev" />
-				<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">Anton Dev</div>
+				<Avatar name={name} />
+				<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{name}</div>
 				<SpentToday />
 				<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
 					<Icon icon={Settings} size={14} />

@@ -15,7 +15,8 @@ import { getProviders } from './providers/index.ts';
 import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
-import { addProject, branches, projects, updateSettings } from './services/projects.ts';
+import { profileName } from './services/profile.ts';
+import { addProject, branches, projects, removeProject, updateSettings } from './services/projects.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
 import {
@@ -67,9 +68,19 @@ async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v
 	return result.output;
 }
 
-/** Images render inline; everything else downloads, so agent-written HTML never runs on this origin. */
-const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
-const contentType = (path: string) => IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
+/**
+ * Images and PDFs render inline (the browser's PDF viewer keeps a PDF's scripts
+ * away from this page); everything else downloads, so agent-written HTML never runs on this origin.
+ */
+const INLINE_TYPES: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	gif: 'image/gif',
+	webp: 'image/webp',
+	pdf: 'application/pdf',
+};
+const contentType = (path: string) => INLINE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
 function bytes(c: Context, data: Uint8Array | null, type = 'application/octet-stream') {
 	if (!data) return c.json({ error: 'Not found' }, 404);
@@ -160,10 +171,15 @@ app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
 app.get('/api/models', async (c) => c.json({ models: await listModels(), default: config.model }));
 
+app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
 app.post('/api/projects', async (c) => {
 	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
 	return c.json(await addProject(repo));
+});
+app.delete('/api/projects/:id', async (c) => {
+	await removeProject(c.req.param('id'));
+	return c.json({ ok: true });
 });
 app.put('/api/projects/:id/memory', async (c) => {
 	const { memory } = await body(c, v.object({ memory: v.pipe(v.string(), v.maxLength(MAX_MEMORY)) }));

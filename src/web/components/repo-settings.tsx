@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
@@ -267,6 +267,35 @@ function MemoryEditor({ project }: { project: Project }) {
 	);
 }
 
+/** Removes the repo after a second click, since its tasks go with it. */
+function RemoveRepo({ project }: { project: Project }) {
+	const queryClient = useQueryClient();
+	const navigate = useNavigate();
+	const [confirming, setConfirming] = useState(false);
+	const remove = useMutation({
+		mutationFn: () => api.removeProject(project.id),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+			void navigate({ to: '/' });
+		},
+	});
+	return (
+		<div className="flex items-center gap-3">
+			<Btn
+				variant="danger"
+				size="sm"
+				disabled={remove.isPending}
+				onClick={() => (confirming ? remove.mutate() : setConfirming(true))}
+				onBlur={() => setConfirming(false)}
+			>
+				{remove.isPending ? 'Removing…' : confirming ? 'Click again to remove' : 'Remove repository'}
+			</Btn>
+			{remove.isError ? <span className="text-[12px] text-(--danger-text)">{remove.error.message}</span> : null}
+		</div>
+	);
+}
+
 /** Per-repository sandbox settings; tasks already running keep theirs until their sandbox restarts. */
 export function RepoSettingsPage() {
 	const { projectId } = useParams({ from: '/repos/$projectId' });
@@ -301,6 +330,13 @@ export function RepoSettingsPage() {
 									Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
 								</p>
 								<Automations projectId={project.id} />
+							</div>
+							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+								<SectionLabel>Remove</SectionLabel>
+								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+									Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
+								</p>
+								<RemoveRepo project={project} />
 							</div>
 						</>
 					) : (

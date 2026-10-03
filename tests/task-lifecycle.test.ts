@@ -57,6 +57,7 @@ const fakeHost: GitHost = {
 	pullRequestState: async () => 'open',
 	listIssues: async () => issues,
 	pullRequestActivity: async () => activity,
+	accountName: async () => 'Ada Lovelace',
 };
 // What the fake GitHub reports; tests change these.
 let issues: Issue[] = [];
@@ -902,4 +903,23 @@ test('repo memory: the agent adds notes, the user edits them, and every task rea
 	await saveMemory(project.id, 'x'.repeat(MAX_MEMORY - 20));
 	assert.match(await remember(session.id, 'One more fact that does not fit.'), /full/);
 	await assert.rejects(() => saveMemory(project.id, 'x'.repeat(MAX_MEMORY + 1)), /under/);
+});
+
+test('removing a repo deletes its tasks, machines and automations, and the profile names the host account', async () => {
+	const { removeProject, projects } = await import('../src/services/projects.ts');
+	const { listAutomations } = await import('../src/db/automations.ts');
+	const { profileName } = await import('../src/services/profile.ts');
+	const project = await addProject('acme/removed');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Goes away' });
+	await machineFor(session.id);
+	await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Nightly.' });
+
+	await removeProject(project.id);
+	assert.equal(await getProject(project.id), null);
+	assert.equal(await getSessionRecord(session.id), null);
+	assert.equal(await sessions.isRunning(session.id), false, 'its machine is stopped');
+	assert.equal((await listAutomations(project.id)).length, 0);
+	assert.ok(!(await projects()).some((item) => item.id === project.id));
+	await assert.rejects(() => removeProject(project.id), /not found/);
+	assert.equal(await profileName(), 'Ada Lovelace');
 });
