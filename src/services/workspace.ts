@@ -1,4 +1,4 @@
-import type { Machine, MachineOrigin } from '../core/ports.ts';
+import type { Acquired, Machine, MachineOrigin } from '../core/ports.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
@@ -27,10 +27,14 @@ function warmImageFor(project: Project): string | null {
 	return fresh ? project.warmImage : null;
 }
 
-/** Saves a reusable image of the set-up repo in the background, once setup has finished. */
-function refreshWarmImage(machine: Machine, project: Project): void {
+/**
+ * Saves a reusable image of the set-up repo once setup has finished. Waited
+ * for, so nothing the agent does can end up in the image: later tasks start
+ * from it, and their setup runs there with Anton's credentials.
+ */
+async function refreshWarmImage(machine: Machine, project: Project): Promise<void> {
 	if (warmImageFor(project)) return;
-	void getProviders()
+	await getProviders()
 		.sandbox.snapshot(machine)
 		.then((image) => setWarmImage(project.id, image, project.baseImage))
 		.catch((error: unknown) => console.warn('[anton] warm image failed', error));
@@ -80,14 +84,14 @@ async function isReady(machine: Machine, session: SessionRecord, origin: Machine
 	return text(marker.stdout).trim() === session.id;
 }
 
+/** Sets up a machine that is not ready yet: one fresh from an image or the toolchain. */
 async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	const { machine, session } = context;
-	if (await isReady(machine, session, origin)) return;
 	await setup[origin === 'image' ? 'image' : 'clone'](context);
 	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
-	if (origin !== 'image') refreshWarmImage(machine, context.project);
+	if (origin !== 'image') await refreshWarmImage(machine, context.project);
 }
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {
@@ -97,20 +101,31 @@ async function load(id: string): Promise<{ session: SessionRecord; project: Proj
 	return { session, project };
 }
 
+const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resumed';
+
+/**
+ * The task's machine, set up or ready to be. A machine of its own that lacks
+ * the marker may have been used by the agent or the terminal since, and
+ * setup runs with Anton's credentials, so it is set aside for a fresh one.
+ */
+async function acquireReady(session: SessionRecord, project: Project): Promise<{ acquired: Acquired; ready: boolean }> {
+	const { sandbox } = getProviders();
+	const request = { key: session.id, image: warmImageFor(project), baseImage: project.baseImage, ports: project.previewPorts };
+	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
+	const ready = await isReady(acquired.machine, session, acquired.origin);
+	if (ready || !isUsed(acquired.origin)) return { acquired, ready };
+	await sandbox.stop(acquired.state);
+	return { acquired: await sandbox.acquire({ ...request, state: null }), ready: false };
+}
+
 async function provision(id: string): Promise<Machine> {
 	const { session, project } = await load(id);
-	const acquired = await getProviders().sandbox.acquire({
-		key: id,
-		state: session.machineState,
-		image: warmImageFor(project),
-		baseImage: project.baseImage,
-		ports: project.previewPorts,
-	});
+	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
 	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...project.env });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
-		await prepare({ machine, session, project }, acquired.origin);
+		if (!ready) await prepare({ machine, session, project }, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;

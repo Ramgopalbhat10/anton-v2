@@ -96,6 +96,29 @@ export type PullRequestInput = {
 	body: string;
 };
 
+/** Who made a commit and when; `date` is ISO 8601 with the original offset, so the commit's hash survives. */
+export type Signature = { name: string; email: string; date: string };
+
+/** A path a commit changed against its first parent; `sha` is null when it was removed. Mode 160000 is a submodule. */
+export type TreeChange = { path: string; mode: string; sha: string | null };
+
+/** A commit exactly as stored, enough to recreate it with the same hash. `parentTree` is its first parent's tree. */
+export type CommitData = {
+	sha: string;
+	tree: string;
+	parents: string[];
+	parentTree: string | null;
+	author: Signature;
+	committer: Signature;
+	message: string;
+	changes: TreeChange[];
+};
+
+/** Reads commits and file contents from wherever they were made. */
+export type CommitSource = { commit(sha: string): Promise<CommitData>; blob(sha: string): Promise<Uint8Array> };
+
+export type PushInput = { repo: string; branch: string; head: string; commits: string[]; source: CommitSource };
+
 export type PullRequestState = 'open' | 'draft' | 'merged' | 'closed';
 
 export type GitHost = {
@@ -107,8 +130,19 @@ export type GitHost = {
 	tree(fullName: string, sha: string): Promise<string[]>;
 	file(fullName: string, sha: string, path: string): Promise<Uint8Array>;
 	cloneUrl(fullName: string): string;
-	/** Environment that authenticates git commands Anton runs itself. Never given to the agent. */
+	/**
+	 * Environment that authenticates the git commands Anton runs to set up a
+	 * machine, before any agent or terminal has used it. Never given to the agent.
+	 */
 	gitAuthEnv(): Record<string, string>;
+	/** Where `branch` points on the host, or null when it does not exist. */
+	branchHead(fullName: string, branch: string): Promise<string | null>;
+	/**
+	 * Recreates `commits` (oldest first) on the host from their contents,
+	 * skipping any it already has, then points `branch` at `head`, replacing
+	 * what was there. Pushing this way keeps credentials out of the machine.
+	 */
+	pushCommits(input: PushInput): Promise<void>;
 	openPullRequest(input: PullRequestInput): Promise<string>;
 	/** The state of a pull request this host opened, by its URL. */
 	pullRequestState(url: string): Promise<PullRequestState>;

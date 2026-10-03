@@ -10,10 +10,17 @@ const RUNNING_MARKER = '.anton-running';
 /** How long the output may stay quiet after the shell exits before exec stops waiting for it. */
 const OUTPUT_GRACE_MS = 1000;
 
+/**
+ * Commits are pushed by recreating them through the git host's API, which
+ * cannot carry a signature, so a signing setup in this computer's git config
+ * stays off for tasks.
+ */
+const UNSIGNED = { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'tag.gpgsign', GIT_CONFIG_VALUE_1: 'false' };
+
 /** Only what a shell needs; host secrets never reach a task. */
 function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 	const pick = (name: string) => (process.env[name] ? { [name]: process.env[name] as string } : {});
-	return { ...pick('PATH'), ...pick('HOME'), ...pick('LANG'), TERM: 'xterm-256color', ...extra };
+	return { ...pick('PATH'), ...pick('HOME'), ...pick('LANG'), TERM: 'xterm-256color', ...UNSIGNED, ...extra };
 }
 
 /**

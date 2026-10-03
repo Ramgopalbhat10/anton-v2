@@ -3,7 +3,6 @@ import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { SYMLINK_MODE, type SavedFile, readBlob, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
 import { type FileChange, changes, repoDir } from './git.ts';
@@ -12,10 +11,10 @@ import { machineFor } from './workspace.ts';
 export type RestoreResult = { at: string; skipped: string[] };
 
 /** Runs `command` over the paths in batches, so a long list never overflows the command line. */
-async function eachBatch(machine: Machine, command: string, paths: string[], env?: Record<string, string>): Promise<void> {
+async function eachBatch(machine: Machine, command: string, paths: string[]): Promise<void> {
 	for (let start = 0; start < paths.length; start += 200) {
 		const batch = paths.slice(start, start + 200).map(quote).join(' ');
-		await run(machine, `${command} -- ${batch}`, { cwd: repoDir(machine), env });
+		await run(machine, `${command} -- ${batch}`, { cwd: repoDir(machine) });
 	}
 }
 
@@ -24,8 +23,8 @@ async function resetToBase(machine: Machine, baseSha: string, files: FileChange[
 	const added = files.filter((file) => file.status === 'A').map((file) => file.path);
 	const existing = files.filter((file) => file.status !== 'A').map((file) => file.path);
 	await eachBatch(machine, 'rm -f', added);
-	// Only the working tree, so the agent's index is untouched. A partial clone may fetch base blobs on demand, which needs Anton's credentials.
-	await eachBatch(machine, `git restore --source=${baseSha} --worktree`, existing, getProviders().git.gitAuthEnv());
+	// Only the working tree, so the agent's index is untouched. The base was checked out at setup, so its files are all here.
+	await eachBatch(machine, `git restore --source=${baseSha} --worktree`, existing);
 }
 
 /**

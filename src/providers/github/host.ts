@@ -1,7 +1,9 @@
-import type { CheckResult, GitHost, PullRequestComment, PullRequestInput, PullRequestState, RepoInfo } from '../../core/ports.ts';
+import type { CheckResult, CommitData, CommitSource, GitHost, PullRequestComment, PullRequestInput, PullRequestState, RepoInfo, TreeChange } from '../../core/ports.ts';
 
 /** Requests that take longer than this fail, so a stuck connection never stalls the headless loop. */
 const TIMEOUT_MS = 30_000;
+/** A file upload may take longer than an ordinary request. */
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 /** Lists longer than this many pages are cut, oldest pages first kept. */
 const MAX_PAGES = 10;
 
@@ -90,6 +92,49 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		return items;
 	}
 
+	const post = <T>(path: string, body: unknown, timeoutMs = TIMEOUT_MS) =>
+		json<T>(path, { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
+	const notFound = (error: unknown) => (error instanceof GitHubError && error.status === 404 ? null : Promise.reject(error));
+	/** A branch name as a ref path: each segment encoded, slashes kept. */
+	const refPath = (branch: string) => `heads/${branch.split('/').map(encodeURIComponent).join('/')}`;
+
+	async function branchHead(repo: string, branch: string): Promise<string | null> {
+		const ref = await json<{ object: { sha: string } }>(`/repos/${repo}/git/ref/${refPath(branch)}`).catch(notFound);
+		return ref?.object.sha ?? null;
+	}
+
+	async function hasCommit(repo: string, sha: string): Promise<boolean> {
+		return (await call(`/repos/${repo}/git/commits/${sha}`).catch(notFound)) !== null;
+	}
+
+	/** One tree entry; a file's contents are uploaded first, so the tree can point at them. */
+	async function entryFor(repo: string, { path, mode, sha }: TreeChange, source: CommitSource) {
+		const type = mode === '160000' ? 'commit' : 'blob';
+		if (sha !== null && type === 'blob') {
+			const content = Buffer.from(await source.blob(sha)).toString('base64');
+			await post(`/repos/${repo}/git/blobs`, { content, encoding: 'base64' }, UPLOAD_TIMEOUT_MS);
+		}
+		return { path, mode, type, sha };
+	}
+
+	/** Builds the commit's tree on the host as its first parent's tree plus its changes. */
+	async function writeTree(repo: string, commit: CommitData, source: CommitSource): Promise<string> {
+		if (commit.changes.length === 0) return commit.tree;
+		const entries = [];
+		for (const change of commit.changes) entries.push(await entryFor(repo, change, source));
+		return (await post<{ sha: string }>(`/repos/${repo}/git/trees`, { base_tree: commit.parentTree ?? undefined, tree: entries })).sha;
+	}
+
+	/** Same contents, parents, people, dates and message give the same hash; anything else is refused. */
+	async function recreate(repo: string, commit: CommitData, source: CommitSource): Promise<void> {
+		const short = commit.sha.slice(0, 7);
+		const tree = await writeTree(repo, commit, source);
+		if (tree !== commit.tree) throw new Error(`GitHub built a different tree for commit ${short}`);
+		const { message, parents, author, committer } = commit;
+		const created = await post<{ sha: string }>(`/repos/${repo}/git/commits`, { message, tree, parents, author, committer });
+		if (created.sha !== commit.sha) throw new Error(`GitHub recreated commit ${short} as ${created.sha.slice(0, 7)}`);
+	}
+
 	async function existingPullRequest({ repo, head }: PullRequestInput): Promise<string | null> {
 		const owner = repo.split('/')[0];
 		const open = await json<Array<{ html_url: string }>>(`/repos/${repo}/pulls?state=open&head=${owner}:${encodeURIComponent(head)}`);
@@ -146,6 +191,15 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		async pullRequestState(url) {
 			const { repo, number } = pullOf(url);
 			return stateOf(await json<PullRequest>(`/repos/${repo}/pulls/${number}`));
+		},
+		branchHead,
+		async pushCommits({ repo, branch, head, commits, source }) {
+			for (const sha of commits) {
+				if (!(await hasCommit(repo, sha))) await recreate(repo, await source.commit(sha), source);
+			}
+			// Like a forced push: the task's branch is the agent's, so it moves to wherever the agent's work is.
+			if ((await branchHead(repo, branch)) === null) await post(`/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: head });
+			else await json(`/repos/${repo}/git/refs/${refPath(branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: head, force: true }) });
 		},
 		async listIssues(fullName, label) {
 			const issues = await all<{ number: number; title: string; body: string | null; html_url: string; pull_request?: unknown }>(
