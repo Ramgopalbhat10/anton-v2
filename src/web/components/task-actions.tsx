@@ -132,6 +132,9 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 				<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>
 					{session.prUrl ? 'Update the pull request' : 'Open a pull request'}
 				</MenuItem>
+				<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/settings/repos/$projectId', params: { projectId: session.projectId } })}>
+					Repository settings
+				</MenuItem>
 				{isLive(session) ? (
 					<MenuItem icon={Square} onSelect={() => stop.mutate()} disabled={stop.isPending}>
 						Stop sandbox

@@ -77,6 +77,8 @@ export type Project = {
 	defaultBranch: string;
 	/** Notes every task's agent reads, one per line. */
 	memory: string;
+	/** When the image new tasks start from (repo cloned, dependencies installed) was built; null when there is none. */
+	warmedAt: string | null;
 } & ProjectSettings;
 
 /**

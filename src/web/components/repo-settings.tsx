@@ -3,7 +3,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
-import { MenuButton } from '@/components/nav';
+import { PageHeading } from '@/components/settings/parts';
 import { Btn, EmptyState, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
 import { api, type Project, type SettingsChange } from '@/lib/api';
 import { useProjects } from '@/lib/projects';
@@ -277,7 +277,7 @@ function RemoveRepo({ project }: { project: Project }) {
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-			void navigate({ to: '/' });
+			void navigate({ to: '/settings/$section', params: { section: 'repos' } });
 		},
 	});
 	return (
@@ -298,52 +298,45 @@ function RemoveRepo({ project }: { project: Project }) {
 
 /** Per-repository sandbox settings; tasks already running keep theirs until their sandbox restarts. */
 export function RepoSettingsPage() {
-	const { projectId } = useParams({ from: '/repos/$projectId' });
+	const { projectId } = useParams({ from: '/settings/repos/$projectId' });
 	const projects = useProjects();
 	const project = projects.data?.projects.find((item) => item.id === projectId);
-	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium text-(--text-secondary) md:pl-4">
-				<MenuButton />
-				{project ? `${project.repoFullName} settings` : 'Repository settings'}
-			</header>
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-8 pb-12 md:px-6">
-				<div className="mx-auto flex max-w-[660px] flex-col gap-6">
-					{projects.isPending ? (
-						<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
-							<Spinner size={12} />
-							Loading
-						</div>
-					) : project ? (
-						<>
-							<SettingsForm key={project.id} project={project} />
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Memory</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
-								</p>
-								<MemoryEditor key={project.id} project={project} />
-							</div>
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Automations</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
-								</p>
-								<Automations projectId={project.id} />
-							</div>
-							<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-								<SectionLabel>Remove</SectionLabel>
-								<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-									Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
-								</p>
-								<RemoveRepo project={project} />
-							</div>
-						</>
-					) : (
-						<EmptyState title="Repository not found" body={projects.error?.message} />
-					)}
-				</div>
+	if (projects.isPending) {
+		return (
+			<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+				<Spinner size={12} />
+				Loading
 			</div>
-		</div>
+		);
+	}
+	if (!project) return <EmptyState title="Repository not found" body={projects.error?.message} />;
+	return (
+		<>
+			<PageHeading title={project.repoFullName}>
+				What every new sandbox for this repository gets. Tasks already running keep theirs until their sandbox restarts.
+			</PageHeading>
+			<SettingsForm key={project.id} project={project} />
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Memory</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
+				</p>
+				<MemoryEditor key={project.id} project={project} />
+			</div>
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Automations</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
+				</p>
+				<Automations projectId={project.id} />
+			</div>
+			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
+				<SectionLabel>Remove</SectionLabel>
+				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+					Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
+				</p>
+				<RemoveRepo project={project} />
+			</div>
+		</>
 	);
 }

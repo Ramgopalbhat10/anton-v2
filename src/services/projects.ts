@@ -12,12 +12,16 @@ const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 /** An MCP server as the browser sees it: whether it has a token, never the token. */
 export type McpServerView = Omit<McpServer, 'auth'> & { hasAuth: boolean };
 
-/** What the browser sees of a repo: variable names and whether servers have tokens, never the secrets. */
-export type ProjectView = Omit<Project, 'env' | 'warmImage' | 'warmedAt' | 'mcpServers'> & { envKeys: string[]; mcpServers: McpServerView[] };
+/**
+ * What the browser sees of a repo: variable names and whether servers have
+ * tokens, never the secrets; when its prepared image was built, not the image.
+ */
+export type ProjectView = Omit<Project, 'env' | 'warmImage' | 'mcpServers'> & { envKeys: string[]; mcpServers: McpServerView[] };
 
-function present({ env, warmImage: _image, warmedAt: _at, mcpServers, ...project }: Project): ProjectView {
+function present({ env, warmImage, warmedAt, mcpServers, ...project }: Project): ProjectView {
 	return {
 		...project,
+		warmedAt: warmImage ? warmedAt : null,
 		envKeys: Object.keys(env).sort(),
 		mcpServers: mcpServers.map(({ auth, ...server }) => ({ ...server, hasAuth: Boolean(auth) })),
 	};

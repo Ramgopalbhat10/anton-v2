@@ -40,6 +40,11 @@ function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[];
 				<MenuItem icon={Plus} onSelect={onAdd}>
 					Add a repository
 				</MenuItem>
+				{value ? (
+					<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/settings/repos/$projectId', params: { projectId: value.id } })}>
+						Repository settings
+					</MenuItem>
+				) : null}
 			</MenuContent>
 		</Menu>
 	);
@@ -70,7 +75,7 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 }
 
 /** Adds a GitHub repo by name; Anton's token must be able to read it. */
-function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => void; onCancel: () => void }) {
+export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => void; onCancel: () => void }) {
 	const [name, setName] = useState('');
 	const queryClient = useQueryClient();
 	const add = useMutation({
