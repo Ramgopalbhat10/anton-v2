@@ -22,6 +22,7 @@ function toProject(row: Row): Project {
 		baseImage: optional(row.base_image),
 		followUps: row.follow_ups == null ? true : Number(row.follow_ups) === 1,
 		mcpServers: parsed(row.mcp_json, []),
+		memory: String(row.memory ?? ''),
 	};
 }
 
@@ -85,4 +86,21 @@ export async function setProjectSettings(id: string, settings: ProjectSettings):
 			id,
 		],
 	});
+}
+
+/** The repo's notes as the user wrote them. */
+export async function setProjectMemory(id: string, memory: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE projects SET memory = ? WHERE id = ?', args: [memory, id] });
+}
+
+/** Adds a line to the repo's notes in one statement, so a note never overwrites another; false when it would not fit. */
+export async function appendProjectMemory(id: string, line: string, maxLength: number): Promise<boolean> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `UPDATE projects SET memory = CASE WHEN memory = '' THEN ? ELSE memory || char(10) || ? END
+			WHERE id = ? AND length(memory) + length(?) + 1 <= ?`,
+		args: [line, line, id, line, maxLength],
+	});
+	return result.rowsAffected === 1;
 }

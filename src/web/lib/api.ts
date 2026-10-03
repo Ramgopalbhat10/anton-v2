@@ -69,6 +69,8 @@ export type Project = {
 	id: string;
 	repoFullName: string;
 	defaultBranch: string;
+	/** Notes every task's agent reads, one per line. */
+	memory: string;
 } & ProjectSettings;
 
 /**
@@ -166,6 +168,8 @@ export const api = {
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
+	saveMemory: (id: string, memory: string) =>
+		json<{ memory: string }>(`/api/projects/${id}/memory`, { method: 'PUT', body: JSON.stringify({ memory }) }),
 	updateProjectSettings: (id: string, change: SettingsChange) =>
 		json<Project>(`/api/projects/${id}/settings`, { method: 'PUT', body: JSON.stringify(change) }),
 	automations: (projectId: string) => json<{ automations: Automation[] }>(`/api/projects/${projectId}/automations`),
