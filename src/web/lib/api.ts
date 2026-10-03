@@ -228,6 +228,7 @@ export const api = {
 	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
 	profile: () => json<{ name: string | null }>('/api/profile'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
+	addableRepos: () => json<{ repos: string[] }>('/api/repos'),
 	addProject: (repo: string) => post<Project>('/api/projects', { repo }),
 	removeProject: async (id: string) => void (await request(`/api/projects/${id}`, { method: 'DELETE' })),
 	logs: () => json<{ logs: LogEntry[] }>('/api/logs'),
@@ -256,6 +257,7 @@ export const api = {
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
 	checkpoint: (id: string, at: string) => json<{ at: string; patch: string | null }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}`),
+	revertFile: async (id: string, path: string) => void (await post(`/api/sessions/${id}/revert`, { path })),
 	restoreCheckpoint: (id: string, at: string) =>
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
