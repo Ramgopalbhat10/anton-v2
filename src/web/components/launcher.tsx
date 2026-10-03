@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
+import { useSuggestions } from '@/components/suggestions';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
 import {
@@ -114,6 +115,9 @@ export function Launcher() {
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [planMode, setPlanMode] = useState(false);
+	const box = useRef<HTMLTextAreaElement>(null);
+	// No task yet, so no files to point at; saved commands work here too.
+	const suggestions = useSuggestions({ text: prompt, setText: setPrompt, box: () => box.current });
 	const [adding, setAdding] = useState(false);
 	const create = useCreateChat();
 	const models = useModels();
@@ -158,18 +162,24 @@ export function Launcher() {
 					</div>
 
 					<form
-						className="flex flex-col gap-3 rounded-xl bg-(--bg-surface) px-4 pt-4 pb-2.5"
+						className="relative flex flex-col gap-3 rounded-xl bg-(--bg-surface) px-4 pt-4 pb-2.5"
 						onSubmit={(event) => {
 							event.preventDefault();
 							start();
 						}}
 					>
 						<textarea
+							ref={box}
 							autoFocus
 							rows={4}
 							value={prompt}
-							onChange={(event) => setPrompt(event.target.value)}
+							onChange={(event) => {
+								setPrompt(event.target.value);
+								suggestions.track(event.target);
+							}}
+							onSelect={(event) => suggestions.track(event.currentTarget)}
 							onKeyDown={(event) => {
+								if (suggestions.onKeyDown(event)) return;
 								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 									event.preventDefault();
 									start();
@@ -178,6 +188,7 @@ export function Launcher() {
 							placeholder="Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test."
 							className="w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-[21px] text-(--text-primary) outline-none"
 						/>
+						{suggestions.list ? <div className="absolute top-full right-0 left-0 z-10 mt-1.5">{suggestions.list}</div> : null}
 						<div className="flex flex-wrap items-center gap-1.5">
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />

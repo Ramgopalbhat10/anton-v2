@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { HardDrive, Trash2 } from 'lucide-react';
+import { HardDrive, Plus, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { MenuButton } from '@/components/nav';
-import { Btn, Icon, SectionLabel, Spinner } from '@/components/signal';
-import { api, type Limits } from '@/lib/api';
+import { Btn, Icon, IconBtn, SectionLabel, Spinner } from '@/components/signal';
+import { api, type Command, type Limits } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 
 const FIELD =
@@ -100,9 +100,63 @@ function Storage() {
 	);
 }
 
-/** App-wide settings: what Anton may spend, and what it keeps in storage. */
+function Commands({ saved }: { saved: Command[] }) {
+	const queryClient = useQueryClient();
+	const [rows, setRows] = useState(saved);
+	const save = useMutation({
+		mutationFn: () => api.saveCommands(rows.filter((row) => row.name.trim() || row.prompt.trim())),
+		onSuccess: (result) => {
+			setRows(result.commands);
+			queryClient.setQueryData(['commands'], result);
+		},
+	});
+	const change = (index: number, patch: Partial<Command>) => setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+	return (
+		<form
+			className="flex flex-col gap-2"
+			onSubmit={(event) => {
+				event.preventDefault();
+				save.mutate();
+			}}
+		>
+			{rows.map((row, index) => (
+				<div key={index} className="flex items-start gap-2">
+					<input
+						value={row.name}
+						onChange={(event) => change(index, { name: event.target.value })}
+						placeholder="review"
+						aria-label="Command name"
+						className={`${FIELD} shrink-0 font-mono`}
+					/>
+					<textarea
+						value={row.prompt}
+						onChange={(event) => change(index, { prompt: event.target.value })}
+						rows={2}
+						placeholder="Review the changes on this branch for bugs and missing tests."
+						aria-label="Prompt"
+						className="min-w-0 flex-1 resize-y rounded-lg bg-(--bg-surface) px-2.5 py-1.5 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+					/>
+					<IconBtn icon={Trash2} size="sm" label="Remove command" onClick={() => setRows((current) => current.filter((_, at) => at !== index))} />
+				</div>
+			))}
+			<div className="flex items-center gap-3">
+				<Btn size="sm" variant="ghost" icon={Plus} onClick={() => setRows((current) => [...current, { name: '', prompt: '' }])}>
+					Add a command
+				</Btn>
+				<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+					{save.isPending ? 'Saving…' : 'Save commands'}
+				</Btn>
+				{save.isSuccess && !save.isPending ? <span className="text-[12px] text-(--success-text)">Saved.</span> : null}
+				{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+			</div>
+		</form>
+	);
+}
+
+/** App-wide settings: what Anton may spend, saved prompts, and what it keeps in storage. */
 export function SettingsPage() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget() });
+	const commands = useQuery({ queryKey: ['commands'], queryFn: api.commands });
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium text-(--text-secondary) md:pl-4">
@@ -122,6 +176,17 @@ export function SettingsPage() {
 						}
 					>
 						{budget.data ? <Caps limits={budget.data.limits} /> : <Spinner size={12} />}
+					</Section>
+					<Section
+						title="Commands"
+						help={
+							<>
+								Prompts you reuse. Type <code>/</code> and the name at the start of a message to fill it in. Type <code>@</code> in a task's
+								message to point the agent at a file.
+							</>
+						}
+					>
+						{commands.data ? <Commands saved={commands.data.commands} /> : <Spinner size={12} />}
 					</Section>
 					<Section
 						title="Storage"

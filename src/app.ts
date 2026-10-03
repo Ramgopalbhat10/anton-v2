@@ -17,6 +17,7 @@ import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { addProject, branches, projects, updateSettings } from './services/projects.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
+import { commands, setCommands } from './services/commands.ts';
 import {
 	createSession,
 	getSession,
@@ -137,6 +138,19 @@ app.put('/api/settings/limits', async (c) => {
 	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));
 	await setLimits(next);
 	return c.json(await budget());
+});
+app.get('/api/settings/commands', async (c) => c.json({ commands: await commands() }));
+app.put('/api/settings/commands', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			commands: v.pipe(
+				v.array(v.object({ name: v.pipe(v.string(), v.maxLength(40)), prompt: v.pipe(v.string(), v.maxLength(20_000)) })),
+				v.maxLength(100),
+			),
+		}),
+	);
+	return c.json({ commands: await setCommands(input.commands) });
 });
 app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
