@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { Copy, GitCommitHorizontal, GitCompare, MessageSquare, Plus, Send, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Copy, GitCommitHorizontal, GitCompare, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useMemo, useState } from 'react';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { SourceBar } from '@/components/source-bar';
@@ -95,7 +95,37 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 	);
 }
 
-export function DiffBlock({ file, commenting }: { file: FileDiff; commenting?: Commenting }) {
+/** Puts the file back as it is on the base branch, after a second click. */
+function RevertButton({ sessionId, path }: { sessionId: string; path: string }) {
+	const queryClient = useQueryClient();
+	const [confirming, setConfirming] = useState(false);
+	const revert = useMutation({
+		mutationFn: () => api.revertFile(sessionId, path),
+		onSuccess: () => {
+			setConfirming(false);
+			void queryClient.invalidateQueries({ queryKey: ['changes', sessionId] });
+			void queryClient.invalidateQueries({ queryKey: ['files', sessionId] });
+		},
+	});
+	return (
+		<>
+			{revert.isError ? <span className="truncate text-[11px] text-(--danger-text)">{revert.error.message}</span> : null}
+			<Btn
+				variant={confirming ? 'dangerGhost' : 'ghost'}
+				size="xs"
+				icon={Undo2}
+				disabled={revert.isPending}
+				onClick={() => (confirming ? revert.mutate() : setConfirming(true))}
+				onBlur={() => setConfirming(false)}
+				title="Put this file back as it is on the base branch"
+			>
+				{revert.isPending ? 'Reverting…' : confirming ? 'Click again to revert' : 'Revert'}
+			</Btn>
+		</>
+	);
+}
+
+export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; commenting?: Commenting; sessionId?: string }) {
 	const [copied, setCopied] = useState(false);
 	// The line being commented on, by its number, so a refetch that shifts the diff keeps the form on its line.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
@@ -111,6 +141,7 @@ export function DiffBlock({ file, commenting }: { file: FileDiff; commenting?: C
 		<div className="overflow-hidden rounded-lg bg-(--bg-inset)">
 			<div className="flex h-8 items-center gap-2 bg-(--bg-raised) pr-1.5 pl-3">
 				<div className="min-w-0 flex-1 truncate text-[12px]">{file.path}</div>
+				{sessionId ? <RevertButton key={file.path} sessionId={sessionId} path={file.path} /> : null}
 				<IconBtn
 					icon={Copy}
 					size="xs"
@@ -187,8 +218,18 @@ function CommitList({ log }: { log: Array<{ sha: string; subject: string; at: st
 	);
 }
 
-/** Files on the left, the chosen file's diff below; `review` turns on line comments. */
-export function DiffList({ files, review, empty }: { files: FileDiff[]; review?: ReturnType<typeof useReviewComments>; empty?: string }) {
+/** Files on the left, the chosen file's diff below; `review` turns on line comments and `sessionId` reverting a file. */
+export function DiffList({
+	files,
+	review,
+	empty,
+	sessionId,
+}: {
+	files: FileDiff[];
+	review?: ReturnType<typeof useReviewComments>;
+	empty?: string;
+	sessionId?: string;
+}) {
 	const [selected, setSelected] = useState<string | null>(null);
 	if (files.length === 0) {
 		return <EmptyState icon={GitCompare} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
@@ -228,6 +269,7 @@ export function DiffList({ files, review, empty }: { files: FileDiff[]; review?:
 			<DiffBlock
 				key={current.path}
 				file={current}
+				sessionId={sessionId}
 				commenting={
 					review && {
 						comments: review.comments.filter((comment) => comment.path === current.path),
@@ -327,7 +369,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 					{view === 'diff' ? 'Commits' : 'Diff'}
 				</Btn>
 			</SourceBar>
-			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} />}
+			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} />}
 			<ReviewBar review={review} />
 		</div>
 	);

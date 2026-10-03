@@ -27,6 +27,6 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - `npm test` (server) and `npm run test:ui` (React components, in `tests/ui/`)
 - `npm run check:types`
 - `npm run dev` — UI on :43127, API on :43128
-- `npm run build && npm start` — production on `PORT`
+- `npm run build && npm start` — production on `PORT`; `npm run start:backup` does the same under Litestream, which restores and streams both SQLite files to Tigris (`litestream.yml`)
 - `npx flue run src/agents/coder.ts --message "Say ready."` (needs an LLM key)
 - `npx flue docs search <query>`

@@ -9,6 +9,7 @@ import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import {
 	Btn,
+	Icon,
 	Menu,
 	MenuContent,
 	MenuItem,
@@ -76,23 +77,30 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 	);
 }
 
-/** Adds a GitHub repo by name; Anton's token must be able to read it. */
+/** Repos offered at once; typing narrows them. */
+const REPOS_SHOWN = 8;
+
+/** Adds a GitHub repo, picked from those Anton's token can reach or typed by name. */
 export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => void; onCancel: () => void }) {
 	const [name, setName] = useState('');
 	const queryClient = useQueryClient();
+	const reachable = useQuery({ queryKey: ['addable-repos'], queryFn: api.addableRepos, staleTime: 60_000 });
 	const add = useMutation({
-		mutationFn: () => api.addProject(name.trim()),
+		mutationFn: (repo: string) => api.addProject(repo),
 		onSuccess: (project) => {
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+			void queryClient.invalidateQueries({ queryKey: ['addable-repos'] });
 			onAdded(project);
 		},
 	});
+	const query = name.trim().toLowerCase();
+	const matches = (reachable.data?.repos ?? []).filter((repo) => repo.toLowerCase().includes(query)).slice(0, REPOS_SHOWN);
 	return (
 		<form
 			className="flex flex-col gap-1.5"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (name.trim()) add.mutate();
+				if (name.trim()) add.mutate(name.trim());
 			}}
 		>
 			<div className="flex items-center gap-1.5">
@@ -101,7 +109,8 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 					value={name}
 					onChange={(event) => setName(event.target.value)}
 					onKeyDown={(event) => event.key === 'Escape' && onCancel()}
-					placeholder="owner/repository"
+					placeholder="Search your repositories, or type owner/repository"
+					aria-label="Repository"
 					className="h-7 min-w-0 flex-1 rounded-lg bg-(--bg-surface) px-2.5 text-[13px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)"
 				/>
 				<Btn type="submit" size="sm" disabled={add.isPending || !name.trim()}>
@@ -111,6 +120,22 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 					Cancel
 				</Btn>
 			</div>
+			{matches.length > 0 ? (
+				<div className="flex flex-col gap-px" role="list" aria-label="Your repositories">
+					{matches.map((repo) => (
+						<button
+							type="button"
+							key={repo}
+							disabled={add.isPending}
+							onClick={() => add.mutate(repo)}
+							className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-[12px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+						>
+							<Icon icon={Folder} size={12} className="text-(--icon-tertiary)" />
+							<span className="min-w-0 flex-1 truncate">{repo}</span>
+						</button>
+					))}
+				</div>
+			) : null}
 			{add.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{add.error.message}</p> : null}
 		</form>
 	);

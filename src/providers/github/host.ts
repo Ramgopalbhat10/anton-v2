@@ -150,6 +150,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 
 	return {
 		name: 'github',
+		async listRepos() {
+			if (!token) return [];
+			const repos = await all<{ full_name: string }>('/user/repos?per_page=100&sort=pushed');
+			return repos.map((repo) => repo.full_name);
+		},
 		async accountName() {
 			if (!token) return null;
 			const user = await json<{ login: string; name: string | null }>('/user');
