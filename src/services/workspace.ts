@@ -1,4 +1,5 @@
 import type { Acquired, Machine, MachineOrigin } from '../core/ports.ts';
+import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
@@ -145,6 +146,7 @@ export function machineFor(id: string): Promise<Machine> {
 	const pending = provision(id);
 	machines.set(id, pending);
 	starting.add(id);
+	announce({ kind: 'task', id, what: 'state' });
 	// Only this start's own entry is cleared: after Stop and Resume a newer start may own the id.
 	const current = () => machines.get(id) === pending;
 	pending
@@ -154,6 +156,7 @@ export function machineFor(id: string): Promise<Machine> {
 		)
 		.finally(() => {
 			if (current() || !machines.has(id)) starting.delete(id);
+			announce({ kind: 'task', id, what: 'state' });
 		});
 	return pending;
 }

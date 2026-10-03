@@ -3,7 +3,7 @@ import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
-import { api, type Session } from '@/lib/api';
+import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
 
@@ -92,7 +92,7 @@ export function Composer({
 	};
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
-	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: 30_000 });
+	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const ready = (text.trim() || images.length > 0) && !blind && !blocked;
 

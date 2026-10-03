@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
+import { announce } from '../core/changes.ts';
 import { getProject } from '../db/projects.ts';
 import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
@@ -22,8 +23,10 @@ function runningKeys(): Promise<Set<string>> {
 	return runningCache.keys;
 }
 
+/** Forgets what is running, after a start or stop, and tells open pages the task list changed. */
 export function invalidateRunning(): void {
 	runningCache = undefined;
+	announce({ kind: 'sessions' });
 }
 
 /** A failed setup reads as an error even while its machine is still up. */

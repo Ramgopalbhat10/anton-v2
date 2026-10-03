@@ -1,3 +1,4 @@
+import { announce } from '../core/changes.ts';
 import { liveMachine } from './workspace.ts';
 
 /**
@@ -10,13 +11,16 @@ const inFlight = new Map<string, Set<string>>();
 export type AgentEvent = { type: string; instanceId?: string; submissionId?: string };
 
 export function recordAgentEvent({ type, instanceId, submissionId }: AgentEvent): void {
+	// A finished tool call may have changed the task's files; open pages refetch them.
+	if (type === 'tool' && instanceId) announce({ kind: 'task', id: instanceId, what: 'files' });
 	if (!instanceId || !submissionId) return;
 	if (type === 'submission_running') {
 		inFlight.set(instanceId, (inFlight.get(instanceId) ?? new Set()).add(submissionId));
 	} else if (type === 'submission_settled') {
 		inFlight.get(instanceId)?.delete(submissionId);
 		if (inFlight.get(instanceId)?.size === 0) inFlight.delete(instanceId);
-	}
+	} else return;
+	announce({ kind: 'task', id: instanceId, what: 'state' });
 }
 
 type Abort = (id: string) => Promise<void>;

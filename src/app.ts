@@ -1,9 +1,11 @@
 import { dispatch, observe } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { config } from './config.ts';
+import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
@@ -91,6 +93,34 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
 setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
+
+/** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
+const HEARTBEAT_MS = 25_000;
+
+// Open pages learn what changed from here and refetch just that, instead of polling.
+app.get('/api/events', (c) =>
+	streamSSE(c, async (stream) => {
+		const queue: Change[] = [];
+		let wake = () => {};
+		const stop = onChange((change) => {
+			queue.push(change);
+			wake();
+		});
+		stream.onAbort(stop);
+		while (!stream.aborted) {
+			for (const change of queue.splice(0)) await stream.writeSSE({ data: JSON.stringify(change) });
+			await new Promise<void>((resolve) => {
+				const timer = setTimeout(resolve, HEARTBEAT_MS);
+				wake = () => {
+					clearTimeout(timer);
+					resolve();
+				};
+			});
+			if (queue.length === 0 && !stream.aborted) await stream.write(': ping\n\n');
+		}
+		stop();
+	}),
+);
 
 app.get('/api/health', (c) =>
 	c.json({

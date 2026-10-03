@@ -38,17 +38,11 @@ function NotRunning({ sessionId }: { sessionId: string }) {
 export function PreviewTab({ sessionId }: { sessionId: string }) {
 	const [chosen, setChosen] = useState<number | null>(null);
 	const [reloads, setReloads] = useState(0);
-	const session = useQuery({
-		queryKey: ['session', sessionId],
-		queryFn: () => api.session(sessionId),
-		refetchInterval: (query) => (query.state.data?.status === 'starting' ? 2000 : false),
-	});
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const starting = session.data?.status === 'starting';
-	const previews = useQuery({
-		queryKey: ['previews', sessionId],
-		queryFn: () => api.previews(sessionId),
-		refetchInterval: (query) => (query.state.data?.live ? 5000 : starting ? 2000 : 15000),
-	});
+	// Checking ports runs a command in the sandbox, and any command keeps it from stopping when idle.
+	// So no polling: the list is checked again when the agent runs a tool (that is how servers start), or on Reload.
+	const previews = useQuery({ queryKey: ['previews', sessionId], queryFn: () => api.previews(sessionId) });
 
 	if (previews.isPending || (starting && !previews.data?.live)) {
 		return (
@@ -73,7 +67,15 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 						<PortChip key={item.port} preview={item} active={item.port === current.port} onSelect={() => setChosen(item.port)} />
 					))}
 				</div>
-				<IconBtn icon={RotateCw} size="sm" label="Reload" onClick={() => setReloads((count) => count + 1)} disabled={!current.listening} />
+				<IconBtn
+					icon={RotateCw}
+					size="sm"
+					label="Reload"
+					onClick={() => {
+						setReloads((count) => count + 1);
+						void previews.refetch();
+					}}
+				/>
 				{current.url ? (
 					<a
 						href={current.url}
@@ -100,7 +102,7 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 					title={`Nothing is serving on port ${current.port}`}
 					body={
 						current.url
-							? 'Ask the agent to start the dev server on this port, bound to 0.0.0.0.'
+							? 'Ask the agent to start the dev server on this port, bound to 0.0.0.0. If you start it from the terminal, press Reload.'
 							: 'This port has no public URL. Sandboxes started before it was added to the repository settings do not expose it; stop and resume the task.'
 					}
 				/>

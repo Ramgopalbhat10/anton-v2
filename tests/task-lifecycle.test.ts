@@ -865,3 +865,19 @@ test('plan mode: the agent cannot write until the plan is approved, and plan-fir
 	assert.equal((await sessions.getSession(delivered[0].id)).planMode, true);
 	await removeAutomation(automation.id);
 });
+
+test('open pages hear about task changes as they happen', async () => {
+	const { onChange } = await import('../src/core/changes.ts');
+	const heard: string[] = [];
+	const stop = onChange((change) => heard.push(change.kind === 'task' ? `${change.what} ${change.id}` : change.kind));
+	const project = await addProject('acme/live');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Live' });
+	await sessions.editSession(session.id, { title: 'Live, renamed' });
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'live' });
+	recordAgentEvent({ type: 'tool', instanceId: session.id });
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'live' });
+	await sessions.deleteSession(session.id);
+	stop();
+	assert.deepEqual(heard.slice(0, 5), ['sessions', `state ${session.id}`, `state ${session.id}`, `files ${session.id}`, `state ${session.id}`]);
+	assert.equal(heard.at(-1), 'sessions', 'deleting a task changes the list');
+});
