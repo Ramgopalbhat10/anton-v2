@@ -24,7 +24,15 @@ import { createSession, deleteSession } from './sessions.ts';
 const ISSUES_AT_ONCE = 3;
 const HOUR_MS = 60 * 60_000;
 
-export type AutomationInput = { kind: Automation['kind']; label?: string | null; everyHours?: number | null; prompt: string; model?: string | null; reasoning?: Reasoning | null };
+export type AutomationInput = {
+	kind: Automation['kind'];
+	label?: string | null;
+	everyHours?: number | null;
+	prompt: string;
+	model?: string | null;
+	reasoning?: Reasoning | null;
+	planFirst?: boolean;
+};
 
 export async function addAutomation(projectId: string, input: AutomationInput): Promise<Automation> {
 	if (!(await getProject(projectId))) throw new NotFoundError('Project not found');
@@ -39,6 +47,7 @@ export async function addAutomation(projectId: string, input: AutomationInput): 
 		prompt: input.prompt.trim(),
 		model: input.model || null,
 		reasoning: input.model ? (input.reasoning ?? null) : null,
+		planFirst: input.planFirst ?? false,
 	});
 }
 
@@ -75,7 +84,13 @@ function issuePrompt(issue: Issue, extra: string): string {
 
 /** Creates a task and gives its agent the instructions, the same as typing them on the launcher. */
 async function startTask(automation: Automation, title: string, prompt: string): Promise<string> {
-	const session = await createSession({ projectId: automation.projectId, title, model: automation.model ?? undefined, reasoning: automation.reasoning ?? undefined });
+	const session = await createSession({
+		projectId: automation.projectId,
+		title,
+		model: automation.model ?? undefined,
+		reasoning: automation.reasoning ?? undefined,
+		planMode: automation.planFirst,
+	});
 	// A task its agent never heard about would only clutter the list; the next run tries again.
 	await sendToAgent(session.id, prompt).catch(async (error: unknown) => {
 		await deleteSession(session.id);

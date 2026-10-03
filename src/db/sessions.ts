@@ -25,6 +25,7 @@ function toRecord(row: Row): SessionRecord {
 		followState: optional(row.follow_json),
 		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
+		planMode: Number(row.plan_mode ?? 0) === 1,
 	};
 }
 
@@ -53,15 +54,15 @@ export async function spentSince(since: Date): Promise<number> {
 	return Number(result.rows[0]?.cost ?? 0);
 }
 
-export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha'>;
+export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'>;
 
 const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';
 
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, created_at)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId,
@@ -72,6 +73,7 @@ export async function insertSession(session: NewSession): Promise<void> {
 			session.branch,
 			session.baseBranch,
 			session.baseSha,
+			session.planMode ? 1 : 0,
 			new Date().toISOString(),
 		],
 	});
@@ -100,15 +102,19 @@ const columns = {
 	followState: 'follow_json',
 } as const;
 
-export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean };
+export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };
 
 export async function updateSession(id: string, update: SessionUpdate): Promise<void> {
 	const entries = Object.entries(columns).filter(([key]) => key in update);
 	const sets = entries.map(([, column]) => `${column} = ?`);
-	const args = entries.map(([key]) => update[key as keyof typeof columns] ?? null);
+	const args: Array<string | number | null> = entries.map(([key]) => update[key as keyof typeof columns] ?? null);
 	if (update.failed !== undefined) {
 		sets.push('status = ?');
 		args.push(update.failed ? 'error' : 'stopped');
+	}
+	if (update.planMode !== undefined) {
+		sets.push('plan_mode = ?');
+		args.push(update.planMode ? 1 : 0);
 	}
 	if (sets.length === 0) return;
 	const db = await appDb();

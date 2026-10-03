@@ -17,6 +17,8 @@ export type Automation = {
 	model: string | null;
 	/** Reasoning level for that model; null uses the model's default. */
 	reasoning: Reasoning | null;
+	/** Its tasks start in plan mode: they propose a plan and change nothing until it is approved. */
+	planFirst: boolean;
 	enabled: boolean;
 	lastRunAt: string | null;
 	lastError: string | null;
@@ -38,6 +40,7 @@ function toAutomation(row: Row): Automation {
 		prompt: String(row.prompt),
 		model: optional(row.model),
 		reasoning: optional(row.reasoning) as Reasoning | null,
+		planFirst: Number(row.plan_first ?? 0) === 1,
 		enabled: Number(row.enabled) === 1,
 		lastRunAt: optional(row.last_run_at),
 		lastError: optional(row.last_error),
@@ -46,14 +49,14 @@ function toAutomation(row: Row): Automation {
 	};
 }
 
-export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning'>;
+export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'>;
 
 export async function insertAutomation(input: NewAutomation): Promise<Automation> {
 	const db = await appDb();
 	const id = `auto_${randomUUID()}`;
 	await db.execute({
-		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, new Date().toISOString()],
+		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, plan_first, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, input.planFirst ? 1 : 0, new Date().toISOString()],
 	});
 	return (await getAutomation(id))!;
 }

@@ -163,6 +163,7 @@ app.post('/api/projects/:id/automations', async (c) => {
 			prompt: v.pipe(v.string(), v.maxLength(20_000)),
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
+			planFirst: v.optional(v.boolean()),
 		}),
 	);
 	return c.json(await addAutomation(c.req.param('id'), input));
@@ -188,6 +189,7 @@ app.post('/api/sessions', async (c) => {
 			model: v.optional(v.string()),
 			reasoning: v.optional(REASONING),
 			title: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			planMode: v.optional(v.boolean()),
 		}),
 	);
 	return c.json(await createSession(input));
@@ -200,6 +202,7 @@ app.patch('/api/sessions/:id', async (c) => {
 			title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
 			model: v.optional(v.string()),
 			reasoning: v.optional(v.nullable(REASONING)),
+			planMode: v.optional(v.boolean()),
 		}),
 	);
 	return c.json(await editSession(c.req.param('id'), change));

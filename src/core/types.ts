@@ -48,6 +48,8 @@ export type Session = {
 	working: boolean;
 	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
 	workspace: boolean;
+	/** The agent investigates and proposes a plan, changing nothing until the plan is approved. */
+	planMode: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;

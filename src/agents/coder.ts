@@ -23,7 +23,7 @@ import { takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { hasWorkspace, mcpServersFor } from '../services/agent-runner.ts';
+import { hasWorkspace, isPlanning, mcpServersFor } from '../services/agent-runner.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
@@ -68,7 +68,7 @@ const tester = defineSubagent({
 });
 
 /** Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch. */
-function useReadOnlyRepo(id: string, startWorkspace: () => void) {
+function useReadOnlyRepo(id: string, startWorkspace: (() => void) | null) {
 	const filter = {
 		path: v.optional(v.pipe(v.string(), v.description('Only under this folder, relative to the repo root'))),
 		glob: v.optional(v.pipe(v.string(), v.description('Only paths matching this glob, such as **/*.ts or package.json'))),
@@ -105,6 +105,10 @@ function useReadOnlyRepo(id: string, startWorkspace: () => void) {
 			run: async ({ data }) => ({ output: await searchRepo(id, data) }),
 		}),
 	);
+	if (startWorkspace) useStartWorkspace(id, startWorkspace);
+}
+
+function useStartWorkspace(id: string, startWorkspace: () => void) {
 	useTool(
 		defineTool({
 			name: 'start_workspace',
@@ -122,29 +126,21 @@ function useReadOnlyRepo(id: string, startWorkspace: () => void) {
 	);
 }
 
-/** The sandbox and everything that needs it: shell and file tools, subagents, pull requests and screenshots. */
-function useWorkspace(id: string) {
+/**
+ * The sandbox and everything that needs it: shell and file tools, subagents,
+ * pull requests and screenshots. In plan mode the file tools cannot write and
+ * there is no pull request.
+ */
+function useWorkspace(id: string, planning: boolean) {
 	useSandbox({
 		async createSandbox() {
 			const machine = await machineFor(id);
-			return machineSandbox(machine, repoDir(machine));
+			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id));
 		},
 	});
 	useSubagent(explorer);
 	useSubagent(tester);
-	useTool(
-		defineTool({
-			name: 'open_pull_request',
-			description: 'Commit all changes on this task branch, push it, and open a pull request. Returns the pull request URL.',
-			input: v.object({
-				title: v.pipe(v.string(), v.minLength(1), v.description('Pull request title, in the imperative mood')),
-				body: v.pipe(v.string(), v.description('What changed and why, in markdown')),
-			}),
-			async run({ data }) {
-				return { output: { url: await openPullRequest(id, data) } };
-			},
-		}),
-	);
+	if (!planning) useOpenPullRequest(id);
 	useTool(
 		defineTool({
 			name: 'screenshot',
@@ -164,6 +160,32 @@ function useWorkspace(id: string) {
 		}),
 	);
 }
+
+function useOpenPullRequest(id: string) {
+	useTool(
+		defineTool({
+			name: 'open_pull_request',
+			description: 'Commit all changes on this task branch, push it, and open a pull request. Returns the pull request URL.',
+			input: v.object({
+				title: v.pipe(v.string(), v.minLength(1), v.description('Pull request title, in the imperative mood')),
+				body: v.pipe(v.string(), v.description('What changed and why, in markdown')),
+			}),
+			async run({ data }) {
+				return { output: { url: await openPullRequest(id, data) } };
+			},
+		}),
+	);
+}
+
+/** Plan mode's way out: the plan is shown with an Approve button, and approving it turns plan mode off. */
+const proposePlan = defineTool({
+	name: 'propose_plan',
+	description: 'Show the user your plan for approval. Call it once the plan is ready, then stop and wait.',
+	input: v.object({
+		plan: v.pipe(v.string(), v.minLength(1), v.description('The plan in markdown: what will change, where, and how it will be checked')),
+	}),
+	run: async () => ({ output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' }),
+});
 
 const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
 
@@ -189,19 +211,31 @@ const WORKSPACE_PROMPT = [
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
+const PLAN_PROMPT = [
+	'Plan mode is on: investigate as much as you need, but change nothing.',
+	'File writes are refused, and you must not run commands that change files, install packages, commit or push.',
+	'When you understand the work, call the propose_plan tool with a concrete plan: the files you will change and how, and how you will check the result.',
+	'Always present the plan through propose_plan, not as a reply, so the user can approve it; keep any reply after it to a line or two.',
+	'Then stop. Once the user approves, plan mode turns off and you carry out the plan.',
+	'If they ask for changes, revise the plan and propose it again.',
+].join(' ');
+
 /**
  * A task starts read-only: questions are answered from a copy of the repo
  * on Anton's side, with no sandbox, clone or branch. The agent opens the
  * workspace when the work needs one, and a task that has had a machine
  * (from the agent, the terminal, Resume or a restore) keeps working there.
+ * In plan mode it may look but not change anything until its plan is approved.
  */
 export function Coder({ id }: AgentProps) {
 	const { model, reasoning } = modelFor(id);
 	useModel(model, { thinkingLevel: reasoning });
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);
-	if (workspace) useWorkspace(id);
-	else useReadOnlyRepo(id, () => setStarted(true));
+	const planning = isPlanning(id);
+	if (workspace) useWorkspace(id, planning);
+	else useReadOnlyRepo(id, planning ? null : () => setStarted(true));
+	if (planning) useTool(proposePlan);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({
@@ -224,5 +258,6 @@ export function Coder({ id }: AgentProps) {
 	});
 	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
 	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
-	return workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
+	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
+	return planning ? `${prompt} ${PLAN_PROMPT}` : prompt;
 }

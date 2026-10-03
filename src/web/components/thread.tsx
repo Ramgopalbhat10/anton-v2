@@ -1,5 +1,5 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
 	Bot,
@@ -11,6 +11,7 @@ import {
 	FileText,
 	FolderSearch,
 	GitPullRequest,
+	ListChecks,
 	Pencil,
 	Search,
 	SquareTerminal,
@@ -20,15 +21,18 @@ import {
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
-import { EmptyState, Icon, Spinner } from '@/components/signal';
-import { api, branchLabel, outputUrl, type Usage } from '@/lib/api';
+import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
+import { api, branchLabel, outputUrl, type Session, type Usage } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
 type Step = ToolPart | ReasoningPart;
-type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] };
+type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] } | { kind: 'plan'; part: ToolPart };
+
+const PLAN_TOOL = 'propose_plan';
+const APPROVED = 'Your plan is approved. Go ahead and build it.';
 
 function field(input: unknown, key: string): string {
 	if (input && typeof input === 'object' && key in input) {
@@ -151,6 +155,8 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 	for (const part of parts) {
 		if (part.type === 'text') {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
+		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {
+			blocks.push({ kind: 'plan', part });
 		} else if (part.type === 'reasoning' || part.type === 'dynamic-tool') {
 			const last = blocks[blocks.length - 1];
 			if (last?.kind === 'steps') last.steps.push(part);
@@ -251,6 +257,48 @@ function StepsCard({ steps, live }: { steps: Step[]; live: boolean }) {
 	);
 }
 
+/** A proposed plan, shown in full. */
+function PlanCard({ part }: { part: ToolPart }) {
+	const plan = field(part.input, 'plan');
+	return (
+		<div className="flex flex-col gap-2 rounded-lg border border-(--border-subtle) bg-(--bg-surface) px-3.5 pt-2.5 pb-3">
+			<div className="flex items-center gap-2 text-[12px] font-medium text-(--text-secondary)">
+				<Icon icon={ListChecks} size={12} className="text-(--accent-text)" />
+				Plan
+			</div>
+			{plan ? <Markdown text={plan} /> : <Spinner size={12} />}
+		</div>
+	);
+}
+
+/**
+ * While plan mode is on and the agent has answered, approving turns plan
+ * mode off first, so the agent has its full tools for the message that follows.
+ */
+function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: string) => Promise<void> }) {
+	const queryClient = useQueryClient();
+	const [approving, setApproving] = useState(false);
+	const approve = async () => {
+		setApproving(true);
+		try {
+			const updated = await api.editSession(sessionId, { planMode: false });
+			queryClient.setQueryData<Session>(['session', sessionId], updated);
+			await send(APPROVED);
+		} finally {
+			setApproving(false);
+		}
+	};
+	return (
+		<div className="mx-auto flex w-full max-w-[700px] items-center gap-2 px-4 pt-2">
+			<Icon icon={ListChecks} size={12} className="text-(--accent-text)" />
+			<span className="min-w-0 flex-1 text-[12px] text-(--text-secondary)">Plan mode is on. Approve the plan to let Anton build it, or reply to change it.</span>
+			<Btn size="sm" variant="primary" disabled={approving} onClick={() => void approve()}>
+				{approving ? 'Approving…' : 'Approve and build'}
+			</Btn>
+		</div>
+	);
+}
+
 type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
 
 function UserMessage({ message, meta }: { message: FlueConversationMessage; meta: string[] }) {
@@ -301,6 +349,8 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 			{blocks.map((block, index) =>
 				block.kind === 'text' ? (
 					<Markdown key={index} text={block.text} />
+				) : block.kind === 'plan' ? (
+					<PlanCard key={block.part.toolCallId} part={block.part} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} />
 				),
@@ -342,6 +392,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	);
 	const meta = session.data ? [session.data.repo, branchLabel(session.data)] : [];
 	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+	const planned = Boolean(session.data?.planMode) && !busy && messages[messages.length - 1]?.role === 'assistant';
 
 	useEffect(() => {
 		if (!agent.historyReady) return;
@@ -396,6 +447,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 					</div>
 				</div>
+				{planned ? <ApproveBar sessionId={sessionId} send={(text) => agent.sendMessage(text)} /> : null}
 				<Composer
 					busy={busy}
 					onSend={(text, images) =>

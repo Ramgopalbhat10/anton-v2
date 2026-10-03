@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, Send, Square, X } from 'lucide-react';
+import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { Icon, IconBtn, Kbd } from '@/components/signal';
+import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { api, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
@@ -27,6 +27,22 @@ function Thumbnails({ images, onRemove }: { images: ImageAttachment[]; onRemove:
 				</div>
 			))}
 		</div>
+	);
+}
+
+/** Plan mode: the agent investigates and proposes a plan, and changes nothing until the plan is approved. */
+export function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+	return (
+		<Btn
+			size="xs"
+			variant={on ? 'secondary' : 'ghost'}
+			icon={ListChecks}
+			aria-pressed={on}
+			title={on ? 'Plan mode: the agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
+			onClick={() => onChange(!on)}
+		>
+			Plan
+		</Btn>
 	);
 }
 
@@ -68,6 +84,12 @@ export function Composer({
 		queryFn: () => api.session(sessionId),
 	});
 	const choice = { model: session.data?.model ?? models.data?.default ?? '', reasoning: session.data?.reasoning ?? null };
+	const planning = session.data?.planMode ?? false;
+	const edit = (change: Partial<Session>) => {
+		// Show the choice at once; the server's copy replaces it when it lands.
+		queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
+		void api.editSession(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
+	};
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: 30_000 });
@@ -120,7 +142,7 @@ export function Composer({
 						event.preventDefault();
 						void attach(files);
 					}}
-					placeholder={busy ? 'Add to what the agent is doing' : 'Ask Anton to change the workspace'}
+					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : 'Ask Anton to change the workspace'}
 					rows={2}
 					className="w-full resize-none border-0 bg-transparent p-0 text-[13px] leading-[19px] text-(--text-primary) outline-none"
 				/>
@@ -142,14 +164,8 @@ export function Composer({
 						}}
 					/>
 					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
-					<ModelPicker
-						value={choice}
-						onChange={(change) => {
-							// Show the choice at once; the server's copy replaces it when it lands.
-							queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
-							void api.editSession(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
-						}}
-					/>
+					<ModelPicker value={choice} onChange={edit} />
+					<PlanToggle on={planning} onChange={(planMode) => edit({ planMode })} />
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled)">
 						<span className="truncate">{busy ? 'Send to the running agent' : 'Send'}</span>
 						<Kbd keys="enter" size="sm" />

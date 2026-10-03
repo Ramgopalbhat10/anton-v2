@@ -34,13 +34,22 @@ export function hasWorkspace(id: string): boolean {
 	return workspaces.has(id);
 }
 
-/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers and whether it has a machine. */
+/** Tasks in plan mode: the agent may look but not change anything until the plan is approved. */
+const planning = new Set<string>();
+
+export function isPlanning(id: string): boolean {
+	return planning.has(id);
+}
+
+/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, whether it has a machine and whether it is planning. */
 export async function primeAgent(id: string): Promise<void> {
 	await primeModel(id);
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);
 	if (session?.machineState) workspaces.add(id);
+	if (session?.planMode) planning.add(id);
+	else planning.delete(id);
 }
 
 /**

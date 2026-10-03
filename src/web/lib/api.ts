@@ -36,6 +36,8 @@ export type Session = {
 	working: boolean;
 	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
 	workspace: boolean;
+	/** The agent proposes a plan and changes nothing until it is approved. */
+	planMode: boolean;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;
@@ -89,6 +91,8 @@ export type Automation = {
 	prompt: string;
 	model: string | null;
 	reasoning: Reasoning | null;
+	/** Its tasks start in plan mode and wait for approval. */
+	planFirst: boolean;
 	enabled: boolean;
 	lastRunAt: string | null;
 	lastError: string | null;
@@ -96,7 +100,7 @@ export type Automation = {
 	createdAt: string;
 };
 
-export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning'>;
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'>;
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';
@@ -172,12 +176,12 @@ export const api = {
 	deleteAutomation: async (id: string) => void (await request(`/api/automations/${id}`, { method: 'DELETE' })),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
-	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning }) =>
+	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
-	editSession: (id: string, change: Partial<ModelChoice> & { title?: string }) =>
+	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),

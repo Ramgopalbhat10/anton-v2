@@ -79,6 +79,7 @@ export async function createSession(input: {
 	model?: string;
 	reasoning?: Reasoning;
 	title?: string;
+	planMode?: boolean;
 }): Promise<Session> {
 	const project = await getProject(input.projectId);
 	if (!project) throw new NotFoundError('Project not found');
@@ -88,7 +89,7 @@ export async function createSession(input: {
 	const title = input.title?.trim() || 'New task';
 	const model = input.model ? await knownModel(input.model) : config.model;
 	const branch = `anton/${slug(title)}-${id.slice(0, 6)}`;
-	await insertSession({ id, projectId: project.id, title, model, reasoning: input.reasoning ?? null, baseBranch, baseSha, branch });
+	await insertSession({ id, projectId: project.id, title, model, reasoning: input.reasoning ?? null, baseBranch, baseSha, branch, planMode: input.planMode ?? false });
 	return getSession(id);
 }
 
@@ -107,9 +108,9 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null };
+export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean };
 
-/** Renames the task or changes its model or reasoning level; a model change applies from the next prompt. */
+/** Renames the task, changes its model or reasoning level, or turns plan mode on or off; the agent sees a change from the next prompt. */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));
 	const title = change.title?.trim();
@@ -117,6 +118,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(title ? { title } : {}),
 		...(model ? { model } : {}),
 		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
+		...(change.planMode !== undefined ? { planMode: change.planMode } : {}),
 	});
 	return getSession(id);
 }
