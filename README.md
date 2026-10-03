@@ -53,7 +53,8 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |
 | `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
-| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records (default `file:./data/anton.db`) |
+| `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
 | `ANTON_IDLE_MINUTES` | Stop a sandbox after this many idle minutes (default 15) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
@@ -61,6 +62,16 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
 | `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
+
+## Backups
+
+Anton keeps its state in two SQLite files in the data folder: `anton.db` (repos, tasks, settings, usage) and `flue.db` (every conversation). Checkpoints and Library files are already in storage. To keep the databases safe too, start production with:
+
+```sh
+npm run build && npm run start:backup
+```
+
+This needs [Litestream](https://litestream.io) 0.5 or later on the server and the Tigris variables above. On start it restores both files from `db/` in the Tigris bucket when the server has none, then runs Anton under Litestream, which streams every write to the bucket about once a second. A new server with the same variables starts where the old one stopped. If the restore fails, Anton does not start, because an empty database next to your storage would lose every task. Only one server may run against a bucket at a time. Settings in `litestream.yml`.
 
 Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
 

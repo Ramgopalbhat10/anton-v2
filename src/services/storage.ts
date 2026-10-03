@@ -1,3 +1,4 @@
+import { ConflictError } from '../core/errors.ts';
 import type { ObjectStore, StoredObject } from '../core/ports.ts';
 import { text } from '../core/shell.ts';
 import { listSessionRecords } from '../db/sessions.ts';
@@ -11,6 +12,7 @@ const KEEP_CHECKPOINTS = 50;
 /** A blob this new may belong to a checkpoint still being written. */
 const BLOB_GRACE_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+const EMPTY_DATABASE = 'Storage cleanup skipped: the database has no tasks but storage holds task files. Restore the database, or point it at storage of its own.';
 
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
@@ -68,6 +70,8 @@ export async function cleanUpStorage(now = Date.now()): Promise<CleanupResult> {
 	const live = new Set((await listSessionRecords()).map((session) => session.id));
 	const sessionObjects = await store.list('sessions/');
 	const orphaned = sessionObjects.filter((object) => !live.has(sessionOf(object.key)));
+	// A database with no tasks next to storage that has some is more likely new or not restored yet than emptied by hand.
+	if (live.size === 0 && orphaned.length > 0) throw new ConflictError(EMPTY_DATABASE);
 	const bySession = Map.groupBy(
 		sessionObjects.filter((object) => live.has(sessionOf(object.key))),
 		(object) => sessionOf(object.key),
