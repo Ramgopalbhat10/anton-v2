@@ -121,3 +121,19 @@ test('a push rebuilds missing commits through the API and then moves the branch'
 	);
 	assert.ok(!calls.some((call) => call.includes('/git/refs')), 'the branch is left alone');
 });
+
+test('a review that GitHub cannot place on the diff is posted with its comments in the summary', async () => {
+	const bodies: Array<Record<string, unknown>> = [];
+	globalThis.fetch = (async (_input: string | URL, init?: RequestInit) => {
+		const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+		bodies.push(body);
+		return body.comments ? new Response('{"message":"Line could not be resolved"}', { status: 422 }) : new Response('{}', { status: 200 });
+	}) as typeof fetch;
+	await githubHost({ token: 't', apiUrl: API }).postReview('https://github.com/acme/demo/pull/7', {
+		commit: 'abc',
+		body: 'Summary',
+		comments: [{ path: 'src/a.ts', line: 3, body: 'Off by one.\nUse <=.' }],
+	});
+	assert.deepEqual(bodies[0], { commit_id: 'abc', event: 'COMMENT', body: 'Summary', comments: [{ path: 'src/a.ts', line: 3, body: 'Off by one.\nUse <=.', side: 'RIGHT' }] });
+	assert.deepEqual(bodies[1], { commit_id: 'abc', event: 'COMMENT', body: 'Summary\n\n- `src/a.ts:3`: Off by one. Use <=.' });
+});

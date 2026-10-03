@@ -168,8 +168,16 @@ export type GitHost = {
 	listIssues(fullName: string, label: string): Promise<Issue[]>;
 	/** A pull request's checks on its head commit and every comment and review on it; only its state once it is merged or closed. */
 	pullRequestActivity(url: string): Promise<PullRequestActivity>;
+	/**
+	 * Posts a review on a pull request as Anton's account, never approving or
+	 * blocking it: a summary, and comments on lines of the change. Comments the
+	 * host cannot place on the diff are folded into the summary.
+	 */
+	postReview(url: string, review: ReviewInput): Promise<void>;
 	/** The display name of the account Anton acts as on the host, or null when it has none. */
 	accountName(): Promise<string | null>;
+	/** `owner/name` of the repos Anton's account can reach, most recently pushed first. */
+	listRepos(): Promise<string[]>;
 };
 
 export type Issue = { number: number; title: string; body: string; url: string };
@@ -183,6 +191,12 @@ export type CheckResult = { name: string; status: 'pending' | 'passed' | 'failed
  * installed on it.
  */
 export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string };
+
+/** A comment on one line of the new version of a file the pull request changed. */
+export type ReviewComment = { path: string; line: number; body: string };
+
+/** `commit` is the head the review read; null means the pull request's latest. */
+export type ReviewInput = { commit: string | null; body: string; comments: ReviewComment[] };
 
 export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[] };
 

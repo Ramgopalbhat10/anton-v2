@@ -4,6 +4,7 @@ import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
+import { Reviewer } from './agents/reviewer.ts';
 import { config } from './config.ts';
 import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
@@ -16,13 +17,14 @@ import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
 import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { profileName } from './services/profile.ts';
-import { addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
+import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { defaultModel, generalSettings, setGeneralSettings } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
+import { catalog, installPlugin, marketplaces, pluginsView, removePlugin, sessionSkills, setEnabled, setMarketplaces } from './services/plugins.ts';
 import {
 	createSession,
 	getSession,
@@ -34,7 +36,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { isRestoring, restoreCheckpoint } from './services/restore.ts';
+import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
@@ -43,6 +45,7 @@ import { addAutomation, automations, removeAutomation, runAutomation, setAutomat
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
+import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
@@ -69,6 +72,7 @@ observe((event) => {
 appDb().catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
+setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, message: text })), 'reviewer');
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -118,7 +122,12 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
-setAgentAbort(async (id) => void (await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' })));
+// The reviewer is never served over HTTP; its router only stops it.
+const reviewers = createAgentRouter(Reviewer);
+setAgentAbort(async (id) => {
+	const path = `/${encodeURIComponent(id)}/abort`;
+	await Promise.all([agents.request(path, { method: 'POST' }), reviewers.request(path, { method: 'POST' })]);
+});
 
 /** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
 const HEARTBEAT_MS = 25_000;
@@ -199,8 +208,42 @@ app.put('/api/settings/sandbox', async (c) => {
 });
 app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
 app.put('/api/settings/general', async (c) => {
-	const next = await body(c, v.object({ model: v.nullable(v.pipe(v.string(), v.minLength(1))), reasoning: v.nullable(REASONING), planMode: v.boolean() }));
+	const next = await body(
+		c,
+		v.object({
+			model: v.nullable(v.pipe(v.string(), v.minLength(1))),
+			reasoning: v.nullable(REASONING),
+			planMode: v.boolean(),
+			reviewPullRequests: v.boolean(),
+		}),
+	);
 	return c.json(await setGeneralSettings(next));
+});
+app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
+app.put('/api/settings/marketplaces', async (c) => {
+	const input = await body(c, v.object({ marketplaces: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), v.maxLength(20)) }));
+	return c.json({ marketplaces: await setMarketplaces(input.marketplaces) });
+});
+app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '') }));
+app.post('/api/plugins', async (c) => {
+	const input = await body(
+		c,
+		v.union([
+			v.object({ marketplace: v.pipe(v.string(), v.minLength(1)), name: v.pipe(v.string(), v.minLength(1)) }),
+			v.object({ address: v.pipe(v.string(), v.trim(), v.minLength(1)) }),
+		]),
+	);
+	await installPlugin(input);
+	return c.json({ plugins: await pluginsView() });
+});
+app.patch('/api/plugins/:id', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	await setEnabled(c.req.param('id'), enabled);
+	return c.json({ plugins: await pluginsView() });
+});
+app.delete('/api/plugins/:id', async (c) => {
+	await removePlugin(c.req.param('id'));
+	return c.json({ plugins: await pluginsView() });
 });
 app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
 app.put('/api/settings/guardrails', async (c) => c.json(await setGuardrails(await body(c, v.object({ hideSecrets: v.boolean() })))));
@@ -222,6 +265,7 @@ app.get('/api/models', async (c) => c.json({ models: await listModels(), default
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
+app.get('/api/repos', async (c) => c.json({ repos: await addableRepos() }));
 app.post('/api/projects', async (c) => {
 	const { repo } = await body(c, v.object({ repo: v.pipe(v.string(), v.trim(), v.minLength(3)) }));
 	return c.json(await addProject(repo));
@@ -294,6 +338,7 @@ app.delete('/api/automations/:id', async (c) => {
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
+app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));
 app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,
@@ -325,6 +370,7 @@ app.delete('/api/sessions/:id', async (c) => {
 	await deleteSession(c.req.param('id'));
 	return c.body(null, 204);
 });
+app.post('/api/sessions/:id/review', async (c) => c.json({ started: await requestReview(c.req.param('id'), { automatic: false }) }));
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 app.get('/api/sessions/:id/checkpoints', async (c) => {
@@ -337,6 +383,11 @@ app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
 	return c.json({ at: c.req.param('at'), patch });
 });
 app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
+app.post('/api/sessions/:id/revert', async (c) => {
+	const { path } = await body(c, v.object({ path: v.pipe(v.string(), v.minLength(1)) }));
+	await revertFile(c.req.param('id'), path);
+	return c.json({ ok: true });
+});
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 

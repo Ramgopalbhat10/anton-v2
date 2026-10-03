@@ -18,10 +18,11 @@ export function machineSandbox(
 	cwd: string,
 	canWrite: () => boolean = () => true,
 	secrets: Record<string, string> = {},
+	refusal = 'Plan mode is on: nothing can be changed until the user approves your plan. Call propose_plan instead.',
 ): Sandbox {
 	const hide = redactor(secrets);
 	function writable(): void {
-		if (!canWrite()) throw new Error('Plan mode is on: nothing can be changed until the user approves your plan. Call propose_plan instead.');
+		if (!canWrite()) throw new Error(refusal);
 	}
 
 	async function check(command: string): Promise<string> {

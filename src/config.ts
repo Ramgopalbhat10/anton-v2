@@ -1,13 +1,15 @@
 import path from 'node:path';
 
 const read = (name: string, fallback = ''): string => process.env[name]?.trim() || fallback;
+/** Anton's own files: both databases, local machines and disk storage. */
+const dataDir = path.resolve(read('ANTON_DATA_DIR', 'data'));
 
 /** Every setting Anton reads from the environment, in one place. */
 export const config = {
 	/** Model for new tasks, as `<gateway>/<model id>`. */
 	model: read('ANTON_MODEL', 'openrouter/~deepseek/deepseek-flash-latest'),
-	dataDir: path.resolve(read('ANTON_DATA_DIR', 'data')),
-	databaseUrl: read('TURSO_DATABASE_URL', 'file:./data/anton.db'),
+	dataDir,
+	databaseUrl: read('TURSO_DATABASE_URL', `file:${path.join(dataDir, 'anton.db')}`),
 	databaseToken: read('TURSO_AUTH_TOKEN'),
 	/** Which provider backs each port; see src/providers/index.ts. */
 	sandbox: read('ANTON_SANDBOX', process.env.MODAL_TOKEN_ID ? 'modal' : 'local'),

@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import type { AcquireRequest, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity } from '../src/core/ports.ts';
+import type { AcquireRequest, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity, ReviewInput } from '../src/core/ports.ts';
 import { bareRemote } from './bare-remote.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
@@ -57,8 +57,19 @@ const fakeHost: GitHost = {
 	pullRequestState: async () => 'open',
 	listIssues: async () => issues,
 	pullRequestActivity: async () => activity,
+	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	accountName: async () => 'Ada Lovelace',
+	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
 };
+/** Resolves once `ready` holds, for work a service starts without waiting on it. */
+async function waitFor(ready: () => boolean): Promise<void> {
+	for (let tries = 0; !ready(); tries += 1) {
+		if (tries > 200) throw new Error('timed out');
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+}
+/** Reviews Anton posted on pull requests. */
+const reviews: Array<{ url: string } & ReviewInput> = [];
 // What the fake GitHub reports; tests change these.
 let issues: Issue[] = [];
 let activity: PullRequestActivity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
@@ -123,6 +134,8 @@ setAgentDelivery(async (id, text) => {
 	if (deliveryFails) throw new Error('agent unavailable');
 	delivered.push({ id, text });
 });
+const reviewRequests: Array<{ id: string; text: string }> = [];
+setAgentDelivery(async (id, text) => void reviewRequests.push({ id, text }), 'reviewer');
 // Counts shells, so a test can tell whether one was opened.
 let shellsOpened = 0;
 const local = localSandboxProvider(path.join(dir, 'data'));
@@ -589,7 +602,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -829,6 +842,57 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 	await updateSettings(project.id, { ...(await getProject(project.id))!, env: {}, followUps: false });
 	assert.equal(await followUp(await record()), false, 'off in the repo settings');
 	assert.equal(delivered.length, 5);
+});
+
+test('each pull request the agent opens or updates is reviewed, and the review is posted on it for follow-ups to fix', async () => {
+	const { postReview, requestReview, MAX_REVIEWS, REVIEW_MARK, CLEAN_MARK } = await import('../src/services/code-review.ts');
+	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const project = await addProject('acme/reviewed');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Reviewed' });
+	await assert.rejects(() => requestReview(session.id, { automatic: false }), /no pull request/);
+	const machine = await machineFor(session.id);
+	writeFileSync(path.join(machine.root, 'repo', 'README.md'), '# demo, reviewed\n');
+	reviewRequests.length = 0;
+	activity = { state: 'open', headSha: 'head-1', checks: [], comments: [] };
+	await openPullRequest(session.id, { title: 'Review me', body: '' });
+	await waitFor(() => reviewRequests.length === 1);
+	assert.equal(reviewRequests[0].id, session.id);
+	const base = (await getSessionRecord(session.id))!.baseSha;
+	assert.match(reviewRequests[0].text, new RegExp(`git diff ${base}\\.\\.\\.head-1`), 'the reviewer gets the change to read');
+
+	reviews.length = 0;
+	assert.match(
+		await postReview(session.id, { summary: 'Changes the readme.', findings: [{ path: './README.md', line: 1, body: 'Says reviewed twice.' }] }),
+		/Posted 1 finding on/,
+	);
+	assert.equal(reviews[0].commit, 'head-1', 'comments land on the commit the reviewer read');
+	assert.deepEqual(reviews[0].comments, [{ path: 'README.md', line: 1, body: 'Says reviewed twice.' }]);
+	assert.match(reviews[0].body, /1 problem to fix[\s\S]*Changes the readme/);
+
+	// Follow-ups send the findings to the agent, but never a review that found nothing.
+	delivered.length = 0;
+	const asReview = (id: string, body: string) => ({ id, author: 'ada', body, path: null, line: null, at: '' });
+	activity = { ...activity, comments: [asReview('review-1', reviews[0].body), { id: 'line-2', author: 'ada', body: 'Says reviewed twice.', path: 'README.md', line: 1, at: '' }] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), true);
+	assert.match(delivered[0].text, /README\.md line 1: Says reviewed twice/);
+	await postReview(session.id, { summary: '', findings: [] });
+	assert.match(reviews[1].body, /no problems found/);
+	activity = { ...activity, comments: [...activity.comments, asReview('review-3', reviews[1].body)] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), false, 'a clean review asks nothing');
+
+	// Automatic reviews stop after a few on one pull request, and when turned off; asking by hand always works.
+	activity = { ...activity, comments: Array.from({ length: MAX_REVIEWS }, (_, index) => asReview(`review-${index}`, `x ${index ? REVIEW_MARK : CLEAN_MARK}`)) };
+	assert.equal(await requestReview(session.id, { automatic: true }), false);
+	assert.equal(await requestReview(session.id, { automatic: false }), true);
+	activity = { ...activity, comments: [] };
+	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: false });
+	assert.equal(await requestReview(session.id, { automatic: true }), false);
+	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: true });
+	activity = { ...activity, state: 'merged' };
+	assert.equal(await requestReview(session.id, { automatic: true }), false);
+	await assert.rejects(() => requestReview(session.id, { automatic: false }), /merged/);
+	assert.equal(reviewRequests.length, 2);
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 
 test('MCP server tokens are kept on save and never shown', async () => {
@@ -1086,4 +1150,65 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 	assert.ok(!(await projects()).some((item) => item.id === project.id));
 	await assert.rejects(() => removeProject(project.id), /not found/);
 	assert.equal(await profileName(), 'Ada Lovelace');
+});
+
+test("a task's agent gets the repo's skills and installed plugins' skills, the repo's winning a name", async () => {
+	const { installPlugin, pluginsView, primeSkills, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/plugins.ts');
+	const skillMd = (name: string) => `---\nname: ${name}\ndescription: Use when asked to ${name}.\n---\nDo ${name} carefully.\n`;
+	git(seed, 'checkout', '-q', '-b', 'with-skills');
+	for (const [file, content] of Object.entries({
+		'.agents/skills/release/SKILL.md': skillMd('release'),
+		'.claude/skills/triage/SKILL.md': skillMd('triage'),
+		'AGENTS.md': 'Run npm test before committing.',
+		'tools/skills/release/SKILL.md': skillMd('release'),
+		'tools/skills/lint/SKILL.md': skillMd('lint'),
+		'tools/skills/lint/rules.md': 'No semicolons.',
+	})) {
+		execFileSync('mkdir', ['-p', path.dirname(path.join(seed, file))]);
+		writeFileSync(path.join(seed, file), content);
+	}
+	git(seed, 'add', '.');
+	git(seed, 'commit', '-q', '-m', 'skills');
+	git(seed, 'push', '-q', remote, 'with-skills');
+	git(seed, 'checkout', '-q', 'main');
+
+	const plugin = (await installPlugin({ address: 'https://github.com/acme/demo/tree/with-skills/tools' })).id;
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Skills', branch: 'with-skills' });
+	await primeSkills(session.id);
+	assert.deepEqual(skillsFor(session.id, false).map((skill) => skill.name), ['release', 'triage', 'lint'], "the plugin's release yields to the repo's");
+	assert.deepEqual(skillsFor(session.id, true).map((skill) => skill.name), ['triage', 'lint'], 'with a sandbox, the runtime reads .agents/skills itself');
+	assert.equal(skillsFor(session.id, false)[2].files['rules.md'], 'No semicolons.');
+	assert.match(repoInstructionsFor(session.id), /Run npm test/);
+
+	await setEnabled(plugin, false);
+	await primeSkills(session.id);
+	assert.deepEqual(skillsFor(session.id, false).map((skill) => skill.name), ['release', 'triage']);
+	assert.deepEqual((await pluginsView())[0].skills.map((skill) => skill.active), [false, false]);
+	await removePlugin(plugin);
+	assert.equal((await pluginsView()).length, 0);
+	await assert.rejects(() => installPlugin({ address: 'https://github.com/acme/demo/tree/main' }), /no skills/);
+});
+
+test('one file goes back to the base branch, and the repo picker leaves out added repos', async () => {
+	const { revertFile } = await import('../src/services/restore.ts');
+	const { addableRepos } = await import('../src/services/projects.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Revert one' });
+	const machine = await machineFor(session.id);
+	const original = await run(machine, 'cat README.md');
+	await run(machine, 'echo changed >> README.md && echo new > added.txt');
+	await revertFile(session.id, 'README.md');
+	assert.equal(await run(machine, 'cat README.md'), original);
+	assert.equal((await run(machine, 'cat added.txt')).trim(), 'new', 'other changes stay');
+	await revertFile(session.id, 'added.txt');
+	assert.equal((await run(machine, 'test -e added.txt || echo gone')).trim(), 'gone', 'an added file is removed');
+	await assert.rejects(() => revertFile(session.id, 'README.md'), /no changes/);
+	await assert.rejects(() => revertFile(session.id, '../etc/passwd'), /Invalid path/);
+	const checkpoints = await listCheckpoints(session.id);
+	assert.ok(checkpoints.length >= 2, 'each revert can be undone from the timeline');
+
+	const offered = await addableRepos();
+	assert.ok(!offered.includes('acme/demo'), 'an added repo is not offered again');
+	assert.ok(offered.includes('acme/other'));
 });

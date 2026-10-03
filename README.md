@@ -32,6 +32,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
 5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.
 6. **Pull request.** The agent calls `open_pull_request`; Anton commits in the sandbox, then rebuilds those commits on GitHub through its API (same hashes), so the token never enters a sandbox the agent has used. Anton's token is used inside a sandbox only to clone during setup, before the agent starts.
+7. **Review.** Each time the agent opens or updates a pull request, a second agent, the reviewer, reads the change in the same sandbox without changing anything. It follows the repo's `REVIEW.md` if there is one, and posts its findings on GitHub as a review with line comments. With follow-ups on, the agent then fixes them. Automatic reviews stop after three on one pull request; **Review the pull request** in the task menu asks for another, and Settings › General turns automatic reviews off.
 
 ## Providers
 
@@ -53,7 +54,8 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |
 | `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
-| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records (default `file:./data/anton.db`) |
+| `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
 | `ANTON_IDLE_MINUTES` | Stop a sandbox after this many idle minutes (default 15) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
@@ -61,6 +63,16 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
 | `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
+
+## Backups
+
+Anton keeps its state in two SQLite files in the data folder: `anton.db` (repos, tasks, settings, usage) and `flue.db` (every conversation). Checkpoints and Library files are already in storage. To keep the databases safe too, start production with:
+
+```sh
+npm run build && npm run start:backup
+```
+
+This needs [Litestream](https://litestream.io) 0.5 or later on the server and the Tigris variables above. On start it restores both files from `db/` in the Tigris bucket when the server has none, then runs Anton under Litestream, which streams every write to the bucket about once a second. A new server with the same variables starts where the old one stopped. If the restore fails, Anton does not start, because an empty database next to your storage would lose every task. Only one server may run against a bucket at a time. Settings in `litestream.yml`.
 
 Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
 
@@ -73,6 +85,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |
+| `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
 | `src/app.ts` | HTTP routes |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
 | `src/web/` | React UI |

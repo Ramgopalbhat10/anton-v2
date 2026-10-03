@@ -56,7 +56,7 @@ export function RepositoriesPage() {
 			{projects.isPending ? (
 				<Spinner size={12} />
 			) : list.length === 0 ? (
-				<EmptyState icon={Folder} title="No repositories yet" body="Add one by its owner/name to start a task on it." />
+				<EmptyState icon={Folder} title="No repositories yet" body="Add one from your GitHub repositories to start a task on it." />
 			) : (
 				<List>
 					{list.map((project) => (

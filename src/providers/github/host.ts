@@ -1,4 +1,15 @@
-import type { CheckResult, CommitData, CommitSource, GitHost, PullRequestComment, PullRequestInput, PullRequestState, RepoInfo, TreeChange } from '../../core/ports.ts';
+import type {
+	CheckResult,
+	CommitData,
+	CommitSource,
+	GitHost,
+	PullRequestComment,
+	PullRequestInput,
+	PullRequestState,
+	RepoInfo,
+	ReviewComment,
+	TreeChange,
+} from '../../core/ports.ts';
 
 /** Requests that take longer than this fail, so a stuck connection never stalls the headless loop. */
 const TIMEOUT_MS = 30_000;
@@ -49,6 +60,12 @@ function commentOf(kind: string, comment: Comment): PullRequestComment {
 		line: comment.line ?? comment.original_line ?? null,
 		at: comment.submitted_at ?? comment.created_at ?? '',
 	};
+}
+
+/** Line comments as a list under the summary, for when they cannot be placed on the diff. */
+function foldComments(body: string, comments: ReviewComment[]): string {
+	const list = comments.map((comment) => `- \`${comment.path}:${comment.line}\`: ${comment.body.replace(/\n+/g, ' ')}`);
+	return [body, ...(list.length ? [list.join('\n')] : [])].join('\n\n');
 }
 
 function pullOf(url: string): { repo: string; number: string } {
@@ -150,6 +167,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 
 	return {
 		name: 'github',
+		async listRepos() {
+			if (!token) return [];
+			const repos = await all<{ full_name: string }>('/user/repos?per_page=100&sort=pushed');
+			return repos.map((repo) => repo.full_name);
+		},
 		async accountName() {
 			if (!token) return null;
 			const user = await json<{ login: string; name: string | null }>('/user');
@@ -246,6 +268,18 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			].filter((comment) => comment.body);
 			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
 			return { state, headSha: pull.head.sha, checks, comments };
+		},
+		async postReview(url, { commit, body, comments }) {
+			const { repo, number } = pullOf(url);
+			const path = `/repos/${repo}/pulls/${number}/reviews`;
+			const review = { ...(commit ? { commit_id: commit } : {}), event: 'COMMENT' };
+			try {
+				await post(path, { ...review, body, comments: comments.map((comment) => ({ ...comment, side: 'RIGHT' })) });
+			} catch (error) {
+				// GitHub refuses the whole review when one line is outside the diff.
+				if (!(error instanceof GitHubError && error.status === 422 && comments.length)) throw error;
+				await post(path, { ...review, body: foldComments(body, comments) });
+			}
 		},
 	};
 }

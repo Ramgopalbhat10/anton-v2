@@ -1,0 +1,21 @@
+# Streams Anton's two SQLite files to the Tigris bucket, so a new server picks
+# up where the old one stopped. Used by scripts/start-with-backup.sh, which sets
+# ANTON_DATA_DIR and TIGRIS_ENDPOINT when they are not set.
+# The replicas live under db/; storage cleanup only touches sessions/ and blobs/.
+access-key-id: ${TIGRIS_ACCESS_KEY_ID}
+secret-access-key: ${TIGRIS_SECRET_ACCESS_KEY}
+dbs:
+  - path: ${ANTON_DATA_DIR}/anton.db
+    replica:
+      type: s3
+      bucket: ${TIGRIS_BUCKET}
+      path: db/anton
+      endpoint: ${TIGRIS_ENDPOINT}
+      region: auto
+  - path: ${ANTON_DATA_DIR}/flue.db
+    replica:
+      type: s3
+      bucket: ${TIGRIS_BUCKET}
+      path: db/flue
+      endpoint: ${TIGRIS_ENDPOINT}
+      region: auto
