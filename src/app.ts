@@ -215,6 +215,9 @@ app.put('/api/settings/general', async (c) => {
 			reasoning: v.nullable(REASONING),
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
+			codeMode: v.boolean(),
+			subagentModel: v.nullable(v.pipe(v.string(), v.minLength(1))),
+			subagentReasoning: v.nullable(REASONING),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));

@@ -43,6 +43,40 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
+			<Block title="Agent">
+				<SettingRow
+					title="Code mode"
+					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. It runs on Anton, not in the sandbox, and can reach nothing else."
+				>
+					<Switch
+						checked={settings.codeMode}
+						disabled={save.isPending}
+						onChange={(codeMode) => save.mutate({ codeMode })}
+						label={<span className="sr-only">Code mode</span>}
+					/>
+				</SettingRow>
+				<SettingRow
+					title="Subagents use their own model"
+					help="The explorer and tester subagents, which search the code and run tests for the agent, can run on a cheaper or faster model than the task's. Off, they use the task's model."
+				>
+					<Switch
+						checked={settings.subagentModel !== null}
+						disabled={save.isPending || !model}
+						onChange={(on) => save.mutate({ subagentModel: on ? model : null, subagentReasoning: null })}
+						label={<span className="sr-only">Subagents use their own model</span>}
+					/>
+				</SettingRow>
+				{settings.subagentModel ? (
+					<div className="self-start">
+						<ModelPicker
+							value={{ model: settings.subagentModel, reasoning: settings.subagentReasoning }}
+							onChange={(change) => save.mutate({ subagentModel: change.model ?? settings.subagentModel, subagentReasoning: change.reasoning ?? null })}
+							height={28}
+							side="bottom"
+						/>
+					</div>
+				) : null}
+			</Block>
 			<Block title="Pull requests">
 				<SettingRow
 					title="Review pull requests"
@@ -65,7 +99,7 @@ export function GeneralPage() {
 	const settings = useGeneralSettings();
 	return (
 		<>
-			<PageHeading title="General">How a new task starts when you do not choose on the launcher, and how its pull requests are reviewed.</PageHeading>
+			<PageHeading title="General">How a new task starts when you do not choose on the launcher, how the agent works, and how its pull requests are reviewed.</PageHeading>
 			{settings.data ? <Form settings={settings.data} /> : <Spinner size={12} />}
 		</>
 	);

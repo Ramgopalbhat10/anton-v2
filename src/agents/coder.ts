@@ -24,7 +24,8 @@ import { browse, takeScreenshot } from '../services/browser.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
+import { agentSettingsNow, hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
+import { hasScriptTools, runScript, scriptToolDescription } from '../services/code-mode.ts';
 import { remember } from '../services/memory.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
@@ -71,6 +72,12 @@ const tester = defineSubagent({
 	description: `Runs the project test suite and writes ${OUTPUTS}/test-report.md.`,
 	agent: Tester,
 });
+
+/** The subagents' own model from Settings, often a cheaper one; without one they use the task's. */
+function withSettingsModel(subagent: typeof explorer): typeof explorer {
+	const choice = agentSettingsNow().subagents;
+	return choice ? { ...subagent, model: choice.model, thinkingLevel: choice.reasoning } : subagent;
+}
 
 /** Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch. */
 function useReadOnlyRepo(id: string, startWorkspace: (() => void) | null) {
@@ -143,8 +150,8 @@ function useWorkspace(id: string, planning: boolean) {
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 	});
-	useSubagent(explorer);
-	useSubagent(tester);
+	useSubagent(withSettingsModel(explorer));
+	useSubagent(withSettingsModel(tester));
 	if (!planning) useOpenPullRequest(id);
 	useTool(browserTool(id));
 	useTool(
@@ -214,6 +221,18 @@ function useOpenPullRequest(id: string) {
 	);
 }
 
+/** Code mode: one program that calls many tools, with only its result coming back; on in Settings > General. */
+function useRunScript(id: string, workspace: boolean) {
+	useTool(
+		defineTool({
+			name: 'run_script',
+			description: scriptToolDescription(id, workspace),
+			input: v.object({ code: v.pipe(v.string(), v.minLength(1), v.description('The body of an async JavaScript function')) }),
+			run: async ({ data, signal }) => ({ output: await runScript(id, data.code, { workspace, signal }) }),
+		}),
+	);
+}
+
 /** Adds a note to the repo's memory, which every later task reads. */
 function useRemember(id: string) {
 	useTool(
@@ -258,6 +277,9 @@ const REMEMBER_HINT = 'When you learn something about this repository that a lat
 const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start.';
 
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
+
+const SCRIPT_HINT =
+	'When a job needs several reads, searches or web lookups, or results you only need part of, write one run_script program instead of many separate tool calls.';
 
 const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
 
@@ -308,6 +330,8 @@ export function Coder({ id }: AgentProps) {
 	if (workspace) useWorkspace(id, planning);
 	else useReadOnlyRepo(id, planning ? null : () => setStarted(true));
 	if (planning) useTool(proposePlan);
+	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, workspace);
+	if (scripts) useRunScript(id, workspace);
 	useRemember(id);
 	useSkills(id, workspace);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
@@ -334,5 +358,5 @@ export function Coder({ id }: AgentProps) {
 	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}`;
 }

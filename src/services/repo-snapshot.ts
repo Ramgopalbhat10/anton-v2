@@ -163,17 +163,35 @@ export async function listRepoFiles(id: string, filter: Filter): Promise<string>
 	return more > 0 ? `${lines.join('\n')}\n(${more} more; narrow it with path or glob)` : lines.join('\n');
 }
 
-/** A file's lines, numbered from `offset`. */
-export async function readRepoFile(id: string, file: string, offset = 1, limit = 400): Promise<string> {
+/** A file's whole text, or why it cannot be read. */
+async function fileText(id: string, file: string): Promise<{ text: string } | { problem: string }> {
 	const { dir, entries } = await snapshotFor(id);
 	const wanted = safeRelativePath(file);
 	const entry = entries.find((item) => item.path === wanted);
-	if (!entry) return `${wanted} does not exist. List files to find the right path.`;
-	if (entry.kind === 'symlink') return `${wanted} is a link to ${entry.target}.`;
-	if (!entry.stored) return `${wanted} is ${entry.size} bytes, too large to read without a workspace.`;
+	if (!entry) return { problem: `${wanted} does not exist. List files to find the right path.` };
+	if (entry.kind === 'symlink') return { problem: `${wanted} is a link to ${entry.target}.` };
+	if (!entry.stored) return { problem: `${wanted} is ${entry.size} bytes, too large to read without a workspace.` };
 	const text = await readFile(path.join(dir, 'files', wanted), 'utf8');
-	if (text.includes('\0')) return `${wanted} is a binary file.`;
-	const lines = text.split('\n');
+	return text.includes('\0') ? { problem: `${wanted} is a binary file.` } : { text };
+}
+
+/** For run_script programs: every matching path, as a list. */
+export async function repoPaths(id: string, filter: Filter): Promise<string[]> {
+	return select((await snapshotFor(id)).entries, filter).map((entry) => entry.path);
+}
+
+/** For run_script programs: a file's whole text; throws when it cannot be read. */
+export async function repoText(id: string, file: string): Promise<string> {
+	const read = await fileText(id, file);
+	if ('problem' in read) throw new Error(read.problem);
+	return read.text;
+}
+
+/** A file's lines, numbered from `offset`. */
+export async function readRepoFile(id: string, file: string, offset = 1, limit = 400): Promise<string> {
+	const read = await fileText(id, file);
+	if ('problem' in read) return read.problem;
+	const lines = read.text.split('\n');
 	const start = Math.max(1, offset);
 	const shown = lines.slice(start - 1, start - 1 + limit);
 	const numbered = shown.map((line, index) => `${start + index}\t${line}`).join('\n');

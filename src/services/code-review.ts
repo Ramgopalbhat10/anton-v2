@@ -3,6 +3,7 @@ import type { PullRequestComment } from '../core/ports.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { sendToAgent } from './agent-runner.ts';
+import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { generalSettings } from './general.ts';
 import { logProblem } from './log.ts';
 
@@ -26,11 +27,34 @@ function reviewMessage(url: string, baseSha: string, head: string): string {
 	].join('\n');
 }
 
+/** At or below this chance that the change touches code, it is taken as documentation only. */
+const CODE_CHANGE = 0.1;
+/** Enough of the diff to judge it, well inside the decision model's 32k-token window. */
+const MAX_DIFF_CHARS = 60_000;
+
+/**
+ * Whether the decision model is sure the pull request changes only
+ * documentation, which an automatic review would find nothing to fix in.
+ * Without a decision model, never.
+ */
+async function documentationOnly(id: string, url: string): Promise<boolean> {
+	if (!hasDecisionModel()) return false;
+	let budget = MAX_DIFF_CHARS;
+	const files = (await getProviders().git.changedFiles(url)).map((file) => {
+		const change = (file.patch ?? '(no diff shown)').slice(0, Math.max(0, budget));
+		budget -= change.length;
+		return { path: file.path, change };
+	});
+	const code = { type: 'yes-no', instructions: 'Does this change touch code, configuration, build files or dependencies, rather than only documentation?' } as const;
+	const answers = await decide(id, { files }, { code });
+	return (yesOf(answers?.code) ?? 1) <= CODE_CHANGE;
+}
+
 /**
  * Asks the task's reviewer agent to review its pull request at the head on
  * the host. Automatic requests, made each time the agent opens or updates a
- * pull request, follow the setting and stop after MAX_REVIEWS; asking by hand
- * always reviews.
+ * pull request, follow the setting, skip a change that is only documentation
+ * and stop after MAX_REVIEWS; asking by hand always reviews.
  */
 export async function requestReview(id: string, { automatic }: { automatic: boolean }): Promise<boolean> {
 	const session = await getSessionRecord(id);
@@ -43,6 +67,7 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 		throw new InvalidInputError(`The pull request is ${activity.state}.`);
 	}
 	if (automatic && activity.comments.filter(isAntonReview).length >= MAX_REVIEWS) return false;
+	if (automatic && (await documentationOnly(id, session.prUrl))) return false;
 	reviewing.set(id, activity.headSha);
 	await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha), 'reviewer');
 	return true;

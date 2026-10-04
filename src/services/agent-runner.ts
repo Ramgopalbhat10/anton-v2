@@ -4,9 +4,11 @@ import type { McpServer } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
+import { generalSettings } from './general.ts';
+import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
 import { isRestoring } from './restore.ts';
-import { primeModel } from './sessions.ts';
+import { type ModelChoice, primeModel } from './sessions.ts';
 
 /**
  * The agent renders synchronously, so it reads each task's MCP servers from
@@ -49,9 +51,23 @@ export function isPlanning(id: string): boolean {
 	return planning.has(id);
 }
 
+/** The General settings the agent reads while it renders: whether it gets run_script, and its subagents' model (null for the task's own). */
+export type AgentSettings = { codeMode: boolean; subagents: ModelChoice | null };
+
+let agentSettings: AgentSettings = { codeMode: false, subagents: null };
+
+export const agentSettingsNow = (): AgentSettings => agentSettings;
+
+async function primeAgentSettings(): Promise<void> {
+	const { codeMode, subagentModel, subagentReasoning } = await generalSettings();
+	const info = subagentModel ? await findModel(subagentModel).catch(() => undefined) : undefined;
+	agentSettings = { codeMode, subagents: subagentModel ? { model: subagentModel, reasoning: reasoningFor(info, subagentReasoning) } : null };
+}
+
 /** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, notes and skills, whether it has a machine and whether it is planning. */
 export async function primeAgent(id: string): Promise<void> {
 	await primeModel(id);
+	await primeAgentSettings();
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);

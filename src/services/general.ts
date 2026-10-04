@@ -13,16 +13,23 @@ export type GeneralSettings = {
 	planMode: boolean;
 	/** A reviewer agent reads each pull request the agent opens or updates and comments on it. */
 	reviewPullRequests: boolean;
+	/** The agent gets run_script, to do many reads, searches or lookups in one short program. */
+	codeMode: boolean;
+	/** The explorer and tester subagents' model and reasoning level (null for the model's default); a null model uses each task's own. */
+	subagentModel: string | null;
+	subagentReasoning: Reasoning | null;
 };
 
 const KEY = 'general';
 
 export async function generalSettings(): Promise<GeneralSettings> {
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, ...(await getSetting<Partial<GeneralSettings>>(KEY, {})) };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, subagentModel: null, subagentReasoning: null, ...(await getSetting<Partial<GeneralSettings>>(KEY, {})) };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {
-	if (next.model && !(await findModel(next.model))) throw new InvalidInputError(`Unknown model: ${next.model}`);
+	for (const model of [next.model, next.subagentModel]) {
+		if (model && !(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+	}
 	await setSetting(KEY, next);
 	return next;
 }

@@ -179,7 +179,16 @@ export type SandboxSettings = {
 };
 export type SandboxView = { settings: SandboxSettings; defaultBaseImage: string; provider: string };
 /** How a new task starts when the launcher does not say; null model is the server's default. */
-export type GeneralSettings = { model: string | null; reasoning: Reasoning | null; planMode: boolean; reviewPullRequests: boolean };
+export type GeneralSettings = {
+	model: string | null;
+	reasoning: Reasoning | null;
+	planMode: boolean;
+	reviewPullRequests: boolean;
+	codeMode: boolean;
+	/** The explorer and tester subagents' model; null uses each task's own. */
+	subagentModel: string | null;
+	subagentReasoning: Reasoning | null;
+};
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
