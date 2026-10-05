@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
 	Bot,
+	Braces,
 	Camera,
 	ChevronDown,
 	ChevronRight,
@@ -146,6 +147,8 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 			};
 		case 'bash':
 			return { icon: SquareTerminal, body: <>Ran <Em>{field(input, 'command').split('\n')[0]}</Em></> };
+		case 'run_script':
+			return { icon: Braces, body: <>Ran a script</> };
 		case 'task':
 			return {
 				icon: Bot,
@@ -224,8 +227,10 @@ function ThoughtRow({ part }: { part: ReasoningPart }) {
 function ToolRow({ part }: { part: ToolPart }) {
 	const { icon, body } = describeTool(part);
 	const failed = part.state === 'output-error';
-	const output = part.toolName === 'bash' && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
-	const command = field(part.input, 'command');
+	const script = part.toolName === 'run_script';
+	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
+	// A script shows its program, then what it gave back.
+	const command = script ? `${field(part.input, 'code').trim()}\n\n// Result` : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
 	return (
@@ -247,7 +252,7 @@ function ToolRow({ part }: { part: ToolPart }) {
 			{output ? (
 				<div className="px-1 pt-1 pb-0.5">
 					<div className="max-h-56 overflow-auto rounded-md bg-(--bg-inset) px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">
-						{`$ ${command}\n${output.split('\n').slice(-40).join('\n')}`}
+						{`${command}\n${output.split('\n').slice(-40).join('\n')}`}
 					</div>
 				</div>
 			) : null}

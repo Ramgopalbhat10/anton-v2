@@ -185,10 +185,10 @@ export type GeneralSettings = {
 	planMode: boolean;
 	reviewPullRequests: boolean;
 	codeMode: boolean;
-	/** The explorer and tester subagents' model; null uses each task's own. */
-	subagentModel: string | null;
-	subagentReasoning: Reasoning | null;
+	/** Each helper agent's own model; null uses the task's. */
+	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };
+export type HelperAgent = 'explorer' | 'tester' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };

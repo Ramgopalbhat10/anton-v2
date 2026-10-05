@@ -4,7 +4,7 @@ import type { McpServer } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
-import { generalSettings } from './general.ts';
+import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent } from './general.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
 import { isRestoring } from './restore.ts';
@@ -51,17 +51,23 @@ export function isPlanning(id: string): boolean {
 	return planning.has(id);
 }
 
-/** The General settings the agent reads while it renders: whether it gets run_script, and its subagents' model (null for the task's own). */
-export type AgentSettings = { codeMode: boolean; subagents: ModelChoice | null };
+/** The General settings the agents read while they render: whether the coder gets run_script, and each helper agent's model (null for the task's own). */
+export type AgentSettings = { codeMode: boolean; models: Record<HelperAgent, ModelChoice | null> };
 
-let agentSettings: AgentSettings = { codeMode: false, subagents: null };
+let agentSettings: AgentSettings = { codeMode: false, models: { explorer: null, tester: null, reviewer: null } };
 
 export const agentSettingsNow = (): AgentSettings => agentSettings;
 
+async function choiceFor(setting: AgentModel | null): Promise<ModelChoice | null> {
+	if (!setting) return null;
+	const info = await findModel(setting.model).catch(() => undefined);
+	return { model: setting.model, reasoning: reasoningFor(info, setting.reasoning) };
+}
+
 async function primeAgentSettings(): Promise<void> {
-	const { codeMode, subagentModel, subagentReasoning } = await generalSettings();
-	const info = subagentModel ? await findModel(subagentModel).catch(() => undefined) : undefined;
-	agentSettings = { codeMode, subagents: subagentModel ? { model: subagentModel, reasoning: reasoningFor(info, subagentReasoning) } : null };
+	const { codeMode, agentModels } = await generalSettings();
+	const models = Object.fromEntries(await Promise.all(HELPER_AGENTS.map(async (agent) => [agent, await choiceFor(agentModels[agent])] as const)));
+	agentSettings = { codeMode, models: models as AgentSettings['models'] };
 }
 
 /** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, notes and skills, whether it has a machine and whether it is planning. */

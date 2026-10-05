@@ -73,9 +73,9 @@ const tester = defineSubagent({
 	agent: Tester,
 });
 
-/** The subagents' own model from Settings, often a cheaper one; without one they use the task's. */
-function withSettingsModel(subagent: typeof explorer): typeof explorer {
-	const choice = agentSettingsNow().subagents;
+/** A subagent's own model from Settings, often a cheaper one; without one it uses the task's. */
+function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester'): typeof explorer {
+	const choice = agentSettingsNow().models[name];
 	return choice ? { ...subagent, model: choice.model, thinkingLevel: choice.reasoning } : subagent;
 }
 
@@ -150,8 +150,8 @@ function useWorkspace(id: string, planning: boolean) {
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 	});
-	useSubagent(withSettingsModel(explorer));
-	useSubagent(withSettingsModel(tester));
+	useSubagent(withSettingsModel(explorer, 'explorer'));
+	useSubagent(withSettingsModel(tester, 'tester'));
 	if (!planning) useOpenPullRequest(id);
 	useTool(browserTool(id));
 	useTool(
