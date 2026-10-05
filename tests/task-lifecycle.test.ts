@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import type { AcquireRequest, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity, ReviewInput } from '../src/core/ports.ts';
+import type { AcquireRequest, ChangedFile, DecisionModel, GitHost, Issue, Machine, ModelCatalog, ModelInfo, PullRequestActivity, ReviewInput } from '../src/core/ports.ts';
 import { bareRemote } from './bare-remote.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
@@ -57,6 +57,7 @@ const fakeHost: GitHost = {
 	pullRequestState: async () => 'open',
 	listIssues: async () => issues,
 	pullRequestActivity: async () => activity,
+	changedFiles: async () => changed,
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	accountName: async () => 'Ada Lovelace',
 	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
@@ -73,6 +74,7 @@ const reviews: Array<{ url: string } & ReviewInput> = [];
 // What the fake GitHub reports; tests change these.
 let issues: Issue[] = [];
 let activity: PullRequestActivity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+let changed: ChangedFile[] = [];
 
 const model = (id: string, reasoning: ModelInfo['reasoning'], defaultReasoning: ModelInfo['reasoning'][number]): ModelInfo => ({
 	id,
@@ -567,6 +569,7 @@ test('connections are checked through the ports, and Compute lists and stops run
 	assert.equal(byId.store?.state, 'ok');
 	assert.equal(byId.database?.state, 'ok');
 	assert.ok(byId.git?.state === 'off' || /Ada Lovelace/.test(byId.git?.detail ?? ''));
+	assert.equal(byId.decisions?.state, 'off', 'no decision model in these tests');
 
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Compute' });
@@ -602,7 +605,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -611,6 +614,14 @@ test('General settings decide how a new task starts when the launcher does not s
 	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
 	await sessions.deleteSession(plain.id);
 	await sessions.deleteSession(other.id);
+
+	// Each helper agent can have its own model; the others keep the task's.
+	const { agentSettingsNow, primeAgent } = await import('../src/services/agent-runner.ts');
+	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
+	await assert.rejects(() => setGeneralSettings({ ...before, agentModels: { ...agentModels, tester: { model: 'openrouter/nobody/unknown', reasoning: null } } }), /Unknown model/);
+	await setGeneralSettings({ ...before, agentModels });
+	await primeAgent(other.id);
+	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
 	await setGeneralSettings(before);
 });
 
@@ -893,6 +904,96 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	await assert.rejects(() => requestReview(session.id, { automatic: false }), /merged/);
 	assert.equal(reviewRequests.length, 2);
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+});
+
+/** A decision model that says a comment or change asks nothing when it is thanks or only the readme, and counts what it was asked. */
+function fakeDecisions(asked: Array<Record<string, unknown>>): DecisionModel {
+	return {
+		name: 'openrouter/~typesafe/jev-latest',
+		decide: async (state, questions) => {
+			asked.push(state);
+			const text = JSON.stringify(state);
+			const yes = /LGTM|README\.md/.test(text) && !/src\//.test(text) ? 0.03 : 0.95;
+			return { answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { yes }])), inputTokens: 100, cost: 0.00001 };
+		},
+	};
+}
+
+test('a decision model keeps thanks from waking the agent and a readme change from being reviewed', async () => {
+	const { requestReview } = await import('../src/services/code-review.ts');
+	const { getProviders } = await import('../src/providers/index.ts');
+	const providers = getProviders();
+	const asked: Array<Record<string, unknown>> = [];
+	setProviders({ ...providers, decisions: fakeDecisions(asked) });
+	try {
+		const project = await addProject('acme/decided');
+		const session = await sessions.createSession({ projectId: project.id, title: 'Decided' });
+		await updateSession(session.id, { prUrl: 'https://example.test/pull/11' });
+		const record = async () => (await getSessionRecord(session.id))!;
+		const comment = (id: string, body: string) => ({ id, author: 'ada', body, path: null, line: null, at: '' });
+		delivered.length = 0;
+		activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [comment('c-1', 'LGTM'), comment('c-2', 'Please rename foo')] };
+		assert.equal(await followUp(await record()), true);
+		assert.match(delivered[0].text, /Please rename foo/);
+		assert.doesNotMatch(delivered[0].text, /LGTM/, 'thanks is left out');
+		activity = { ...activity, comments: [...activity.comments, comment('c-3', 'LGTM, thanks!')] };
+		assert.equal(await followUp(await record()), false, 'a comment that asks nothing sends nothing');
+		const askedBefore = asked.length;
+		assert.equal(await followUp(await record()), false);
+		assert.equal(asked.length, askedBefore, 'and is not asked about again');
+		assert.equal(delivered.length, 1);
+		assert.equal(JSON.parse((await record()).followState!).sent, 1, 'only a message sent counts toward the limit');
+
+		// Automatic reviews skip a change the decision model is sure is documentation only; asking by hand still reviews.
+		reviewRequests.length = 0;
+		activity = { state: 'open', headSha: 'head-1', checks: [], comments: [] };
+		changed = [{ path: 'README.md', patch: '@@ -1 +1 @@\n-# demo\n+# demo app' }];
+		assert.equal(await requestReview(session.id, { automatic: true }), false);
+		assert.equal(await requestReview(session.id, { automatic: false }), true);
+		changed = [...changed, { path: 'src/app.ts', patch: '@@ -1 +1 @@\n-a\n+b' }];
+		assert.equal(await requestReview(session.id, { automatic: true }), true);
+		assert.equal(reviewRequests.length, 2);
+
+		const { usage } = await sessions.getSession(session.id);
+		assert.equal(usage.inputTokens, 100 * asked.length, 'decisions count toward the task like any model call');
+		const rows = await database.execute({ sql: 'SELECT DISTINCT model FROM usage_log WHERE session_id = ?', args: [session.id] });
+		assert.deepEqual(rows.rows.map((row) => row.model), ['openrouter/~typesafe/jev-latest'], 'under the decision model, not the task model');
+	} finally {
+		setProviders(providers);
+		changed = [];
+		activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+	}
+});
+
+test('run_script runs a program over the read-only repo and the decision model, and returns only what it gives back', async () => {
+	const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
+	const { getProviders } = await import('../src/providers/index.ts');
+	const providers = getProviders();
+	const asked: Array<Record<string, unknown>> = [];
+	setProviders({ ...providers, decisions: fakeDecisions(asked) });
+	try {
+		const project = await addProject('acme/demo');
+		const session = await sessions.createSession({ projectId: project.id, title: 'Scripted' });
+		assert.match(scriptToolDescription(session.id, false), /list_files[\s\S]*read_file[\s\S]*search_code[\s\S]*decide/);
+		assert.doesNotMatch(scriptToolDescription(session.id, true), /list_files/, 'a workspace has its own shell for files');
+		const output = await runScript(
+			session.id,
+			`const paths = await tools.list_files({ glob: '*.md' });
+			const texts = await Promise.all(paths.map((path) => tools.read_file({ path })));
+			const answers = await decide({ file: paths[0] }, { docs: { type: 'yes-no', instructions: 'Is this documentation?' } });
+			console.log('read', texts.length);
+			return { paths, first: texts[0].trim(), docs: answers.docs.yes };`,
+			{ workspace: false },
+		);
+		assert.match(output, /^read 1\n/);
+		assert.deepEqual(JSON.parse(output.slice(output.indexOf('\n') + 1)), { paths: ['README.md'], first: '# demo', docs: 0.03 });
+		assert.equal(asked.length, 1);
+		assert.match(await runScript(session.id, 'await tools.read_file({ path: "missing.ts" });', { workspace: false }), /The program failed[\s\S]*does not exist/);
+		assert.match(await runScript(session.id, 'return await tools.read_file({ path: "README.md" });', { workspace: true }), /read_file does not exist/);
+		assert.ok(!(await local.running()).has(session.id), 'no sandbox was started');
+	} finally {
+		setProviders(providers);
+	}
 });
 
 test('MCP server tokens are kept on save and never shown', async () => {

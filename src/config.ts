@@ -37,9 +37,15 @@ export const config = {
 	},
 	openrouter: {
 		apiUrl: read('ANTON_OPENROUTER_API_URL', 'https://openrouter.ai/api/v1'),
+		apiKey: read('OPENROUTER_API_KEY'),
 		/** How long the model list is cached before it is fetched again. */
 		ttlMs: 60 * 60_000,
 	},
+	/**
+	 * The System One decision model (TypeSafe's Jev) that decides which pull request
+	 * comments and pushes need an agent, and that run_script programs can ask. `off` turns it off.
+	 */
+	decisionModel: read('ANTON_DECISION_MODEL', '~typesafe/jev-latest'),
 	/** Parallel's search MCP server gives every task web_search and web_fetch; free without a key. `off` turns it off. */
 	web: {
 		mcpUrl: read('ANTON_WEB_MCP_URL', 'https://search.parallel.ai/mcp'),

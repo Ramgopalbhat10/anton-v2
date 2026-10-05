@@ -7,6 +7,7 @@ import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { CLEAN_MARK } from './code-review.ts';
+import { decide, yesOf } from './decisions.ts';
 import { logProblem } from './log.ts';
 
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
@@ -33,6 +34,22 @@ function stateFor(session: SessionRecord): FollowState {
  */
 const isNoise = (comment: PullRequestComment) => (comment.author.endsWith('[bot]') && comment.id.startsWith('comment-')) || comment.body.includes(CLEAN_MARK);
 
+/** Comments not yet handled that might ask the agent for something. */
+export const unseenComments = (activity: PullRequestActivity, state: FollowState) => activity.comments.filter((comment) => !state.seen.includes(comment.id) && !isNoise(comment));
+
+/** At or below this chance that a comment asks for anything, it is taken as thanks or approval and never wakes the agent. */
+const ASKS_NOTHING = 0.1;
+
+/**
+ * Comments the decision model is sure ask nothing ("LGTM", "Thanks!"), so a
+ * full agent turn is not spent on them. Without a decision model, none.
+ */
+async function askingNothing(id: string, comments: PullRequestComment[]): Promise<string[]> {
+	const asks = { type: 'yes-no', instructions: 'Does this pull request comment ask the author to change something, answer a question, or do anything else?' } as const;
+	const answers = await Promise.all(comments.map((comment) => decide(id, { comment: comment.body.slice(0, 20_000) }, { asks })));
+	return comments.filter((_, index) => (yesOf(answers[index]?.asks) ?? 1) <= ASKS_NOTHING).map((comment) => comment.id);
+}
+
 function checksMessage(url: string, sha: string, failed: CheckResult[]): string {
 	return [
 		`Checks failed on your pull request (${url}) at ${sha.slice(0, 7)}:`,
@@ -52,20 +69,25 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	].join('\n');
 }
 
-/** What to tell the agent about the pull request now, and the state that records it as handled. */
-export function nextFollowUp(url: string, activity: PullRequestActivity, state: FollowState): { message: string | null; state: FollowState } {
+/**
+ * What to tell the agent about the pull request now, and the state that
+ * records it as handled. `quiet` comments ask nothing; they are marked seen
+ * without a message.
+ */
+export function nextFollowUp(url: string, activity: PullRequestActivity, state: FollowState, quiet: string[] = []): { message: string | null; state: FollowState } {
 	const settled = !activity.checks.some((check) => check.status === 'pending');
 	const failed = activity.checks.filter((check) => check.status === 'failed');
 	const reportChecks = settled && failed.length > 0 && state.sha !== activity.headSha;
-	const fresh = activity.comments.filter((comment) => !state.seen.includes(comment.id) && !isNoise(comment));
+	const unseen = unseenComments(activity, state);
+	const fresh = unseen.filter((comment) => !quiet.includes(comment.id));
 	const parts = [...(reportChecks ? [checksMessage(url, activity.headSha, failed)] : []), ...(fresh.length ? [commentsMessage(url, fresh)] : [])];
-	if (parts.length === 0) return { message: null, state };
+	if (parts.length === 0 && fresh.length === unseen.length) return { message: null, state };
 	return {
-		message: parts.join('\n\n'),
+		message: parts.length ? parts.join('\n\n') : null,
 		state: {
 			sha: reportChecks ? activity.headSha : state.sha,
-			seen: [...state.seen, ...fresh.map((comment) => comment.id)].slice(-500),
-			sent: state.sent + 1,
+			seen: [...state.seen, ...unseen.map((comment) => comment.id)].slice(-500),
+			sent: state.sent + (parts.length ? 1 : 0),
 		},
 	};
 }
@@ -83,11 +105,10 @@ export async function followUp(session: SessionRecord): Promise<boolean> {
 		await save({ ...state, done: true });
 		return false;
 	}
-	const next = nextFollowUp(session.prUrl, activity, state);
-	if (!next.message) return false;
-	await sendToAgent(session.id, next.message);
-	await save(next.state);
-	return true;
+	const next = nextFollowUp(session.prUrl, activity, state, await askingNothing(session.id, unseenComments(activity, state)));
+	if (next.message) await sendToAgent(session.id, next.message);
+	if (next.state !== state) await save(next.state);
+	return next.message !== null;
 }
 
 /** A person wrote to the task, so its agent may again follow up on its own up to the limit. */

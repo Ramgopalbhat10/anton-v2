@@ -269,6 +269,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
 			return { state, headSha: pull.head.sha, checks, comments };
 		},
+		async changedFiles(url) {
+			const { repo, number } = pullOf(url);
+			const files = await all<{ filename: string; patch?: string }>(`/repos/${repo}/pulls/${number}/files?per_page=100`);
+			return files.map((file) => ({ path: file.filename, patch: file.patch ?? null }));
+		},
 		async postReview(url, { commit, body, comments }) {
 			const { repo, number } = pullOf(url);
 			const path = `/repos/${repo}/pulls/${number}/reviews`;

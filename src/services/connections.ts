@@ -18,7 +18,7 @@ function withTimeout<T>(work: Promise<T>): Promise<T> {
 type Check = { id: string; name: string; provider: string; off?: string; unchecked?: boolean; run: () => Promise<string> };
 
 function checks(): Check[] {
-	const { git, sandbox, store, models } = getProviders();
+	const { git, sandbox, store, models, decisions } = getProviders();
 	const web = config.web.mcpUrl === 'off' ? null : new URL(config.web.mcpUrl);
 	return [
 		{
@@ -53,6 +53,21 @@ function checks(): Check[] {
 			provider: models.name,
 			off: config.hasOpenRouter() ? undefined : 'OPENROUTER_API_KEY is not set, so the agent cannot answer.',
 			run: async () => `${(await models.list()).length} models that can call tools.`,
+		},
+		{
+			id: 'decisions',
+			name: 'Decision model',
+			provider: decisions?.name.replace(/^openrouter\//, '') ?? 'off',
+			off: decisions
+				? undefined
+				: config.decisionModel === 'off'
+					? 'ANTON_DECISION_MODEL is off, so every comment wakes the agent and every pull request is reviewed.'
+					: 'Needs OPENROUTER_API_KEY. Without it, every comment wakes the agent and every pull request is reviewed.',
+			run: async () => {
+				// One tiny question, a hundred-thousandth of a dollar.
+				await decisions!.decide({ check: 'connection' }, { ok: { type: 'yes-no', instructions: 'Is this a connection check?' } });
+				return 'Skips pull request comments that ask nothing and automatic reviews of documentation-only changes; decide() in code mode.';
+			},
 		},
 		{
 			id: 'web',

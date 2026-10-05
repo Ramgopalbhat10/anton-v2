@@ -1,8 +1,54 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Spinner, Switch } from '@/components/signal';
-import { api, type GeneralSettings } from '@/lib/api';
+import { api, type GeneralSettings, type HelperAgent, type Reasoning } from '@/lib/api';
 import { Block, PageHeading, SaveState, SettingRow } from './parts';
+
+const HELPERS: Array<{ agent: HelperAgent; title: string; help: string }> = [
+	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code for the agent and reports what it found.' },
+	{ agent: 'tester', title: 'Tester', help: 'Runs the project\'s tests and reports the failures.' },
+	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews each pull request the agent opens or updates and comments on GitHub.' },
+];
+
+type AgentModel = { model: string; reasoning: Reasoning | null };
+
+/** One helper agent: the task's model, or its own when switched on. */
+function HelperModel({
+	title,
+	help,
+	value,
+	fallback,
+	disabled,
+	onChange,
+}: {
+	title: string;
+	help: string;
+	value: AgentModel | null;
+	fallback: string;
+	disabled: boolean;
+	onChange: (value: AgentModel | null) => void;
+}) {
+	return (
+		<SettingRow title={title} help={help}>
+			{value ? (
+				<ModelPicker
+					value={value}
+					onChange={(change) => onChange({ model: change.model ?? value.model, reasoning: change.reasoning ?? null })}
+					height={28}
+					side="bottom"
+				/>
+			) : (
+				<span className="text-[12px] text-(--text-tertiary)">Task's model</span>
+			)}
+			<Switch
+				checked={value !== null}
+				disabled={disabled || !fallback}
+				onChange={(on) => onChange(on ? { model: fallback, reasoning: null } : null)}
+				label={<span className="sr-only">{title} uses its own model</span>}
+			/>
+		</SettingRow>
+	);
+}
 
 export const useGeneralSettings = () => useQuery({ queryKey: ['general-settings'], queryFn: api.generalSettings });
 
@@ -43,6 +89,35 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
+			<Block title="Agent">
+				<SettingRow
+					title="Code mode"
+					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. It runs on Anton, not in the sandbox, and can reach nothing else."
+				>
+					<Switch
+						checked={settings.codeMode}
+						disabled={save.isPending}
+						onChange={(codeMode) => save.mutate({ codeMode })}
+						label={<span className="sr-only">Code mode</span>}
+					/>
+				</SettingRow>
+			</Block>
+			<Block
+				title="Helper agents"
+				help="The agents that work for the main one can each run on their own model, often a cheaper or faster one. Off, they use the task's model."
+			>
+				{HELPERS.map((helper) => (
+					<HelperModel
+						key={helper.agent}
+						title={helper.title}
+						help={helper.help}
+						value={settings.agentModels[helper.agent]}
+						fallback={model}
+						disabled={save.isPending}
+						onChange={(choice) => save.mutate({ agentModels: { ...settings.agentModels, [helper.agent]: choice } })}
+					/>
+				))}
+			</Block>
 			<Block title="Pull requests">
 				<SettingRow
 					title="Review pull requests"
@@ -65,7 +140,7 @@ export function GeneralPage() {
 	const settings = useGeneralSettings();
 	return (
 		<>
-			<PageHeading title="General">How a new task starts when you do not choose on the launcher, and how its pull requests are reviewed.</PageHeading>
+			<PageHeading title="General">How a new task starts when you do not choose on the launcher, how the agent works, and how its pull requests are reviewed.</PageHeading>
 			{settings.data ? <Form settings={settings.data} /> : <Spinner size={12} />}
 		</>
 	);

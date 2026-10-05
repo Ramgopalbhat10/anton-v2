@@ -99,7 +99,9 @@ export function UsagePage() {
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage });
 	const models = useModels();
 	const modelName = (id: string | null) =>
-		id === null ? 'Not recorded' : (models.data?.models.find((model) => model.id === id)?.name ?? id.replace(/^openrouter\//, ''));
+		id === null
+			? 'Not recorded'
+			: (models.data?.models.find((model) => model.id === id)?.name ?? (/typesafe\/jev/.test(id) ? 'Jev (decision model)' : id.replace(/^openrouter\//, '')));
 	return (
 		<>
 			<PageHeading title="Usage and limits">
@@ -118,7 +120,7 @@ export function UsagePage() {
 					<Block title="This month by repository">
 						<SpendRows rows={usage.data.byRepo} label={(key) => key ?? 'Removed repository'} empty="Nothing spent this month." />
 					</Block>
-					<Block title="This month by model" help="Each response counts against the model its task was set to.">
+					<Block title="This month by model" help="Each response counts against the model that gave it, so helper agents on their own model and the decision model show up on their own.">
 						<SpendRows rows={usage.data.byModel} label={modelName} empty="Nothing spent this month." />
 					</Block>
 				</>

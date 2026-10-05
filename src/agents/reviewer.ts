@@ -4,6 +4,7 @@ import { type AgentProps, defineTool, setProvider, useModel, useSandbox, useTool
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { agentSettingsNow } from '../services/agent-runner.ts';
 import { postReview } from '../services/code-review.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
@@ -50,7 +51,8 @@ const postReviewTool = (id: string) =>
  * conversation, so the coder never sees how it reasoned, only its comments.
  */
 export function Reviewer({ id }: AgentProps) {
-	const { model, reasoning } = modelFor(id);
+	// Its own model from Settings, or the task's.
+	const { model, reasoning } = agentSettingsNow().models.reviewer ?? modelFor(id);
 	useModel(model, { thinkingLevel: reasoning });
 	useSandbox({
 		async createSandbox() {

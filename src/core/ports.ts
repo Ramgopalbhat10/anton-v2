@@ -168,6 +168,8 @@ export type GitHost = {
 	listIssues(fullName: string, label: string): Promise<Issue[]>;
 	/** A pull request's checks on its head commit and every comment and review on it; only its state once it is merged or closed. */
 	pullRequestActivity(url: string): Promise<PullRequestActivity>;
+	/** The files a pull request changes, each with its diff when the host shows one (not for binary or very large files). */
+	changedFiles(url: string): Promise<ChangedFile[]>;
 	/**
 	 * Posts a review on a pull request as Anton's account, never approving or
 	 * blocking it: a summary, and comments on lines of the change. Comments the
@@ -198,6 +200,8 @@ export type ReviewComment = { path: string; line: number; body: string };
 /** `commit` is the head the review read; null means the pull request's latest. */
 export type ReviewInput = { commit: string | null; body: string; comments: ReviewComment[] };
 
+export type ChangedFile = { path: string; patch: string | null };
+
 export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[] };
 
 /** How hard a model reasons before answering, from none to the most it offers. */
@@ -226,4 +230,23 @@ export type ModelInfo = {
 export type ModelCatalog = {
 	readonly name: string;
 	list(): Promise<ModelInfo[]>;
+};
+
+/** A question with a bounded answer: yes or no, or one of a few named options, each with what it means. */
+export type Question = { type: 'yes-no'; instructions: string } | { type: 'choice'; instructions: string; options: Record<string, string> };
+
+/** `yes` is the probability that the answer is yes; a choice gives the option picked and each option's probability. */
+export type Answer = { yes: number } | { choice: string; probabilities: Record<string, number> };
+
+export type Decision = { answers: Record<string, Answer>; inputTokens: number; cost: number };
+
+/**
+ * A fast, cheap model that answers typed questions about some state with
+ * probabilities instead of text (a "System One" model such as TypeSafe's Jev),
+ * for decisions code makes without a full model call.
+ */
+export type DecisionModel = {
+	/** The model specifier, `<gateway>/<model>`, as usage is logged under. */
+	readonly name: string;
+	decide(state: Record<string, unknown>, questions: Record<string, Question>, signal?: AbortSignal): Promise<Decision>;
 };

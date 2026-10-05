@@ -13,16 +13,30 @@ export type GeneralSettings = {
 	planMode: boolean;
 	/** A reviewer agent reads each pull request the agent opens or updates and comments on it. */
 	reviewPullRequests: boolean;
+	/** The agent gets run_script, to do many reads, searches or lookups in one short program. */
+	codeMode: boolean;
+	/** Each helper agent's own model; null uses the task's. */
+	agentModels: Record<HelperAgent, AgentModel | null>;
 };
+
+/** The agents that work for the coder: its explorer and tester subagents, and the reviewer of its pull requests. */
+export const HELPER_AGENTS = ['explorer', 'tester', 'reviewer'] as const;
+export type HelperAgent = (typeof HELPER_AGENTS)[number];
+/** A null reasoning level uses the model's default. */
+export type AgentModel = { model: string; reasoning: Reasoning | null };
 
 const KEY = 'general';
 
 export async function generalSettings(): Promise<GeneralSettings> {
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, ...(await getSetting<Partial<GeneralSettings>>(KEY, {})) };
+	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
+	const agentModels = { explorer: null, tester: null, reviewer: null, ...stored.agentModels };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, ...stored, agentModels };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {
-	if (next.model && !(await findModel(next.model))) throw new InvalidInputError(`Unknown model: ${next.model}`);
+	for (const model of [next.model, ...Object.values(next.agentModels).map((choice) => choice?.model)]) {
+		if (model && !(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+	}
 	await setSetting(KEY, next);
 	return next;
 }

@@ -42,4 +42,5 @@ test('only tool-calling text models are offered to the agent', () => {
 	assert.equal(isAgentModel({ ...flash, supported_parameters: ['reasoning'] }), false);
 	assert.equal(isAgentModel({ ...flash, architecture: { output_modalities: ['image'] } }), false);
 	assert.equal(isAgentModel({ ...flash, id: 'deepseek/deepseek-v4.1-flash:batch' }), false);
+	assert.equal(isAgentModel({ ...flash, pricing: { prompt: '-1', completion: '-1' } }), false, 'a router whose price is unknown would spend past the caps');
 });

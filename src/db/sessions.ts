@@ -31,7 +31,8 @@ function toRecord(row: Row): SessionRecord {
 }
 
 /** Adds one response's usage to the task's totals and to the log daily caps are counted from. */
-export async function addSessionUsage(id: string, usage: Usage, at = new Date()): Promise<void> {
+/** `model` is the one that did the work, when it is not the task's own (a subagent's, or the decision model). */
+export async function addSessionUsage(id: string, usage: Usage, at = new Date(), model: string | null = null): Promise<void> {
 	const db = await appDb();
 	await db.batch(
 		[
@@ -41,8 +42,8 @@ export async function addSessionUsage(id: string, usage: Usage, at = new Date())
 			},
 			{
 				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model)
-					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), (SELECT model FROM sessions WHERE id = ?))`,
-				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, id],
+					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)))`,
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id],
 			},
 		],
 		'write',

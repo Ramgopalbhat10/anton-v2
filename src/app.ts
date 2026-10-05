@@ -54,6 +54,7 @@ import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 const app = new Hono();
 
 const REASONING = v.picklist(REASONING_LEVELS);
+const AGENT_MODEL = v.nullable(v.object({ model: v.pipe(v.string(), v.minLength(1)), reasoning: v.nullable(REASONING) }));
 /** Variables from the browser; null keeps a stored value. */
 const ENV = v.pipe(
 	v.record(v.pipe(v.string(), v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Variable names use letters, digits and underscores')), v.nullable(v.string())),
@@ -215,6 +216,8 @@ app.put('/api/settings/general', async (c) => {
 			reasoning: v.nullable(REASONING),
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
+			codeMode: v.boolean(),
+			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, reviewer: AGENT_MODEL }),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));

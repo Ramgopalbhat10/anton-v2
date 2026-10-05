@@ -10,12 +10,15 @@ export function toUsage(usage: ResponseUsage): Usage {
 	return { inputTokens: usage.input + usage.cacheRead + usage.cacheWrite, outputTokens: usage.output, cost: usage.cost.total };
 }
 
-/** Adds usage to the task's totals; a failed write only loses the count. */
-export async function recordUsage(id: string, usage: Usage): Promise<void> {
-	await addSessionUsage(id, usage).catch((error: unknown) => logProblem('warn', 'Usage not recorded', error, id));
+/** Adds usage to the task's totals, under the model that did the work; a failed write only loses the count. */
+export async function recordUsage(id: string, usage: Usage, model: string | null = null): Promise<void> {
+	await addSessionUsage(id, usage, new Date(), model).catch((error: unknown) => logProblem('warn', 'Usage not recorded', error, id));
 }
 
-type TurnEvent = { type: string; instanceId?: string; response?: { usage?: ResponseUsage } };
+type TurnEvent = { type: string; instanceId?: string; request?: { providerId: string; requestedModel: string }; response?: { usage?: ResponseUsage } };
+
+/** `openrouter/<id>`, the way tasks name their model, so a subagent on another model is counted under it. */
+const modelOf = (request: TurnEvent['request']) => (request ? `${request.providerId}/${request.requestedModel}` : null);
 
 /**
  * Counts every model call as it ends: the agent's, its subagents' and
@@ -24,7 +27,7 @@ type TurnEvent = { type: string; instanceId?: string; response?: { usage?: Respo
  */
 export async function recordTurnUsage(event: TurnEvent): Promise<string | null> {
 	if (event.type !== 'turn' || !event.instanceId || !event.response?.usage) return null;
-	await recordUsage(event.instanceId, toUsage(event.response.usage));
+	await recordUsage(event.instanceId, toUsage(event.response.usage), modelOf(event.request));
 	return event.instanceId;
 }
 

@@ -57,10 +57,17 @@ function prices(pricing: NonNullable<OpenRouterModel['pricing']>): ModelInfo['pr
 	};
 }
 
-/** Agent work needs live tool calls and text out; batch-only variants and other models are left out. */
+/**
+ * A router such as Jev Router lists its price as -1, meaning it depends on the
+ * model it picks. Anton prices every call from the list, so it could not count
+ * such a model's spend against the caps.
+ */
+const unpriced = (model: OpenRouterModel) => [model.pricing?.prompt, model.pricing?.completion].some((price) => Number(price ?? 0) < 0);
+
+/** Agent work needs live tool calls, text out and a known price; batch-only variants and other models are left out. */
 export function isAgentModel(model: OpenRouterModel): boolean {
 	const out = model.architecture?.output_modalities ?? ['text'];
-	return Boolean(model.supported_parameters?.includes('tools')) && out.includes('text') && !model.id.endsWith(':batch');
+	return Boolean(model.supported_parameters?.includes('tools')) && out.includes('text') && !model.id.endsWith(':batch') && !unpriced(model);
 }
 
 export function toModelInfo(model: OpenRouterModel): ModelInfo {
