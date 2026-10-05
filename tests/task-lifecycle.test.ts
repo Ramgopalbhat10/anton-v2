@@ -569,6 +569,7 @@ test('connections are checked through the ports, and Compute lists and stops run
 	assert.equal(byId.store?.state, 'ok');
 	assert.equal(byId.database?.state, 'ok');
 	assert.ok(byId.git?.state === 'off' || /Ada Lovelace/.test(byId.git?.detail ?? ''));
+	assert.equal(byId.decisions?.state, 'off', 'no decision model in these tests');
 
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Compute' });
