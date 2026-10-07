@@ -18,7 +18,7 @@ function checksOf(checks: CheckResult[]): PullRequestStatus['checks'] {
 /** Keeps a task's pull request status, writing (and so announcing) only a change. */
 export async function savePullRequestStatus(session: SessionRecord, status: PullRequestStatus): Promise<void> {
 	if (!session.prUrl) return;
-	if (session.pullRequest?.state === status.state && session.pullRequest.checks === status.checks) return;
+	if (JSON.stringify(session.pullRequest) === JSON.stringify(status)) return;
 	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: session.prUrl, ...status }) });
 }
 
@@ -27,7 +27,8 @@ export async function readPullRequest(session: SessionRecord & { prUrl: string }
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
 	readAt.set(session.id, Date.now());
 	const open = activity.state === 'open' || activity.state === 'draft';
-	await savePullRequestStatus(session, { state: activity.state, checks: open ? checksOf(activity.checks) : null });
+	const runs = activity.checks.flatMap(({ name, status, url }) => (status === 'skipped' ? [] : [{ name, status, url }]));
+	await savePullRequestStatus(session, { state: activity.state, checks: open ? checksOf(activity.checks) : null, runs: open ? runs : [] });
 	return activity;
 }
 

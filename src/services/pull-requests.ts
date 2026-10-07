@@ -35,7 +35,7 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 		title: input.title,
 		body: input.body,
 	});
-	await updateSession(id, { prUrl: url, pullRequestJson: JSON.stringify({ url, state: 'open', checks: null }) });
+	await updateSession(id, { prUrl: url, pullRequestJson: JSON.stringify({ url, state: 'open', checks: null, runs: [] }) });
 	await saveCheckpoint(id, machine);
 	reviewAfterPush(id);
 	return url;
@@ -52,7 +52,8 @@ export async function pullRequestView(id: string): Promise<PullRequestView | nul
 	const state = await getProviders().git.pullRequestState(session.prUrl).catch(() => null);
 	if (state && state !== session.pullRequest?.state) {
 		const open = state === 'open' || state === 'draft';
-		await savePullRequestStatus(session, { state, checks: open ? (session.pullRequest?.checks ?? null) : null });
+		const checks = open ? session.pullRequest : null;
+		await savePullRequestStatus(session, { state, checks: checks?.checks ?? null, runs: checks?.runs ?? [] });
 	}
 	return { url: session.prUrl, state };
 }

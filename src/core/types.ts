@@ -64,8 +64,15 @@ export type Session = {
 	usage: Usage;
 };
 
-/** A pull request's state and its checks on the head commit, in a word; `checks` is null when it has none or is finished. */
-export type PullRequestStatus = { state: PullRequestState; checks: 'passed' | 'failed' | 'pending' | null };
+/**
+ * A pull request's state and its checks on the head commit: in a word (null when it has none or is
+ * finished), and each one that ran, for the sidebar's CI card.
+ */
+export type PullRequestStatus = {
+	state: PullRequestState;
+	checks: 'passed' | 'failed' | 'pending' | null;
+	runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
+};
 
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };
 

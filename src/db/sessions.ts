@@ -35,8 +35,9 @@ function toRecord(row: Row): SessionRecord {
 /** The saved status, only while it is for the task's current pull request. */
 function pullRequestOf(row: Row): PullRequestStatus | null {
 	if (row.pr_json == null || row.pr_url == null) return null;
-	const { url, ...status } = JSON.parse(String(row.pr_json)) as PullRequestStatus & { url: string };
-	return url === row.pr_url ? status : null;
+	// `runs` is missing from statuses saved before it was kept.
+	const { url, ...status } = JSON.parse(String(row.pr_json)) as Omit<PullRequestStatus, 'runs'> & { url: string; runs?: PullRequestStatus['runs'] };
+	return url === row.pr_url ? { ...status, runs: status.runs ?? [] } : null;
 }
 
 /** Adds one response's usage to the task's totals and to the log daily caps are counted from. */

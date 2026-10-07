@@ -45,7 +45,11 @@ export type Session = {
 	/** When the task was pinned to the top of the sidebar; null when it is not. */
 	pinnedAt: string | null;
 	/** Its pull request as last read from GitHub; `checks` sums up the head commit's checks. */
-	pullRequest: { state: 'open' | 'draft' | 'merged' | 'closed'; checks: 'passed' | 'failed' | 'pending' | null } | null;
+	pullRequest: {
+		state: 'open' | 'draft' | 'merged' | 'closed';
+		checks: 'passed' | 'failed' | 'pending' | null;
+		runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
+	} | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
 };

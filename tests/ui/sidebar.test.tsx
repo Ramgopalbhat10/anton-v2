@@ -24,7 +24,7 @@ const tasks = [
 		title: 'New merged',
 		createdAt: '2026-10-02T00:00:00Z',
 		prUrl: 'https://github.com/acme/demo/pull/12',
-		pullRequest: { state: 'merged', checks: null },
+		pullRequest: { state: 'merged', checks: null, runs: [] },
 		usage: { inputTokens: 1, outputTokens: 1, cost: 0.1 },
 	}),
 	session({ id: 'pinned', title: 'Pinned oldest', createdAt: '2026-09-01T00:00:00Z', pinnedAt: '2026-10-03T00:00:00Z' }),
@@ -33,7 +33,14 @@ const tasks = [
 		title: 'Red checks',
 		createdAt: '2026-09-02T00:00:00Z',
 		prUrl: 'https://github.com/acme/demo/pull/7',
-		pullRequest: { state: 'open', checks: 'failed' },
+		pullRequest: {
+			state: 'open',
+			checks: 'failed',
+			runs: [
+				{ name: 'test', status: 'failed', url: 'https://ci.test/test' },
+				{ name: 'lint', status: 'passed', url: 'https://ci.test/lint' },
+			],
+		},
 	}),
 ];
 
@@ -57,7 +64,8 @@ function open() {
 const titles = (section: string) =>
 	within(screen.getByRole('region', { name: section }))
 		.queryAllByRole('link')
-		.map((link) => tasks.find((task) => link.textContent?.startsWith(task.title))?.title);
+		.map((link) => link.getAttribute('aria-label'))
+		.filter((name) => tasks.some((task) => task.title === name));
 const row = (title: string) => screen.getByText(title).closest('.group') as HTMLElement;
 
 describe('sidebar', () => {
@@ -81,14 +89,20 @@ describe('sidebar', () => {
 		expect(api.editSession).toHaveBeenCalledWith('old', { pinned: true });
 	});
 
-	it('says under each title what the task is doing or how its pull request stands', async () => {
+	it('links each task to its pull request and CI, and lists the checks when resting on CI', async () => {
 		open();
 		await screen.findByText('Busy task');
-		expect(within(row('Busy task')).getByText('Working')).toBeTruthy();
-		expect(within(row('New merged')).getByText('#12 merged')).toBeTruthy();
-		expect(within(row('Red checks')).getByText('Checks failing on #7')).toBeTruthy();
-		expect(within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+		const merged = within(row('New merged')).getByRole('link', { name: 'Pull request #12, merged' });
+		expect(merged.getAttribute('href')).toBe('https://github.com/acme/demo/pull/12');
+		expect(within(row('Busy task')).queryByText('Working')).toBeNull();
 		expect(within(row('Idle task')).getByText(/web/)).toBeTruthy();
+
+		const ci = within(row('Red checks')).getByRole('link', { name: 'Checks failing on #7' });
+		expect(ci.getAttribute('href')).toBe('https://github.com/acme/demo/pull/7/checks');
+		await userEvent.hover(ci);
+		const card = await screen.findByText('Checks on #7', {}, { timeout: 2000 });
+		expect(card.parentElement?.textContent).toMatch(/1 failing, 1 passing/);
+		expect(screen.getByRole('link', { name: 'test' }).getAttribute('href')).toBe('https://ci.test/test');
 	});
 
 	it('sorts, filters and saves the view from one menu', async () => {
@@ -129,12 +143,14 @@ describe('sidebar', () => {
 	it('shows only titles in compact view', async () => {
 		open();
 		await screen.findByText('Busy task');
-		expect(within(row('Busy task')).getByText('Working')).toBeTruthy();
+		expect(within(row('New merged')).getByRole('link', { name: /#12/ })).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'View options' }));
 		const toggle = screen.getByRole('menuitemcheckbox', { name: 'Compact view' });
 		expect(toggle.getAttribute('aria-checked')).toBe('false');
 		await userEvent.click(toggle);
-		expect(within(row('Busy task')).queryByText('Working')).toBeNull();
+		await userEvent.keyboard('{Escape}');
+		expect(within(row('New merged')).queryByRole('link', { name: /#12/ })).toBeNull();
+		expect(within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
 	});
 
 	it('searches every section', async () => {

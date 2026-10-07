@@ -893,21 +893,22 @@ test('each task keeps its pull request state and checks, read in the background 
 	assert.equal(await status(), null);
 
 	await updateSession(session.id, { prUrl: 'https://example.test/pull/21' });
-	activity = { state: 'open', headSha: 'a', checks: [{ name: 'test', status: 'failed', summary: '', url: '' }], comments: [] };
+	activity = { state: 'open', headSha: 'a', checks: [{ name: 'test', status: 'failed', summary: '', url: 'https://ci.test/1' }, { name: 'lint', status: 'skipped', summary: '', url: '' }], comments: [] };
 	await refreshPullRequests();
-	assert.deepEqual(await status(), { state: 'open', checks: 'failed' });
-	activity = { ...activity, checks: [{ name: 'test', status: 'passed', summary: '', url: '' }] };
+	const failed = { state: 'open', checks: 'failed', runs: [{ name: 'test', status: 'failed', url: 'https://ci.test/1' }] };
+	assert.deepEqual(await status(), failed, 'skipped checks are left out');
+	activity = { ...activity, checks: [{ name: 'test', status: 'passed', summary: '', url: 'https://ci.test/2' }] };
 	await refreshPullRequests();
-	assert.deepEqual(await status(), { state: 'open', checks: 'failed' }, 'not read again so soon');
+	assert.deepEqual(await status(), failed, 'not read again so soon');
 	await refreshPullRequests(Date.now() + 5 * 60_000);
-	assert.deepEqual(await status(), { state: 'open', checks: 'passed' });
+	assert.deepEqual(await status(), { state: 'open', checks: 'passed', runs: [{ name: 'test', status: 'passed', url: 'https://ci.test/2' }] });
 
 	activity = { ...activity, state: 'merged', checks: [] };
 	await refreshPullRequests(Date.now() + 10 * 60_000);
-	assert.deepEqual(await status(), { state: 'merged', checks: null });
+	assert.deepEqual(await status(), { state: 'merged', checks: null, runs: [] });
 	activity = { ...activity, state: 'open' };
 	await refreshPullRequests(Date.now() + 20 * 60_000);
-	assert.deepEqual(await status(), { state: 'merged', checks: null }, 'a merged pull request is not read again');
+	assert.deepEqual(await status(), { state: 'merged', checks: null, runs: [] }, 'a merged pull request is not read again');
 	await updateSession(session.id, { prUrl: 'https://example.test/pull/22' });
 	assert.equal(await status(), null, 'a new pull request starts unknown');
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };

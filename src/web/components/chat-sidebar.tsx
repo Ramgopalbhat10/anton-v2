@@ -46,7 +46,8 @@ import {
 	SectionLabel,
 } from '@/components/signal';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
-import { TaskPeek, TONE } from '@/components/task-peek';
+import { TaskCues } from '@/components/task-cues';
+import { TaskPeek } from '@/components/task-peek';
 import { isLive, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
@@ -405,33 +406,33 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 	return <IconBtn icon={pinned ? PinOff : Pin} size="xs" label={pinned ? 'Unpin' : 'Pin to top'} onClick={() => pin.mutate()} disabled={pin.isPending} />;
 }
 
-/** The line under a row's title: what the task is doing or waits on, then the details the view asks for. */
-function Subtitle({ session, show }: { session: Session; show: TaskView['show'] }) {
-	const note = taskNote(session);
+/** The line under a row's title: links to act on (pull request, CI, a plan to review), then the details the view asks for. */
+function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
 	const details = [show.repo && repoName(session.repo), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
 	return (
-		<div className="flex min-w-0 items-center gap-1 text-[11px] tracking-[0.01em] text-(--text-tertiary)">
-			{note ? (
-				<span className={cn('flex shrink-0 items-center gap-1', TONE[note.tone])}>
-					{note.pullRequest ? <Icon icon={GitPullRequest} size={10} /> : null}
-					{note.text}
-				</span>
-			) : null}
-			{details.length ? <span className="truncate">{`${note ? '· ' : ''}${details.join(' · ')}`}</span> : null}
+		<div className="flex min-w-0 items-center gap-2 text-[11px] tracking-[0.01em] text-(--text-tertiary)">
+			<span className="pointer-events-auto contents">
+				<TaskCues session={session} onCardChange={onCardChange} />
+			</span>
+			{details.length ? <span className="truncate">{details.join(' · ')}</span> : null}
 		</div>
 	);
 }
 
-/** One task in the sidebar; its actions show on hover and stay while its menu is open, and resting on it shows a card of details. */
+/**
+ * One task in the sidebar. The whole row links to the task, under the links its line holds;
+ * its actions show on hover and stay while its menu is open, and resting on it shows a card of details.
+ */
 function TaskRow({ session, place, view, active, onNavigate }: { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void }) {
 	const [renaming, setRenaming] = useState(false);
 	const [menuOpen, setMenuOpen] = useState(false);
+	const [cardOpen, setCardOpen] = useState(false);
 	const note = taskNote(session);
 	const live = isLive(session);
 	return (
-		<TaskPeek session={session} disabled={menuOpen || renaming}>
+		<TaskPeek session={session} disabled={menuOpen || renaming || cardOpen}>
 			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
 				{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
 				{renaming ? (
@@ -439,35 +440,41 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
 					</div>
 				) : (
-					<Link
-						to="/agents/$sessionId"
-						params={{ sessionId: session.id }}
-						search={{ app: 'code' }}
-						onClick={onNavigate}
-						className={cn(
-							'relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-1.5 pl-2 outline-none focus-visible:shadow-(--focus-ring)',
-							active || live ? 'text-(--text-primary)' : 'text-(--text-secondary) hover:text-(--text-primary)',
-						)}
-					>
-						<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-[5px]', live && 'text-(--accent-text)')}>
-							<TaskStatusIcon session={session} size={view.compact ? 12 : 13} />
-						</span>
-						<div className="flex min-w-0 flex-1 flex-col gap-px">
-							<span className="truncate text-[13px]">{session.title}</span>
-							{view.compact ? null : <Subtitle session={session} show={view.show} />}
+					<>
+						<Link
+							to="/agents/$sessionId"
+							params={{ sessionId: session.id }}
+							search={{ app: 'code' }}
+							onClick={onNavigate}
+							aria-label={session.title}
+							className="absolute inset-0 rounded-lg outline-none focus-visible:shadow-(--focus-ring)"
+						/>
+						<div
+							className={cn(
+								'pointer-events-none relative flex h-full min-w-0 flex-1 items-center gap-2 pr-1.5 pl-2',
+								active || live ? 'text-(--text-primary)' : 'text-(--text-secondary) group-hover:text-(--text-primary)',
+							)}
+						>
+							<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-[5px]', live && 'text-(--accent-text)')}>
+								<TaskStatusIcon session={session} size={view.compact ? 12 : 13} />
+							</span>
+							<div className="flex min-w-0 flex-1 flex-col gap-px">
+								<span className="truncate text-[13px]">{session.title}</span>
+								{view.compact ? null : <Subtitle session={session} show={view.show} onCardChange={setCardOpen} />}
+							</div>
+							{/* Compact rows have no line for what waits on you, so a dot says it; it gives way to the row's actions on hover. */}
+							{view.compact && note?.attention ? (
+								<span
+									role="img"
+									aria-label={note.text}
+									className={cn(
+										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
+										note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)',
+									)}
+								/>
+							) : null}
 						</div>
-						{/* Gives way to the row's actions on hover. */}
-						{note?.attention ? (
-							<span
-								role="img"
-								aria-label={note.text}
-								className={cn(
-									'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-									note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)',
-								)}
-							/>
-						) : null}
-					</Link>
+					</>
 				)}
 				{renaming ? null : (
 					<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
