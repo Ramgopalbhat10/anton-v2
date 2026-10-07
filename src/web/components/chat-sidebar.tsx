@@ -1,12 +1,70 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { GitBranch, GitPullRequest, List, ListFilter, MoreHorizontal, PanelLeft, Pin, PinOff, Plus, Search, Settings, Square, X } from 'lucide-react';
-import { useState } from 'react';
-import { Avatar, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
+import {
+	ArrowUpDown,
+	CalendarDays,
+	CircleDot,
+	Cpu,
+	Eye,
+	FolderGit2,
+	GitBranch,
+	GitPullRequest,
+	List,
+	ListFilter,
+	type LucideIcon,
+	MoreHorizontal,
+	PanelLeft,
+	Pin,
+	PinOff,
+	Plus,
+	RotateCcw,
+	Rows2,
+	Rows3,
+	Search,
+	Settings,
+	SlidersHorizontal,
+	Square,
+	X,
+} from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import {
+	Avatar,
+	Icon,
+	IconBtn,
+	Menu,
+	MenuContent,
+	MenuItem,
+	MenuSeparator,
+	MenuSub,
+	MenuSubContent,
+	MenuSubTrigger,
+	MenuTrigger,
+	SectionLabel,
+} from '@/components/signal';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
-import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
+import { TaskPeek, TONE } from '@/components/task-peek';
+import { isLive, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
+import {
+	activeAt,
+	DEFAULT_VIEW,
+	FACET_KEYS,
+	FACETS,
+	type FacetKey,
+	filterCount,
+	groups,
+	optionLabel,
+	readView,
+	repoName,
+	saveView,
+	SORTS,
+	type SortKey,
+	sections,
+	type TaskView,
+	taskNote,
+	toggleFilter,
+} from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 const NAV_ROW =
@@ -50,125 +108,251 @@ export function SidebarRail({ onExpand }: { onExpand: () => void }) {
 	);
 }
 
-const RUNNING_FILTERS = {
-	all: { label: 'All', test: (_session: Session) => true },
-	working: { label: 'Working', test: (session: Session) => session.working || session.status === 'starting' },
-	idle: { label: 'Idle', test: (session: Session) => !session.working && session.status === 'running' },
-} satisfies Record<string, { label: string; test: (session: Session) => boolean }>;
-type RunningFilter = keyof typeof RUNNING_FILTERS;
+const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
-const RECENT_SORTS = {
-	newest: { label: 'Newest first', compare: (a: Session, b: Session) => b.createdAt.localeCompare(a.createdAt) },
-	spend: { label: 'Highest spend first', compare: (a: Session, b: Session) => b.usage.cost - a.usage.cost },
-} satisfies Record<string, { label: string; compare: (a: Session, b: Session) => number }>;
-type RecentSort = keyof typeof RECENT_SORTS;
-
-/** Pinned tasks first, each group keeping its order. */
-const pinnedFirst = (tasks: Session[]) => [...tasks.filter((task) => task.pinnedAt), ...tasks.filter((task) => !task.pinnedAt)];
-
-function readSort(): RecentSort {
-	try {
-		return localStorage.getItem('anton.recentSort') === 'spend' ? 'spend' : 'newest';
-	} catch {
-		return 'newest';
-	}
+/** A count beside a menu option, so empty options read as such before picking them. */
+function Count({ n }: { n: number }) {
+	return <span className="ml-1.5 text-[11px] text-(--text-disabled)">{n}</span>;
 }
 
-function saveSort(sort: RecentSort) {
-	try {
-		localStorage.setItem('anton.recentSort', sort);
-	} catch {
-		// Storage is a convenience; the list still sorts without it.
-	}
-}
-
-/** The Running header: narrow by what the task is doing, stop every sandbox, or open the task list. */
-function RunningHeader({ filter, onFilter, running }: { filter: RunningFilter; onFilter: (next: RunningFilter) => void; running: number }) {
+/**
+ * Sort, filter, group and what each row shows, in one menu with a submenu each.
+ * Picking a filter or a detail keeps the menu open, so several can be picked.
+ */
+function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
 	const navigate = useNavigate();
+	const active = filterCount(view.filters);
+	const stay = (change: () => void) => (event: Event) => {
+		event.preventDefault();
+		change();
+	};
+	const details = [
+		['repo', 'Repository'],
+		['time', 'Last active'],
+		['spend', 'Spend'],
+	] as const;
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<IconBtn icon={SlidersHorizontal} size="xs" label="View options" className={cn(active > 0 && 'text-(--accent-text)')} />
+			</MenuTrigger>
+			<MenuContent align="end" className="w-[224px]">
+				<MenuSub>
+					<MenuSubTrigger icon={ArrowUpDown} hint={SORTS[view.sort].label}>
+						Sort
+					</MenuSubTrigger>
+					<MenuSubContent>
+						{Object.entries(SORTS).map(([key, { label }]) => (
+							<MenuItem key={key} checked={view.sort === key} onSelect={() => onChange({ ...view, sort: key as SortKey })}>
+								{label}
+							</MenuItem>
+						))}
+					</MenuSubContent>
+				</MenuSub>
+				<MenuSub>
+					<MenuSubTrigger icon={ListFilter} hint={active || undefined}>
+						Filter
+					</MenuSubTrigger>
+					<MenuSubContent>
+						{FACET_KEYS.map((key) => {
+							const options = FACETS[key].options(tasks);
+							return (
+								<MenuSub key={key}>
+									<MenuSubTrigger icon={FACET_ICON[key]} hint={view.filters[key].length || undefined}>
+										{FACETS[key].label}
+									</MenuSubTrigger>
+									<MenuSubContent>
+										{options.length ? (
+											options.map((option) => (
+												<MenuItem
+													key={option.value}
+													checked={view.filters[key].includes(option.value)}
+													onSelect={stay(() => onChange(toggleFilter(view, key, option.value)))}
+												>
+													{option.label}
+													<Count n={tasks.filter((task) => FACETS[key].test(task, option.value)).length} />
+												</MenuItem>
+											))
+										) : (
+											<MenuItem disabled>No tasks yet</MenuItem>
+										)}
+									</MenuSubContent>
+								</MenuSub>
+							);
+						})}
+						<MenuSeparator />
+						<MenuItem icon={X} disabled={active === 0} onSelect={() => onChange({ ...view, filters: DEFAULT_VIEW.filters })}>
+							Clear filters
+						</MenuItem>
+					</MenuSubContent>
+				</MenuSub>
+				<MenuSub>
+					<MenuSubTrigger icon={Rows3} hint={view.group === 'repo' ? 'Repository' : 'None'}>
+						Group
+					</MenuSubTrigger>
+					<MenuSubContent>
+						<MenuItem checked={view.group === 'none'} onSelect={() => onChange({ ...view, group: 'none' })}>
+							None
+						</MenuItem>
+						<MenuItem checked={view.group === 'repo'} onSelect={() => onChange({ ...view, group: 'repo' })}>
+							Repository
+						</MenuItem>
+					</MenuSubContent>
+				</MenuSub>
+				<MenuSub>
+					<MenuSubTrigger icon={Eye} hint={details.filter(([key]) => view.show[key]).length + 1}>
+						Details
+					</MenuSubTrigger>
+					<MenuSubContent>
+						<MenuItem checked disabled>
+							Status and pull request
+						</MenuItem>
+						{details.map(([key, label]) => (
+							<MenuItem key={key} checked={view.show[key]} onSelect={stay(() => onChange({ ...view, show: { ...view.show, [key]: !view.show[key] } }))}>
+								{label}
+							</MenuItem>
+						))}
+					</MenuSubContent>
+				</MenuSub>
+				<MenuItem icon={Rows2} onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}>
+					<span className="flex items-center justify-between gap-3">
+						Compact view
+						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 shrink-0 rounded-full', view.compact ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
+							<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', view.compact ? 'translate-x-3' : 'translate-x-0.5')} />
+						</span>
+					</span>
+				</MenuItem>
+				<MenuSeparator />
+				<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
+					Open the task list
+				</MenuItem>
+				<MenuItem icon={RotateCcw} onSelect={() => onChange(DEFAULT_VIEW)}>
+					Reset view
+				</MenuItem>
+			</MenuContent>
+		</Menu>
+	);
+}
+
+/** The filters in use, each a chip that removes itself. */
+function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
+	const chips = FACET_KEYS.flatMap((key) => view.filters[key].map((value) => ({ key, value, label: optionLabel(key, value, tasks) })));
+	return (
+		<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+			{chips.map(({ key, value, label }) => (
+				<button
+					key={`${key}:${value}`}
+					type="button"
+					aria-label={`Remove the ${label} filter`}
+					onClick={() => onChange(toggleFilter(view, key, value))}
+					className="flex h-5 max-w-full items-center gap-1 rounded-full bg-(--accent-bg-subtle) pr-1 pl-1.5 text-[11px] text-(--accent-text) outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={FACET_ICON[key]} size={10} />
+					<span className="truncate">{label}</span>
+					<Icon icon={X} size={10} />
+				</button>
+			))}
+		</div>
+	);
+}
+
+/** Search every task, and the view menu, above the sections they shape. */
+function Toolbar({
+	view,
+	onChange,
+	tasks,
+	query,
+	onQuery,
+}: {
+	view: TaskView;
+	onChange: (next: TaskView) => void;
+	tasks: Session[];
+	query: string;
+	onQuery: (next: string) => void;
+}) {
+	const [searching, setSearching] = useState(false);
+	const close = () => {
+		onQuery('');
+		setSearching(false);
+	};
+	if (searching || query) {
+		return (
+			<div className="mx-2 mt-2 flex h-7 items-center gap-2 rounded-lg bg-(--bg-raised) px-2">
+				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+				<input
+					autoFocus
+					value={query}
+					onChange={(event) => onQuery(event.target.value)}
+					onKeyDown={(event) => event.key === 'Escape' && close()}
+					placeholder="Search tasks"
+					aria-label="Search tasks"
+					className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none"
+				/>
+				<button type="button" aria-label="Close search" onClick={close} className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)">
+					<Icon icon={X} size={12} />
+				</button>
+			</div>
+		);
+	}
+	const active = filterCount(view.filters);
+	return (
+		<div className="flex min-h-7 items-center gap-0.5 pt-2 pr-1.5 pl-4">
+			{active ? (
+				<FilterChips view={view} onChange={onChange} tasks={tasks} />
+			) : (
+				<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">
+					{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+				</span>
+			)}
+			<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
+			<ViewMenu view={view} onChange={onChange} tasks={tasks} />
+		</div>
+	);
+}
+
+function SectionHeader({ label, count, children }: { label: string; count?: number; children?: ReactNode }) {
+	return (
+		<div className="flex h-8 items-center gap-0.5 pt-3 pr-1.5 pl-4">
+			<SectionLabel className="min-w-0 flex-1">
+				{label}
+				{count ? <span className="ml-1.5 font-normal text-(--text-disabled)">{count}</span> : null}
+			</SectionLabel>
+			{children}
+		</div>
+	);
+}
+
+/** Stops every sandbox, asking twice inside the menu as it stops them all at once. */
+function RunningMenu({ running }: { running: number }) {
 	const queryClient = useQueryClient();
 	const [confirming, setConfirming] = useState(false);
 	const stopAll = useMutation({ mutationFn: api.stopAllSandboxes, onSettled: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }) });
 	return (
-		<div className="flex items-center gap-0.5 pt-4 pr-1.5 pb-1.5 pl-4">
-			<SectionLabel className="min-w-0 flex-1">Running</SectionLabel>
-			{filter !== 'all' ? (
-				<button
-					type="button"
-					aria-label={`Clear the ${RUNNING_FILTERS[filter].label} filter`}
-					onClick={() => onFilter('all')}
-					className="flex h-[18px] items-center gap-1 rounded-full bg-(--bg-raised) px-1.5 text-[11px] text-(--text-secondary) hover:text-(--text-primary)"
+		<Menu onOpenChange={(open) => !open && setConfirming(false)}>
+			<MenuTrigger asChild>
+				<IconBtn icon={MoreHorizontal} size="xs" label="Running options" />
+			</MenuTrigger>
+			<MenuContent align="end">
+				<MenuItem
+					icon={Square}
+					disabled={running === 0 || stopAll.isPending}
+					onSelect={(event) => {
+						if (confirming) return stopAll.mutate();
+						event.preventDefault();
+						setConfirming(true);
+					}}
 				>
-					{RUNNING_FILTERS[filter].label}
-					<Icon icon={X} size={10} />
-				</button>
-			) : null}
-			<Menu>
-				<MenuTrigger asChild>
-					<IconBtn icon={ListFilter} size="xs" label="Filter running tasks" />
-				</MenuTrigger>
-				<MenuContent align="end">
-					{Object.entries(RUNNING_FILTERS).map(([key, { label }]) => (
-						<MenuItem key={key} checked={filter === key} onSelect={() => onFilter(key as RunningFilter)}>
-							{label}
-						</MenuItem>
-					))}
-				</MenuContent>
-			</Menu>
-			<Menu onOpenChange={(open) => !open && setConfirming(false)}>
-				<MenuTrigger asChild>
-					<IconBtn icon={MoreHorizontal} size="xs" label="Running options" />
-				</MenuTrigger>
-				<MenuContent align="end">
-					{/* Asks twice inside the menu, as it stops every task's sandbox at once. */}
-					<MenuItem
-						icon={Square}
-						disabled={running === 0 || stopAll.isPending}
-						onSelect={(event) => {
-							if (confirming) return stopAll.mutate();
-							event.preventDefault();
-							setConfirming(true);
-						}}
-					>
-						{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
-					</MenuItem>
-					<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
-						Open the task list
-					</MenuItem>
-				</MenuContent>
-			</Menu>
-		</div>
+					{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
+				</MenuItem>
+			</MenuContent>
+		</Menu>
 	);
 }
 
-/** The Recent header: search, sort by age or spend, or open the task list. */
-function RecentHeader({ sort, onSort, onSearch }: { sort: RecentSort; onSort: (next: RecentSort) => void; onSearch: () => void }) {
-	const navigate = useNavigate();
-	return (
-		<div className="flex items-center gap-0.5 pt-4 pr-1.5 pb-1.5 pl-4">
-			<SectionLabel className="min-w-0 flex-1">Recent</SectionLabel>
-			<IconBtn icon={Search} size="xs" label="Search recent tasks" onClick={onSearch} />
-			<Menu>
-				<MenuTrigger asChild>
-					<IconBtn icon={MoreHorizontal} size="xs" label="Recent options" />
-				</MenuTrigger>
-				<MenuContent align="end">
-					{Object.entries(RECENT_SORTS).map(([key, { label }]) => (
-						<MenuItem key={key} checked={sort === key} onSelect={() => onSort(key as RecentSort)}>
-							{label}
-						</MenuItem>
-					))}
-					<MenuSeparator />
-					<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
-						Open the task list
-					</MenuItem>
-				</MenuContent>
-			</Menu>
-		</div>
-	);
-}
+type Place = 'pinned' | 'running' | 'recent';
 
-/** Running tasks offer fork and stop on hover; stopped ones offer pin. Both have the task menu. */
-function HoverActions({ session, live }: { session: Session; live: boolean }) {
+/** On hover: pinned tasks offer Unpin, running ones fork and stop, the rest Pin. All have the task menu. */
+function HoverActions({ session, place }: { session: Session; place: Place }) {
 	const queryClient = useQueryClient();
 	const stop = useMutation({
 		mutationFn: () => api.stopSession(session.id),
@@ -176,70 +360,107 @@ function HoverActions({ session, live }: { session: Session; live: boolean }) {
 	});
 	const fork = useFork(session);
 	const pin = usePin(session);
-	if (!live) {
-		return <IconBtn icon={session.pinnedAt ? PinOff : Pin} size="xs" label={session.pinnedAt ? 'Unpin' : 'Pin to top'} onClick={() => pin.mutate()} disabled={pin.isPending} />;
+	if (place === 'running') {
+		return (
+			<>
+				<IconBtn icon={GitBranch} size="xs" label="Fork into a new task" onClick={() => fork.mutate()} disabled={fork.isPending} />
+				<IconBtn icon={Square} size="xs" label="Stop sandbox" onClick={() => stop.mutate()} disabled={stop.isPending} />
+			</>
+		);
 	}
+	const pinned = place === 'pinned';
+	return <IconBtn icon={pinned ? PinOff : Pin} size="xs" label={pinned ? 'Unpin' : 'Pin to top'} onClick={() => pin.mutate()} disabled={pin.isPending} />;
+}
+
+/** The line under a row's title: what the task is doing or waits on, then the details the view asks for. */
+function Subtitle({ session, show }: { session: Session; show: TaskView['show'] }) {
+	const note = taskNote(session);
+	const details = [show.repo && repoName(session.repo), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
+		(part): part is string => Boolean(part),
+	);
 	return (
-		<>
-			<IconBtn icon={GitBranch} size="xs" label="Fork into a new task" onClick={() => fork.mutate()} disabled={fork.isPending} />
-			<IconBtn icon={Square} size="xs" label="Stop sandbox" onClick={() => stop.mutate()} disabled={stop.isPending} />
-		</>
+		<div className="flex min-w-0 items-center gap-1 text-[11px] tracking-[0.01em] text-(--text-tertiary)">
+			{note ? (
+				<span className={cn('flex shrink-0 items-center gap-1', TONE[note.tone])}>
+					{note.pullRequest ? <Icon icon={GitPullRequest} size={10} /> : null}
+					{note.text}
+				</span>
+			) : null}
+			{details.length ? <span className="truncate">{`${note ? '· ' : ''}${details.join(' · ')}`}</span> : null}
+		</div>
 	);
 }
 
-/** One task in the sidebar; its actions show on hover, and stay while its menu is open. */
-function TaskRow({ session, live, active, onNavigate }: { session: Session; live: boolean; active: boolean; onNavigate: () => void }) {
+/** One task in the sidebar; its actions show on hover and stay while its menu is open, and resting on it shows a card of details. */
+function TaskRow({ session, place, view, active, onNavigate }: { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void }) {
 	const [renaming, setRenaming] = useState(false);
 	const [menuOpen, setMenuOpen] = useState(false);
+	const note = taskNote(session);
+	const live = isLive(session);
 	return (
-		<div
-			data-open={menuOpen || undefined}
-			className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', live ? 'h-11' : 'h-[30px]')}
-		>
+		<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
 			{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
 			{renaming ? (
 				<div className="relative flex min-w-0 flex-1 px-1">
 					<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
 				</div>
 			) : (
-				<Link
-					to="/agents/$sessionId"
-					params={{ sessionId: session.id }}
-					search={{ app: 'code' }}
-					onClick={onNavigate}
-					className={cn(
-						'relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-1.5 pl-2 outline-none focus-visible:shadow-(--focus-ring)',
-						!live && (active ? 'text-(--text-primary)' : 'text-(--text-secondary) hover:text-(--text-primary)'),
-					)}
-				>
-					<span className={cn('inline-flex shrink-0', live && 'text-(--accent-text)')}>
-						<TaskStatusIcon session={session} size={live ? 14 : 12} />
-					</span>
-					<div className="flex min-w-0 flex-1 flex-col gap-px">
-						<div className={cn('flex min-w-0 items-center gap-1 text-[13px]', live && 'text-(--text-primary)')}>
-							<span className="truncate">{session.title}</span>
+				<TaskPeek session={session} disabled={menuOpen}>
+					<Link
+						to="/agents/$sessionId"
+						params={{ sessionId: session.id }}
+						search={{ app: 'code' }}
+						onClick={onNavigate}
+						className={cn(
+							'relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-1.5 pl-2 outline-none focus-visible:shadow-(--focus-ring)',
+							active || live ? 'text-(--text-primary)' : 'text-(--text-secondary) hover:text-(--text-primary)',
+						)}
+					>
+						<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-[5px]', live && 'text-(--accent-text)')}>
+							<TaskStatusIcon session={session} size={view.compact ? 12 : 13} />
+						</span>
+						<div className="flex min-w-0 flex-1 flex-col gap-px">
+							<span className="truncate text-[13px]">{session.title}</span>
+							{view.compact ? null : <Subtitle session={session} show={view.show} />}
 						</div>
-						{live ? (
-							<div className="truncate text-[11px] tracking-[0.02em] text-(--text-tertiary)">
-								{liveLabel(session)} · {age(session.createdAt)} · {session.repo.split('/').pop()}
-							</div>
-						) : null}
-					</div>
-					{/* Gives way to the row's actions, which have Unpin, on hover. */}
-					<div className="flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-disabled) group-focus-within:hidden group-hover:hidden group-data-open:hidden">
-						{session.pinnedAt ? <Icon icon={Pin} size={11} className="text-(--icon-tertiary)" /> : null}
-						{live ? null : age(session.createdAt)}
-					</div>
-				</Link>
+						{/* Gives way to the row's actions on hover. */}
+						<div className="flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-disabled) group-focus-within:hidden group-hover:hidden group-data-open:hidden">
+							{view.compact && view.show.time ? age(activeAt(session)) : null}
+							{note?.attention ? (
+								<span role="img" aria-label={note.text} className={cn('size-1.5 rounded-full', note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)')} />
+							) : null}
+						</div>
+					</Link>
+				</TaskPeek>
 			)}
 			{renaming ? null : (
 				<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
-					<HoverActions session={session} live={live} />
+					<HoverActions session={session} place={place} />
 					<TaskMenu session={session} size="xs" onRename={() => setRenaming(true)} onOpenChange={setMenuOpen} />
 				</div>
 			)}
 		</div>
 	);
+}
+
+/** A section's rows, under a heading per repository when grouping. */
+function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {
+	return (
+		<div className="flex flex-col gap-0.5 px-2">
+			{groups(tasks, view.group).map((group) => (
+				<div key={group.key} className="flex flex-col gap-0.5">
+					{group.label ? <div className="truncate px-2 pt-1.5 pb-0.5 text-[11px] text-(--text-disabled)">{group.label}</div> : null}
+					{group.tasks.map((session) => (
+						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
+					))}
+				</div>
+			))}
+		</div>
+	);
+}
+
+function Empty({ children }: { children: ReactNode }) {
+	return <div className="px-4 py-1.5 text-[12px] text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -257,22 +478,16 @@ export function ChatSidebar({
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const name = profile.data?.name ?? 'You';
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
-	const [searching, setSearching] = useState(false);
 	const [query, setQuery] = useState('');
-	const [filter, setFilter] = useState<RunningFilter>('all');
-	const [sort, setSort] = useState(readSort);
+	const [view, setView] = useState(readView);
+	const changeView = (next: TaskView) => {
+		setView(next);
+		saveView(next);
+	};
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	const live = sessions.filter(isLive);
-	const running = pinnedFirst(live.filter(RUNNING_FILTERS[filter].test));
-	const recent = pinnedFirst(
-		sessions
-			.filter((session) => !isLive(session))
-			.filter((session) => session.title.toLowerCase().includes(query.trim().toLowerCase()))
-			.sort(RECENT_SORTS[sort].compare),
-	);
-	const row = (session: Session) => (
-		<TaskRow key={session.id} session={session} live={isLive(session)} active={params.sessionId === session.id} onNavigate={onNavigate} />
-	);
+	const { pinned, running, recent } = sections(sessions, view, query);
+	const narrowed = filterCount(view.filters) > 0 || query.trim() !== '';
+	const rows = (tasks: Session[], place: Place) => <Rows tasks={tasks} place={place} view={view} activeId={params.sessionId} onNavigate={onNavigate} />;
 
 	return (
 		<aside
@@ -314,68 +529,34 @@ export function ChatSidebar({
 			</div>
 
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-				<RunningHeader filter={filter} onFilter={setFilter} running={live.length} />
-				<div className="flex flex-col gap-0.5 px-2">
+				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
+				{pinned.length ? (
+					<section aria-label="Pinned">
+						<SectionHeader label="Pinned" count={pinned.length} />
+						{rows(pinned, 'pinned')}
+					</section>
+				) : null}
+				<section aria-label="Running">
+					<SectionHeader label="Running" count={running.length}>
+						<RunningMenu running={sessions.filter(isLive).length} />
+					</SectionHeader>
 					{sessionsQuery.isError ? (
-						<div className="px-2 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
+						<div className="px-4 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
-						<div className="flex flex-col gap-1 px-1">
+						<div className="px-3">
 							<div className="h-11 rounded-lg bg-(--bg-skeleton)" />
 						</div>
-					) : running.length === 0 ? (
-						<div className="px-2 py-1.5 text-[12px] text-(--text-disabled)">{live.length === 0 ? 'Nothing is running.' : 'Nothing running matches this filter.'}</div>
+					) : running.length ? (
+						rows(running, 'running')
 					) : (
-						running.map(row)
+						<Empty>{narrowed ? 'Nothing running matches.' : 'Nothing is running.'}</Empty>
 					)}
-				</div>
-
-				{searching ? (
-					<div className="mx-2 mt-3.5 mb-1.5 ml-3 flex h-7 items-center gap-2 rounded-lg bg-(--bg-raised) px-2">
-						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-						<input
-							autoFocus
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === 'Escape') {
-									setQuery('');
-									setSearching(false);
-								}
-							}}
-							placeholder="Search recent tasks"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none"
-						/>
-						<button
-							type="button"
-							aria-label="Close search"
-							onClick={() => {
-								setQuery('');
-								setSearching(false);
-							}}
-							className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)"
-						>
-							<Icon icon={X} size={12} />
-						</button>
-					</div>
-				) : (
-					<RecentHeader
-						sort={sort}
-						onSort={(next) => {
-							setSort(next);
-							saveSort(next);
-						}}
-						onSearch={() => setSearching(true)}
-					/>
-				)}
-				<div className="flex flex-col gap-0.5 px-2 pb-2">
-					{recent.length === 0 ? (
-						<div className="px-2 py-1.5 text-[12px] text-(--text-disabled)">
-							{query ? 'No recent task matches that search.' : 'Stopped tasks show up here.'}
-						</div>
-					) : (
-						recent.map(row)
-					)}
-				</div>
+				</section>
+				<section aria-label="Recent">
+					<SectionHeader label="Recent" count={recent.length} />
+					{recent.length ? rows(recent, 'recent') : <Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>}
+				</section>
+				<div className="h-2 shrink-0" />
 			</div>
 
 			<div className="flex shrink-0 items-center gap-2 p-2">

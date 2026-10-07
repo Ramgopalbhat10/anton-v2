@@ -885,6 +885,34 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 	assert.equal(delivered.length, 5);
 });
 
+test('each task keeps its pull request state and checks, read in the background until it is finished', async () => {
+	const { refreshPullRequests } = await import('../src/services/pr-status.ts');
+	const project = await addProject('acme/status');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Status' });
+	const status = async () => (await sessions.getSession(session.id)).pullRequest;
+	assert.equal(await status(), null);
+
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/21' });
+	activity = { state: 'open', headSha: 'a', checks: [{ name: 'test', status: 'failed', summary: '', url: '' }], comments: [] };
+	await refreshPullRequests();
+	assert.deepEqual(await status(), { state: 'open', checks: 'failed' });
+	activity = { ...activity, checks: [{ name: 'test', status: 'passed', summary: '', url: '' }] };
+	await refreshPullRequests();
+	assert.deepEqual(await status(), { state: 'open', checks: 'failed' }, 'not read again so soon');
+	await refreshPullRequests(Date.now() + 5 * 60_000);
+	assert.deepEqual(await status(), { state: 'open', checks: 'passed' });
+
+	activity = { ...activity, state: 'merged', checks: [] };
+	await refreshPullRequests(Date.now() + 10 * 60_000);
+	assert.deepEqual(await status(), { state: 'merged', checks: null });
+	activity = { ...activity, state: 'open' };
+	await refreshPullRequests(Date.now() + 20 * 60_000);
+	assert.deepEqual(await status(), { state: 'merged', checks: null }, 'a merged pull request is not read again');
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/22' });
+	assert.equal(await status(), null, 'a new pull request starts unknown');
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+});
+
 test('each pull request the agent opens or updates is reviewed, and the review is posted on it for follow-ups to fix', async () => {
 	const { postReview, requestReview, MAX_REVIEWS, REVIEW_MARK, CLEAN_MARK } = await import('../src/services/code-review.ts');
 	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
