@@ -74,7 +74,37 @@ export type Plugin = {
 	skipped: string[];
 	enabled: boolean;
 	installedAt: string;
+	/** Where it was installed from, so it can be installed again to update it. */
+	pick: PluginPick | null;
 };
+
+/** What to install or look at: a marketplace's plugin, a GitHub address, or an installed plugin by its id. */
+export type PluginPick = { marketplace: string; name: string } | { address: string } | { plugin: string };
+
+/** A plugin as installing it would save it, with every file in its folder. */
+export type PluginPreview = {
+	id: string;
+	name: string;
+	description: string;
+	/** Its repository and folder, at the commit shown. */
+	source: PluginSource;
+	sha: string;
+	marketplace: string | null;
+	pick: PluginPick;
+	skills: Array<{ name: string; description: string; folder: string; license: string | null }>;
+	mcpServers: string[];
+	skipped: string[];
+	files: string[];
+	truncated: boolean;
+	readme: string | null;
+	installed: { sha: string; enabled: boolean } | null;
+	/** A newer commit of an installed plugin. */
+	update: string | null;
+};
+
+export type GitHubSkill = { address: string; repo: string; name: string; description: string };
+export type GitHubRepo = { address: string; description: string; stars: number };
+export type GitHubSearch = { skills: GitHubSkill[]; repos: GitHubRepo[]; problems: string[] };
 
 export type CatalogItem = { id: string; name: string; description: string; source: PluginSource; skills: string[] | null; bundle?: string; browseable?: boolean; installed: boolean };
 
@@ -271,7 +301,11 @@ export const api = {
 	saveMarketplaces: (marketplaces: string[]) =>
 		json<{ marketplaces: string[] }>('/api/settings/marketplaces', { method: 'PUT', body: JSON.stringify({ marketplaces }) }),
 	catalog: (repo: string, bundle?: string) => json<{ entries: CatalogItem[] }>(`/api/marketplaces/catalog?repo=${encodeURIComponent(repo)}${bundle ? `&bundle=${encodeURIComponent(bundle)}` : ''}`),
-	installPlugin: (input: { marketplace: string; name: string } | { address: string }) => post<{ plugins: Plugin[] }>('/api/plugins', input),
+	installPlugin: (input: PluginPick) => post<{ plugins: Plugin[] }>('/api/plugins', input),
+	previewPlugin: (pick: PluginPick) => json<PluginPreview>(`/api/plugins/preview?${new URLSearchParams(pick)}`),
+	pluginFile: async (repo: string, sha: string, path: string) =>
+		new Uint8Array(await (await request(`/api/plugins/file?${new URLSearchParams({ repo, sha, path })}`)).arrayBuffer()),
+	searchGitHub: (q: string, signal?: AbortSignal) => json<GitHubSearch>(`/api/skills/search?q=${encodeURIComponent(q)}`, { signal }),
 	setPluginEnabled: (id: string, enabled: boolean) =>
 		json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 	removePlugin: (id: string) => json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'DELETE' }),

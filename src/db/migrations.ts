@@ -78,6 +78,8 @@ const migrations: string[][] = [
 	],
 	// 14: tasks pinned to the top of the sidebar.
 	[`ALTER TABLE sessions ADD COLUMN pinned_at TEXT`],
+	// 15: what each plugin was installed from (a marketplace entry or an address), to show and update it from the same place.
+	[`ALTER TABLE plugins ADD COLUMN pick_json TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

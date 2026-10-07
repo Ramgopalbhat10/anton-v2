@@ -13,6 +13,9 @@
 /** A repository at one commit: its file paths, and their contents on request. */
 export type RepoFiles = { paths: string[]; read(path: string): Promise<Uint8Array | null> };
 
+/** How the user picks a plugin: an entry of a marketplace, or a GitHub address of a repository, folder or skill. */
+export type PluginPick = { marketplace: string; name: string } | { address: string };
+
 /** Where a plugin lives: a folder of a GitHub repository at a commit or branch (null for its default branch). */
 export type PluginSource = { repo: string; path: string; ref: string | null };
 
@@ -30,7 +33,15 @@ export type CatalogEntry = {
 
 export type SkillFile = { text: string } | { base64: string };
 
-export type ParsedSkill = { name: string; description: string; instructions: string; license?: string; files: Record<string, SkillFile> };
+export type ParsedSkill = {
+	name: string;
+	description: string;
+	instructions: string;
+	license?: string;
+	files: Record<string, SkillFile>;
+	/** Its folder in the repository; absent on skills installed before it was kept. */
+	folder?: string;
+};
 
 export type ParsedPlugin = {
 	name: string;
@@ -131,7 +142,7 @@ export async function readSkill(files: RepoFiles, dir: string): Promise<ParsedSk
 		}
 	}
 	const license = str(data.license);
-	return { name, description, instructions: body.trim(), ...(license ? { license } : {}), files: out };
+	return { name, description, instructions: body.trim(), ...(license ? { license } : {}), files: out, folder };
 }
 
 /** Folders holding a SKILL.md: `dir` itself, or its direct children. */

@@ -1,4 +1,4 @@
-import type { ParsedSkill, PluginSource } from '../core/plugins.ts';
+import type { ParsedSkill, PluginPick, PluginSource } from '../core/plugins.ts';
 import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
@@ -12,6 +12,8 @@ export type InstalledPlugin = {
 	sha: string;
 	/** The marketplace it was picked from, or null when added by its address. */
 	marketplace: string | null;
+	/** What it was installed from, to show it and update it from the same place; null for plugins installed before it was kept. */
+	pick: PluginPick | null;
 	skills: ParsedSkill[];
 	mcpServers: string[];
 	skipped: string[];
@@ -27,6 +29,7 @@ function toPlugin(row: Row): InstalledPlugin {
 		source: JSON.parse(String(row.source_json)) as PluginSource,
 		sha: String(row.sha),
 		marketplace: row.marketplace == null ? null : String(row.marketplace),
+		pick: row.pick_json == null ? null : (JSON.parse(String(row.pick_json)) as PluginPick),
 		skills: JSON.parse(String(row.skills_json)) as ParsedSkill[],
 		mcpServers: JSON.parse(String(row.mcp_json)) as string[],
 		skipped: JSON.parse(String(row.skipped_json)) as string[],
@@ -50,10 +53,10 @@ export async function getPlugin(id: string): Promise<InstalledPlugin | null> {
 export async function savePlugin(plugin: Omit<InstalledPlugin, 'enabled' | 'installedAt'>): Promise<InstalledPlugin> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO plugins (id, name, description, source_json, sha, marketplace, skills_json, mcp_json, skipped_json, enabled, installed_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+		sql: `INSERT INTO plugins (id, name, description, source_json, sha, marketplace, pick_json, skills_json, mcp_json, skipped_json, enabled, installed_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
 			ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, source_json = excluded.source_json, sha = excluded.sha,
-				marketplace = excluded.marketplace, skills_json = excluded.skills_json, mcp_json = excluded.mcp_json, skipped_json = excluded.skipped_json`,
+				marketplace = excluded.marketplace, pick_json = excluded.pick_json, skills_json = excluded.skills_json, mcp_json = excluded.mcp_json, skipped_json = excluded.skipped_json`,
 		args: [
 			plugin.id,
 			plugin.name,
@@ -61,6 +64,7 @@ export async function savePlugin(plugin: Omit<InstalledPlugin, 'enabled' | 'inst
 			JSON.stringify(plugin.source),
 			plugin.sha,
 			plugin.marketplace,
+			plugin.pick && JSON.stringify(plugin.pick),
 			JSON.stringify(plugin.skills),
 			JSON.stringify(plugin.mcpServers),
 			JSON.stringify(plugin.skipped),

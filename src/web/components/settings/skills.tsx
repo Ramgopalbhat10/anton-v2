@@ -1,324 +1,541 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Blocks, ChevronRight, Download, Plus, Store, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
-import { Badge, Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
-import { api, type CatalogItem, type Plugin } from '@/lib/api';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { Blocks, Github, Plus, ScrollText, Search, Settings2, Star, Store, X } from 'lucide-react';
+import { Popover as PopoverPrimitive } from 'radix-ui';
+import { type ReactNode, useEffect, useState } from 'react';
+import { Badge, Btn, EmptyState, Icon, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
+import { api, type CatalogItem, type GitHubSearch, type Plugin, type PluginPick } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Block, FIELD, List, PageHeading } from './parts';
+import { FIELD, PageHeading } from './parts';
 
-/** Catalog rows shown at once; searching narrows them. */
-const SHOWN = 40;
+/** Cards shown at once on Discover; "Show more" adds as many again. */
+const PAGE = 24;
+/** GitHub is searched once typing pauses this long. */
+const SEARCH_DELAY_MS = 400;
 
-const where = (plugin: Plugin) => [plugin.source.repo, plugin.source.path].filter(Boolean).join('/');
+export type SkillsTab = 'installed' | 'discover';
+export type ViewSearch = { marketplace?: string; name?: string; address?: string; plugin?: string };
 
-function usePlugins() {
+type PluginsView = { plugins: Plugin[]; marketplaces: string[] };
+
+export function usePlugins() {
 	return useQuery({ queryKey: ['plugins'], queryFn: api.plugins });
 }
 
-/** Mutations that answer with the new plugin list put it straight into the cache. */
-function usePluginMutation<T>(run: (input: T) => Promise<{ plugins: Plugin[] }>) {
+/** Mutations answer with the new plugin list, which goes straight into the cache. */
+export function usePluginMutation<T>(run: (input: T) => Promise<{ plugins: Plugin[] }>) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: run,
 		onSuccess: (result) => {
-			queryClient.setQueryData<{ plugins: Plugin[]; marketplaces: string[] }>(['plugins'], (current) => current && { ...current, plugins: result.plugins });
+			queryClient.setQueryData<PluginsView>(['plugins'], (current) => current && { ...current, plugins: result.plugins });
 			void queryClient.invalidateQueries({ queryKey: ['catalog'] });
+			void queryClient.invalidateQueries({ queryKey: ['plugin-preview'] });
 		},
 	});
 }
 
-function PluginRow({ plugin }: { plugin: Plugin }) {
-	const toggle = usePluginMutation((enabled: boolean) => api.setPluginEnabled(plugin.id, enabled));
-	const remove = usePluginMutation(() => api.removePlugin(plugin.id));
-	const [confirming, setConfirming] = useState(false);
+/** The detail page's search params for a pick. */
+export const viewSearch = (pick: PluginPick): ViewSearch => ({ ...pick });
+
+/** `owner/repo`, a deeper path or a GitHub URL, which can be opened as it is. */
+export const looksLikeAddress = (text: string) => /^(https?:\/\/(www\.)?github\.com\/)?[\w.-]+\/[\w.-]+(\/\S*)?$/i.test(text.trim());
+
+export const owner = (repo: string) => repo.split('/')[0] ?? repo;
+
+/** A square tile with a plugin's or a skill's glyph. */
+export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 'lg' }) {
 	return (
-		<div className="flex flex-col gap-1.5 rounded-md px-2.5 py-2">
-			<div className="flex items-center gap-2.5">
-				<Icon icon={Blocks} className="text-(--icon-secondary)" />
+		<span
+			className={cn(
+				'inline-flex shrink-0 items-center justify-center rounded-lg border border-(--border-subtle) bg-(--bg-raised) text-(--icon-secondary)',
+				size === 'lg' ? 'size-11' : 'size-8',
+			)}
+		>
+			<Icon icon={bundle ? Blocks : ScrollText} size={size === 'lg' ? 20 : 15} />
+		</span>
+	);
+}
+
+/** One plugin or skill as a card; the whole card opens it, and `action` sits above that. */
+function Card({
+	open,
+	bundle,
+	title,
+	caption,
+	description,
+	action,
+	children,
+}: {
+	open: ViewSearch;
+	bundle: boolean;
+	title: string;
+	caption: ReactNode;
+	description: string;
+	action?: ReactNode;
+	children?: ReactNode;
+}) {
+	return (
+		<div className="group relative flex min-w-0 flex-col gap-2.5 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default) hover:bg-(--bg-raised)">
+			<div className="flex items-start gap-3">
+				<Glyph bundle={bundle} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="flex items-center gap-2 text-[13px] font-medium">
-						<span className="truncate">{plugin.name}</span>
-						{plugin.marketplace ? <Badge>{plugin.marketplace}</Badge> : null}
-					</div>
-					<a
-						href={`https://github.com/${plugin.source.repo}/tree/${plugin.sha}${plugin.source.path ? `/${plugin.source.path}` : ''}`}
-						target="_blank"
-						rel="noreferrer"
-						className="truncate font-mono text-[11px] text-(--text-disabled) outline-none hover:underline"
+					<Link
+						to="/settings/skills/view"
+						search={open}
+						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:shadow-(--focus-ring)"
 					>
-						{where(plugin)} @ {plugin.sha.slice(0, 7)}
-					</a>
+						{title}
+					</Link>
+					<div className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-(--text-disabled)">{caption}</div>
 				</div>
+				{action ? <div className="relative z-10 flex shrink-0 items-center">{action}</div> : null}
+			</div>
+			<p className={cn('m-0 line-clamp-2 min-h-9 text-[12px] leading-[18px] text-pretty', description ? 'text-(--text-tertiary)' : 'text-(--text-disabled)')}>
+				{description || 'No description.'}
+			</p>
+			{children}
+		</div>
+	);
+}
+
+function Grid({ children }: { children: ReactNode }) {
+	return <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">{children}</div>;
+}
+
+function SkillChips({ plugin }: { plugin: Plugin }) {
+	const shown = plugin.skills.slice(0, 4);
+	return (
+		<div className="flex flex-wrap gap-1" aria-label={`Skills in ${plugin.name}`}>
+			{shown.map((skill) => (
+				<span
+					key={skill.name}
+					title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
+					className={cn(
+						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md bg-(--alpha-white-4) px-1.5 font-mono text-[11px]',
+						skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
+					)}
+				>
+					/{skill.name}
+				</span>
+			))}
+			{plugin.skills.length > shown.length ? (
+				<span className="inline-flex h-5 items-center px-1 text-[11px] text-(--text-disabled)">+{plugin.skills.length - shown.length}</span>
+			) : null}
+		</div>
+	);
+}
+
+function InstalledCard({ plugin }: { plugin: Plugin }) {
+	const toggle = usePluginMutation((enabled: boolean) => api.setPluginEnabled(plugin.id, enabled));
+	return (
+		<Card
+			open={{ plugin: plugin.id }}
+			bundle={plugin.skills.length !== 1}
+			title={plugin.name}
+			caption={
+				plugin.marketplace ? (
+					<>
+						<Icon icon={Store} size={11} />
+						<span className="truncate">{plugin.marketplace}</span>
+					</>
+				) : (
+					<span className="truncate font-mono">{[plugin.source.repo, plugin.source.path].filter(Boolean).join('/')}</span>
+				)
+			}
+			description={plugin.description}
+			action={
 				<Switch
 					checked={plugin.enabled}
 					disabled={toggle.isPending}
 					onChange={(enabled) => toggle.mutate(enabled)}
 					label={<span className="sr-only">Use {plugin.name}</span>}
 				/>
-				{confirming ? (
-					<Btn size="sm" variant="dangerGhost" disabled={remove.isPending} onBlur={() => setConfirming(false)} onClick={() => remove.mutate(undefined)}>
-						{remove.isPending ? 'Removing…' : 'Click again to remove'}
-					</Btn>
-				) : (
-					<IconBtn icon={Trash2} size="sm" label={`Remove ${plugin.name}`} onClick={() => setConfirming(true)} />
-				)}
-			</div>
-			{plugin.description ? <p className="m-0 pl-6 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{plugin.description}</p> : null}
-			<div className="flex flex-wrap gap-1 pl-6" aria-label={`Skills in ${plugin.name}`}>
-				{plugin.skills.map((skill) => (
-					<span
-						key={skill.name}
-						title={
-							skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'
-						}
-						className={cn(
-							'inline-flex h-5 items-center rounded-md bg-(--bg-raised) px-1.5 font-mono text-[11px]',
-							skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
-						)}
-					>
-						/{skill.name}
-					</span>
-				))}
-			</div>
-			{plugin.mcpServers.length ? (
-				<p className="m-0 pl-6 text-[12px] text-(--text-disabled)">
-					Also declares MCP servers ({plugin.mcpServers.join(', ')}). Anton does not run them; add one under a repository’s MCP servers to use it.
-				</p>
-			) : null}
-			{toggle.isError || remove.isError ? <p className="m-0 pl-6 text-[12px] text-(--danger-text)">{(toggle.error ?? remove.error)?.message}</p> : null}
-		</div>
-	);
-}
-
-function InstallByAddress() {
-	const [address, setAddress] = useState('');
-	const install = usePluginMutation((value: string) => api.installPlugin({ address: value }));
-	return (
-		<form
-			className="flex flex-col gap-1.5"
-			onSubmit={(event) => {
-				event.preventDefault();
-				if (address.trim()) install.mutate(address.trim(), { onSuccess: () => setAddress('') });
-			}}
+			}
 		>
-			<div className="flex items-center gap-2">
-				<input
-					value={address}
-					onChange={(event) => setAddress(event.target.value)}
-					placeholder="owner/repo, owner/repo/skills/name, or a GitHub URL"
-					aria-label="GitHub address"
-					className={cn(FIELD, 'flex-1 font-mono')}
-				/>
-				<Btn type="submit" size="sm" variant="primary" icon={Download} disabled={install.isPending || !address.trim()}>
-					{install.isPending ? 'Installing…' : 'Install'}
-				</Btn>
-			</div>
-			{install.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{install.error.message}</p> : null}
-		</form>
+			<SkillChips plugin={plugin} />
+		</Card>
 	);
 }
 
-function CatalogRow({ marketplace, item }: { marketplace: string; item: CatalogItem }) {
-	const [browsing, setBrowsing] = useState(false);
-	const children = useQuery({
-		queryKey: ['catalog', marketplace, item.name],
-		queryFn: () => api.catalog(marketplace, item.name),
-		enabled: browsing,
-		staleTime: 5 * 60_000,
-	});
-	const install = usePluginMutation(() => api.installPlugin({ marketplace, name: item.name }));
-	return (
-		<div className="flex flex-col gap-1 rounded-md px-2.5 py-1.5">
-			<div className="flex items-center gap-2.5">
-				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="flex items-center gap-2 text-[13px]">
-						{item.bundle ? <Icon icon={Blocks} size={12} className="text-(--icon-tertiary)" /> : null}
-						<span className="truncate">{item.bundle ? item.name.slice(item.bundle.length + 1) : item.name}</span>
-						{item.bundle ? <span className="truncate text-[11px] text-(--text-disabled)">{item.bundle}</span> : null}
-					</div>
-					{item.description ? <div className="line-clamp-2 text-[12px] leading-[17px] text-(--text-tertiary)">{item.description}</div> : null}
-				</div>
-				{item.installed ? (
-					<Badge tone="success">Installed</Badge>
-				) : (
-					<Btn size="sm" icon={Download} aria-label={`Install ${item.name}`} disabled={install.isPending} onClick={() => install.mutate(undefined)}>
-						{install.isPending ? 'Installing…' : 'Install'}
-					</Btn>
-				)}
-			</div>
-			{item.browseable ? (
-				<Btn
-					size="xs"
-					variant="ghost"
-					icon={ChevronRight}
-					aria-label={`Browse skills in ${item.name}`}
-					aria-expanded={browsing}
-					onClick={() => setBrowsing((current) => !current)}
-				>
-					Browse skills
-				</Btn>
-			) : null}
-			{browsing ? (
-				<div className="ml-2 border-l border-(--border-subtle) pl-2">
-					{children.isPending ? (
-						<Spinner size={12} />
-					) : children.isError ? (
-						<p className="text-[12px] text-(--danger-text)">{children.error.message}</p>
-					) : children.data.entries.length ? (
-						children.data.entries.map((child) => <CatalogRow key={child.id} marketplace={marketplace} item={child} />)
-					) : (
-						<p className="text-[12px] text-(--text-tertiary)">No individual skills found.</p>
-					)}
-				</div>
-			) : null}
-			{install.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{install.error.message}</p> : null}
-		</div>
+function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: string; onDiscover: () => void }) {
+	const needle = query.trim().toLowerCase();
+	const shown = plugins.filter((plugin) =>
+		[plugin.name, plugin.description, plugin.source.repo, ...plugin.skills.map((skill) => skill.name)].join(' ').toLowerCase().includes(needle),
 	);
-}
-
-function Catalog({ marketplace }: { marketplace: string }) {
-	const [search, setSearch] = useState('');
-	const entries = useQuery({ queryKey: ['catalog', marketplace], queryFn: () => api.catalog(marketplace), staleTime: 5 * 60_000 });
-	const query = search.trim().toLowerCase();
-	const nested = new Set((entries.data?.entries ?? []).filter((item) => item.browseable).map((item) => item.name));
-	const matches = (entries.data?.entries ?? [])
-		.filter((item) => query || !item.bundle || !nested.has(item.bundle))
-		.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query));
+	if (!plugins.length) {
+		return (
+			<EmptyState icon={Blocks} title="No skills installed yet" body="Find plugins and skills in your marketplaces or anywhere on GitHub, look through them, then install.">
+				<Btn size="sm" variant="primary" icon={Store} onClick={onDiscover}>
+					Discover skills
+				</Btn>
+			</EmptyState>
+		);
+	}
 	return (
-		<div className="flex flex-col gap-2">
-			<input
-				value={search}
-				onChange={(event) => setSearch(event.target.value)}
-				placeholder={`Search ${marketplace}`}
-				aria-label="Search the marketplace"
-				className={FIELD}
-			/>
-			{entries.isPending ? <Spinner size={12} /> : null}
-			{entries.isError ? (
-				<p className="m-0 text-[12px] text-(--danger-text)">
-					Could not read {marketplace}: {entries.error.message}
+		<div className="flex flex-col gap-3">
+			{shown.length ? (
+				<Grid>
+					{shown.map((plugin) => (
+						<InstalledCard key={plugin.id} plugin={plugin} />
+					))}
+				</Grid>
+			) : (
+				<p className="m-0 text-[12px] text-(--text-tertiary)">
+					Nothing installed matches.{' '}
+					<button type="button" onClick={onDiscover} className="text-(--accent-text) outline-none hover:underline">
+						Search Discover instead
+					</button>
 				</p>
-			) : null}
-			{entries.data ? (
-				matches.length ? (
-					<List>
-						{matches.slice(0, SHOWN).map((item) => (
-							<CatalogRow key={item.id} marketplace={marketplace} item={item} />
-						))}
-					</List>
-				) : (
-					<p className="m-0 text-[12px] text-(--text-tertiary)">Nothing matches.</p>
-				)
-			) : null}
-			{matches.length > SHOWN ? <p className="m-0 text-[12px] text-(--text-disabled)">{matches.length - SHOWN} more; search to narrow them.</p> : null}
+			)}
+			<p className="m-0 text-[12px] text-(--text-disabled)">
+				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> are always used too, ahead of these. Type <code>/</code> and a skill’s name in a task to
+				ask for it.
+			</p>
 		</div>
 	);
 }
 
-function Marketplaces({ saved }: { saved: string[] }) {
+function InstallButton({ pick, name }: { pick: PluginPick; name: string }) {
+	const install = usePluginMutation(() => api.installPlugin(pick));
+	if (install.isPending) return <Spinner size={14} />;
+	return (
+		<IconBtn
+			icon={Plus}
+			size="sm"
+			variant="secondary"
+			label={install.isError ? `Could not install: ${install.error.message}` : `Install ${name}`}
+			className={install.isError ? 'text-(--danger-text)' : undefined}
+			onClick={() => install.mutate(undefined)}
+		/>
+	);
+}
+
+function CatalogCard({ item, marketplace }: { item: CatalogItem; marketplace: string }) {
+	const pick = { marketplace, name: item.name };
+	const title = item.bundle ? item.name.slice(item.bundle.length + 1) : item.name;
+	const count = item.skills?.length;
+	return (
+		<Card
+			open={viewSearch(pick)}
+			bundle={!item.bundle}
+			title={title}
+			caption={
+				<>
+					<Icon icon={Store} size={11} />
+					<span className="truncate">{item.bundle ? `${item.bundle} · ${marketplace}` : marketplace}</span>
+					{count && count > 1 ? <span className="shrink-0">· {count} skills</span> : null}
+				</>
+			}
+			description={item.description}
+			action={item.installed ? <Badge tone="success">Installed</Badge> : <InstallButton pick={pick} name={item.name} />}
+		/>
+	);
+}
+
+/** Marketplace repositories to add or remove. */
+function ManageMarketplaces({ saved }: { saved: string[] }) {
 	const queryClient = useQueryClient();
-	const [open, setOpen] = useState(saved[0] ?? '');
 	const [adding, setAdding] = useState('');
 	const save = useMutation({
 		mutationFn: api.saveMarketplaces,
-		onSuccess: (result) => {
-			queryClient.setQueryData<{ plugins: Plugin[]; marketplaces: string[] }>(
-				['plugins'],
-				(current) => current && { ...current, marketplaces: result.marketplaces },
-			);
-			if (!result.marketplaces.includes(open)) setOpen(result.marketplaces.at(-1) ?? '');
-		},
+		onSuccess: (result) => queryClient.setQueryData<PluginsView>(['plugins'], (current) => current && { ...current, marketplaces: result.marketplaces }),
 	});
-	const shown = saved.includes(open) ? open : (saved[0] ?? '');
 	return (
-		<div className="flex flex-col gap-3">
-			<div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Marketplaces">
-				{saved.map((marketplace) => (
-					<span
-						key={marketplace}
-						className={cn(
-							'inline-flex h-7 items-center gap-1 rounded-lg pr-1 pl-2.5 text-[12px]',
-							marketplace === shown ? 'bg-(--accent-bg) text-(--accent-text)' : 'bg-(--bg-surface) text-(--text-secondary)',
-						)}
-					>
-						<button
-							type="button"
-							role="tab"
-							aria-selected={marketplace === shown}
-							onClick={() => setOpen(marketplace)}
-							className="inline-flex items-center gap-1.5 outline-none"
-						>
-							<Icon icon={Store} size={12} />
-							{marketplace}
-						</button>
-						<button
-							type="button"
-							aria-label={`Remove ${marketplace}`}
-							onClick={() => save.mutate(saved.filter((item) => item !== marketplace))}
-							className="inline-flex size-5 items-center justify-center rounded-md outline-none hover:bg-(--bg-hover)"
-						>
-							<Icon icon={X} size={11} />
-						</button>
-					</span>
-				))}
-				<form
-					className="flex items-center gap-1.5"
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (!adding.trim()) return;
-						save.mutate([...saved, adding.trim()], { onSuccess: () => setAdding('') });
-						setOpen(adding.trim());
-					}}
+		<PopoverPrimitive.Root>
+			<PopoverPrimitive.Trigger asChild>
+				<IconBtn icon={Settings2} size="sm" label="Manage marketplaces" />
+			</PopoverPrimitive.Trigger>
+			<PopoverPrimitive.Portal>
+				<PopoverPrimitive.Content
+					align="end"
+					sideOffset={6}
+					collisionPadding={12}
+					className="z-50 flex w-[320px] flex-col gap-2 rounded-xl bg-(--bg-overlay) p-3 text-(--text-primary) shadow-(--shadow-overlay) outline-none"
 				>
-					<input
-						value={adding}
-						onChange={(event) => setAdding(event.target.value)}
-						placeholder="owner/repo"
-						aria-label="Marketplace to add"
-						className={cn(FIELD, 'h-7 w-[180px] font-mono')}
-					/>
-					<Btn type="submit" size="sm" variant="ghost" icon={Plus} disabled={!adding.trim() || save.isPending}>
-						Add
-					</Btn>
-				</form>
+					<SectionLabel>Marketplaces</SectionLabel>
+					<p className="m-0 text-[12px] leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
+					<div className="flex flex-col gap-0.5">
+						{saved.map((marketplace) => (
+							<div key={marketplace} className="flex h-7 items-center gap-2 rounded-md pr-0.5 pl-2 hover:bg-(--bg-hover)">
+								<Icon icon={Store} size={12} className="text-(--icon-tertiary)" />
+								<span className="min-w-0 flex-1 truncate font-mono text-[12px]">{marketplace}</span>
+								<IconBtn icon={X} size="xs" label={`Remove ${marketplace}`} onClick={() => save.mutate(saved.filter((item) => item !== marketplace))} />
+							</div>
+						))}
+					</div>
+					<form
+						className="flex items-center gap-1.5"
+						onSubmit={(event) => {
+							event.preventDefault();
+							if (adding.trim()) save.mutate([...saved, adding.trim()], { onSuccess: () => setAdding('') });
+						}}
+					>
+						<input
+							value={adding}
+							onChange={(event) => setAdding(event.target.value)}
+							placeholder="owner/repo"
+							aria-label="Marketplace to add"
+							className={cn(FIELD, 'h-7 flex-1 font-mono')}
+						/>
+						<Btn type="submit" size="sm" icon={Plus} disabled={!adding.trim() || save.isPending}>
+							Add
+						</Btn>
+					</form>
+					{save.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{save.error.message}</p> : null}
+				</PopoverPrimitive.Content>
+			</PopoverPrimitive.Portal>
+		</PopoverPrimitive.Root>
+	);
+}
+
+function SourceChip({ label, on, onClick, icon }: { label: string; on: boolean; onClick: () => void; icon?: typeof Store }) {
+	return (
+		<button
+			type="button"
+			aria-pressed={on}
+			onClick={onClick}
+			className={cn(
+				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+				on ? 'bg-(--accent-bg) text-(--accent-text)' : 'bg-(--bg-surface) text-(--text-secondary) hover:text-(--text-primary)',
+			)}
+		>
+			{icon ? <Icon icon={icon} size={12} /> : null}
+			{label}
+		</button>
+	);
+}
+
+const SKELETONS = Array.from({ length: 6 }, (_, index) => index);
+
+/** Every marketplace's catalog, read in parallel; one that fails says so on its own. */
+function useCatalogs(marketplaces: string[]) {
+	return useQueries({
+		queries: marketplaces.map((marketplace) => ({
+			queryKey: ['catalog', marketplace],
+			queryFn: () => api.catalog(marketplace),
+			staleTime: 5 * 60_000,
+			retry: 1,
+		})),
+		combine: (results) => ({
+			items: results.flatMap((result, index) => (result.data?.entries ?? []).map((item) => ({ item, marketplace: marketplaces[index] as string }))),
+			pending: results.some((result) => result.isPending),
+			failures: results.flatMap((result, index) => (result.isError ? [{ marketplace: marketplaces[index] as string, error: result.error, retry: result.refetch }] : [])),
+		}),
+	});
+}
+
+/** The value, once it has stopped changing for `delay`; empty until then. */
+function useSettled(value: string, delay: number) {
+	const [settled, setSettled] = useState('');
+	useEffect(() => {
+		const timer = setTimeout(() => setSettled(value), delay);
+		return () => clearTimeout(timer);
+	}, [value, delay]);
+	return settled;
+}
+
+function GitHubResults({ query }: { query: string }) {
+	const settled = useSettled(query.trim(), SEARCH_DELAY_MS);
+	const search = useQuery({
+		queryKey: ['github-skills', settled.toLowerCase()],
+		queryFn: ({ signal }) => api.searchGitHub(settled, signal),
+		enabled: settled.length >= 2,
+		staleTime: 10 * 60_000,
+		placeholderData: keepPreviousData,
+	});
+	const typing = query.trim() !== settled || search.isFetching;
+	const result: GitHubSearch | undefined = search.data;
+	const empty = result && !result.skills.length && !result.repos.length;
+	return (
+		<section className="flex flex-col gap-2.5" aria-label="On GitHub">
+			<div className="flex items-center gap-2">
+				<Icon icon={Github} size={13} className="text-(--icon-tertiary)" />
+				<SectionLabel>On GitHub</SectionLabel>
+				{typing ? <Spinner size={12} /> : null}
 			</div>
-			{save.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{save.error.message}</p> : null}
-			{shown ? <Catalog key={shown} marketplace={shown} /> : <p className="m-0 text-[12px] text-(--text-tertiary)">Add a marketplace to browse it.</p>}
+			{search.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{search.error.message}</p> : null}
+			{result?.problems.map((problem) => (
+				<p key={problem} className="m-0 text-[12px] text-(--warning-text)">
+					{problem}
+				</p>
+			))}
+			{result?.skills.length ? (
+				<Grid>
+					{result.skills.map((skill) => (
+						<Card
+							key={skill.address}
+							open={{ address: skill.address }}
+							bundle={false}
+							title={skill.name}
+							caption={<span className="truncate font-mono">{skill.address}</span>}
+							description={skill.description}
+							action={<InstallButton pick={{ address: skill.address }} name={skill.name} />}
+						/>
+					))}
+				</Grid>
+			) : null}
+			{result?.repos.length ? (
+				<div className="flex flex-col gap-0.5 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-1" aria-label="Repositories">
+					{result.repos.map((repo) => (
+						<Link
+							key={repo.address}
+							to="/settings/skills/view"
+							search={{ address: repo.address }}
+							className="flex min-h-10 items-center gap-3 rounded-lg px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						>
+							<Icon icon={Github} size={14} className="text-(--icon-tertiary)" />
+							<div className="flex min-w-0 flex-1 flex-col">
+								<span className="truncate font-mono text-[12px] text-(--text-primary)">{repo.address}</span>
+								{repo.description ? <span className="truncate text-[12px] text-(--text-tertiary)">{repo.description}</span> : null}
+							</div>
+							<span className="flex shrink-0 items-center gap-1 text-[11px] text-(--text-disabled)">
+								<Icon icon={Star} size={11} />
+								{repo.stars.toLocaleString()}
+							</span>
+						</Link>
+					))}
+				</div>
+			) : null}
+			{empty && !typing && !result.problems.length ? <p className="m-0 text-[12px] text-(--text-tertiary)">Nothing on GitHub matches “{settled}”.</p> : null}
+		</section>
+	);
+}
+
+function Discover({ marketplaces, query }: { marketplaces: string[]; query: string }) {
+	const [source, setSource] = useState<string | null>(null);
+	const [limit, setLimit] = useState(PAGE);
+	const catalogs = useCatalogs(marketplaces);
+	const needle = query.trim().toLowerCase();
+	useEffect(() => setLimit(PAGE), [needle, source]);
+	const shown = catalogs.items
+		.filter(({ marketplace }) => !source || marketplace === source)
+		// A bundle's own skills show on its page, or when searching.
+		.filter(({ item }) => (needle ? `${item.name} ${item.description}`.toLowerCase().includes(needle) : !item.bundle));
+	return (
+		<div className="flex flex-col gap-5">
+			{looksLikeAddress(query) ? (
+				<Link
+					to="/settings/skills/view"
+					search={{ address: query.trim() }}
+					className="flex items-center gap-3 rounded-xl border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={Github} size={16} className="text-(--accent-text)" />
+					<div className="flex min-w-0 flex-1 flex-col">
+						<span className="truncate text-[13px] font-medium text-(--text-primary)">Open {query.trim()}</span>
+						<span className="text-[12px] text-(--text-tertiary)">Look through its skills and files before installing.</span>
+					</div>
+				</Link>
+			) : null}
+			<section className="flex flex-col gap-2.5" aria-label="From your marketplaces">
+				<div className="flex items-center gap-1.5 overflow-x-auto">
+					<SourceChip label="All" on={!source} onClick={() => setSource(null)} />
+					{marketplaces.map((marketplace) => (
+						<SourceChip key={marketplace} label={marketplace} icon={Store} on={source === marketplace} onClick={() => setSource(marketplace)} />
+					))}
+					<span className="flex-1" />
+					<ManageMarketplaces saved={marketplaces} />
+				</div>
+				{catalogs.failures.map(({ marketplace, error, retry }) => (
+					<div key={marketplace} className="flex items-center gap-2 rounded-lg bg-(--danger-bg) px-3 py-2 text-[12px] text-(--danger-text)">
+						<span className="min-w-0 flex-1">
+							Could not read {marketplace}: {error.message}
+						</span>
+						<Btn size="xs" variant="ghost" onClick={() => void retry()}>
+							Try again
+						</Btn>
+					</div>
+				))}
+				{shown.length ? (
+					<Grid>
+						{shown.slice(0, limit).map(({ item, marketplace }) => (
+							<CatalogCard key={`${marketplace}:${item.id}`} item={item} marketplace={marketplace} />
+						))}
+					</Grid>
+				) : catalogs.pending ? (
+					<Grid>
+						{SKELETONS.map((index) => (
+							<div key={index} className="h-[118px] animate-pulse rounded-xl border border-(--border-subtle) bg-(--bg-surface)" />
+						))}
+					</Grid>
+				) : (
+					<p className="m-0 text-[12px] text-(--text-tertiary)">{needle ? 'Nothing in your marketplaces matches.' : 'Add a marketplace to browse it.'}</p>
+				)}
+				{shown.length > limit ? (
+					<Btn size="sm" variant="ghost" className="self-center" onClick={() => setLimit((current) => current + PAGE)}>
+						Show more ({shown.length - limit})
+					</Btn>
+				) : null}
+			</section>
+			{needle.length >= 2 && !looksLikeAddress(query) ? <GitHubResults query={query} /> : null}
 		</div>
+	);
+}
+
+function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+	return (
+		<button
+			type="button"
+			role="tab"
+			aria-selected={on}
+			onClick={onClick}
+			className={cn(
+				'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
+				on ? 'bg-(--bg-overlay) text-(--text-primary) shadow-(--shadow-inset-hairline)' : 'text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{children}
+		</button>
 	);
 }
 
 export function SkillsPage() {
 	const plugins = usePlugins();
+	const search = useSearch({ strict: false }) as { tab?: SkillsTab; q?: string };
+	const navigate = useNavigate();
+	const [query, setQuery] = useState(search.q ?? '');
+	const tab: SkillsTab = search.tab ?? (plugins.data && !plugins.data.plugins.length ? 'discover' : 'installed');
+	const go = (next: { tab?: SkillsTab; q?: string }) =>
+		void navigate({ to: '/settings/$section', params: { section: 'skills' }, search: { tab, q: query || undefined, ...next }, replace: true });
 	return (
 		<>
 			<PageHeading title="Skills">
-				Instructions the agent loads when a task matches them, in the open Agent Skills format. A repository’s own <code>.agents/skills</code> and{' '}
-				<code>.claude/skills</code> are always used. Install more below; every task gets them, and you can ask for one by typing <code>/</code> and its name.
+				Instructions the agent loads when a task needs them, in the open Agent Skills format. Plugins for Claude Code, Devin, Codex or Cursor work too; Anton uses their
+				skills.
 			</PageHeading>
+			<div className="flex flex-wrap items-center gap-3">
+				<div role="tablist" aria-label="Skills" className="inline-flex shrink-0 gap-0.5 rounded-lg bg-(--bg-surface) p-0.5">
+					<Tab on={tab === 'installed'} onClick={() => go({ tab: 'installed' })}>
+						Installed
+						{plugins.data ? <span className="text-[12px] text-(--text-disabled)">{plugins.data.plugins.length}</span> : null}
+					</Tab>
+					<Tab on={tab === 'discover'} onClick={() => go({ tab: 'discover' })}>
+						Discover
+					</Tab>
+				</div>
+				<label className="relative flex min-w-[220px] flex-1 items-center">
+					<Icon icon={Search} size={13} className="pointer-events-none absolute left-2.5 text-(--icon-tertiary)" />
+					<input
+						type="search"
+						value={query}
+						onChange={(event) => {
+							setQuery(event.target.value);
+							go({ q: event.target.value || undefined });
+						}}
+						placeholder={tab === 'installed' ? 'Search installed skills' : 'Search marketplaces and GitHub, or paste owner/repo'}
+						aria-label="Search skills"
+						className={cn(FIELD, 'w-full pl-8')}
+					/>
+				</label>
+			</div>
 			{plugins.data ? (
-				<>
-					<Block title="Installed" help="Each plugin is saved as it was when installed. Install it again to update it.">
-						{plugins.data.plugins.length ? (
-							<List>
-								{plugins.data.plugins.map((plugin) => (
-									<PluginRow key={plugin.id} plugin={plugin} />
-								))}
-							</List>
-						) : (
-							<p className="m-0 text-[12px] text-(--text-tertiary)">Nothing installed yet.</p>
-						)}
-					</Block>
-					<Block
-						title="Install from GitHub"
-						help="A repository, a folder of skills or a single skill. Plugins made for Claude Code, Devin, Codex or Cursor, and Agent Plugins, all work; Anton uses their skills."
-					>
-						<InstallByAddress />
-					</Block>
-					<Block title="Marketplaces" help="Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.">
-						<Marketplaces saved={plugins.data.marketplaces} />
-					</Block>
-				</>
+				tab === 'installed' ? (
+					<Installed plugins={plugins.data.plugins} query={query} onDiscover={() => go({ tab: 'discover' })} />
+				) : (
+					<Discover marketplaces={plugins.data.marketplaces} query={query} />
+				)
+			) : plugins.isError ? (
+				<p className="m-0 text-[12px] text-(--danger-text)">{plugins.error.message}</p>
 			) : (
 				<Spinner size={12} />
 			)}

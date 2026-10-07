@@ -61,6 +61,8 @@ const fakeHost: GitHost = {
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	accountName: async () => 'Ada Lovelace',
 	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
+	searchRepos: async () => [],
+	searchFiles: async () => [],
 };
 /** Resolves once `ready` holds, for work a service starts without waiting on it. */
 async function waitFor(ready: () => boolean): Promise<void> {

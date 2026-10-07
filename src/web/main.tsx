@@ -11,6 +11,8 @@ import { createRoot } from 'react-dom/client';
 import { RepoSettingsPage } from '@/components/repo-settings';
 import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
+import { SkillDetailPage } from '@/components/settings/skill-detail';
+import type { SkillsTab, ViewSearch } from '@/components/settings/skills';
 import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
@@ -76,7 +78,20 @@ const settingsIndexRoute = createRoute({
 const settingsSectionRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: '$section',
+	// The Skills page keeps its tab and search here, so coming back from a plugin finds them again.
+	validateSearch: (search: Record<string, unknown>): { tab?: SkillsTab; q?: string } => ({
+		tab: search.tab === 'installed' || search.tab === 'discover' ? search.tab : undefined,
+		q: typeof search.q === 'string' && search.q ? search.q : undefined,
+	}),
 	component: SectionPage,
+});
+
+const skillRoute = createRoute({
+	getParentRoute: () => settingsRoute,
+	path: 'skills/view',
+	validateSearch: (search: Record<string, unknown>): ViewSearch =>
+		Object.fromEntries(['marketplace', 'name', 'address', 'plugin'].flatMap((key) => (typeof search[key] === 'string' ? [[key, search[key]]] : []))),
+	component: SkillDetailPage,
 });
 
 const repoSettingsRoute = createRoute({
@@ -100,7 +115,7 @@ const routeTree = rootRoute.addChildren([
 	tasksRoute,
 	reviewsRoute,
 	oldRepoSettingsRoute,
-	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, repoSettingsRoute]),
+	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, repoSettingsRoute]),
 ]);
 const router = createRouter({ routeTree });
 
