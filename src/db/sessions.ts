@@ -32,22 +32,25 @@ function toRecord(row: Row): SessionRecord {
 
 /** Adds one response's usage to the task's totals and to the log daily caps are counted from. */
 /** `model` is the one that did the work, when it is not the task's own (a subagent's, or the decision model). */
-export async function addSessionUsage(id: string, usage: Usage, at = new Date(), model: string | null = null): Promise<void> {
+export async function addSessionUsage(id: string, usage: Usage, at = new Date(), model: string | null = null, turnId: string | null = null): Promise<boolean> {
 	const db = await appDb();
-	await db.batch(
+	const result = await db.batch(
 		[
 			{
-				sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?',
-				args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
+				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model, turn_id)
+					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)), ?)
+					ON CONFLICT (session_id, turn_id) WHERE turn_id IS NOT NULL DO NOTHING`,
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id, turnId],
 			},
 			{
-				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model)
-					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)))`,
-				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id],
+				// changes() refers to the insert immediately above, on the same transaction/connection.
+				sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ? AND changes() > 0',
+				args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
 			},
 		],
 		'write',
 	);
+	return result[0].rowsAffected > 0;
 }
 
 /** Dollars spent on every task since `since`. */

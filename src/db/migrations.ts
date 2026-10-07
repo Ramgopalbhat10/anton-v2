@@ -71,6 +71,11 @@ const migrations: string[][] = [
 	[
 		`CREATE TABLE IF NOT EXISTS plugins (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL, source_json TEXT NOT NULL, sha TEXT NOT NULL, marketplace TEXT, skills_json TEXT NOT NULL, mcp_json TEXT NOT NULL, skipped_json TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, installed_at TEXT NOT NULL)`,
 	],
+	// 13: one durable usage entry per task/model call, even after retries or dev reloads.
+	[
+		`ALTER TABLE usage_log ADD COLUMN turn_id TEXT`,
+		`CREATE UNIQUE INDEX usage_log_turn ON usage_log (session_id, turn_id) WHERE turn_id IS NOT NULL`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

@@ -1,4 +1,4 @@
-import { dispatch, observe } from '@flue/runtime';
+import { dispatch } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -50,6 +50,7 @@ import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
+import { observeRuntime } from './services/runtime-observer.ts';
 
 const app = new Hono();
 
@@ -62,7 +63,7 @@ const ENV = v.pipe(
 );
 
 publishUpgradeHandler(handleTerminalUpgrade);
-observe((event) => {
+observeRuntime((event) => {
 	recordAgentEvent(event);
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
