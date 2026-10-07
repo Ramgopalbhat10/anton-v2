@@ -110,11 +110,6 @@ export function SidebarRail({ onExpand }: { onExpand: () => void }) {
 
 const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
-/** A count beside a menu option, so empty options read as such before picking them. */
-function Count({ n }: { n: number }) {
-	return <span className="ml-1.5 text-[11px] text-(--text-disabled)">{n}</span>;
-}
-
 /**
  * Sort, filter, group and what each row shows, in one menu with a submenu each.
  * Picking a filter or a detail keeps the menu open, so several can be picked.
@@ -167,10 +162,10 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 												<MenuItem
 													key={option.value}
 													checked={view.filters[key].includes(option.value)}
+													hint={tasks.filter((task) => FACETS[key].test(task, option.value)).length}
 													onSelect={stay(() => onChange(toggleFilter(view, key, option.value)))}
 												>
 													{option.label}
-													<Count n={tasks.filter((task) => FACETS[key].test(task, option.value)).length} />
 												</MenuItem>
 											))
 										) : (

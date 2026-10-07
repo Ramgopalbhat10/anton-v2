@@ -179,10 +179,11 @@ export function MenuContent({
 export function MenuItem({
 	icon,
 	checked,
+	hint,
 	className,
 	children,
 	...props
-}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: LucideIcon; checked?: boolean }) {
+}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: LucideIcon; checked?: boolean; hint?: ReactNode }) {
 	return (
 		<MenuPrimitive.Item className={cn('sg-menu-item outline-none focus-visible:shadow-none data-highlighted:bg-(--bg-hover)', className)} {...props}>
 			{icon ? (
@@ -193,6 +194,8 @@ export function MenuItem({
 			<span className="sg-menu-item__label">{children}</span>
 			<span className="sg-menu-item__trail">
 				{checked ? <Icon icon={Check} size={13} className="sg-menu-item__check" /> : null}
+				{/* Last, so counts line up at the right edge whether or not the item is checked. */}
+				{hint !== undefined ? <span className="min-w-4 text-right text-[11px] text-(--text-disabled) tabular-nums">{hint}</span> : null}
 			</span>
 		</MenuPrimitive.Item>
 	);
