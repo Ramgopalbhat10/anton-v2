@@ -1,5 +1,5 @@
 import type { Reasoning } from '../core/ports.ts';
-import type { SessionRecord, Usage } from '../core/types.ts';
+import type { PullRequestStatus, SessionRecord, Usage } from '../core/types.ts';
 import { announce } from '../core/changes.ts';
 import { appDb } from './client.ts';
 
@@ -27,7 +27,17 @@ function toRecord(row: Row): SessionRecord {
 		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 		planMode: Number(row.plan_mode ?? 0) === 1,
+		pinnedAt: optional(row.pinned_at),
+		pullRequest: pullRequestOf(row),
 	};
+}
+
+/** The saved status, only while it is for the task's current pull request. */
+function pullRequestOf(row: Row): PullRequestStatus | null {
+	if (row.pr_json == null || row.pr_url == null) return null;
+	// `runs` is missing from statuses saved before it was kept.
+	const { url, ...status } = JSON.parse(String(row.pr_json)) as Omit<PullRequestStatus, 'runs'> & { url: string; runs?: PullRequestStatus['runs'] };
+	return url === row.pr_url ? { ...status, runs: status.runs ?? [] } : null;
 }
 
 /** Adds one response's usage to the task's totals and to the log daily caps are counted from. */
@@ -124,6 +134,8 @@ const columns = {
 	checkpointAt: 'checkpoint_at',
 	errorMessage: 'error_message',
 	followState: 'follow_json',
+	pinnedAt: 'pinned_at',
+	pullRequestJson: 'pr_json',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

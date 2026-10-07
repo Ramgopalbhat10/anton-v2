@@ -172,6 +172,20 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			const repos = await all<{ full_name: string }>('/user/repos?per_page=100&sort=pushed');
 			return repos.map((repo) => repo.full_name);
 		},
+		async searchRepos(query, limit) {
+			const found = await json<{ items: Array<{ full_name: string; description: string | null; stargazers_count: number }> }>(
+				`/search/repositories?q=${encodeURIComponent(query)}&per_page=${limit}`,
+			);
+			return found.items.map((item) => ({ fullName: item.full_name, description: item.description ?? '', stars: item.stargazers_count }));
+		},
+		async searchFiles(query, filename, limit) {
+			// Code search needs an account.
+			if (!token) return [];
+			const found = await json<{ items: Array<{ path: string; url: string; repository: { full_name: string } }> }>(
+				`/search/code?q=${encodeURIComponent(`${query} filename:${filename}`)}&per_page=${limit}`,
+			);
+			return found.items.map((item) => ({ repo: item.repository.full_name, path: item.path, ref: new URL(item.url).searchParams.get('ref') ?? 'HEAD' }));
+		},
 		async accountName() {
 			if (!token) return null;
 			const user = await json<{ login: string; name: string | null }>('/user');

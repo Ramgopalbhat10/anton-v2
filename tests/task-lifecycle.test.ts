@@ -61,6 +61,8 @@ const fakeHost: GitHost = {
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	accountName: async () => 'Ada Lovelace',
 	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
+	searchRepos: async () => [],
+	searchFiles: async () => [],
 };
 /** Resolves once `ready` holds, for work a service starts without waiting on it. */
 async function waitFor(ready: () => boolean): Promise<void> {
@@ -534,6 +536,34 @@ test('the checkpoint timeline keeps distinct states, and restoring one puts its 
 	await assert.rejects(() => restoreCheckpoint(session.id, '2020-01-01T00:00:00.000Z'), /not found/);
 });
 
+test('a task can be pinned, and a fork starts in a sandbox of its own with the task\'s files', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Try one way' });
+	assert.ok((await sessions.editSession(session.id, { pinned: true })).pinnedAt);
+	assert.equal((await sessions.editSession(session.id, { pinned: false })).pinnedAt, null);
+
+	const machine = await machineFor(session.id);
+	await run(machine, 'echo tried > a.txt && rm old.txt');
+	// Still running, so the fork takes the files as they are now, not as last saved.
+	const fork = await sessions.forkSession(session.id);
+	assert.equal(fork.title, 'Try one way (fork)');
+	assert.notEqual(fork.branch, session.branch);
+	assert.equal(fork.baseSha, session.baseSha);
+	assert.equal((await listCheckpoints(fork.id)).length, 1);
+	const forked = await machineFor(fork.id);
+	assert.notEqual(forked.root, machine.root);
+	assert.equal((await run(forked, 'cat a.txt')).trim(), 'tried');
+	assert.equal((await run(forked, 'test -e old.txt && echo yes || echo no')).trim(), 'no');
+	assert.equal((await run(forked, 'git rev-parse --abbrev-ref HEAD')).trim(), fork.branch);
+	await run(forked, 'echo other > a.txt');
+	assert.equal((await run(machine, 'cat a.txt')).trim(), 'tried', 'the original keeps its own files');
+
+	const untouched = await sessions.createSession({ projectId: project.id, title: 'Only read' });
+	const plain = await sessions.forkSession(untouched.id);
+	assert.equal(plain.checkpointAt, null);
+	assert.equal((await getSessionRecord(plain.id))?.machineState, null, 'nothing to work on, so no sandbox');
+});
+
 test('a task adds up the tokens and cost of its responses', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Usage' });
@@ -853,6 +883,35 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 	await updateSettings(project.id, { ...(await getProject(project.id))!, env: {}, followUps: false });
 	assert.equal(await followUp(await record()), false, 'off in the repo settings');
 	assert.equal(delivered.length, 5);
+});
+
+test('each task keeps its pull request state and checks, read in the background until it is finished', async () => {
+	const { refreshPullRequests } = await import('../src/services/pr-status.ts');
+	const project = await addProject('acme/status');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Status' });
+	const status = async () => (await sessions.getSession(session.id)).pullRequest;
+	assert.equal(await status(), null);
+
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/21' });
+	activity = { state: 'open', headSha: 'a', checks: [{ name: 'test', status: 'failed', summary: '', url: 'https://ci.test/1' }, { name: 'lint', status: 'skipped', summary: '', url: '' }], comments: [] };
+	await refreshPullRequests();
+	const failed = { state: 'open', checks: 'failed', runs: [{ name: 'test', status: 'failed', url: 'https://ci.test/1' }] };
+	assert.deepEqual(await status(), failed, 'skipped checks are left out');
+	activity = { ...activity, checks: [{ name: 'test', status: 'passed', summary: '', url: 'https://ci.test/2' }] };
+	await refreshPullRequests();
+	assert.deepEqual(await status(), failed, 'not read again so soon');
+	await refreshPullRequests(Date.now() + 5 * 60_000);
+	assert.deepEqual(await status(), { state: 'open', checks: 'passed', runs: [{ name: 'test', status: 'passed', url: 'https://ci.test/2' }] });
+
+	activity = { ...activity, state: 'merged', checks: [] };
+	await refreshPullRequests(Date.now() + 10 * 60_000);
+	assert.deepEqual(await status(), { state: 'merged', checks: null, runs: [] });
+	activity = { ...activity, state: 'open' };
+	await refreshPullRequests(Date.now() + 20 * 60_000);
+	assert.deepEqual(await status(), { state: 'merged', checks: null, runs: [] }, 'a merged pull request is not read again');
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/22' });
+	assert.equal(await status(), null, 'a new pull request starts unknown');
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 
 test('each pull request the agent opens or updates is reviewed, and the review is posted on it for follow-ups to fix', async () => {

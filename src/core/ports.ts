@@ -180,7 +180,14 @@ export type GitHost = {
 	accountName(): Promise<string | null>;
 	/** `owner/name` of the repos Anton's account can reach, most recently pushed first. */
 	listRepos(): Promise<string[]>;
+	/** Public repositories matching a search, best match first. */
+	searchRepos(query: string, limit: number): Promise<RepoHit[]>;
+	/** Files named `filename` whose contents match a search, best match first, each with the commit it was found at. */
+	searchFiles(query: string, filename: string, limit: number): Promise<FileHit[]>;
 };
+
+export type RepoHit = { fullName: string; description: string; stars: number };
+export type FileHit = { repo: string; path: string; ref: string };
 
 export type Issue = { number: number; title: string; body: string; url: string };
 

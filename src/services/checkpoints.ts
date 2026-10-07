@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { listMachineFiles, readMachineFile } from '../core/machine-fs.ts';
+import { listMachineFiles, readMachineFile, writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine, ObjectStore } from '../core/ports.ts';
-import { quote, text } from '../core/shell.ts';
+import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { type FileChange, type LogEntry, changes, repoDir } from './git.ts';
@@ -111,12 +111,17 @@ export async function whileNoCheckpointIsWritten<T>(work: () => Promise<T>): Pro
 }
 
 /** Records the task's current files, diff and outputs. Safe to call repeatedly. */
-export async function saveCheckpoint(id: string, machine: Machine): Promise<Checkpoint> {
+export function saveCheckpoint(id: string, machine: Machine): Promise<Checkpoint> {
+	return asWrite(() => writeCheckpoint(id, machine));
+}
+
+/** Runs `work` as a checkpoint write, which a blob sweep waits for. */
+async function asWrite<T>(work: () => Promise<T>): Promise<T> {
 	// Checked and counted in the same tick, so a sweep starting now waits for this one.
 	while (sweep) await sweep.catch(() => undefined);
 	writing++;
 	try {
-		return await writeCheckpoint(id, machine);
+		return await work();
 	} finally {
 		writing--;
 	}
@@ -147,6 +152,70 @@ async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint
 	await store.put(keys.latest(id), manifest, 'application/json');
 	await updateSession(id, { checkpointAt: checkpoint.at });
 	return checkpoint;
+}
+
+/**
+ * Gives another task the files of this task's latest checkpoint, as its own
+ * first checkpoint. Blobs are shared, so nothing is copied but the manifest
+ * and the diff; outputs stay with the original. Null when there is none.
+ */
+export function copyCheckpoint(from: string, to: string): Promise<Checkpoint | null> {
+	return asWrite(() => writeCopy(from, to));
+}
+
+async function writeCopy(from: string, to: string): Promise<Checkpoint | null> {
+	const [source, target] = await Promise.all([readCheckpoint(from), getSessionRecord(to)]);
+	if (!source || !target) return null;
+	const { store } = getProviders();
+	const copy: Checkpoint = { ...source, at: new Date().toISOString(), branch: target.branch, log: [], outputs: [] };
+	const manifest = JSON.stringify(copy);
+	const patch = await readCheckpointPatch(from);
+	await store.put(keys.patch(to), patch, 'text/x-diff');
+	await store.put(keys.historyPatch(to, copy.at), patch, 'text/x-diff');
+	await store.put(keys.history(to, copy.at), manifest, 'application/json');
+	await store.put(keys.latest(to), manifest, 'application/json');
+	await updateSession(to, { checkpointAt: copy.at });
+	return copy;
+}
+
+/** Runs `command` over the paths in batches, so a long list never overflows the command line. */
+export async function eachBatch(machine: Machine, command: string, paths: string[]): Promise<void> {
+	for (let start = 0; start < paths.length; start += 200) {
+		const batch = paths.slice(start, start + 200).map(quote).join(' ');
+		await run(machine, `${command} -- ${batch}`, { cwd: repoDir(machine) });
+	}
+}
+
+/**
+ * Writes one file as saved: a symlink as a link, an executable with its bit.
+ * Whatever is at the path goes first, so a write never follows a symlink out
+ * of place, and an empty directory left by the reset makes way for the file.
+ */
+async function writeFile(machine: Machine, path: string, file: SavedFile, bytes: Uint8Array): Promise<void> {
+	const dir = path.slice(0, path.lastIndexOf('/'));
+	await run(machine, `mkdir -p ${quote(dir)} && { if [ -d ${quote(path)} ] && [ ! -L ${quote(path)} ]; then rmdir ${quote(path)}; else rm -f ${quote(path)}; fi; }`);
+	if (file.mode === SYMLINK_MODE) {
+		await run(machine, `ln -s -- "$(cat)" ${quote(path)}`, { stdin: bytes });
+		return;
+	}
+	await writeMachineFile(machine, path, bytes);
+	if (file.mode === '100755') await run(machine, `chmod +x ${quote(path)}`);
+}
+
+/** Writes the checkpoint's version of each file; returns those too large to have been saved. */
+export async function applyFiles(machine: Machine, files: SavedFile[]): Promise<string[]> {
+	const root = repoDir(machine);
+	await eachBatch(machine, 'rm -f', files.filter((file) => file.status === 'D').map((file) => file.path));
+	const skipped: string[] = [];
+	for (const file of files.filter((item) => item.status !== 'D')) {
+		const bytes = file.blob ? await readBlob(file.blob) : null;
+		if (!bytes) {
+			skipped.push(file.path);
+			continue;
+		}
+		await writeFile(machine, `${root}/${file.path}`, file, bytes);
+	}
+	return skipped;
 }
 
 export async function readOutput(id: string, path: string): Promise<Uint8Array | null> {

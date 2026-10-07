@@ -28,6 +28,8 @@ export const session = (patch: Partial<Session> = {}): Session => ({
 	errorMessage: null,
 	checkpointAt: null,
 	createdAt: '2026-10-03T00:00:00Z',
+	pinnedAt: null,
+	pullRequest: null,
 	usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
 	...patch,
 });

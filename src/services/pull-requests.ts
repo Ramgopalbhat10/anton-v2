@@ -4,6 +4,7 @@ import { getProviders } from '../providers/index.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { reviewAfterPush } from './code-review.ts';
 import { commitAndPush } from './git.ts';
+import { savePullRequestStatus } from './pr-status.ts';
 import { machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { PullRequestState } from '../core/ports.ts';
@@ -34,7 +35,7 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 		title: input.title,
 		body: input.body,
 	});
-	await updateSession(id, { prUrl: url });
+	await updateSession(id, { prUrl: url, pullRequestJson: JSON.stringify({ url, state: 'open', checks: null, runs: [] }) });
 	await saveCheckpoint(id, machine);
 	reviewAfterPush(id);
 	return url;
@@ -49,5 +50,10 @@ export async function pullRequestView(id: string): Promise<PullRequestView | nul
 	if (!session.prUrl) return null;
 	// The link is still worth showing when the host can't be reached.
 	const state = await getProviders().git.pullRequestState(session.prUrl).catch(() => null);
+	if (state && state !== session.pullRequest?.state) {
+		const open = state === 'open' || state === 'draft';
+		const checks = open ? session.pullRequest : null;
+		await savePullRequestStatus(session, { state, checks: checks?.checks ?? null, runs: checks?.runs ?? [] });
+	}
 	return { url: session.prUrl, state };
 }

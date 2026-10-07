@@ -139,6 +139,11 @@ export function SessionPage() {
 		setOpen(true);
 	}
 
+	// Opening the panel drops it from the address, so asking again opens it again.
+	useEffect(() => {
+		if (search.panel) showPanel(search.panel);
+	}, [search.panel]);
+
 	const centerVisible = !(open && expanded);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);
 

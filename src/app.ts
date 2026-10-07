@@ -24,13 +24,26 @@ import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services
 import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
-import { catalog, installPlugin, marketplaces, pluginsView, removePlugin, sessionSkills, setEnabled, setMarketplaces } from './services/plugins.ts';
+import {
+	catalog,
+	installPlugin,
+	marketplaces,
+	pluginFile,
+	pluginsView,
+	previewPlugin,
+	removePlugin,
+	searchGitHub,
+	sessionSkills,
+	setEnabled,
+	setMarketplaces,
+} from './services/plugins.ts';
 import {
 	createSession,
 	getSession,
 	listSessions,
 	deleteSession,
 	editSession,
+	forkSession,
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
@@ -79,10 +92,14 @@ setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, messag
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
 
-async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
-	const result = v.safeParse(schema, await c.req.json().catch(() => ({})));
+function valid<T extends v.GenericSchema>(schema: T, value: unknown): v.InferOutput<T> {
+	const result = v.safeParse(schema, value);
 	if (!result.success) throw new InvalidInputError(result.issues.map((issue) => issue.message).join('; '));
 	return result.output;
+}
+
+async function body<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T>> {
+	return valid(schema, await c.req.json().catch(() => ({})));
 }
 
 /**
@@ -229,17 +246,18 @@ app.put('/api/settings/marketplaces', async (c) => {
 	return c.json({ marketplaces: await setMarketplaces(input.marketplaces) });
 });
 app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '', c.req.query('bundle')) }));
+const PLUGIN_PICK = v.union([
+	v.object({ marketplace: v.pipe(v.string(), v.minLength(1)), name: v.pipe(v.string(), v.minLength(1)) }),
+	v.object({ address: v.pipe(v.string(), v.trim(), v.minLength(1)) }),
+	v.object({ plugin: v.pipe(v.string(), v.minLength(1)) }),
+]);
 app.post('/api/plugins', async (c) => {
-	const input = await body(
-		c,
-		v.union([
-			v.object({ marketplace: v.pipe(v.string(), v.minLength(1)), name: v.pipe(v.string(), v.minLength(1)) }),
-			v.object({ address: v.pipe(v.string(), v.trim(), v.minLength(1)) }),
-		]),
-	);
-	await installPlugin(input);
+	await installPlugin(await body(c, PLUGIN_PICK));
 	return c.json({ plugins: await pluginsView() });
 });
+app.get('/api/plugins/preview', async (c) => c.json(await previewPlugin(valid(PLUGIN_PICK, c.req.query()))));
+app.get('/api/plugins/file', async (c) => bytes(c, await pluginFile(c.req.query('repo') ?? '', c.req.query('sha') ?? '', c.req.query('path') ?? '')));
+app.get('/api/skills/search', async (c) => c.json(await searchGitHub(c.req.query('q') ?? '')));
 app.patch('/api/plugins/:id', async (c) => {
 	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
 	await setEnabled(c.req.param('id'), enabled);
@@ -367,10 +385,12 @@ app.patch('/api/sessions/:id', async (c) => {
 			model: v.optional(v.string()),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planMode: v.optional(v.boolean()),
+			pinned: v.optional(v.boolean()),
 		}),
 	);
 	return c.json(await editSession(c.req.param('id'), change));
 });
+app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
 app.delete('/api/sessions/:id', async (c) => {
 	await deleteSession(c.req.param('id'));
 	return c.body(null, 204);

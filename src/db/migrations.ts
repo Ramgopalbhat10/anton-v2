@@ -76,6 +76,12 @@ const migrations: string[][] = [
 		`ALTER TABLE usage_log ADD COLUMN turn_id TEXT`,
 		`CREATE UNIQUE INDEX usage_log_turn ON usage_log (session_id, turn_id) WHERE turn_id IS NOT NULL`,
 	],
+	// 14: tasks pinned to the top of the sidebar.
+	[`ALTER TABLE sessions ADD COLUMN pinned_at TEXT`],
+	// 15: what each plugin was installed from (a marketplace entry or an address), to show and update it from the same place.
+	[`ALTER TABLE plugins ADD COLUMN pick_json TEXT`],
+	// 16: the state and checks of each task's pull request, last read from the host, for the sidebar.
+	[`ALTER TABLE sessions ADD COLUMN pr_json TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

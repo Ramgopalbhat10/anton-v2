@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -179,12 +179,13 @@ export function MenuContent({
 export function MenuItem({
 	icon,
 	checked,
+	hint,
 	className,
 	children,
 	...props
-}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: LucideIcon; checked?: boolean }) {
+}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: LucideIcon; checked?: boolean; hint?: ReactNode }) {
 	return (
-		<MenuPrimitive.Item className={cn('sg-menu-item outline-none data-highlighted:bg-(--bg-hover)', className)} {...props}>
+		<MenuPrimitive.Item className={cn('sg-menu-item outline-none focus-visible:shadow-none data-highlighted:bg-(--bg-hover)', className)} {...props}>
 			{icon ? (
 				<span className="sg-menu-item__icon">
 					<Icon icon={icon} />
@@ -193,8 +194,53 @@ export function MenuItem({
 			<span className="sg-menu-item__label">{children}</span>
 			<span className="sg-menu-item__trail">
 				{checked ? <Icon icon={Check} size={13} className="sg-menu-item__check" /> : null}
+				{/* Last, so counts line up at the right edge whether or not the item is checked. */}
+				{hint !== undefined ? <span className="min-w-4 text-right text-[11px] text-(--text-disabled) tabular-nums">{hint}</span> : null}
 			</span>
 		</MenuPrimitive.Item>
+	);
+}
+
+/** A menu item that opens a menu of its own beside it. */
+export const MenuSub = MenuPrimitive.Sub;
+
+export function MenuSubTrigger({
+	icon,
+	hint,
+	className,
+	children,
+	...props
+}: ComponentProps<typeof MenuPrimitive.SubTrigger> & { icon?: LucideIcon; hint?: ReactNode }) {
+	return (
+		<MenuPrimitive.SubTrigger className={cn('sg-menu-item outline-none focus-visible:shadow-none data-highlighted:bg-(--bg-hover) data-[state=open]:bg-(--alpha-white-6)', className)} {...props}>
+			{icon ? (
+				<span className="sg-menu-item__icon">
+					<Icon icon={icon} />
+				</span>
+			) : null}
+			<span className="sg-menu-item__label">{children}</span>
+			<span className="sg-menu-item__trail gap-1.5">
+				{hint ? <span className="text-[12px] text-(--text-tertiary)">{hint}</span> : null}
+				<Icon icon={ChevronRight} size={13} className="text-(--icon-tertiary)" />
+			</span>
+		</MenuPrimitive.SubTrigger>
+	);
+}
+
+export function MenuSubContent({ className, ...props }: ComponentProps<typeof MenuPrimitive.SubContent>) {
+	return (
+		<MenuPrimitive.Portal>
+			<MenuPrimitive.SubContent
+				sideOffset={4}
+				collisionPadding={8}
+				className={cn(
+					'z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[184px] flex-col gap-px overflow-y-auto rounded-lg bg-(--bg-overlay) p-1 text-(--text-primary) shadow-(--shadow-overlay) outline-none',
+					'data-[state=open]:animate-in data-[state=open]:fade-in-0',
+					className,
+				)}
+				{...props}
+			/>
+		</MenuPrimitive.Portal>
 	);
 }
 

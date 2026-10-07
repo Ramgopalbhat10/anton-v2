@@ -2,13 +2,13 @@ import type { CheckResult, PullRequestActivity, PullRequestComment } from '../co
 import type { SessionRecord } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessions.ts';
-import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { CLEAN_MARK } from './code-review.ts';
 import { decide, yesOf } from './decisions.ts';
 import { logProblem } from './log.ts';
+import { readPullRequest } from './pr-status.ts';
 
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
@@ -98,7 +98,7 @@ export async function followUp(session: SessionRecord): Promise<boolean> {
 	const project = await getProject(session.projectId);
 	const state = stateFor(session);
 	if (!project?.followUps || state.done || state.sent >= MAX_FOLLOW_UPS) return false;
-	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
+	const activity = await readPullRequest({ ...session, prUrl: session.prUrl });
 	const save = (next: FollowState) => updateSession(session.id, { followState: JSON.stringify({ ...next, url: session.prUrl }) });
 	if (activity.state === 'merged' || activity.state === 'closed') {
 		// Never looked at again, so finished tasks cost no requests on every poll.

@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, GitPullRequest, MoreHorizontal, Pencil, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
+import { useNavigate, useParams } from '@tanstack/react-router';
+import { ArrowUpRight, Copy, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
-import { api, type PullRequest, type Session } from '@/lib/api';
+import { api, branchLabel, type PullRequest, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -55,61 +55,154 @@ export function UsageChip({ session }: { session: Session }) {
 	);
 }
 
-/** Click to rename; Enter or leaving the field saves, Escape cancels. */
-export function TaskTitle({ session, editing, onEditingChange }: { session?: Session; editing: boolean; onEditingChange: (next: boolean) => void }) {
+/** Renames the task, showing the new title at once wherever the task is listed. */
+function useRename(session: Session) {
 	const queryClient = useQueryClient();
-	const rename = useMutation({
-		mutationFn: (title: string) => api.editSession(session!.id, { title }),
+	return useMutation({
+		mutationFn: (title: string) => api.editSession(session.id, { title }),
+		onMutate: (title) => {
+			queryClient.setQueryData<Session>(['session', session.id], (current) => current && { ...current, title });
+			queryClient.setQueryData<{ sessions: Session[] }>(['sessions'], (current) =>
+				current && { sessions: current.sessions.map((task) => (task.id === session.id ? { ...task, title } : task)) },
+			);
+		},
+		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['session', session.id] }),
 		onSuccess: (updated) => {
 			queryClient.setQueryData(['session', updated.id], updated);
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 		},
 	});
-	const title = session?.title ?? 'Task';
-	if (!editing || !session) {
-		return (
-			<button
-				type="button"
-				onClick={() => session && onEditingChange(true)}
-				title="Rename task"
-				className="min-w-[60px] flex-auto truncate text-left text-[13px] font-medium outline-none"
-			>
-				{rename.isPending ? rename.variables : title}
-			</button>
-		);
-	}
+}
+
+/** The title being edited: Enter or leaving the field saves, Escape cancels. */
+export function TitleInput({ session, onDone, className }: { session: Session; onDone: () => void; className?: string }) {
+	const rename = useRename(session);
 	const save = (value: string) => {
-		onEditingChange(false);
-		if (value.trim() && value.trim() !== title) rename.mutate(value.trim());
+		onDone();
+		if (value.trim() && value.trim() !== session.title) rename.mutate(value.trim());
 	};
 	return (
 		<input
 			autoFocus
-			defaultValue={title}
+			defaultValue={session.title}
 			maxLength={200}
 			aria-label="Task title"
 			onFocus={(event) => event.currentTarget.select()}
 			onBlur={(event) => save(event.currentTarget.value)}
 			onKeyDown={(event) => {
 				if (event.key === 'Enter') save(event.currentTarget.value);
-				if (event.key === 'Escape') onEditingChange(false);
+				if (event.key === 'Escape') onDone();
 			}}
-			className="h-7 min-w-[100px] flex-auto rounded-md bg-(--bg-raised) px-2 text-[13px] font-medium text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)"
+			className={cn('h-7 rounded-md bg-(--bg-raised) px-2 text-[13px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)', className)}
 		/>
 	);
 }
 
-/**
- * Rename, ask for a pull request or a review of it, open the repo's settings, stop the sandbox, or delete the task.
- * Delete asks twice inside the menu, so a stray click never loses a task.
- */
-export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: Session; onRename: () => void; onAskForPullRequest: () => void }) {
+/** Click to rename. */
+export function TaskTitle({ session, editing, onEditingChange }: { session?: Session; editing: boolean; onEditingChange: (next: boolean) => void }) {
+	if (editing && session) return <TitleInput session={session} onDone={() => onEditingChange(false)} className="min-w-[100px] flex-auto font-medium" />;
+	return (
+		<button
+			type="button"
+			onClick={() => session && onEditingChange(true)}
+			title="Rename task"
+			className="min-w-[60px] flex-auto truncate text-left text-[13px] font-medium outline-none"
+		>
+			{session?.title ?? 'Task'}
+		</button>
+	);
+}
+
+/** Pins the task to the top of the sidebar, or unpins it. */
+export function usePin(session: Session) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => api.editSession(session.id, { pinned: !session.pinnedAt }),
+		onSuccess: (updated) => {
+			queryClient.setQueryData(['session', updated.id], updated);
+			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+		},
+	});
+}
+
+/** Forks the task into a new one with its files, and opens it. */
+export function useFork(session: Session) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
+	return useMutation({
+		mutationFn: () => api.forkSession(session.id),
+		onSuccess: (fork) => {
+			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+			void navigate({ to: '/agents/$sessionId', params: { sessionId: fork.id }, search: { app: 'code' } });
+		},
+	});
+}
+
+/** Opens the task with its History panel, where any earlier state of the files can be restored. */
+export function useRewind(session: Session) {
+	const navigate = useNavigate();
+	return () => void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code', panel: 'History' } });
+}
+
+const taskLink = (session: Session) => new URL(`/agents/${session.id}`, window.location.origin).href;
+
+/** What the task has cost so far, which model it runs on and the branch it works on. */
+function TaskFacts({ session }: { session: Session }) {
+	const { inputTokens, outputTokens, cost } = session.usage;
+	const facts: Array<[string, string]> = [
+		['Spend', inputTokens + outputTokens > 0 ? `${dollars(cost)} · ${tokens(inputTokens + outputTokens)}` : dollars(cost)],
+		['Model', session.model.split('/').pop() ?? session.model],
+		['Branch', branchLabel(session)],
+	];
+	return (
+		<div className="flex max-w-[260px] flex-col gap-1 px-2 pt-1 pb-1.5 text-[11px]">
+			{facts.map(([label, value]) => (
+				<div key={label} className="flex items-center gap-3">
+					<span className="shrink-0 text-(--text-tertiary)">{label}</span>
+					<span className="min-w-0 flex-1 truncate text-right text-(--text-secondary)" title={value}>
+						{value}
+					</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
+/**
+ * Everything to do with a task, in the task header and on each sidebar row:
+ * rename, copy its link, pin it, go back to an earlier state, fork it, ask
+ * for a pull request or a review of it, open the repo's settings, stop the
+ * sandbox, or delete the task. Delete asks twice inside the menu, so a stray
+ * click never loses a task.
+ */
+export function TaskMenu({
+	session,
+	onRename,
+	onAskForPullRequest,
+	onOpenChange,
+	size = 'sm',
+	side = 'bottom',
+}: {
+	session: Session;
+	onRename: () => void;
+	/** Only where the task's agent is open, as it asks the agent in the thread. */
+	onAskForPullRequest?: () => void;
+	onOpenChange?: (open: boolean) => void;
+	size?: 'xs' | 'sm';
+	/** Beside the trigger in the sidebar, below it in the task header. */
+	side?: 'bottom' | 'right';
+}) {
+	const queryClient = useQueryClient();
+	const navigate = useNavigate();
+	const params = useParams({ strict: false }) as { sessionId?: string };
 	const [confirming, setConfirming] = useState(false);
+	const [copied, setCopied] = useState(false);
 	const refresh = () => void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 	const stop = useMutation({ mutationFn: () => api.stopSession(session.id), onSuccess: refresh });
 	const review = useMutation({ mutationFn: () => api.reviewPullRequest(session.id), onSuccess: refresh });
+	const pin = usePin(session);
+	const fork = useFork(session);
+	const rewind = useRewind(session);
 	const remove = useMutation({
 		mutationFn: async () => {
 			if (session.working) await api.stopAgent(session.id).catch(() => undefined);
@@ -117,28 +210,55 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 		},
 		onSuccess: () => {
 			refresh();
-			void navigate({ to: '/' });
+			if (params.sessionId === session.id) void navigate({ to: '/' });
 		},
 	});
 
 	return (
 		<Menu
 			onOpenChange={(open) => {
+				onOpenChange?.(open);
 				if (open) return;
 				setConfirming(false);
+				setCopied(false);
 				review.reset();
 			}}
 		>
 			<MenuTrigger asChild>
-				<IconBtn icon={MoreHorizontal} size="sm" label="Task actions" />
+				<IconBtn icon={MoreHorizontal} size={size} label="Task actions" />
 			</MenuTrigger>
-			<MenuContent align="end">
+			<MenuContent side={side} align={side === 'right' ? 'start' : 'end'} sideOffset={side === 'right' ? 6 : 4}>
 				<MenuItem icon={Pencil} onSelect={onRename}>
 					Rename
 				</MenuItem>
-				<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>
-					{session.prUrl ? 'Update the pull request' : 'Open a pull request'}
+				{/* Stays open, so it can say the link was copied. */}
+				<MenuItem
+					icon={Copy}
+					onSelect={(event) => {
+						event.preventDefault();
+						void navigator.clipboard?.writeText(taskLink(session)).then(() => setCopied(true));
+					}}
+				>
+					{copied ? 'Link copied' : 'Copy task link'}
 				</MenuItem>
+				<MenuItem icon={session.pinnedAt ? PinOff : Pin} onSelect={() => pin.mutate()} disabled={pin.isPending}>
+					{session.pinnedAt ? 'Unpin' : 'Pin to top'}
+				</MenuItem>
+				<MenuSeparator />
+				{session.checkpointAt ? (
+					<MenuItem icon={History} onSelect={rewind}>
+						Rewind to a checkpoint
+					</MenuItem>
+				) : null}
+				<MenuItem icon={GitBranch} onSelect={() => fork.mutate()} disabled={fork.isPending}>
+					Fork into a new task
+				</MenuItem>
+				<MenuSeparator />
+				{onAskForPullRequest ? (
+					<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>
+						{session.prUrl ? 'Update the pull request' : 'Open a pull request'}
+					</MenuItem>
+				) : null}
 				{session.prUrl ? (
 					// Stays open, so it can say the review started or why it could not.
 					<MenuItem
@@ -176,6 +296,8 @@ export function TaskMenu({ session, onRename, onAskForPullRequest }: { session: 
 				>
 					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete task'}
 				</MenuItem>
+				<MenuSeparator />
+				<TaskFacts session={session} />
 			</MenuContent>
 		</Menu>
 	);

@@ -1,4 +1,4 @@
-import type { Reasoning } from './ports.ts';
+import type { PullRequestState, Reasoning } from './ports.ts';
 
 export type Project = {
 	id: string;
@@ -56,8 +56,22 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** When the task was pinned to the top of the sidebar; null when it is not. */
+	pinnedAt: string | null;
+	/** Its pull request as last read from the git host; null before one is opened or read. */
+	pullRequest: PullRequestStatus | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
+};
+
+/**
+ * A pull request's state and its checks on the head commit: in a word (null when it has none or is
+ * finished), and each one that ran, for the sidebar's CI card.
+ */
+export type PullRequestStatus = {
+	state: PullRequestState;
+	checks: 'passed' | 'failed' | 'pending' | null;
+	runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
 };
 
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };

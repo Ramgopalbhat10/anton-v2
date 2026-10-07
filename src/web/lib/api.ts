@@ -42,6 +42,14 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** When the task was pinned to the top of the sidebar; null when it is not. */
+	pinnedAt: string | null;
+	/** Its pull request as last read from GitHub; `checks` sums up the head commit's checks. */
+	pullRequest: {
+		state: 'open' | 'draft' | 'merged' | 'closed';
+		checks: 'passed' | 'failed' | 'pending' | null;
+		runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
+	} | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
 };
@@ -72,7 +80,37 @@ export type Plugin = {
 	skipped: string[];
 	enabled: boolean;
 	installedAt: string;
+	/** Where it was installed from, so it can be installed again to update it. */
+	pick: PluginPick | null;
 };
+
+/** What to install or look at: a marketplace's plugin, a GitHub address, or an installed plugin by its id. */
+export type PluginPick = { marketplace: string; name: string } | { address: string } | { plugin: string };
+
+/** A plugin as installing it would save it, with every file in its folder. */
+export type PluginPreview = {
+	id: string;
+	name: string;
+	description: string;
+	/** Its repository and folder, at the commit shown. */
+	source: PluginSource;
+	sha: string;
+	marketplace: string | null;
+	pick: PluginPick;
+	skills: Array<{ name: string; description: string; folder: string; license: string | null }>;
+	mcpServers: string[];
+	skipped: string[];
+	files: string[];
+	truncated: boolean;
+	readme: string | null;
+	installed: { sha: string; enabled: boolean } | null;
+	/** A newer commit of an installed plugin. */
+	update: string | null;
+};
+
+export type GitHubSkill = { address: string; repo: string; name: string; description: string };
+export type GitHubRepo = { address: string; description: string; stars: number };
+export type GitHubSearch = { skills: GitHubSkill[]; repos: GitHubRepo[]; problems: string[] };
 
 export type CatalogItem = { id: string; name: string; description: string; source: PluginSource; skills: string[] | null; bundle?: string; browseable?: boolean; installed: boolean };
 
@@ -269,7 +307,11 @@ export const api = {
 	saveMarketplaces: (marketplaces: string[]) =>
 		json<{ marketplaces: string[] }>('/api/settings/marketplaces', { method: 'PUT', body: JSON.stringify({ marketplaces }) }),
 	catalog: (repo: string, bundle?: string) => json<{ entries: CatalogItem[] }>(`/api/marketplaces/catalog?repo=${encodeURIComponent(repo)}${bundle ? `&bundle=${encodeURIComponent(bundle)}` : ''}`),
-	installPlugin: (input: { marketplace: string; name: string } | { address: string }) => post<{ plugins: Plugin[] }>('/api/plugins', input),
+	installPlugin: (input: PluginPick) => post<{ plugins: Plugin[] }>('/api/plugins', input),
+	previewPlugin: (pick: PluginPick) => json<PluginPreview>(`/api/plugins/preview?${new URLSearchParams(pick)}`),
+	pluginFile: async (repo: string, sha: string, path: string) =>
+		new Uint8Array(await (await request(`/api/plugins/file?${new URLSearchParams({ repo, sha, path })}`)).arrayBuffer()),
+	searchGitHub: (q: string, signal?: AbortSignal) => json<GitHubSearch>(`/api/skills/search?q=${encodeURIComponent(q)}`, { signal }),
 	setPluginEnabled: (id: string, enabled: boolean) =>
 		json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 	removePlugin: (id: string) => json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'DELETE' }),
@@ -296,7 +338,8 @@ export const api = {
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
-	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean }) =>
+	forkSession: (id: string) => post<Session>(`/api/sessions/${id}/fork`),
+	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean; pinned?: boolean }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
