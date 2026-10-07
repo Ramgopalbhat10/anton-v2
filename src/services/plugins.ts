@@ -6,6 +6,7 @@ import {
 	type PluginSource,
 	parseGitHub,
 	readCatalog,
+	readCatalogBundle,
 	readPlugin,
 	readRepoSkills,
 	type RepoFiles,
@@ -55,24 +56,37 @@ const idFor = (source: PluginSource, skills: string[] | null) =>
 		.slice(0, 16)}`;
 
 export type CatalogItem = CatalogEntry & { id: string; installed: boolean };
-const catalogs = new Map<string, { at: number; entries: CatalogEntry[] }>();
+const catalogs = new Map<string, { at: number; entries: CatalogEntry[]; expanded: Set<string> }>();
 
 /** What one marketplace offers, and which of it is installed. */
-export async function catalog(marketplace: string): Promise<CatalogItem[]> {
+export async function catalog(marketplace: string, bundle?: string): Promise<CatalogItem[]> {
 	const found = parseGitHub(marketplace);
 	if (!found) throw new InvalidInputError(`"${marketplace}" is not a GitHub repository`);
 	const key = marketplace.toLowerCase();
 	let cached = catalogs.get(key);
 	if (!cached || Date.now() - cached.at > CATALOG_TTL_MS) {
 		const { files, sha } = await filesAt(found.repo, found.ref);
-		cached = { at: Date.now(), entries: await readCatalog(files, { ...found, ref: sha }) };
+		cached = { at: Date.now(), entries: await readCatalog(files, { ...found, ref: sha }), expanded: new Set() };
 		catalogs.set(key, cached);
 	}
+	if (bundle && !cached.expanded.has(bundle)) {
+		const entry = cached.entries.find((item) => !item.bundle && item.name === bundle);
+		if (!entry) throw new NotFoundError(`${marketplace} does not list ${bundle}`);
+		if (entry.browseable) {
+			const { files, sha } = await filesAt(entry.source.repo, entry.source.ref);
+			const children = await readCatalogBundle(files, { ...entry, source: { ...entry.source, ref: sha } });
+			// Replace rather than append, so concurrent requests cannot duplicate rows.
+			cached.entries = [...cached.entries.filter((item) => item.bundle !== bundle), ...children];
+		}
+		cached.expanded.add(bundle);
+	}
 	const installed = new Set((await listPlugins()).map((plugin) => plugin.id));
-	return cached.entries.map((entry) => {
-		const id = idFor({ ...entry.source, ref: null }, entry.skills);
-		return { ...entry, id, installed: installed.has(id) };
-	});
+	return cached.entries
+		.filter((entry) => !bundle || entry.bundle === bundle)
+		.map((entry) => {
+			const id = idFor({ ...entry.source, ref: null }, entry.skills);
+			return { ...entry, id, installed: installed.has(id) };
+		});
 }
 
 /**
@@ -89,7 +103,13 @@ export async function installPlugin(input: { marketplace: string; name: string }
 		if (!found) throw new InvalidInputError('Give a GitHub repository, such as owner/repo or owner/repo/skills/name, or its URL');
 		source = found;
 	} else {
-		const entry = (await catalog(input.marketplace)).find((item) => item.name === input.name);
+		const entries = await catalog(input.marketplace);
+		let entry = entries.find((item) => item.name === input.name);
+		// Re-resolve a lazily browsed skill after cache expiry or a server restart.
+		if (!entry) {
+			const parent = entries.filter((item) => item.browseable && input.name.startsWith(`${item.name}/`)).sort((a, b) => b.name.length - a.name.length)[0];
+			if (parent) entry = (await catalog(input.marketplace, parent.name)).find((item) => item.name === input.name);
+		}
 		if (!entry) throw new NotFoundError(`${input.marketplace} does not list ${input.name}`);
 		({ source, skills: named, name: fallback } = entry);
 		marketplace = input.marketplace;

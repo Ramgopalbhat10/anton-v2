@@ -1,24 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { PlanToggle } from '@/components/composer';
-import { useSuggestions } from '@/components/suggestions';
+import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
-import {
-	Btn,
-	Icon,
-	Menu,
-	MenuContent,
-	MenuItem,
-	MenuLabel,
-	MenuSeparator,
-	MenuTrigger,
-	PickerChip,
-	SectionLabel,
-} from '@/components/signal';
+import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, branchLabel, type ModelChoice, type Project } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
@@ -147,9 +136,6 @@ export function Launcher() {
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [planChoice, setPlanMode] = useState<boolean | null>(null);
-	const box = useRef<HTMLTextAreaElement>(null);
-	// No task yet, so no files to point at; saved commands work here too.
-	const suggestions = useSuggestions({ text: prompt, setText: setPrompt, box: () => box.current });
 	const [adding, setAdding] = useState(false);
 	const queryClient = useQueryClient();
 	const create = useCreateChat();
@@ -174,7 +160,7 @@ export function Launcher() {
 		if (create.isPending || !project) return;
 		const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] }));
 		create.mutate({
-			prompt: expandCommand(prompt, saved.commands),
+			prompt: expandCommand(prompt, saved.commands, true),
 			projectId: project.id,
 			branch: chosenBranch || undefined,
 			model: model || undefined,
@@ -194,8 +180,7 @@ export function Launcher() {
 					<div className="flex flex-col gap-2">
 						<h1 className="m-0 text-[24px] leading-[30px] font-semibold tracking-[-0.022em]">What should the agent do?</h1>
 						<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">
-							Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the
-							terminal, and the files as it goes.
+							Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the terminal, and the files as it goes.
 						</p>
 					</div>
 
@@ -206,36 +191,21 @@ export function Launcher() {
 							void start();
 						}}
 					>
-						<textarea
-							ref={box}
+						<ComposerInput
 							autoFocus
-							rows={4}
 							value={prompt}
-							onChange={(event) => {
-								setPrompt(event.target.value);
-								suggestions.track(event.target);
-							}}
-							onSelect={(event) => suggestions.track(event.currentTarget)}
-							onKeyDown={(event) => {
-								if (suggestions.onKeyDown(event)) return;
-								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-									event.preventDefault();
-									void start();
-								}
-							}}
+							onChange={setPrompt}
+							projectId={project?.id}
+							branch={chosenBranch}
+							submitOn="mod-enter"
+							suggestionsPosition="below"
 							placeholder="Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test."
-							className="w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-[21px] text-(--text-primary) outline-none"
+							className="min-h-[84px] text-[14px] leading-[21px]"
 						/>
-						{suggestions.list ? <div className="absolute top-full right-0 left-0 z-10 mt-1.5">{suggestions.list}</div> : null}
 						<div className="flex flex-wrap items-center gap-1.5">
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />
-							<ModelPicker
-								value={{ model, reasoning }}
-								onChange={(change) => setChoice((current) => ({ ...current, ...change }))}
-								height={28}
-								side="bottom"
-							/>
+							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />
 							<PlanToggle on={planMode} onChange={setPlanMode} />
 							<div className="min-w-0 flex-[1_1_8px]" />
 							<Btn type="submit" variant="primary" icon={Play} disabled={create.isPending || !project}>

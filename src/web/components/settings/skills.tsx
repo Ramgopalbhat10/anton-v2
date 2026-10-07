@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Blocks, Download, Plus, Store, Trash2, X } from 'lucide-react';
+import { Blocks, ChevronRight, Download, Plus, Store, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type CatalogItem, type Plugin } from '@/lib/api';
@@ -49,7 +49,12 @@ function PluginRow({ plugin }: { plugin: Plugin }) {
 						{where(plugin)} @ {plugin.sha.slice(0, 7)}
 					</a>
 				</div>
-				<Switch checked={plugin.enabled} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Use {plugin.name}</span>} />
+				<Switch
+					checked={plugin.enabled}
+					disabled={toggle.isPending}
+					onChange={(enabled) => toggle.mutate(enabled)}
+					label={<span className="sr-only">Use {plugin.name}</span>}
+				/>
 				{confirming ? (
 					<Btn size="sm" variant="dangerGhost" disabled={remove.isPending} onBlur={() => setConfirming(false)} onClick={() => remove.mutate(undefined)}>
 						{remove.isPending ? 'Removing…' : 'Click again to remove'}
@@ -63,7 +68,9 @@ function PluginRow({ plugin }: { plugin: Plugin }) {
 				{plugin.skills.map((skill) => (
 					<span
 						key={skill.name}
-						title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
+						title={
+							skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'
+						}
 						className={cn(
 							'inline-flex h-5 items-center rounded-md bg-(--bg-raised) px-1.5 font-mono text-[11px]',
 							skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
@@ -112,12 +119,23 @@ function InstallByAddress() {
 }
 
 function CatalogRow({ marketplace, item }: { marketplace: string; item: CatalogItem }) {
+	const [browsing, setBrowsing] = useState(false);
+	const children = useQuery({
+		queryKey: ['catalog', marketplace, item.name],
+		queryFn: () => api.catalog(marketplace, item.name),
+		enabled: browsing,
+		staleTime: 5 * 60_000,
+	});
 	const install = usePluginMutation(() => api.installPlugin({ marketplace, name: item.name }));
 	return (
 		<div className="flex flex-col gap-1 rounded-md px-2.5 py-1.5">
 			<div className="flex items-center gap-2.5">
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="truncate text-[13px]">{item.name}</div>
+					<div className="flex items-center gap-2 text-[13px]">
+						{item.bundle ? <Icon icon={Blocks} size={12} className="text-(--icon-tertiary)" /> : null}
+						<span className="truncate">{item.bundle ? item.name.slice(item.bundle.length + 1) : item.name}</span>
+						{item.bundle ? <span className="truncate text-[11px] text-(--text-disabled)">{item.bundle}</span> : null}
+					</div>
 					{item.description ? <div className="line-clamp-2 text-[12px] leading-[17px] text-(--text-tertiary)">{item.description}</div> : null}
 				</div>
 				{item.installed ? (
@@ -128,6 +146,31 @@ function CatalogRow({ marketplace, item }: { marketplace: string; item: CatalogI
 					</Btn>
 				)}
 			</div>
+			{item.browseable ? (
+				<Btn
+					size="xs"
+					variant="ghost"
+					icon={ChevronRight}
+					aria-label={`Browse skills in ${item.name}`}
+					aria-expanded={browsing}
+					onClick={() => setBrowsing((current) => !current)}
+				>
+					Browse skills
+				</Btn>
+			) : null}
+			{browsing ? (
+				<div className="ml-2 border-l border-(--border-subtle) pl-2">
+					{children.isPending ? (
+						<Spinner size={12} />
+					) : children.isError ? (
+						<p className="text-[12px] text-(--danger-text)">{children.error.message}</p>
+					) : children.data.entries.length ? (
+						children.data.entries.map((child) => <CatalogRow key={child.id} marketplace={marketplace} item={child} />)
+					) : (
+						<p className="text-[12px] text-(--text-tertiary)">No individual skills found.</p>
+					)}
+				</div>
+			) : null}
 			{install.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{install.error.message}</p> : null}
 		</div>
 	);
@@ -137,12 +180,25 @@ function Catalog({ marketplace }: { marketplace: string }) {
 	const [search, setSearch] = useState('');
 	const entries = useQuery({ queryKey: ['catalog', marketplace], queryFn: () => api.catalog(marketplace), staleTime: 5 * 60_000 });
 	const query = search.trim().toLowerCase();
-	const matches = (entries.data?.entries ?? []).filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query));
+	const nested = new Set((entries.data?.entries ?? []).filter((item) => item.browseable).map((item) => item.name));
+	const matches = (entries.data?.entries ?? [])
+		.filter((item) => query || !item.bundle || !nested.has(item.bundle))
+		.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query));
 	return (
 		<div className="flex flex-col gap-2">
-			<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${marketplace}`} aria-label="Search the marketplace" className={FIELD} />
+			<input
+				value={search}
+				onChange={(event) => setSearch(event.target.value)}
+				placeholder={`Search ${marketplace}`}
+				aria-label="Search the marketplace"
+				className={FIELD}
+			/>
 			{entries.isPending ? <Spinner size={12} /> : null}
-			{entries.isError ? <p className="m-0 text-[12px] text-(--danger-text)">Could not read {marketplace}: {entries.error.message}</p> : null}
+			{entries.isError ? (
+				<p className="m-0 text-[12px] text-(--danger-text)">
+					Could not read {marketplace}: {entries.error.message}
+				</p>
+			) : null}
 			{entries.data ? (
 				matches.length ? (
 					<List>
@@ -166,7 +222,10 @@ function Marketplaces({ saved }: { saved: string[] }) {
 	const save = useMutation({
 		mutationFn: api.saveMarketplaces,
 		onSuccess: (result) => {
-			queryClient.setQueryData<{ plugins: Plugin[]; marketplaces: string[] }>(['plugins'], (current) => current && { ...current, marketplaces: result.marketplaces });
+			queryClient.setQueryData<{ plugins: Plugin[]; marketplaces: string[] }>(
+				['plugins'],
+				(current) => current && { ...current, marketplaces: result.marketplaces },
+			);
 			if (!result.marketplaces.includes(open)) setOpen(result.marketplaces.at(-1) ?? '');
 		},
 	});
@@ -177,9 +236,18 @@ function Marketplaces({ saved }: { saved: string[] }) {
 				{saved.map((marketplace) => (
 					<span
 						key={marketplace}
-						className={cn('inline-flex h-7 items-center gap-1 rounded-lg pr-1 pl-2.5 text-[12px]', marketplace === shown ? 'bg-(--accent-bg) text-(--accent-text)' : 'bg-(--bg-surface) text-(--text-secondary)')}
+						className={cn(
+							'inline-flex h-7 items-center gap-1 rounded-lg pr-1 pl-2.5 text-[12px]',
+							marketplace === shown ? 'bg-(--accent-bg) text-(--accent-text)' : 'bg-(--bg-surface) text-(--text-secondary)',
+						)}
 					>
-						<button type="button" role="tab" aria-selected={marketplace === shown} onClick={() => setOpen(marketplace)} className="inline-flex items-center gap-1.5 outline-none">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={marketplace === shown}
+							onClick={() => setOpen(marketplace)}
+							className="inline-flex items-center gap-1.5 outline-none"
+						>
 							<Icon icon={Store} size={12} />
 							{marketplace}
 						</button>
@@ -202,7 +270,13 @@ function Marketplaces({ saved }: { saved: string[] }) {
 						setOpen(adding.trim());
 					}}
 				>
-					<input value={adding} onChange={(event) => setAdding(event.target.value)} placeholder="owner/repo" aria-label="Marketplace to add" className={cn(FIELD, 'h-7 w-[180px] font-mono')} />
+					<input
+						value={adding}
+						onChange={(event) => setAdding(event.target.value)}
+						placeholder="owner/repo"
+						aria-label="Marketplace to add"
+						className={cn(FIELD, 'h-7 w-[180px] font-mono')}
+					/>
 					<Btn type="submit" size="sm" variant="ghost" icon={Plus} disabled={!adding.trim() || save.isPending}>
 						Add
 					</Btn>

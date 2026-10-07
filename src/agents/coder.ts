@@ -10,6 +10,7 @@ import {
 	useModel,
 	usePersistentState,
 	useResponseFinish,
+	useResponseStart,
 	useSandbox,
 	useSkill,
 	useSubagent,
@@ -354,8 +355,17 @@ export function Coder({ id }: AgentProps) {
 			logProblem('warn', 'Checkpoint failed', error, id);
 		}
 	});
-	// Shown on the reply; the task's totals are counted per model call from the runtime's events.
-	useResponseFinish(({ response }) => ({ usage: toUsage(response.usage) }));
+	// These response hooks run at the true start/end, across all model and tool calls.
+	// The persisted start survives resumed responses; usage totals are still counted per model call.
+	useResponseStart(() => ({ startedAt: Date.now() }));
+	useResponseFinish(({ response, metadata }) => {
+		const completedAt = Date.now();
+		const startedAt = metadata.startedAt;
+		return {
+			usage: toUsage(response.usage),
+			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
+		};
+	});
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
 	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}`;

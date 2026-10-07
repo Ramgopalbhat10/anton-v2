@@ -7,13 +7,19 @@ function repo(files: Record<string, string>): RepoFiles {
 	return { paths: Object.keys(files), read: async (path) => (path in files ? new TextEncoder().encode(files[path]) : null) };
 }
 
-const skill = (name: string, description = `Does ${name}. Use when asked to ${name}.`) => `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nSteps for ${name}.\n`;
+const skill = (name: string, description = `Does ${name}. Use when asked to ${name}.`) =>
+	`---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nSteps for ${name}.\n`;
 
 test('front matter: plain, quoted and folded values, and metadata', () => {
 	const { data, body } = parseFrontMatter(
 		'---\nname: pdf\ndescription: >\n  Fill and merge PDFs.\n  Use for any PDF.\nlicense: "Apache-2.0"\nmetadata:\n  author: acme\n  version: \'1.0\'\n---\nBody here\n',
 	);
-	assert.deepEqual(data, { name: 'pdf', description: 'Fill and merge PDFs. Use for any PDF.', license: 'Apache-2.0', metadata: { author: 'acme', version: '1.0' } });
+	assert.deepEqual(data, {
+		name: 'pdf',
+		description: 'Fill and merge PDFs. Use for any PDF.',
+		license: 'Apache-2.0',
+		metadata: { author: 'acme', version: '1.0' },
+	});
 	assert.equal(body, 'Body here\n');
 	assert.deepEqual(parseFrontMatter('No front matter').data, {});
 });
@@ -43,8 +49,8 @@ test("Claude Code's marketplace: named plugins here and in other repositories", 
 	});
 	assert.deepEqual(await readCatalog(files, home), [
 		{ name: 'docs', description: 'Document skills', source: home, skills: ['./skills/pdf', './skills/xlsx'] },
-		{ name: 'lint', description: '', source: { repo: 'acme/lint', path: '', ref: 'f00' }, skills: null },
-		{ name: 'db', description: '', source: { repo: 'acme/mono', path: 'plugins/db', ref: 'v2' }, skills: null },
+		{ name: 'lint', description: '', source: { repo: 'acme/lint', path: '', ref: 'f00' }, skills: null, browseable: true },
+		{ name: 'db', description: '', source: { repo: 'acme/mono', path: 'plugins/db', ref: 'v2' }, skills: null, browseable: true },
 	]);
 });
 
@@ -96,8 +102,89 @@ test('one skill folder installs as a plugin of its own, and a marketplace can pi
 
 test("a repository's own skills: .agents/skills first, .claude/skills for names not taken", async () => {
 	const { agents, claude } = await readRepoSkills(
-		repo({ '.agents/skills/release/SKILL.md': skill('release'), '.claude/skills/release/SKILL.md': skill('release'), '.claude/skills/triage/SKILL.md': skill('triage') }),
+		repo({
+			'.agents/skills/release/SKILL.md': skill('release'),
+			'.claude/skills/release/SKILL.md': skill('release'),
+			'.claude/skills/triage/SKILL.md': skill('triage'),
+		}),
 	);
-	assert.deepEqual(agents.map((item) => item.name), ['release']);
-	assert.deepEqual(claude.map((item) => item.name), ['triage']);
+	assert.deepEqual(
+		agents.map((item) => item.name),
+		['release'],
+	);
+	assert.deepEqual(
+		claude.map((item) => item.name),
+		['triage'],
+	);
+});
+
+test('marketplace bundles expose individually installable skills with their own source folders', async () => {
+	const files = repo({
+		'.claude-plugin/marketplace.json': JSON.stringify({ plugins: [{ name: 'engineering', source: './', skills: ['./skills/tdd', './skills/review'] }] }),
+		'skills/tdd/SKILL.md': skill('tdd', 'Test first'),
+		'skills/review/SKILL.md': skill('review', 'Review code'),
+		'skills/unlisted/SKILL.md': skill('unlisted'),
+	});
+	const entries = await readCatalog(files, home);
+	assert.deepEqual(
+		entries.slice(1).map((entry) => [entry.name, entry.description, entry.source.path]),
+		[
+			['engineering/review', 'Review code', 'skills/review'],
+			['engineering/tdd', 'Test first', 'skills/tdd'],
+		],
+	);
+	for (const entry of entries.slice(1)) {
+		const installed = await readPlugin(files, entry.source.path, entry.skills);
+		assert.equal(installed.skills.length, 1);
+	}
+});
+
+test('a repository of skills without a marketplace exposes children and skips malformed skills', async () => {
+	const files = repo({ 'tdd/SKILL.md': skill('tdd'), 'review/SKILL.md': skill('review'), 'broken/SKILL.md': 'No metadata' });
+	const entries = await readCatalog(files, home);
+	assert.deepEqual(
+		entries.map((entry) => entry.name),
+		['market', 'market/review', 'market/tdd'],
+	);
+	assert.deepEqual(
+		(await readPlugin(files, 'review')).skills.map((item) => item.name),
+		['review'],
+	);
+});
+
+test('individual catalog skills deduplicate names just like bulk installation', async () => {
+	const files = repo({ 'skills/a/SKILL.md': skill('review', 'First review'), 'skills/b/SKILL.md': skill('review', 'Second review') });
+	const entries = await readCatalog(files, home);
+	assert.deepEqual(
+		entries.slice(1).map((entry) => [entry.name, entry.source.path]),
+		[['market/review', 'skills/a']],
+	);
+});
+
+test('external marketplace bundles can be expanded from the source repository at its pinned ref', async () => {
+	const { readCatalogBundle } = await import('../src/core/plugins.ts');
+	const files = repo({ 'skills/pdf/SKILL.md': skill('pdf'), 'skills/other/SKILL.md': skill('other') });
+	const entries = await readCatalogBundle(files, {
+		name: 'docs',
+		description: '',
+		source: { repo: 'acme/remote', path: '', ref: 'pinned' },
+		skills: ['skills/pdf'],
+	});
+	assert.deepEqual(
+		entries.map((entry) => [entry.name, entry.source]),
+		[['docs/pdf', { repo: 'acme/remote', path: 'skills/pdf', ref: 'pinned' }]],
+	);
+});
+
+test('duplicate names follow the bundle manifest order when selecting an individual skill', async () => {
+	const files = repo({
+		'.claude-plugin/marketplace.json': JSON.stringify({ plugins: [{ name: 'bundle', source: './', skills: ['skills/b', 'skills/a'] }] }),
+		'skills/a/SKILL.md': skill('review', 'A'),
+		'skills/b/SKILL.md': skill('review', 'B'),
+	});
+	const entries = await readCatalog(files, home);
+	assert.deepEqual(
+		entries.slice(1).map((entry) => [entry.name, entry.source.path]),
+		[['bundle/review', 'skills/b']],
+	);
 });

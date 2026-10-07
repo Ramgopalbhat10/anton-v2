@@ -1,9 +1,19 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import type { FlueConversationMessage, UseFlueAgentResult } from '@flue/react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueries, session } from './render';
 
-const api = vi.hoisted(() => ({ editSession: vi.fn(), session: vi.fn(), health: vi.fn(), budget: vi.fn(), models: vi.fn(), stopAgent: vi.fn() }));
+const api = vi.hoisted(() => ({
+	editSession: vi.fn(),
+	session: vi.fn(),
+	health: vi.fn(),
+	budget: vi.fn(),
+	models: vi.fn(),
+	stopAgent: vi.fn(),
+	commands: vi.fn(async () => ({ commands: [] })),
+	sessionSkills: vi.fn(async () => ({ skills: [] })),
+}));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { Thread } = await import('@/components/thread');
@@ -21,7 +31,13 @@ const tool = (toolName: string, input: unknown, output?: unknown) => ({
 });
 
 function agent(messages: unknown[], patch: Partial<UseFlueAgentResult> = {}): UseFlueAgentResult {
-	return { messages: messages as FlueConversationMessage[], status: 'idle', historyReady: true, sendMessage: vi.fn(async () => undefined), ...patch } as unknown as UseFlueAgentResult;
+	return {
+		messages: messages as FlueConversationMessage[],
+		status: 'idle',
+		historyReady: true,
+		sendMessage: vi.fn(async () => undefined),
+		...patch,
+	} as unknown as UseFlueAgentResult;
 }
 
 function show(flue: UseFlueAgentResult, patch = {}) {
@@ -50,6 +66,7 @@ describe('Thread', () => {
 		expect(screen.getByRole('heading', { name: 'Done' })).toBeTruthy();
 		expect(screen.getAllByRole('listitem')).toHaveLength(2);
 		expect(screen.getByText('2 STEPS')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
 	});
 
@@ -86,5 +103,91 @@ describe('Thread', () => {
 		const flue = agent([]);
 		show(flue);
 		await waitFor(() => expect(flue.sendMessage).toHaveBeenCalledWith('Start here'));
+	});
+});
+
+describe('response details', () => {
+	it('shows the recorded response duration rather than the sum of fast tools, including after reload', () => {
+		const reply = {
+			...assistant('a1', [
+				{ type: 'reasoning', text: 'Thinking through the task', state: 'done' },
+				{ ...tool('run_script', { code: 'text(42)' }, { output: '42' }), durationMs: 1400 },
+			]),
+			metadata: { startedAt: 1000, durationMs: 73_500 },
+		};
+		const view = show(agent([reply]));
+		expect(screen.getByRole('button', { name: /Worked for 1m 13s/ })).toBeTruthy();
+		view.unmount();
+		show(agent([reply]));
+		expect(screen.getByRole('button', { name: /Worked for 1m 13s/ })).toBeTruthy();
+	});
+	it('times reasoning-only responses and shows total response time once across split traces', () => {
+		show(
+			agent([
+				{
+					...assistant('a1', [
+						{ type: 'reasoning', text: 'First thought', state: 'done' },
+						{ type: 'text', text: 'Checking one more thing' },
+						{ type: 'reasoning', text: 'Second thought', state: 'done' },
+					]),
+					metadata: { durationMs: 14_000 },
+				},
+			]),
+		);
+		expect(screen.getAllByRole('button', { name: /Worked for 14s/ })).toHaveLength(1);
+		expect(screen.getByRole('button', { name: /^Worked 1 STEP$/ })).toBeTruthy();
+	});
+	it('does not claim full response timing for legacy messages that only have tool durations', () => {
+		show(agent([assistant('a1', [{ ...tool('run_script', { code: 'text(42)' }, { output: '42' }), durationMs: 1400 }])]));
+		expect(screen.getByRole('button', { name: /^Worked 1 STEP$/ })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: /Worked for/ })).toBeNull();
+	});
+	it('collapses script output when completed and the whole reasoning when work ends', async () => {
+		const parts = [tool('run_script', { code: 'text(42)' })];
+		const view = show(agent([assistant('a1', parts)], { status: 'streaming' }));
+		expect(screen.getByRole('button', { name: /Working/ }).getAttribute('aria-expanded')).toBe('true');
+		expect(screen.getByRole('button', { name: /Ran a script/ }).getAttribute('aria-expanded')).toBe('true');
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent([assistant('a1', [tool('run_script', { code: 'text(42)' }, { output: '42' })])], { status: 'streaming' })} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(screen.getByRole('button', { name: /Ran a script/ }).getAttribute('aria-expanded')).toBe('false'));
+		fireEvent.click(screen.getByRole('button', { name: /Ran a script/ }));
+		expect(screen.getByText(/text\(42\)/)).toBeTruthy();
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent([assistant('a1', [tool('run_script', { code: 'text(42)' }, { output: '42' })])])} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(screen.getByRole('button', { name: /Worked/ }).getAttribute('aria-expanded')).toBe('false'));
+	});
+	it('opens and closes completed command output through its trace row', () => {
+		show(agent([assistant('a1', [tool('bash', { command: 'npm test' }, { output: 'All tests passed' })])]));
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+		const command = screen.getByRole('button', { name: 'Ran npm test' });
+		expect(command.getAttribute('aria-expanded')).toBe('false');
+		const details = document.getElementById(command.getAttribute('aria-controls')!);
+		expect(details?.getAttribute('aria-hidden')).toBe('true');
+		fireEvent.click(command);
+		expect(command.getAttribute('aria-expanded')).toBe('true');
+		expect(details?.textContent).toContain('All tests passed');
+		fireEvent.click(command);
+		expect(details?.getAttribute('aria-hidden')).toBe('true');
+	});
+	it('copies only the response text, including markdown, before its token count', async () => {
+		const writeText = vi.fn(async () => undefined);
+		Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+		show(
+			agent([
+				{
+					...assistant('a1', [{ type: 'text', text: '**Done**' }, tool('bash', { command: 'secret' }, { output: 'private' })]),
+					metadata: { usage: { inputTokens: 20, outputTokens: 10, cost: 0.01 } },
+				},
+			]),
+		);
+		fireEvent.click(screen.getByRole('button', { name: 'Copy response' }));
+		await waitFor(() => expect(writeText).toHaveBeenCalledWith('**Done**'));
+		expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
 	});
 });

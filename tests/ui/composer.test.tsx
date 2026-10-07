@@ -15,7 +15,19 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 
 const { Composer } = await import('@/components/composer');
 
-const model = { id: 'openrouter/test/model', name: 'Test model', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 0, output: 0 }, vision: false, reasoning: [], defaultReasoning: 'off' };
+const model = {
+	id: 'openrouter/test/model',
+	name: 'Test model',
+	vendor: 'Test',
+	description: '',
+	createdAt: 0,
+	contextLength: 128000,
+	maxOutput: null,
+	price: { input: 0, output: 0 },
+	vision: false,
+	reasoning: [],
+	defaultReasoning: 'off',
+};
 
 function setup(patch = {}) {
 	const onSend = vi.fn(async () => undefined);
@@ -27,7 +39,7 @@ function setup(patch = {}) {
 		[['files', 's1'], { source: 'base', at: null, paths: ['src/app.ts', 'src/server.ts', 'README.md'], changes: [] }],
 		[['commands'], { commands: [{ name: 'review', prompt: 'Review the branch for bugs.' }] }],
 	]);
-	return { ...view, onSend, onStop, box: screen.getByRole('textbox') as HTMLTextAreaElement };
+	return { ...view, onSend, onStop, box: screen.getByRole('textbox') as HTMLElement };
 }
 
 describe('Composer', () => {
@@ -39,10 +51,10 @@ describe('Composer', () => {
 	it('sends on Enter and keeps Shift+Enter for a new line', async () => {
 		const { box, onSend } = setup();
 		await userEvent.type(box, 'Fix the bug{Shift>}{Enter}{/Shift}now');
-		expect(box.value).toBe('Fix the bug\nnow');
+		expect(box.textContent).toBe('Fix the bug\nnow');
 		await userEvent.type(box, '{Enter}');
 		expect(onSend).toHaveBeenCalledWith('Fix the bug\nnow', []);
-		expect(box.value).toBe('');
+		expect(box.textContent).toBe('');
 	});
 
 	it('puts the draft back and says why when sending fails', async () => {
@@ -50,7 +62,7 @@ describe('Composer', () => {
 		onSend.mockRejectedValueOnce(new Error('cap reached'));
 		await userEvent.type(box, 'Keep me{Enter}');
 		await screen.findByText('Not sent: cap reached');
-		expect(box.value).toBe('Keep me');
+		expect(box.textContent).toBe('Keep me');
 	});
 
 	it('offers the task files after @ and inserts the chosen path', async () => {
@@ -58,7 +70,8 @@ describe('Composer', () => {
 		await userEvent.type(box, 'Look at @serv');
 		expect(await screen.findByRole('option', { name: /server\.ts/ })).toBeTruthy();
 		await userEvent.keyboard('{Enter}');
-		expect(box.value).toBe('Look at @src/server.ts ');
+		expect(box.textContent).toBe('Look at @server.ts ');
+		expect(screen.getByLabelText('File src/server.ts').getAttribute('title')).toBe('src/server.ts');
 		expect(screen.queryByRole('listbox')).toBeNull();
 	});
 
@@ -67,8 +80,9 @@ describe('Composer', () => {
 		await userEvent.type(box, '/rev');
 		await screen.findByRole('option', { name: /\/review/ });
 		await userEvent.keyboard('{Tab}');
-		expect(box.value).toBe('Review the branch for bugs.');
-		expect(onSend).not.toHaveBeenCalled();
+		expect(screen.getByLabelText('Command /review')).toBeTruthy();
+		await userEvent.keyboard('{Enter}');
+		expect(onSend).toHaveBeenCalledWith('Review the branch for bugs.', []);
 	});
 
 	it('Escape closes the suggestions so Enter sends', async () => {
@@ -86,7 +100,7 @@ describe('Composer', () => {
 		fireEvent.click(toggle);
 		expect(api.editSession).toHaveBeenCalledWith('s1', { planMode: true });
 		await waitFor(() => expect(screen.getByRole('button', { name: /Plan/ }).getAttribute('aria-pressed')).toBe('true'));
-		expect(screen.getByPlaceholderText('Describe what to plan')).toBeTruthy();
+		expect(screen.getByRole('textbox', { name: 'Describe what to plan' })).toBeTruthy();
 	});
 
 	it('shows Stop while the agent works and refuses to send past a cap', async () => {
@@ -100,5 +114,17 @@ describe('Composer', () => {
 		expect(onStop).toHaveBeenCalled();
 		expect(screen.getByText("Today's spending cap of $1 is reached.")).toBeTruthy();
 		expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true);
+	});
+});
+
+describe('selected file references', () => {
+	it('sends full paths even though the editor shows only filenames', async () => {
+		const { box, onSend } = setup();
+		await userEvent.type(box, 'Review @serv');
+		await screen.findByRole('option', { name: /server.ts/ });
+		await userEvent.keyboard('{Tab}');
+		expect(screen.getByLabelText('File src/server.ts').textContent).toBe('@server.ts');
+		await userEvent.keyboard('{Enter}');
+		expect(onSend).toHaveBeenCalledWith('Review @src/server.ts', []);
 	});
 });

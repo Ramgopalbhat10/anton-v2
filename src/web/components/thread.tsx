@@ -4,6 +4,8 @@ import type { LucideIcon } from 'lucide-react';
 import {
 	Bot,
 	Braces,
+	Check,
+	Copy,
 	Camera,
 	ChevronDown,
 	ChevronRight,
@@ -20,10 +22,11 @@ import {
 	Wrench,
 	Zap,
 } from 'lucide-react';
-import { createContext, Fragment, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, Fragment, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
+import { Disclosure } from '@/components/disclosure';
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
-import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, outputUrl, type Session, type Usage } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
@@ -66,15 +69,31 @@ function browserStep(input: unknown) {
 	const target = <Em>{field(input, 'target')}</Em>;
 	switch (field(input, 'action')) {
 		case 'open':
-			return <>Opened <Em>{field(input, 'url')}</Em></>;
+			return (
+				<>
+					Opened <Em>{field(input, 'url')}</Em>
+				</>
+			);
 		case 'click':
 			return <>Clicked {target}</>;
 		case 'type':
-			return <>Typed <Em>{field(input, 'text')}</Em> into {target}</>;
+			return (
+				<>
+					Typed <Em>{field(input, 'text')}</Em> into {target}
+				</>
+			);
 		case 'select':
-			return <>Chose <Em>{field(input, 'text')}</Em> in {target}</>;
+			return (
+				<>
+					Chose <Em>{field(input, 'text')}</Em> in {target}
+				</>
+			);
 		case 'press':
-			return <>Pressed <Em>{field(input, 'key')}</Em></>;
+			return (
+				<>
+					Pressed <Em>{field(input, 'key')}</Em>
+				</>
+			);
 		case 'hover':
 			return <>Hovered over {target}</>;
 		case 'scroll':
@@ -99,9 +118,7 @@ function outputText(output: unknown): string {
 	const record = output as Record<string, unknown>;
 	if (typeof record.output === 'string') return record.output;
 	if (Array.isArray(record.content)) {
-		return record.content
-			.map((item) => (item && typeof item === 'object' && 'text' in item ? String((item as { text: unknown }).text) : ''))
-			.join('\n');
+		return record.content.map((item) => (item && typeof item === 'object' && 'text' in item ? String((item as { text: unknown }).text) : '')).join('\n');
 	}
 	return '';
 }
@@ -117,12 +134,33 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 			const offset = Number(field(input, 'offset')) || 0;
 			const limit = Number(field(input, 'limit')) || 0;
 			const range = limit ? `:${offset || 1}-${(offset || 1) + limit - 1}` : '';
-			return { icon: FileText, body: <>Read <Em>{field(input, 'path') + range}</Em></> };
+			return {
+				icon: FileText,
+				body: (
+					<>
+						Read <Em>{field(input, 'path') + range}</Em>
+					</>
+				),
+			};
 		}
 		case 'grep':
-			return { icon: Search, body: <>Searched <Em>{field(input, 'pattern')}</Em></> };
+			return {
+				icon: Search,
+				body: (
+					<>
+						Searched <Em>{field(input, 'pattern')}</Em>
+					</>
+				),
+			};
 		case 'glob':
-			return { icon: FolderSearch, body: <>Listed <Em>{field(input, 'pattern')}</Em></> };
+			return {
+				icon: FolderSearch,
+				body: (
+					<>
+						Listed <Em>{field(input, 'pattern')}</Em>
+					</>
+				),
+			};
 		case 'edit': {
 			const added = lineCount(field(input, 'newText'));
 			const removed = lineCount(field(input, 'oldText'));
@@ -146,7 +184,14 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 				),
 			};
 		case 'bash':
-			return { icon: SquareTerminal, body: <>Ran <Em>{field(input, 'command').split('\n')[0]}</Em></> };
+			return {
+				icon: SquareTerminal,
+				body: (
+					<>
+						Ran <Em>{field(input, 'command').split('\n')[0]}</Em>
+					</>
+				),
+			};
 		case 'run_script':
 			return { icon: Braces, body: <>Ran a script</> };
 		case 'task':
@@ -176,11 +221,25 @@ function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
 			};
 		}
 		case 'screenshot':
-			return { icon: Camera, body: <>Took a screenshot of <Em>{field(input, 'url')}</Em></> };
+			return {
+				icon: Camera,
+				body: (
+					<>
+						Took a screenshot of <Em>{field(input, 'url')}</Em>
+					</>
+				),
+			};
 		case 'browser':
 			return { icon: Globe, body: browserStep(input) };
 		default:
-			return { icon: Wrench, body: <>Called <Em>{part.toolName}</Em></> };
+			return {
+				icon: Wrench,
+				body: (
+					<>
+						Called <Em>{part.toolName}</Em>
+					</>
+				),
+			};
 	}
 }
 
@@ -205,20 +264,14 @@ function ThoughtRow({ part }: { part: ReasoningPart }) {
 	const words = part.text.trim().split(/\s+/).filter(Boolean).length;
 	return (
 		<>
-			<button
-				type="button"
-				onClick={() => setOpen((current) => !current)}
-				className="flex h-6 min-w-0 items-center gap-2 px-1 text-left"
-			>
+			<button type="button" onClick={() => setOpen((current) => !current)} className="flex h-6 min-w-0 items-center gap-2 px-1 text-left">
 				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
 				<span className="text-[12px] whitespace-nowrap text-(--text-tertiary)">
 					{part.state === 'streaming' ? 'Thinking…' : `Thought${words ? ` · ${words} words` : ''}`}
 				</span>
 			</button>
 			{open && part.text.trim() ? (
-				<div className="mx-1 mt-0.5 mb-1.5 ml-6 text-[12px] leading-[18px] whitespace-pre-wrap text-pretty text-(--text-tertiary)">
-					{part.text.trim()}
-				</div>
+				<div className="mx-1 mt-0.5 mb-1.5 ml-6 text-[12px] leading-[18px] whitespace-pre-wrap text-pretty text-(--text-tertiary)">{part.text.trim()}</div>
 			) : null}
 		</>
 	);
@@ -228,67 +281,115 @@ function ToolRow({ part }: { part: ToolPart }) {
 	const { icon, body } = describeTool(part);
 	const failed = part.state === 'output-error';
 	const script = part.toolName === 'run_script';
+	const expandable = script || part.toolName === 'bash';
+	const running = part.state === 'input-available';
+	const [open, setOpen] = useState(running);
+	const detailsId = useId();
+	useEffect(() => setOpen(running), [running]);
 	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
-	// A script shows its program, then what it gave back.
-	const command = script ? `${field(part.input, 'code').trim()}\n\n// Result` : `$ ${field(part.input, 'command')}`;
+	const command = script ? field(part.input, 'code').trim() : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
-	return (
+	const heading = (
 		<>
-			<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-[12px] text-(--text-tertiary)">
-				{part.state === 'input-available' ? (
-					<Spinner size={12} />
-				) : (
-					<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? 'text-(--danger-text)' : 'text-(--icon-tertiary)'} />
-				)}
-				<span className="truncate">{body}</span>
-			</div>
+			<span className="relative inline-flex size-3 shrink-0 items-center justify-center">
+				<span
+					className={
+						expandable
+							? 'inline-flex transition-opacity duration-(--duration-micro) group-hover/trace:opacity-0 group-focus-visible/trace:opacity-0'
+							: 'inline-flex'
+					}
+				>
+					{running ? (
+						<Spinner size={12} />
+					) : (
+						<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? 'text-(--danger-text)' : 'text-(--icon-tertiary)'} />
+					)}
+				</span>
+				{expandable ? (
+					<Icon
+						icon={ChevronRight}
+						size={12}
+						className="absolute inset-0 text-(--icon-tertiary) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) ease-(--ease-out) group-hover/trace:opacity-100 group-focus-visible/trace:opacity-100"
+						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
+					/>
+				) : null}
+			</span>
+			<span className="min-w-0 flex-1 truncate">{body}</span>
+		</>
+	);
+	const details = (
+		<>
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
 			{image ? (
 				<a href={outputUrl(sessionId, image)} target="_blank" rel="noreferrer" className="mx-1 mb-1 ml-6 block w-fit">
 					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-md border border-(--border-subtle)" />
 				</a>
 			) : null}
-			{output ? (
+			{output || (expandable && command) ? (
 				<div className="px-1 pt-1 pb-0.5">
 					<div className="max-h-56 overflow-auto rounded-md bg-(--bg-inset) px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">
-						{`${command}\n${output.split('\n').slice(-40).join('\n')}`}
+						{`${command}${output ? `${script ? '\n\n// Result' : ''}\n${output.split('\n').slice(-40).join('\n')}` : ''}`}
 					</div>
 				</div>
 			) : null}
 		</>
 	);
+	return (
+		<>
+			{expandable ? (
+				<button
+					type="button"
+					aria-expanded={open}
+					aria-controls={detailsId}
+					onClick={() => setOpen((current) => !current)}
+					className="group/trace flex h-6 min-w-0 items-center gap-2 rounded-md px-1 text-left text-[12px] text-(--text-tertiary) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus-ring)"
+				>
+					{heading}
+				</button>
+			) : (
+				<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-[12px] text-(--text-tertiary)">{heading}</div>
+			)}
+			{expandable ? (
+				<Disclosure open={open} id={detailsId}>
+					{details}
+				</Disclosure>
+			) : (
+				details
+			)}
+		</>
+	);
 }
 
-function StepsCard({ steps, live }: { steps: Step[]; live: boolean }) {
-	const [open, setOpen] = useState(true);
-	const tools = steps.filter((step): step is ToolPart => step.type === 'dynamic-tool');
-	const duration = tools.reduce((sum, step) => sum + (step.durationMs ?? 0), 0);
-	const label = live ? 'Working' : duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
+function StepsCard({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
+	const [open, setOpen] = useState(live);
+	const detailsId = useId();
+	useEffect(() => setOpen(live), [live]);
+	const label = live ? 'Working' : duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
 		<div className="overflow-hidden rounded-lg bg-(--bg-surface)">
 			<button
 				type="button"
+				aria-expanded={open}
+				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
 				className="flex h-[34px] w-full items-center gap-1.5 pr-3 pl-2 text-left hover:bg-(--bg-hover)"
 			>
-				<Icon icon={open ? ChevronDown : ChevronRight} className="text-(--icon-tertiary)" />
+				<Icon
+					icon={ChevronRight}
+					className="text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)"
+					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
+				/>
 				<div className="min-w-0 flex-auto truncate text-[12px] text-(--text-secondary)">{label}</div>
 				<div className="shrink-0 text-[11px] tracking-[0.04em] whitespace-nowrap text-(--text-disabled)">
 					{steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}
 				</div>
 			</button>
-			{open ? (
+			<Disclosure open={open} id={detailsId}>
 				<div className="flex flex-col gap-px px-2 pt-0.5 pb-2">
-					{steps.map((step, index) =>
-						step.type === 'reasoning' ? (
-							<ThoughtRow key={index} part={step} />
-						) : (
-							<ToolRow key={step.toolCallId} part={step} />
-						),
-					)}
+					{steps.map((step, index) => (step.type === 'reasoning' ? <ThoughtRow key={index} part={step} /> : <ToolRow key={step.toolCallId} part={step} />))}
 				</div>
-			) : null}
+			</Disclosure>
 		</div>
 	);
 }
@@ -327,7 +428,9 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 	return (
 		<div className="mx-auto flex w-full max-w-[700px] items-center gap-2 px-4 pt-2">
 			<Icon icon={ListChecks} size={12} className="text-(--accent-text)" />
-			<span className="min-w-0 flex-1 text-[12px] text-(--text-secondary)">Plan mode is on. Approve the plan to let Anton build it, or reply to change it.</span>
+			<span className="min-w-0 flex-1 text-[12px] text-(--text-secondary)">
+				Plan mode is on. Approve the plan to let Anton build it, or reply to change it.
+			</span>
 			<Btn size="sm" variant="primary" disabled={approving} onClick={() => void approve()}>
 				{approving ? 'Approving…' : 'Approve and build'}
 			</Btn>
@@ -372,9 +475,38 @@ function usageOf(message: FlueConversationMessage): Usage | null {
 	return usage && typeof usage.inputTokens === 'number' ? usage : null;
 }
 
+function CopyResponse({ text }: { text: string }) {
+	const [state, setState] = useState<'ready' | 'copied' | 'failed'>('ready');
+	useEffect(() => {
+		if (state === 'ready') return;
+		const timer = setTimeout(() => setState('ready'), 2000);
+		return () => clearTimeout(timer);
+	}, [state]);
+	return (
+		<IconBtn
+			size="xs"
+			icon={state === 'copied' ? Check : Copy}
+			label={state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed. Try again' : 'Copy response'}
+			disabled={!text}
+			onClick={() => {
+				void navigator.clipboard
+					.writeText(text)
+					.then(() => setState('copied'))
+					.catch(() => setState('failed'));
+			}}
+		/>
+	);
+}
+
 function AssistantMessage({ message, live }: { message: FlueConversationMessage; live: boolean }) {
 	const blocks = toBlocks(message.parts);
 	const usage = usageOf(message);
+	// This is the whole response's wall time, including model thinking, not tool execution time.
+	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
+	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
+	const copyText = blocks
+		.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : []))
+		.join('\n\n');
 	if (blocks.length === 0 && !live) return null;
 	return (
 		<div className="flex flex-col gap-3">
@@ -388,15 +520,17 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 				) : block.kind === 'plan' ? (
 					<PlanCard key={block.part.toolCallId} part={block.part} />
 				) : (
-					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} />
+					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
 				),
 			)}
-			{usage && !live ? (
-				<div
-					className="text-[11px] text-(--text-disabled)"
-					title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}
-				>
-					{tokens(usage.inputTokens + usage.outputTokens)} tokens · {dollars(usage.cost)}
+			{!live ? (
+				<div className="flex items-center gap-1.5">
+					<CopyResponse text={copyText} />
+					{usage ? (
+						<div className="text-[11px] text-(--text-disabled)" title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}>
+							{tokens(usage.inputTokens + usage.outputTokens)} tokens · {dollars(usage.cost)}
+						</div>
+					) : null}
 				</div>
 			) : null}
 		</div>
@@ -413,7 +547,10 @@ function Notice({ children }: { children: ReactNode }) {
 }
 
 function SettlementNotice({ message }: { message: FlueConversationMessage }) {
-	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('').trim();
+	const text = message.parts
+		.map((part) => (part.type === 'text' ? part.text : ''))
+		.join('')
+		.trim();
 	const verb = message.settlement?.outcome === 'aborted' ? 'was stopped' : 'failed';
 	return <Notice>{text || `The agent turn ${verb}. Send the message again to retry.`}</Notice>;
 }
@@ -423,9 +560,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const scroller = useRef<HTMLDivElement>(null);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
-	const messages = agent.messages.filter(
-		(message) => message.settlement || (message.display === 'visible' && message.role !== 'system'),
-	);
+	const messages = agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'));
 	const meta = session.data ? [session.data.repo, branchLabel(session.data)] : [];
 	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
 	const planned = Boolean(session.data?.planMode) && !busy && messages[messages.length - 1]?.role === 'assistant';
@@ -477,8 +612,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
 								{agent.error?.message
-								? `The agent turn failed: ${agent.error.message}`
-								: 'The agent turn failed. Check OPENROUTER_API_KEY or send the message again.'}
+									? `The agent turn failed: ${agent.error.message}`
+									: 'The agent turn failed. Check OPENROUTER_API_KEY or send the message again.'}
 							</Notice>
 						) : null}
 					</div>
