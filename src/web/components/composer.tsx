@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
-import { useSuggestions } from '@/components/suggestions';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
@@ -68,8 +68,6 @@ export function Composer({
 	const [notice, setNotice] = useState<string | null>(null);
 	const [stopping, setStopping] = useState(false);
 	const picker = useRef<HTMLInputElement>(null);
-	const box = useRef<HTMLTextAreaElement>(null);
-	const suggestions = useSuggestions({ text, setText, sessionId, box: () => box.current });
 	const attach = async (files: File[]) => {
 		if (files.length === 0) return;
 		const read = await readImages(files, MAX_IMAGES - images.length);
@@ -114,7 +112,7 @@ export function Composer({
 				setNotice(null);
 				try {
 					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
-					await onSend(expandCommand(text.trim(), saved.commands) || IMAGE_ONLY, sent);
+					await onSend(expandCommand(text.trim(), saved.commands, true) || IMAGE_ONLY, sent);
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
 					setText((current) => current || typed);
@@ -131,23 +129,11 @@ export function Composer({
 					void attach([...event.dataTransfer.files]);
 				}}
 			>
-				{suggestions.list ? <div className="absolute right-0 bottom-full left-0 mb-1.5">{suggestions.list}</div> : null}
 				{images.length > 0 ? <Thumbnails images={images} onRemove={(id) => setImages((current) => current.filter((image) => image.id !== id))} /> : null}
-				<textarea
-					ref={box}
+				<ComposerInput
 					value={text}
-					onChange={(event) => {
-						setText(event.target.value);
-						suggestions.track(event.target);
-					}}
-					onSelect={(event) => suggestions.track(event.currentTarget)}
-					onKeyDown={(event) => {
-						if (suggestions.onKeyDown(event)) return;
-						if (event.key === 'Enter' && !event.shiftKey) {
-							event.preventDefault();
-							event.currentTarget.form?.requestSubmit();
-						}
-					}}
+					onChange={setText}
+					sessionId={sessionId}
 					onPaste={(event) => {
 						const files = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
 						if (files.length === 0) return;
@@ -155,8 +141,6 @@ export function Composer({
 						void attach(files);
 					}}
 					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : 'Ask Anton to change the workspace'}
-					rows={2}
-					className="w-full resize-none border-0 bg-transparent p-0 text-[13px] leading-[19px] text-(--text-primary) outline-none"
 				/>
 				{blocked || blind || notice ? (
 					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
@@ -182,9 +166,7 @@ export function Composer({
 						<span className="truncate">{busy ? 'Send to the running agent' : 'Send'}</span>
 						<Kbd keys="enter" size="sm" />
 					</div>
-					{busy ? (
-						<IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} />
-					) : null}
+					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
 					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
 				</div>
 			</div>

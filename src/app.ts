@@ -15,7 +15,7 @@ import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels } from './services/models.ts';
-import { changesView, fileTree, outputsView, readFile, readOutputFile } from './services/files.ts';
+import { changesView, fileTree, projectFiles, outputsView, readFile, readOutputFile } from './services/files.ts';
 import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
@@ -227,7 +227,7 @@ app.put('/api/settings/marketplaces', async (c) => {
 	const input = await body(c, v.object({ marketplaces: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), v.maxLength(20)) }));
 	return c.json({ marketplaces: await setMarketplaces(input.marketplaces) });
 });
-app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '') }));
+app.get('/api/marketplaces/catalog', async (c) => c.json({ entries: await catalog(c.req.query('repo') ?? '', c.req.query('bundle')) }));
 app.post('/api/plugins', async (c) => {
 	const input = await body(
 		c,
@@ -339,6 +339,7 @@ app.delete('/api/automations/:id', async (c) => {
 	return c.json({ ok: true });
 });
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
+app.get('/api/projects/:id/files', async (c) => c.json({ paths: await projectFiles(c.req.param('id'), c.req.query('branch')) }));
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
 app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));

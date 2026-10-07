@@ -74,7 +74,7 @@ export type Plugin = {
 	installedAt: string;
 };
 
-export type CatalogItem = { id: string; name: string; description: string; source: PluginSource; skills: string[] | null; installed: boolean };
+export type CatalogItem = { id: string; name: string; description: string; source: PluginSource; skills: string[] | null; bundle?: string; browseable?: boolean; installed: boolean };
 
 export type SkillSummary = { name: string; description: string };
 
@@ -268,7 +268,7 @@ export const api = {
 	plugins: () => json<{ plugins: Plugin[]; marketplaces: string[] }>('/api/plugins'),
 	saveMarketplaces: (marketplaces: string[]) =>
 		json<{ marketplaces: string[] }>('/api/settings/marketplaces', { method: 'PUT', body: JSON.stringify({ marketplaces }) }),
-	catalog: (repo: string) => json<{ entries: CatalogItem[] }>(`/api/marketplaces/catalog?repo=${encodeURIComponent(repo)}`),
+	catalog: (repo: string, bundle?: string) => json<{ entries: CatalogItem[] }>(`/api/marketplaces/catalog?repo=${encodeURIComponent(repo)}${bundle ? `&bundle=${encodeURIComponent(bundle)}` : ''}`),
 	installPlugin: (input: { marketplace: string; name: string } | { address: string }) => post<{ plugins: Plugin[] }>('/api/plugins', input),
 	setPluginEnabled: (id: string, enabled: boolean) =>
 		json<{ plugins: Plugin[] }>(`/api/plugins/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
@@ -288,6 +288,8 @@ export const api = {
 	runAutomation: (id: string) => post<Automation>(`/api/automations/${id}/run`),
 	deleteAutomation: async (id: string) => void (await request(`/api/automations/${id}`, { method: 'DELETE' })),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
+	projectFiles: (projectId: string, branch?: string) =>
+		json<{ paths: string[] }>(`/api/projects/${projectId}/files${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
 	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),

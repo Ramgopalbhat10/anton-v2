@@ -24,9 +24,13 @@ export function matchPaths(paths: string[], query: string, limit = SHOWN): strin
 /** Where a saved command's prompt takes what is typed after `/name`. */
 export const ARGUMENTS = '$ARGUMENTS';
 
-/** `/name what follows` becomes the saved prompt with what follows in place of $ARGUMENTS; any other message is left as it is. */
-export function expandCommand(text: string, commands: Array<{ name: string; prompt: string }>): string {
+/** Expands saved commands on send. Rich composers retain even commands without $ARGUMENTS as chips until submission. */
+export function expandCommand(text: string, commands: Array<{ name: string; prompt: string }>, keepCommands = false): string {
 	const match = /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
-	const command = match && commands.find((item) => item.name === match[1] && item.prompt.includes(ARGUMENTS));
-	return command ? command.prompt.replaceAll(ARGUMENTS, (match[2] ?? '').trim()) : text;
+	const command = match && commands.find((item) => item.name === match[1] && (keepCommands || item.prompt.includes(ARGUMENTS)));
+	return command
+		? command.prompt.includes(ARGUMENTS)
+			? command.prompt.replaceAll(ARGUMENTS, (match[2] ?? '').trim())
+			: [command.prompt, (match[2] ?? '').trim()].filter(Boolean).join('\n\n')
+		: text;
 }

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Plugin } from '@/lib/api';
+import type { CatalogItem, Plugin } from '@/lib/api';
 
 const installed: Plugin = {
 	id: 'plugin_1',
@@ -24,9 +24,23 @@ const api = vi.hoisted(() => ({
 	plugins: vi.fn(async () => ({ plugins: [] as Plugin[], marketplaces: ['anthropics/skills', 'CognitionAI/devin-marketplace'] })),
 	catalog: vi.fn(async () => ({
 		entries: [
-			{ id: 'plugin_1', name: 'document-skills', description: 'Documents', source: { repo: 'anthropics/skills', path: '', ref: 'abc' }, skills: ['./skills/pdf'], installed: false },
-			{ id: 'plugin_2', name: 'claude-api', description: 'The Claude API', source: { repo: 'anthropics/skills', path: '', ref: 'abc' }, skills: null, installed: false },
-		],
+			{
+				id: 'plugin_1',
+				name: 'document-skills',
+				description: 'Documents',
+				source: { repo: 'anthropics/skills', path: '', ref: 'abc' },
+				skills: ['./skills/pdf'],
+				installed: false,
+			},
+			{
+				id: 'plugin_2',
+				name: 'claude-api',
+				description: 'The Claude API',
+				source: { repo: 'anthropics/skills', path: '', ref: 'abc' },
+				skills: null,
+				installed: false,
+			},
+		] as CatalogItem[],
 	})),
 	installPlugin: vi.fn(async () => ({ plugins: [] as Plugin[] })),
 	setPluginEnabled: vi.fn(async () => ({ plugins: [] as Plugin[] })),
@@ -47,7 +61,7 @@ function open() {
 }
 
 describe('Skills settings', () => {
-	it("browses a marketplace and installs a plugin from it, then shows it with its skills", async () => {
+	it('browses a marketplace and installs a plugin from it, then shows it with its skills', async () => {
 		api.installPlugin.mockResolvedValueOnce({ plugins: [installed] });
 		open();
 		expect(await screen.findByText('Nothing installed yet.')).toBeTruthy();
@@ -67,4 +81,37 @@ describe('Skills settings', () => {
 		fireEvent.click(screen.getByRole('tab', { name: 'CognitionAI/devin-marketplace' }));
 		await vi.waitFor(() => expect(api.catalog).toHaveBeenCalledWith('CognitionAI/devin-marketplace'));
 	});
+});
+
+it('browses individual skills from a bundle in another repository before installing one', async () => {
+	api.catalog.mockResolvedValueOnce({
+		entries: [
+			{
+				id: 'remote',
+				name: 'remote',
+				description: 'Remote skills',
+				source: { repo: 'acme/remote', path: '', ref: 'abc' },
+				skills: null,
+				installed: false,
+				browseable: true,
+			},
+		],
+	});
+	api.catalog.mockResolvedValueOnce({
+		entries: [
+			{
+				id: 'pdf',
+				name: 'remote/pdf',
+				bundle: 'remote',
+				description: 'PDF skill',
+				source: { repo: 'acme/remote', path: 'skills/pdf', ref: 'abc' },
+				skills: null,
+				installed: false,
+			},
+		],
+	});
+	open();
+	fireEvent.click(await screen.findByRole('button', { name: 'Browse skills in remote' }));
+	expect(await screen.findByRole('button', { name: 'Install remote/pdf' })).toBeTruthy();
+	expect(api.catalog).toHaveBeenCalledWith('anthropics/skills', 'remote');
 });

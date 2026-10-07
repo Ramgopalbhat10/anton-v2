@@ -79,6 +79,14 @@ const trees: Record<Source, (ctx: Context) => Promise<Omit<FileTree, 'source' | 
 	base: async (ctx) => ({ paths: await baseTree(ctx.repo, ctx.baseSha), changes: [] }),
 };
 
+/** Files offered before a task exists, from the selected repository branch. Never acquires a machine. */
+export async function projectFiles(projectId: string, branch?: string): Promise<string[]> {
+	const project = await getProject(projectId);
+	if (!project) throw new NotFoundError('Project not found');
+	const sha = await getProviders().git.resolveRef(project.repoFullName, branch || project.defaultBranch);
+	return baseTree(project.repoFullName, sha);
+}
+
 export async function fileTree(id: string): Promise<FileTree> {
 	const ctx = await context(id);
 	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, ...(await trees[ctx.source](ctx)) };

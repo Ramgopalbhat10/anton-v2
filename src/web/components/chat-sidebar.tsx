@@ -80,7 +80,7 @@ export function ChatSidebar({
 	return (
 		<aside
 			className={cn(
-				'w-60 min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-(--bg-surface)',
+				'w-64 min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-(--bg-surface)',
 				open ? 'fixed inset-y-0 left-0 z-30 flex shadow-(--shadow-modal) md:static md:shadow-none' : 'hidden md:flex',
 			)}
 		>

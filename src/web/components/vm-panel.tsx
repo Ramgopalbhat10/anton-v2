@@ -1,5 +1,6 @@
-import { ArrowUpRight, Check, ChevronRight, PanelRight, Plus, X } from 'lucide-react';
+import { Check, FileDiff, Files, Globe, History, Library, Maximize2, Minimize2, PanelRight, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { WorkspacePane } from '@/components/workspace-pane';
 import { FilesTab } from '@/components/files-tab';
 import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
@@ -11,12 +12,12 @@ import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
 export const panels = [
-	{ name: 'Changes', desc: 'Every file the agent edited, as a diff' },
-	{ name: 'Terminal', desc: 'The sandbox shell and its command output' },
-	{ name: 'Files', desc: 'Browse the repository on the task branch' },
-	{ name: 'Preview', desc: 'The app the agent is running, live from the sandbox' },
-	{ name: 'Library', desc: 'Reports, screenshots and exports the agent saved' },
-	{ name: 'History', desc: 'Earlier states of the files, to compare or restore' },
+	{ name: 'Changes', icon: FileDiff, desc: 'Every file the agent edited, as a diff' },
+	{ name: 'Terminal', icon: SquareTerminal, desc: 'The sandbox shell and its command output' },
+	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
+	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
+	{ name: 'Library', icon: Library, desc: 'Reports, screenshots and exports the agent saved' },
+	{ name: 'History', icon: History, desc: 'Earlier states of the files, to compare or restore' },
 ] as const;
 
 export type PanelName = (typeof panels)[number]['name'];
@@ -30,42 +31,32 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	History: HistoryTab,
 };
 
-function PanelTab({
-	name,
-	count,
-	active,
-	onSelect,
-	onClose,
-}: {
-	name: PanelName;
-	count?: number;
-	active: boolean;
-	onSelect: () => void;
-	onClose: () => void;
-}) {
+function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
+	const panel = panels.find((panel) => panel.name === name)!;
 	return (
-		<div className="group relative flex h-7 shrink-0 items-center rounded-lg hover:bg-(--bg-hover)">
+		<div className="sg-panel-tab relative flex h-7 shrink-0 items-center rounded-lg hover:bg-(--bg-hover)">
 			{active ? <div className="absolute inset-0 rounded-lg bg-(--bg-overlay)" /> : null}
 			<button
 				type="button"
 				role="tab"
 				aria-selected={active}
 				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-lg pl-2.5 outline-none focus-visible:shadow-(--focus-ring)"
+				className="relative flex h-full items-center gap-1.5 rounded-lg px-1.5 outline-none focus-visible:shadow-(--focus-ring)"
 			>
+				<span className="sg-panel-icon inline-flex size-4 shrink-0 items-center justify-center text-(--icon-secondary) transition-opacity duration-(--duration-micro)">
+					<Icon icon={panel.icon} size={12} />
+				</span>
 				<span className="text-[12px] whitespace-nowrap text-(--text-secondary)">{name}</span>
 				{count ? <span className="text-[11px] text-(--text-tertiary)">{count}</span> : null}
 			</button>
-			<span className="relative mr-1.5 ml-1.5 inline-flex size-4 shrink-0 items-center justify-center">
-				<button
-					type="button"
-					aria-label={`Close ${name}`}
-					onClick={onClose}
-					className="hidden size-4 items-center justify-center rounded-sm bg-(--alpha-white-9) text-(--text-secondary) group-focus-within:inline-flex group-hover:inline-flex hover:bg-(--alpha-white-14) hover:text-(--text-primary)"
-				>
-					<Icon icon={X} size={10} />
-				</button>
-			</span>
+			<button
+				type="button"
+				aria-label={`Close ${name}`}
+				onClick={onClose}
+				className="sg-panel-close absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-(--text-secondary) opacity-0 outline-none hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+			>
+				<Icon icon={X} size={12} />
+			</button>
 		</div>
 	);
 }
@@ -110,7 +101,7 @@ export function VmPanel({
 	const View = current ? VIEWS[current] : null;
 
 	return (
-		<section className="flex min-w-0 flex-[1_1_46%] flex-col overflow-hidden border-(--border-subtle) md:min-w-[280px] md:border-l">
+		<WorkspacePane expanded={expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
 				<div data-noscrollbar role="tablist" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
 					{tabs.map((name) => (
@@ -137,6 +128,7 @@ export function VmPanel({
 									onSelect={() => show(panel.name)}
 									className="flex items-start gap-2 rounded-md px-2 py-1.5 outline-none data-highlighted:bg-(--bg-hover)"
 								>
+									<Icon icon={panel.icon} size={14} className="mt-0.5 text-(--icon-secondary)" />
 									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<div className="text-[13px] text-(--text-primary)">{panel.name}</div>
 										<div className="text-[12px] text-pretty text-(--text-tertiary)">{panel.desc}</div>
@@ -151,17 +143,22 @@ export function VmPanel({
 						</MenuContent>
 					</Menu>
 					<IconBtn
-						icon={expanded ? ChevronRight : ArrowUpRight}
+						icon={expanded ? Minimize2 : Maximize2}
 						size="sm"
 						label={expanded ? 'Restore the conversation' : 'Expand workspace'}
 						onClick={onToggleExpanded}
-						className="hidden md:inline-flex"
+						className="hidden @min-[700px]/workspace:inline-flex"
 					/>
 					<IconBtn icon={PanelRight} size="sm" label="Hide workspace" onClick={onClose} />
 				</div>
 			</div>
 
-			<div className={cn('min-h-0 flex-1', current === 'Terminal' || current === 'Preview' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3')}>
+			<div
+				className={cn(
+					'min-h-0 flex-1',
+					current === 'Terminal' || current === 'Preview' || current === 'Files' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
+				)}
+			>
 				{current === null ? (
 					<div className="flex min-h-full items-center justify-center px-2 py-6">
 						<div className="flex w-full max-w-80 flex-col gap-0.5">
@@ -179,8 +176,8 @@ export function VmPanel({
 						</div>
 					</div>
 				) : null}
-				{View ? <View sessionId={sessionId} /> : null}
+				{View ? <View key={sessionId} sessionId={sessionId} /> : null}
 			</div>
-		</section>
+		</WorkspacePane>
 	);
 }

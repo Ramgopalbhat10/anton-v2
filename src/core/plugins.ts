@@ -22,6 +22,10 @@ export type CatalogEntry = {
 	source: PluginSource;
 	/** Skill folders the marketplace names for this plugin, when it names them. */
 	skills: string[] | null;
+	/** The bundle this individually installable skill belongs to. */
+	bundle?: string;
+	/** Skills in a separate repository can be fetched on demand. */
+	browseable?: boolean;
 };
 
 export type SkillFile = { text: string } | { base64: string };
@@ -152,7 +156,8 @@ async function readJson(files: RepoFiles, path: string): Promise<Record<string, 
 	}
 }
 
-const asList = (value: unknown): string[] => (typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []);
+const asList = (value: unknown): string[] =>
+	typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
 
 /** The manifest at a plugin's folder, first found in Devin's order. */
 async function manifestAt(files: RepoFiles, dir: string): Promise<Record<string, unknown> | null> {
@@ -184,7 +189,7 @@ export async function readPlugin(files: RepoFiles, dir: string, named: string[] 
 	const manifest = await manifestAt(files, dir);
 	const listed = named ?? (manifest && 'skills' in manifest ? asList(manifest.skills) : ['skills']);
 	const folders = [...new Set(listed.flatMap((path) => skillFolders(paths, join(dir, path))))];
-	if (folders.length === 0 && !named) folders.push(...skillFolders(paths, dir).filter((folder) => folder === join(dir)));
+	if (folders.length === 0 && !named) folders.push(...skillFolders(paths, dir));
 	const skills: ParsedSkill[] = [];
 	const skipped: string[] = [];
 	for (const folder of folders) {
@@ -198,10 +203,50 @@ export async function readPlugin(files: RepoFiles, dir: string, named: string[] 
 	return { name, description, skills, mcpServers: await mcpServerNames(files, dir, manifest), skipped };
 }
 
+/** Enumerates a local bundle without fetching its supporting files. */
+async function withIndividualSkills(files: RepoFiles, marketplace: PluginSource, entries: CatalogEntry[]): Promise<CatalogEntry[]> {
+	const result: CatalogEntry[] = [];
+	const paths = new Set(files.paths);
+	for (const entry of entries) {
+		if (entry.source.repo !== marketplace.repo || entry.source.ref !== marketplace.ref) {
+			result.push({ ...entry, browseable: true });
+			continue;
+		}
+		result.push(entry);
+		const manifest = await manifestAt(files, entry.source.path);
+		const listed = entry.skills ?? (manifest && 'skills' in manifest ? asList(manifest.skills) : ['skills']);
+		let folders = [...new Set(listed.flatMap((path) => skillFolders(paths, join(entry.source.path, path))))];
+		if (!folders.length && !entry.skills) folders = skillFolders(paths, entry.source.path);
+		const taken = new Set<string>();
+		const children: CatalogEntry[] = [];
+		for (const folder of folders) {
+			// A standalone skill already has its own install action.
+			if (folder === join(entry.source.path)) continue;
+			const bytes = await files.read(join(folder, 'SKILL.md'));
+			if (!bytes) continue;
+			const { data } = parseFrontMatter(text(bytes));
+			const name = str(data.name) || baseName(folder);
+			const description = str(data.description);
+			if (!SKILL_NAME.test(name) || name.length > 64 || !description || description.length > MAX_DESCRIPTION) continue;
+			if (taken.has(name)) continue;
+			taken.add(name);
+			children.push({ name: `${entry.name}/${name}`, description, source: { ...entry.source, path: folder }, skills: null, bundle: entry.name });
+		}
+		result.push(...children.sort((a, b) => a.name.localeCompare(b.name)));
+	}
+	return result;
+}
+
+/** Individual skills of a bundle, with the source's own files already fetched. */
+export async function readCatalogBundle(files: RepoFiles, entry: CatalogEntry): Promise<CatalogEntry[]> {
+	return (await withIndividualSkills(files, entry.source, [entry])).slice(1);
+}
+
 /** A GitHub repository and folder from a URL or `owner/repo[/path]`, or null for anything else. */
 export function parseGitHub(input: string): { repo: string; path: string; ref: string | null } | null {
 	const value = input.trim().replace(/\.git$/, '');
-	const url = /^(?:https?:\/\/)?(?:www\.)?github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/tree\/([^/]+)(?:\/(.*))?)?\/?$/.exec(value) ??
+	const url =
+		/^(?:https?:\/\/)?(?:www\.)?github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/tree\/([^/]+)(?:\/(.*))?)?\/?$/.exec(value) ??
 		/^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?()()$/.exec(value);
 	if (url) return { repo: `${url[1]}/${url[2]}`, path: join(url[4] ?? ''), ref: url[3] || null };
 	const short = /^([\w.-]+)\/([\w.-]+)((?:\/[^/]+)*)\/?$/.exec(value);
@@ -254,10 +299,12 @@ export async function readCatalog(files: RepoFiles, marketplace: PluginSource): 
 			const skills = plugin.strict === false || 'skills' in plugin ? asList(plugin.skills) : null;
 			entries.push({ name: str(plugin.name), description: str(plugin.description), source, skills: skills && skills.length ? skills : null });
 		}
-		return entries;
+		return withIndividualSkills(files, marketplace, entries);
 	}
 	const devin = await readJson(files, join(marketplace.path, '.devin-plugin/plugin.json'));
-	const listed = devin ? [...(Array.isArray(devin.requiredPlugins) ? devin.requiredPlugins : []), ...(Array.isArray(devin.optionalPlugins) ? devin.optionalPlugins : [])] : [];
+	const listed = devin
+		? [...(Array.isArray(devin.requiredPlugins) ? devin.requiredPlugins : []), ...(Array.isArray(devin.optionalPlugins) ? devin.optionalPlugins : [])]
+		: [];
 	if (listed.length) {
 		const entries: CatalogEntry[] = [];
 		for (const raw of listed) {
@@ -272,10 +319,14 @@ export async function readCatalog(files: RepoFiles, marketplace: PluginSource): 
 				skills: null,
 			});
 		}
-		return entries;
+		return withIndividualSkills(files, marketplace, entries);
 	}
 	const plugin = await readPlugin(files, marketplace.path);
-	return plugin.skills.length ? [{ name: plugin.name, description: plugin.description, source: marketplace, skills: null }] : [];
+	return plugin.skills.length
+		? withIndividualSkills(files, marketplace, [
+				{ name: plugin.name || baseName(marketplace.repo), description: plugin.description, source: marketplace, skills: null },
+			])
+		: [];
 }
 
 /** A repository's own skills: `.agents/skills`, which every agent reads, then `.claude/skills` for names not taken. */

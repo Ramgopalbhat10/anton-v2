@@ -144,9 +144,9 @@ export function SessionPage() {
 
 	return (
 		<SendToAgent.Provider value={send}>
-			<div className="flex min-h-0 flex-1">
+			<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
 				{centerVisible ? (
-					<div className={open ? 'hidden min-h-0 min-w-[340px] flex-[1_1_54%] flex-col md:flex' : 'flex min-h-0 min-w-0 flex-1 flex-col'}>
+					<div className={open ? 'hidden min-h-0 min-w-0 flex-1 flex-col @min-[700px]/workspace:flex' : 'flex min-h-0 min-w-0 flex-1 flex-col'}>
 						<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 							<MenuButton />
 							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
