@@ -1,35 +1,178 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight } from 'lucide-react';
+import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { lastDays, Sparkline } from '@/components/charts';
+import { SandboxArt } from '@/components/illustrations';
+import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, TickGauge, usedTone, Well } from '@/components/instrument';
 import { Icon } from '@/components/signal';
+import { isLive } from '@/components/task-status';
 import { api } from '@/lib/api';
-import { dollars } from '@/lib/format';
+import { age, dollars } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { size } from './parts';
 import { GROUPS, SECTIONS } from './sections';
 
-function Stat({ label, value }: { label: string; value: string | undefined }) {
+function Open({ section, children }: { section: string; children: ReactNode }) {
 	return (
-		<div className="flex flex-col gap-1 px-3 py-2.5">
-			<div className="text-[11px] font-medium tracking-[0.06em] text-(--text-disabled) uppercase">{label}</div>
-			<div className="text-[16px] font-medium tabular-nums">{value ?? '…'}</div>
-		</div>
+		<Link
+			to="/settings/$section"
+			params={{ section }}
+			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-[12px] font-medium text-(--text-secondary) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+		>
+			{children}
+			<Icon icon={ArrowUpRight} size={12} />
+		</Link>
 	);
 }
 
-function Stats() {
+/** Today's spend against the daily cap, and the shape of the last 30 days. */
+function SpendCard() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget() });
-	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
-	const storage = useQuery({ queryKey: ['storage'], queryFn: api.storage });
-	const projects = useProjects();
-	const running = sessions.data?.sessions.filter((session) => session.status === 'running').length;
+	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage });
+	const today = budget.data?.today ?? 0;
+	const cap = budget.data?.limits.dailyUsd ?? null;
+	const used = cap ? today / cap : 0;
+	const days = lastDays(30);
+	const trend = days.map((day) => ({ key: day, value: (usage.data?.daily ?? []).filter((row) => row.day === day).reduce((sum, row) => sum + row.cost, 0) }));
 	return (
-		<div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-0.5 rounded-lg border border-(--border-subtle) bg-(--bg-surface) p-1">
-			<Stat label="Spent today" value={budget.data && dollars(budget.data.today)} />
-			<Stat label="Sandboxes running" value={running?.toString()} />
-			<Stat label="Repositories" value={projects.data?.projects.length.toString()} />
-			<Stat label="Storage" value={storage.data && size(storage.data.bytes)} />
-		</div>
+		<Card
+			icon={Activity}
+			title="Spend today"
+			sub="all tasks"
+			status={cap === null ? <Status>No cap</Status> : <Status tone={usedTone(used)}>{Math.round(used * 100)}% of cap</Status>}
+			footer={
+				<CardFooter caption="Resets at midnight">
+					<Open section="usage">Usage</Open>
+				</CardFooter>
+			}
+		>
+			<CardSection ruled={false} className="pt-1">
+				<Figure value={budget.data ? dollars(today) : '…'} unit={cap !== null ? `of $${cap}` : undefined} />
+				{cap !== null ? (
+					<TickGauge
+						label="Today's spend against the daily cap"
+						value={today}
+						max={cap}
+						tone={usedTone(used)}
+						markers={[{ at: cap * 0.8, label: 'warn', tone: 'warning' }]}
+						scale={['$0', `$${cap}`]}
+					/>
+				) : null}
+			</CardSection>
+			<CardSection label="Last 30 days" hint={usage.data ? dollars(usage.data.month) + ' this month' : undefined}>
+				<Sparkline values={trend} label="Spend per day over the last 30 days" />
+			</CardSection>
+		</Card>
+	);
+}
+
+/** Tasks by state, and how many hold a sandbox right now. */
+function TasksCard() {
+	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
+	const all = sessions.data?.sessions ?? [];
+	const running = all.filter((session) => session.status === 'running').length;
+	const parts: Part[] = [
+		{ key: 'live', label: 'Running', value: all.filter(isLive).length, color: 'var(--accent-base)' },
+		{ key: 'stopped', label: 'Stopped', value: all.filter((session) => !isLive(session) && session.status !== 'error').length, color: 'var(--neutral-500)' },
+		{ key: 'failed', label: 'Failed', value: all.filter((session) => session.status === 'error').length, color: 'var(--danger-base)' },
+	];
+	return (
+		<Card
+			icon={Box}
+			title="Sandboxes"
+			sub="running now"
+			status={running ? <Status tone="success" pulse>Live</Status> : <Status>Idle</Status>}
+			footer={
+				<CardFooter caption={`${all.length} tasks in all`}>
+					<Open section="compute">Compute</Open>
+				</CardFooter>
+			}
+		>
+			<CardSection ruled={false} className="pt-1">
+				<Figure value={sessions.data ? String(running) : '…'} unit={running === 1 ? 'sandbox' : 'sandboxes'} />
+				<SplitBar label="Tasks by state" parts={parts} />
+			</CardSection>
+			<CardSection className="flex-1 pt-3">
+				{running ? (
+					<div className="flex flex-col gap-1">
+						{all
+							.filter((session) => session.status === 'running')
+							.slice(0, 4)
+							.map((session) => (
+								<Link
+									key={session.id}
+									to="/agents/$sessionId"
+									params={{ sessionId: session.id }}
+									search={{ app: 'code' }}
+									className="flex min-h-8 items-center gap-2 rounded-lg px-1 text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+								>
+									<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--success-base)" />
+									<span className="min-w-0 flex-1 truncate">{session.title}</span>
+									<Caption className="tracking-normal normal-case">{age(session.createdAt)}</Caption>
+								</Link>
+							))}
+					</div>
+				) : (
+					<Well grid className="flex flex-1 items-center justify-center py-3">
+						<SandboxArt className="w-[150px]" />
+					</Well>
+				)}
+			</CardSection>
+		</Card>
+	);
+}
+
+/** Repositories, ranked by how many tasks have worked on each. */
+function ReposCard() {
+	const projects = useProjects();
+	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
+	const counts = (projects.data?.projects ?? [])
+		.map((project) => ({ project, tasks: (sessions.data?.sessions ?? []).filter((session) => session.projectId === project.id).length }))
+		.sort((a, b) => b.tasks - a.tasks);
+	const most = Math.max(1, ...counts.map((entry) => entry.tasks));
+	return (
+		<Card
+			icon={Folder}
+			title="Repositories"
+			sub="by tasks"
+			footer={
+				<CardFooter caption="Each with its own settings">
+					<Open section="repos">Repositories</Open>
+				</CardFooter>
+			}
+		>
+			<CardSection ruled={false} className="gap-1 pt-1">
+				<Figure value={projects.data ? String(projects.data.projects.length) : '…'} unit={projects.data?.projects.length === 1 ? 'repository' : 'repositories'} />
+				{counts.slice(0, 3).map(({ project, tasks }) => (
+					<ShareRow key={project.id} label={project.repoFullName.split('/').pop()} sub={project.repoFullName.split('/')[0]} share={tasks / most} value={`${tasks} ${tasks === 1 ? 'task' : 'tasks'}`} />
+				))}
+			</CardSection>
+		</Card>
+	);
+}
+
+function StorageCard() {
+	const storage = useQuery({ queryKey: ['storage'], queryFn: api.storage });
+	const data = storage.data;
+	return (
+		<Card
+			icon={HardDrive}
+			title="Storage"
+			sub="checkpoints and files"
+			footer={
+				<CardFooter caption={data?.lastCleanup ? `Cleaned ${age(data.lastCleanup.at)} ago` : 'Cleans up daily'}>
+					<Open section="storage">Storage</Open>
+				</CardFooter>
+			}
+		>
+			<CardSection ruled={false} className="pt-1">
+				<Figure value={data ? size(data.bytes) : '…'} unit={data ? `${data.objects.toLocaleString()} objects` : undefined} />
+				<Caption className="tracking-normal normal-case">
+					{data?.lastCleanup ? `Last cleanup freed ${size(data.lastCleanup.freedBytes)} from ${data.lastCleanup.removed} objects.` : 'Nothing cleaned up yet.'}
+				</Caption>
+			</CardSection>
+		</Card>
 	);
 }
 
@@ -37,38 +180,41 @@ function Stats() {
 export function SettingsOverview() {
 	return (
 		<div className="flex flex-col gap-6">
-			<div className="flex flex-col gap-1.5">
-				<h1 className="m-0 text-[24px] leading-[30px] font-semibold tracking-[-0.022em]">Settings</h1>
-				<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">
+			<div className="flex flex-col gap-2">
+				<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
+				<p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">
 					Anton runs every task in its own sandbox, on its own branch. What you set here decides what it may spend, which repositories it works on,
 					and what it keeps between tasks.
 				</p>
 			</div>
-			<Stats />
+			<div className="grid gap-3 sm:grid-cols-2">
+				<SpendCard />
+				<TasksCard />
+				<ReposCard />
+				<StorageCard />
+			</div>
 			{GROUPS.map((group) => (
-				<section key={group.id} className="flex flex-col gap-2.5">
-					<div className="flex flex-col gap-1">
-						<h2 className="m-0 text-[16px] font-semibold tracking-[-0.011em]">{group.label}</h2>
-						<p className="m-0 text-[13px] text-pretty text-(--text-tertiary)">{group.desc}</p>
-					</div>
-					<div className="flex flex-col gap-0.5 rounded-lg border border-(--border-subtle) bg-(--bg-surface) p-1">
+				<Card key={group.id} title={group.label} sub={group.desc}>
+					<nav aria-label={group.label} className="grid gap-px px-1.5 pb-1.5 sm:grid-cols-2">
 						{SECTIONS.filter((section) => section.group === group.id).map((section) => (
 							<Link
 								key={section.id}
 								to="/settings/$section"
 								params={{ section: section.id }}
-								className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+								className="group/row flex min-h-14 items-center gap-3 rounded-[10px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 							>
-								<Icon icon={section.icon} className="text-(--icon-secondary)" />
+								<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[9px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary) group-hover/row:text-(--accent-text)">
+									<Icon icon={section.icon} size={14} />
+								</span>
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 									<div className="truncate text-[13px] font-medium">{section.label}</div>
-									<div className="truncate text-[12px] text-(--text-tertiary)">{section.desc}</div>
+									<div className="line-clamp-2 text-[12px] leading-4 text-(--text-tertiary)">{section.desc}</div>
 								</div>
-								<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
+								<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled) group-hover/row:text-(--icon-secondary)" />
 							</Link>
 						))}
-					</div>
-				</section>
+					</nav>
+				</Card>
 			))}
 		</div>
 	);

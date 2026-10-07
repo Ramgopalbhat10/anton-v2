@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { session } from './render';
 
@@ -38,8 +38,8 @@ describe('Tasks and Reviews', () => {
 		});
 		open('/tasks');
 		expect(await screen.findByText('Fix flaky upload retry')).toBeTruthy();
-		expect(screen.getByText('$1.50')).toBeTruthy();
-		expect(screen.getAllByText('Failed')).toHaveLength(2); // the filter and the task's state
+		expect(within(screen.getByText('Fix flaky upload retry').closest('a')!).getByText('$1.50')).toBeTruthy();
+		expect(screen.getAllByText('Failed')).toHaveLength(3); // the filter, the summary's legend and the task's state
 
 		fireEvent.click(screen.getByRole('button', { name: 'Pull request' }));
 		expect(screen.queryByText('Fix flaky upload retry')).toBeNull();
@@ -63,7 +63,7 @@ describe('Tasks and Reviews', () => {
 		expect(await screen.findByText('Waiting on you')).toBeTruthy();
 		expect(screen.getByText(/acme\/web #7 · .* · 2 passed/)).toBeTruthy();
 		expect(screen.getByText('3')).toBeTruthy();
-		expect(screen.getByText('Merged')).toBeTruthy();
+		expect(screen.getAllByText('Merged').length).toBeGreaterThan(0);
 		expect(screen.queryByText('Failing checks')).toBeNull();
 	});
 });

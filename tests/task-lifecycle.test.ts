@@ -117,7 +117,7 @@ const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint }
 const { assertWithinBudget, budget, setLimits } = await import('../src/services/budget.ts');
 const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
 const { restoreCheckpoint } = await import('../src/services/restore.ts');
-const { toUsage, usageView } = await import('../src/services/usage.ts');
+const { dayKey, toUsage, usageView } = await import('../src/services/usage.ts');
 const { connections } = await import('../src/services/connections.ts');
 const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox-settings.ts');
 const { rebuildPreparedImage } = await import('../src/services/projects.ts');
@@ -590,6 +590,10 @@ test('spend this month breaks down by repository and model, and outlives a delet
 	assert.ok(Math.abs((repo?.cost ?? 0) - 0.5) < 1e-9);
 	assert.ok(view.byModel.some((row) => row.key === 'openrouter/plain/no-reasoning' && Math.abs(row.cost - 0.5) < 1e-9));
 	assert.ok(view.month >= view.today && view.today >= 0.5);
+	const today = view.daily.filter((row) => row.day === dayKey(new Date()) && row.model === 'openrouter/plain/no-reasoning');
+	assert.equal(today.length, 1, 'one row per day and model');
+	assert.ok(Math.abs(today[0].cost - 0.5) < 1e-9);
+	assert.equal(today[0].tokens, 165);
 });
 
 test('connections are checked through the ports, and Compute lists and stops running sandboxes', async () => {

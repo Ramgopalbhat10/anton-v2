@@ -200,7 +200,9 @@ export type Limits = { dailyUsd: number | null; taskUsd: number | null };
 export type Budget = { limits: Limits; today: number; task: number | null; blocked: string | null };
 /** Spend this month by one key; `key` is null for a removed repository or spend logged before it was recorded. */
 export type SpendRow = { key: string | null; tokens: number; cost: number };
-export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[] };
+/** One model's spend on one of the last 30 days (`YYYY-MM-DD`, server time); days with nothing spent are left out. */
+export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };

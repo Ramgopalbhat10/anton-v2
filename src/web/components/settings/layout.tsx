@@ -89,7 +89,7 @@ export function SettingsLayout() {
 			<div className="flex min-h-0 flex-1">
 				<Nav />
 				<div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-4 pb-12 md:px-6">
-					<div className={cn('flex flex-col gap-6', wide ? 'max-w-[1080px]' : 'max-w-[760px]')}>
+					<div className={cn('flex flex-col gap-6', wide ? 'max-w-[1080px]' : 'max-w-[820px]')}>
 						<Outlet />
 					</div>
 				</div>

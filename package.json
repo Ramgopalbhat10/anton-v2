@@ -29,6 +29,7 @@
 		"@modelcontextprotocol/client": "^2.0.0",
 		"@pierre/diffs": "^1.4.2",
 		"@pierre/trees": "1.0.0-beta.6",
+		"@tanstack/charts": "^1.0.0",
 		"@tanstack/react-query": "^5.90.2",
 		"@tanstack/react-router": "^1.131.36",
 		"@xterm/addon-fit": "^0.10.0",

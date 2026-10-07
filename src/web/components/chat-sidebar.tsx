@@ -45,6 +45,8 @@ import {
 	MenuTrigger,
 	SectionLabel,
 } from '@/components/signal';
+import { SegmentMeter, usedTone } from '@/components/instrument';
+import { Logo } from '@/components/illustrations';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
@@ -75,30 +77,27 @@ import { cn } from '@/lib/utils';
 const NAV_ROW =
 	'group relative flex h-[30px] items-center gap-2 rounded-lg px-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6)';
 
-/** Today's spend against the daily cap, so it is visible before it blocks anything. */
+/** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
 function SpentToday() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	if (!budget.data) return null;
 	const { today, limits } = budget.data;
+	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<span className={cn('shrink-0 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')} title="Spent today">
-			{dollars(today)}
-			{limits.dailyUsd !== null ? ` / $${limits.dailyUsd}` : ''}
-		</span>
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-lg px-1 py-0.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
+			<span className={cn('in-num flex items-baseline justify-between gap-2 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span className="in-caption">Today</span>
+				<span>
+					<span className={budget.data.blocked ? undefined : 'text-(--text-primary)'}>{dollars(today)}</span>
+					{limits.dailyUsd !== null ? ` / $${limits.dailyUsd}` : ''}
+				</span>
+			</span>
+			{limits.dailyUsd !== null ? <SegmentMeter label="Today's spend against the daily cap" value={used} segments={20} tone={usedTone(used)} height={5} /> : null}
+		</Link>
 	);
 }
 
-export function Logo({ size = 20 }: { size?: number }) {
-	return (
-		<div
-			className="flex shrink-0 items-center justify-center rounded-md bg-(--accent-base) text-[11px] font-semibold text-(--accent-fg)"
-			style={{ width: size, height: size }}
-		>
-			A
-		</div>
-	);
-}
-
+/** Anton's mark: a lit cube, drawn in the same isometric projection as the illustrations. */
 /** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task. */
 export function SidebarRail({ onExpand }: { onExpand: () => void }) {
 	const navigate = useNavigate();
@@ -611,13 +610,15 @@ export function ChatSidebar({
 				<div className="h-2 shrink-0" />
 			</div>
 
-			<div className="flex shrink-0 items-center gap-2 p-2">
-				<Avatar name={name} />
-				<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{name}</div>
+			<div className="m-2 mt-0 flex shrink-0 flex-col gap-2 rounded-xl border border-(--border-subtle) bg-(--well-bg) p-2">
 				<SpentToday />
-				<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
-					<Icon icon={Settings} size={14} />
-				</Link>
+				<div className="flex items-center gap-2">
+					<Avatar name={name} />
+					<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{name}</div>
+					<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
+						<Icon icon={Settings} size={14} />
+					</Link>
+				</div>
 			</div>
 		</aside>
 	);

@@ -20,16 +20,17 @@ import {
 	Search,
 	SquareTerminal,
 	Wrench,
-	Zap,
 } from 'lucide-react';
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
+import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, outputUrl, type Session, type Usage } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
+import { cn } from '@/lib/utils';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
@@ -265,7 +266,9 @@ function ThoughtRow({ part }: { part: ReasoningPart }) {
 	return (
 		<>
 			<button type="button" onClick={() => setOpen((current) => !current)} className="flex h-6 min-w-0 items-center gap-2 px-1 text-left">
-				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+				<span className={NODE}>
+					<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+				</span>
 				<span className="text-[12px] whitespace-nowrap text-(--text-tertiary)">
 					{part.state === 'streaming' ? 'Thinking…' : `Thought${words ? ` · ${words} words` : ''}`}
 				</span>
@@ -292,7 +295,7 @@ function ToolRow({ part }: { part: ToolPart }) {
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
 	const heading = (
 		<>
-			<span className="relative inline-flex size-3 shrink-0 items-center justify-center">
+			<span className={cn(NODE, 'relative')}>
 				<span
 					className={
 						expandable
@@ -323,12 +326,12 @@ function ToolRow({ part }: { part: ToolPart }) {
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
 			{image ? (
 				<a href={outputUrl(sessionId, image)} target="_blank" rel="noreferrer" className="mx-1 mb-1 ml-6 block w-fit">
-					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-md border border-(--border-subtle)" />
+					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-[10px] border border-(--card-border)" />
 				</a>
 			) : null}
 			{output || (expandable && command) ? (
-				<div className="px-1 pt-1 pb-0.5">
-					<div className="max-h-56 overflow-auto rounded-md bg-(--bg-inset) px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">
+				<div className="pt-1 pr-1 pb-0.5 pl-6">
+					<div className="in-well max-h-56 overflow-auto px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">
 						{`${command}${output ? `${script ? '\n\n// Result' : ''}\n${output.split('\n').slice(-40).join('\n')}` : ''}`}
 					</div>
 				</div>
@@ -361,32 +364,85 @@ function ToolRow({ part }: { part: ToolPart }) {
 	);
 }
 
+/** What kind of work a step was, for the strip on a steps card. */
+function stepTone(step: Step): string {
+	if (step.type === 'reasoning') return 'var(--neutral-600)';
+	if (step.state === 'output-error') return 'var(--danger-base)';
+	switch (step.toolName) {
+		case 'bash':
+		case 'run_script':
+			return 'var(--data-1)';
+		case 'edit':
+		case 'write':
+			return 'var(--data-2)';
+		case 'screenshot':
+		case 'browser':
+			return 'var(--data-3)';
+		case 'open_pull_request':
+			return 'var(--data-4)';
+		case 'task':
+			return 'var(--data-5)';
+		default:
+			return 'var(--neutral-500)';
+	}
+}
+
+/** Steps shown in a card's strip; a long turn shows its latest. */
+const STRIP = 36;
+
+/**
+ * One mark per step, coloured by what it did (commands cyan, edits violet,
+ * the browser amber, failures red), so a turn's shape reads before it opens.
+ */
+function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
+	const shown = steps.slice(-STRIP);
+	return (
+		<span aria-hidden className="hidden h-3.5 shrink-0 items-end gap-[2px] sm:flex">
+			{shown.map((step, index) => {
+				const running = live && index === shown.length - 1;
+				return (
+					<span
+						key={index}
+						className={cn('w-[3px] rounded-[1px]', running && 'in-pulse')}
+						style={{ height: step.type === 'reasoning' ? 7 : 14, background: running ? 'var(--accent-base)' : stepTone(step), opacity: running ? 1 : 0.85 }}
+					/>
+				);
+			})}
+		</span>
+	);
+}
+
+/** A step's mark on the card's rail: it sits over the line so the line runs between steps. */
+const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-(--card-bg) ring-[3px] ring-(--card-bg)';
+
 function StepsCard({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
 	const detailsId = useId();
 	useEffect(() => setOpen(live), [live]);
 	const label = live ? 'Working' : duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
-		<div className="overflow-hidden rounded-lg bg-(--bg-surface)">
+		<div className="overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
 			<button
 				type="button"
 				aria-expanded={open}
 				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
-				className="flex h-[34px] w-full items-center gap-1.5 pr-3 pl-2 text-left hover:bg-(--bg-hover)"
+				className="flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
 			>
 				<Icon
 					icon={ChevronRight}
 					className="text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)"
 					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
 				/>
-				<div className="min-w-0 flex-auto truncate text-[12px] text-(--text-secondary)">{label}</div>
-				<div className="shrink-0 text-[11px] tracking-[0.04em] whitespace-nowrap text-(--text-disabled)">
+				<div className={cn('min-w-0 flex-auto truncate text-[12px]', live ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{label}</div>
+				<StepStrip steps={steps} live={live} />
+				<div className="in-caption shrink-0 whitespace-nowrap">
 					{steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}
 				</div>
 			</button>
 			<Disclosure open={open} id={detailsId}>
-				<div className="flex flex-col gap-px px-2 pt-0.5 pb-2">
+				<div className="relative flex flex-col gap-px border-t border-(--card-border) px-2 pt-1.5 pb-2">
+					<span aria-hidden className="absolute top-4 bottom-4 left-[17.5px] w-px bg-(--border-default)" />
 					{steps.map((step, index) => (step.type === 'reasoning' ? <ThoughtRow key={index} part={step} /> : <ToolRow key={step.toolCallId} part={step} />))}
 				</div>
 			</Disclosure>
@@ -398,12 +454,15 @@ function StepsCard({ steps, live, duration }: { steps: Step[]; live: boolean; du
 function PlanCard({ part }: { part: ToolPart }) {
 	const plan = field(part.input, 'plan');
 	return (
-		<div className="flex flex-col gap-2 rounded-lg border border-(--border-subtle) bg-(--bg-surface) px-3.5 pt-2.5 pb-3">
-			<div className="flex items-center gap-2 text-[12px] font-medium text-(--text-secondary)">
-				<Icon icon={ListChecks} size={12} className="text-(--accent-text)" />
-				Plan
+		<div className="in-card overflow-hidden">
+			<div className="flex h-10 items-center gap-2.5 border-b border-(--card-border) px-3.5">
+				<span className="inline-flex size-[22px] items-center justify-center rounded-[7px] border border-dashed border-(--accent-border) text-(--accent-text)">
+					<Icon icon={ListChecks} size={12} />
+				</span>
+				<span className="text-[13px] font-medium">Plan</span>
+				<span className="in-caption ml-auto">{plan ? 'Proposed' : 'Writing'}</span>
 			</div>
-			{plan ? <Markdown text={plan} /> : <Spinner size={12} />}
+			<div className="px-4 pt-3 pb-3.5">{plan ? <Markdown text={plan} /> : <Spinner size={12} />}</div>
 		</div>
 	);
 }
@@ -426,8 +485,8 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 		}
 	};
 	return (
-		<div className="mx-auto flex w-full max-w-[700px] items-center gap-2 px-4 pt-2">
-			<Icon icon={ListChecks} size={12} className="text-(--accent-text)" />
+		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--card-border) bg-(--card-bg) py-1 pr-1 pl-3.5 shadow-(--card-highlight)">
+			<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
 			<span className="min-w-0 flex-1 text-[12px] text-(--text-secondary)">
 				Plan mode is on. Approve the plan to let Anton build it, or reply to change it.
 			</span>
@@ -454,10 +513,10 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 					))}
 				</div>
 			) : null}
-			<div className="max-w-[520px] rounded-[12px_12px_4px_12px] bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty">
+			<div className="max-w-[520px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
 				{text}
 			</div>
-			<div className="flex items-center gap-1.5 text-[11px] tracking-[0.04em] text-(--text-disabled) uppercase">
+			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em]">
 				{meta.map((item, index) => (
 					<Fragment key={item + index}>
 						{index > 0 ? <span>·</span> : null}
@@ -511,8 +570,9 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 	return (
 		<div className="flex flex-col gap-3">
 			<div className="flex items-center gap-2">
-				<Icon icon={Zap} size={12} className="text-(--accent-text)" />
+				<Logo size={18} />
 				<div className="text-[12px] font-medium text-(--text-secondary)">Anton</div>
+				{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
 			</div>
 			{blocks.map((block, index) =>
 				block.kind === 'text' ? (
@@ -527,7 +587,7 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 				<div className="flex items-center gap-1.5">
 					<CopyResponse text={copyText} />
 					{usage ? (
-						<div className="text-[11px] text-(--text-disabled)" title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}>
+						<div className="in-num text-[11px] text-(--text-disabled)" title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}>
 							{tokens(usage.inputTokens + usage.outputTokens)} tokens · {dollars(usage.cost)}
 						</div>
 					) : null}
@@ -539,7 +599,7 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 
 function Notice({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex items-start gap-2 rounded-lg border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
+		<div className="flex items-start gap-2 rounded-[12px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
 			<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 			<div className="min-w-0 flex-1 break-words">{children}</div>
 		</div>
@@ -588,10 +648,10 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 						{messages.length === 0 && !busy ? (
 							<EmptyState
-								icon={Zap}
+								art={<SandboxArt className="w-[170px]" />}
 								title="Workspace is ready"
 								body="Describe the outcome you want. Anton works in the sandbox on the right and shows every step here."
-								className="mt-[12vh]"
+								className="mt-[10vh]"
 							/>
 						) : null}
 						{messages.map((message) =>
