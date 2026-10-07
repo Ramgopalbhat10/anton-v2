@@ -10,7 +10,10 @@ export type TaskView = {
 	group: 'none' | 'repo';
 	filters: Record<FacetKey, string[]>;
 	show: { repo: boolean; time: boolean; spend: boolean };
+	/** Shows only each task's title, without the line under it. */
 	compact: boolean;
+	/** Sections folded away: pinned, running or recent. */
+	collapsed: string[];
 };
 
 export type Tone = 'accent' | 'success' | 'warning' | 'danger' | 'muted';
@@ -110,6 +113,7 @@ export const DEFAULT_VIEW: TaskView = {
 	filters: { status: [], pr: [], repo: [], model: [], created: [] },
 	show: { repo: true, time: true, spend: false },
 	compact: false,
+	collapsed: [],
 };
 
 export const matches = (session: Session, filters: TaskView['filters']) =>

@@ -181,6 +181,7 @@ export function TaskMenu({
 	onAskForPullRequest,
 	onOpenChange,
 	size = 'sm',
+	side = 'bottom',
 }: {
 	session: Session;
 	onRename: () => void;
@@ -188,6 +189,8 @@ export function TaskMenu({
 	onAskForPullRequest?: () => void;
 	onOpenChange?: (open: boolean) => void;
 	size?: 'xs' | 'sm';
+	/** Beside the trigger in the sidebar, below it in the task header. */
+	side?: 'bottom' | 'right';
 }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -224,7 +227,7 @@ export function TaskMenu({
 			<MenuTrigger asChild>
 				<IconBtn icon={MoreHorizontal} size={size} label="Task actions" />
 			</MenuTrigger>
-			<MenuContent align="end">
+			<MenuContent side={side} align={side === 'right' ? 'start' : 'end'} sideOffset={side === 'right' ? 6 : 4}>
 				<MenuItem icon={Pencil} onSelect={onRename}>
 					Rename
 				</MenuItem>

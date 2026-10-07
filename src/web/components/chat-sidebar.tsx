@@ -1,14 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
+	Activity,
 	ArrowUpDown,
 	CalendarDays,
+	ChevronDown,
+	ChevronRight,
 	CircleDot,
 	Cpu,
 	Eye,
 	FolderGit2,
 	GitBranch,
 	GitPullRequest,
+	History,
 	List,
 	ListFilter,
 	type LucideIcon,
@@ -131,7 +135,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 			<MenuTrigger asChild>
 				<IconBtn icon={SlidersHorizontal} size="xs" label="View options" className={cn(active > 0 && 'text-(--accent-text)')} />
 			</MenuTrigger>
-			<MenuContent align="end" className="w-[224px]">
+			<MenuContent side="right" align="start" sideOffset={6} className="w-[224px]">
 				<MenuSub>
 					<MenuSubTrigger icon={ArrowUpDown} hint={SORTS[view.sort].label}>
 						Sort
@@ -209,13 +213,18 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 						))}
 					</MenuSubContent>
 				</MenuSub>
-				<MenuItem icon={Rows2} onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}>
-					<span className="flex items-center justify-between gap-3">
-						Compact view
-						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 shrink-0 rounded-full', view.compact ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
+				<MenuItem
+					icon={Rows2}
+					role="menuitemcheckbox"
+					aria-checked={view.compact}
+					onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}
+					hint={
+						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
 							<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', view.compact ? 'translate-x-3' : 'translate-x-0.5')} />
 						</span>
-					</span>
+					}
+				>
+					Compact view
 				</MenuItem>
 				<MenuSeparator />
 				<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
@@ -305,14 +314,43 @@ function Toolbar({
 	);
 }
 
-function SectionHeader({ label, count, children }: { label: string; count?: number; children?: ReactNode }) {
+const SECTION_ICON: Record<Place, LucideIcon> = { pinned: Pin, running: Activity, recent: History };
+
+/** A section's heading: click it to fold the section away. Its actions show while the pointer is on it. */
+function SectionHeader({
+	place,
+	label,
+	count,
+	open,
+	onToggle,
+	children,
+}: {
+	place: Place;
+	label: string;
+	count: number;
+	open: boolean;
+	onToggle: () => void;
+	children?: ReactNode;
+}) {
 	return (
-		<div className="flex h-8 items-center gap-0.5 pt-3 pr-1.5 pl-4">
-			<SectionLabel className="min-w-0 flex-1">
-				{label}
-				{count ? <span className="ml-1.5 font-normal text-(--text-disabled)">{count}</span> : null}
-			</SectionLabel>
-			{children}
+		<div className="group/header mt-2 flex h-7 items-center gap-0.5 pr-1.5 pl-2">
+			<button
+				type="button"
+				aria-expanded={open}
+				onClick={onToggle}
+				className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+			>
+				<Icon icon={SECTION_ICON[place]} size={12} className="text-(--icon-tertiary)" />
+				<SectionLabel className="truncate">{label}</SectionLabel>
+				{count ? <span className="text-[11px] text-(--text-disabled)">{count}</span> : null}
+				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+			</button>
+			{children ? (
+				// Stays while its menu is open, which Radix marks on the trigger.
+				<div className="flex shrink-0 items-center opacity-0 group-focus-within/header:opacity-100 group-hover/header:opacity-100 has-data-[state=open]:opacity-100">
+					{children}
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -327,7 +365,7 @@ function RunningMenu({ running }: { running: number }) {
 			<MenuTrigger asChild>
 				<IconBtn icon={MoreHorizontal} size="xs" label="Running options" />
 			</MenuTrigger>
-			<MenuContent align="end">
+			<MenuContent side="right" align="start" sideOffset={6}>
 				<MenuItem
 					icon={Square}
 					disabled={running === 0 || stopAll.isPending}
@@ -393,14 +431,14 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 	const note = taskNote(session);
 	const live = isLive(session);
 	return (
-		<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
-			{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
-			{renaming ? (
-				<div className="relative flex min-w-0 flex-1 px-1">
-					<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
-				</div>
-			) : (
-				<TaskPeek session={session} disabled={menuOpen}>
+		<TaskPeek session={session} disabled={menuOpen || renaming}>
+			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
+				{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
+				{renaming ? (
+					<div className="relative flex min-w-0 flex-1 px-1">
+						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
+					</div>
+				) : (
 					<Link
 						to="/agents/$sessionId"
 						params={{ sessionId: session.id }}
@@ -419,22 +457,26 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 							{view.compact ? null : <Subtitle session={session} show={view.show} />}
 						</div>
 						{/* Gives way to the row's actions on hover. */}
-						<div className="flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-disabled) group-focus-within:hidden group-hover:hidden group-data-open:hidden">
-							{view.compact && view.show.time ? age(activeAt(session)) : null}
-							{note?.attention ? (
-								<span role="img" aria-label={note.text} className={cn('size-1.5 rounded-full', note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)')} />
-							) : null}
-						</div>
+						{note?.attention ? (
+							<span
+								role="img"
+								aria-label={note.text}
+								className={cn(
+									'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
+									note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)',
+								)}
+							/>
+						) : null}
 					</Link>
-				</TaskPeek>
-			)}
-			{renaming ? null : (
-				<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
-					<HoverActions session={session} place={place} />
-					<TaskMenu session={session} size="xs" onRename={() => setRenaming(true)} onOpenChange={setMenuOpen} />
-				</div>
-			)}
-		</div>
+				)}
+				{renaming ? null : (
+					<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
+						<HoverActions session={session} place={place} />
+						<TaskMenu session={session} size="xs" side="right" onRename={() => setRenaming(true)} onOpenChange={setMenuOpen} />
+					</div>
+				)}
+			</div>
+		</TaskPeek>
 	);
 }
 
@@ -482,6 +524,14 @@ export function ChatSidebar({
 	const sessions = sessionsQuery.data?.sessions ?? [];
 	const { pinned, running, recent } = sections(sessions, view, query);
 	const narrowed = filterCount(view.filters) > 0 || query.trim() !== '';
+	const folded = (place: Place) => view.collapsed.includes(place);
+	const header = (place: Place, label: string, count: number) => ({
+		place,
+		label,
+		count,
+		open: !folded(place),
+		onToggle: () => changeView({ ...view, collapsed: folded(place) ? view.collapsed.filter((item) => item !== place) : [...view.collapsed, place] }),
+	});
 	const rows = (tasks: Session[], place: Place) => <Rows tasks={tasks} place={place} view={view} activeId={params.sessionId} onNavigate={onNavigate} />;
 
 	return (
@@ -527,15 +577,15 @@ export function ChatSidebar({
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
 					<section aria-label="Pinned">
-						<SectionHeader label="Pinned" count={pinned.length} />
-						{rows(pinned, 'pinned')}
+						<SectionHeader {...header('pinned', 'Pinned', pinned.length)} />
+						{folded('pinned') ? null : rows(pinned, 'pinned')}
 					</section>
 				) : null}
 				<section aria-label="Running">
-					<SectionHeader label="Running" count={running.length}>
+					<SectionHeader {...header('running', 'Running', running.length)}>
 						<RunningMenu running={sessions.filter(isLive).length} />
 					</SectionHeader>
-					{sessionsQuery.isError ? (
+					{folded('running') ? null : sessionsQuery.isError ? (
 						<div className="px-4 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
 						<div className="px-3">
@@ -548,8 +598,8 @@ export function ChatSidebar({
 					)}
 				</section>
 				<section aria-label="Recent">
-					<SectionHeader label="Recent" count={recent.length} />
-					{recent.length ? rows(recent, 'recent') : <Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>}
+					<SectionHeader {...header('recent', 'Recent', recent.length)} />
+					{folded('recent') ? null : recent.length ? rows(recent, 'recent') : <Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>}
 				</section>
 				<div className="h-2 shrink-0" />
 			</div>

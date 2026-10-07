@@ -113,6 +113,30 @@ describe('sidebar', () => {
 		expect(titles('Recent')).toHaveLength(3);
 	});
 
+	it('folds a section from its header and keeps it folded', async () => {
+		open();
+		await screen.findByText('Busy task');
+		const header = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { expanded: true });
+		expect(header.getAttribute('aria-expanded')).toBe('true');
+		await userEvent.click(header);
+		expect(header.getAttribute('aria-expanded')).toBe('false');
+		expect(titles('Running')).toEqual([]);
+		expect(JSON.parse(localStorage.getItem('anton.sidebarView') ?? '{}')).toMatchObject({ collapsed: ['running'] });
+		await userEvent.click(header);
+		expect(titles('Running')).toEqual(['Busy task', 'Idle task']);
+	});
+
+	it('shows only titles in compact view', async () => {
+		open();
+		await screen.findByText('Busy task');
+		expect(within(row('Busy task')).getByText('Working')).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'View options' }));
+		const toggle = screen.getByRole('menuitemcheckbox', { name: 'Compact view' });
+		expect(toggle.getAttribute('aria-checked')).toBe('false');
+		await userEvent.click(toggle);
+		expect(within(row('Busy task')).queryByText('Working')).toBeNull();
+	});
+
 	it('searches every section', async () => {
 		open();
 		await screen.findByText('Busy task');
