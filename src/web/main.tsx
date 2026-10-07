@@ -15,6 +15,7 @@ import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { type PanelName, panels } from '@/components/vm-panel';
 import './styles.css';
 
 const queryClient = new QueryClient();
@@ -40,8 +41,10 @@ const sessionRoute = createRoute({
 	path: '/agents/$sessionId',
 	// A fresh page per task, so drafts and panel state never carry over to another task.
 	remountDeps: ({ params }) => params.sessionId,
-	validateSearch: (search: Record<string, unknown>): { app?: 'code' | 'closed' } => ({
+	// `panel` opens one of the workspace panels, such as History from the sidebar's Rewind.
+	validateSearch: (search: Record<string, unknown>): { app?: 'code' | 'closed'; panel?: PanelName } => ({
 		app: search.app === 'closed' ? 'closed' : 'code',
+		panel: panels.find((panel) => panel.name === search.panel)?.name,
 	}),
 	component: SessionPage,
 });

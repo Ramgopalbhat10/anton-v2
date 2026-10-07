@@ -31,6 +31,7 @@ import {
 	listSessions,
 	deleteSession,
 	editSession,
+	forkSession,
 	resumeSession,
 	stopSession,
 } from './services/sessions.ts';
@@ -367,10 +368,12 @@ app.patch('/api/sessions/:id', async (c) => {
 			model: v.optional(v.string()),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planMode: v.optional(v.boolean()),
+			pinned: v.optional(v.boolean()),
 		}),
 	);
 	return c.json(await editSession(c.req.param('id'), change));
 });
+app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
 app.delete('/api/sessions/:id', async (c) => {
 	await deleteSession(c.req.param('id'));
 	return c.body(null, 204);

@@ -27,6 +27,7 @@ function toRecord(row: Row): SessionRecord {
 		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 		planMode: Number(row.plan_mode ?? 0) === 1,
+		pinnedAt: optional(row.pinned_at),
 	};
 }
 
@@ -124,6 +125,7 @@ const columns = {
 	checkpointAt: 'checkpoint_at',
 	errorMessage: 'error_message',
 	followState: 'follow_json',
+	pinnedAt: 'pinned_at',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

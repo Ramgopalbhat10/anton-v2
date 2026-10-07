@@ -6,6 +6,7 @@ import type { Project, SessionRecord } from '../core/types.ts';
 import { getProject, setWarmImage } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
+import { applyFiles, readCheckpoint } from './checkpoints.ts';
 import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
@@ -95,6 +96,22 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
 	if (origin !== 'image') await refreshWarmImage(machine, context.project);
+	await putBackSavedFiles(machine, session.id);
+}
+
+/**
+ * A fresh machine for a task that has saved files (a fork, or a task whose
+ * sandbox is gone) starts from them. After the image, so no image holds a
+ * task's files; a file that cannot be put back is logged, not fatal.
+ */
+async function putBackSavedFiles(machine: Machine, id: string): Promise<void> {
+	const checkpoint = await readCheckpoint(id);
+	if (!checkpoint) return;
+	const skipped = await applyFiles(machine, checkpoint.files).catch((error: unknown) => {
+		logProblem('warn', 'Putting saved files back failed', error, id);
+		return [];
+	});
+	if (skipped.length > 0) logProblem('warn', 'Some saved files were too large to put back', skipped.join(', '), id);
 }
 
 async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {

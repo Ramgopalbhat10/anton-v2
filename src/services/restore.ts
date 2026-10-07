@@ -1,22 +1,13 @@
 import { ConflictError, NotFoundError } from '../core/errors.ts';
-import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
-import { quote, run, safeRelativePath } from '../core/shell.ts';
+import { safeRelativePath } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
-import { SYMLINK_MODE, type SavedFile, readBlob, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
+import { applyFiles, eachBatch, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
 import { type FileChange, changes, repoDir } from './git.ts';
 import { machineFor } from './workspace.ts';
 
 export type RestoreResult = { at: string; skipped: string[] };
-
-/** Runs `command` over the paths in batches, so a long list never overflows the command line. */
-async function eachBatch(machine: Machine, command: string, paths: string[]): Promise<void> {
-	for (let start = 0; start < paths.length; start += 200) {
-		const batch = paths.slice(start, start + 200).map(quote).join(' ');
-		await run(machine, `${command} -- ${batch}`, { cwd: repoDir(machine) });
-	}
-}
 
 /** Puts changed files back as they are at the base commit; files the task added are removed. */
 async function resetToBase(machine: Machine, baseSha: string, files: FileChange[]): Promise<void> {
@@ -25,38 +16,6 @@ async function resetToBase(machine: Machine, baseSha: string, files: FileChange[
 	await eachBatch(machine, 'rm -f', added);
 	// Only the working tree, so the agent's index is untouched. The base was checked out at setup, so its files are all here.
 	await eachBatch(machine, `git restore --source=${baseSha} --worktree`, existing);
-}
-
-/**
- * Writes one file as saved: a symlink as a link, an executable with its bit.
- * Whatever is at the path goes first, so a write never follows a symlink out
- * of place, and an empty directory left by the reset makes way for the file.
- */
-async function writeFile(machine: Machine, path: string, file: SavedFile, bytes: Uint8Array): Promise<void> {
-	const dir = path.slice(0, path.lastIndexOf('/'));
-	await run(machine, `mkdir -p ${quote(dir)} && { if [ -d ${quote(path)} ] && [ ! -L ${quote(path)} ]; then rmdir ${quote(path)}; else rm -f ${quote(path)}; fi; }`);
-	if (file.mode === SYMLINK_MODE) {
-		await run(machine, `ln -s -- "$(cat)" ${quote(path)}`, { stdin: bytes });
-		return;
-	}
-	await writeMachineFile(machine, path, bytes);
-	if (file.mode === '100755') await run(machine, `chmod +x ${quote(path)}`);
-}
-
-/** Writes the checkpoint's version of each file; returns those too large to have been saved. */
-async function applyFiles(machine: Machine, files: SavedFile[]): Promise<string[]> {
-	const root = repoDir(machine);
-	await eachBatch(machine, 'rm -f', files.filter((file) => file.status === 'D').map((file) => file.path));
-	const skipped: string[] = [];
-	for (const file of files.filter((item) => item.status !== 'D')) {
-		const bytes = file.blob ? await readBlob(file.blob) : null;
-		if (!bytes) {
-			skipped.push(file.path);
-			continue;
-		}
-		await writeFile(machine, `${root}/${file.path}`, file, bytes);
-	}
-	return skipped;
 }
 
 /** Tasks whose files are being restored; their agent takes no new messages until it finishes. */

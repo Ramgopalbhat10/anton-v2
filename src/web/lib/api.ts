@@ -42,6 +42,8 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** When the task was pinned to the top of the sidebar; null when it is not. */
+	pinnedAt: string | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
 };
@@ -296,7 +298,8 @@ export const api = {
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
-	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean }) =>
+	forkSession: (id: string) => post<Session>(`/api/sessions/${id}/fork`),
+	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean; pinned?: boolean }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),

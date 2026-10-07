@@ -56,6 +56,8 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
+	/** When the task was pinned to the top of the sidebar; null when it is not. */
+	pinnedAt: string | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
 };

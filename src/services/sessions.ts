@@ -6,7 +6,7 @@ import { getProject } from '../db/projects.ts';
 import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
-import { deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
+import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
@@ -97,10 +97,33 @@ export async function createSession(input: {
 	// The default reasoning level belongs to the default model; another model starts at its own default.
 	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
 	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
-	const branch = `anton/${slug(title)}-${id.slice(0, 6)}`;
 	const planMode = input.planMode ?? general.planMode;
-	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch, planMode });
+	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, id), planMode });
 	return getSession(id);
+}
+
+const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
+
+/**
+ * A new task on the same base, model and plan mode, holding the task's files
+ * as they are now on a branch and sandbox of its own, so two approaches can
+ * be tried side by side. The conversation and outputs stay with the original.
+ * Its sandbox starts right away when there are files, so the agent works on
+ * them rather than reading the base.
+ */
+export async function forkSession(id: string): Promise<Session> {
+	const source = await getSessionRecord(id);
+	if (!source) throw new NotFoundError('Session not found');
+	const machine = await liveMachine(id);
+	if (machine) await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before fork failed', error, id));
+	const forkId = randomUUID();
+	const title = `${source.title.slice(0, 190)} (fork)`;
+	const { projectId, model, reasoning, baseBranch, baseSha, planMode } = source;
+	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, forkId), planMode });
+	if (await copyCheckpoint(id, forkId)) {
+		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
+	}
+	return getSession(forkId);
 }
 
 export async function listSessions(): Promise<Session[]> {
@@ -118,9 +141,9 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean };
+export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean; pinned?: boolean };
 
-/** Renames the task, changes its model or reasoning level, or turns plan mode on or off; the agent sees a change from the next prompt. */
+/** Renames the task, changes its model or reasoning level, turns plan mode on or off, or pins it; the agent sees a change from the next prompt. */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));
 	const title = change.title?.trim();
@@ -129,6 +152,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(model ? { model } : {}),
 		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
 		...(change.planMode !== undefined ? { planMode: change.planMode } : {}),
+		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
 	});
 	return getSession(id);
 }

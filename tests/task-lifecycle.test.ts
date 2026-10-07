@@ -534,6 +534,34 @@ test('the checkpoint timeline keeps distinct states, and restoring one puts its 
 	await assert.rejects(() => restoreCheckpoint(session.id, '2020-01-01T00:00:00.000Z'), /not found/);
 });
 
+test('a task can be pinned, and a fork starts in a sandbox of its own with the task\'s files', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Try one way' });
+	assert.ok((await sessions.editSession(session.id, { pinned: true })).pinnedAt);
+	assert.equal((await sessions.editSession(session.id, { pinned: false })).pinnedAt, null);
+
+	const machine = await machineFor(session.id);
+	await run(machine, 'echo tried > a.txt && rm old.txt');
+	// Still running, so the fork takes the files as they are now, not as last saved.
+	const fork = await sessions.forkSession(session.id);
+	assert.equal(fork.title, 'Try one way (fork)');
+	assert.notEqual(fork.branch, session.branch);
+	assert.equal(fork.baseSha, session.baseSha);
+	assert.equal((await listCheckpoints(fork.id)).length, 1);
+	const forked = await machineFor(fork.id);
+	assert.notEqual(forked.root, machine.root);
+	assert.equal((await run(forked, 'cat a.txt')).trim(), 'tried');
+	assert.equal((await run(forked, 'test -e old.txt && echo yes || echo no')).trim(), 'no');
+	assert.equal((await run(forked, 'git rev-parse --abbrev-ref HEAD')).trim(), fork.branch);
+	await run(forked, 'echo other > a.txt');
+	assert.equal((await run(machine, 'cat a.txt')).trim(), 'tried', 'the original keeps its own files');
+
+	const untouched = await sessions.createSession({ projectId: project.id, title: 'Only read' });
+	const plain = await sessions.forkSession(untouched.id);
+	assert.equal(plain.checkpointAt, null);
+	assert.equal((await getSessionRecord(plain.id))?.machineState, null, 'nothing to work on, so no sandbox');
+});
+
 test('a task adds up the tokens and cost of its responses', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Usage' });
