@@ -1,0 +1,176 @@
+/* Instrument: the card language on top of Signal.
+   Every view that shows a number reads like a small instrument: a titled
+   card, a hero figure in tabular type, a gauge or chart that explains it, and
+   a footer with a mono caption and the actions that change it. */
+:root,
+[data-theme='dark'] {
+	--card-bg: #121212;
+	--card-bg-top: #161616;
+	--card-border: rgba(255, 255, 255, 0.07);
+	--card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	--card-radius: 14px;
+	--well-bg: #0c0c0c;
+	--well-border: rgba(255, 255, 255, 0.05);
+	--well-radius: 10px;
+	--grid-line: rgba(255, 255, 255, 0.035);
+	--grid-mark: rgba(255, 255, 255, 0.14);
+	--tick-off: rgba(255, 255, 255, 0.12);
+	--segment-off: rgba(255, 255, 255, 0.07);
+	--line-art: rgba(255, 255, 255, 0.34);
+	--line-art-faint: rgba(255, 255, 255, 0.14);
+
+	/* Data hues, in the order series take them. Cyan leads so a single series
+	   reads as Anton's; the rest stay apart from the status hues at 10px. */
+	--data-1: #3fb6d8;
+	--data-2: #a78bfa;
+	--data-3: #e3a63f;
+	--data-4: #35c88a;
+	--data-5: #f472b6;
+	--data-6: #8e8e8e;
+
+	--ts-chart-1: var(--data-1);
+	--ts-chart-2: var(--data-2);
+	--ts-chart-3: var(--data-3);
+	--ts-chart-4: var(--data-4);
+	--ts-chart-5: var(--data-5);
+	--ts-chart-6: var(--data-6);
+	--ts-chart-tooltip-background: var(--bg-overlay);
+	--ts-chart-tooltip-color: var(--text-primary);
+	--ts-chart-tooltip-border: 1px solid var(--border-strong);
+	--ts-chart-tooltip-border-radius: 10px;
+	--ts-chart-tooltip-shadow: var(--shadow-overlay);
+	--ts-chart-tooltip-font: 12px/16px var(--font-mono);
+	--ts-chart-tooltip-padding: 8px 10px;
+}
+
+.in-card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border-radius: var(--card-radius);
+	border: 1px solid var(--card-border);
+	background: linear-gradient(180deg, var(--card-bg-top), var(--card-bg) 72px);
+	box-shadow: var(--card-highlight);
+}
+
+.in-well {
+	border-radius: var(--well-radius);
+	border: 1px solid var(--well-border);
+	background: var(--well-bg);
+}
+
+/* A faint drafting grid with plus marks at its corners, behind illustrations. */
+.in-grid {
+	position: relative;
+	background-color: var(--well-bg);
+	background-image:
+		linear-gradient(var(--grid-line) 1px, transparent 1px),
+		linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+	background-size: 24px 24px;
+	background-position: -1px -1px;
+}
+.in-grid::before,
+.in-grid::after {
+	content: '+';
+	position: absolute;
+	font: 400 12px/1 var(--font-mono);
+	color: var(--grid-mark);
+	pointer-events: none;
+}
+.in-grid::before {
+	top: 10px;
+	left: 12px;
+}
+.in-grid::after {
+	right: 12px;
+	bottom: 10px;
+}
+
+/* The mono caption every card footer and gauge label uses. */
+.in-caption {
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 16px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-disabled);
+}
+
+.in-figure {
+	font-family: var(--font-sans);
+	font-weight: 500;
+	letter-spacing: -0.02em;
+	font-feature-settings: var(--font-feature-tabular);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-primary);
+}
+
+.in-num {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Charts inherit the card's text colour and Anton's mono type. */
+.in-chart {
+	color: var(--text-tertiary);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+}
+.in-chart svg {
+	overflow: visible;
+}
+
+@keyframes in-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+.in-pulse {
+	animation: in-pulse 1.6s var(--ease-out) infinite;
+}
+
+@keyframes in-sweep {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(100%);
+	}
+}
+/* A slow sheen across a live meter, so a running task reads as moving. */
+.in-sweep {
+	position: relative;
+	overflow: hidden;
+}
+.in-sweep::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+	animation: in-sweep 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.in-pulse,
+	.in-sweep::after {
+		animation: none;
+	}
+}
+
+/* A list inside a block is rows on the block's own card, not a second card. */
+.in-list {
+	padding: 4px;
+}
+.in-card .in-list {
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	padding: 0;
+	margin: 0 -10px;
+}

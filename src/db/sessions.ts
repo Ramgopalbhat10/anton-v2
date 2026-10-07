@@ -87,6 +87,22 @@ export async function spendBy(group: keyof typeof GROUPS, since: Date): Promise<
 	return result.rows.map((row) => ({ key: row.key == null ? null : String(row.key), tokens: Number(row.tokens), cost: Number(row.cost) }));
 }
 
+/** Dollars and tokens since `since` by model, per minute in UTC, so callers can bucket them into local days. */
+export async function spendByMinute(since: Date): Promise<Array<{ minute: string; model: string | null; tokens: number; cost: number }>> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `SELECT substr(at, 1, 16) AS minute, model, SUM(input_tokens + output_tokens) AS tokens, SUM(cost_usd) AS cost
+			FROM usage_log WHERE at >= ? GROUP BY 1, 2 ORDER BY 1`,
+		args: [since.toISOString()],
+	});
+	return result.rows.map((row) => ({
+		minute: String(row.minute),
+		model: row.model == null ? null : String(row.model),
+		tokens: Number(row.tokens),
+		cost: Number(row.cost),
+	}));
+}
+
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'>;
 
 const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';

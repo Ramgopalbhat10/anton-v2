@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 const api = vi.hoisted(() => ({
 	budget: vi.fn(async () => ({ limits: { dailyUsd: 10, taskUsd: null }, today: 1.25, task: null, blocked: null })),
 	sessions: vi.fn(async () => ({ sessions: [] })),
+	usage: vi.fn(async () => ({ since: '2026-10-01T00:00:00Z', today: 1.25, month: 3, byRepo: [], byModel: [], daily: [] })),
 	storage: vi.fn(async () => ({ objects: 0, bytes: 0, lastCleanup: null })),
 	projects: vi.fn(async () => ({ projects: [] })),
 	secrets: vi.fn(async () => ({ shared: ['NPM_TOKEN'], repos: [{ projectId: 'p1', repo: 'acme/web', names: ['API_KEY', 'DB_URL'] }] })),
@@ -38,7 +39,7 @@ describe('Settings', () => {
 	it('lists every section by group on the overview, with what was spent today', async () => {
 		open('/settings');
 		expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
-		expect(await screen.findByText('$1.25')).toBeTruthy();
+		expect(await screen.findByLabelText('$1.25')).toBeTruthy();
 		const nav = screen.getByRole('navigation', { name: 'Settings' });
 		for (const label of ['All settings', 'Usage and limits', 'Storage', 'Repositories', 'Commands']) expect(within(nav).getByText(label)).toBeTruthy();
 	});

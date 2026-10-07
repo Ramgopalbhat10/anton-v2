@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Box, Square } from 'lucide-react';
 import { useState } from 'react';
-import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { SandboxArt } from '@/components/illustrations';
+import { Card, CardFooter, CardSection, Facts, Figure, Status, Well } from '@/components/instrument';
+import { Btn, IconBtn, Spinner } from '@/components/signal';
 import { api, type ComputeView } from '@/lib/api';
 import { age } from '@/lib/format';
-import { Block, List, PageHeading } from './parts';
+import { PageHeading } from './parts';
 
 function Running({ view }: { view: ComputeView }) {
 	const queryClient = useQueryClient();
@@ -16,41 +18,75 @@ function Running({ view }: { view: ComputeView }) {
 	};
 	const stop = useMutation({ mutationFn: (id: string) => api.stopSession(id), onSuccess: refresh });
 	const stopAll = useMutation({ mutationFn: api.stopAllSandboxes, onSuccess: refresh, onSettled: () => setConfirming(false) });
-	if (view.running.length === 0) return <EmptyState icon={Box} title="Nothing is running" body="A sandbox starts when a task needs to edit or run code." />;
+	const count = view.running.length;
 	return (
-		<div className="flex flex-col gap-2">
-			<List>
-				{view.running.map((task) => (
-					<div key={task.id} className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5">
-						<Link
-							to="/agents/$sessionId"
-							params={{ sessionId: task.id }}
-							search={{ app: 'code' }}
-							className="flex min-w-0 flex-1 flex-col gap-0.5 outline-none hover:underline focus-visible:shadow-(--focus-ring)"
-						>
-							<span className="truncate text-[13px] font-medium">{task.title}</span>
-							<span className="truncate text-[12px] text-(--text-tertiary)">
-								{task.repo} · task created {age(task.createdAt)} ago
+		<Card
+			icon={Box}
+			title="Running now"
+			sub={view.provider === 'modal' ? `Modal · ${view.app}` : 'this server · local sandboxes'}
+			status={count ? <Status tone="success" pulse>Live</Status> : <Status>Idle</Status>}
+			footer={
+				<CardFooter
+					caption={
+						stopAll.isError ? (
+							<span className="text-[12px] text-(--danger-text)">{stopAll.error.message}</span>
+						) : view.others > 0 ? (
+							<span className="block text-[12px] leading-[18px] text-pretty text-(--text-disabled)">
+								{view.others} more running in this app are not tasks of this Anton, so they are not shown or stopped here.
 							</span>
-						</Link>
-						<IconBtn icon={Square} size="sm" label={`Stop ${task.title}`} disabled={stop.isPending} onClick={() => stop.mutate(task.id)} />
-					</div>
-				))}
-			</List>
-			<div className="flex items-center gap-3">
-				<Btn
-					size="sm"
-					variant="dangerGhost"
-					icon={Square}
-					disabled={stopAll.isPending}
-					onClick={() => (confirming ? stopAll.mutate() : setConfirming(true))}
-					onBlur={() => setConfirming(false)}
+						) : (
+							'Stopping saves a checkpoint first'
+						)
+					}
 				>
-					{stopAll.isPending ? 'Stopping…' : confirming ? 'Click again to stop all' : 'Stop every sandbox'}
-				</Btn>
-				{stopAll.isError ? <span className="text-[12px] text-(--danger-text)">{stopAll.error.message}</span> : null}
-			</div>
-		</div>
+					{count ? (
+						<Btn
+							size="sm"
+							variant="dangerGhost"
+							icon={Square}
+							disabled={stopAll.isPending}
+							onClick={() => (confirming ? stopAll.mutate() : setConfirming(true))}
+							onBlur={() => setConfirming(false)}
+						>
+							{stopAll.isPending ? 'Stopping…' : confirming ? 'Click again to stop all' : 'Stop every sandbox'}
+						</Btn>
+					) : null}
+				</CardFooter>
+			}
+		>
+			<CardSection ruled={false} className="pt-1">
+				<Figure value={String(count)} unit={count === 1 ? 'sandbox running' : 'sandboxes running'} />
+			</CardSection>
+			{count === 0 ? (
+				<CardSection>
+					<Well grid className="flex flex-col items-center gap-3 px-6 pt-5 pb-6 text-center">
+						<SandboxArt className="w-[180px]" />
+						<div className="flex flex-col gap-1">
+							<div className="text-[14px] font-medium">Nothing is running</div>
+							<div className="max-w-[44ch] text-[12px] leading-[18px] text-(--text-tertiary)">A sandbox starts when a task needs to edit or run code.</div>
+						</div>
+					</Well>
+				</CardSection>
+			) : (
+				<CardSection className="gap-0 px-2 py-1.5">
+					{view.running.map((task) => (
+						<div key={task.id} className="flex min-h-12 items-center gap-3 rounded-[10px] px-2 py-1.5 hover:bg-(--bg-hover)">
+							<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--success-base)" />
+							<Link
+								to="/agents/$sessionId"
+								params={{ sessionId: task.id }}
+								search={{ app: 'code' }}
+								className="flex min-w-0 flex-1 flex-col gap-0.5 outline-none focus-visible:shadow-(--focus-ring)"
+							>
+								<span className="truncate text-[13px] font-medium">{task.title}</span>
+								<Facts items={[task.repo, `created ${age(task.createdAt)} ago`]} className="tracking-[0.04em] normal-case" />
+							</Link>
+							<IconBtn icon={Square} size="sm" label={`Stop ${task.title}`} disabled={stop.isPending} onClick={() => stop.mutate(task.id)} />
+						</div>
+					))}
+				</CardSection>
+			)}
+		</Card>
 	);
 }
 
@@ -69,18 +105,7 @@ export function ComputePage() {
 			) : compute.isError ? (
 				<p className="m-0 text-[12px] text-(--danger-text)">{compute.error.message}</p>
 			) : view ? (
-				<>
-					<div className="flex items-center gap-2 text-[13px] text-(--text-secondary)">
-						<Icon icon={Box} className="text-(--icon-tertiary)" />
-						{view.provider === 'modal' ? `Modal, app ${view.app}` : 'This server (local sandboxes)'}
-					</div>
-					<Block
-						title="Running now"
-						help={view.others > 0 ? `${view.others} more running in this app are not tasks of this Anton, so they are not shown or stopped here.` : undefined}
-					>
-						<Running view={view} />
-					</Block>
-				</>
+				<Running view={view} />
 			) : null}
 		</>
 	);

@@ -1,5 +1,5 @@
 import type { Usage } from '../core/types.ts';
-import { addSessionUsage, type SpendRow, spendBy, spentSince } from '../db/sessions.ts';
+import { addSessionUsage, type SpendRow, spendBy, spendByMinute, spentSince } from '../db/sessions.ts';
 import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
 
@@ -46,11 +46,45 @@ function startOfMonth(now: Date): Date {
 	return day;
 }
 
-/** What has been spent this month, in total and by repository and model, from the server's local midnight on the 1st. */
-export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[] };
+/** Days the daily chart covers, today included. */
+export const DAILY_DAYS = 30;
+
+/** One model's spend on one local day (`YYYY-MM-DD`); `model` is null when it was not recorded. */
+export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
+
+/** A local date as `YYYY-MM-DD`, the way the daily cap counts days. */
+export function dayKey(date: Date): string {
+	const pad = (value: number) => String(value).padStart(2, '0');
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Spend per local day and model over the last `DAILY_DAYS` days, oldest first. Days with nothing spent are left out. */
+async function dailySpend(now: Date): Promise<DailySpend[]> {
+	const since = startOfToday(now);
+	since.setDate(since.getDate() - (DAILY_DAYS - 1));
+	const rows = new Map<string, DailySpend>();
+	for (const row of await spendByMinute(since)) {
+		const day = dayKey(new Date(`${row.minute}:00Z`));
+		const key = `${day} ${row.model ?? ''}`;
+		const entry = rows.get(key) ?? { day, model: row.model, tokens: 0, cost: 0 };
+		entry.tokens += row.tokens;
+		entry.cost += row.cost;
+		rows.set(key, entry);
+	}
+	return [...rows.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/** What has been spent this month, in total and by repository and model, from the server's local midnight on the 1st, and each of the last 30 days. */
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[] };
 
 export async function usageView(now = new Date()): Promise<UsageView> {
 	const since = startOfMonth(now);
-	const [today, month, byRepo, byModel] = await Promise.all([spentSince(startOfToday(now)), spentSince(since), spendBy('repo', since), spendBy('model', since)]);
-	return { since: since.toISOString(), today, month, byRepo, byModel };
+	const [today, month, byRepo, byModel, daily] = await Promise.all([
+		spentSince(startOfToday(now)),
+		spentSince(since),
+		spendBy('repo', since),
+		spendBy('model', since),
+		dailySpend(now),
+	]);
+	return { since: since.toISOString(), today, month, byRepo, byModel, daily };
 }

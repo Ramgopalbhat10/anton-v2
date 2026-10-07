@@ -64,7 +64,8 @@
 @keyframes sg-spin{to{transform:rotate(360deg)}}
 
 /* App-level overrides from the reference. */
-.sg-btn,.sg-icon-btn{border-radius:8px}
+.sg-btn{border-radius:var(--radius-full)}
+.sg-icon-btn{border-radius:8px}
 .sg-kbd,.sg-kbd-group__plus,.sg-avatar{font-family:var(--font-sans)}
 .sg-btn svg{stroke-width:1.5}
 

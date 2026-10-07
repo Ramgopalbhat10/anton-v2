@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
+import { Box, Clock, Eye, Folder, GitBranch, GitPullRequest, type LucideIcon, Play, Plus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { PlanToggle } from '@/components/composer';
+import { Caption, Card } from '@/components/instrument';
 import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
-import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
+import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, branchLabel, type ModelChoice, type Project } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
@@ -130,6 +131,47 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 	);
 }
 
+type Stage = { icon: LucideIcon; title: string; note: string; lit?: boolean };
+
+/**
+ * How a task runs, left to right: it reads first, then takes its own branch,
+ * starts a sandbox only when it has to edit or run code, and ends in a pull request.
+ */
+function Route({ repo, branch, planMode }: { repo?: string; branch: string; planMode: boolean }) {
+	const stages: Stage[] = [
+		{ icon: Eye, title: planMode ? 'Plan' : 'Read', note: repo ?? 'repository', lit: true },
+		{ icon: GitBranch, title: 'Branch', note: `off ${branch || 'main'}` },
+		{ icon: Box, title: 'Sandbox', note: 'when it edits' },
+		{ icon: GitPullRequest, title: 'Pull request', note: 'for your review' },
+	];
+	return (
+		<ol aria-label="How a task runs" className="in-well in-grid m-0 grid list-none grid-cols-2 gap-y-4 px-4 py-4 sm:grid-cols-4 sm:px-5">
+			{stages.map((stage, index) => (
+				<li key={stage.title} className="relative flex min-w-0 flex-col gap-2">
+					<div className="flex items-center">
+						<span
+							className={
+								stage.lit
+									? 'relative z-[1] inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)'
+									: 'relative z-[1] inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong) bg-(--well-bg) text-(--icon-secondary)'
+							}
+						>
+							<Icon icon={stage.icon} size={13} />
+						</span>
+						{index < stages.length - 1 ? <span aria-hidden className="mx-2 hidden h-px flex-1 border-t border-dashed border-(--border-strong) sm:block" /> : null}
+					</div>
+					<div className="flex min-w-0 flex-col gap-0.5 pr-2">
+						<Caption className="text-(--text-tertiary)">
+							{String(index + 1).padStart(2, '0')} {stage.title}
+						</Caption>
+						<div className="truncate text-[12px] text-(--text-secondary)">{stage.note}</div>
+					</div>
+				</li>
+			))}
+		</ol>
+	);
+}
+
 export function Launcher() {
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
@@ -178,14 +220,15 @@ export function Launcher() {
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-8 pb-12 md:px-6">
 				<div className="mx-auto flex max-w-[660px] flex-col gap-5">
 					<div className="flex flex-col gap-2">
-						<h1 className="m-0 text-[24px] leading-[30px] font-semibold tracking-[-0.022em]">What should the agent do?</h1>
+						<Caption>New task</Caption>
+						<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">What should the agent do?</h1>
 						<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">
 							Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the terminal, and the files as it goes.
 						</p>
 					</div>
 
 					<form
-						className="relative flex flex-col gap-3 rounded-xl bg-(--bg-surface) px-4 pt-4 pb-2.5"
+						className="in-card relative flex flex-col focus-within:border-(--border-strong)"
 						onSubmit={(event) => {
 							event.preventDefault();
 							void start();
@@ -200,9 +243,9 @@ export function Launcher() {
 							submitOn="mod-enter"
 							suggestionsPosition="below"
 							placeholder="Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test."
-							className="min-h-[84px] text-[14px] leading-[21px]"
+							className="min-h-[96px] px-4 pt-4 text-[14px] leading-[21px]"
 						/>
-						<div className="flex flex-wrap items-center gap-1.5">
+						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />
 							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />
@@ -223,34 +266,36 @@ export function Launcher() {
 						/>
 					) : null}
 					{create.isError ? <p className="m-0 text-[12px] text-(--danger-text)">Could not start the task: {create.error.message}</p> : null}
+					<Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />
 
 					{recent.length > 0 ? (
-						<div className="flex flex-col gap-0.5 pt-2">
-							<SectionLabel className="px-2 pb-1.5">Recent tasks</SectionLabel>
-							{recent.map((session) => (
-								<Link
-									key={session.id}
-									to="/agents/$sessionId"
-									params={{ sessionId: session.id }}
-									search={{ app: 'code' }}
-									className="flex h-11 items-center gap-2.5 rounded-lg px-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-								>
-									<span className="inline-flex text-(--icon-tertiary)">
-										<TaskStatusIcon session={session} />
-									</span>
-									<div className="flex min-w-0 flex-1 flex-col gap-px">
-										<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
-										<div className="truncate text-[11px] text-(--text-disabled)">
-											{session.repo} · {branchLabel(session)}
+						<Card icon={Clock} title="Recent tasks" sub={`latest ${recent.length}`}>
+							<div className="flex flex-col gap-px px-1.5 pb-1.5">
+								{recent.map((session) => (
+									<Link
+										key={session.id}
+										to="/agents/$sessionId"
+										params={{ sessionId: session.id }}
+										search={{ app: 'code' }}
+										className="flex h-12 items-center gap-3 rounded-[10px] px-2.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+									>
+										<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary)">
+											<TaskStatusIcon session={session} />
+										</span>
+										<div className="flex min-w-0 flex-1 flex-col gap-px">
+											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
+											<div className="truncate font-mono text-[11px] text-(--text-disabled)">
+												{session.repo} · {branchLabel(session)}
+											</div>
 										</div>
-									</div>
-									<div className="text-[11px] whitespace-nowrap text-(--text-tertiary)">
-										{age(session.createdAt)}
-										{session.status === 'error' ? ' · failed' : session.prUrl ? ' · PR opened' : ''}
-									</div>
-								</Link>
-							))}
-						</div>
+										<div className="text-[11px] whitespace-nowrap text-(--text-tertiary)">
+											{age(session.createdAt)}
+											{session.status === 'error' ? ' · failed' : session.prUrl ? ' · PR opened' : ''}
+										</div>
+									</Link>
+								))}
+							</div>
+						</Card>
 					) : null}
 				</div>
 			</div>

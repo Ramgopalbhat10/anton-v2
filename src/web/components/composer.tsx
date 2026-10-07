@@ -122,7 +122,7 @@ export function Composer({
 			}}
 		>
 			<div
-				className="relative mx-auto flex max-w-[700px] flex-col gap-2 rounded-xl bg-(--bg-surface) px-3 pt-3 pb-2"
+				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)"
 				onDragOver={(event) => event.preventDefault()}
 				onDrop={(event) => {
 					event.preventDefault();

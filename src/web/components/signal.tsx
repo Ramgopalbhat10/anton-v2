@@ -102,7 +102,7 @@ export function Avatar({ name, size = 'sm' }: { name: string; size?: 'xs' | 'sm'
 /** Uppercase group label: "RUNNING", "RECENT", "ADD A PANEL". */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
 	return (
-		<div className={cn('text-[11px] leading-4 font-medium tracking-[0.06em] uppercase text-(--text-disabled)', className)}>
+		<div className={cn('font-mono text-[10.5px] leading-4 font-medium tracking-[0.08em] uppercase text-(--text-disabled)', className)}>
 			{children}
 		</div>
 	);
@@ -125,12 +125,15 @@ export function DiffStat({ added, removed }: { added: number; removed: number })
 /** Empty state: icon tile, title, body, optional actions. */
 export function EmptyState({
 	icon,
+	art,
 	title,
 	body,
 	children,
 	className,
 }: {
 	icon?: LucideIcon;
+	/** A drawing shown on a drafting grid in place of the icon. */
+	art?: ReactNode;
 	title: string;
 	body?: ReactNode;
 	children?: ReactNode;
@@ -138,8 +141,10 @@ export function EmptyState({
 }) {
 	return (
 		<div className={cn('flex flex-col items-center gap-3 px-6 py-8 text-center', className)}>
-			{icon ? (
-				<span className="inline-flex size-8 items-center justify-center rounded-md border border-(--border-subtle) bg-(--bg-raised) text-(--icon-tertiary)">
+			{art ? (
+				<div className="in-well in-grid mb-1 flex w-full max-w-[320px] items-center justify-center px-6 py-5">{art}</div>
+			) : icon ? (
+				<span className="inline-flex size-8 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) text-(--icon-secondary)">
 					<Icon icon={icon} />
 				</span>
 			) : null}

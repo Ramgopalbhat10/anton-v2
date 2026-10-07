@@ -5,6 +5,7 @@
 @import "@fontsource-variable/geist-mono";
 @import "./styles/signal-tokens.css";
 @import "./styles/signal-components.css" layer(components);
+@import "./styles/instrument.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 
