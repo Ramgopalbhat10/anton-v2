@@ -218,7 +218,6 @@ function TaskRow({ session, live, active, onNavigate }: { session: Session; live
 					<div className="flex min-w-0 flex-1 flex-col gap-px">
 						<div className={cn('flex min-w-0 items-center gap-1 text-[13px]', live && 'text-(--text-primary)')}>
 							<span className="truncate">{session.title}</span>
-							{session.pinnedAt ? <Icon icon={Pin} size={11} className="shrink-0 text-(--icon-tertiary)" /> : null}
 						</div>
 						{live ? (
 							<div className="truncate text-[11px] tracking-[0.02em] text-(--text-tertiary)">
@@ -226,11 +225,11 @@ function TaskRow({ session, live, active, onNavigate }: { session: Session; live
 							</div>
 						) : null}
 					</div>
-					{live ? null : (
-						<div className="shrink-0 text-[11px] text-(--text-disabled) group-focus-within:hidden group-hover:hidden group-data-open:hidden">
-							{age(session.createdAt)}
-						</div>
-					)}
+					{/* Gives way to the row's actions, which have Unpin, on hover. */}
+					<div className="flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-disabled) group-focus-within:hidden group-hover:hidden group-data-open:hidden">
+						{session.pinnedAt ? <Icon icon={Pin} size={11} className="text-(--icon-tertiary)" /> : null}
+						{live ? null : age(session.createdAt)}
+					</div>
 				</Link>
 			)}
 			{renaming ? null : (

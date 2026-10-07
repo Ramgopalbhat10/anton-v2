@@ -164,6 +164,11 @@ describe('A plugin page', () => {
 		expect(await screen.findByText('Everything on brand.')).toBeTruthy();
 		expect(screen.getByText(/Also declares MCP servers \(figma\)/)).toBeTruthy();
 
+		// The Files tab opens the README the Overview already read.
+		await userEvent.click(screen.getByRole('tab', { name: /Files/ }));
+		expect(await screen.findByText('Everything on brand.')).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'README.md' }).getAttribute('aria-current')).toBe('true');
+
 		await userEvent.click(screen.getByRole('tab', { name: /Skills/ }));
 		expect(screen.getByText('/fonts')).toBeTruthy();
 		await userEvent.click(screen.getAllByRole('button', { name: 'View SKILL.md' })[0] as HTMLElement);

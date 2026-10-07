@@ -301,8 +301,8 @@
      makes it visible against an accent-filled button. :focus-visible only. */
   --focus-ring-width:1px;
   --focus-ring-offset:0px;
-  --focus-ring:0 0 0 var(--focus-ring-width) var(--accent-base),0 0 0 4px var(--accent-ring);
-  --focus-ring-inset:inset 0 0 0 1px var(--accent-base),0 0 0 3px var(--accent-ring);
+  --focus-ring:0 0 0 var(--focus-ring-width) var(--accent-base);
+  --focus-ring-inset:inset 0 0 0 1px var(--accent-base);
 }
 @media (prefers-reduced-motion:reduce){
   :root{

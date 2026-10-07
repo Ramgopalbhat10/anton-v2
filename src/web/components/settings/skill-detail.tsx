@@ -139,7 +139,8 @@ function Facts({ preview }: { preview: PluginPreview }) {
 
 function Overview({ preview }: { preview: PluginPreview }) {
 	const readme = useQuery({
-		queryKey: ['plugin-file', preview.source.repo, preview.sha, preview.readme],
+		// Text, so not under the 'plugin-file' key, where the Files tab keeps the same file's bytes.
+		queryKey: ['plugin-readme', preview.source.repo, preview.sha, preview.readme],
 		queryFn: async () => new TextDecoder().decode(await api.pluginFile(preview.source.repo, preview.sha, preview.readme as string)),
 		enabled: Boolean(preview.readme),
 		staleTime: Number.POSITIVE_INFINITY,
