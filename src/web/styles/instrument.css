@@ -18,6 +18,10 @@
 	--segment-off: rgba(255, 255, 255, 0.07);
 	--line-art: rgba(255, 255, 255, 0.34);
 	--line-art-faint: rgba(255, 255, 255, 0.14);
+	--line-art-hi: rgba(255, 255, 255, 0.6);
+	--art-top: #262626;
+	--art-left: #181818;
+	--art-right: #0f0f0f;
 
 	/* Data hues, in the order series take them. Cyan leads so a single series
 	   reads as Anton's; the rest stay apart from the status hues at 10px. */
