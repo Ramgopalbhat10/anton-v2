@@ -251,7 +251,7 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 					align="end"
 					sideOffset={6}
 					collisionPadding={12}
-					className="z-50 flex w-[320px] flex-col gap-2 rounded-xl bg-(--bg-overlay) p-3 text-(--text-primary) shadow-(--shadow-overlay) outline-none"
+					className="in-pop z-50 flex w-[320px] flex-col gap-2 p-3 text-(--text-primary) outline-none"
 				>
 					<SectionLabel>Marketplaces</SectionLabel>
 					<p className="m-0 text-[12px] leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>

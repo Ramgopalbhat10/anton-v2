@@ -3,6 +3,7 @@ import { ChevronLeft, History, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { useRefreshTask } from '@/components/source-bar';
+import { HistoryArt } from '@/components/illustrations';
 import { Btn, DiffStat, EmptyState, Spinner } from '@/components/signal';
 import { api, type CheckpointSummary, SAFETY_NET_MS } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
@@ -98,7 +99,7 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 	if (timeline.isPending) return <Loading label="Loading the history" />;
 	if (timeline.isError) return <EmptyState title="History unavailable" body={timeline.error.message} />;
 	if (entries.length === 0) {
-		return <EmptyState icon={History} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." />;
+		return <EmptyState art={<HistoryArt className="w-[190px]" />} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." className="pt-10" />;
 	}
 	return (
 		<div className="flex flex-col gap-px pt-1">

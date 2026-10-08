@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Download, FileText, Image, Library, Sheet } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { SourceBar } from '@/components/source-bar';
+import { LibraryArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type Output, outputUrl, refreshFor } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
@@ -148,7 +149,8 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 				</div>
 			) : items.length === 0 ? (
 				<EmptyState
-					icon={Library}
+					art={<LibraryArt className="w-[180px]" />}
+					className="pt-10"
 					title="Nothing saved yet"
 					body="Reports, screenshots and exports the agent saves show up here after each step."
 				/>

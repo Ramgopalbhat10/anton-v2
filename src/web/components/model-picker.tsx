@@ -283,7 +283,7 @@ export function ModelPicker({
 					sideOffset={6}
 					collisionPadding={12}
 					onKeyDown={onKeyDown}
-					className="z-50 flex max-h-[min(460px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl bg-(--bg-overlay) text-(--text-primary) shadow-(--shadow-overlay) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex max-h-[min(460px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
 				>
 					<div className="flex flex-col gap-2 px-2.5 pt-2.5 pb-2">
 						<div className="flex h-8 items-center gap-2 rounded-lg bg-(--bg-inset) px-2.5">

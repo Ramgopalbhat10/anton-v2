@@ -3,7 +3,7 @@ import { Clock, Cpu, Globe, Timer } from 'lucide-react';
 import { useState } from 'react';
 import { Btn, Spinner } from '@/components/signal';
 import { api, type SandboxSettings, type SandboxView } from '@/lib/api';
-import { Block, PageHeading, SaveState, Select } from './parts';
+import { Block, PageHeading, SaveState, Select, SubBlock } from './parts';
 
 const MACHINES = [
 	{ cpu: 1, memoryMiB: 2048 },
@@ -40,72 +40,79 @@ function Form({ view }: { view: SandboxView }) {
 	});
 	return (
 		<form
-			className="flex flex-col gap-6"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate();
 			}}
 		>
-			<div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
-				<Select
-					label="Machine size"
-					icon={Cpu}
-					value={`${draft.cpu}x${draft.memoryMiB}`}
-					options={MACHINES}
-					fallback={`${draft.cpu} vCPU · ${draft.memoryMiB / 1024} GB`}
-					onChange={(value) => {
-						const machine = MACHINES.find((option) => option.value === value);
-						if (machine) change({ cpu: machine.cpu, memoryMiB: machine.memoryMiB });
-					}}
-					help="Reserved for each sandbox. Bigger machines install and test faster and cost more."
-				/>
-				<Select
-					label="Region"
-					icon={Globe}
-					value={draft.region}
-					options={REGIONS}
-					onChange={(region) => change({ region })}
-					help="Pinning a region costs about 15 percent more on Modal."
-				/>
-				<Select
-					label="Idle shutdown"
-					icon={Clock}
-					value={draft.idleMinutes}
-					options={IDLE}
-					fallback={`${draft.idleMinutes} minutes`}
-					onChange={(idleMinutes) => change({ idleMinutes })}
-					help="A sandbox with nothing running stops after this long. Its files are kept."
-				/>
-				<Select
-					label="Maximum lifetime"
-					icon={Timer}
-					value={draft.lifetimeHours}
-					options={LIFETIME}
-					fallback={`${draft.lifetimeHours} hours`}
-					onChange={(lifetimeHours) => change({ lifetimeHours })}
-					help="Stopped this long after it starts, even while working. The branch and files are kept."
-				/>
-			</div>
 			<Block
-				title="Allowed domains"
-				help="One per line, *.example.com for subdomains. When set, sandboxes can reach only these and GitHub, which setup needs. Leave it empty to allow everything. Web search runs on Anton's side and is not affected."
+				title="Every new sandbox"
+				icon={Cpu}
+				help="What each sandbox gets when it starts, how long it may run, and which sites it can reach."
+				footer={
+					<>
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes that start from now on use these." />
+						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+							{save.isPending ? 'Saving…' : 'Save changes'}
+						</Btn>
+					</>
+				}
 			>
-				<textarea
-					value={domains}
-					onChange={(event) => setDomains(event.target.value)}
-					rows={5}
-					spellCheck={false}
-					placeholder={'registry.npmjs.org\npypi.org\nfiles.pythonhosted.org'}
-					aria-label="Allowed domains"
-					className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 font-mono text-[12px] leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
-				/>
+				<div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-4 gap-y-5 pt-1 pb-2">
+					<Select
+						label="Machine size"
+						icon={Cpu}
+						value={`${draft.cpu}x${draft.memoryMiB}`}
+						options={MACHINES}
+						fallback={`${draft.cpu} vCPU · ${draft.memoryMiB / 1024} GB`}
+						onChange={(value) => {
+							const machine = MACHINES.find((option) => option.value === value);
+							if (machine) change({ cpu: machine.cpu, memoryMiB: machine.memoryMiB });
+						}}
+						help="Reserved for each sandbox. Bigger machines install and test faster and cost more."
+					/>
+					<Select
+						label="Region"
+						icon={Globe}
+						value={draft.region}
+						options={REGIONS}
+						onChange={(region) => change({ region })}
+						help="Pinning a region costs about 15 percent more on Modal."
+					/>
+					<Select
+						label="Idle shutdown"
+						icon={Clock}
+						value={draft.idleMinutes}
+						options={IDLE}
+						fallback={`${draft.idleMinutes} minutes`}
+						onChange={(idleMinutes) => change({ idleMinutes })}
+						help="A sandbox with nothing running stops after this long. Its files are kept."
+					/>
+					<Select
+						label="Maximum lifetime"
+						icon={Timer}
+						value={draft.lifetimeHours}
+						options={LIFETIME}
+						fallback={`${draft.lifetimeHours} hours`}
+						onChange={(lifetimeHours) => change({ lifetimeHours })}
+						help="Stopped this long after it starts, even while working. The branch and files are kept."
+					/>
+				</div>
+				<SubBlock
+					label="Allowed domains"
+					help="One per line, *.example.com for subdomains. When set, sandboxes can reach only these and GitHub, which setup needs. Leave it empty to allow everything. Web search runs on Anton's side and is not affected."
+				>
+					<textarea
+						value={domains}
+						onChange={(event) => setDomains(event.target.value)}
+						rows={5}
+						spellCheck={false}
+						placeholder={'registry.npmjs.org\npypi.org\nfiles.pythonhosted.org'}
+						aria-label="Allowed domains"
+						className="w-full resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 font-mono text-[12px] leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+					/>
+				</SubBlock>
 			</Block>
-			<div className="flex items-center gap-3">
-				<Btn type="submit" variant="primary" disabled={save.isPending}>
-					{save.isPending ? 'Saving…' : 'Save changes'}
-				</Btn>
-				<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes that start from now on use these." />
-			</div>
 		</form>
 	);
 }

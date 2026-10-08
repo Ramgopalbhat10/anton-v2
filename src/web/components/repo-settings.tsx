@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Plus, X } from 'lucide-react';
+import { BookOpen, Box, Plus, Trash2, Workflow, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
-import { PageHeading } from '@/components/settings/parts';
-import { Btn, EmptyState, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
+import { Block, FIELD as WELL_FIELD, PageHeading, SaveState, SubBlock } from '@/components/settings/parts';
+import { Btn, EmptyState, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type Project, type SettingsChange } from '@/lib/api';
 import { useProjects } from '@/lib/projects';
 
@@ -17,16 +17,17 @@ type Server = { name: string; url: string; token: string; hasAuth: boolean; tool
 const toServers = (project: Project): Server[] =>
 	project.mcpServers.map((server) => ({ ...server, token: '', tools: server.tools.join(', ') }));
 
-const FIELD =
-	'h-8 min-w-0 rounded-lg bg-(--bg-surface) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+const FIELD = WELL_FIELD;
+
+/** A textarea on the same inset well as the fields. */
+const AREA =
+	'w-full resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
 function Section({ title, help, children }: { title: string; help: ReactNode; children: ReactNode }) {
 	return (
-		<section className="flex flex-col gap-2">
-			<SectionLabel>{title}</SectionLabel>
-			<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p>
+		<SubBlock label={title} help={help}>
 			{children}
-		</section>
+		</SubBlock>
 	);
 }
 
@@ -172,64 +173,70 @@ function SettingsForm({ project }: { project: Project }) {
 
 	return (
 		<form
-			className="flex flex-col gap-7"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate();
 			}}
 		>
-			<Section
-				title="Environment variables"
-				help="Set in every command the agent runs and in the terminal, over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
+			<Block
+				title="Every new sandbox"
+				icon={Box}
+				help="What a task's sandbox gets for this repository, and what the agent can reach from it."
+				footer={
+					<>
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. New sandboxes use these settings." />
+						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+							{save.isPending ? 'Saving…' : 'Save settings'}
+						</Btn>
+					</>
+				}
 			>
-				<VariablesEditor rows={variables} onChange={setVariables} />
-			</Section>
-			<Section
-				title="Setup script"
-				help="Runs in the repository each time a task's sandbox is set up, before the agent starts. Install dependencies or seed a database here. A failure stops the task's setup."
-			>
-				<textarea
-					value={setupScript}
-					onChange={(event) => setSetupScript(event.target.value)}
-					rows={6}
-					spellCheck={false}
-					placeholder="npm ci"
-					className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 font-mono text-[12px] leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
-				/>
-			</Section>
-			<Section title="Preview ports" help="Ports that get a public URL in the Preview panel. Up to eight, separated by commas.">
-				<input value={ports} onChange={(event) => setPorts(event.target.value)} placeholder="3000, 5173" className={`${FIELD} max-w-[320px] font-mono`} />
-			</Section>
-			<Section
-				title="Base image"
-				help="A container image to build the sandbox from instead of Anton's default, for languages it does not include. Anton adds git and its tools on top."
-			>
-				<input
-					value={baseImage}
-					onChange={(event) => setBaseImage(event.target.value)}
-					placeholder="Default image"
-					className={`${FIELD} font-mono`}
-				/>
-			</Section>
-			<Section
-				title="Pull request follow-ups"
-				help="Every five minutes Anton checks the pull requests its agents opened. Failed checks on the latest commit and new review comments go to that task's agent, up to five times per task."
-			>
-				<Switch checked={followUps} onChange={setFollowUps} label="Follow up on CI and reviews" className="self-start" />
-			</Section>
-			<Section
-				title="MCP servers"
-				help="Remote MCP servers the agent can call, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those."
-			>
-				<ServersEditor rows={servers} onChange={setServers} />
-			</Section>
-			<div className="flex items-center gap-3">
-				<Btn type="submit" variant="primary" disabled={save.isPending}>
-					{save.isPending ? 'Saving…' : 'Save settings'}
-				</Btn>
-				{save.isSuccess && !save.isPending ? <span className="text-[12px] text-(--success-text)">Saved. New sandboxes use these settings.</span> : null}
-				{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
-			</div>
+				<Section
+					title="Environment variables"
+					help="Set in every command the agent runs and in the terminal, over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
+				>
+					<VariablesEditor rows={variables} onChange={setVariables} />
+				</Section>
+				<Section
+					title="Setup script"
+					help="Runs in the repository each time a task's sandbox is set up, before the agent starts. Install dependencies or seed a database here. A failure stops the task's setup."
+				>
+					<textarea
+						value={setupScript}
+						onChange={(event) => setSetupScript(event.target.value)}
+						rows={6}
+						spellCheck={false}
+						placeholder="npm ci"
+						className={`${AREA} font-mono text-[12px] leading-[18px]`}
+					/>
+				</Section>
+				<Section title="Preview ports" help="Ports that get a public URL in the Preview panel. Up to eight, separated by commas.">
+					<input value={ports} onChange={(event) => setPorts(event.target.value)} placeholder="3000, 5173" className={`${FIELD} max-w-[320px] font-mono`} />
+				</Section>
+				<Section
+					title="Base image"
+					help="A container image to build the sandbox from instead of Anton's default, for languages it does not include. Anton adds git and its tools on top."
+				>
+					<input
+						value={baseImage}
+						onChange={(event) => setBaseImage(event.target.value)}
+						placeholder="Default image"
+						className={`${FIELD} font-mono`}
+					/>
+				</Section>
+				<Section
+					title="Pull request follow-ups"
+					help="Every five minutes Anton checks the pull requests its agents opened. Failed checks on the latest commit and new review comments go to that task's agent, up to five times per task."
+				>
+					<Switch checked={followUps} onChange={setFollowUps} label="Follow up on CI and reviews" className="self-start" />
+				</Section>
+				<Section
+					title="MCP servers"
+					help="Remote MCP servers the agent can call, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those."
+				>
+					<ServersEditor rows={servers} onChange={setServers} />
+				</Section>
+			</Block>
 		</form>
 	);
 }
@@ -252,21 +259,27 @@ function MemoryEditor({ project }: { project: Project }) {
 		},
 	});
 	return (
-		<div className="flex flex-col gap-2">
+		<Block
+			title="Memory"
+			icon={BookOpen}
+			help="Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
+			footer={
+				<>
+					{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+					<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
+						{save.isPending ? 'Saving…' : 'Save notes'}
+					</Btn>
+				</>
+			}
+		>
 			<textarea
 				value={memory}
 				onChange={(event) => setMemory(event.target.value)}
 				rows={6}
 				placeholder="- Run the tests with npm test; they need Docker."
-				className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+				className={`${AREA} text-[13px] leading-[19px]`}
 			/>
-			<div className="flex items-center gap-3">
-				<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
-					{save.isPending ? 'Saving…' : 'Save notes'}
-				</Btn>
-				{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
-			</div>
-		</div>
+		</Block>
 	);
 }
 
@@ -284,7 +297,7 @@ function RemoveRepo({ project }: { project: Project }) {
 		},
 	});
 	return (
-		<div className="flex items-center gap-3">
+		<div className="flex items-center justify-end gap-3">
 			<Btn
 				variant="danger"
 				size="sm"
@@ -319,27 +332,21 @@ export function RepoSettingsPage() {
 				What every new sandbox for this repository gets. Tasks already running keep theirs until their sandbox restarts.
 			</PageHeading>
 			<SettingsForm key={project.id} project={project} />
-			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-				<SectionLabel>Memory</SectionLabel>
-				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-					Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here.
-				</p>
-				<MemoryEditor key={project.id} project={project} />
-			</div>
-			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-				<SectionLabel>Automations</SectionLabel>
-				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-					Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached.
-				</p>
+			<MemoryEditor key={project.id} project={project} />
+			<Block
+				title="Automations"
+				icon={Workflow}
+				help="Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached."
+			>
 				<Automations projectId={project.id} />
-			</div>
-			<div className="mt-4 flex flex-col gap-2 border-t border-(--border-subtle) pt-8">
-				<SectionLabel>Remove</SectionLabel>
-				<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-					Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub.
-				</p>
-				<RemoveRepo project={project} />
-			</div>
+			</Block>
+			<Block
+				title="Remove"
+				icon={Trash2}
+				className="border-(--danger-border)"
+				help="Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub."
+				footer={<RemoveRepo project={project} />}
+			/>
 		</>
 	);
 }

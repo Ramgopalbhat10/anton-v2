@@ -1,5 +1,5 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ChevronRight, List } from 'lucide-react';
+import { ChevronRight, List, type LucideIcon } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { MenuButton } from '@/components/nav';
 import { EmptyState, Icon, SectionLabel } from '@/components/signal';
@@ -10,21 +10,33 @@ import { pickOf, usePreview } from './skill-detail';
 import type { ViewSearch } from './skills';
 
 const NAV_ITEM =
-	'relative flex h-7 items-center gap-2 rounded-lg px-2 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-[9px] pr-2 pl-1 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
+
+/** A nav item's icon on a small tile, lit on the page you are on. */
+function NavIcon({ icon }: { icon: LucideIcon }) {
+	return (
+		<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:border-(--accent-border) group-data-[status=active]/nav:text-(--accent-text)">
+			<Icon icon={icon} size={13} />
+		</span>
+	);
+}
 
 function Nav() {
 	return (
-		<nav aria-label="Settings" className="hidden w-[224px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-(--border-subtle) pt-2 pr-2 pb-4 pl-3 md:flex">
+		<nav aria-label="Settings" className="hidden w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-(--border-subtle) pt-2.5 pr-2.5 pb-4 pl-2.5 md:flex">
 			<Link to="/settings" activeOptions={{ exact: true }} className={NAV_ITEM}>
-				<Icon icon={List} size={12} className="text-(--icon-tertiary)" />
+				<NavIcon icon={List} />
 				All settings
 			</Link>
 			{GROUPS.map((group) => (
 				<Fragment key={group.id}>
-					<SectionLabel className="px-2 pt-3.5 pb-1">{group.label}</SectionLabel>
+					<div className="flex items-center gap-2 px-2 pt-4 pb-1.5">
+						<SectionLabel className="shrink-0">{group.label}</SectionLabel>
+						<span aria-hidden className="h-px flex-1 bg-(--border-subtle)" />
+					</div>
 					{SECTIONS.filter((section) => section.group === group.id).map((section) => (
 						<Link key={section.id} to="/settings/$section" params={{ section: section.id }} className={NAV_ITEM}>
-							<Icon icon={section.icon} size={12} className="text-(--icon-tertiary)" />
+							<NavIcon icon={section.icon} />
 							<span className="min-w-0 flex-1 truncate">{section.label}</span>
 						</Link>
 					))}

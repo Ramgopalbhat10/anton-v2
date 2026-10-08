@@ -96,7 +96,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 	return (
 		<div
-			className="fixed inset-0 z-[200] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4"
+			className="fixed inset-0 z-[200] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4 backdrop-blur-[2px]"
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}
@@ -104,7 +104,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 			<div
 				role="dialog"
 				aria-label="Command palette"
-				className="flex w-[min(560px,100%)] flex-col overflow-hidden rounded-lg bg-(--bg-overlay) shadow-(--shadow-modal)"
+				className="in-pop in-pop--modal flex w-[min(580px,100%)] flex-col overflow-hidden"
 			>
 				<div className="flex h-12 items-center gap-2.5 px-3.5 shadow-[inset_0_-1px_0_var(--border-subtle)]">
 					<Icon icon={Search} className="text-(--icon-tertiary)" />

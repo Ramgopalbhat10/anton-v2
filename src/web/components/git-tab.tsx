@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, GitCommitHorizontal, GitCompare, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useMemo, useState } from 'react';
+import { BranchArt } from '@/components/illustrations';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { SourceBar } from '@/components/source-bar';
 import { api, refreshFor } from '@/lib/api';
@@ -232,7 +233,7 @@ export function DiffList({
 }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	if (files.length === 0) {
-		return <EmptyState icon={GitCompare} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
+		return <EmptyState art={<BranchArt className="w-[190px]" />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} className="pt-10" />;
 	}
 	const current = files.find((file) => file.path === selected) ?? files[0];
 	return (
