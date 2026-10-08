@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Package, RefreshCw } from 'lucide-react';
+import { Layers, Package, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { Btn, Icon, Spinner } from '@/components/signal';
+import { Status } from '@/components/instrument';
+import { Btn, Spinner } from '@/components/signal';
 import { api, type Project, type SandboxView } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
-import { Block, FIELD, List, PageHeading, SaveState, Select } from './parts';
+import { Block, FIELD, List, PageHeading, RowIcon, SaveState, Select, SubBlock } from './parts';
 
 const MAX_AGE = [1, 3, 7, 14, 30].map((days) => ({ value: days, label: days === 1 ? '1 day' : `${days} days` }));
 
@@ -26,7 +27,6 @@ function Defaults({ view }: { view: SandboxView }) {
 	});
 	return (
 		<form
-			className="flex flex-col gap-5"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate();
@@ -34,27 +34,32 @@ function Defaults({ view }: { view: SandboxView }) {
 		>
 			<Block
 				title="Default base image"
+				icon={Layers}
 				help={`A container image from a registry. Anton adds git, ripgrep, Python and a browser for screenshots on top. A repository can set its own. Changing it rebuilds the prepared images of repositories that use the default.`}
+				footer={
+					<>
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
+						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+							{save.isPending ? 'Saving…' : 'Save changes'}
+						</Btn>
+					</>
+				}
 			>
 				<input value={baseImage} onChange={(event) => setBaseImage(event.target.value)} placeholder={view.defaultBaseImage} aria-label="Default base image" className={`${FIELD} max-w-[420px] font-mono`} />
+				<SubBlock>
+					<div className="max-w-[260px] pb-1">
+						<Select
+							label="Rebuild prepared images after"
+							icon={RefreshCw}
+							value={warmImageDays}
+							options={MAX_AGE}
+							fallback={`${warmImageDays} days`}
+							onChange={setWarmImageDays}
+							help="An older one is rebuilt by the next task, so new dependencies are picked up."
+						/>
+					</div>
+				</SubBlock>
 			</Block>
-			<div className="max-w-[260px]">
-				<Select
-					label="Rebuild prepared images after"
-					icon={RefreshCw}
-					value={warmImageDays}
-					options={MAX_AGE}
-					fallback={`${warmImageDays} days`}
-					onChange={setWarmImageDays}
-					help="An older one is rebuilt by the next task, so new dependencies are picked up."
-				/>
-			</div>
-			<div className="flex items-center gap-3">
-				<Btn type="submit" variant="primary" disabled={save.isPending}>
-					{save.isPending ? 'Saving…' : 'Save changes'}
-				</Btn>
-				<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
-			</div>
 		</form>
 	);
 }
@@ -68,7 +73,7 @@ function Prepared({ project, view }: { project: Project; view: SandboxView }) {
 	const base = project.baseImage ?? view.settings.baseImage ?? view.defaultBaseImage;
 	return (
 		<div className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5">
-			<Icon icon={Package} className="text-(--icon-secondary)" />
+			<RowIcon icon={Package} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Link to="/settings/repos/$projectId" params={{ projectId: project.id }} className="truncate text-[13px] font-medium outline-none hover:underline">
 					{project.repoFullName}
@@ -98,7 +103,12 @@ export function ImagesPage() {
 			</PageHeading>
 			{view.data ? <Defaults view={view.data} /> : <Spinner size={12} />}
 			{view.data && projects.data ? (
-				<Block title="Prepared images" help="Rebuild drops one, so the next task sets up from scratch and saves a fresh image.">
+				<Block
+					title="Prepared images"
+					icon={Package}
+					aside={<Status>{`${projects.data.projects.filter((project) => project.warmedAt).length} of ${projects.data.projects.length} built`}</Status>}
+					help="Rebuild drops one, so the next task sets up from scratch and saves a fresh image."
+				>
 					<List>
 						{projects.data.projects.map((project) => (
 							<Prepared key={project.id} project={project} view={view.data} />

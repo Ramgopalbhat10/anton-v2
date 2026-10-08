@@ -4,7 +4,6 @@ import {
 	Activity,
 	ArrowUpDown,
 	CalendarDays,
-	ChevronDown,
 	ChevronRight,
 	CircleDot,
 	Cpu,
@@ -35,6 +34,7 @@ import {
 	Avatar,
 	Icon,
 	IconBtn,
+	Kbd,
 	Menu,
 	MenuContent,
 	MenuItem,
@@ -45,7 +45,7 @@ import {
 	MenuTrigger,
 	SectionLabel,
 } from '@/components/signal';
-import { SegmentMeter, usedTone } from '@/components/instrument';
+import { Count, SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
@@ -75,8 +75,18 @@ import {
 import { cn } from '@/lib/utils';
 
 const NAV_ROW =
-	'group relative flex h-[30px] items-center gap-2 rounded-lg px-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-[9px] pr-2 pl-1 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
 
+/** A nav row's icon, on a small tile that lights up on the page you are on. */
+function NavIcon({ icon }: { icon: LucideIcon }) {
+	return (
+		<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:border-(--accent-border) group-data-[status=active]/nav:text-(--accent-text)">
+			<Icon icon={icon} size={13} />
+		</span>
+	);
+}
+
+/** A count in a small mono pill, beside a nav row or section heading. */
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
 function SpentToday() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
@@ -304,7 +314,7 @@ function Toolbar({
 			{active ? (
 				<FilterChips view={view} onChange={onChange} tasks={tasks} />
 			) : (
-				<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">
+				<span className="in-caption min-w-0 flex-1 truncate">
 					{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
 				</span>
 			)}
@@ -338,12 +348,18 @@ function SectionHeader({
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
-				<Icon icon={SECTION_ICON[place]} size={12} className="text-(--icon-tertiary)" />
+				<Icon icon={SECTION_ICON[place]} size={12} className={place === 'running' && count ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
 				<SectionLabel className="truncate">{label}</SectionLabel>
-				{count ? <span className="text-[11px] text-(--text-disabled)">{count}</span> : null}
-				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+				{count ? <Count>{count}</Count> : null}
+				<span aria-hidden className="mx-1 h-px min-w-2 flex-1 bg-(--border-subtle)" />
+				<Icon
+					icon={ChevronRight}
+					size={12}
+					className="shrink-0 text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out) group-hover/fold:text-(--icon-secondary)"
+					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
+				/>
 			</button>
 			{children ? (
 				// Stays while its menu is open, which Radix marks on the trigger.
@@ -432,8 +448,9 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 	const live = isLive(session);
 	return (
 		<TaskPeek session={session} disabled={menuOpen || renaming || cardOpen}>
-			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-lg hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
-				{active ? <div className="absolute inset-0 rounded-lg bg-(--alpha-white-6)" /> : null}
+			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
+				{active ? <div className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
+				{live ? <div aria-hidden className="absolute top-2.5 bottom-2.5 -left-2 w-[2px] rounded-full bg-(--accent-base)" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -446,7 +463,7 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 							search={{ app: 'code' }}
 							onClick={onNavigate}
 							aria-label={session.title}
-							className="absolute inset-0 rounded-lg outline-none focus-visible:shadow-(--focus-ring)"
+							className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
 						/>
 						<div
 							className={cn(
@@ -503,7 +520,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 }
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="px-4 py-1.5 text-[12px] text-(--text-disabled)">{children}</div>;
+	return <div className="mx-2 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -548,33 +565,42 @@ export function ChatSidebar({
 			)}
 		>
 			<div className="flex h-11 shrink-0 items-center gap-1.5 pr-2 pl-3">
-				<Logo />
-				<div className="min-w-0 truncate text-[13px] font-medium">Anton</div>
+				<Logo size={22} />
+				<div className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
-				<IconBtn icon={Search} size="xs" label="Command palette" onClick={onOpenPalette} />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
 
-			<div className="px-2 pb-2">
+			<div className="flex flex-col gap-1.5 px-2 pb-2">
 				<Link
 					to="/"
 					onClick={onNavigate}
-					className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-(--bg-overlay) text-[13px] font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Plus} />
 					<span>New task</span>
 				</Link>
+				<button
+					type="button"
+					onClick={onOpenPalette}
+					aria-label="Command palette"
+					className="flex h-8 items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-left text-[12px] text-(--text-disabled) outline-none hover:border-(--border-default) hover:text-(--text-tertiary) focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+					<span className="min-w-0 flex-1 truncate">Search or jump to</span>
+					<Kbd keys="mod+k" size="sm" />
+				</button>
 			</div>
 
 			<div className="flex flex-col gap-0.5 px-2 py-1">
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
-					<Icon icon={List} className="text-(--icon-tertiary)" />
+					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
-					<div className="text-[11px] text-(--text-tertiary)">{sessions.length}</div>
+					<Count>{sessions.length}</Count>
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
-					<Icon icon={GitPullRequest} className="text-(--icon-tertiary)" />
+					<NavIcon icon={GitPullRequest} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Reviews</div>
 				</Link>
 			</div>

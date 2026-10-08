@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, Download, FileText, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Download, FileText, Info, RefreshCw, Trash2 } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView } from '@/components/file-view';
 import { Markdown } from '@/components/markdown';
-import { Badge, Btn, EmptyState, Icon, SectionLabel, Spinner, Switch } from '@/components/signal';
+import { Card, Count, Status } from '@/components/instrument';
+import { Btn, EmptyState, Icon, Spinner, Switch } from '@/components/signal';
 import { api, type PluginPick, type PluginPreview } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
@@ -111,22 +112,23 @@ function Facts({ preview }: { preview: PluginPreview }) {
 	];
 	return (
 		<aside className="flex flex-col gap-3 lg:w-[260px] lg:shrink-0">
-			<div className="flex flex-col gap-2 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-3.5">
-				<SectionLabel>Details</SectionLabel>
-				{rows.map(([label, value]) => (
-					<div key={label} className="flex items-baseline gap-3 text-[12px]">
-						<span className="w-[84px] shrink-0 text-(--text-tertiary)">{label}</span>
-						<span className="min-w-0 flex-1 truncate text-(--text-secondary)">{value}</span>
-					</div>
-				))}
-			</div>
+			<Card icon={Info} title="Details">
+				<dl className="m-0 flex flex-col px-4 pb-2">
+					{rows.map(([label, value]) => (
+						<div key={label} className="flex min-h-9 items-center gap-3 border-t border-(--border-subtle) text-[12px]">
+							<dt className="in-caption w-[84px] shrink-0">{label}</dt>
+							<dd className="m-0 flex min-w-0 flex-1 justify-end truncate text-(--text-secondary)">{value}</dd>
+						</div>
+					))}
+				</dl>
+			</Card>
 			{preview.mcpServers.length ? (
-				<p className="m-0 rounded-xl bg-(--bg-surface) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
+				<p className="m-0 rounded-[12px] border border-dashed border-(--border-default) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
 					Also declares MCP servers ({preview.mcpServers.join(', ')}). Anton does not run them; add one under a repository’s MCP servers to use it.
 				</p>
 			) : null}
 			{preview.skipped.length ? (
-				<div className="flex flex-col gap-1 rounded-xl bg-(--warning-bg) p-3 text-[12px] leading-[18px] text-(--warning-text)">
+				<div className="flex flex-col gap-1 rounded-[12px] border border-(--border-subtle) bg-(--warning-bg) p-3 text-[12px] leading-[18px] text-(--warning-text)">
 					<span className="font-medium">Left out when installed</span>
 					{preview.skipped.map((note) => (
 						<span key={note}>{note}</span>
@@ -147,7 +149,7 @@ function Overview({ preview }: { preview: PluginPreview }) {
 	});
 	return (
 		<div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-			<div className="min-w-0 flex-1 rounded-xl border border-(--border-subtle) bg-(--bg-surface) px-5 py-4">
+			<div className="in-card min-w-0 flex-1 px-5 py-4">
 				{!preview.readme ? (
 					<p className="m-0 text-[13px] text-(--text-tertiary)">{preview.description || 'This has no README. Its skills and files are in the tabs above.'}</p>
 				) : readme.isPending ? (
@@ -168,14 +170,16 @@ function Skills({ preview, onView }: { preview: PluginPreview; onView: (path: st
 		return <EmptyState icon={FileText} title="No skills here" body="No SKILL.md was found in this folder, so there is nothing to install. Its files are still in the Files tab." />;
 	}
 	return (
-		<div className="flex flex-col gap-0.5 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-1">
+		<div className="in-card p-1">
 			{preview.skills.map((skill) => (
-				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-lg px-3 py-2.5 hover:bg-(--bg-hover)">
+				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-[10px] px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
 					<Glyph bundle={false} />
 					<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 						<span className="font-mono text-[13px] text-(--text-primary)">/{skill.name}</span>
-						<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{skill.description || 'No description.'}</p>
-						{skill.license ? <span className="text-[11px] text-(--text-disabled)">{skill.license}</span> : null}
+						<p className="m-0 line-clamp-3 max-w-[90ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)" title={skill.description}>
+							{skill.description || 'No description.'}
+						</p>
+						{skill.license ? <span className="in-num truncate text-[10.5px] text-(--text-disabled)">{skill.license}</span> : null}
 					</div>
 					<div className="flex shrink-0 items-center gap-1">
 						<Btn size="xs" variant="ghost" onClick={() => onView(within(preview, skill.folder ? `${skill.folder}/SKILL.md` : 'SKILL.md'))}>
@@ -219,14 +223,14 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 	const full = preview.source.path ? `${preview.source.path}/${selected}` : selected;
 	return (
 		<FileIcons>
-			<div className="flex h-[min(640px,70vh)] min-h-[360px] overflow-hidden rounded-xl border border-(--border-subtle)">
-				<div className="flex w-[240px] shrink-0 flex-col overflow-y-auto border-r border-(--border-subtle) bg-(--bg-surface) p-1.5">
+			<div className="in-card h-[min(640px,70vh)] min-h-[360px] flex-row overflow-hidden">
+				<div className="flex w-[240px] shrink-0 flex-col overflow-y-auto border-r border-(--border-subtle) p-1.5">
 					<Branch node={tree} selected={selected} depth={0} expanded={expanded} onToggle={toggle} onOpen={onOpen} />
 					{preview.truncated ? <p className="m-0 px-2 py-1.5 text-[11px] text-(--text-disabled)">Only the first {preview.files.length.toLocaleString()} files are listed.</p> : null}
 				</div>
 				<div className="flex min-w-0 flex-1 flex-col">
-					<div className="flex h-8 shrink-0 items-center gap-2 border-b border-(--border-subtle) bg-(--bg-raised) px-3 text-[12px]">
-						<span className="min-w-0 flex-1 truncate font-mono text-(--text-secondary)">{selected || 'No file'}</span>
+					<div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--border-subtle) px-3 text-[12px]">
+						<span className="in-num min-w-0 flex-1 truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
 						{selected ? (
 							<a
 								href={`https://github.com/${preview.source.repo}/blob/${preview.sha}/${full}`}
@@ -272,10 +276,6 @@ function TabButton({ on, onClick, children }: { on: boolean; onClick: () => void
 	);
 }
 
-function Count({ children }: { children: ReactNode }) {
-	return <span className="text-[12px] text-(--text-disabled)">{children}</span>;
-}
-
 /** The first file worth reading: the README, or the first skill's instructions. */
 function firstFile(preview: PluginPreview): string {
 	const skill = preview.files.find((path) => path.endsWith('/SKILL.md') || path === 'SKILL.md');
@@ -294,8 +294,8 @@ function Detail({ preview }: { preview: PluginPreview }) {
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex items-center gap-2">
 						<h1 className="m-0 truncate text-[20px] leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
-						{preview.installed ? <Badge tone="success">Installed</Badge> : null}
-						{preview.update ? <Badge tone="accent">Update available</Badge> : null}
+						{preview.installed ? <Status tone="success">Installed</Status> : null}
+						{preview.update ? <Status tone="accent" pulse>Update available</Status> : null}
 					</div>
 					<div className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-(--text-tertiary)">
 						<span>by {by}</span>

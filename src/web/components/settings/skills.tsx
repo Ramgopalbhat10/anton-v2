@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Blocks, Github, Plus, ScrollText, Search, Settings2, Star, Store, X } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Badge, Btn, EmptyState, Icon, IconBtn, SectionLabel, Spinner, Switch } from '@/components/signal';
+import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/instrument';
+import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type CatalogItem, type GitHubSearch, type Plugin, type PluginPick } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { FIELD, PageHeading } from './parts';
@@ -48,8 +49,9 @@ export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 
 	return (
 		<span
 			className={cn(
-				'inline-flex shrink-0 items-center justify-center rounded-lg border border-(--border-subtle) bg-(--bg-raised) text-(--icon-secondary)',
-				size === 'lg' ? 'size-11' : 'size-8',
+				'inline-flex shrink-0 items-center justify-center border border-dashed border-(--border-strong) bg-(--well-bg)',
+				bundle ? 'text-(--data-2)' : 'text-(--data-1)',
+				size === 'lg' ? 'size-12 rounded-[12px]' : 'size-8 rounded-[9px]',
 			)}
 		>
 			<Icon icon={bundle ? Blocks : ScrollText} size={size === 'lg' ? 20 : 15} />
@@ -76,14 +78,14 @@ function Card({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="group relative flex min-w-0 flex-col gap-2.5 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default) hover:bg-(--bg-raised)">
+		<div className="in-card group gap-2.5 p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default)">
 			<div className="flex items-start gap-3">
 				<Glyph bundle={bundle} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<Link
 						to="/settings/skills/view"
 						search={open}
-						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:shadow-(--focus-ring)"
+						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)"
 					>
 						{title}
 					</Link>
@@ -94,7 +96,7 @@ function Card({
 			<p className={cn('m-0 line-clamp-2 min-h-9 text-[12px] leading-[18px] text-pretty', description ? 'text-(--text-tertiary)' : 'text-(--text-disabled)')}>
 				{description || 'No description.'}
 			</p>
-			{children}
+			{children ? <div className="-mx-3.5 mt-auto border-t border-(--border-subtle) px-3.5 pt-2.5">{children}</div> : null}
 		</div>
 	);
 }
@@ -112,7 +114,7 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 					key={skill.name}
 					title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
 					className={cn(
-						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md bg-(--alpha-white-4) px-1.5 font-mono text-[11px]',
+						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[11px]',
 						skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
 					)}
 				>
@@ -188,7 +190,7 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					</button>
 				</p>
 			)}
-			<p className="m-0 text-[12px] text-(--text-disabled)">
+			<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-tertiary)">
 				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> are always used too, ahead of these. Type <code>/</code> and a skill’s name in a task to
 				ask for it.
 			</p>
@@ -228,7 +230,7 @@ function CatalogCard({ item, marketplace }: { item: CatalogItem; marketplace: st
 				</>
 			}
 			description={item.description}
-			action={item.installed ? <Badge tone="success">Installed</Badge> : <InstallButton pick={pick} name={item.name} />}
+			action={item.installed ? <Status tone="success">Installed</Status> : <InstallButton pick={pick} name={item.name} />}
 		/>
 	);
 }
@@ -251,9 +253,9 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 					align="end"
 					sideOffset={6}
 					collisionPadding={12}
-					className="z-50 flex w-[320px] flex-col gap-2 rounded-xl bg-(--bg-overlay) p-3 text-(--text-primary) shadow-(--shadow-overlay) outline-none"
+					className="in-pop z-50 flex w-[320px] flex-col gap-2 p-3 text-(--text-primary) outline-none"
 				>
-					<SectionLabel>Marketplaces</SectionLabel>
+					<Caption>Marketplaces</Caption>
 					<p className="m-0 text-[12px] leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
 					<div className="flex flex-col gap-0.5">
 						{saved.map((marketplace) => (
@@ -296,8 +298,10 @@ function SourceChip({ label, on, onClick, icon }: { label: string; on: boolean; 
 			aria-pressed={on}
 			onClick={onClick}
 			className={cn(
-				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
-				on ? 'bg-(--accent-bg) text-(--accent-text)' : 'bg-(--bg-surface) text-(--text-secondary) hover:text-(--text-primary)',
+				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+				on
+					? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)'
+					: 'border-(--border-subtle) bg-(--well-bg) text-(--text-secondary) hover:border-(--border-default) hover:text-(--text-primary)',
 			)}
 		>
 			{icon ? <Icon icon={icon} size={12} /> : null}
@@ -351,7 +355,7 @@ function GitHubResults({ query }: { query: string }) {
 		<section className="flex flex-col gap-2.5" aria-label="On GitHub">
 			<div className="flex items-center gap-2">
 				<Icon icon={Github} size={13} className="text-(--icon-tertiary)" />
-				<SectionLabel>On GitHub</SectionLabel>
+				<Caption>On GitHub</Caption>
 				{typing ? <Spinner size={12} /> : null}
 			</div>
 			{search.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{search.error.message}</p> : null}
@@ -376,7 +380,7 @@ function GitHubResults({ query }: { query: string }) {
 				</Grid>
 			) : null}
 			{result?.repos.length ? (
-				<div className="flex flex-col gap-0.5 rounded-xl border border-(--border-subtle) bg-(--bg-surface) p-1" aria-label="Repositories">
+				<div className="in-card gap-0.5 p-1" aria-label="Repositories">
 					{result.repos.map((repo) => (
 						<Link
 							key={repo.address}
@@ -389,7 +393,7 @@ function GitHubResults({ query }: { query: string }) {
 								<span className="truncate font-mono text-[12px] text-(--text-primary)">{repo.address}</span>
 								{repo.description ? <span className="truncate text-[12px] text-(--text-tertiary)">{repo.description}</span> : null}
 							</div>
-							<span className="flex shrink-0 items-center gap-1 text-[11px] text-(--text-disabled)">
+							<span className="in-num flex shrink-0 items-center gap-1 text-[11px] text-(--text-disabled)">
 								<Icon icon={Star} size={11} />
 								{repo.stars.toLocaleString()}
 							</span>
@@ -418,7 +422,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 				<Link
 					to="/settings/skills/view"
 					search={{ address: query.trim() }}
-					className="flex items-center gap-3 rounded-xl border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
+					className="flex items-center gap-3 rounded-[14px] border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Github} size={16} className="text-(--accent-text)" />
 					<div className="flex min-w-0 flex-1 flex-col">
@@ -455,7 +459,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 				) : catalogs.pending ? (
 					<Grid>
 						{SKELETONS.map((index) => (
-							<div key={index} className="h-[118px] animate-pulse rounded-xl border border-(--border-subtle) bg-(--bg-surface)" />
+							<div key={index} className="in-card h-[118px] animate-pulse" />
 						))}
 					</Grid>
 				) : (
@@ -469,23 +473,6 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 			</section>
 			{needle.length >= 2 && !looksLikeAddress(query) ? <GitHubResults query={query} /> : null}
 		</div>
-	);
-}
-
-function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
-	return (
-		<button
-			type="button"
-			role="tab"
-			aria-selected={on}
-			onClick={onClick}
-			className={cn(
-				'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
-				on ? 'bg-(--bg-overlay) text-(--text-primary) shadow-(--shadow-inset-hairline)' : 'text-(--text-tertiary) hover:text-(--text-secondary)',
-			)}
-		>
-			{children}
-		</button>
 	);
 }
 
@@ -504,15 +491,15 @@ export function SkillsPage() {
 				skills.
 			</PageHeading>
 			<div className="flex flex-wrap items-center gap-3">
-				<div role="tablist" aria-label="Skills" className="inline-flex shrink-0 gap-0.5 rounded-lg bg-(--bg-surface) p-0.5">
-					<Tab on={tab === 'installed'} onClick={() => go({ tab: 'installed' })}>
+				<Segmented label="Skills" className="shrink-0">
+					<SegmentedItem on={tab === 'installed'} onClick={() => go({ tab: 'installed' })}>
 						Installed
-						{plugins.data ? <span className="text-[12px] text-(--text-disabled)">{plugins.data.plugins.length}</span> : null}
-					</Tab>
-					<Tab on={tab === 'discover'} onClick={() => go({ tab: 'discover' })}>
+						{plugins.data ? <Count tone={tab === 'installed' ? 'accent' : 'neutral'}>{plugins.data.plugins.length}</Count> : null}
+					</SegmentedItem>
+					<SegmentedItem on={tab === 'discover'} onClick={() => go({ tab: 'discover' })}>
 						Discover
-					</Tab>
-				</div>
+					</SegmentedItem>
+				</Segmented>
 				<label className="relative flex min-w-[220px] flex-1 items-center">
 					<Icon icon={Search} size={13} className="pointer-events-none absolute left-2.5 text-(--icon-tertiary)" />
 					<input

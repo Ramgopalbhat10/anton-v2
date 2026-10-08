@@ -1,9 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, History, RotateCcw } from 'lucide-react';
+import { Check, ChevronLeft, History, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { useRefreshTask } from '@/components/source-bar';
-import { Btn, DiffStat, EmptyState, Spinner } from '@/components/signal';
+import { HistoryArt } from '@/components/illustrations';
+import { DiffBars, Status } from '@/components/instrument';
+import { Btn, DiffStat, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type CheckpointSummary, SAFETY_NET_MS } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
 import { age, clock } from '@/lib/format';
@@ -57,19 +59,20 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 				<Btn variant="ghost" size="xs" icon={ChevronLeft} onClick={onBack}>
 					History
 				</Btn>
-				<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-tertiary)">
-					Saved at {clock(entry.at)}
-				</span>
+				<span className="in-caption min-w-0 flex-1 truncate">Saved at {clock(entry.at)}</span>
 				{latest ? (
-					<span className="text-[11px] text-(--text-disabled)">Current files</span>
+					<Status tone="accent">Current files</Status>
 				) : (
 					<RestoreButton sessionId={sessionId} at={entry.at} onDone={setRestored} />
 				)}
 			</div>
 			{restored ? (
-				<div className="rounded-lg bg-(--bg-raised) px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
+				<div className="flex items-start gap-2.5 rounded-[10px] border border-(--border-subtle) bg-(--success-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-secondary)">
+					<Icon icon={Check} size={13} className="mt-0.5 text-(--success-text)" />
+					<span>
 					Files restored. Commits and the conversation are unchanged, so tell the agent if it should know.
 					{restored.length > 0 ? ` Too large to have been saved, so left as they were: ${restored.join(', ')}.` : ''}
+					</span>
 				</div>
 			) : null}
 			{detail.isPending ? (
@@ -98,31 +101,58 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 	if (timeline.isPending) return <Loading label="Loading the history" />;
 	if (timeline.isError) return <EmptyState title="History unavailable" body={timeline.error.message} />;
 	if (entries.length === 0) {
-		return <EmptyState icon={History} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." />;
+		return <EmptyState art={<HistoryArt className="w-[190px]" />} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." className="pt-10" />;
 	}
 	return (
-		<div className="flex flex-col gap-px pt-1">
-			{entries.map((entry, index) => (
-				<button
-					type="button"
-					key={entry.at}
-					onClick={() => setSelected(entry.at)}
-					className="flex h-11 items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-				>
-					<span className={cn('size-1.5 shrink-0 rounded-full', index === 0 ? 'bg-(--accent-base)' : 'bg-(--text-disabled)')} />
-					<div className="flex min-w-0 flex-1 flex-col gap-px">
-						<div className="flex items-center gap-2 truncate text-[12px] text-(--text-primary)">
-							{entry.files} {entry.files === 1 ? 'file' : 'files'} changed
-							{entry.added !== null && entry.removed !== null ? <DiffStat added={entry.added} removed={entry.removed} /> : null}
-							{index === 0 ? <span className="text-(--text-tertiary)">Current</span> : null}
-						</div>
-						<div className="truncate text-[11px] text-(--text-disabled)">{entry.commit ?? 'No commits yet'}</div>
-					</div>
-					<span className="shrink-0 text-[11px] text-(--text-tertiary)">
-						{clock(entry.at)} · {age(entry.at)}
-					</span>
-				</button>
-			))}
+		<div className="flex flex-col gap-2.5">
+			<div className="in-caption flex h-7 items-center gap-2">
+				<span>
+					{entries.length} {entries.length === 1 ? 'checkpoint' : 'checkpoints'}
+				</span>
+				<span className="flex-1" />
+				<span className="normal-case tracking-normal">One per reply that changed files</span>
+			</div>
+			<ol className="in-card m-0 list-none p-1.5" aria-label="Checkpoints">
+				{entries.map((entry, index) => (
+					<li key={entry.at} className="relative">
+						{/* The timeline runs through every checkpoint's node, newest at the top. */}
+						<span aria-hidden className={cn('absolute left-[17px] w-px bg-(--border-default)', index === 0 ? 'top-1/2' : 'top-0', index === entries.length - 1 ? 'bottom-1/2' : 'bottom-0')} />
+						<button
+							type="button"
+							onClick={() => setSelected(entry.at)}
+							className="relative flex min-h-14 w-full items-center gap-3 rounded-lg py-2 pr-2.5 pl-3 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						>
+							<span
+								className={cn(
+									'relative size-[11px] shrink-0 rounded-full border-2',
+									index === 0 ? 'border-(--accent-base) bg-(--accent-bg-subtle) shadow-[0_0_0_3px_var(--accent-bg-subtle)]' : 'border-(--text-disabled) bg-(--card-bg)',
+								)}
+							/>
+							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+								<div className="flex min-w-0 items-center gap-2 text-[12.5px] text-(--text-primary)">
+									<span className="truncate">
+										{entry.files} {entry.files === 1 ? 'file' : 'files'} changed
+									</span>
+									{index === 0 ? <Status tone="accent">Current</Status> : null}
+								</div>
+								<div className="truncate text-[11.5px] text-(--text-tertiary)">{entry.commit ?? 'No commits yet'}</div>
+							</div>
+							{entry.added !== null && entry.removed !== null ? (
+								<span className="hidden shrink-0 items-center gap-2 sm:flex">
+									<span className="in-num">
+										<DiffStat added={entry.added} removed={entry.removed} />
+									</span>
+									<DiffBars added={entry.added} removed={entry.removed} />
+								</span>
+							) : null}
+							<span className="flex w-12 shrink-0 flex-col items-end">
+								<span className="in-num text-[11.5px] text-(--text-secondary)">{clock(entry.at)}</span>
+								<span className="in-num text-[10.5px] text-(--text-disabled)">{age(entry.at)}</span>
+							</span>
+						</button>
+					</li>
+				))}
+			</ol>
 		</div>
 	);
 }

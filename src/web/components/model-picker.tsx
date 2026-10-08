@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDownUp, Brain, Check, ChevronDown, Eye, Search } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, useMemo, useRef, useState } from 'react';
+import { Count } from '@/components/instrument';
 import { FilterChip, Icon, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type Reasoning } from '@/lib/api';
 import {
@@ -98,7 +99,7 @@ function ModelRow({
 			onClick={onPick}
 			onMouseMove={onHover}
 			title={model.description}
-			className="group flex h-9 w-full items-center gap-2 rounded-md px-2 text-left outline-none data-active:bg-(--bg-hover)"
+			className="group flex h-9 w-full items-center gap-2 rounded-[8px] border border-transparent px-2 text-left outline-none data-active:border-(--card-border) data-active:bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] data-active:shadow-(--card-highlight)"
 		>
 			<VendorMark vendor={model.vendor} />
 			<span className="flex min-w-0 flex-1 flex-col">
@@ -111,7 +112,7 @@ function ModelRow({
 				{model.reasoning.length ? <Icon icon={Brain} size={11} /> : null}
 				{model.vision ? <Icon icon={Eye} size={11} /> : null}
 			</span>
-			<span className="w-9 shrink-0 text-right font-mono text-[10.5px] text-(--text-tertiary)">{tokens(model.contextLength)}</span>
+			<span className="in-num w-9 shrink-0 text-right text-[10.5px] text-(--text-tertiary)">{tokens(model.contextLength)}</span>
 			<span className="flex w-8 shrink-0 justify-end">
 				<CostDots model={model} />
 			</span>
@@ -126,7 +127,7 @@ function ReasoningControl({ model, value, onChange }: { model?: ModelInfo; value
 		return <span className="text-[11px] text-(--text-disabled)">This model answers without a reasoning step.</span>;
 	}
 	return (
-		<div role="radiogroup" aria-label="Reasoning" className="flex min-w-0 flex-1 rounded-md bg-(--bg-inset) p-0.5">
+		<div role="radiogroup" aria-label="Reasoning" className="flex min-w-0 flex-1 gap-0.5 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) p-[3px]">
 			{model.reasoning.map((level) => (
 				<button
 					type="button"
@@ -135,8 +136,10 @@ function ReasoningControl({ model, value, onChange }: { model?: ModelInfo; value
 					key={level}
 					onClick={() => onChange(level)}
 					className={cn(
-						'h-[22px] min-w-0 flex-1 rounded-[4px] px-1.5 text-[11px] whitespace-nowrap transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
-						level === value ? 'bg-(--bg-overlay) text-(--text-primary) shadow-(--shadow-inset-hairline)' : 'text-(--text-tertiary) hover:text-(--text-secondary)',
+						'h-[22px] min-w-0 flex-1 rounded-[6px] border px-1.5 text-[11px] whitespace-nowrap transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
+						level === value
+							? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
+							: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 					)}
 				>
 					{REASONING_LABEL[level]}
@@ -159,9 +162,10 @@ function Details({ model }: { model?: ModelInfo }) {
 		`${dollars(model.price.input)} / ${dollars(model.price.output)} per 1M`,
 	].filter(Boolean);
 	return (
-		<div className="flex min-w-0 items-center gap-1.5 text-[10.5px] text-(--text-tertiary)">
-			<span className="truncate text-(--text-secondary)">{model.name}</span>
-			<span className="shrink-0 font-mono">{facts.join(' · ')}</span>
+		<div className="flex min-w-0 items-center gap-2 text-[11px] text-(--text-tertiary)">
+			<VendorMark vendor={model.vendor} size={16} />
+			<span className="min-w-0 truncate text-(--text-primary)">{model.name}</span>
+			<span className="in-num ml-auto shrink-0 text-[10.5px]">{facts.join(' · ')}</span>
 		</div>
 	);
 }
@@ -283,10 +287,10 @@ export function ModelPicker({
 					sideOffset={6}
 					collisionPadding={12}
 					onKeyDown={onKeyDown}
-					className="z-50 flex max-h-[min(460px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl bg-(--bg-overlay) text-(--text-primary) shadow-(--shadow-overlay) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex max-h-[min(460px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
 				>
 					<div className="flex flex-col gap-2 px-2.5 pt-2.5 pb-2">
-						<div className="flex h-8 items-center gap-2 rounded-lg bg-(--bg-inset) px-2.5">
+						<div className="sg-file-search flex h-8 items-center gap-2 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) px-2.5">
 							<Icon icon={Search} size={13} className="text-(--icon-tertiary)" />
 							<input
 								autoFocus
@@ -299,7 +303,7 @@ export function ModelPicker({
 								aria-label="Search models"
 								className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
 							/>
-							<span className="font-mono text-[10.5px] text-(--text-disabled)">{models.isPending ? '' : all.length}</span>
+							{models.isPending ? null : <Count>{all.length}</Count>}
 						</div>
 						<div data-noscrollbar className="flex items-center gap-1 overflow-x-auto">
 							{(Object.keys(FILTERS) as Filter[]).map((filter) => (
@@ -334,7 +338,10 @@ export function ModelPicker({
 								offset += section.models.length;
 								return (
 									<div key={section.title} className="flex flex-col">
-										<div className="px-2 pt-1.5 pb-1 text-[10px] tracking-[0.06em] text-(--text-disabled) uppercase">{section.title}</div>
+										<div className="flex items-center gap-2 px-2 pt-2 pb-1">
+											<span className="in-caption">{section.title}</span>
+											<span className="h-px flex-1 bg-(--border-subtle)" />
+										</div>
 										{section.models.map((model, index) => (
 											<ModelRow
 												key={`${section.title}-${model.id}`}
@@ -351,10 +358,10 @@ export function ModelPicker({
 						)}
 					</div>
 
-					<div className="flex flex-col gap-1.5 bg-(--bg-raised) px-2.5 py-2">
+					<div className="flex flex-col gap-2 border-t border-(--border-subtle) bg-[rgba(0,0,0,0.16)] px-2.5 py-2.5">
 						<Details model={selected} />
 						<div className="flex items-center gap-2">
-							<span className="flex shrink-0 items-center gap-1 text-[11px] text-(--text-tertiary)">
+							<span className="in-caption flex shrink-0 items-center gap-1.5">
 								<Icon icon={Brain} size={12} />
 								Reasoning
 							</span>

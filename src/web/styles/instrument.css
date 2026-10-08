@@ -174,3 +174,35 @@
 	padding: 0;
 	margin: 0 -10px;
 }
+
+/* Popovers, menus and the palette: a raised card with a lit top edge, so
+   they read as the same object as the cards beneath them. */
+:root,
+[data-theme='dark'] {
+	--pop-bg: #1a1a1a;
+	--pop-bg-top: #1f1f1f;
+	--pop-border: rgba(255, 255, 255, 0.09);
+	--pop-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 44px -14px rgba(0, 0, 0, 0.75), 0 3px 10px -3px rgba(0, 0, 0, 0.5);
+}
+.in-pop {
+	border-radius: 12px;
+	border: 1px solid var(--pop-border);
+	background: linear-gradient(180deg, var(--pop-bg-top), var(--pop-bg) 48px);
+	box-shadow: var(--pop-shadow);
+}
+.in-pop--modal {
+	border-radius: 16px;
+	box-shadow: var(--pop-shadow), 0 40px 80px -24px rgba(0, 0, 0, 0.8);
+}
+.in-pop .sg-menu-item {
+	height: 28px;
+	border-radius: 7px;
+	padding: 0 8px;
+}
+
+/* The open file in a tree is raised like the chosen tab above it. */
+.sg-file-row[aria-current='true'],
+.sg-file-row[aria-current='true']:hover {
+	background: linear-gradient(180deg, var(--neutral-750), var(--neutral-800));
+	box-shadow: inset 0 0 0 1px var(--card-border), var(--card-highlight);
+}

@@ -34,20 +34,27 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
 	const panel = panels.find((panel) => panel.name === name)!;
 	return (
-		<div className="sg-panel-tab relative flex h-7 shrink-0 items-center rounded-lg hover:bg-(--bg-hover)">
-			{active ? <div className="absolute inset-0 rounded-lg bg-(--bg-overlay)" /> : null}
+		<div className="sg-panel-tab relative flex h-7 shrink-0 items-center rounded-[8px] hover:bg-(--bg-hover)">
+			{active ? <div className="absolute inset-0 rounded-[8px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<button
 				type="button"
 				role="tab"
 				aria-selected={active}
 				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-lg px-1.5 outline-none focus-visible:shadow-(--focus-ring)"
+				className="relative flex h-full items-center gap-1.5 rounded-[8px] pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
 			>
-				<span className="sg-panel-icon inline-flex size-4 shrink-0 items-center justify-center text-(--icon-secondary) transition-opacity duration-(--duration-micro)">
+				<span
+					className={cn(
+						'sg-panel-icon inline-flex size-4 shrink-0 items-center justify-center transition-opacity duration-(--duration-micro)',
+						active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
+					)}
+				>
 					<Icon icon={panel.icon} size={12} />
 				</span>
-				<span className="text-[12px] whitespace-nowrap text-(--text-secondary)">{name}</span>
-				{count ? <span className="text-[11px] text-(--text-tertiary)">{count}</span> : null}
+				<span className={cn('text-[12px] whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
+				{count ? (
+					<span className="in-num inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--accent-bg-subtle) px-1 text-[10px] text-(--accent-text)">{count}</span>
+				) : null}
 			</button>
 			<button
 				type="button"
@@ -103,7 +110,11 @@ export function VmPanel({
 	return (
 		<WorkspacePane expanded={expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
-				<div data-noscrollbar role="tablist" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
+				<div
+					data-noscrollbar
+					role="tablist"
+					className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-[10px] border border-(--border-subtle) bg-(--well-bg) p-[3px] empty:hidden"
+				>
 					{tabs.map((name) => (
 						<PanelTab
 							key={name}
@@ -126,9 +137,11 @@ export function VmPanel({
 								<MenuPrimitive.Item
 									key={panel.name}
 									onSelect={() => show(panel.name)}
-									className="flex items-start gap-2 rounded-md px-2 py-1.5 outline-none data-highlighted:bg-(--bg-hover)"
+									className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 outline-none data-highlighted:bg-(--bg-hover)"
 								>
-									<Icon icon={panel.icon} size={14} className="mt-0.5 text-(--icon-secondary)" />
+									<span className="mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary)">
+										<Icon icon={panel.icon} size={13} />
+									</span>
 									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<div className="text-[13px] text-(--text-primary)">{panel.name}</div>
 										<div className="text-[12px] text-pretty text-(--text-tertiary)">{panel.desc}</div>
@@ -161,18 +174,26 @@ export function VmPanel({
 			>
 				{current === null ? (
 					<div className="flex min-h-full items-center justify-center px-2 py-6">
-						<div className="flex w-full max-w-80 flex-col gap-0.5">
-							{panels.map((panel) => (
-								<button
-									type="button"
-									key={panel.name}
-									onClick={() => show(panel.name)}
-									className="flex flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-								>
-									<div className="text-[13px] text-(--text-primary)">{panel.name}</div>
-									<div className="text-[12px] text-pretty text-(--text-tertiary)">{panel.desc}</div>
-								</button>
-							))}
+						<div className="flex w-full max-w-[520px] flex-col gap-3">
+							<div className="in-caption px-1">Open a panel</div>
+							<div className="grid gap-2 sm:grid-cols-2">
+								{panels.map((panel) => (
+									<button
+										type="button"
+										key={panel.name}
+										onClick={() => show(panel.name)}
+										className="in-card group/panel flex-row items-start gap-3 px-3 py-3 text-left outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+									>
+										<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) text-(--icon-secondary) group-hover/panel:border-(--accent-border) group-hover/panel:text-(--accent-text)">
+											<Icon icon={panel.icon} size={14} />
+										</span>
+										<span className="flex min-w-0 flex-col gap-0.5">
+											<span className="text-[13px] font-medium text-(--text-primary)">{panel.name}</span>
+											<span className="text-[12px] leading-[17px] text-pretty text-(--text-tertiary)">{panel.desc}</span>
+										</span>
+									</button>
+								))}
+							</div>
 						</div>
 					</div>
 				) : null}

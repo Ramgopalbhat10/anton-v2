@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, Folder } from 'lucide-react';
+import { ChevronRight, Folder, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { storedVariables, toEnv, VariablesEditor } from '@/components/repo-settings';
+import { Status } from '@/components/instrument';
 import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type SecretsView } from '@/lib/api';
-import { Block, List, PageHeading, SaveState } from './parts';
+import { Block, List, PageHeading, RowIcon, SaveState } from './parts';
 
 function Shared({ view }: { view: SecretsView }) {
 	const queryClient = useQueryClient();
@@ -17,27 +18,31 @@ function Shared({ view }: { view: SecretsView }) {
 			queryClient.setQueryData(['secrets'], saved);
 		},
 	});
+	const count = view.shared.length;
 	return (
-		<Block
-			title="For every repository"
-			help="Set in every sandbox, for the agent's commands, setup and the terminal. A repository's own variable of the same name wins."
+		<form
+			onSubmit={(event) => {
+				event.preventDefault();
+				save.mutate();
+			}}
 		>
-			<form
-				className="flex flex-col gap-3"
-				onSubmit={(event) => {
-					event.preventDefault();
-					save.mutate();
-				}}
+			<Block
+				title="For every repository"
+				icon={KeyRound}
+				aside={<Status>{count === 1 ? '1 variable' : `${count} variables`}</Status>}
+				help="Set in every sandbox, for the agent's commands, setup and the terminal. A repository's own variable of the same name wins."
+				footer={
+					<>
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes get them from their next start." />
+						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+							{save.isPending ? 'Saving…' : 'Save changes'}
+						</Btn>
+					</>
+				}
 			>
 				<VariablesEditor rows={rows} onChange={setRows} />
-				<div className="flex items-center gap-3">
-					<Btn type="submit" variant="primary" disabled={save.isPending}>
-						{save.isPending ? 'Saving…' : 'Save changes'}
-					</Btn>
-					<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes get them from their next start." />
-				</div>
-			</form>
-		</Block>
+			</Block>
+		</form>
 	);
 }
 
@@ -48,7 +53,7 @@ function RepoRow({ repo }: { repo: SecretsView['repos'][number] }) {
 			params={{ projectId: repo.projectId }}
 			className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
-			<Icon icon={Folder} className="text-(--icon-secondary)" />
+			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="truncate text-[13px] font-medium">{repo.repo}</div>
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">{repo.names.join(' · ')}</div>
@@ -70,7 +75,7 @@ export function SecretsPage() {
 			{view.data ? (
 				<>
 					<Shared view={view.data} />
-					<Block title="Set by a repository" help="Each repository's own variables, edited in its settings.">
+					<Block title="Set by a repository" icon={Folder} help="Each repository's own variables, edited in its settings.">
 						{repos.length ? (
 							<List>
 								{repos.map((repo) => (
@@ -78,7 +83,7 @@ export function SecretsPage() {
 								))}
 							</List>
 						) : (
-							<p className="m-0 text-[12px] text-(--text-disabled)">No repository has variables of its own.</p>
+							<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No repository has variables of its own.</p>
 						)}
 					</Block>
 				</>

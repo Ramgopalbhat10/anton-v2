@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bot, Braces, Cpu, GitPullRequest, ListChecks } from 'lucide-react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Spinner, Switch } from '@/components/signal';
 import { api, type GeneralSettings, type HelperAgent, type Reasoning } from '@/lib/api';
@@ -68,6 +69,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 		<div className="flex flex-col gap-6">
 			<Block
 				title="Default model"
+				icon={Cpu}
 				help="New tasks and automations without a model of their own start with this one and its reasoning level. Each task can change its own."
 			>
 				<div className="self-start">
@@ -79,7 +81,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				</div>
 			</Block>
-			<Block title="New tasks">
+			<Block title="New tasks" icon={ListChecks}>
 				<SettingRow title="Start in plan mode" help="The agent reads the code and proposes a plan, and changes nothing until you approve it. The launcher can still turn it off.">
 					<Switch
 						checked={settings.planMode}
@@ -89,7 +91,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
-			<Block title="Agent">
+			<Block title="Agent" icon={Braces}>
 				<SettingRow
 					title="Code mode"
 					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. It runs on Anton, not in the sandbox, and can reach nothing else."
@@ -104,6 +106,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 			</Block>
 			<Block
 				title="Helper agents"
+				icon={Bot}
 				help="The agents that work for the main one can each run on their own model, often a cheaper or faster one. Off, they use the task's model."
 			>
 				{HELPERS.map((helper) => (
@@ -118,7 +121,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					/>
 				))}
 			</Block>
-			<Block title="Pull requests">
+			<Block title="Pull requests" icon={GitPullRequest}>
 				<SettingRow
 					title="Review pull requests"
 					help="Each time the agent opens or updates a pull request, a reviewer agent reads the change and comments on GitHub; with follow-ups on, the agent then fixes what it found. It follows the repository's REVIEW.md if there is one, and stops after three reviews of one pull request."

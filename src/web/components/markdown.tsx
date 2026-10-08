@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -6,14 +7,25 @@ import remarkGfm from 'remark-gfm';
  * default). Images become links, so a reply can't make the browser load a URL
  * on its own, which would let anything the agent read leak out in the URL.
  */
+const InLink = createContext(false);
+
 const components: Components = {
-	a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
-	img: ({ src, alt }) =>
-		typeof src === 'string' && src ? (
+	a: ({ node: _node, ...props }) => (
+		<InLink.Provider value={true}>
+			<a {...props} target="_blank" rel="noreferrer" />
+		</InLink.Provider>
+	),
+	// Inside a link (a README's badges) the image's text joins that link, since links can't nest.
+	img: function Img({ src, alt }) {
+		const inLink = useContext(InLink);
+		if (typeof src !== 'string' || !src) return null;
+		if (inLink) return <>{alt || src}</>;
+		return (
 			<a href={src} target="_blank" rel="noreferrer">
 				{alt || src}
 			</a>
-		) : null,
+		);
+	},
 };
 
 /** Agent replies as GitHub-flavored markdown: headings, lists, tables, links and code blocks. */

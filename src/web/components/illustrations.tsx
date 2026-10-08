@@ -161,6 +161,32 @@ export function LinkArt({ className }: { className?: string }) {
 	);
 }
 
+/** Plates stepping back in time along a dashed rail, the newest lit: saved checkpoints. */
+export function HistoryArt({ className }: { className?: string }) {
+	return (
+		<Frame label="Checkpoints along a timeline" viewBox="-120 -50 240 130" className={className}>
+			<Path from={[-20, 30, 0]} to={[120, 30, 0]} />
+			<Box at={[0, 14, 0]} size={[28, 28, 6]} dashed />
+			<Box at={[40, 14, 0]} size={[28, 28, 12]} />
+			<Box at={[80, 14, 0]} size={[28, 28, 22]} accent />
+			<Tag at={[110, 0, 26]}>now</Tag>
+		</Frame>
+	);
+}
+
+/** Sheets fanned on a plate, the top one lit: reports and screenshots the agent kept. */
+export function LibraryArt({ className }: { className?: string }) {
+	return (
+		<Frame label="Saved sheets on a plate" viewBox="-110 -60 220 130" className={className}>
+			<Box at={[0, 0, 0]} size={[80, 64, 6]} />
+			<Box at={[10, 10, 6]} size={[52, 40, 2]} dashed />
+			<Box at={[16, 14, 12]} size={[52, 40, 2]} />
+			<Box at={[22, 18, 18]} size={[52, 40, 2]} accent />
+			<Tag at={[80, -6, 4]}>saved</Tag>
+		</Frame>
+	);
+}
+
 /** Anton's mark: an isometric cube on a cyan tile. */
 export function Logo({ size = 20 }: { size?: number }) {
 	const id = `anton-mark${useId().replace(/[^\w-]/g, '')}`;

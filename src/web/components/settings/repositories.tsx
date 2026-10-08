@@ -7,7 +7,7 @@ import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type Project, type Session } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
-import { List, PageHeading } from './parts';
+import { List, PageHeading, RowIcon } from './parts';
 
 function detail(project: Project, sessions: Session[]): string {
 	const tasks = sessions.filter((session) => session.projectId === project.id).length;
@@ -20,14 +20,14 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 		<Link
 			to="/settings/repos/$projectId"
 			params={{ projectId: project.id }}
-			className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-h-14 items-center gap-3 rounded-[10px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
-			<Icon icon={Folder} className="text-(--icon-secondary)" />
+			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="truncate text-[13px] font-medium">{project.repoFullName}</div>
 				<div className="truncate text-[12px] text-(--text-tertiary)">{detail(project, sessions)}</div>
 			</div>
-			<span className="hidden shrink-0 font-mono text-[11px] text-(--text-disabled) sm:inline">{project.baseImage ?? 'default image'}</span>
+			<span className="hidden h-[22px] shrink-0 items-center rounded-full border border-(--border-subtle) px-2 font-mono text-[11px] text-(--text-tertiary) sm:inline-flex">{project.baseImage ?? 'default image'}</span>
 			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
 		</Link>
 	);

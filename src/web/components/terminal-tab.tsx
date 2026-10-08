@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { RotateCw } from 'lucide-react';
+import { RotateCw, SquareTerminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Btn } from '@/components/signal';
+import { Facts, Status } from '@/components/instrument';
+import { Btn, Icon } from '@/components/signal';
 import { useRefreshTask } from '@/components/source-bar';
 import { api } from '@/lib/api';
 
@@ -33,7 +34,15 @@ const theme = {
 	brightWhite: '#f7f7f8',
 };
 
-function Shell({ sessionId, onConnected }: { sessionId: string; onConnected: () => void }) {
+type Link = 'connecting' | 'connected' | 'closed';
+
+const LINK: Record<Link, { tone: 'warning' | 'success' | 'neutral'; label: string }> = {
+	connecting: { tone: 'warning', label: 'Connecting' },
+	connected: { tone: 'success', label: 'Connected' },
+	closed: { tone: 'neutral', label: 'Disconnected' },
+};
+
+function Shell({ sessionId, onConnected, onLink }: { sessionId: string; onConnected: () => void; onLink: (link: Link) => void }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -64,17 +73,22 @@ function Shell({ sessionId, onConnected }: { sessionId: string; onConnected: () 
 		socket.binaryType = 'arraybuffer';
 		const encoder = new TextEncoder();
 		let connected = false;
+		onLink('connecting');
 		const send = (data: string | Uint8Array<ArrayBuffer>) => socket.readyState === WebSocket.OPEN && socket.send(data);
 		socket.onmessage = (event) => {
 			if (!connected) {
 				connected = true;
 				term.reset();
+				onLink('connected');
 				onConnected();
 			}
 			term.write(new Uint8Array(event.data as ArrayBuffer));
 		};
 		socket.onerror = () => term.write('\r\nCould not reach the terminal server.\r\n');
-		socket.onclose = () => term.write('\r\n[disconnected]\r\n');
+		socket.onclose = () => {
+			onLink('closed');
+			term.write('\r\n[disconnected]\r\n');
+		};
 		term.onData((data) => send(encoder.encode(data)));
 		term.onResize(({ cols, rows }) => send(JSON.stringify({ type: 'resize', cols, rows })));
 		const observer = new ResizeObserver(refit);
@@ -85,7 +99,7 @@ function Shell({ sessionId, onConnected }: { sessionId: string; onConnected: () 
 			socket.close();
 			term.dispose();
 		};
-	}, [sessionId, onConnected]);
+	}, [sessionId, onConnected, onLink]);
 
 	return <div ref={containerRef} className="h-full min-h-0 min-w-0" />;
 }
@@ -93,22 +107,30 @@ function Shell({ sessionId, onConnected }: { sessionId: string; onConnected: () 
 /** Opening the terminal is an explicit request for a sandbox, so it starts one when the task is stopped. */
 export function TerminalTab({ sessionId }: { sessionId: string }) {
 	const [generation, setGeneration] = useState(0);
+	const [link, setLink] = useState<Link>('connecting');
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const onConnected = useRefreshTask(sessionId);
-	const label = ['Sandbox', session.data?.repo.split('/').pop(), health.data?.providers.sandbox].filter(Boolean).join(' · ');
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-2">
-			<div className="flex h-7 shrink-0 items-center gap-2 text-[11px] tracking-[0.04em] text-(--text-disabled)">
-				<span className="truncate uppercase">{label}</span>
-				<div className="flex-1" />
+			<div className="flex h-7 shrink-0 items-center gap-2.5">
+				<Facts items={['Sandbox', session.data?.repo.split('/').pop(), health.data?.providers.sandbox]} className="flex-1" />
+				<Status tone={LINK[link].tone} pulse={link === 'connecting'}>
+					{LINK[link].label}
+				</Status>
 				<Btn variant="ghost" size="xs" icon={RotateCw} onClick={() => setGeneration((current) => current + 1)}>
 					Restart
 				</Btn>
 			</div>
-			<div className="min-h-0 flex-1 overflow-hidden rounded-lg bg-(--bg-inset) p-3">
-				<Shell key={generation} sessionId={sessionId} onConnected={onConnected} />
+			<div className="in-well flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
+				<div aria-hidden className="flex h-8 shrink-0 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-3">
+					<Icon icon={SquareTerminal} size={12} className={link === 'connected' ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
+					<span className="in-num min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{session.data ? `${session.data.repo.split('/').pop()} — shell` : 'shell'}</span>
+				</div>
+				<div className="min-h-0 flex-1 p-3">
+					<Shell key={generation} sessionId={sessionId} onConnected={onConnected} onLink={setLink} />
+				</div>
 			</div>
 		</div>
 	);

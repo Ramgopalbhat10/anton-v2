@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Folder, FolderOpen, Search, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
-import { Branch, buildTree, FileView, STATUS_TONE } from '@/components/file-view';
+import { Branch, buildTree, FileView, StatusChip } from '@/components/file-view';
 import { SourceBar } from '@/components/source-bar';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, refreshFor } from '@/lib/api';
@@ -33,12 +33,12 @@ function Matches({
 						key={path}
 						onClick={() => onOpen(path)}
 						aria-current={selected === path ? 'true' : undefined}
-						className="sg-file-row flex h-[26px] items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="sg-file-row flex h-[26px] items-center gap-2 rounded-[7px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 					>
 						<FileIcon path={path} />
 						<span className={cn('shrink-0 text-[12px]', selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
 						<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
-						{status ? <span className={cn('text-[11px]', STATUS_TONE[status])}>{status}</span> : null}
+						{status ? <StatusChip status={status} /> : null}
 					</button>
 				);
 			})}
@@ -84,11 +84,11 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		<FileIcons>
 			<div className="flex min-h-0 flex-1 flex-col gap-1">
 				<SourceBar sessionId={sessionId} source={listing.data?.source} at={listing.data?.at}>
-					<span className="truncate text-(--text-disabled) uppercase">{heading}</span>
+					<span className="truncate">{heading}</span>
 				</SourceBar>
 				<div className="flex min-h-0 flex-1 gap-3">
 					<div className={cn('flex min-h-0 shrink-0 flex-col overflow-auto', selected ? 'w-[38%] min-w-28 max-w-60' : 'flex-1')}>
-						<label className="sg-file-search mb-1 flex h-8 shrink-0 items-center gap-2 rounded-lg bg-(--bg-surface) px-2.5">
+						<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
 							<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 							<input
 								value={query}
@@ -136,11 +136,17 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 							/>
 						)}
 					</div>
-					<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-(--border-subtle)">
+					<div className="in-well flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 						{opened.length ? (
-							<div role="tablist" aria-label="Open files" className="flex shrink-0 gap-1 overflow-x-auto bg-(--bg-surface) p-1">
+							<div role="tablist" aria-label="Open files" className="flex shrink-0 gap-1 overflow-x-auto border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-1">
 								{opened.map((path) => (
-									<div key={path} className={cn('group flex shrink-0 items-center gap-1 rounded-md', selected === path && 'bg-(--bg-overlay)')}>
+									<div
+										key={path}
+										className={cn(
+											'group flex shrink-0 items-center gap-1 rounded-[7px] border',
+											selected === path ? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)' : 'border-transparent hover:bg-(--bg-hover)',
+										)}
+									>
 										<button
 											type="button"
 											role="tab"
@@ -149,7 +155,10 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 											aria-selected={selected === path}
 											title={path}
 											onClick={() => setSelected(path)}
-											className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] text-(--text-secondary) outline-none focus-visible:shadow-(--focus-ring)"
+											className={cn(
+												'flex h-[26px] items-center gap-1.5 rounded-[7px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+												selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)',
+											)}
 										>
 											<FileIcon path={path} />
 											{path.split('/').pop()}

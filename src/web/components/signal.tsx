@@ -171,7 +171,7 @@ export function MenuContent({
 			<MenuPrimitive.Content
 				sideOffset={sideOffset}
 				className={cn(
-					'z-50 flex min-w-[176px] flex-col gap-px rounded-lg bg-(--bg-overlay) p-1 text-(--text-primary) shadow-(--shadow-overlay) outline-none',
+					'in-pop z-50 flex min-w-[184px] flex-col gap-px p-1.5 text-(--text-primary) outline-none',
 					'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
 					className,
 				)}
@@ -239,7 +239,7 @@ export function MenuSubContent({ className, ...props }: ComponentProps<typeof Me
 				sideOffset={4}
 				collisionPadding={8}
 				className={cn(
-					'z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[184px] flex-col gap-px overflow-y-auto rounded-lg bg-(--bg-overlay) p-1 text-(--text-primary) shadow-(--shadow-overlay) outline-none',
+					'in-pop z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[184px] flex-col gap-px overflow-y-auto p-1.5 text-(--text-primary) outline-none',
 					'data-[state=open]:animate-in data-[state=open]:fade-in-0',
 					className,
 				)}
@@ -254,7 +254,7 @@ export function MenuLabel({ children }: { children: ReactNode }) {
 }
 
 export function MenuSeparator() {
-	return <MenuPrimitive.Separator className="my-1 h-px bg-(--border-subtle)" />;
+	return <MenuPrimitive.Separator className="-mx-1.5 my-1 h-px bg-(--border-subtle)" />;
 }
 
 /** A pill-shaped picker trigger, as used for the model / repo / branch choosers. */
@@ -338,7 +338,7 @@ export function ProgressBar({ value, tone = 'accent', label }: { value: number; 
 
 const BADGE_TONE = {
 	neutral: 'bg-(--bg-raised) text-(--text-secondary)',
-	accent: 'bg-(--accent-bg) text-(--accent-text)',
+	accent: 'bg-(--accent-bg-subtle) text-(--accent-text)',
 	success: 'bg-(--success-bg) text-(--success-text)',
 	warning: 'bg-(--warning-bg) text-(--warning-text)',
 	danger: 'bg-(--danger-bg) text-(--danger-text)',
