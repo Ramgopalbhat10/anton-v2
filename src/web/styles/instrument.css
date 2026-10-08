@@ -280,33 +280,25 @@
 }
 @keyframes rack-sweep {
 	to {
-		transform: translateX(86px);
+		transform: translateX(110px);
 	}
 }
-/* Turning a page brings the new bays in from the side the tasks were on. */
-.rack-bay[data-from='older'] {
-	animation: rack-bay-older 460ms var(--ease-out) both;
-	animation-delay: calc(var(--bay, 0) * 50ms);
+/* The rack's row scrolls sideways; it can be dragged, so it shows a hand. */
+.rack-scroll {
+	cursor: grab;
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) transparent;
+	overscroll-behavior-x: contain;
 }
-.rack-bay[data-from='newer'] {
-	animation: rack-bay-newer 460ms var(--ease-out) both;
-	animation-delay: calc(var(--bay, 0) * 50ms);
+.rack-scroll[data-dragging] {
+	cursor: grabbing;
+	user-select: none;
 }
-@keyframes rack-bay-older {
-	from {
-		opacity: 0;
-		transform: translateX(32px);
-	}
-}
-@keyframes rack-bay-newer {
-	from {
-		opacity: 0;
-		transform: translateX(-32px);
-	}
+.rack-scroll[data-dragging] .rack-blade {
+	cursor: grabbing;
 }
 @media (prefers-reduced-motion: reduce) {
 	.rack-blade,
-	.rack-bay,
 	.rack-activity,
 	.rack-sweep {
 		animation: none;
