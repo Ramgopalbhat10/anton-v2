@@ -110,15 +110,7 @@
 		opacity: 0;
 	}
 }
-/* Dashes marching along a route, and a scan line sweeping a face. */
-.art-flow {
-	animation: art-flow 1.4s linear infinite;
-}
-@keyframes art-flow {
-	to {
-		stroke-dashoffset: -14;
-	}
-}
+/* A scan line sweeping a face. */
 .art-scan {
 	animation: art-scan 2.6s ease-in-out infinite alternate;
 }
@@ -127,11 +119,129 @@
 		transform: translateY(24px);
 	}
 }
+/* The task route: four stages take turns on a ten-second loop, each lit for a
+   quarter of it. Anything that follows a stage sets --stage to its index:
+   the lit station, its captions, the line it draws, and the hand-off that
+   runs to the next stage in the last stretch of its turn. */
+.route-lit,
+.route-caption,
+.route-draw,
+.route-trail,
+.route-dot {
+	animation-duration: 10s;
+	animation-iteration-count: infinite;
+	animation-fill-mode: both;
+	animation-delay: calc(var(--stage, 0) * 2.5s);
+}
+.route-lit {
+	opacity: 0;
+	animation-name: route-lit;
+}
+@keyframes route-lit {
+	0% {
+		opacity: 0;
+	}
+	2%,
+	23% {
+		opacity: 1;
+	}
+	25%,
+	100% {
+		opacity: 0;
+	}
+}
+.route-caption {
+	animation-name: route-caption;
+}
+@keyframes route-caption {
+	0% {
+		color: var(--text-tertiary);
+	}
+	2%,
+	23% {
+		color: var(--accent-text);
+	}
+	25%,
+	100% {
+		color: var(--text-tertiary);
+	}
+}
+.route-draw {
+	stroke-dasharray: 1 1;
+	animation-name: route-draw;
+}
+@keyframes route-draw {
+	0%,
+	3% {
+		stroke-dashoffset: 1;
+	}
+	11%,
+	100% {
+		stroke-dashoffset: 0;
+	}
+}
+.route-trail {
+	stroke-dasharray: 1 1;
+	stroke-dashoffset: 1;
+	animation-name: route-trail;
+}
+@keyframes route-trail {
+	0%,
+	18% {
+		stroke-dashoffset: 1;
+		opacity: 1;
+	}
+	25% {
+		stroke-dashoffset: 0;
+		opacity: 1;
+	}
+	32%,
+	100% {
+		stroke-dashoffset: 0;
+		opacity: 0;
+	}
+}
+.route-dot {
+	opacity: 0;
+	animation-name: route-dot;
+}
+@keyframes route-dot {
+	0%,
+	18% {
+		opacity: 0;
+		transform: translateX(0);
+	}
+	19% {
+		opacity: 1;
+	}
+	25% {
+		opacity: 1;
+		transform: translateX(calc(var(--run) * 1px));
+	}
+	27%,
+	100% {
+		opacity: 0;
+		transform: translateX(calc(var(--run) * 1px));
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.art-blink,
-	.art-flow,
-	.art-scan {
+	.art-scan,
+	.route-lit,
+	.route-caption,
+	.route-draw,
+	.route-trail,
+	.route-dot {
 		animation: none;
+	}
+	.route-lit[data-first],
+	.route-draw {
+		opacity: 1;
+		stroke-dashoffset: 0;
+	}
+	.route-caption[data-first] {
+		color: var(--accent-text);
 	}
 }
 

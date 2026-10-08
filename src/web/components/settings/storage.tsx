@@ -38,8 +38,8 @@ function Usage() {
 			}
 		>
 			<CardSection ruled={false} className="pt-1">
-				<div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
-					<div className="flex flex-col gap-3">
+				<div className="grid items-stretch gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
+					<div className="flex flex-col justify-center gap-3">
 						<div className="flex flex-col gap-1">
 							<span className="in-caption">In use</span>
 							<Figure size="xl" value={size(bytes)} />
@@ -48,8 +48,8 @@ function Usage() {
 							Cleanup removes deleted tasks, history beyond the newest 50 entries per task, and file contents nothing uses any more.
 						</p>
 					</div>
-					<Well grid className="flex items-center justify-center py-3">
-						<StorageArt className="w-[170px]" />
+					<Well grid className="flex items-center justify-center px-6 py-6">
+						<StorageArt className="w-full max-w-[270px]" />
 					</Well>
 				</div>
 			</CardSection>
