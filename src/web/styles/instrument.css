@@ -245,6 +245,55 @@
 	}
 }
 
+/* The task rack: blades slide in one after another, the open one slides out,
+   running ones blink, and an indexing light sweeps the lid. */
+.rack-blade {
+	cursor: pointer;
+	outline: none;
+	animation: rack-in 560ms var(--ease-out) both;
+	animation-delay: calc(var(--slot, 0) * 45ms);
+}
+@keyframes rack-in {
+	from {
+		opacity: 0;
+		transform: translate(-12px, 7px);
+	}
+}
+.rack-slide {
+	transition: transform 280ms var(--ease-out);
+}
+.rack-body {
+	transition: opacity 180ms var(--ease-out);
+}
+.rack-activity {
+	animation: rack-activity 0.9s steps(1, end) infinite;
+	animation-delay: calc(var(--blink, 0) * 0.3s);
+}
+@keyframes rack-activity {
+	50% {
+		opacity: 0.15;
+	}
+}
+.rack-sweep {
+	animation: rack-sweep 5s ease-in-out infinite alternate;
+}
+@keyframes rack-sweep {
+	to {
+		transform: translateX(130px);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.rack-blade,
+	.rack-activity,
+	.rack-sweep {
+		animation: none;
+	}
+	.rack-slide,
+	.rack-body {
+		transition: none;
+	}
+}
+
 /* The mono caption every card footer and gauge label uses. */
 .in-caption {
 	font-family: var(--font-mono);
