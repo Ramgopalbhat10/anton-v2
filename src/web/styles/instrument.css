@@ -245,8 +245,9 @@
 	}
 }
 
-/* The task rack: blades slide in one after another, the open one slides out,
-   running ones blink, and an indexing light sweeps each bay's lid. */
+/* The task rack: blades slide in one after another, running ones blink, and an
+   indexing light sweeps each bay's lid. The open blade is drawn out of its slot
+   in script (task-rack.tsx), since its body grows as it comes out. */
 .rack-blade {
 	cursor: pointer;
 	outline: none;
@@ -259,11 +260,16 @@
 		transform: translate(-12px, 7px);
 	}
 }
-.rack-slide {
-	transition: transform 280ms var(--ease-out);
+/* The open blade's card and its leader fade into place as the blade comes out. */
+.rack-card,
+.rack-leader {
+	animation: rack-card 260ms var(--ease-out) 120ms both;
 }
-.rack-body {
-	transition: opacity 180ms var(--ease-out);
+@keyframes rack-card {
+	from {
+		opacity: 0;
+		margin-top: 6px;
+	}
 }
 .rack-activity {
 	animation: rack-activity 0.9s steps(1, end) infinite;
@@ -283,19 +289,11 @@
 		transform: translateX(110px);
 	}
 }
-/* The rack's row scrolls sideways; it can be dragged, so it shows a hand. */
+/* The rack's row scrolls sideways. */
 .rack-scroll {
-	cursor: grab;
 	scrollbar-width: thin;
 	scrollbar-color: var(--border-strong) transparent;
 	overscroll-behavior-x: contain;
-}
-.rack-scroll[data-dragging] {
-	cursor: grabbing;
-	user-select: none;
-}
-.rack-scroll[data-dragging] .rack-blade {
-	cursor: grabbing;
 }
 @media (prefers-reduced-motion: reduce) {
 	.rack-blade,
@@ -303,9 +301,9 @@
 	.rack-sweep {
 		animation: none;
 	}
-	.rack-slide,
-	.rack-body {
-		transition: none;
+	.rack-card,
+	.rack-leader {
+		animation: none;
 	}
 }
 
