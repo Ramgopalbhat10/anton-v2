@@ -110,8 +110,27 @@
 		opacity: 0;
 	}
 }
+/* Dashes marching along a route, and a scan line sweeping a face. */
+.art-flow {
+	animation: art-flow 1.4s linear infinite;
+}
+@keyframes art-flow {
+	to {
+		stroke-dashoffset: -14;
+	}
+}
+.art-scan {
+	animation: art-scan 2.6s ease-in-out infinite alternate;
+}
+@keyframes art-scan {
+	to {
+		transform: translateY(24px);
+	}
+}
 @media (prefers-reduced-motion: reduce) {
-	.art-blink {
+	.art-blink,
+	.art-flow,
+	.art-scan {
 		animation: none;
 	}
 }

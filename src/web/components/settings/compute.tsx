@@ -60,7 +60,7 @@ function Running({ view }: { view: ComputeView }) {
 			{count === 0 ? (
 				<CardSection>
 					<Well grid className="flex flex-col items-center gap-3 px-6 pt-5 pb-6 text-center">
-						<SandboxArt className="w-[210px]" />
+						<SandboxArt className="w-full max-w-[280px]" />
 						<div className="flex flex-col gap-1">
 							<div className="text-[14px] font-medium">Nothing is running</div>
 							<div className="max-w-[44ch] text-[12px] leading-[18px] text-(--text-tertiary)">A sandbox starts when a task needs to edit or run code.</div>

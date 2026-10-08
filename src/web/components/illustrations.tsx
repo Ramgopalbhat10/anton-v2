@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from 'react';
+import { cn } from '@/lib/utils';
 
 /* Isometric drawings for empty and quiet states, drawn like the objects on a
    technical sheet: rounded blocks in three flat tones, recesses cut into their
@@ -266,7 +267,7 @@ function Turn({ at, r, from, to, stroke = ACCENT }: { at: Pair; r: number; from:
 
 function Frame({ children, label, viewBox, className }: { children: ReactNode; label: string; viewBox: string; className?: string }) {
 	return (
-		<svg role="img" aria-label={label} viewBox={viewBox} className={className} fill="none" style={{ maxWidth: '100%', height: 'auto', overflow: 'visible' }}>
+		<svg role="img" aria-label={label} viewBox={viewBox} className={cn('h-auto max-w-full overflow-visible', className)} fill="none">
 			{children}
 		</svg>
 	);
@@ -742,6 +743,180 @@ export function LibraryArt({ className }: { className?: string }) {
 			<Label at={[30, 78.6, 86]} run={-46} rise={-26} accent>
 				saved
 			</Label>
+		</Frame>
+	);
+}
+
+/** Where each station of the task route stands, in screen units across a 400-wide
+    drawing: the centres of four equal columns, so captions laid out in a
+    four-column grid under it line up with the stations. */
+const ROUTE_X = [50, 150, 250, 350];
+
+/** A point on the line that runs straight across the screen: along x and
+    against y at once, so it neither climbs nor falls. */
+const across = (screenX: number, s = 0): [number, number] => {
+	const t = screenX / (2 * COS);
+	return [t + s, -t + s];
+};
+
+/** A station's block, centred on its column. */
+function Station(props: Omit<Parameters<typeof Block>[0], 'at'> & { column: number; z?: number }) {
+	const { column, z = 0, size, ...rest } = props;
+	const [cx, cy] = across(ROUTE_X[column]);
+	return <Block at={[cx - size[0] / 2, cy - size[1] / 2, z]} size={size} {...rest} />;
+}
+
+/**
+ * How a task runs, as a production line: a conveyor runs across the well past
+ * four stations. The reader is lit and scanning the repository's snapshot; the
+ * branch plate forks its trace off main; the sandbox is drawn dashed, because it
+ * only starts when the agent has to edit; the pull request leaves sealed. The
+ * task rides the belt as a cyan cube, and the dashes ahead of it march on.
+ */
+export function TaskRouteArt({ className }: { className?: string }) {
+	const belt = { top: -14, front: 4, bottom: 9, left: 4, right: 396 };
+	const ticks = Array.from({ length: 39 }, (_, i) => belt.left + 6 + i * 10);
+	const token = across(99);
+	const sheets = [24, 29, 34];
+	const [rx, ry] = across(ROUTE_X[0]);
+	return (
+		<Frame label="A task's route: read, branch, sandbox, pull request" viewBox="0 -60 400 84" className={className}>
+			<rect x={belt.left} y={belt.top} width={belt.right - belt.left} height={belt.front - belt.top} rx={3} fill="var(--art-top)" stroke={EDGE} {...ve} />
+			<rect x={belt.left} y={belt.front} width={belt.right - belt.left} height={belt.bottom - belt.front} rx={2} fill="var(--art-left)" stroke={EDGE} {...ve} />
+			{ticks.map((x) => (
+				<line key={x} x1={x} y1={belt.top + 3} x2={x} y2={belt.front - 3} stroke={DETAIL} {...ve} />
+			))}
+			{ticks.filter((_, i) => i % 3 === 0).map((x) => (
+				<ellipse key={x} cx={x + 5} cy={(belt.front + belt.bottom) / 2} rx={1.6} ry={1.3} fill={RECESS} stroke={DETAIL} {...ve} />
+			))}
+			<line className="art-flow" x1={110} y1={-5} x2={378} y2={-5} stroke={ACCENT} strokeDasharray="4 3" opacity={0.85} {...ve} />
+			<polyline points="375,-8.5 380,-5 375,-1.5" fill="none" stroke={ACCENT} strokeLinecap="round" strokeLinejoin="round" {...ve} />
+
+			{/* 01 Read: the reader, lit, with the snapshot it is reading held above it. */}
+			<Station
+				column={0}
+				size={[40, 40, 12]}
+				r={3}
+				tone="accent"
+				top={
+					<>
+						<Slot x={6} y={6} w={28} h={28} r={2} />
+						<Bar x={10} y={10} w={16} accent />
+						<Bar x={10} y={14} w={10} accent />
+						<Bar x={10} y={18} w={18} accent />
+						<Bar x={10} y={22} w={8} accent />
+						<g className="art-scan">
+							<line x1={7} y1={8} x2={33} y2={8} stroke="var(--cyan-200)" strokeWidth={1.4} {...ve} />
+						</g>
+					</>
+				}
+				left={
+					<>
+						<Led at={[6, 6]} lit />
+						<Bar x={12} y={5.2} w={12} accent />
+					</>
+				}
+			/>
+			{sheets.map((z, i) => (
+				<Block
+					key={z}
+					at={[rx - 12, ry - 14, z]}
+					size={[24, 28, 1.2]}
+					r={1.2}
+					tone={i === sheets.length - 1 ? 'solid' : 'glass'}
+					top={
+						i === sheets.length - 1 ? (
+							<>
+								<Bar x={4} y={5} w={14} />
+								<Bar x={4} y={9} w={9} />
+								<Bar x={4} y={13} w={16} />
+								<Bar x={4} y={17} w={11} />
+							</>
+						) : undefined
+					}
+				/>
+			))}
+			<Trace points={[pt([rx - 12, ry + 14, 12]), pt([rx - 12, ry + 14, 24])]} stroke={ACCENT} dash="1.5 2.5" />
+			<Trace points={[pt([rx + 12, ry + 14, 12]), pt([rx + 12, ry + 14, 24])]} stroke={ACCENT} dash="1.5 2.5" />
+
+			{/* 02 Branch: a plate whose trace forks off main at a junction. */}
+			<Station
+				column={1}
+				size={[40, 40, 8]}
+				r={3}
+				top={
+					<>
+						<Trace points={[[0, 13], [40, 13]]} stroke={EDGE} />
+						<Trace points={[[11, 13], [19, 21], [19, 29], [40, 29]]} stroke={EDGE} dash="3 2.5" />
+						<Ring at={[36, 13]} r={1.6} fill="var(--art-top)" stroke={EDGE} />
+						<Ring at={[36, 29]} r={1.6} fill="var(--art-top)" stroke={EDGE} />
+					</>
+				}
+				left={<Bar x={6} y={3.2} w={10} />}
+				right={<Bar x={24} y={3.2} w={10} />}
+			/>
+			{(() => {
+				const [bx, by] = across(ROUTE_X[1]);
+				return <Disc at={[bx - 9, by - 7, 8]} r={3.4} h={4} top={<Ring at={[0, 0]} r={1.2} fill={EDGE} stroke="none" />} />;
+			})()}
+
+			{/* 03 Sandbox: dashed, because it only starts when the agent edits. */}
+			<Station
+				column={2}
+				size={[40, 40, 26]}
+				r={4}
+				tone="glass"
+				dashed
+				top={
+					<>
+						{[8, 13, 18, 23].map((v) => (
+							<Ln key={v} a={[7, v]} b={[26, v]} />
+						))}
+						<Ring at={[32, 30]} r={3.4} />
+					</>
+				}
+				left={
+					<>
+						<rect x={5} y={7} width={26} height={14} rx={2} fill="none" stroke={DETAIL} strokeDasharray="2 2" {...ve} />
+						<Trace points={[[8.5, 12.4], [10.6, 11], [8.5, 9.6]]} />
+						<Bar x={12} y={9.4} w={3} h={3} />
+					</>
+				}
+				right={
+					<>
+						<Ln a={[8, 18]} b={[30, 18]} />
+						<Ln a={[8, 14]} b={[22, 14]} />
+					</>
+				}
+			/>
+
+			{/* 04 Pull request: a sealed case marked with the merge glyph. */}
+			<Station
+				column={3}
+				size={[40, 40, 18]}
+				r={3.5}
+				top={
+					<>
+						<Slot x={5} y={5} w={30} h={30} r={2.5} edge />
+						<Ring at={[13, 11]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[13, 29]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[28, 29]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ln a={[13, 13.6]} b={[13, 26.4]} stroke={EDGE} />
+						<Trace points={[[28, 26.4], [28, 17], [21, 11.5]]} stroke={EDGE} />
+						<Trace points={[[23.4, 10.6], [21, 11.5], [21.6, 14]]} stroke={EDGE} />
+					</>
+				}
+				left={
+					<>
+						<Slot x={8} y={6} w={24} h={7} r={1.2} edge />
+						<Trace points={[[11, 9.6], [12.6, 8], [15.6, 11]]} />
+						<Bar x={18} y={8.8} w={10} />
+					</>
+				}
+				right={<Led at={[32, 9]} />}
+			/>
+
+			<Block at={[token[0] - 4, token[1] - 4, 5]} size={[8, 8, 8]} r={1.4} tone="accent" />
 		</Frame>
 	);
 }

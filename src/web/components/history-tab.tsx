@@ -101,7 +101,7 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 	if (timeline.isPending) return <Loading label="Loading the history" />;
 	if (timeline.isError) return <EmptyState title="History unavailable" body={timeline.error.message} />;
 	if (entries.length === 0) {
-		return <EmptyState art={<HistoryArt className="w-[210px]" />} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." className="pt-10" />;
+		return <EmptyState art={<HistoryArt className="w-full max-w-[340px]" />} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." />;
 	}
 	return (
 		<div className="flex flex-col gap-2.5">
