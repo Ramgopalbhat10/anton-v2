@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ExternalLink, GitMerge, GitPullRequest, MessageSquare } from 'lucide-react';
 import { BranchArt } from '@/components/illustrations';
-import { Card, CardSection, Figure, Pips, SplitBar, StatRow, Status, type Tone, Well } from '@/components/instrument';
+import { Card, CardSection, Figure, Pips, SplitBar, StatRow, Status, type Tone } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
-import { Badge, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Badge, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type ReviewGroup, type ReviewItem } from '@/lib/api';
 import { age } from '@/lib/format';
 
@@ -129,14 +129,8 @@ export function ReviewsPage() {
 				<p className="m-0 text-[12px] text-(--danger-text)">Could not load pull requests: {reviews.error.message}</p>
 			) : groups.length === 0 ? (
 				<Card as="div">
-					<div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-						<Well grid className="flex w-full max-w-[380px] items-center justify-center py-4">
-							<BranchArt className="w-[220px]" />
-						</Well>
-						<div className="flex flex-col gap-1">
-							<div className="text-[14px] font-medium">No pull requests yet</div>
-							<div className="max-w-[44ch] text-[12px] leading-[18px] text-(--text-tertiary)">Pull requests the agent opens show up here, with their checks and comments.</div>
-						</div>
+					<div className="p-1.5">
+						<EmptyState art={<BranchArt className="w-full max-w-[400px]" />} title="No pull requests yet" body="Pull requests the agent opens show up here, with their checks and comments." />
 					</div>
 				</Card>
 			) : (

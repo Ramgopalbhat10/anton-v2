@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Box, Clock, Eye, Folder, GitBranch, GitPullRequest, type LucideIcon, Play, Plus, Settings } from 'lucide-react';
-import { useState } from 'react';
+import { Clock, Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
+import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
+import { TaskRouteArt } from '@/components/illustrations';
 import { Caption, Card } from '@/components/instrument';
 import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -131,44 +132,35 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 	);
 }
 
-type Stage = { icon: LucideIcon; title: string; note: string; lit?: boolean };
+type Stage = { title: string; note: string };
 
 /**
  * How a task runs, left to right: it reads first, then takes its own branch,
  * starts a sandbox only when it has to edit or run code, and ends in a pull request.
+ * The drawing shows the line and lights each stage in turn; the captions under
+ * it are the words, and light with their stage.
  */
 function Route({ repo, branch, planMode }: { repo?: string; branch: string; planMode: boolean }) {
 	const stages: Stage[] = [
-		{ icon: Eye, title: planMode ? 'Plan' : 'Read', note: repo ?? 'repository', lit: true },
-		{ icon: GitBranch, title: 'Branch', note: `off ${branch || 'main'}` },
-		{ icon: Box, title: 'Sandbox', note: 'when it edits' },
-		{ icon: GitPullRequest, title: 'Pull request', note: 'for your review' },
+		{ title: planMode ? 'Plan' : 'Read', note: repo ?? 'repository' },
+		{ title: 'Branch', note: `off ${branch || 'main'}` },
+		{ title: 'Sandbox', note: 'when it edits' },
+		{ title: 'Pull request', note: 'for your review' },
 	];
 	return (
-		<ol aria-label="How a task runs" className="in-well in-grid m-0 grid list-none grid-cols-2 gap-y-4 px-4 py-4 sm:grid-cols-4 sm:px-5">
-			{stages.map((stage, index) => (
-				<li key={stage.title} className="relative flex min-w-0 flex-col gap-2">
-					<div className="flex items-center">
-						<span
-							className={
-								stage.lit
-									? 'relative z-[1] inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)'
-									: 'relative z-[1] inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong) bg-(--well-bg) text-(--icon-secondary)'
-							}
-						>
-							<Icon icon={stage.icon} size={13} />
-						</span>
-						{index < stages.length - 1 ? <span aria-hidden className="mx-2 hidden h-px flex-1 border-t border-dashed border-(--border-strong) sm:block" /> : null}
-					</div>
-					<div className="flex min-w-0 flex-col gap-0.5 pr-2">
-						<Caption className="text-(--text-tertiary)">
+		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
+			<TaskRouteArt className="w-full" />
+			<ol aria-label="How a task runs" className="m-0 grid list-none grid-cols-4 p-0">
+				{stages.map((stage, index) => (
+					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
+						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
 							{String(index + 1).padStart(2, '0')} {stage.title}
-						</Caption>
-						<div className="truncate text-[12px] text-(--text-secondary)">{stage.note}</div>
-					</div>
-				</li>
-			))}
-		</ol>
+						</span>
+						<div className="w-full truncate text-[12px] text-(--text-secondary)">{stage.note}</div>
+					</li>
+				))}
+			</ol>
+		</div>
 	);
 }
 

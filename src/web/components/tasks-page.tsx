@@ -4,9 +4,9 @@ import { CalendarDays, GitPullRequest, List as ListIcon, Plus, Search } from 'lu
 import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
-import { Card, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill, Well } from '@/components/instrument';
+import { Card, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, FilterChip, Icon, Spinner } from '@/components/signal';
+import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
@@ -164,17 +164,13 @@ export function TasksPage() {
 						<Spinner size={12} />
 					</div>
 				) : shown.length === 0 ? (
-					<div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-						{all.length ? null : (
-							<Well grid className="flex w-full max-w-[360px] items-center justify-center py-4">
-								<TasksArt className="w-[180px]" />
-							</Well>
-						)}
-						<div className="flex flex-col gap-1">
-							<div className="text-[14px] font-medium">{all.length ? 'No tasks match' : 'No tasks yet'}</div>
-							<div className="text-[12px] text-(--text-tertiary)">{all.length ? 'Try another search or filter.' : 'Start one from New task.'}</div>
+					all.length ? (
+						<EmptyState title="No tasks match" body="Try another search or filter." />
+					) : (
+						<div className="p-1.5">
+							<EmptyState art={<TasksArt className="w-full max-w-[320px]" />} title="No tasks yet" body="Start one from New task." />
 						</div>
-					</div>
+					)
 				) : (
 					<div className="flex flex-col gap-0.5 p-1.5">
 						<div className={`${COLUMNS} in-caption px-2.5 pt-1 pb-1.5`}>

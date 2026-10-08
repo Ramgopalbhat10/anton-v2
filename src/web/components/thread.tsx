@@ -648,7 +648,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 						{messages.length === 0 && !busy ? (
 							<EmptyState
-								art={<SandboxArt className="w-[170px]" />}
+								art={<SandboxArt className="w-full max-w-[300px]" label="ready" />}
 								title="Workspace is ready"
 								body="Describe the outcome you want. Anton works in the sandbox on the right and shows every step here."
 								className="mt-[10vh]"

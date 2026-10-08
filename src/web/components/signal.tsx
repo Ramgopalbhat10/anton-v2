@@ -132,18 +132,30 @@ export function EmptyState({
 	className,
 }: {
 	icon?: LucideIcon;
-	/** A drawing shown on a drafting grid in place of the icon. */
+	/** A drawing shown in place of the icon; the drafting grid then spans the width and holds the words too. */
 	art?: ReactNode;
 	title: string;
 	body?: ReactNode;
 	children?: ReactNode;
 	className?: string;
 }) {
+	if (art) {
+		// The drawing gets the whole width: the drafting grid runs edge to edge and
+		// the words sit on it, under the drawing.
+		return (
+			<div className={cn('in-well in-grid flex w-full flex-col items-center gap-5 px-6 pt-10 pb-9 text-center', className)}>
+				<div className="flex w-full justify-center">{art}</div>
+				<div className="flex flex-col items-center gap-1">
+					<div className="text-[14px] leading-[21px] font-medium text-(--text-primary)">{title}</div>
+					{body ? <div className="max-w-[48ch] text-[12px] leading-[18px] text-(--text-tertiary)">{body}</div> : null}
+				</div>
+				{children ? <div className="flex items-center gap-2">{children}</div> : null}
+			</div>
+		);
+	}
 	return (
 		<div className={cn('flex flex-col items-center gap-3 px-6 py-8 text-center', className)}>
-			{art ? (
-				<div className="in-well in-grid mb-1 flex w-full max-w-[320px] items-center justify-center px-6 py-5">{art}</div>
-			) : icon ? (
+			{icon ? (
 				<span className="inline-flex size-8 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) text-(--icon-secondary)">
 					<Icon icon={icon} />
 				</span>

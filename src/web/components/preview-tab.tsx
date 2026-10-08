@@ -31,7 +31,7 @@ function PortChip({ preview, active, onSelect }: { preview: Preview; active: boo
 function NotRunning({ sessionId }: { sessionId: string }) {
 	const resume = useResume(sessionId);
 	return (
-		<EmptyState art={<SandboxArt className="w-[170px]" />} className="pt-10" title="The sandbox is not running" body="Previews come from servers running in the task's sandbox. Resume it to see them.">
+		<EmptyState art={<SandboxArt className="w-full max-w-[300px]" label="stopped" />} title="The sandbox is not running" body="Previews come from servers running in the task's sandbox. Resume it to see them.">
 			<Btn size="sm" icon={Play} disabled={resume.isPending} onClick={() => resume.mutate()}>
 				{resume.isPending ? 'Starting…' : 'Resume'}
 			</Btn>
@@ -62,7 +62,7 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 
 	const list = previews.data.previews;
 	const current = list.find((item) => item.port === chosen) ?? list.find((item) => item.listening) ?? list[0];
-	if (!current) return <EmptyState art={<LinkArt className="w-[180px]" />} className="pt-10" title="No preview ports" body="Add preview ports in the repository settings." />;
+	if (!current) return <EmptyState art={<LinkArt className="w-full max-w-[340px]" />} title="No preview ports" body="Add preview ports in the repository settings." />;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">

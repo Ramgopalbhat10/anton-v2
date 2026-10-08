@@ -246,7 +246,7 @@ export function DiffList({
 }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	if (files.length === 0) {
-		return <EmptyState art={<BranchArt className="w-[190px]" />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} className="pt-10" />;
+		return <EmptyState art={<BranchArt className="w-full max-w-[380px]" />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
 	const current = files.find((file) => file.path === selected) ?? files[0];
 	return (

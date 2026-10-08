@@ -115,7 +115,7 @@ function TasksCard() {
 					</div>
 				) : (
 					<Well grid className="flex flex-1 items-center justify-center py-3">
-						<SandboxArt className="w-[150px]" />
+						<SandboxArt className="w-full max-w-[230px]" />
 					</Well>
 				)}
 			</CardSection>
