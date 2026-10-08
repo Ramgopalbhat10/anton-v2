@@ -245,6 +245,68 @@
 	}
 }
 
+/* The task rack: blades slide in one after another, running ones blink, and an
+   indexing light sweeps each bay's lid. The open blade is drawn out of its slot
+   in script (task-rack.tsx), since its body grows as it comes out. */
+.rack-blade {
+	cursor: pointer;
+	outline: none;
+	animation: rack-in 560ms var(--ease-out) both;
+	animation-delay: calc(var(--slot, 0) * 45ms);
+}
+@keyframes rack-in {
+	from {
+		opacity: 0;
+		transform: translate(-12px, 7px);
+	}
+}
+/* The open blade's card and its leader fade into place as the blade comes out. */
+.rack-card,
+.rack-leader {
+	animation: rack-card 260ms var(--ease-out) 120ms both;
+}
+@keyframes rack-card {
+	from {
+		opacity: 0;
+		margin-top: 6px;
+	}
+}
+.rack-activity {
+	animation: rack-activity 0.9s steps(1, end) infinite;
+	animation-delay: calc(var(--blink, 0) * 0.3s);
+}
+@keyframes rack-activity {
+	50% {
+		opacity: 0.15;
+	}
+}
+.rack-sweep {
+	animation: rack-sweep 4.2s ease-in-out infinite alternate;
+	animation-delay: calc(var(--bay, 0) * -1.3s);
+}
+@keyframes rack-sweep {
+	to {
+		transform: translateX(110px);
+	}
+}
+/* The rack's row scrolls sideways. */
+.rack-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) transparent;
+	overscroll-behavior-x: contain;
+}
+@media (prefers-reduced-motion: reduce) {
+	.rack-blade,
+	.rack-activity,
+	.rack-sweep {
+		animation: none;
+	}
+	.rack-card,
+	.rack-leader {
+		animation: none;
+	}
+}
+
 /* The mono caption every card footer and gauge label uses. */
 .in-caption {
 	font-family: var(--font-mono);

@@ -7,6 +7,7 @@ import { TasksArt } from '@/components/illustrations';
 import { Card, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal';
+import { RackCard } from '@/components/task-rack';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
@@ -140,6 +141,7 @@ export function TasksPage() {
 				</Btn>
 			}
 		>
+			{all.length ? <RackCard sessions={all} /> : null}
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">
 				<div className="flex flex-wrap items-center gap-2 border-b border-(--border-subtle) p-2.5">

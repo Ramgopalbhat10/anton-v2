@@ -11,21 +11,21 @@ import { cn } from '@/lib/utils';
    the 2D plane of the face they sit on (see OnFace), so a circle on a lid
    becomes the right ellipse and a slot on a side follows its slope. */
 
-type Point = [number, number, number];
-type Pair = [number, number];
+export type Point = [number, number, number];
+export type Pair = [number, number];
 
-const COS = Math.cos(Math.PI / 6);
-const SIN = 0.5;
+export const COS = Math.cos(Math.PI / 6);
+export const SIN = 0.5;
 
-const pt = ([x, y, z]: Point): Pair => [(x - y) * COS, (x + y) * SIN - z];
-const fmt = (n: number) => (Math.abs(n) < 0.005 ? '0' : n.toFixed(2));
+export const pt = ([x, y, z]: Point): Pair => [(x - y) * COS, (x + y) * SIN - z];
+export const fmt = (n: number) => (Math.abs(n) < 0.005 ? '0' : n.toFixed(2));
 const pairs = (points: Pair[]) => points.map((p) => `${fmt(p[0])},${fmt(p[1])}`).join(' ');
 
-const ve = { vectorEffect: 'non-scaling-stroke' } as const;
-const EDGE = 'var(--art-edge)';
-const DETAIL = 'var(--art-detail)';
-const RECESS = 'var(--art-recess)';
-const ACCENT = 'var(--accent-base)';
+export const ve = { vectorEffect: 'non-scaling-stroke' } as const;
+export const EDGE = 'var(--art-edge)';
+export const DETAIL = 'var(--art-detail)';
+export const RECESS = 'var(--art-recess)';
+export const ACCENT = 'var(--accent-base)';
 
 function useSvgId(prefix: string) {
 	return `${prefix}${useId().replace(/[^\w-]/g, '')}`;
@@ -64,35 +64,35 @@ const AXES: Record<Plane, [number, number, number, number]> = {
 };
 
 /** Draws its children in the plane of a face, with the origin at a grid point. */
-function OnFace({ on, at, children }: { on: Plane; at: Point; children: ReactNode }) {
+export function OnFace({ on, at, children }: { on: Plane; at: Point; children: ReactNode }) {
 	const [ox, oy] = pt(at);
 	return <g transform={`matrix(${AXES[on].map(fmt).join(' ')} ${fmt(ox)} ${fmt(oy)})`}>{children}</g>;
 }
 
 /** A recess cut into a face. */
-function Slot({ x, y, w, h, r = 1, edge }: { x: number; y: number; w: number; h: number; r?: number; edge?: boolean }) {
+export function Slot({ x, y, w, h, r = 1, edge }: { x: number; y: number; w: number; h: number; r?: number; edge?: boolean }) {
 	return <rect x={x} y={y} width={w} height={h} rx={r} fill={RECESS} stroke={edge ? DETAIL : 'none'} {...ve} />;
 }
 
 /** A line of text or a seam, as a short filled bar. */
-function Bar({ x, y, w, h = 1.6, accent }: { x: number; y: number; w: number; h?: number; accent?: boolean }) {
+export function Bar({ x, y, w, h = 1.6, accent }: { x: number; y: number; w: number; h?: number; accent?: boolean }) {
 	return <rect x={x} y={y} width={w} height={h} rx={h / 2} fill={accent ? ACCENT : DETAIL} />;
 }
 
-function Ring({ at, r, fill = 'none', stroke = DETAIL }: { at: Pair; r: number; fill?: string; stroke?: string }) {
+export function Ring({ at, r, fill = 'none', stroke = DETAIL }: { at: Pair; r: number; fill?: string; stroke?: string }) {
 	return <circle cx={at[0]} cy={at[1]} r={r} fill={fill} stroke={stroke} {...ve} />;
 }
 
-function Ln({ a, b, stroke = DETAIL, dash }: { a: Pair; b: Pair; stroke?: string; dash?: string }) {
+export function Ln({ a, b, stroke = DETAIL, dash }: { a: Pair; b: Pair; stroke?: string; dash?: string }) {
 	return <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeDasharray={dash} strokeLinecap="round" {...ve} />;
 }
 
-function Trace({ points, stroke = DETAIL, dash }: { points: Pair[]; stroke?: string; dash?: string }) {
+export function Trace({ points, stroke = DETAIL, dash }: { points: Pair[]; stroke?: string; dash?: string }) {
 	return <polyline points={pairs(points)} fill="none" stroke={stroke} strokeDasharray={dash} strokeLinejoin="round" strokeLinecap="round" {...ve} />;
 }
 
 /** A status light: lit ones are cyan. */
-function Led({ at, lit, r = 1.4 }: { at: Pair; lit?: boolean; r?: number }) {
+export function Led({ at, lit, r = 1.4 }: { at: Pair; lit?: boolean; r?: number }) {
 	return <circle cx={at[0]} cy={at[1]} r={r} fill={lit ? 'var(--cyan-300)' : 'var(--art-detail)'} />;
 }
 
@@ -121,7 +121,7 @@ type Faces = { top?: ReactNode; left?: ReactNode; right?: ReactNode };
 
 /** A block with softened edges, from its back corner at (x, y, z). Face details
     are clipped to its outline, so nothing spills past a rounded corner. */
-function Block({ at, size, r = 3, tone = 'solid', dashed, top, left, right }: Faces & { at: Point; size: Point; r?: number; tone?: Tone; dashed?: boolean }) {
+export function Block({ at, size, r = 3, tone = 'solid', dashed, top, left, right }: Faces & { at: Point; size: Point; r?: number; tone?: Tone; dashed?: boolean }) {
 	const clip = useSvgId('blk');
 	const [x, y, z] = at;
 	const [w, d, h] = size;
