@@ -3,6 +3,7 @@ import { ArrowUpRight, Globe, Play, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { useResume } from '@/components/source-bar';
 import { LinkArt, SandboxArt } from '@/components/illustrations';
+import { Segmented } from '@/components/instrument';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type Preview } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -13,13 +14,16 @@ function PortChip({ preview, active, onSelect }: { preview: Preview; active: boo
 			type="button"
 			onClick={onSelect}
 			aria-pressed={active}
+			title={preview.listening ? `Port ${preview.port} is serving` : `Nothing is serving on port ${preview.port}`}
 			className={cn(
-				'flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
-				active ? 'bg-(--bg-overlay) text-(--text-primary)' : 'text-(--text-tertiary) hover:bg-(--bg-hover)',
+				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-[7px] border px-2 text-[11.5px] outline-none focus-visible:shadow-(--focus-ring)',
+				active
+					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
+					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 			)}
 		>
 			<span className={cn('size-1.5 rounded-full', preview.listening ? 'bg-(--success-base)' : 'bg-(--text-disabled)')} />
-			{preview.port}
+			:{preview.port}
 		</button>
 	);
 }
@@ -62,11 +66,15 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">
-			<div className="flex h-7 shrink-0 items-center gap-1">
-				<div data-noscrollbar className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto">
+			<div className="flex h-8 shrink-0 items-center gap-1.5">
+				<Segmented label="Ports" role="group" className="max-w-[60%] shrink-0 overflow-x-auto">
 					{list.map((item) => (
 						<PortChip key={item.port} preview={item} active={item.port === current.port} onSelect={() => setChosen(item.port)} />
 					))}
+				</Segmented>
+				<div className="in-num flex h-7 min-w-0 flex-auto items-center gap-1.5 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[11.5px] text-(--text-tertiary)">
+					<Icon icon={Globe} size={12} className={current.listening ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
+					<span className="min-w-0 truncate">{current.url ?? `Port ${current.port} has no public URL`}</span>
 				</div>
 				<IconBtn
 					icon={RotateCw}
@@ -95,7 +103,7 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 					key={`${current.url}#${reloads}`}
 					src={current.url}
 					title={`Preview of port ${current.port}`}
-					className="min-h-[360px] w-full flex-1 rounded-lg border border-(--border-subtle) bg-white"
+					className="in-well min-h-[360px] w-full flex-1 bg-white"
 				/>
 			) : (
 				<EmptyState

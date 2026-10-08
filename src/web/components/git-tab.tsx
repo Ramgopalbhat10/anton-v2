@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, GitCommitHorizontal, GitCompare, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
+import { Copy, GitBranch, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useMemo, useState } from 'react';
+import { FileIcon, FileIcons } from '@/components/file-icons';
 import { BranchArt } from '@/components/illustrations';
+import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem, SplitBar } from '@/components/instrument';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { SourceBar } from '@/components/source-bar';
 import { api, refreshFor } from '@/lib/api';
@@ -22,7 +24,7 @@ const sideOf = (line: CodeLine): ReviewComment['side'] => (line.kind === 'remove
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
-		<div className="sticky left-2 my-1 ml-11 flex w-[min(480px,70vw)] items-start gap-2 rounded-md bg-(--bg-raised) px-2.5 py-1.5 font-sans">
+		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] items-start gap-2 border-l-2 border-l-(--accent-base) px-2.5 py-2 font-sans">
 			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--accent-text)" />
 			<div className="min-w-0 flex-1 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-primary)">
 				{outdated ? <div className="text-(--text-tertiary)">Line {comment.line} has changed since this comment</div> : null}
@@ -37,7 +39,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 	const [text, setText] = useState('');
 	const save = () => (text.trim() ? onSave(text.trim()) : undefined);
 	return (
-		<div className="sticky left-2 my-1 ml-11 flex w-[min(480px,70vw)] flex-col gap-1.5 rounded-md bg-(--bg-raised) p-2 font-sans">
+		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] flex-col gap-2 border-l-2 border-l-(--accent-base) p-2 font-sans">
 			<textarea
 				autoFocus
 				rows={2}
@@ -49,7 +51,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 				}}
 				placeholder="What should the agent change here?"
 				aria-label="Comment"
-				className="w-full resize-none rounded-md bg-(--bg-surface) px-2 py-1.5 text-[12px] leading-[18px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)"
+				className="w-full resize-none rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2 py-1.5 text-[12px] leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
 			/>
 			<div className="flex justify-end gap-1.5">
 				<Btn size="xs" variant="ghost" onClick={onCancel}>
@@ -68,8 +70,8 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 		<div
 			className={cn(
 				'group relative flex',
-				line.kind === 'add' && 'bg-(--success-bg)',
-				line.kind === 'remove' && 'bg-(--danger-bg)',
+				line.kind === 'add' && 'bg-(--success-bg) shadow-[inset_2px_0_0_var(--success-base)]',
+				line.kind === 'remove' && 'bg-(--danger-bg) shadow-[inset_2px_0_0_var(--danger-base)]',
 			)}
 		>
 			{onComment ? (
@@ -77,19 +79,21 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					type="button"
 					aria-label={`Comment on line ${line.number}`}
 					onClick={onComment}
-					className="absolute top-px left-1 inline-flex size-4 items-center justify-center rounded-sm bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-[5px] bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
 				>
 					<Icon icon={Plus} size={11} />
 				</button>
 			) : null}
-			<span className="w-11 shrink-0 pr-2.5 text-right text-(--text-disabled)">{line.number}</span>
+			<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{line.number}</span>
+			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--success-text)' : line.kind === 'remove' ? 'text-(--danger-text)' : 'text-transparent')}>
+				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}
+			</span>
 			<span
 				className={cn(
-					'pr-3 pl-2 whitespace-pre',
+					'pr-3 whitespace-pre',
 					line.kind === 'add' ? 'text-(--success-text)' : line.kind === 'remove' ? 'text-(--danger-text)' : 'text-(--text-secondary)',
 				)}
 			>
-				{line.kind === 'add' ? '+ ' : line.kind === 'remove' ? '- ' : '  '}
 				{line.text}
 			</span>
 		</div>
@@ -139,9 +143,13 @@ export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; com
 	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => matches(comment, line));
 	const outdated = (commenting?.comments ?? []).filter((comment) => !codeLines.some((line) => matches(comment, line)));
 	return (
-		<div className="overflow-hidden rounded-lg bg-(--bg-inset)">
-			<div className="flex h-8 items-center gap-2 bg-(--bg-raised) pr-1.5 pl-3">
-				<div className="min-w-0 flex-1 truncate text-[12px]">{file.path}</div>
+		<div className="in-well overflow-hidden bg-(--bg-inset)">
+			<div className="flex h-9 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] pr-1.5 pl-3">
+				<FileIcon path={file.path} />
+				<PathName path={file.path} active className="flex-1" />
+				<span className="in-num shrink-0">
+					<DiffStat added={file.added} removed={file.removed} />
+				</span>
 				{sessionId ? <RevertButton key={file.path} sessionId={sessionId} path={file.path} /> : null}
 				<IconBtn
 					icon={Copy}
@@ -155,16 +163,16 @@ export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; com
 					}}
 				/>
 			</div>
-			<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[18px]">
+			<div className="@container overflow-x-auto pb-1.5 font-mono text-[12px] leading-[19px]">
 				<div className="min-w-max">
 					{outdated.map((comment, at) => (
 						<CommentCard key={`outdated-${at}`} comment={comment} outdated onRemove={() => commenting?.onRemove(comment)} />
 					))}
 					{file.lines.map((line, index) =>
 						line.kind === 'hunk' ? (
-							<div key={`hunk-${index}`} className="flex text-(--text-disabled)">
-								<span className="w-11 shrink-0 pr-2.5 text-right">@@</span>
-								<span className="whitespace-pre">{line.text}</span>
+							<div key={`hunk-${index}`} className="my-1 flex bg-(--accent-bg-subtle) py-0.5 text-(--accent-text) first:mt-0">
+								<span className="w-12 shrink-0 border-r border-(--accent-border) pr-2.5 text-right opacity-70 select-none">@@</span>
+								<span className="pl-2 whitespace-pre opacity-80">{line.text}</span>
 							</div>
 						) : (
 							// Keyed by the line, not its position, so an open comment form keeps its text when the diff refreshes.
@@ -207,15 +215,20 @@ function CommitList({ log }: { log: Array<{ sha: string; subject: string; at: st
 		return <EmptyState icon={GitCommitHorizontal} title="No commits yet" body="Commits on the task branch show up here." />;
 	}
 	return (
-		<div className="flex flex-col gap-px">
-			{log.map((entry) => (
-				<div key={entry.sha} className="flex h-7 items-center gap-2 rounded-md px-2 hover:bg-(--bg-hover)">
-					<span className="shrink-0 font-mono text-[11px] text-(--text-tertiary)">{entry.sha.slice(0, 7)}</span>
-					<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{entry.subject}</span>
-					<span className="shrink-0 text-[11px] text-(--text-disabled)">{age(entry.at)}</span>
-				</div>
+		<ol className="in-card m-0 list-none p-1.5">
+			{log.map((entry, index) => (
+				<li key={entry.sha} className="relative flex min-h-11 items-center gap-3 rounded-lg px-2.5 hover:bg-(--bg-hover)">
+					{/* The branch line runs through every commit's node. */}
+					<span aria-hidden className="relative flex w-3 shrink-0 justify-center self-stretch">
+						<span className={cn('absolute w-px bg-(--border-default)', index === 0 ? 'top-1/2' : 'top-0', index === log.length - 1 ? 'bottom-1/2' : 'bottom-0')} />
+						<span className={cn('relative mt-auto mb-auto size-2.5 rounded-full border-2', index === 0 ? 'border-(--accent-base) bg-(--accent-bg-subtle)' : 'border-(--text-disabled) bg-(--card-bg)')} />
+					</span>
+					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{entry.subject}</span>
+					<span className="in-num shrink-0 rounded-md bg-(--alpha-white-6) px-1.5 py-px text-[10.5px] text-(--text-tertiary)">{entry.sha.slice(0, 7)}</span>
+					<span className="in-num w-8 shrink-0 text-right text-[11px] text-(--text-disabled)">{age(entry.at)}</span>
+				</li>
 			))}
-		</div>
+		</ol>
 	);
 }
 
@@ -237,8 +250,8 @@ export function DiffList({
 	}
 	const current = files.find((file) => file.path === selected) ?? files[0];
 	return (
-		<>
-			<div className="flex flex-col gap-px">
+		<FileIcons>
+			<div className="in-card flex flex-col gap-px p-1">
 				{files.map((file) => {
 					const active = file.path === current.path;
 					return (
@@ -246,23 +259,23 @@ export function DiffList({
 							type="button"
 							key={file.path}
 							onClick={() => setSelected(file.path)}
-							className="relative flex h-7 items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							aria-current={active ? 'true' : undefined}
+							className={cn(
+								'flex h-8 items-center gap-2 rounded-[8px] border px-2 text-left outline-none focus-visible:shadow-(--focus-ring)',
+								active
+									? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)'
+									: 'border-transparent hover:bg-(--bg-hover)',
+							)}
 						>
-							{active ? <div className="absolute inset-0 rounded-md bg-(--alpha-white-6)" /> : null}
-							<div
-								className={cn(
-									'relative min-w-0 flex-1 truncate text-[12px]',
-									active ? 'text-(--text-primary)' : 'text-(--text-secondary)',
-								)}
-							>
-								{file.path}
-							</div>
+							<FileIcon path={file.path} />
+							<PathName path={file.path} active={active} className="flex-1" />
 							{review?.comments.some((comment) => comment.path === file.path) ? (
-								<Icon icon={MessageSquare} size={12} className="relative text-(--accent-text)" />
+								<Icon icon={MessageSquare} size={12} className="text-(--accent-text)" />
 							) : null}
-							<div className="relative">
+							<span className="in-num shrink-0">
 								<DiffStat added={file.added} removed={file.removed} />
-							</div>
+							</span>
+							<DiffBars added={file.added} removed={file.removed} />
 						</button>
 					);
 				})}
@@ -279,7 +292,7 @@ export function DiffList({
 					}
 				}
 			/>
-		</>
+		</FileIcons>
 	);
 }
 
@@ -291,8 +304,10 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	if (review.comments.length === 0) return null;
 	const count = review.comments.length;
 	return (
-		<div className="sticky bottom-0 flex items-center gap-2 rounded-lg bg-(--bg-raised) py-1.5 pr-1.5 pl-3 shadow-(--shadow-overlay)">
-			<Icon icon={MessageSquare} size={12} className="text-(--accent-text)" />
+		<div className="in-pop sticky bottom-0 flex items-center gap-2 py-1.5 pr-1.5 pl-2">
+			<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-(--accent-bg-subtle) text-(--accent-text)">
+				<Icon icon={MessageSquare} size={12} />
+			</span>
 			<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
 				{error ?? `${count} ${count === 1 ? 'comment' : 'comments'} for the agent`}
 			</span>
@@ -345,31 +360,41 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
 
 	return (
-		<div className="flex flex-col gap-2">
+		<div className="flex flex-col gap-2.5">
 			<SourceBar sessionId={sessionId} source={source} at={at}>
-				{view === 'diff' ? (
-					<>
-						<span className="text-(--text-disabled)">
-							{files.length} {files.length === 1 ? 'FILE' : 'FILES'}
-						</span>
-						<span className="text-(--success-text)">+{added}</span>
-						<span className="text-(--danger-text)">-{removed}</span>
-					</>
-				) : (
-					<span className="text-(--text-disabled)">{log.length} COMMITS</span>
-				)}
-				<span className="hidden min-w-0 truncate text-(--text-disabled) uppercase lg:inline" title={`${baseBranch} → ${branch}`}>
-					{baseBranch} → {branch}
+				<span className="flex min-w-0 items-center gap-1.5 truncate" title={`${baseBranch} → ${branch}`}>
+					<Icon icon={GitBranch} size={11} className="text-(--icon-tertiary)" />
+					<span className="truncate">
+						{baseBranch} → {branch}
+					</span>
 				</span>
-				<Btn
-					variant="ghost"
-					size="xs"
-					icon={view === 'diff' ? GitCommitHorizontal : GitCompare}
-					onClick={() => setView(view === 'diff' ? 'commits' : 'diff')}
-				>
-					{view === 'diff' ? 'Commits' : 'Diff'}
-				</Btn>
 			</SourceBar>
+			<div className="in-card gap-3 px-3.5 py-3">
+				<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+					<Figure value={String(files.length)} unit={files.length === 1 ? 'file changed' : 'files changed'} size="md" />
+					<span className="in-num text-[12px]">
+						<span className="text-(--success-text)">+{added}</span> <span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
+					</span>
+					<span className="flex-1" />
+					<Segmented label="Show">
+						<SegmentedItem size="sm" on={view === 'diff'} onClick={() => setView('diff')}>
+							Diff
+						</SegmentedItem>
+						<SegmentedItem size="sm" on={view === 'commits'} onClick={() => setView('commits')}>
+							Commits
+							<Count className="h-4 min-w-4 px-1">{log.length}</Count>
+						</SegmentedItem>
+					</Segmented>
+				</div>
+				<SplitBar
+					label={`${added} lines added, ${removed} removed`}
+					legend={false}
+					parts={[
+						{ key: 'added', label: 'Added', value: added, color: 'var(--success-base)' },
+						{ key: 'removed', label: 'Removed', value: removed, color: 'var(--danger-base)' },
+					]}
+				/>
+			</div>
 			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} />}
 			<ReviewBar review={review} />
 		</div>

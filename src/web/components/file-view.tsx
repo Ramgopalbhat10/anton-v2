@@ -3,7 +3,8 @@ import { Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
 import { Markdown } from '@/components/markdown';
-import { Btn, Icon, Spinner } from '@/components/signal';
+import { Segmented, SegmentedItem } from '@/components/instrument';
+import { Icon, Spinner } from '@/components/signal';
 import { highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +40,21 @@ export const STATUS_TONE: Record<string, string> = {
 	D: 'text-(--danger-text)',
 };
 
+const STATUS_BG: Record<string, string> = {
+	A: 'bg-(--success-bg)',
+	M: 'bg-(--warning-bg)',
+	D: 'bg-(--danger-bg)',
+};
+
+/** A file's git status as a small lettered chip: A added, M modified, D deleted. */
+export function StatusChip({ status }: { status: string }) {
+	return (
+		<span className={cn('in-num inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-medium', STATUS_TONE[status], STATUS_BG[status])}>
+			{status}
+		</span>
+	);
+}
+
 export function Branch({
 	node,
 	selected,
@@ -57,7 +73,7 @@ export function Branch({
 	statusOf?: (path: string, folder: boolean) => string | undefined;
 }) {
 	return (
-		<div className="flex flex-col gap-px" style={{ paddingLeft: depth ? 16 : 0 }}>
+		<div className={cn('flex flex-col gap-px', depth > 0 && 'ml-[13px] border-l border-(--border-subtle) pl-1')}>
 			{sorted(node).map((child) => {
 				const status = statusOf?.(child.path, !child.file);
 				if (child.file) {
@@ -67,7 +83,7 @@ export function Branch({
 							key={child.path}
 							onClick={() => onOpen(child.path)}
 							aria-current={selected === child.path ? 'true' : undefined}
-							className="sg-file-row flex h-[26px] items-center gap-2 rounded-md pr-2 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="sg-file-row flex h-[26px] items-center gap-2 rounded-[7px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 						>
 							<FileIcon path={child.path} />
 							<span
@@ -78,7 +94,7 @@ export function Branch({
 							>
 								{child.name}
 							</span>
-							{status ? <span className={cn('text-[11px]', STATUS_TONE[status])}>{status}</span> : null}
+							{status ? <StatusChip status={status} /> : null}
 						</button>
 					);
 				}
@@ -89,11 +105,11 @@ export function Branch({
 							type="button"
 							aria-expanded={open}
 							onClick={() => onToggle(child.path)}
-							className="flex h-[26px] items-center gap-2 rounded-md px-2 text-left text-(--text-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex h-[26px] items-center gap-2 rounded-[7px] pr-1.5 pl-2 text-left text-(--text-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 						>
-							<Icon icon={open ? FolderOpen : Folder} size={12} className="text-(--icon-tertiary)" />
+							<Icon icon={open ? FolderOpen : Folder} size={12} className={open ? 'text-(--icon-secondary)' : 'text-(--icon-tertiary)'} />
 							<span className="min-w-0 flex-1 truncate text-[12px]">{child.name}</span>
-							{status ? <span className={cn('text-[11px]', STATUS_TONE[status])}>{status}</span> : null}
+							{status ? <StatusChip status={status} /> : null}
 						</button>
 						{open ? (
 							<Branch selected={selected} node={child} depth={depth + 1} expanded={expanded} onToggle={onToggle} onOpen={onOpen} statusOf={statusOf} />
@@ -136,12 +152,12 @@ function RenderedMarkdown({ text }: { text: string }) {
 	return (
 		<div className="flex flex-col gap-4 p-4">
 			{fields.length ? (
-				<table className="w-full border-collapse overflow-hidden rounded-lg text-[12px]">
+				<table className="in-well w-full border-separate border-spacing-0 overflow-hidden text-[12px]">
 					<tbody>
 						{fields.map(([, key, value]) => (
-							<tr key={key} className="border-b border-(--border-subtle) last:border-0">
-								<th className="w-[120px] bg-(--bg-raised) px-2.5 py-1.5 text-left align-top font-mono font-normal text-(--text-tertiary)">{key}</th>
-								<td className="bg-(--bg-surface) px-2.5 py-1.5 text-pretty text-(--text-secondary)">{value.replace(/^(["'])(.*)\1$/, '$2')}</td>
+							<tr key={key} className="[&:last-child>*]:border-b-0">
+								<th className="in-caption w-[120px] border-b border-(--border-subtle) px-2.5 py-2 text-left align-top font-normal">{key}</th>
+								<td className="border-b border-(--border-subtle) px-2.5 py-1.5 text-pretty text-(--text-secondary)">{value.replace(/^(["'])(.*)\1$/, '$2')}</td>
 							</tr>
 						))}
 					</tbody>
@@ -179,13 +195,15 @@ export function FileView({ path, queryKey, read }: { path: string; queryKey: unk
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 			{markdown ? (
-				<div className="flex shrink-0 justify-end gap-1 bg-(--bg-raised) px-2 py-1">
-					<Btn size="xs" variant={!preview ? 'secondary' : 'ghost'} aria-pressed={!preview} onClick={() => setPreview(false)}>
-						Source
-					</Btn>
-					<Btn size="xs" variant={preview ? 'secondary' : 'ghost'} aria-pressed={preview} onClick={() => setPreview(true)}>
-						Preview
-					</Btn>
+				<div className="flex shrink-0 justify-end border-b border-(--border-subtle) bg-(--card-bg) px-2 py-1.5">
+					<Segmented label="Show as" role="group">
+						<SegmentedItem role="button" size="sm" on={!preview} onClick={() => setPreview(false)}>
+							Source
+						</SegmentedItem>
+						<SegmentedItem role="button" size="sm" on={preview} onClick={() => setPreview(true)}>
+							Preview
+						</SegmentedItem>
+					</Segmented>
 				</div>
 			) : null}
 			<div className="min-h-0 flex-1 overflow-auto">
@@ -205,12 +223,12 @@ export function FileView({ path, queryKey, read }: { path: string; queryKey: unk
 				) : contents === null ? (
 					<div className="px-3 py-2.5 text-[12px] text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
 				) : (
-					<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[18px]">
+					<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[19px]">
 						<div className="min-w-max">
 							{contents.split('\n').map((line, index) => (
 								<div key={index} className="flex">
-									<span className="w-11 shrink-0 pr-2.5 text-right text-(--text-disabled)">{index + 1}</span>
-									<span className="pr-3 pl-2 whitespace-pre text-(--text-secondary)">
+									<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{index + 1}</span>
+									<span className="pr-3 pl-3 whitespace-pre text-(--text-secondary)">
 										{tokens?.[index]
 											? tokens[index].map((token, at) => (
 													<span key={at} style={{ color: token.color }}>

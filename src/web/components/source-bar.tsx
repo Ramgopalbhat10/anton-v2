@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Play } from 'lucide-react';
 import { type ReactNode, useCallback } from 'react';
+import { Status } from '@/components/instrument';
 import { Btn } from '@/components/signal';
 import { api, type Source } from '@/lib/api';
 import { age } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
 const LABEL: Record<Source, (at: string | null) => string> = {
 	live: () => 'Live',
@@ -46,17 +46,16 @@ export function SourceBar({
 }) {
 	const resume = useResume(sessionId);
 	return (
-		<div className="flex h-7 min-w-0 shrink-0 items-center gap-2.5 text-[11px] tracking-[0.04em] whitespace-nowrap">
+		<div className="in-caption flex h-7 min-w-0 shrink-0 items-center gap-2.5 whitespace-nowrap">
 			{children}
 			<div className="flex-1" />
 			{source ? (
-				<span className={cn('flex items-center gap-1.5', source === 'live' ? 'text-(--success-text)' : 'text-(--text-tertiary)')}>
-					<span className={cn('size-1.5 rounded-full', source === 'live' ? 'bg-(--success-base)' : 'bg-(--text-disabled)')} />
+				<Status tone={source === 'live' ? 'success' : 'neutral'} pulse={source === 'live'}>
 					{LABEL[source](at ?? null)}
-				</span>
+				</Status>
 			) : null}
 			{source && source !== 'live' ? (
-				<Btn variant="ghost" size="xs" icon={Play} disabled={resume.isPending} onClick={() => resume.mutate()}>
+				<Btn variant="ghost" size="xs" icon={Play} disabled={resume.isPending} onClick={() => resume.mutate()} className="normal-case tracking-normal">
 					{resume.isPending ? 'Starting…' : 'Resume'}
 				</Btn>
 			) : null}

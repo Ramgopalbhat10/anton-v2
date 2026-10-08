@@ -45,7 +45,7 @@ import {
 	MenuTrigger,
 	SectionLabel,
 } from '@/components/signal';
-import { SegmentMeter, usedTone } from '@/components/instrument';
+import { Count, SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
@@ -87,10 +87,6 @@ function NavIcon({ icon }: { icon: LucideIcon }) {
 }
 
 /** A count in a small mono pill, beside a nav row or section heading. */
-function Count({ children }: { children: ReactNode }) {
-	return <span className="in-num inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-(--alpha-white-6) px-1.5 text-[10.5px] text-(--text-tertiary)">{children}</span>;
-}
-
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
 function SpentToday() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });

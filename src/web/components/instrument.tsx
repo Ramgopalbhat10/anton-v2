@@ -374,3 +374,101 @@ export function Facts({ items, className }: { items: ReactNode[]; className?: st
 		</span>
 	);
 }
+
+/** A small mono count in a pill: beside a tab, a section heading or a nav item. */
+export function Count({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'accent'; className?: string }) {
+	return (
+		<span
+			className={cn(
+				'in-num inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px]',
+				tone === 'accent' ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'bg-(--alpha-white-6) text-(--text-tertiary)',
+				className,
+			)}
+		>
+			{children}
+		</span>
+	);
+}
+
+/** The well a segmented control sits in; its items are `SegmentedItem`s. */
+export function Segmented({ children, label, className, role = 'tablist' }: { children: ReactNode; label: string; className?: string; role?: 'tablist' | 'radiogroup' | 'group' }) {
+	return (
+		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
+			{children}
+		</div>
+	);
+}
+
+/** One option of a segmented control: raised on the well when it is the chosen one. */
+export function SegmentedItem({
+	on,
+	onClick,
+	children,
+	role = 'tab',
+	size = 'md',
+	className,
+	title,
+}: {
+	on: boolean;
+	onClick: () => void;
+	children: ReactNode;
+	role?: 'tab' | 'radio' | 'button';
+	size?: 'sm' | 'md';
+	className?: string;
+	title?: string;
+}) {
+	const state = role === 'tab' ? { 'aria-selected': on } : role === 'radio' ? { 'aria-checked': on } : { 'aria-pressed': on };
+	return (
+		<button
+			type="button"
+			role={role === 'button' ? undefined : role}
+			{...state}
+			title={title}
+			onClick={onClick}
+			className={cn(
+				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[7px] border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				size === 'sm' ? 'h-[22px] px-2 text-[11px]' : 'h-7 px-3 text-[12.5px]',
+				on
+					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
+					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+				className,
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+/**
+ * A diff's size as five blocks, the way a pull request shows it: green for
+ * lines added, red for lines removed, grey for the rest of a small change.
+ */
+export function DiffBars({ added, removed, blocks = 5 }: { added: number; removed: number; blocks?: number }) {
+	const total = added + removed;
+	// Small changes light fewer blocks, so a one-line edit doesn't read like a rewrite.
+	const lit = total === 0 ? 0 : Math.min(blocks, Math.max(1, Math.ceil(Math.log10(total + 1) * 2)));
+	const green = total ? Math.round((added / total) * lit) : 0;
+	const red = lit - green;
+	return (
+		<span role="img" aria-label={`${added} added, ${removed} removed`} className="inline-flex shrink-0 items-center gap-[2px]">
+			{Array.from({ length: blocks }, (_, index) => (
+				<span
+					key={index}
+					className="size-[7px] rounded-[2px]"
+					style={{ background: index < green ? 'var(--success-base)' : index < green + red ? 'var(--danger-base)' : 'var(--segment-off)' }}
+				/>
+			))}
+		</span>
+	);
+}
+
+/** A path as its file name, bright, after its folder, dimmed. */
+export function PathName({ path, className, active }: { path: string; className?: string; active?: boolean }) {
+	const slash = path.lastIndexOf('/');
+	return (
+		<span className={cn('flex min-w-0 items-baseline gap-1.5 text-[12px]', className)} title={path}>
+			<span className={cn('shrink-0 truncate', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
+			{slash > 0 ? <span className="min-w-0 truncate text-[11px] text-(--text-disabled)">{path.slice(0, slash)}</span> : null}
+		</span>
+	);
+}

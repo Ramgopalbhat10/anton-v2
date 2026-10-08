@@ -3,6 +3,7 @@ import { ChevronLeft, Download, FileText, Image, Library, Sheet } from 'lucide-r
 import { type ReactNode, useState } from 'react';
 import { SourceBar } from '@/components/source-bar';
 import { LibraryArt } from '@/components/illustrations';
+import { Caption } from '@/components/instrument';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type Output, outputUrl, refreshFor } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
@@ -49,13 +50,14 @@ function Table({ text, separator }: { text: string; separator: string }) {
 	const parsed = parseCsv(text, separator, MAX_ROWS + 1);
 	const [header = [], ...rows] = parsed.slice(0, MAX_ROWS);
 	const cell = 'max-w-[320px] truncate border-b border-(--border-subtle) px-3 py-1.5 text-left';
+	const head = 'max-w-[320px] truncate border-b border-(--border-default) px-3 py-2 text-left';
 	return (
 		<div className="overflow-x-auto">
 			<table className="w-full border-collapse text-[12px]">
-				<thead className="bg-(--bg-raised) text-(--text-primary)">
+				<thead className="bg-(--card-bg)">
 					<tr>
 						{header.map((name, index) => (
-							<th key={index} className={`${cell} font-medium`}>
+							<th key={index} className={`${head} in-caption font-medium text-(--text-tertiary)`}>
 								{name}
 							</th>
 						))}
@@ -63,9 +65,9 @@ function Table({ text, separator }: { text: string; separator: string }) {
 				</thead>
 				<tbody className="text-(--text-secondary)">
 					{rows.map((row, index) => (
-						<tr key={index}>
+						<tr key={index} className="hover:bg-(--bg-hover)">
 							{row.map((value, column) => (
-								<td key={column} className={cell} title={value}>
+								<td key={column} className={`${cell} ${/^-?[\d.,]+%?$/.test(value) ? 'in-num' : ''}`} title={value}>
 									{value}
 								</td>
 							))}
@@ -99,10 +101,11 @@ function Preview({ sessionId, output, onBack }: { sessionId: string; output: Out
 					Library
 				</Btn>
 			</div>
-			<div className="overflow-hidden rounded-lg bg-(--bg-inset)">
-				<div className="flex h-8 items-center gap-2 bg-(--bg-raised) pr-1.5 pl-3">
-					<div className="min-w-0 flex-1 truncate text-[12px]">{output.path}</div>
-					<span className="text-[11px] text-(--text-disabled)">{size(output.size)}</span>
+			<div className="in-well overflow-hidden bg-(--bg-inset)">
+				<div className="flex h-9 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] pr-1.5 pl-3">
+					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
+					<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-primary)">{output.path}</div>
+					<span className="in-num text-[11px] text-(--text-disabled)">{size(output.size)}</span>
 					<a
 						href={outputUrl(sessionId, output.path)}
 						download={output.path.split('/').pop()}
@@ -121,6 +124,51 @@ function Preview({ sessionId, output, onBack }: { sessionId: string; output: Out
 
 const ICONS: Record<Kind, typeof FileText> = { image: Image, pdf: FileText, table: Sheet, text: FileText, other: FileText };
 
+/** Each kind keeps one data hue, so a report and a table read apart at a glance. */
+const KIND_TONE: Record<Kind, string> = {
+	image: 'text-(--data-5)',
+	pdf: 'text-(--data-3)',
+	table: 'text-(--data-4)',
+	text: 'text-(--data-1)',
+	other: 'text-(--icon-tertiary)',
+};
+
+const extension = (path: string) => (path.includes('.') ? path.split('.').pop()?.toUpperCase() : 'FILE');
+
+/** A saved file as a tile: a thumbnail for an image, its kind's glyph for anything else. */
+function Tile({ sessionId, output, onOpen }: { sessionId: string; output: Output; onOpen: () => void }) {
+	const kind = kindOf(output.path);
+	const name = output.path.split('/').pop() ?? output.path;
+	return (
+		<button
+			type="button"
+			onClick={onOpen}
+			title={output.path}
+			className="in-card group overflow-hidden text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
+		>
+			<span className="in-grid relative flex h-[92px] items-center justify-center border-b border-(--border-subtle)">
+				{kind === 'image' ? (
+					<img src={outputUrl(sessionId, output.path)} alt="" loading="lazy" className="absolute inset-0 size-full object-cover object-top opacity-90 group-hover:opacity-100" />
+				) : (
+					<span className="flex flex-col items-center gap-1.5">
+						<span className="inline-flex size-9 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) bg-(--card-bg)">
+							<Icon icon={ICONS[kind]} size={16} className={KIND_TONE[kind]} />
+						</span>
+						<Caption>{extension(output.path)}</Caption>
+					</span>
+				)}
+			</span>
+			<span className="flex flex-col gap-0.5 px-3 py-2.5">
+				<span className="truncate text-[12.5px] text-(--text-primary)">{name}</span>
+				<span className="in-num truncate text-[10.5px] text-(--text-disabled)">
+					{size(output.size)} · {age(new Date(output.mtimeMs).toISOString())}
+					{output.path !== name ? ` · ${output.path.slice(0, output.path.length - name.length - 1)}` : ''}
+				</span>
+			</span>
+		</button>
+	);
+}
+
 /** Deliverables the agent saved outside the repo: reports, screenshots, exports. */
 export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<Output | null>(null);
@@ -134,10 +182,10 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 
 	const items = outputs.data?.outputs ?? [];
 	return (
-		<div className="flex flex-col gap-1">
+		<div className="flex flex-col gap-2">
 			<SourceBar sessionId={sessionId} source={outputs.data?.source} at={outputs.data?.at}>
-				<span className="text-(--text-disabled)">
-					{items.length} {items.length === 1 ? 'FILE' : 'FILES'}
+				<span>
+					{items.length} {items.length === 1 ? 'file' : 'files'}
 				</span>
 			</SourceBar>
 			{outputs.isError ? (
@@ -155,19 +203,9 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 					body="Reports, screenshots and exports the agent saves show up here after each step."
 				/>
 			) : (
-				<div className="flex flex-col gap-px">
+				<div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
 					{items.map((output) => (
-						<button
-							type="button"
-							key={output.path}
-							onClick={() => setSelected(output)}
-							className="flex h-7 items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-						>
-							<Icon icon={ICONS[kindOf(output.path)]} size={12} className="text-(--icon-tertiary)" />
-							<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{output.path}</span>
-							<span className="shrink-0 text-[11px] text-(--text-disabled)">{size(output.size)}</span>
-							<span className="w-8 shrink-0 text-right text-[11px] text-(--text-disabled)">{age(new Date(output.mtimeMs).toISOString())}</span>
-						</button>
+						<Tile key={output.path} sessionId={sessionId} output={output} onOpen={() => setSelected(output)} />
 					))}
 				</div>
 			)}
