@@ -49,7 +49,7 @@ function Usage() {
 						</p>
 					</div>
 					<Well grid className="flex items-center justify-center py-3">
-						<StorageArt className="w-[130px]" />
+						<StorageArt className="w-[170px]" />
 					</Well>
 				</div>
 			</CardSection>

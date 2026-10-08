@@ -167,7 +167,7 @@ export function TasksPage() {
 					<div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
 						{all.length ? null : (
 							<Well grid className="flex w-full max-w-[360px] items-center justify-center py-4">
-								<TasksArt className="w-[180px]" />
+								<TasksArt className="w-[190px]" />
 							</Well>
 						)}
 						<div className="flex flex-col gap-1">

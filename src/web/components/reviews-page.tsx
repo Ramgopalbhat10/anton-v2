@@ -131,7 +131,7 @@ export function ReviewsPage() {
 				<Card as="div">
 					<div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
 						<Well grid className="flex w-full max-w-[380px] items-center justify-center py-4">
-							<BranchArt className="w-[220px]" />
+							<BranchArt className="w-[260px]" />
 						</Well>
 						<div className="flex flex-col gap-1">
 							<div className="text-[14px] font-medium">No pull requests yet</div>

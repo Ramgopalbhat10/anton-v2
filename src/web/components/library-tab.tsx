@@ -197,7 +197,7 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 				</div>
 			) : items.length === 0 ? (
 				<EmptyState
-					art={<LibraryArt className="w-[180px]" />}
+					art={<LibraryArt className="w-[210px]" />}
 					className="pt-10"
 					title="Nothing saved yet"
 					body="Reports, screenshots and exports the agent saves show up here after each step."

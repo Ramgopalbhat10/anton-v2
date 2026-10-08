@@ -18,10 +18,20 @@
 	--segment-off: rgba(255, 255, 255, 0.07);
 	--line-art: rgba(255, 255, 255, 0.34);
 	--line-art-faint: rgba(255, 255, 255, 0.14);
-	--line-art-hi: rgba(255, 255, 255, 0.6);
-	--art-top: #262626;
-	--art-left: #181818;
-	--art-right: #0f0f0f;
+
+	/* Isometric drawings: three flat face tones lit from the top left, one
+	   hairline edge, recesses cut darker than the well, and the accent as an
+	   outline over a cyan-tinted face. */
+	--art-top: #272727;
+	--art-left: #1d1d1d;
+	--art-right: #161616;
+	--art-edge: rgba(255, 255, 255, 0.27);
+	--art-detail: rgba(255, 255, 255, 0.13);
+	--art-recess: #0a0a0a;
+	--art-glass: rgba(255, 255, 255, 0.03);
+	--art-accent-top: color-mix(in srgb, var(--cyan-400) 26%, #171717);
+	--art-accent-left: color-mix(in srgb, var(--cyan-400) 17%, #141414);
+	--art-accent-right: color-mix(in srgb, var(--cyan-400) 11%, #121212);
 
 	/* Data hues, in the order series take them. Cyan leads so a single series
 	   reads as Anton's; the rest stay apart from the status hues at 10px. */
@@ -89,6 +99,21 @@
 .in-grid::after {
 	right: 12px;
 	bottom: 10px;
+}
+
+/* A blinking cursor inside an illustration. */
+.art-blink {
+	animation: art-blink 1.1s steps(1, end) infinite;
+}
+@keyframes art-blink {
+	50% {
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.art-blink {
+		animation: none;
+	}
 }
 
 /* The mono caption every card footer and gauge label uses. */
