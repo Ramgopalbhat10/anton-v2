@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { CalendarDays, GitPullRequest, List as ListIcon, Plus, Search, Server } from 'lucide-react';
+import { CalendarDays, GitPullRequest, List as ListIcon, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
-import { Card, CardFooter, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill } from '@/components/instrument';
+import { Card, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal';
-import { RACK_SLOTS, TaskRack } from '@/components/task-rack';
+import { RackCard } from '@/components/task-rack';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
@@ -87,22 +87,8 @@ function Summary({ sessions }: { sessions: Session[] }) {
 		{ key: 'stopped', label: 'Stopped', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && !session.prUrl).length, color: 'var(--neutral-500)' },
 		{ key: 'error', label: 'Failed', value: sessions.filter((session) => session.status === 'error').length, color: 'var(--danger-base)' },
 	];
-	const racked = Math.min(sessions.length, RACK_SLOTS);
 	return (
-		<div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-			<Card
-				icon={Server}
-				title="Rack"
-				sub={racked < sessions.length ? `latest ${racked} of ${sessions.length}` : `${racked} ${racked === 1 ? 'task' : 'tasks'}`}
-				className="lg:row-span-2"
-				footer={<CardFooter caption="Lights as in the split bar · point at a blade to pull it" />}
-			>
-				<CardSection ruled={false} className="flex-1 pt-1">
-					<div className="in-well in-grid flex flex-1 items-center justify-center px-6 pt-20 pb-6">
-						<TaskRack sessions={sessions} className="w-full max-w-[480px]" />
-					</div>
-				</CardSection>
-			</Card>
+		<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
 			<Card icon={ListIcon} title="All tasks" sub="by state" status={parts[0].value ? <Status tone="accent" pulse>{parts[0].value} live</Status> : <Status>Idle</Status>}>
 				<CardSection ruled={false} className="pt-1">
 					<Figure value={String(sessions.length)} unit={sessions.length === 1 ? 'task' : 'tasks'} />
@@ -155,6 +141,7 @@ export function TasksPage() {
 				</Btn>
 			}
 		>
+			{all.length ? <RackCard sessions={all} /> : null}
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">
 				<div className="flex flex-wrap items-center gap-2 border-b border-(--border-subtle) p-2.5">

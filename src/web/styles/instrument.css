@@ -246,7 +246,7 @@
 }
 
 /* The task rack: blades slide in one after another, the open one slides out,
-   running ones blink, and an indexing light sweeps the lid. */
+   running ones blink, and an indexing light sweeps each bay's lid. */
 .rack-blade {
 	cursor: pointer;
 	outline: none;
@@ -275,15 +275,38 @@
 	}
 }
 .rack-sweep {
-	animation: rack-sweep 5s ease-in-out infinite alternate;
+	animation: rack-sweep 4.2s ease-in-out infinite alternate;
+	animation-delay: calc(var(--bay, 0) * -1.3s);
 }
 @keyframes rack-sweep {
 	to {
-		transform: translateX(130px);
+		transform: translateX(86px);
+	}
+}
+/* Turning a page brings the new bays in from the side the tasks were on. */
+.rack-bay[data-from='older'] {
+	animation: rack-bay-older 460ms var(--ease-out) both;
+	animation-delay: calc(var(--bay, 0) * 50ms);
+}
+.rack-bay[data-from='newer'] {
+	animation: rack-bay-newer 460ms var(--ease-out) both;
+	animation-delay: calc(var(--bay, 0) * 50ms);
+}
+@keyframes rack-bay-older {
+	from {
+		opacity: 0;
+		transform: translateX(32px);
+	}
+}
+@keyframes rack-bay-newer {
+	from {
+		opacity: 0;
+		transform: translateX(-32px);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.rack-blade,
+	.rack-bay,
 	.rack-activity,
 	.rack-sweep {
 		animation: none;

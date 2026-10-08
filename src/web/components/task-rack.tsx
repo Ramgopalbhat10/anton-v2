@@ -1,34 +1,45 @@
 import { useNavigate } from '@tanstack/react-router';
-import { type CSSProperties, type KeyboardEvent, type ReactNode, useState } from 'react';
-import { Block, COS, DETAIL, EDGE, fmt, Ln, OnFace, type Pair, pt, RECESS, SIN, Slot, ve } from '@/components/illustrations';
+import { ChevronLeft, ChevronRight, Server } from 'lucide-react';
+import { type CSSProperties, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Block, COS, DETAIL, EDGE, fmt, Ln, type Pair, pt, RECESS, SIN, Slot, ve } from '@/components/illustrations';
+import { Card, CardFooter, CardSection } from '@/components/instrument';
+import { IconBtn } from '@/components/signal';
 import { isLive, liveLabel } from '@/components/task-status';
 import type { Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 
-/* The latest tasks as blades in a rack, drawn like the other isometric
+/* Every task as a blade in a row of rack bays, drawn like the other isometric
    objects. Each blade's light shows how its task stands; pointing at one (or
    tabbing to it) slides it out and opens a card with its details, and choosing
-   it opens the task. */
+   it opens the task. The row fits as many bays as the card is wide; when there
+   are more tasks than blades, Newer and Older page through them, and the floor
+   line runs on past the end of the row toward the tasks not shown. */
 
-export const RACK_SLOTS = 12;
-
+/** Blades in one bay. */
+const PER_BAY = 8;
 const PITCH = 12;
 const BLADE = 10;
 const INSET = 8;
-const WIDTH = INSET * 2 + RACK_SLOTS * PITCH - (PITCH - BLADE);
-const DEPTH = 50;
+const BAY_W = INSET * 2 + PER_BAY * PITCH - (PITCH - BLADE);
+const DEPTH = 44;
 const HEIGHT = 60;
 const PLINTH = 6;
 /** How far a blade slides out when it is chosen. */
-const PULL = 20;
+const PULL = 18;
 const BLADE_Z = PLINTH + 7;
 const BLADE_H = 46;
 
-const VIEW = { x: -62, y: -74, w: 212, h: 188 };
+/** Each bay's share of the row, in screen units, and the row's height. */
+const SPAN = 168;
+const TOP = -128;
+const BOTTOM = 56;
+/** Roughly how wide a bay is drawn on the page, used to decide how many fit. */
+const BAY_PX = 225;
+const MAX_BAYS = 6;
 
 type Kind = 'live' | 'pr' | 'failed' | 'stopped';
 
-/** The same four states, in the same colours, as the split bar in the card beside it, which is the legend. */
+/** The same four states, in the same colours, as the split bar under the rack, which is the legend. */
 const KINDS: Record<Kind, { label: string; color: string }> = {
 	live: { label: 'Running', color: 'var(--accent-base)' },
 	pr: { label: 'Pull request', color: 'var(--data-2)' },
@@ -45,13 +56,21 @@ function stateWord(session: Session): string {
 	return KINDS[kind].label;
 }
 
-/** A point given in the drawing's units, as a share of the drawing's box. */
-const share = ([x, y]: Pair) => ({ left: `${((x - VIEW.x) / VIEW.w) * 100}%`, top: `${((y - VIEW.y) / VIEW.h) * 100}%` });
+/** The back corner of bay `bay`, placed so the middle of its footprint lands on
+    its column in a row that runs straight across the screen. */
+function bayOrigin(bay: number): Pair {
+	const t = (SPAN * (bay + 0.5)) / (2 * COS);
+	return [t - BAY_W / 2, -t - DEPTH / 2];
+}
 
-const slotX = (index: number) => INSET + index * PITCH;
+/** Where blade `slot` of a bay stands along the bay's front. */
+const slotX = (slot: number) => INSET + slot * PITCH;
 
 /** Where the details card hangs from: the top of a pulled-out blade's front plate. */
-const anchor = (index: number) => pt([slotX(index) + BLADE / 2, DEPTH + PULL + 1, BLADE_Z + BLADE_H]);
+function anchor(index: number): Pair {
+	const [ox, oy] = bayOrigin(Math.floor(index / PER_BAY));
+	return pt([ox + slotX(index % PER_BAY) + BLADE / 2, oy + DEPTH + PULL + 1, BLADE_Z + BLADE_H]);
+}
 
 type Handlers = { onOpen: () => void; onClose: () => void; onChoose: () => void };
 
@@ -61,7 +80,9 @@ type Handlers = { onOpen: () => void; onClose: () => void; onChoose: () => void 
 function Blade({ session, index, open, copy, handlers }: { session: Session; index: number; open: boolean; copy?: boolean; handlers?: Handlers }) {
 	const kind = kindOf(session);
 	const lit = open || kind === 'live';
-	const x = slotX(index);
+	const slot = index % PER_BAY;
+	const [ox, oy] = bayOrigin(Math.floor(index / PER_BAY));
+	const x = ox + slotX(slot);
 	// Out of the rack is home; sliding back by the pull puts its plate flush with the front.
 	const rest = `translate(${fmt(PULL * COS)}px, ${fmt(-PULL * SIN)}px)`;
 	const [tipX, tipY] = anchor(index);
@@ -71,7 +92,7 @@ function Blade({ session, index, open, copy, handlers }: { session: Session; ind
 				? { 'aria-hidden': true, style: { pointerEvents: 'none' } as CSSProperties }
 				: {
 						className: 'rack-blade',
-						style: { '--slot': index } as CSSProperties,
+						style: { '--slot': slot } as CSSProperties,
 						role: 'link',
 						tabIndex: 0,
 						'aria-label': `${session.title}, ${stateWord(session)}`,
@@ -91,7 +112,7 @@ function Blade({ session, index, open, copy, handlers }: { session: Session; ind
 			<g className="rack-slide" style={{ transform: open ? 'none' : rest }}>
 				<g className="rack-body" style={{ opacity: open ? 1 : 0 }}>
 					<Block
-						at={[x + 0.6, DEPTH, BLADE_Z + 1]}
+						at={[x + 0.6, oy + DEPTH, BLADE_Z + 1]}
 						size={[BLADE - 1.2, PULL, BLADE_H - 2]}
 						r={1}
 						top={
@@ -103,19 +124,19 @@ function Blade({ session, index, open, copy, handlers }: { session: Session; ind
 						right={
 							<>
 								<rect x={2} y={4} width={PULL - 4} height={BLADE_H - 10} rx={1.5} fill={RECESS} stroke={DETAIL} {...ve} />
-								<rect x={4.5} y={22} width={7} height={7} rx={1} fill="var(--art-top)" stroke={EDGE} {...ve} />
-								<rect x={4.5} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
-								<rect x={11} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
-								<Ln a={[11.5, 25.5]} b={[16, 25.5]} />
-								<Ln a={[8, 29]} b={[8, 33]} />
-								<Ln a={[8, 33]} b={[14, 33]} />
-								<circle cx={14.5} cy={33} r={0.9} fill={kind === 'live' ? 'var(--cyan-300)' : DETAIL} />
+								<rect x={4} y={22} width={7} height={7} rx={1} fill="var(--art-top)" stroke={EDGE} {...ve} />
+								<rect x={4} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
+								<rect x={10} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
+								<Ln a={[11, 25.5]} b={[14.5, 25.5]} />
+								<Ln a={[7.5, 29]} b={[7.5, 33]} />
+								<Ln a={[7.5, 33]} b={[13, 33]} />
+								<circle cx={13.5} cy={33} r={0.9} fill={kind === 'live' ? 'var(--cyan-300)' : DETAIL} />
 							</>
 						}
 					/>
 				</g>
 				<Block
-					at={[x, DEPTH + PULL, BLADE_Z]}
+					at={[x, oy + DEPTH + PULL, BLADE_Z]}
 					size={[BLADE, 2.2, BLADE_H]}
 					r={1.4}
 					tone={lit ? 'accent' : 'solid'}
@@ -134,7 +155,7 @@ function Blade({ session, index, open, copy, handlers }: { session: Session; ind
 				/>
 			</g>
 			{open && copy ? (
-				<g className="rack-tip">
+				<g>
 					<line x1={tipX} y1={tipY - 2} x2={tipX} y2={tipY - 11} stroke="var(--accent-base)" strokeDasharray="1.5 2" {...ve} />
 					<circle cx={tipX} cy={tipY - 1} r={1.5} fill="var(--accent-base)" />
 				</g>
@@ -143,59 +164,84 @@ function Blade({ session, index, open, copy, handlers }: { session: Session; ind
 	);
 }
 
-/** The rack's cabinet: the plinth it stands on, the slots in its front, the
-    vents and the sweep of the indexing light across its lid. */
-function Cabinet() {
+/** One bay's cabinet: its plinth, the slots in its front, vents, and the sweep
+    of the indexing light across its lid. Its number range sits above it. */
+function Bay({ bay, first, filled }: { bay: number; first: number; filled: number }) {
+	const [ox, oy] = bayOrigin(bay);
+	const [lx] = pt([ox + BAY_W / 2, oy + DEPTH / 2, 0]);
+	const [, ly] = pt([ox, oy, PLINTH + HEIGHT]);
+	const number = (n: number) => String(n).padStart(2, '0');
+	const range = filled > 1 ? `${number(first + 1)}–${number(first + filled)}` : filled ? number(first + 1) : 'empty';
 	return (
-		<>
+		<g opacity={filled ? 1 : 0.5}>
+			<text x={lx} y={ly - 12} textAnchor="middle" fill={filled ? 'var(--text-tertiary)' : 'var(--text-disabled)'} style={{ font: '500 8.5px var(--font-mono)', letterSpacing: '0.08em' }}>
+				{range}
+			</text>
 			<Block
-				at={[-4, -4, 0]}
-				size={[WIDTH + 8, DEPTH + 8, PLINTH]}
+				at={[ox - 4, oy - 4, 0]}
+				size={[BAY_W + 8, DEPTH + 8, PLINTH]}
 				r={2}
-				left={Array.from({ length: RACK_SLOTS }, (_, i) => (
-					<rect key={i} x={4 + slotX(i) + BLADE / 2 - 1} y={2.6} width={2} height={0.9} rx={0.45} fill={DETAIL} />
+				left={Array.from({ length: PER_BAY }, (_, i) => (
+					<rect key={i} x={4 + slotX(i) + BLADE / 2 - 1} y={2.6} width={2} height={0.9} rx={0.45} fill={i < filled ? DETAIL : 'none'} />
 				))}
 			/>
 			<Block
-				at={[0, 0, PLINTH]}
-				size={[WIDTH, DEPTH, HEIGHT]}
+				at={[ox, oy, PLINTH]}
+				size={[BAY_W, DEPTH, HEIGHT]}
 				r={3.5}
 				top={
 					<>
-						{Array.from({ length: 9 }, (_, i) => (
-							<Slot key={i} x={10 + i * 15} y={8} w={9} h={2.4} r={1.2} />
+						{Array.from({ length: 6 }, (_, i) => (
+							<Slot key={i} x={10 + i * 16} y={8} w={10} h={2.4} r={1.2} />
 						))}
-						<Slot x={10} y={DEPTH - 16} w={WIDTH - 20} h={8} r={2} edge />
-						<g className="rack-sweep">
-							<line x1={12} y1={DEPTH - 14.6} x2={12} y2={DEPTH - 9.4} stroke="var(--cyan-200)" strokeWidth={1.4} {...ve} />
-						</g>
+						<Slot x={10} y={DEPTH - 15} w={BAY_W - 20} h={8} r={2} edge />
+						{filled ? (
+							<g className="rack-sweep" style={{ '--bay': bay } as CSSProperties}>
+								<line x1={12} y1={DEPTH - 13.6} x2={12} y2={DEPTH - 8.4} stroke="var(--cyan-200)" strokeWidth={1.4} {...ve} />
+							</g>
+						) : null}
 					</>
 				}
-				left={
-					<>
-						{Array.from({ length: RACK_SLOTS }, (_, i) => (
-							<Slot key={i} x={slotX(i) - 0.6} y={6} w={BLADE + 1.2} h={BLADE_H + 1.2} r={1.4} />
-						))}
-						<rect x={INSET} y={HEIGHT - 4.4} width={34} height={1.4} rx={0.7} fill={DETAIL} />
-					</>
-				}
+				left={Array.from({ length: PER_BAY }, (_, i) => (
+					<Slot key={i} x={slotX(i) - 0.6} y={6} w={BLADE + 1.2} h={BLADE_H + 1.2} r={1.4} />
+				))}
 				right={
 					<>
 						<Slot x={8} y={8} w={DEPTH - 16} h={HEIGHT - 20} r={2} edge />
 						{Array.from({ length: 8 }, (_, i) => (
 							<Ln key={i} a={[12, 13 + i * 4.4]} b={[DEPTH - 12, 13 + i * 4.4]} />
 						))}
-						<circle cx={DEPTH - 9} cy={HEIGHT - 6} r={1.4} fill="var(--cyan-300)" />
+						<circle cx={DEPTH - 9} cy={HEIGHT - 6} r={1.4} fill={filled ? 'var(--cyan-300)' : DETAIL} />
 					</>
 				}
 			/>
-		</>
+		</g>
 	);
 }
 
-function Details({ session, index }: { session: Session; index: number }) {
+/** The floor line the bays stand on; past either end it runs on, with an arrow
+    head, when there are tasks that way. */
+function Floor({ width, newer, older }: { width: number; newer: boolean; older: boolean }) {
+	const chevron = (x: number, dir: 1 | -1) => (
+		<g stroke="var(--accent-base)" strokeLinecap="round" strokeLinejoin="round" fill="none">
+			{[0, 6].map((offset) => (
+				<polyline key={offset} points={`${x + dir * offset},-4 ${x + dir * (offset + 4)},0 ${x + dir * offset},4`} {...ve} />
+			))}
+		</g>
+	);
+	return (
+		<g>
+			<line x1={newer ? 0 : 20} y1={0} x2={older ? width : width - 20} y2={0} stroke={DETAIL} strokeDasharray="2 3" {...ve} />
+			{newer ? chevron(14, -1) : null}
+			{older ? chevron(width - 14, 1) : null}
+		</g>
+	);
+}
+
+function Details({ session, index, view }: { session: Session; index: number; view: { w: number; h: number } }) {
 	const kind = kindOf(session);
-	const where = share(anchor(index));
+	const [ax, ay] = anchor(index);
+	const across = ax / view.w;
 	const model = session.model.split('/').pop() ?? session.model;
 	const facts: Array<[string, ReactNode]> = [
 		['spent', dollars(session.usage.cost)],
@@ -205,8 +251,8 @@ function Details({ session, index }: { session: Session; index: number }) {
 	return (
 		<div
 			className="in-pop pointer-events-none absolute z-10 flex w-[248px] flex-col gap-2 px-3 py-2.5 text-left"
-			// Slid along by the blade's place in the row, so the first card opens to the right of its blade and the last to the left.
-			style={{ ...where, transform: `translate(${-Math.round((index / (RACK_SLOTS - 1)) * 100)}%, calc(-100% - 22px))` }}
+			// Slid along by the blade's place in the row, so cards near the ends open inward.
+			style={{ left: `${across * 100}%`, top: `${((ay - TOP) / view.h) * 100}%`, transform: `translate(${-Math.round(across * 100)}%, calc(-100% - 22px))` }}
 			role="status"
 		>
 			<div className="flex items-center gap-1.5">
@@ -228,39 +274,106 @@ function Details({ session, index }: { session: Session; index: number }) {
 	);
 }
 
-/** The newest tasks, one blade each, in the order the list below shows them. */
-export function TaskRack({ sessions, className }: { sessions: Session[]; className?: string }) {
+/** How many bays fit the element's width, kept up to date as it resizes. */
+function useBays() {
+	const ref = useRef<HTMLDivElement>(null);
+	const [bays, setBays] = useState(4);
+	useLayoutEffect(() => {
+		const element = ref.current;
+		if (!element) return;
+		const fit = () => setBays(Math.max(1, Math.min(MAX_BAYS, Math.floor(element.clientWidth / BAY_PX))));
+		fit();
+		const observer = new ResizeObserver(fit);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	return { ref, bays };
+}
+
+/** Every task, newest first, as blades in a row of bays across the card, a page at a time. */
+export function RackCard({ sessions }: { sessions: Session[] }) {
 	const navigate = useNavigate();
+	const { ref, bays } = useBays();
+	const perPage = bays * PER_BAY;
+	const pages = Math.max(1, Math.ceil(sessions.length / perPage));
+	const [page, setPage] = useState(0);
+	// Which way the last page turn went, so the new bays come in from that side.
+	const [from, setFrom] = useState<'newer' | 'older' | null>(null);
 	const [open, setOpen] = useState<number | null>(null);
 	// The blade drawn on top: the open one, and after it closes, the last one
 	// opened, so its copy slides back in with it.
 	const [top, setTop] = useState<number | null>(null);
-	const shown = sessions.slice(0, RACK_SLOTS);
+	const current = Math.min(page, pages - 1);
+	const start = current * perPage;
+	const shown = sessions.slice(start, start + perPage);
+	const view = { w: bays * SPAN, h: BOTTOM - TOP };
+
+	useEffect(() => {
+		setOpen(null);
+		setTop(null);
+	}, [current, bays]);
+
+	const turn = (to: number) => {
+		setFrom(to > current ? 'older' : 'newer');
+		setPage(to);
+	};
 	const choose = (session: Session) => void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
+	const range = sessions.length ? `${start + 1}–${start + shown.length} of ${sessions.length}` : 'none yet';
+
 	return (
-		<div className={`relative ${className ?? ''}`}>
-			<svg role="group" aria-label="The latest tasks as blades in a rack" viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`} className="block h-auto w-full overflow-visible" fill="none">
-				<Cabinet />
-				{shown.map((session, index) => (
-					<Blade
-						key={session.id}
-						session={session}
-						index={index}
-						open={open === index}
-						handlers={{
-							onOpen: () => {
-								setOpen(index);
-								setTop(index);
-							},
-							onClose: () => setOpen((current) => (current === index ? null : current)),
-							onChoose: () => choose(session),
-						}}
-					/>
-				))}
-				{top !== null && shown[top] ? <Blade key={`copy-${top}`} session={shown[top]} index={top} open={open === top} copy /> : null}
-			</svg>
-			{open !== null && shown[open] ? <Details session={shown[open]} index={open} /> : null}
-		</div>
+		<Card
+			icon={Server}
+			title="Rack"
+			sub="every task, newest first"
+			status={
+				<div className="flex items-center gap-1">
+					<IconBtn icon={ChevronLeft} label="Newer tasks" size="sm" disabled={current === 0} onClick={() => turn(current - 1)} />
+					<span className="in-caption in-num min-w-[92px] text-center">{range}</span>
+					<IconBtn icon={ChevronRight} label="Older tasks" size="sm" disabled={current >= pages - 1} onClick={() => turn(current + 1)} />
+				</div>
+			}
+			footer={<CardFooter caption={pages > 1 ? `Page ${current + 1} of ${pages} · lights as in the split bar · point at a blade to pull it` : 'Lights as in the split bar · point at a blade to pull it'} />}
+		>
+			<CardSection ruled={false} className="pt-1">
+				<div ref={ref} className="in-well in-grid relative px-6 pt-14 pb-4">
+					<div className="relative">
+						<svg role="group" aria-label={`Tasks ${range}, as blades in a rack`} viewBox={`0 ${TOP} ${view.w} ${view.h}`} className="block h-auto w-full overflow-visible" fill="none">
+							<Floor width={view.w} newer={current > 0} older={current < pages - 1} />
+							<g key={`${current}-${bays}`}>
+								{Array.from({ length: bays }, (_, bay) => {
+									const filled = Math.max(0, Math.min(PER_BAY, shown.length - bay * PER_BAY));
+									return (
+										<g key={bay} className="rack-bay" data-from={from ?? undefined} style={{ '--bay': bay } as CSSProperties}>
+											<Bay bay={bay} first={start + bay * PER_BAY} filled={filled} />
+											{shown.slice(bay * PER_BAY, bay * PER_BAY + filled).map((session, slot) => {
+												const index = bay * PER_BAY + slot;
+												return (
+													<Blade
+														key={session.id}
+														session={session}
+														index={index}
+														open={open === index}
+														handlers={{
+															onOpen: () => {
+																setOpen(index);
+																setTop(index);
+															},
+															onClose: () => setOpen((now) => (now === index ? null : now)),
+															onChoose: () => choose(session),
+														}}
+													/>
+												);
+											})}
+										</g>
+									);
+								})}
+								{top !== null && shown[top] ? <Blade key={`copy-${top}`} session={shown[top]} index={top} open={open === top} copy /> : null}
+							</g>
+						</svg>
+						{open !== null && shown[open] ? <Details session={shown[open]} index={open} view={view} /> : null}
+					</div>
+				</div>
+			</CardSection>
+		</Card>
 	);
 }
-
