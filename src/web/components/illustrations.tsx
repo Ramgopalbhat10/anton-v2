@@ -818,6 +818,27 @@ function Handoff({ from }: { from: number }) {
 export function TaskRouteArt({ className }: { className?: string }) {
 	const [rx, ry] = stationAt(0);
 	const sheets = [26, 31, 36];
+	/** The top sheet of the snapshot, with its lines of text. */
+	const snapshot = (z: number, lit: boolean) => (
+		<Block
+			key={z}
+			at={[rx - 13, ry - 15, z]}
+			size={[26, 30, 1.2]}
+			r={1.2}
+			tone={lit ? 'accent' : 'solid'}
+			top={(
+				[
+					[4, 5, 12],
+					[7, 9, 11],
+					[7, 13, 14],
+					[4, 17, 9],
+					[4, 21, 16],
+				] as const
+			).map(([x, y, w]) => (
+				<Bar key={y} x={x} y={y} w={w} accent={lit} />
+			))}
+		/>
+	);
 	const readTop = (lit: boolean) => (
 		<>
 			<Slot x={6} y={6} w={28} h={28} r={2.5} />
@@ -890,26 +911,9 @@ export function TaskRouteArt({ className }: { className?: string }) {
 					<Trace key={`${dx}${dy}`} points={[pt([rx + dx, ry + dy, 16]), pt([rx + dx, ry + dy, 26])]} stroke={ACCENT} dash="1.5 2.5" />
 				))}
 			</Lit>
-			{sheets.map((z, i) => (
-				<Block
-					key={z}
-					at={[rx - 13, ry - 15, z]}
-					size={[26, 30, 1.2]}
-					r={1.2}
-					tone={i === sheets.length - 1 ? 'solid' : 'glass'}
-					top={
-						i === sheets.length - 1 ? (
-							<>
-								<Bar x={4} y={5} w={12} />
-								<Bar x={7} y={9} w={11} />
-								<Bar x={7} y={13} w={14} />
-								<Bar x={4} y={17} w={9} />
-								<Bar x={4} y={21} w={16} />
-							</>
-						) : undefined
-					}
-				/>
-			))}
+			{sheets.map((z, i) => (i === sheets.length - 1 ? snapshot(z, false) : <Block key={z} at={[rx - 13, ry - 15, z]} size={[26, 30, 1.2]} r={1.2} tone="glass" />))}
+			{/* The sheet being read lights with the reader. */}
+			<Lit stage={0}>{snapshot(sheets[sheets.length - 1], true)}</Lit>
 
 			{/* 02 Branch: the fork in its lid draws itself. */}
 			<Station column={1} h={18} r={3.5} top={fork(false, 1)} left={<Led at={[33, 13]} />} />
