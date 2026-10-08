@@ -751,141 +751,195 @@ export function LibraryArt({ className }: { className?: string }) {
     drawing: the centres of four equal columns, so captions laid out in a
     four-column grid under it line up with the stations. */
 const ROUTE_X = [50, 150, 250, 350];
+/** Half a station's footprint, and the height its pipes run at. */
+const HALF = 20;
+const PIPE_Z = 7;
 
-/** A point on the line that runs straight across the screen: along x and
-    against y at once, so it neither climbs nor falls. */
-const across = (screenX: number, s = 0): [number, number] => {
-	const t = screenX / (2 * COS);
-	return [t + s, -t + s];
+/** The grid point under a station: along x and against y at once, so stations
+    side by side on screen sit in one row. */
+const stationAt = (column: number): Pair => {
+	const t = ROUTE_X[column] / (2 * COS);
+	return [t, -t];
 };
 
 /** A station's block, centred on its column. */
-function Station(props: Omit<Parameters<typeof Block>[0], 'at'> & { column: number; z?: number }) {
-	const { column, z = 0, size, ...rest } = props;
-	const [cx, cy] = across(ROUTE_X[column]);
-	return <Block at={[cx - size[0] / 2, cy - size[1] / 2, z]} size={size} {...rest} />;
+function Station(props: Omit<Parameters<typeof Block>[0], 'at' | 'size'> & { column: number; h: number }) {
+	const { column, h, ...rest } = props;
+	const [cx, cy] = stationAt(column);
+	return <Block at={[cx - HALF, cy - HALF, 0]} size={[HALF * 2, HALF * 2, h]} {...rest} />;
+}
+
+/** The collar a pipe fits into, on a station's side. */
+const Port = ({ lit }: { lit?: boolean }) => <Ring at={[HALF, PIPE_Z]} r={3.6} fill={RECESS} stroke={lit ? ACCENT : EDGE} />;
+
+/**
+ * The pipe from one station to the next: out of the first one's right face
+ * along x, through an elbow box on the floor, and into the next one's left face
+ * against y. Side by side on screen, that run dips into a V between them.
+ */
+function Pipe({ from, lit }: { from: number; lit?: boolean }) {
+	const [ax, ay] = stationAt(from);
+	const [bx, by] = stationAt(from + 1);
+	const start = pt([ax + HALF, ay, PIPE_Z]);
+	const corner = pt([bx, ay, PIPE_Z]);
+	const end = pt([bx, by + HALF, PIPE_Z]);
+	const d = `M ${fmt(start[0])} ${fmt(start[1])} L ${fmt(corner[0])} ${fmt(corner[1])} L ${fmt(end[0])} ${fmt(end[1])}`;
+	return (
+		<g fill="none" strokeLinecap="round" strokeLinejoin="round">
+			<path d={d} stroke={lit ? ACCENT : EDGE} strokeWidth={6.4} />
+			<path d={d} stroke={lit ? 'var(--art-accent-left)' : 'var(--art-left)'} strokeWidth={4.4} />
+			{lit ? (
+				<path className="art-flow" d={d} stroke="var(--cyan-200)" strokeWidth={1.1} strokeDasharray="4 3" />
+			) : (
+				<path d={d} stroke={DETAIL} strokeWidth={1} strokeDasharray="1.5 3" />
+			)}
+		</g>
+	);
+}
+
+/** The elbow box a pipe turns in, standing on the floor. */
+function Elbow({ from, lit }: { from: number; lit?: boolean }) {
+	const [, ay] = stationAt(from);
+	const [bx] = stationAt(from + 1);
+	return (
+		<Block
+			at={[bx - 5, ay - 5, 0]}
+			size={[10, 10, 11]}
+			r={2}
+			tone={lit ? 'accent' : 'solid'}
+			top={<Ring at={[5, 5]} r={1.6} fill={lit ? 'var(--cyan-200)' : DETAIL} stroke="none" />}
+			left={<Bar x={2.5} y={3} w={5} accent={lit} />}
+		/>
+	);
 }
 
 /**
- * How a task runs, as a production line: a conveyor runs across the well past
- * four stations. The reader is lit and scanning the repository's snapshot; the
- * branch plate forks its trace off main; the sandbox is drawn dashed, because it
- * only starts when the agent has to edit; the pull request leaves sealed. The
- * task rides the belt as a cyan cube, and the dashes ahead of it march on.
+ * How a task runs, as a line of four stations joined by pipes. The reader is
+ * lit, scanning the repository's snapshot that hangs above it; the branch box
+ * carries a fork; the sandbox is drawn dashed, because it only starts when the
+ * agent has to edit; the pull request leaves sealed. The first pipe is lit and
+ * flowing, and the task waits on its elbow as a cyan cube.
  */
 export function TaskRouteArt({ className }: { className?: string }) {
-	const belt = { top: -14, front: 4, bottom: 9, left: 4, right: 396 };
-	const ticks = Array.from({ length: 39 }, (_, i) => belt.left + 6 + i * 10);
-	const token = across(99);
-	const sheets = [24, 29, 34];
-	const [rx, ry] = across(ROUTE_X[0]);
+	const [rx, ry] = stationAt(0);
+	const [ex, ey] = [stationAt(1)[0], stationAt(0)[1]];
+	const sheets = [26, 31, 36];
 	return (
-		<Frame label="A task's route: read, branch, sandbox, pull request" viewBox="0 -60 400 84" className={className}>
-			<rect x={belt.left} y={belt.top} width={belt.right - belt.left} height={belt.front - belt.top} rx={3} fill="var(--art-top)" stroke={EDGE} {...ve} />
-			<rect x={belt.left} y={belt.front} width={belt.right - belt.left} height={belt.bottom - belt.front} rx={2} fill="var(--art-left)" stroke={EDGE} {...ve} />
-			{ticks.map((x) => (
-				<line key={x} x1={x} y1={belt.top + 3} x2={x} y2={belt.front - 3} stroke={DETAIL} {...ve} />
-			))}
-			{ticks.filter((_, i) => i % 3 === 0).map((x) => (
-				<ellipse key={x} cx={x + 5} cy={(belt.front + belt.bottom) / 2} rx={1.6} ry={1.3} fill={RECESS} stroke={DETAIL} {...ve} />
-			))}
-			<line className="art-flow" x1={110} y1={-5} x2={378} y2={-5} stroke={ACCENT} strokeDasharray="4 3" opacity={0.85} {...ve} />
-			<polyline points="375,-8.5 380,-5 375,-1.5" fill="none" stroke={ACCENT} strokeLinecap="round" strokeLinejoin="round" {...ve} />
-
+		<Frame label="A task's route: read, branch, sandbox, pull request" viewBox="0 -66 400 104" className={className}>
 			{/* 01 Read: the reader, lit, with the snapshot it is reading held above it. */}
 			<Station
 				column={0}
-				size={[40, 40, 12]}
-				r={3}
+				h={16}
+				r={3.5}
 				tone="accent"
 				top={
 					<>
-						<Slot x={6} y={6} w={28} h={28} r={2} />
-						<Bar x={10} y={10} w={16} accent />
-						<Bar x={10} y={14} w={10} accent />
-						<Bar x={10} y={18} w={18} accent />
-						<Bar x={10} y={22} w={8} accent />
+						<Slot x={6} y={6} w={28} h={28} r={2.5} />
+						<Bar x={10} y={11} w={16} accent />
+						<Bar x={10} y={15} w={10} accent />
+						<Bar x={13} y={19} w={14} accent />
+						<Bar x={13} y={23} w={8} accent />
+						<Bar x={10} y={27} w={12} accent />
 						<g className="art-scan">
-							<line x1={7} y1={8} x2={33} y2={8} stroke="var(--cyan-200)" strokeWidth={1.4} {...ve} />
+							<line x1={7} y1={8} x2={33} y2={8} stroke="var(--cyan-100)" strokeWidth={1.4} {...ve} />
 						</g>
 					</>
 				}
 				left={
 					<>
-						<Led at={[6, 6]} lit />
-						<Bar x={12} y={5.2} w={12} accent />
+						<Led at={[6, 11]} lit />
+						<Bar x={11} y={10.2} w={10} accent />
+						{[26, 29, 32, 35].map((u) => (
+							<Ln key={u} a={[u, 4]} b={[u, 12]} stroke={ACCENT} />
+						))}
 					</>
 				}
+				right={<Port lit />}
 			/>
 			{sheets.map((z, i) => (
 				<Block
 					key={z}
-					at={[rx - 12, ry - 14, z]}
-					size={[24, 28, 1.2]}
+					at={[rx - 13, ry - 15, z]}
+					size={[26, 30, 1.2]}
 					r={1.2}
 					tone={i === sheets.length - 1 ? 'solid' : 'glass'}
 					top={
 						i === sheets.length - 1 ? (
 							<>
-								<Bar x={4} y={5} w={14} />
-								<Bar x={4} y={9} w={9} />
-								<Bar x={4} y={13} w={16} />
-								<Bar x={4} y={17} w={11} />
+								<Bar x={4} y={5} w={12} />
+								<Bar x={7} y={9} w={11} />
+								<Bar x={7} y={13} w={14} />
+								<Bar x={4} y={17} w={9} />
+								<Bar x={4} y={21} w={16} />
 							</>
 						) : undefined
 					}
 				/>
 			))}
-			<Trace points={[pt([rx - 12, ry + 14, 12]), pt([rx - 12, ry + 14, 24])]} stroke={ACCENT} dash="1.5 2.5" />
-			<Trace points={[pt([rx + 12, ry + 14, 12]), pt([rx + 12, ry + 14, 24])]} stroke={ACCENT} dash="1.5 2.5" />
+			<Trace points={[pt([rx - 13, ry + 15, 16]), pt([rx - 13, ry + 15, 26])]} stroke={ACCENT} dash="1.5 2.5" />
+			<Trace points={[pt([rx + 13, ry + 15, 16]), pt([rx + 13, ry + 15, 26])]} stroke={ACCENT} dash="1.5 2.5" />
+			<Trace points={[pt([rx + 13, ry - 15, 16]), pt([rx + 13, ry - 15, 26])]} stroke={ACCENT} dash="1.5 2.5" />
 
-			{/* 02 Branch: a plate whose trace forks off main at a junction. */}
+			{/* 02 Branch: a junction box with a fork cut into its lid. */}
 			<Station
 				column={1}
-				size={[40, 40, 8]}
-				r={3}
+				h={18}
+				r={3.5}
 				top={
 					<>
-						<Trace points={[[0, 13], [40, 13]]} stroke={EDGE} />
-						<Trace points={[[11, 13], [19, 21], [19, 29], [40, 29]]} stroke={EDGE} dash="3 2.5" />
-						<Ring at={[36, 13]} r={1.6} fill="var(--art-top)" stroke={EDGE} />
-						<Ring at={[36, 29]} r={1.6} fill="var(--art-top)" stroke={EDGE} />
+						<Slot x={5} y={5} w={30} h={30} r={2.5} edge />
+						<Ln a={[12, 12.6]} b={[12, 27.4]} stroke={EDGE} />
+						<path d="M 28 14.6 C 28 21 12 18.5 12 24.4" fill="none" stroke={EDGE} {...ve} />
+						<Ring at={[12, 10]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[12, 30]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[28, 12]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
 					</>
 				}
-				left={<Bar x={6} y={3.2} w={10} />}
-				right={<Bar x={24} y={3.2} w={10} />}
+				left={
+					<>
+						<Port />
+						<Led at={[33, 13]} />
+					</>
+				}
+				right={
+					<>
+						<Port />
+						{[5, 8, 11].map((v) => (
+							<Ln key={v} a={[28, v]} b={[35, v]} />
+						))}
+					</>
+				}
 			/>
-			{(() => {
-				const [bx, by] = across(ROUTE_X[1]);
-				return <Disc at={[bx - 9, by - 7, 8]} r={3.4} h={4} top={<Ring at={[0, 0]} r={1.2} fill={EDGE} stroke="none" />} />;
-			})()}
 
 			{/* 03 Sandbox: dashed, because it only starts when the agent edits. */}
 			<Station
 				column={2}
-				size={[40, 40, 26]}
+				h={30}
 				r={4}
 				tone="glass"
 				dashed
 				top={
 					<>
 						{[8, 13, 18, 23].map((v) => (
-							<Ln key={v} a={[7, v]} b={[26, v]} />
+							<Ln key={v} a={[7, v]} b={[25, v]} />
 						))}
-						<Ring at={[32, 30]} r={3.4} />
+						<Ring at={[31, 30]} r={3.6} />
+						<path d="M 29.6 28.4 A 2 2 0 1 0 32.4 28.4" fill="none" stroke={DETAIL} {...ve} />
 					</>
 				}
 				left={
 					<>
-						<rect x={5} y={7} width={26} height={14} rx={2} fill="none" stroke={DETAIL} strokeDasharray="2 2" {...ve} />
-						<Trace points={[[8.5, 12.4], [10.6, 11], [8.5, 9.6]]} />
-						<Bar x={12} y={9.4} w={3} h={3} />
+						<rect x={5} y={14} width={30} height={12} rx={2} fill="none" stroke={DETAIL} strokeDasharray="2 2" {...ve} />
+						<Trace points={[[8.5, 21.4], [10.6, 20], [8.5, 18.6]]} />
+						<Bar x={12} y={18.6} w={3} h={2.8} />
+						<Ring at={[HALF, PIPE_Z]} r={3.6} stroke={EDGE} />
 					</>
 				}
 				right={
 					<>
-						<Ln a={[8, 18]} b={[30, 18]} />
-						<Ln a={[8, 14]} b={[22, 14]} />
+						<Ring at={[HALF, PIPE_Z]} r={3.6} stroke={EDGE} />
+						<Ln a={[6, 22]} b={[34, 22]} />
+						<Ln a={[6, 18]} b={[24, 18]} />
 					</>
 				}
 			/>
@@ -893,30 +947,43 @@ export function TaskRouteArt({ className }: { className?: string }) {
 			{/* 04 Pull request: a sealed case marked with the merge glyph. */}
 			<Station
 				column={3}
-				size={[40, 40, 18]}
+				h={22}
 				r={3.5}
 				top={
 					<>
 						<Slot x={5} y={5} w={30} h={30} r={2.5} edge />
-						<Ring at={[13, 11]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
-						<Ring at={[13, 29]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
-						<Ring at={[28, 29]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
-						<Ln a={[13, 13.6]} b={[13, 26.4]} stroke={EDGE} />
-						<Trace points={[[28, 26.4], [28, 17], [21, 11.5]]} stroke={EDGE} />
-						<Trace points={[[23.4, 10.6], [21, 11.5], [21.6, 14]]} stroke={EDGE} />
+						<Ring at={[12, 10]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[12, 30]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ring at={[28, 30]} r={2.6} stroke={EDGE} fill="var(--art-top)" />
+						<Ln a={[12, 12.6]} b={[12, 27.4]} stroke={EDGE} />
+						<Trace points={[[28, 27.4], [28, 17], [21, 11.2]]} stroke={EDGE} />
+						<Trace points={[[23.6, 10.4], [21, 11.2], [21.6, 13.8]]} stroke={EDGE} />
 					</>
 				}
 				left={
 					<>
-						<Slot x={8} y={6} w={24} h={7} r={1.2} edge />
-						<Trace points={[[11, 9.6], [12.6, 8], [15.6, 11]]} />
-						<Bar x={18} y={8.8} w={10} />
+						<Port />
+						<Slot x={27} y={13} w={10} h={5} r={1} edge />
+						<Trace points={[[29, 15.4], [30.4, 14.2], [33, 16.8]]} />
 					</>
 				}
-				right={<Led at={[32, 9]} />}
+				right={
+					<>
+						<Led at={[33, 16]} />
+						{[5, 8, 11].map((v) => (
+							<Ln key={v} a={[6, v]} b={[22, v]} />
+						))}
+					</>
+				}
 			/>
 
-			<Block at={[token[0] - 4, token[1] - 4, 5]} size={[8, 8, 8]} r={1.4} tone="accent" />
+			<Pipe from={0} lit />
+			<Pipe from={1} />
+			<Pipe from={2} />
+			<Elbow from={0} lit />
+			<Elbow from={1} />
+			<Elbow from={2} />
+			<Block at={[ex - 3.5, ey - 3.5, 11]} size={[7, 7, 7]} r={1.4} tone="accent" />
 		</Frame>
 	);
 }
