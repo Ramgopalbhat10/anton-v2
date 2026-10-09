@@ -62,6 +62,9 @@ const settingKey = (id: string) => `subscription.${id}`;
 
 export const subscriptionProviders = (): SubscriptionProvider[] => getProviders().subscriptions ?? [];
 
+/** Whether a model (`<gateway>/<model>`) runs on a plan, where calls cost nothing per token. */
+export const onPlan = (model: string): boolean => subscriptionProviders().some((provider) => model.startsWith(`${provider.gateway}/`));
+
 function providerById(id: string): SubscriptionProvider {
 	const provider = subscriptionProviders().find((candidate) => candidate.id === id);
 	if (!provider) throw new NotFoundError(`No subscription named "${id}"`);
@@ -418,7 +421,7 @@ export type PlanUsage = {
 	calls: number;
 	/**
 	 * US dollars the month's calls would have cost per token, at the vendor's list price or, failing that,
-	 * OpenRouter's for the same model; input counted at the input price, cache reads included. Null when no price is known.
+	 * OpenRouter's for the same model; input read from the cache at the cached price where one is listed. Null when no price is known.
 	 */
 	apiValue: number | null;
 	/** Tokens per local day and model over the last 30 days; days with none are left out. */
@@ -463,7 +466,9 @@ export async function planUsage(now = new Date()): Promise<PlanUsage[]> {
 					const price = priceOf(row.model);
 					if (price) {
 						priced = true;
-						apiValue += (row.input * price.input + row.output * price.output) / 1_000_000;
+						// Cached input is billed at its own, lower price; without one listed it counts at the input price.
+						const cachedPrice = price.cacheRead > 0 ? price.cacheRead : price.input;
+						apiValue += ((row.input - row.cached) * price.input + row.cached * cachedPrice + row.output * price.output) / 1_000_000;
 					}
 				}
 				if (at >= thirty) {

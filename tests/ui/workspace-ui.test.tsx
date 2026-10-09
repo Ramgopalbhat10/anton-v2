@@ -119,8 +119,8 @@ describe('Context meter', () => {
 		for (const label of ['Messages', 'Agent tools', 'System prompt', 'Skills', 'MCP tools', 'Autocompact buffer', 'Free space']) expect(screen.getByText(label)).toBeTruthy();
 		expect(screen.getByText('Messages').parentElement?.textContent).toContain('37%');
 		expect(screen.getByText('until the agent compacts older turns').previousElementSibling?.textContent).toBe('116K');
-		// The total beside the task's title counts every call, each reading the whole conversation again.
-		expect(screen.getByText(/This task processed/).textContent).toMatch(/377K tokens over 9 model calls/);
+		// The window is not the cost; the task's total, every call and subagent counted, is.
+		expect(screen.getByText(/This task used/).textContent).toMatch(/not what you pay for\. This task used 377K tokens over 9 model calls, its subagents' included/);
 		expect(screen.getByText('ChatGPT plan')).toBeTruthy();
 		expect(screen.getByText('≈ $1.23')).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Limits in ChatGPT/ }).getAttribute('href')).toBe('https://chatgpt.com/settings/usage');

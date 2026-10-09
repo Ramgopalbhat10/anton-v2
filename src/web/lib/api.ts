@@ -59,7 +59,8 @@ export type Session = {
 	lastInputAt?: string | null;
 };
 
-export type Usage = { inputTokens: number; outputTokens: number; cost: number };
+/** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */
+export type Usage = { inputTokens: number; outputTokens: number; cost: number; cachedTokens?: number };
 
 /** A problem from background work, newest first. */
 export type LogEntry = { at: string; level: 'warn' | 'error'; message: string; detail: string | null; sessionId: string | null };

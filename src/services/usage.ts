@@ -8,7 +8,7 @@ import { type PlanUsage, planUsage } from './subscriptions.ts';
 type ResponseUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } };
 
 export function toUsage(usage: ResponseUsage): Usage {
-	return { inputTokens: usage.input + usage.cacheRead + usage.cacheWrite, outputTokens: usage.output, cost: usage.cost.total };
+	return { inputTokens: usage.input + usage.cacheRead + usage.cacheWrite, outputTokens: usage.output, cost: usage.cost.total, cachedTokens: usage.cacheRead };
 }
 
 /** Adds usage to the task's totals, under the model that did the work; a failed write only loses the count. */

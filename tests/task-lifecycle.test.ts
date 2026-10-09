@@ -567,14 +567,16 @@ test('a task can be pinned, and a fork starts in a sandbox of its own with the t
 test('a task adds up the tokens and cost of its responses', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Usage' });
-	assert.deepEqual(session.usage, { inputTokens: 0, outputTokens: 0, cost: 0 });
+	assert.deepEqual(session.usage, { inputTokens: 0, outputTokens: 0, cost: 0, cachedTokens: 0 });
 	const usage = toUsage({ input: 100, output: 20, cacheRead: 50, cacheWrite: 0, cost: { total: 0.01 } });
-	assert.deepEqual(usage, { inputTokens: 150, outputTokens: 20, cost: 0.01 });
+	// Input counts the cached part too; the cached part is kept apart, as it is priced lower.
+	assert.deepEqual(usage, { inputTokens: 150, outputTokens: 20, cost: 0.01, cachedTokens: 50 });
 	await addSessionUsage(session.id, usage);
 	await addSessionUsage(session.id, usage);
 	const totals = (await sessions.getSession(session.id)).usage;
 	assert.equal(totals.inputTokens, 300);
 	assert.equal(totals.outputTokens, 40);
+	assert.equal(totals.cachedTokens, 100);
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
 });
 

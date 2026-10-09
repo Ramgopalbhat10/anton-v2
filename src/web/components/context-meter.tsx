@@ -92,9 +92,13 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
 				{[
 					['Today', tokens(plan.tokens.today)],
 					['7 days', tokens(plan.tokens.week)],
-					['API value', plan.apiValue === null ? '—' : `≈ ${dollars(plan.apiValue)}`],
+					['At API prices', plan.apiValue === null ? '—' : `≈ ${dollars(plan.apiValue)}`],
 				].map(([label, value]) => (
-					<div key={label} className="flex flex-col gap-0.5">
+					<div
+						key={label}
+						className="flex flex-col gap-0.5"
+						title={label === 'At API prices' ? 'What these calls would cost on a paid API, cached input at its lower price. On your plan you pay nothing per token.' : undefined}
+					>
 						<span className="in-num text-[13px] text-(--text-primary)">{value}</span>
 						<span className="text-[10.5px] text-(--text-disabled)">{label}</span>
 					</div>
@@ -217,9 +221,9 @@ export function ContextMeter({ sessionId, model }: { sessionId: string; model: s
 								</div>
 								{measured.task && measured.task.calls > 1 ? (
 									<p className="m-0 text-[11px] leading-[16px] text-pretty text-(--text-disabled)">
-										This task processed <span className="in-num text-(--text-tertiary)">{tokens(measured.task.tokens)}</span> tokens over{' '}
-										{measured.task.calls} model calls, the total beside its title. Each call reads the whole conversation again, so that total grows much
-										faster than what the window holds now.
+										The window is what the agent holds now, not what you pay for. This task used{' '}
+										<span className="in-num text-(--text-tertiary)">{tokens(measured.task.tokens)}</span> tokens over {measured.task.calls} model calls, its
+										subagents' included: that is what usage and cost count. Each call reads its conversation again, so the total grows much faster than the window.
 									</p>
 								) : null}
 							</>

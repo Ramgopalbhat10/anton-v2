@@ -84,6 +84,8 @@ const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN pr_json TEXT`],
 	// 17: each task's latest input and when it came, for cards that show what the task was last asked.
 	[`ALTER TABLE sessions ADD COLUMN last_input TEXT`, `ALTER TABLE sessions ADD COLUMN last_input_at TEXT`],
+	// 18: input tokens the provider read from its cache, part of input_tokens and priced lower, per call and per task.
+	[`ALTER TABLE usage_log ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE sessions ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

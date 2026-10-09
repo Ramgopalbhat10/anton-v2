@@ -36,7 +36,8 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
-import { gatewayToken } from '../services/subscriptions.ts';
+import { gatewayToken, onPlan } from '../services/subscriptions.ts';
+import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { agentBrowse, sharedBrowserAvailable } from '../services/live-browser.ts';
 import { logProblem } from '../services/log.ts';
@@ -436,12 +437,19 @@ export function Coder({ id }: AgentProps) {
 	});
 	// These response hooks run at the true start/end, across all model and tool calls.
 	// The persisted start survives resumed responses; usage totals are still counted per model call.
-	useResponseStart(() => ({ startedAt: Date.now() }));
+	useResponseStart(() => {
+		startReply(id);
+		return { startedAt: Date.now() };
+	});
 	useResponseFinish(({ response, metadata }) => {
 		const completedAt = Date.now();
 		const startedAt = metadata.startedAt;
+		// The runtime's usage covers this conversation only; the reply's subagents are billed too.
+		const reply = finishReply(id);
 		return {
-			usage: toUsage(response.usage),
+			usage: reply ? replyTotal(reply) : toUsage(response.usage),
+			...(reply ? { usageParts: reply } : {}),
+			billing: onPlan(model) ? 'plan' : 'api',
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};
 	});

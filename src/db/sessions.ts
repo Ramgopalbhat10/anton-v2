@@ -24,7 +24,7 @@ function toRecord(row: Row): SessionRecord {
 		failed: row.status === 'error',
 		machineState: optional(row.machine_state),
 		followState: optional(row.follow_json),
-		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0) },
+		usage: { inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), cost: Number(row.cost_usd ?? 0), cachedTokens: Number(row.cached_tokens ?? 0) },
 		legacySetup: Number(row.legacy_setup ?? 0) === 1,
 		planMode: Number(row.plan_mode ?? 0) === 1,
 		pinnedAt: optional(row.pinned_at),
@@ -49,15 +49,15 @@ export async function addSessionUsage(id: string, usage: Usage, at = new Date(),
 	const result = await db.batch(
 		[
 			{
-				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model, turn_id)
-					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)), ?)
+				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model, turn_id, cached_tokens)
+					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)), ?, ?)
 					ON CONFLICT (session_id, turn_id) WHERE turn_id IS NOT NULL DO NOTHING`,
-				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id, turnId],
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id, turnId, usage.cachedTokens ?? 0],
 			},
 			{
 				// changes() refers to the insert immediately above, on the same transaction/connection.
-				sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ? WHERE id = ? AND changes() > 0',
-				args: [usage.inputTokens, usage.outputTokens, usage.cost, id],
+				sql: 'UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_usd = cost_usd + ?, cached_tokens = cached_tokens + ? WHERE id = ? AND changes() > 0',
+				args: [usage.inputTokens, usage.outputTokens, usage.cost, usage.cachedTokens ?? 0, id],
 			},
 		],
 		'write',
@@ -96,15 +96,22 @@ export async function sessionCalls(id: string): Promise<{ calls: number; tokens:
 	return { calls: Number(result.rows[0]?.calls ?? 0), tokens: Number(result.rows[0]?.tokens ?? 0) };
 }
 
-/** Input and output tokens and calls since `since` for models whose id starts with `prefix`, per minute in UTC and model. */
-export async function tokensByMinute(prefix: string, since: Date): Promise<Array<{ minute: string; model: string; input: number; output: number; calls: number }>> {
+/** Input (and the cached part of it) and output tokens and calls since `since` for models whose id starts with `prefix`, per minute in UTC and model. */
+export async function tokensByMinute(prefix: string, since: Date): Promise<Array<{ minute: string; model: string; input: number; cached: number; output: number; calls: number }>> {
 	const db = await appDb();
 	const result = await db.execute({
-		sql: `SELECT substr(at, 1, 16) AS minute, model, SUM(input_tokens) AS input, SUM(output_tokens) AS output, COUNT(*) AS calls
+		sql: `SELECT substr(at, 1, 16) AS minute, model, SUM(input_tokens) AS input, SUM(cached_tokens) AS cached, SUM(output_tokens) AS output, COUNT(*) AS calls
 			FROM usage_log WHERE at >= ? AND model LIKE ? GROUP BY 1, 2 ORDER BY 1`,
 		args: [since.toISOString(), `${prefix.replace(/[%_]/g, '')}%`],
 	});
-	return result.rows.map((row) => ({ minute: String(row.minute), model: String(row.model), input: Number(row.input), output: Number(row.output), calls: Number(row.calls) }));
+	return result.rows.map((row) => ({
+		minute: String(row.minute),
+		model: String(row.model),
+		input: Number(row.input),
+		cached: Number(row.cached ?? 0),
+		output: Number(row.output),
+		calls: Number(row.calls),
+	}));
 }
 
 /** Dollars and tokens since `since` by model, per minute in UTC, so callers can bucket them into local days. */
