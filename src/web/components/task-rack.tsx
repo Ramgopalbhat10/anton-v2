@@ -9,6 +9,7 @@ import { useFork } from '@/components/task-actions';
 import { isLive, liveLabel } from '@/components/task-status';
 import { api, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
+import { useModels } from '@/components/model-picker';
 import { setPendingPrompt } from '@/lib/pending-prompt';
 
 /* Every task as a blade in a row of rack bays, drawn like the other isometric
@@ -277,11 +278,17 @@ function Details({ session, placement, linger }: { session: Session; placement: 
 	const [prompt, setPrompt] = useState('');
 	const kind = kindOf(session);
 	const model = session.model.split('/').pop() ?? session.model;
+	// A plan model costs nothing per token; its calls count against the plan instead.
+	const onPlan = Boolean(useModels().data?.models.find((entry) => entry.id === session.model)?.subscription);
 	const stats: Array<[string, ReactNode]> = [
-		['spent', dollars(session.usage.cost)],
+		[onPlan ? 'billed' : 'spent', onPlan ? 'plan' : dollars(session.usage.cost)],
 		['tokens', tokens(session.usage.inputTokens + session.usage.outputTokens)],
 		['model', model],
 	];
+	// The latest thing the task was asked; tasks from before Anton kept it show their first message, the title.
+	const latest = session.lastInput?.trim() || session.title;
+	const latestAt = session.lastInputAt ?? session.createdAt;
+	const followedUp = Boolean(session.lastInput && session.lastInputAt && session.lastInputAt !== session.createdAt && session.lastInput !== session.title);
 	const openTask = () => void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
 	const send = () => {
 		const text = prompt.trim();
@@ -314,9 +321,22 @@ function Details({ session, placement, linger }: { session: Session; placement: 
 					<div className="flex items-center gap-1.5">
 						<span className={`size-1.5 shrink-0 rounded-full ${kind === 'live' ? 'in-pulse' : ''}`} style={{ background: KINDS[kind].color }} />
 						<span className="in-caption text-(--text-secondary)">{stateWord(session)}</span>
-						<span className="in-caption ml-auto">{age(session.createdAt)} ago</span>
+						<span className="in-caption ml-auto" title={`Started ${new Date(session.createdAt).toLocaleString()}`}>
+							started {age(session.createdAt)} ago
+						</span>
 					</div>
-					<div className="line-clamp-2 text-[13.5px] leading-[19px] font-medium text-(--text-primary)">{session.title}</div>
+					<div className="truncate text-[12px] text-(--text-tertiary)" title={session.title}>
+						{session.title}
+					</div>
+					<div className="flex flex-col gap-1 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
+						<div className="flex items-center gap-1.5">
+							<span className="in-caption">{followedUp ? 'Latest input' : 'Input'}</span>
+							<span className="in-caption ml-auto tracking-normal normal-case" title={new Date(latestAt).toLocaleString()}>
+								{age(latestAt)} ago
+							</span>
+						</div>
+						<p className="m-0 line-clamp-3 text-[13px] leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
+					</div>
 					<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
 						{session.repo.split('/').pop()} · {session.workspace ? session.branch : `${session.baseBranch} (read-only)`}
 					</div>

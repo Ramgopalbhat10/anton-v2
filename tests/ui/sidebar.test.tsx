@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
 	budget: vi.fn(async () => ({ today: 0, limits: { dailyUsd: null }, blocked: false })),
 	editSession: vi.fn(async (id: string, change: { pinned?: boolean }) => ({ id, pinnedAt: change.pinned ? 'now' : null })),
 	forkSession: vi.fn(async () => ({ id: 'fork' })),
+	stopAllSandboxes: vi.fn(async () => ({ stopped: 2 })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ChatSidebar } = await import('@/components/chat-sidebar');
@@ -125,6 +126,19 @@ describe('sidebar', () => {
 
 		await userEvent.click(screen.getByRole('button', { name: 'Remove the Needs you filter' }));
 		expect(titles('Recent')).toHaveLength(3);
+	});
+
+	it('stops every sandbox from the view menu, asking twice, with no menu of its own on Running', async () => {
+		open();
+		await screen.findByText('Busy task');
+		expect(within(screen.getByRole('region', { name: 'Running' })).queryByRole('button', { name: /options/i })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'View options' }));
+		const item = screen.getByRole('menuitem', { name: /Stop every sandbox/ });
+		expect(item.textContent).toContain('2');
+		await userEvent.click(item);
+		expect(api.stopAllSandboxes).not.toHaveBeenCalled();
+		await userEvent.click(screen.getByRole('menuitem', { name: /Click again to stop all 2/ }));
+		await waitFor(() => expect(api.stopAllSandboxes).toHaveBeenCalledTimes(1));
 	});
 
 	it('folds a section from its header and keeps it folded', async () => {

@@ -31,5 +31,7 @@ export const session = (patch: Partial<Session> = {}): Session => ({
 	pinnedAt: null,
 	pullRequest: null,
 	usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
+	lastInput: null,
+	lastInputAt: null,
 	...patch,
 });

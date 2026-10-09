@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderOpen } from 'lucide-react';
+import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
 import { Markdown } from '@/components/markdown';
@@ -168,14 +168,38 @@ function RenderedMarkdown({ text }: { text: string }) {
 	);
 }
 
+export const isMarkdown = (path: string) => /\.(md|markdown|mdown)$/i.test(path);
+
+/** Two icons for how a Markdown file shows: its source, or rendered. */
+export function MarkdownToggle({ preview, onChange, className }: { preview: boolean; onChange: (preview: boolean) => void; className?: string }) {
+	return (
+		<Segmented label="Show Markdown as" role="radiogroup" className={className}>
+			{(
+				[
+					[false, Code, 'Source'],
+					[true, Eye, 'Preview'],
+				] as const
+			).map(([value, icon, label]) => (
+				<SegmentedItem key={label} role="radio" size="sm" on={preview === value} onClick={() => onChange(value)} title={label} className="px-1.5">
+					<Icon icon={icon} size={12} />
+					<span className="sr-only">{label}</span>
+				</SegmentedItem>
+			))}
+		</Segmented>
+	);
+}
+
 /**
  * One file: an image shown, Markdown rendered or as source, code highlighted
  * with line numbers, or a note for binary content. `read` fetches its bytes.
+ * Pass `preview` to choose how Markdown shows from outside, as a tab bar does;
+ * without it the file has its own icons for that, in its top corner.
  */
-export function FileView({ path, queryKey, read }: { path: string; queryKey: unknown[]; read: () => Promise<Uint8Array> }) {
+export function FileView({ path, queryKey, read, preview: chosen }: { path: string; queryKey: unknown[]; read: () => Promise<Uint8Array>; preview?: boolean }) {
 	const imageType = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
-	const markdown = /\.(md|markdown|mdown)$/i.test(path);
-	const [preview, setPreview] = useState(true);
+	const markdown = isMarkdown(path);
+	const [own, setOwn] = useState(true);
+	const preview = chosen ?? own;
 	const [imageUrl, setImageUrl] = useState('');
 	const file = useQuery({ queryKey, queryFn: read });
 	const contents = file.data && !imageType ? asText(file.data) : '';
@@ -193,19 +217,8 @@ export function FileView({ path, queryKey, read }: { path: string; queryKey: unk
 	});
 	const tokens = colored.data ?? null;
 	return (
-		<div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
-			{markdown ? (
-				<div className="flex shrink-0 justify-end border-b border-(--border-subtle) bg-(--card-bg) px-2 py-1.5">
-					<Segmented label="Show as" role="group">
-						<SegmentedItem role="button" size="sm" on={!preview} onClick={() => setPreview(false)}>
-							Source
-						</SegmentedItem>
-						<SegmentedItem role="button" size="sm" on={preview} onClick={() => setPreview(true)}>
-							Preview
-						</SegmentedItem>
-					</Segmented>
-				</div>
-			) : null}
+		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
+			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="absolute top-2 right-3 z-10" /> : null}
 			<div className="min-h-0 flex-1 overflow-auto">
 				{file.isError ? (
 					<div className="px-3 py-2.5 text-[12px] text-(--danger-text)">{file.error.message || 'Could not read this file.'}</div>

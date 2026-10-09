@@ -18,6 +18,7 @@ function staleFor(change: Change): QueryKey[] {
 		['usage'],
 		['compute'],
 		['session', change.id],
+		['context', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],
 		...files,

@@ -29,6 +29,8 @@ function toRecord(row: Row): SessionRecord {
 		planMode: Number(row.plan_mode ?? 0) === 1,
 		pinnedAt: optional(row.pinned_at),
 		pullRequest: pullRequestOf(row),
+		lastInput: optional(row.last_input),
+		lastInputAt: optional(row.last_input_at),
 	};
 }
 
@@ -85,6 +87,24 @@ export async function spendBy(group: keyof typeof GROUPS, since: Date): Promise<
 		args: [since.toISOString()],
 	});
 	return result.rows.map((row) => ({ key: row.key == null ? null : String(row.key), tokens: Number(row.tokens), cost: Number(row.cost) }));
+}
+
+/** Every model call a task made, the subagents' and compaction's included, and the tokens they processed in all. */
+export async function sessionCalls(id: string): Promise<{ calls: number; tokens: number }> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens FROM usage_log WHERE session_id = ?', args: [id] });
+	return { calls: Number(result.rows[0]?.calls ?? 0), tokens: Number(result.rows[0]?.tokens ?? 0) };
+}
+
+/** Input and output tokens and calls since `since` for models whose id starts with `prefix`, per minute in UTC and model. */
+export async function tokensByMinute(prefix: string, since: Date): Promise<Array<{ minute: string; model: string; input: number; output: number; calls: number }>> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `SELECT substr(at, 1, 16) AS minute, model, SUM(input_tokens) AS input, SUM(output_tokens) AS output, COUNT(*) AS calls
+			FROM usage_log WHERE at >= ? AND model LIKE ? GROUP BY 1, 2 ORDER BY 1`,
+		args: [since.toISOString(), `${prefix.replace(/[%_]/g, '')}%`],
+	});
+	return result.rows.map((row) => ({ minute: String(row.minute), model: String(row.model), input: Number(row.input), output: Number(row.output), calls: Number(row.calls) }));
 }
 
 /** Dollars and tokens since `since` by model, per minute in UTC, so callers can bucket them into local days. */
@@ -152,6 +172,8 @@ const columns = {
 	followState: 'follow_json',
 	pinnedAt: 'pinned_at',
 	pullRequestJson: 'pr_json',
+	lastInput: 'last_input',
+	lastInputAt: 'last_input_at',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

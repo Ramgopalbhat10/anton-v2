@@ -62,6 +62,9 @@ export type Session = {
 	pullRequest: PullRequestStatus | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
+	/** The latest message the task was given, by you or by Anton (a follow-up, an automation); null before Anton kept it. */
+	lastInput: string | null;
+	lastInputAt: string | null;
 };
 
 /**

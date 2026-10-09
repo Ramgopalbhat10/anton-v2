@@ -2,6 +2,7 @@ import type { Usage } from '../core/types.ts';
 import { addSessionUsage, type SpendRow, spendBy, spendByMinute, spentSince } from '../db/sessions.ts';
 import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
+import { type PlanUsage, planUsage } from './subscriptions.ts';
 
 /** What the runtime reports for one response; cached prompt tokens are still prompt tokens. */
 type ResponseUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } };
@@ -75,16 +76,17 @@ async function dailySpend(now: Date): Promise<DailySpend[]> {
 }
 
 /** What has been spent this month, in total and by repository and model, from the server's local midnight on the 1st, and each of the last 30 days. */
-export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[] };
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans: PlanUsage[] };
 
 export async function usageView(now = new Date()): Promise<UsageView> {
 	const since = startOfMonth(now);
-	const [today, month, byRepo, byModel, daily] = await Promise.all([
+	const [today, month, byRepo, byModel, daily, plans] = await Promise.all([
 		spentSince(startOfToday(now)),
 		spentSince(since),
 		spendBy('repo', since),
 		spendBy('model', since),
 		dailySpend(now),
+		planUsage(now),
 	]);
-	return { since: since.toISOString(), today, month, byRepo, byModel, daily };
+	return { since: since.toISOString(), today, month, byRepo, byModel, daily, plans };
 }

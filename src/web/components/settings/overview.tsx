@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { lastDays, Sparkline } from '@/components/charts';
+import { ArcDial, DotMatrix, lastDays } from '@/components/charts';
 import { SandboxArt } from '@/components/illustrations';
-import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, TickGauge, usedTone, Well } from '@/components/instrument';
+import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, usedTone, Well } from '@/components/instrument';
 import { Icon } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api } from '@/lib/api';
@@ -48,20 +48,23 @@ function SpendCard() {
 			}
 		>
 			<CardSection ruled={false} className="pt-1">
-				<Figure value={budget.data ? dollars(today) : '…'} unit={cap !== null ? `of $${cap}` : undefined} />
-				{cap !== null ? (
-					<TickGauge
-						label="Today's spend against the daily cap"
-						value={today}
-						max={cap}
-						tone={usedTone(used)}
-						markers={[{ at: cap * 0.8, label: 'warn', tone: 'warning' }]}
-						scale={['$0', `$${cap}`]}
-					/>
-				) : null}
+				<div className="flex items-center justify-between gap-4">
+					<div className="flex min-w-0 flex-col gap-2">
+						<Figure value={budget.data ? dollars(today) : '…'} unit={cap !== null ? `of $${cap}` : undefined} />
+						<Caption className="tracking-normal normal-case">
+							{cap === null ? 'No daily cap is set.' : `Agents stop for the day at $${cap}.`}
+						</Caption>
+					</div>
+					{cap !== null ? (
+						<ArcDial label="Today's spend against the daily cap" value={today} max={cap}>
+							<span className="in-num text-[15px] leading-none text-(--text-primary)">{dollars(Math.max(0, cap - today))}</span>
+							<span className="in-caption">left</span>
+						</ArcDial>
+					) : null}
+				</div>
 			</CardSection>
 			<CardSection label="Last 30 days" hint={usage.data ? dollars(usage.data.month) + ' this month' : undefined}>
-				<Sparkline values={trend} label="Spend per day over the last 30 days" />
+				<DotMatrix values={trend} format={dollars} label="Spend per day over the last 30 days" />
 			</CardSection>
 		</Card>
 	);

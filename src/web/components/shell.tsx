@@ -8,13 +8,14 @@ import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
 import { Btn, IconBtn } from '@/components/signal';
-import { PullRequestChip, TaskMenu, TaskTitle, UsageChip } from '@/components/task-actions';
+import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
 import { type PanelName, VmPanel } from '@/components/vm-panel';
 import { api, type Session } from '@/lib/api';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useTaskNotifications } from '@/lib/notifications';
 import { SendToAgent } from '@/lib/review';
+import { cn } from '@/lib/utils';
 
 function readCollapsed() {
 	try {
@@ -154,19 +155,21 @@ export function SessionPage() {
 					<div className={open ? 'hidden min-h-0 min-w-0 flex-1 flex-col @min-[700px]/workspace:flex' : 'flex min-h-0 min-w-0 flex-1 flex-col'}>
 						<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 							<MenuButton />
-							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
+							{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
 							{status ? (
-								<div className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`}>
-									<span className={`size-1.5 shrink-0 rounded-full ${status.dot}`} title={status.label} />
-									<span className="hidden sm:inline">{status.label}</span>
-								</div>
+								<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
+									<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
+									<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
+								</span>
 							) : null}
-							{session.data ? <UsageChip session={session.data} /> : null}
+							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
 							{session.data ? <PullRequestChip session={session.data} /> : null}
-							{/* On a phone the header keeps only icons, so the menu and panel buttons stay on screen. */}
-							<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
-								<span className="hidden sm:inline">Review</span>
-							</Btn>
+							{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
+							{!open ? (
+								<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
+									<span className="hidden sm:inline">Review</span>
+								</Btn>
+							) : null}
 							{session.data ? (
 								<TaskMenu
 									session={session.data}
