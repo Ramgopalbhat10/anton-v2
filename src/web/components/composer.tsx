@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ComposerInput } from '@/components/composer-input';
+import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
@@ -162,6 +163,7 @@ export function Composer({
 					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
 					<ModelPicker value={choice} onChange={edit} />
 					<PlanToggle on={planning} onChange={(planMode) => edit({ planMode })} />
+					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
 						<span className="truncate">{busy ? 'Send to the running agent' : 'Send'}</span>
 						<Kbd keys="enter" size="sm" />

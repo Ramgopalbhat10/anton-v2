@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { ModelInfo, SubscriptionCredential, SubscriptionLogin, SubscriptionModel, SubscriptionProvider } from '../core/ports.ts';
-import { spendBy } from '../db/sessions.ts';
+import { spendBy, tokensByMinute } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
@@ -26,6 +26,8 @@ type Stored = SubscriptionOptions & {
 	modelsAt: number | null;
 	/** Why the plan cannot be used now, such as a sign-in that was revoked. */
 	problem: string | null;
+	/** When the vendor last said the plan's usage limit was reached. */
+	limitHitAt: string | null;
 };
 
 export type SubscriptionView = {
@@ -49,7 +51,7 @@ export type SubscriptionView = {
 	login: { url: string; redirectUri: string; listening: boolean; startedAt: string } | null;
 };
 
-const DEFAULTS: Stored = { enabled: true, countAtApiPrices: false, credential: null, connectedAt: null, models: [], modelsAt: null, problem: null };
+const DEFAULTS: Stored = { enabled: true, countAtApiPrices: false, credential: null, connectedAt: null, models: [], modelsAt: null, problem: null, limitHitAt: null };
 const MODELS_TTL_MS = 60 * 60_000;
 /** After a failed listing, how long the last list is served before asking again. */
 const MODELS_RETRY_MS = 5 * 60_000;
@@ -383,6 +385,109 @@ export async function subscriptionView(provider: SubscriptionProvider): Promise<
 }
 
 export const subscriptionsView = (): Promise<SubscriptionView[]> => Promise.all(subscriptionProviders().map(subscriptionView));
+
+/** What the vendor calls a plan whose usage limit is reached (OpenAI's Sign in with ChatGPT). */
+const LIMIT_CODES = ['subscription_sharing_usage_limit_exceeded', 'usage_limit_reached', 'usage_limit_exceeded'];
+
+/** The fields Anton reads from a runtime `turn` event. */
+type TurnEvent = { type: string; request?: { providerId?: string }; response?: unknown; isError?: boolean };
+
+/** Notes when a plan's model call failed because the plan's usage limit was reached, for the usage views. */
+export async function recordPlanLimit(event: TurnEvent): Promise<void> {
+	if (event.type !== 'turn' || !event.request?.providerId) return;
+	const provider = subscriptionProviders().find((candidate) => candidate.gateway === event.request?.providerId);
+	if (!provider || !(await stored(provider.id)).credential) return;
+	const text = JSON.stringify(event.response ?? '');
+	if (LIMIT_CODES.some((code) => text.includes(code))) await save(provider.id, { limitHitAt: new Date().toISOString() });
+}
+
+/** Where each vendor shows the plan's own limits and what is left of them. */
+const USAGE_PAGES: Record<string, string> = { chatgpt: 'https://chatgpt.com/settings/usage' };
+
+/**
+ * A plan's use as Anton saw it: tokens and calls on its models, and what the
+ * same calls would have cost at the vendor's API list prices. The vendor
+ * does not tell apps how much of the plan is left, so that is not here.
+ */
+export type PlanUsage = {
+	id: string;
+	name: string;
+	gateway: string;
+	connected: boolean;
+	tokens: { today: number; week: number; month: number };
+	calls: number;
+	/**
+	 * US dollars the month's calls would have cost per token, at the vendor's list price or, failing that,
+	 * OpenRouter's for the same model; input counted at the input price, cache reads included. Null when no price is known.
+	 */
+	apiValue: number | null;
+	/** Tokens per local day and model over the last 30 days; days with none are left out. */
+	daily: Array<{ day: string; model: string; tokens: number }>;
+	limitHitAt: string | null;
+	usagePage: string | null;
+};
+
+const localDay = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+export async function planUsage(now = new Date()): Promise<PlanUsage[]> {
+	const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+	const weekStart = new Date(midnight);
+	weekStart.setDate(weekStart.getDate() - 6);
+	const thirty = new Date(midnight);
+	thirty.setDate(thirty.getDate() - 29);
+	const since = thirty < monthStart ? thirty : monthStart;
+	return Promise.all(
+		subscriptionProviders().map(async (provider) => {
+			const current = await stored(provider.id);
+			const rows = await tokensByMinute(`${provider.gateway}/`, since).catch(() => []);
+			// The vendor's own list price, else what OpenRouter lists the same model at.
+			const routed = await getProviders()
+				.models.list()
+				.catch(() => []);
+			const priceOf = (id: string) =>
+				current.models.find((model) => model.id === id)?.listPrice ?? routed.find((model) => model.id === `openrouter/${id}`)?.price ?? null;
+			let priced = false;
+			const tokens = { today: 0, week: 0, month: 0 };
+			let calls = 0;
+			let apiValue = 0;
+			const daily = new Map<string, { day: string; model: string; tokens: number }>();
+			for (const row of rows) {
+				const at = new Date(`${row.minute}:00Z`);
+				const total = row.input + row.output;
+				if (at >= midnight) tokens.today += total;
+				if (at >= weekStart) tokens.week += total;
+				if (at >= monthStart) {
+					tokens.month += total;
+					calls += row.calls;
+					const price = priceOf(row.model);
+					if (price) {
+						priced = true;
+						apiValue += (row.input * price.input + row.output * price.output) / 1_000_000;
+					}
+				}
+				if (at >= thirty) {
+					const key = `${localDay(at)} ${row.model}`;
+					const entry = daily.get(key) ?? { day: localDay(at), model: row.model, tokens: 0 };
+					entry.tokens += total;
+					daily.set(key, entry);
+				}
+			}
+			return {
+				id: provider.id,
+				name: provider.name,
+				gateway: provider.gateway,
+				connected: current.credential !== null && !current.problem,
+				tokens,
+				calls,
+				apiValue: priced || tokens.month === 0 ? apiValue : null,
+				daily: [...daily.values()],
+				limitHitAt: current.limitHitAt,
+				usagePage: USAGE_PAGES[provider.id] ?? null,
+			};
+		}),
+	);
+}
 
 /** Tests start each case from nothing stored. */
 export function resetSubscriptionsForTests(): void {

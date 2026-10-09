@@ -48,9 +48,9 @@ export function UsageChip({ session }: { session: Session }) {
 	return (
 		<span
 			className="hidden shrink-0 text-[12px] whitespace-nowrap text-(--text-tertiary) sm:inline"
-			title={`${inputTokens.toLocaleString()} input and ${outputTokens.toLocaleString()} output tokens`}
+			title={`Tokens processed over every model call: ${inputTokens.toLocaleString()} input and ${outputTokens.toLocaleString()} output. Each call reads the whole conversation again, so this grows faster than the context window; the meter beside the composer shows how full that is.`}
 		>
-			{tokens(inputTokens + outputTokens)} · {dollars(cost)}
+			{tokens(inputTokens + outputTokens)} processed · {dollars(cost)}
 		</span>
 	);
 }

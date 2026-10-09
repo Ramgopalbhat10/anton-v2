@@ -51,6 +51,8 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
+import { recordLatestInput } from './services/latest-input.ts';
+import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
@@ -62,6 +64,7 @@ import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
 import {
+	recordPlanLimit,
 	beginLogin,
 	cancelLogin,
 	disconnect,
@@ -88,6 +91,9 @@ const ENV = v.pipe(
 publishUpgradeHandler(handleTerminalUpgrade);
 observeRuntime((event) => {
 	recordAgentEvent(event);
+	void recordLatestInput(event as Parameters<typeof recordLatestInput>[0]);
+	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
+	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
 		.then((id) => (id ? stopIfOverBudget(id) : undefined))
@@ -447,6 +453,10 @@ app.post('/api/sessions/:id/revert', async (c) => {
 	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
+app.get('/api/sessions/:id/context', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json(await contextView(id));
+});
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
 
 app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'))));

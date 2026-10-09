@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, GitBranch, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
+import { Copy, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useMemo, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { BranchArt } from '@/components/illustrations';
 import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem, SplitBar } from '@/components/instrument';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { SourceBar } from '@/components/source-bar';
 import { api, refreshFor } from '@/lib/api';
 import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
@@ -355,20 +354,12 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 		);
 	}
 
-	const { branch, baseBranch, log, source, at } = changes.data;
+	const { log } = changes.data;
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
 
 	return (
 		<div className="flex flex-col gap-2.5">
-			<SourceBar sessionId={sessionId} source={source} at={at}>
-				<span className="flex min-w-0 items-center gap-1.5 truncate" title={`${baseBranch} → ${branch}`}>
-					<Icon icon={GitBranch} size={11} className="text-(--icon-tertiary)" />
-					<span className="truncate">
-						{baseBranch} → {branch}
-					</span>
-				</span>
-			</SourceBar>
 			<div className="in-card gap-3 px-3.5 py-3">
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
 					<Figure value={String(files.length)} unit={files.length === 1 ? 'file changed' : 'files changed'} size="md" />

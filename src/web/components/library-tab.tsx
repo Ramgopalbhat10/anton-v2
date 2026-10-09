@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Download, FileText, Image, Library, Sheet } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { SourceBar } from '@/components/source-bar';
 import { LibraryArt } from '@/components/illustrations';
 import { Caption } from '@/components/instrument';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
@@ -183,11 +182,6 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const items = outputs.data?.outputs ?? [];
 	return (
 		<div className="flex flex-col gap-2">
-			<SourceBar sessionId={sessionId} source={outputs.data?.source} at={outputs.data?.at}>
-				<span>
-					{items.length} {items.length === 1 ? 'file' : 'files'}
-				</span>
-			</SourceBar>
 			{outputs.isError ? (
 				<EmptyState title="Library unavailable" body={outputs.error.message} />
 			) : outputs.isPending ? (

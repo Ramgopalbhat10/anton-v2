@@ -138,4 +138,3 @@
 .sg-file-row[aria-current='true'] { background: var(--bg-selected); }
 .sg-file-row[aria-current='true']:hover { background: var(--bg-selected-hover); }
 
-.sg-panel-tab:has(.sg-panel-close:is(:hover, :focus-visible)) .sg-panel-icon { opacity: 0; }

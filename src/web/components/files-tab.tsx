@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderOpen, Search, X } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { Folder, FolderOpen, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
-import { Branch, buildTree, FileView, StatusChip } from '@/components/file-view';
-import { SourceBar } from '@/components/source-bar';
+import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
+import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, refreshFor } from '@/lib/api';
+import { api, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +48,12 @@ function Matches({
 
 const MATCHES_SHOWN = 200;
 
+/** The file tree's width: remembered, and kept between these bounds; the viewer beside it takes the rest. */
+const TREE_DEFAULT = 220;
+const TREE_MIN = 140;
+/** The open file keeps at least this much room. */
+const VIEWER_MIN = 200;
+
 export function FilesTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	const [opened, setOpened] = useState<string[]>([]);
@@ -62,8 +68,9 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		if (selected === path) setSelected(next[Math.min(opened.indexOf(path), next.length - 1)] ?? null);
 	};
 	const [query, setQuery] = useState('');
+	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
+	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const listing = useQuery({
 		queryKey: ['files', sessionId],
 		queryFn: () => api.files(sessionId),
@@ -78,16 +85,35 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		return undefined;
 	}
 
-	const heading = session.data ? `${session.data.repo.split('/').pop()}/${branchLabel(session.data)}` : '';
+
+	// The tree has its own width, which you drag; beside an open file it can also be put away to read the file wide.
+	const [treeWidth, setTreeWidth] = useStoredState('anton.files.tree-width', TREE_DEFAULT);
+	const [treeHidden, setTreeHidden] = useStoredState('anton.files.tree-hidden', false);
+	const row = useRef<HTMLDivElement>(null);
+	const [rowWidth, setRowWidth] = useState(0);
+	useLayoutEffect(() => {
+		const element = row.current;
+		if (!element) return;
+		const measure = () => setRowWidth(Math.round(element.getBoundingClientRect().width));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	const treeMax = Math.max(TREE_MIN, (rowWidth || 800) - VIEWER_MIN);
+	const width = Math.min(treeMax, Math.max(TREE_MIN, treeWidth));
+	const showTree = !selected || !treeHidden;
 
 	return (
 		<FileIcons>
 			<div className="flex min-h-0 flex-1 flex-col gap-1">
-				<SourceBar sessionId={sessionId} source={listing.data?.source} at={listing.data?.at}>
-					<span className="truncate">{heading}</span>
-				</SourceBar>
-				<div className="flex min-h-0 flex-1 gap-3">
-					<div className={cn('flex min-h-0 shrink-0 flex-col overflow-auto', selected ? 'w-[38%] min-w-28 max-w-60' : 'flex-1')}>
+				<div ref={row} className="flex min-h-0 flex-1">
+					<div
+						aria-label="File tree"
+						hidden={!showTree}
+						className={cn('min-h-0 shrink-0 flex-col overflow-auto', showTree ? 'flex' : 'hidden')}
+						style={{ width }}
+					>
 						<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
 							<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 							<input
@@ -136,9 +162,22 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 							/>
 						)}
 					</div>
+					{showTree ? (
+						<ResizeHandle label="Resize the file tree" width={width} min={TREE_MIN} max={treeMax} initial={TREE_DEFAULT} onResize={setTreeWidth} className="mx-0.5" />
+					) : null}
 					<div className="in-well flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 						{opened.length ? (
-							<div role="tablist" aria-label="Open files" className="flex shrink-0 gap-1 overflow-x-auto border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-1">
+							<div className="flex shrink-0 items-center gap-1 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-1">
+								<IconBtn
+									icon={treeHidden ? PanelLeftOpen : PanelLeftClose}
+									size="xs"
+									label={treeHidden ? 'Show the file tree' : 'Hide the file tree'}
+									aria-pressed={!treeHidden}
+									onClick={() => setTreeHidden(!treeHidden)}
+									className="shrink-0"
+								/>
+								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
+								<div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
 								{opened.map((path) => (
 									<div
 										key={path}
@@ -166,11 +205,32 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 										<IconBtn icon={X} size="xs" label={`Close ${path}`} onClick={() => close(path)} className="mr-1" />
 									</div>
 								))}
+								</div>
+								{selected && isMarkdown(selected) ? (
+									<MarkdownToggle
+										preview={!sourceShown.has(selected)}
+										onChange={(preview) =>
+											setSourceShown((current) => {
+												const next = new Set(current);
+												if (preview) next.delete(selected);
+												else next.add(selected);
+												return next;
+											})
+										}
+										className="shrink-0"
+									/>
+								) : null}
 							</div>
 						) : null}
 						{selected ? (
 							<div role="tabpanel" id={viewerId} aria-labelledby={`${viewerId}-${encodeURIComponent(selected)}`} className="flex min-h-0 flex-1 flex-col">
-								<FileView key={selected} path={selected} queryKey={['file', sessionId, selected]} read={() => api.file(sessionId, selected)} />
+								<FileView
+										key={selected}
+										path={selected}
+										queryKey={['file', sessionId, selected]}
+										read={() => api.file(sessionId, selected)}
+										preview={!sourceShown.has(selected)}
+									/>
 							</div>
 						) : (
 							<EmptyState icon={FolderOpen} title="Open a file" body="Select a file to view its contents." />

@@ -54,6 +54,9 @@ export type Session = {
 	} | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
+	/** The latest message the task was given (by you, a follow-up or an automation), and when; null for tasks from before Anton kept it. */
+	lastInput?: string | null;
+	lastInputAt?: string | null;
 };
 
 export type Usage = { inputTokens: number; outputTokens: number; cost: number };
@@ -204,7 +207,37 @@ export type Budget = { limits: Limits; today: number; task: number | null; block
 export type SpendRow = { key: string | null; tokens: number; cost: number };
 /** One model's spend on one of the last 30 days (`YYYY-MM-DD`, server time); days with nothing spent are left out. */
 export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
-export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[] };
+/**
+ * A plan's use as Anton saw it: tokens and calls on its models, and what they would have cost at API prices.
+ * The vendor does not say how much of the plan is left; `usagePage` is where it shows that.
+ */
+export type PlanUsage = {
+	id: string;
+	name: string;
+	gateway: string;
+	connected: boolean;
+	tokens: { today: number; week: number; month: number };
+	calls: number;
+	/** Null when no API price is known for the plan's models. */
+	apiValue: number | null;
+	daily: Array<{ day: string; model: string; tokens: number }>;
+	limitHitAt: string | null;
+	usagePage: string | null;
+};
+/** The parts of a task's context window, as the last model call measured them. */
+export type ContextPart = 'messages' | 'tools' | 'systemPrompt' | 'skills' | 'mcpTools';
+export type ContextView = {
+	model: string | null;
+	window: number;
+	used: number;
+	/** Where the agent compacts older turns: the window less room kept for the next reply. */
+	autocompactAt: number;
+	parts: Array<{ key: ContextPart; tokens: number }>;
+	at: string | null;
+	/** Every model call the task made and the tokens they processed in all; each call re-reads the conversation, so this outgrows `used`. */
+	task?: { calls: number; tokens: number };
+};
+export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans?: PlanUsage[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the caps at API prices. */
 export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean };
@@ -384,6 +417,7 @@ export const api = {
 	restoreCheckpoint: (id: string, at: string) =>
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
+	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */

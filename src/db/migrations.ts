@@ -82,6 +82,8 @@ const migrations: string[][] = [
 	[`ALTER TABLE plugins ADD COLUMN pick_json TEXT`],
 	// 16: the state and checks of each task's pull request, last read from the host, for the sidebar.
 	[`ALTER TABLE sessions ADD COLUMN pr_json TEXT`],
+	// 17: each task's latest input and when it came, for cards that show what the task was last asked.
+	[`ALTER TABLE sessions ADD COLUMN last_input TEXT`, `ALTER TABLE sessions ADD COLUMN last_input_at TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

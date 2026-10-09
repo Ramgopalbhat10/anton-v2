@@ -15,7 +15,6 @@ import {
 	List,
 	ListFilter,
 	type LucideIcon,
-	MoreHorizontal,
 	PanelLeft,
 	Pin,
 	PinOff,
@@ -130,7 +129,12 @@ const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, pr: GitPul
  */
 function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 	const active = filterCount(view.filters);
+	const running = tasks.filter(isLive).length;
+	// Stopping every sandbox at once asks twice, inside the menu.
+	const [confirming, setConfirming] = useState(false);
+	const stopAll = useMutation({ mutationFn: api.stopAllSandboxes, onSettled: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }) });
 	const stay = (change: () => void) => (event: Event) => {
 		event.preventDefault();
 		change();
@@ -141,7 +145,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 		['spend', 'Spend'],
 	] as const;
 	return (
-		<Menu>
+		<Menu onOpenChange={(open) => !open && setConfirming(false)}>
 			<MenuTrigger asChild>
 				<IconBtn icon={SlidersHorizontal} size="xs" label="View options" className={cn(active > 0 && 'text-(--accent-text)')} />
 			</MenuTrigger>
@@ -237,6 +241,18 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 					Compact view
 				</MenuItem>
 				<MenuSeparator />
+				<MenuItem
+					icon={Square}
+					disabled={running === 0 || stopAll.isPending}
+					hint={running || undefined}
+					onSelect={(event) => {
+						if (confirming) return stopAll.mutate();
+						event.preventDefault();
+						setConfirming(true);
+					}}
+				>
+					{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
+				</MenuItem>
 				<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
 					Open the task list
 				</MenuItem>
@@ -348,18 +364,22 @@ function SectionHeader({
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="group/fold flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={SECTION_ICON[place]} size={12} className={place === 'running' && count ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
 				<SectionLabel className="truncate">{label}</SectionLabel>
-				{count ? <Count>{count}</Count> : null}
-				<span aria-hidden className="mx-1 h-px min-w-2 flex-1 bg-(--border-subtle)" />
-				<Icon
-					icon={ChevronRight}
-					size={12}
-					className="shrink-0 text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out) group-hover/fold:text-(--icon-secondary)"
-					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
-				/>
+				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
+				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
+					{count ? (
+						<Count className="transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</Count>
+					) : null}
+					<Icon
+						icon={ChevronRight}
+						size={12}
+						className="absolute text-(--icon-secondary) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) ease-(--ease-out) group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100"
+						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
+					/>
+				</span>
 			</button>
 			{children ? (
 				// Stays while its menu is open, which Radix marks on the trigger.
@@ -368,33 +388,6 @@ function SectionHeader({
 				</div>
 			) : null}
 		</div>
-	);
-}
-
-/** Stops every sandbox, asking twice inside the menu as it stops them all at once. */
-function RunningMenu({ running }: { running: number }) {
-	const queryClient = useQueryClient();
-	const [confirming, setConfirming] = useState(false);
-	const stopAll = useMutation({ mutationFn: api.stopAllSandboxes, onSettled: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }) });
-	return (
-		<Menu onOpenChange={(open) => !open && setConfirming(false)}>
-			<MenuTrigger asChild>
-				<IconBtn icon={MoreHorizontal} size="xs" label="Running options" />
-			</MenuTrigger>
-			<MenuContent side="right" align="start" sideOffset={6}>
-				<MenuItem
-					icon={Square}
-					disabled={running === 0 || stopAll.isPending}
-					onSelect={(event) => {
-						if (confirming) return stopAll.mutate();
-						event.preventDefault();
-						setConfirming(true);
-					}}
-				>
-					{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
-				</MenuItem>
-			</MenuContent>
-		</Menu>
 	);
 }
 
@@ -614,9 +607,7 @@ export function ChatSidebar({
 					</section>
 				) : null}
 				<section aria-label="Running">
-					<SectionHeader {...header('running', 'Running', running.length)}>
-						<RunningMenu running={sessions.filter(isLive).length} />
-					</SectionHeader>
+					<SectionHeader {...header('running', 'Running', running.length)} />
 					{folded('running') ? null : sessionsQuery.isError ? (
 						<div className="px-4 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (

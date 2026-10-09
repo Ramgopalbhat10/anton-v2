@@ -1,4 +1,5 @@
-import { Check, FileDiff, Files, Globe, History, Library, Maximize2, Minimize2, PanelRight, Plus, SquareTerminal, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { FilesTab } from '@/components/files-tab';
@@ -6,8 +7,10 @@ import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
 import { LibraryTab } from '@/components/library-tab';
 import { PreviewTab } from '@/components/preview-tab';
+import { useResume } from '@/components/source-bar';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
@@ -31,10 +34,14 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	History: HistoryTab,
 };
 
+/**
+ * One open panel as a button, raised when it is the one shown. Hovering it
+ * swaps its icon for the close button, in the same place.
+ */
 function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
 	const panel = panels.find((panel) => panel.name === name)!;
 	return (
-		<div className="sg-panel-tab relative flex h-7 shrink-0 items-center rounded-[8px] hover:bg-(--bg-hover)">
+		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-[8px] hover:bg-(--bg-hover)">
 			{active ? <div className="absolute inset-0 rounded-[8px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<button
 				type="button"
@@ -45,7 +52,7 @@ function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName;
 			>
 				<span
 					className={cn(
-						'sg-panel-icon inline-flex size-4 shrink-0 items-center justify-center transition-opacity duration-(--duration-micro)',
+						'inline-flex size-4 shrink-0 items-center justify-center transition-opacity duration-(--duration-micro) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
 						active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
 					)}
 				>
@@ -60,11 +67,35 @@ function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName;
 				type="button"
 				aria-label={`Close ${name}`}
 				onClick={onClose}
-				className="sg-panel-close absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-(--text-secondary) opacity-0 outline-none hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={X} size={12} />
 			</button>
 		</div>
+	);
+}
+
+/**
+ * Starts the task's sandbox from where it stopped, shown while it is not
+ * running. Until then the panels show the task's files as they were last
+ * saved, or as the branch was when the task began.
+ */
+function ResumeButton({ sessionId }: { sessionId: string }) {
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const resume = useResume(sessionId);
+	const status = session.data?.status;
+	if (!session.data || status === 'running') return null;
+	const starting = status === 'starting' || resume.isPending;
+	const showing = session.data.checkpointAt ? 'the files as last saved' : 'the files as the branch was when the task began';
+	return (
+		<IconBtn
+			icon={starting ? Loader : Play}
+			size="sm"
+			label={starting ? 'Starting the sandbox' : `Resume: start the sandbox. Until then these panels show ${showing}.`}
+			disabled={starting}
+			onClick={() => resume.mutate()}
+			className={cn(starting && '[&_svg]:animate-spin')}
+		/>
 	);
 }
 
@@ -110,11 +141,7 @@ export function VmPanel({
 	return (
 		<WorkspacePane expanded={expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
-				<div
-					data-noscrollbar
-					role="tablist"
-					className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-[10px] border border-(--border-subtle) bg-(--well-bg) p-[3px] empty:hidden"
-				>
+				<div data-noscrollbar role="tablist" aria-label="Workspace panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
 					{tabs.map((name) => (
 						<PanelTab
 							key={name}
@@ -127,6 +154,7 @@ export function VmPanel({
 					))}
 				</div>
 				<div className="relative flex shrink-0 items-center gap-0.5">
+					<ResumeButton sessionId={sessionId} />
 					<Menu open={menuOpen} onOpenChange={setMenuOpen}>
 						<MenuTrigger asChild>
 							<IconBtn icon={Plus} size="sm" label="Add a panel" />
