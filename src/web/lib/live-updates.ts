@@ -1,7 +1,7 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' | 'files' } | { kind: 'subscriptions' } | { kind: 'models' };
+type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' } | { kind: 'subscriptions' } | { kind: 'models' };
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
 function staleFor(change: Change): QueryKey[] {
@@ -9,6 +9,8 @@ function staleFor(change: Change): QueryKey[] {
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections']];
 	if (change.kind === 'models') return [['models']];
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute']];
+	// The Browser panel's page moved, or the browser opened or closed.
+	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id]];
 	if (change.what === 'files') return files;

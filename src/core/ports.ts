@@ -308,3 +308,25 @@ export type DecisionModel = {
 	readonly name: string;
 	decide(state: Record<string, unknown>, questions: Record<string, Question>, signal?: AbortSignal): Promise<Decision>;
 };
+
+/** A browser running on a hosted service: Chrome DevTools Protocol for code, a live view for people. */
+export type HostedBrowser = {
+	id: string;
+	/** WebSocket address of the browser's Chrome DevTools Protocol endpoint. */
+	cdpUrl: string;
+	/** A page that shows the browser and takes the viewer's input; a credential, so only Anton's own UI gets it. */
+	liveViewUrl: string | null;
+	viewport: { width: number; height: number };
+};
+
+/**
+ * Real browsers someone can see and use from inside Anton (Kernel, say).
+ * Each lives until it is removed or has been idle for `idleSeconds`.
+ */
+export type BrowserHost = {
+	readonly name: string;
+	create(options: { idleSeconds: number; viewport: { width: number; height: number }; startUrl?: string }): Promise<HostedBrowser>;
+	/** Null once the browser is gone, removed or timed out. */
+	get(id: string): Promise<HostedBrowser | null>;
+	remove(id: string): Promise<void>;
+};

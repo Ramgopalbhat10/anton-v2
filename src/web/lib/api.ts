@@ -304,6 +304,27 @@ export type ReviewItem = {
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
+export type BrowserPage = { url: string; title: string; canGoBack: boolean; canGoForward: boolean };
+export type BrowserView = {
+	/** False until KERNEL_API_KEY is set. */
+	available: boolean;
+	browser: { liveViewUrl: string; viewport: { width: number; height: number }; openedAt: string; page: BrowserPage | null } | null;
+};
+/** An element picked in the Browser panel, as the page described it. */
+export type PickedElement = {
+	tag: string;
+	selector: string;
+	text: string;
+	html: string;
+	rect: { x: number; y: number; width: number; height: number };
+	styles: Record<string, string>;
+	components: Array<{ name: string; source: string | null }>;
+	url: string;
+	title: string;
+	/** PNG, base64. */
+	image: string | null;
+};
+
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
@@ -418,6 +439,14 @@ export const api = {
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
+	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
+	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),
+	closeBrowser: async (id: string) => void (await request(`/api/sessions/${id}/browser`, { method: 'DELETE' })),
+	navigateBrowser: (id: string, to: { url: string } | { action: 'back' | 'forward' | 'reload' }) => post<BrowserPage>(`/api/sessions/${id}/browser/navigate`, to),
+	inspectBrowser: (id: string, point: { x: number; y: number; pick: boolean }) =>
+		post<{ element: PickedElement | null }>(`/api/sessions/${id}/browser/inspect`, point),
+	clearBrowserHighlight: async (id: string) => void (await post(`/api/sessions/${id}/browser/highlight/clear`)),
+	browserScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/browser/screenshot`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */

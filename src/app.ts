@@ -49,6 +49,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
+import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
@@ -454,6 +455,29 @@ app.post('/api/sessions/:id/revert', async (c) => {
 	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
+// The Browser panel: a hosted browser per task, seen through its live view and driven for the address bar, picking and drawing.
+app.get('/api/sessions/:id/browser', async (c) => c.json(await browserView(c.req.param('id'))));
+app.post('/api/sessions/:id/browser', async (c) => {
+	const { url } = await body(c, v.object({ url: v.optional(v.pipe(v.string(), v.maxLength(4000))) }));
+	return c.json(await openBrowser(c.req.param('id'), url));
+});
+app.delete('/api/sessions/:id/browser', async (c) => {
+	await closeBrowser(c.req.param('id'));
+	return c.json({ ok: true });
+});
+app.post('/api/sessions/:id/browser/navigate', async (c) => {
+	const input = await body(c, v.union([v.object({ url: v.pipe(v.string(), v.maxLength(4000)) }), v.object({ action: v.picklist(['back', 'forward', 'reload']) })]));
+	return c.json(await navigate(c.req.param('id'), input));
+});
+app.post('/api/sessions/:id/browser/inspect', async (c) => {
+	const point = await body(c, v.object({ x: v.number(), y: v.number(), pick: v.optional(v.boolean(), false) }));
+	return c.json({ element: await inspectAt(c.req.param('id'), point) });
+});
+app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
+	await clearHighlight(c.req.param('id'));
+	return c.json({ ok: true });
+});
+app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
 app.get('/api/sessions/:id/context', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json(await contextView(id));

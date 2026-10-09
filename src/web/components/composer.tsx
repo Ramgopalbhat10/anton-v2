@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, ListChecks, Send, Square, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { ImagePlus, ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -8,10 +8,49 @@ import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
+import { elementContext, elementLabel, type InboxItem, keepDraft, keptDraft, takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { askToNotify } from '@/lib/notifications';
 
 /** Sent when a message is only images, since the agent always gets text. */
 const IMAGE_ONLY = 'Look at the attached image.';
+const ELEMENT_ONLY = 'Look at the selected element.';
+
+type Element = Extract<InboxItem, { kind: 'element' }>;
+
+/** Elements picked in the Browser panel: a picture of each and what it is, removable before sending. */
+function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (id: string) => void }) {
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{elements.map(({ id, element }) => (
+				<div
+					key={id}
+					title={`${element.selector}\n${element.url}`}
+					className="flex h-9 max-w-[260px] items-center gap-2 rounded-md border border-(--border-subtle) bg-(--well-bg) pr-1 pl-1"
+				>
+					{element.image ? (
+						<img src={`data:image/png;base64,${element.image}`} alt="" className="h-7 w-10 shrink-0 rounded-[4px] bg-white object-contain" />
+					) : (
+						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-[4px] bg-(--alpha-white-6) text-(--icon-tertiary)">
+							<Icon icon={SquareDashedMousePointer} size={13} />
+						</span>
+					)}
+					<span className="flex min-w-0 flex-col">
+						<span className="truncate font-mono text-[11px] text-(--text-primary)">{elementLabel(element)}</span>
+						<span className="truncate text-[10.5px] text-(--text-tertiary)">{element.components[0]?.source ?? element.selector}</span>
+					</span>
+					<button
+						type="button"
+						aria-label={`Remove ${elementLabel(element)}`}
+						onClick={() => onRemove(id)}
+						className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+					>
+						<Icon icon={X} size={10} />
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
 
 function Thumbnails({ images, onRemove }: { images: ImageAttachment[]; onRemove: (id: string) => void }) {
 	return (
@@ -64,9 +103,24 @@ export function Composer({
 	onSend: (text: string, images: ImageAttachment[]) => Promise<void>;
 	onStop: () => Promise<void>;
 }) {
-	const [text, setText] = useState('');
-	const [images, setImages] = useState<ImageAttachment[]>([]);
+	const [text, setText] = useState(() => keptDraft(sessionId).text);
+	const [images, setImages] = useState<ImageAttachment[]>(() => keptDraft(sessionId).images);
+	const [elements, setElements] = useState<Element[]>(() => keptDraft(sessionId).elements);
+	useEffect(() => keepDraft(sessionId, { text, images, elements }), [sessionId, text, images, elements]);
 	const [notice, setNotice] = useState<string | null>(null);
+	// What the Browser panel hands over (a picked element, a drawing) joins the draft.
+	const inbox = useInbox(sessionId);
+	useEffect(() => {
+		if (!inbox.length) return;
+		const items = takeFromInbox(sessionId);
+		const picked = items.filter((item): item is Element => item.kind === 'element');
+		const drawn = items.flatMap((item) => (item.kind === 'image' ? [item.image] : []));
+		if (picked.length) setElements((current) => [...current, ...picked]);
+		if (drawn.length) {
+			setImages((current) => [...current, ...drawn].slice(0, MAX_IMAGES));
+			setNotice(images.length + drawn.length > MAX_IMAGES ? `Up to ${MAX_IMAGES} images per message.` : null);
+		}
+	}, [inbox, sessionId]);
 	const [stopping, setStopping] = useState(false);
 	const picker = useRef<HTMLInputElement>(null);
 	const attach = async (files: File[]) => {
@@ -97,7 +151,7 @@ export function Composer({
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
-	const ready = (text.trim() || images.length > 0) && !blind && !blocked;
+	const ready = (text.trim() || images.length > 0 || elements.length > 0) && !blind && !blocked;
 
 	return (
 		<form
@@ -106,18 +160,32 @@ export function Composer({
 				event.preventDefault();
 				if (!ready) return;
 				const sent = images;
+				const picked = elements;
 				const typed = text;
 				askToNotify();
 				setText('');
 				setImages([]);
+				setElements([]);
 				setNotice(null);
 				try {
 					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
-					await onSend(expandCommand(text.trim(), saved.commands, true) || IMAGE_ONLY, sent);
+					const message = expandCommand(text.trim(), saved.commands, true) || (picked.length ? ELEMENT_ONLY : IMAGE_ONLY);
+					// Each element goes as text the agent can search the code with, and as its picture when the model can see.
+					const pictures: ImageAttachment[] =
+						model?.vision === false
+							? []
+							: picked.flatMap(({ id, element }) =>
+									element.image
+										? [{ id, filename: `${element.tag}.png`, mimeType: 'image/png', data: element.image, preview: `data:image/png;base64,${element.image}` }]
+										: [],
+								);
+					const context = picked.map(({ element }) => elementContext(element)).join('\n\n');
+					await onSend(context ? `${message}\n\n${context}` : message, [...sent, ...pictures].slice(0, MAX_IMAGES + picked.length));
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
 					setText((current) => current || typed);
 					setImages((current) => (current.length ? current : sent));
+					setElements((current) => (current.length ? current : picked));
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}}
@@ -130,6 +198,7 @@ export function Composer({
 					void attach([...event.dataTransfer.files]);
 				}}
 			>
+				{elements.length > 0 ? <ElementChips elements={elements} onRemove={(id) => setElements((current) => current.filter((item) => item.id !== id))} /> : null}
 				{images.length > 0 ? <Thumbnails images={images} onRemove={(id) => setImages((current) => current.filter((image) => image.id !== id))} /> : null}
 				<ComposerInput
 					value={text}

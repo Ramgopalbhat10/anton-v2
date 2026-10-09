@@ -11,6 +11,7 @@ import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { generalSettings } from './general.ts';
+import { closeBrowser } from './live-browser.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
 
@@ -185,6 +186,8 @@ export async function stopSession(id: string): Promise<Session> {
  */
 export async function deleteSession(id: string): Promise<void> {
 	await stopSession(id);
+	// Its Browser panel's browser too, which the host would otherwise keep until it idles out.
+	await closeBrowser(id).catch((error: unknown) => logProblem('warn', 'Could not close the task browser', error, id));
 	await deleteCheckpoints(id);
 	await deleteSessionRecord(id);
 }
