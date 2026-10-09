@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider } from '../core/ports.ts';
+import type { DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
+import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
@@ -26,8 +27,18 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 	return make();
 }
 
-/** `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before. */
-export type Providers = { sandbox: SandboxProvider; store: ObjectStore; git: GitHost; models: ModelCatalog; decisions?: DecisionModel | null };
+/**
+ * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
+ * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
+ */
+export type Providers = {
+	sandbox: SandboxProvider;
+	store: ObjectStore;
+	git: GitHost;
+	models: ModelCatalog;
+	decisions?: DecisionModel | null;
+	subscriptions?: SubscriptionProvider[];
+};
 
 function decisionModel(): DecisionModel | null {
 	const { apiUrl, apiKey } = config.openrouter;
@@ -43,6 +54,7 @@ export function getProviders(): Providers {
 		git: githubHost(config.github),
 		models: openRouterCatalog(config.openrouter),
 		decisions: decisionModel(),
+		subscriptions: [chatGptSubscription()],
 	};
 	return providers;
 }

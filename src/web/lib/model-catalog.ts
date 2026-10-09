@@ -7,7 +7,7 @@ export type Sort = 'newest' | 'cheapest' | 'context';
 export const FILTERS: Record<Filter, { label: string; test: (model: ModelInfo) => boolean }> = {
 	reasoning: { label: 'Reasoning', test: (model) => model.reasoning.length > 0 },
 	vision: { label: 'Vision', test: (model) => model.vision },
-	free: { label: 'Free', test: (model) => model.price.input === 0 && model.price.output === 0 },
+	free: { label: 'Free', test: (model) => !model.subscription && model.price.input === 0 && model.price.output === 0 },
 	long: { label: '256K+', test: (model) => model.contextLength >= 256_000 },
 };
 
@@ -18,6 +18,34 @@ export const SORTS: Record<Sort, { label: string; compare: (a: ModelInfo, b: Mod
 };
 
 export const NEXT_SORT: Record<Sort, Sort> = { newest: 'cheapest', cheapest: 'context', context: 'newest' };
+
+/** Gateways by the `<gateway>` a model id starts with. */
+const GATEWAYS: Record<string, string> = { openrouter: 'OpenRouter' };
+
+/** Where a model's calls go: the plan you signed in to, such as "ChatGPT", or the gateway that lists it. */
+export function sourceOf(model: ModelInfo): string {
+	if (model.subscription) return model.subscription;
+	const gateway = model.id.split('/')[0];
+	return GATEWAYS[gateway] ?? gateway;
+}
+
+/** One tab of the picker's source switch; `plan` ones bill a subscription, and `connected` is false for a plan not signed in yet. */
+export type Source = { name: string; plan: boolean; connected: boolean; count: number };
+
+/** Plans first, connected or not, then the gateways, each with how many models it offers. */
+export function sourcesOf(models: ModelInfo[], plans: Array<{ name: string; connected: boolean }> = []): Source[] {
+	const counts = new Map<string, number>();
+	for (const model of models) counts.set(sourceOf(model), (counts.get(sourceOf(model)) ?? 0) + 1);
+	const planNames = new Set([...plans.map((plan) => plan.name), ...models.filter((model) => model.subscription).map(sourceOf)]);
+	const planSources = [...planNames].map((name) => ({
+		name,
+		plan: true,
+		connected: (counts.get(name) ?? 0) > 0 || plans.some((plan) => plan.name === name && plan.connected),
+		count: counts.get(name) ?? 0,
+	}));
+	const gateways = [...counts].filter(([name]) => !planNames.has(name)).map(([name, count]) => ({ name, plan: false, connected: true, count }));
+	return [...planSources, ...gateways];
+}
 
 /** Every word of the query must appear in the model's name, vendor or id. */
 export function matches(model: ModelInfo, query: string): boolean {

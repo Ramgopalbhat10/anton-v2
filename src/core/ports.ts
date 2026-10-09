@@ -231,12 +231,63 @@ export type ModelInfo = {
 	/** Levels the model accepts, weakest first; empty when it cannot reason. */
 	reasoning: Reasoning[];
 	defaultReasoning: Reasoning;
+	/** The plan its calls bill, such as "ChatGPT", when it runs on a subscription you signed in to rather than per token. */
+	subscription?: string;
 };
 
 /** The models an LLM gateway offers for agent work (tool calling, text out). */
 export type ModelCatalog = {
 	readonly name: string;
 	list(): Promise<ModelInfo[]>;
+};
+
+/**
+ * A signed-in subscription: a short-lived access token, the rotating refresh
+ * token that renews it, and the OAuth client that sign-in registered.
+ */
+export type SubscriptionCredential = {
+	access: string;
+	refresh: string;
+	/** Unix milliseconds the access token stops working. */
+	expiresAt: number;
+	clientId: string;
+	scopes: string[];
+	/** Who signed in, for display only. */
+	email: string | null;
+};
+
+/** One sign-in attempt: open `url`, approve, and the browser lands on `redirectUri` with what `complete` needs. */
+export type SubscriptionLogin = {
+	url: string;
+	redirectUri: string;
+	/** Takes the full address the browser was sent back to. */
+	complete(callbackUrl: string, signal?: AbortSignal): Promise<SubscriptionCredential>;
+};
+
+/** A model the subscription offers this account, with what the same calls would cost through the vendor's API, when known. */
+export type SubscriptionModel = Omit<ModelInfo, 'price' | 'subscription'> & { listPrice: ModelInfo['price'] | null };
+
+/**
+ * A model subscription the user already pays for (a ChatGPT plan), signed in to
+ * with the vendor's own OAuth flow, whose calls bill the plan instead of per token.
+ */
+export type SubscriptionProvider = {
+	/** `chatgpt`: how settings and routes name it. */
+	readonly id: string;
+	/** The plan, as the model picker shows it: "ChatGPT". */
+	readonly name: string;
+	/** The Flue provider id its models resolve under, the `<gateway>` in `<gateway>/<model>`. */
+	readonly gateway: string;
+	/**
+	 * `hostId` names this Anton install to the vendor and stays the same across
+	 * sign-ins; `previous` is the last sign-in's client, reused so the vendor
+	 * lists Anton once.
+	 */
+	startLogin(hostId: string, previous?: Pick<SubscriptionCredential, 'clientId' | 'email'>): SubscriptionLogin;
+	/** Renews the access token; the refresh token rotates, so the old credential stops working. */
+	refresh(credential: SubscriptionCredential, signal?: AbortSignal): Promise<SubscriptionCredential>;
+	/** The models this account may use now. */
+	listModels(accessToken: string): Promise<SubscriptionModel[]>;
 };
 
 /** A question with a bounded answer: yes or no, or one of a few named options, each with what it means. */

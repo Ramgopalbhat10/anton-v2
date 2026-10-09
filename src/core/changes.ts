@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
-/** What changed, so open pages refetch only that: the task list, or one task's state or files. */
-export type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' | 'files' };
+/** What changed, so open pages refetch only that: the task list, one task's state or files, a subscription sign-in, or the pinned models. */
+export type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' | 'files' } | { kind: 'subscriptions' } | { kind: 'models' };
 
 const bus = new EventEmitter().setMaxListeners(0);
 

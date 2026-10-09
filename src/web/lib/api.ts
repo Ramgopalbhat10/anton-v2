@@ -16,6 +16,8 @@ export type ModelInfo = {
 	vision: boolean;
 	reasoning: Reasoning[];
 	defaultReasoning: Reasoning;
+	/** The plan its calls bill, such as "ChatGPT", when it runs on a subscription rather than per token. */
+	subscription?: string;
 };
 
 /** A task's model and reasoning level; null reasoning runs the model's default. */
@@ -204,6 +206,27 @@ export type SpendRow = { key: string | null; tokens: number; cost: number };
 export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
 export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
+/** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the caps at API prices. */
+export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean };
+/** A plan you can sign in to; the sign-in itself never leaves the server. */
+export type Subscription = {
+	id: string;
+	name: string;
+	gateway: string;
+	state: 'connected' | 'expired' | 'signed-out';
+	email: string | null;
+	connectedAt: string | null;
+	problem: string | null;
+	/** When the current access token lapses; Anton renews it a few minutes before. */
+	expiresAt: string | null;
+	options: SubscriptionOptions;
+	/** The account's models, each with the tokens it used on the plan this month. */
+	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number }>;
+	monthTokens: number;
+	modelsAt: string | null;
+	/** A sign-in waiting for the address the browser is sent back to; `listening` when Anton catches it itself. */
+	login: { url: string; redirectUri: string; listening: boolean; startedAt: string } | null;
+};
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
 /** What every new sandbox gets; see Settings › Sandboxes and Images. */
@@ -298,7 +321,18 @@ export const api = {
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),
 	cleanUpStorage: () => post<CleanupResult>('/api/storage/cleanup'),
-	models: () => json<{ models: ModelInfo[]; default: string }>('/api/models'),
+	/** `pinned` are the models you pinned to the top of the picker, in the order you pinned them. */
+	models: () => json<{ models: ModelInfo[]; default: string; pinned?: string[] }>('/api/models'),
+	setPinnedModels: (pinned: string[]) => json<{ pinned: string[] }>('/api/models/pinned', { method: 'PUT', body: JSON.stringify({ pinned }) }),
+	subscriptions: () => json<{ subscriptions: Subscription[] }>('/api/subscriptions'),
+	setSubscriptionOptions: (id: string, options: SubscriptionOptions) =>
+		json<Subscription>(`/api/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(options) }),
+	beginSubscriptionLogin: (id: string) => post<Subscription>(`/api/subscriptions/${id}/login`),
+	cancelSubscriptionLogin: (id: string) => json<Subscription>(`/api/subscriptions/${id}/login`, { method: 'DELETE' }),
+	finishSubscriptionLogin: (id: string, callbackUrl: string) => post<Subscription>(`/api/subscriptions/${id}/login/complete`, { callbackUrl }),
+	importSubscriptionLogin: (id: string, credential: string) => post<Subscription>(`/api/subscriptions/${id}/import`, { credential }),
+	refreshSubscriptionModels: (id: string) => post<Subscription>(`/api/subscriptions/${id}/models/refresh`),
+	disconnectSubscription: (id: string) => json<Subscription>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
 	profile: () => json<{ name: string | null }>('/api/profile'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addableRepos: () => json<{ repos: string[] }>('/api/repos'),

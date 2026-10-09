@@ -19,6 +19,7 @@ import {
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
 import { browse, takeScreenshot } from '../services/browser.ts';
@@ -33,11 +34,14 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
+import { gatewayToken } from '../services/subscriptions.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { logProblem } from '../services/log.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
+// Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
+setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
 const OUTPUTS = '../outputs';

@@ -20,7 +20,7 @@ const toServers = (project: Project): Server[] =>
 const FIELD = WELL_FIELD;
 
 /** A textarea on the same inset well as the fields. */
-const AREA =
+export const AREA =
 	'w-full resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
 function Section({ title, help, children }: { title: string; help: ReactNode; children: ReactNode }) {
