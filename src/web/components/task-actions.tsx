@@ -31,27 +31,15 @@ export function PullRequestChip({ session }: { session: Session }) {
 			href={session.prUrl}
 			target="_blank"
 			rel="noreferrer"
-			className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] whitespace-nowrap text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+			title={state ? `Pull request ${number ? `#${number} ` : ''}· ${state.label} on GitHub` : 'Pull request on GitHub'}
+			className="group/pr flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] whitespace-nowrap text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
 		>
+			{/* Its state is the icon's colour; the word is in the tooltip. */}
 			<Icon icon={GitPullRequest} size={13} className={state?.tone ?? 'text-(--icon-tertiary)'} />
 			<span>{number ? `#${number}` : 'Pull request'}</span>
-			{state ? <span className={cn('hidden sm:inline', state.tone)}>{state.label}</span> : null}
-			<Icon icon={ArrowUpRight} size={12} className="text-(--icon-tertiary)" />
+			{state ? <span className="sr-only">{state.label}</span> : null}
+			<Icon icon={ArrowUpRight} size={12} className="hidden text-(--icon-tertiary) group-hover/pr:inline" />
 		</a>
-	);
-}
-
-/** What the task has spent on its model so far; nothing until a response finishes. */
-export function UsageChip({ session }: { session: Session }) {
-	const { inputTokens, outputTokens, cost } = session.usage;
-	if (inputTokens + outputTokens === 0) return null;
-	return (
-		<span
-			className="hidden shrink-0 text-[12px] whitespace-nowrap text-(--text-tertiary) sm:inline"
-			title={`Tokens processed over every model call: ${inputTokens.toLocaleString()} input and ${outputTokens.toLocaleString()} output. Each call reads the whole conversation again, so this grows faster than the context window; the meter beside the composer shows how full that is.`}
-		>
-			{tokens(inputTokens + outputTokens)} processed · {dollars(cost)}
-		</span>
 	);
 }
 

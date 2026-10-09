@@ -6,6 +6,8 @@ import {
 	defineTool,
 	setProvider,
 	useAgentFinish,
+	useAgentStart,
+	useDelivery,
 	useMcpConnection,
 	useModel,
 	usePersistentState,
@@ -37,6 +39,7 @@ import { loadedModels } from '../services/models.ts';
 import { gatewayToken } from '../services/subscriptions.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { logProblem } from '../services/log.ts';
+import { recordLatestInput } from '../services/latest-input.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -326,6 +329,17 @@ const PLAN_PROMPT = [
  * (from the agent, the terminal, Resume or a restore) keeps working there.
  * In plan mode it may look but not change anything until its plan is approved.
  */
+/**
+ * Keeps the task's latest input for its card: each message the agent is given, typed, a follow-up or an
+ * automation's, as it starts a reply or joins one already running. The runtime emits no event for them.
+ */
+function useLatestInput(id: string) {
+	const delivery = useDelivery();
+	useAgentStart(async () => {
+		if (delivery.kind === 'user') await recordLatestInput(id, delivery.body);
+	});
+}
+
 export function Coder({ id }: AgentProps) {
 	const { model, reasoning } = modelFor(id);
 	useModel(model, { thinkingLevel: reasoning });
@@ -339,6 +353,7 @@ export function Coder({ id }: AgentProps) {
 	if (scripts) useRunScript(id, workspace);
 	useRemember(id);
 	useSkills(id, workspace);
+	useLatestInput(id);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({

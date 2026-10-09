@@ -20,7 +20,7 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 
 const { RackCard } = await import('@/components/task-rack');
 const { ContextMeter } = await import('@/components/context-meter');
-const { StackedDaysChart } = await import('@/components/charts');
+const { ArcDial, DotMatrix, StackedDaysChart } = await import('@/components/charts');
 const { VmPanel } = await import('@/components/vm-panel');
 
 const model = (patch: Partial<ModelInfo>): ModelInfo => ({
@@ -171,6 +171,47 @@ describe('Daily chart', () => {
 		fireEvent.keyDown(chart, { key: 'ArrowLeft' });
 		expect(chart.querySelector('[aria-live]')?.textContent).toBe('Oct 6: 1000K');
 		rect.mockRestore();
+	});
+});
+
+describe('Spend matrix and dial', () => {
+	it('lights each day in proportion to the busiest, labels that day, and reads any day by arrow keys', () => {
+		const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 300, height: 120, top: 0, left: 0, right: 300, bottom: 120, x: 0, y: 0, toJSON: () => ({}) });
+		const { container } = renderWithQueries(
+			<DotMatrix
+				values={[
+					{ key: '2026-10-06', value: 0.04 },
+					{ key: '2026-10-07', value: 0 },
+					{ key: '2026-10-08', value: 0.01 },
+				]}
+				rows={4}
+				format={(value) => `$${value.toFixed(2)}`}
+				label="Spend per day"
+			/>,
+		);
+		const matrix = screen.getByRole('figure', { name: 'Spend per day' });
+		// The busiest day fills its column; a quarter of it lights one cell; a quiet day none.
+		const lit = [...container.querySelectorAll('svg > g')].map((day) => day.querySelectorAll('rect[fill="var(--accent-base)"]').length);
+		expect(lit).toEqual([4, 0, 1]);
+		expect(within(matrix).getByText('$0.04')).toBeTruthy();
+		expect(within(matrix).getByText('Today')).toBeTruthy();
+		fireEvent.keyDown(matrix, { key: 'ArrowLeft' });
+		expect(matrix.querySelector('[aria-live]')?.textContent).toBe('Oct 8: $0.01');
+		fireEvent.keyDown(matrix, { key: 'ArrowLeft' });
+		expect(matrix.querySelector('[aria-live]')?.textContent).toBe('Oct 7: $0.00');
+		rect.mockRestore();
+	});
+
+	it('is a meter of the spend against the cap, with what is left in the middle', () => {
+		renderWithQueries(
+			<ArcDial label="Spend against the cap" value={2.5} max={10}>
+				<span>$7.50 left</span>
+			</ArcDial>,
+		);
+		const dial = screen.getByRole('meter', { name: 'Spend against the cap' });
+		expect(dial.getAttribute('aria-valuenow')).toBe('2.5');
+		expect(dial.getAttribute('aria-valuemax')).toBe('10');
+		expect(within(dial).getByText('$7.50 left')).toBeTruthy();
 	});
 });
 

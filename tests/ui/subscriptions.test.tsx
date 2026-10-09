@@ -298,6 +298,33 @@ describe('Model picker', () => {
 		expect(await screen.findByText('ChatGPT is not connected. Sign in under Settings › Subscriptions.')).toBeTruthy();
 	});
 
+	it('filters by any number of providers next to the count, and clears them', async () => {
+		const claude = model({ id: 'openrouter/anthropic/claude-x', name: 'Claude X', vendor: 'Anthropic' });
+		openPicker({ model: routed.id, reasoning: null }, [connected], [routed, gpt, claude]);
+		const list = await screen.findByRole('listbox', { name: 'Models' });
+		const trigger = await screen.findByRole('button', { name: 'Filter by provider' });
+		fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' });
+		let menu = await screen.findByRole('menu');
+		expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([expect.stringMatching(/Acme1$/), expect.stringMatching(/Anthropic1$/), expect.stringMatching(/OpenAI1$/)]);
+		fireEvent.click(within(menu).getByRole('menuitem', { name: /Anthropic/ }));
+		fireEvent.click(within(menu).getByRole('menuitem', { name: /OpenAI/ }));
+		expect(screen.getByRole('menu')).toBeTruthy();
+		await userEvent.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+		expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual([expect.stringContaining('GPT-6.1-Sol'), expect.stringContaining('Claude X')]);
+		expect(screen.getByText('2/3')).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Providers: Anthropic, OpenAI' })).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: 'Clear the provider filter' }));
+		expect(within(list).getAllByRole('option')).toHaveLength(3);
+		expect(screen.getByText('3')).toBeTruthy();
+		menu = await (async () => {
+			fireEvent.pointerDown(screen.getByRole('button', { name: 'Filter by provider' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+			return screen.findByRole('menu');
+		})();
+		expect(within(menu).queryByRole('button', { name: /Clear/ })).toBeNull();
+	});
+
 	it('sets the effort along the bottom, by click or with the arrow keys', async () => {
 		openPicker({ model: gpt.id, reasoning: null });
 		const effort = await screen.findByRole('radiogroup', { name: 'Reasoning effort' });

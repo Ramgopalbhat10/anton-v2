@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, Pin, Search, SlidersHorizontal } from 'lucide-react';
+import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, type PointerEvent, useMemo, useRef, useState } from 'react';
 import { Count } from '@/components/instrument';
@@ -201,15 +201,15 @@ function ModelRow({
 }
 
 /**
- * The model's efforts as a row of labels over a thin track that fills up to
- * the chosen one. Click a level, drag along the row, or use the arrow keys.
+ * The model's efforts along one ramp of thin ticks rising left to right, lit
+ * up to the end of the chosen level; a dot marks the model's default. Click a
+ * level, drag along the row, or use the arrow keys.
  */
 export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; value: Reasoning; onChange: (level: Reasoning) => void }) {
 	const row = useRef<HTMLDivElement>(null);
 	if (!model?.reasoning.length) return <span className="text-[11px] text-(--text-disabled)">No reasoning step</span>;
 	const levels = model.reasoning;
 	const chosen = Math.max(0, levels.indexOf(value));
-	const centre = (index: number) => ((index + 0.5) / levels.length) * 100;
 
 	function onPointer(event: PointerEvent<HTMLDivElement>) {
 		if (event.type === 'pointerdown') event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -226,6 +226,11 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 		onChange(levels[Math.min(levels.length - 1, Math.max(0, chosen + step))]);
 	}
 
+	// One ramp of thin ticks rising left to right, a few per level, lit up to the end of the chosen level.
+	const PER = 7;
+	const total = levels.length * PER;
+	const litUpTo = (chosen + 1) * PER - 1;
+
 	return (
 		<div
 			ref={row}
@@ -234,45 +239,143 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 			onKeyDown={onKeyDown}
 			onPointerDown={onPointer}
 			onPointerMove={onPointer}
-			className="relative grid min-w-0 flex-1 touch-none pb-1.5"
+			className="grid min-w-0 flex-1 touch-none"
 			style={{ gridTemplateColumns: `repeat(${levels.length}, minmax(0, 1fr))` }}
 		>
-			{levels.map((level, index) => (
+			{levels.map((level, index) => {
+				const isDefault = level === model.defaultReasoning;
+				return (
+					<button
+						type="button"
+						role="radio"
+						aria-checked={index === chosen}
+						tabIndex={index === chosen ? 0 : -1}
+						key={level}
+						onClick={() => onChange(level)}
+						title={isDefault ? "The model's default" : undefined}
+						className="group/level flex min-w-0 flex-col items-stretch gap-1 rounded-[6px] pt-1 pb-0.5 outline-none focus-visible:shadow-(--focus-ring)"
+					>
+						<span aria-hidden className="flex h-5 items-end justify-around px-[3px]">
+							{Array.from({ length: PER }, (_, tick) => {
+								const at = index * PER + tick;
+								const lit = at <= litUpTo;
+								return (
+									<span
+										key={tick}
+										className={cn('w-[2px] rounded-full transition-colors duration-(--duration-micro)', !lit && 'bg-(--segment-off) group-hover/level:bg-(--alpha-white-14)')}
+										style={{
+											height: `${22 + (at / (total - 1)) * 78}%`,
+											...(lit ? { background: 'var(--accent-base)', opacity: 0.3 + 0.7 * (at / Math.max(1, litUpTo)) } : {}),
+										}}
+									/>
+								);
+							})}
+						</span>
+						<span
+							className={cn(
+								'flex items-center justify-center gap-1 truncate font-mono text-[9.5px] tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
+								index === chosen ? 'text-(--text-primary)' : 'text-(--text-disabled) group-hover/level:text-(--text-secondary)',
+							)}
+						>
+							{REASONING_LABEL[level]}
+							{isDefault ? <span aria-hidden className="size-1 shrink-0 rounded-full bg-current opacity-60" /> : null}
+						</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+/**
+ * Which providers' models to list, any number at once. With none chosen it is
+ * a quiet icon; with some, their logos side by side and a button to clear them.
+ */
+function ProviderFilter({
+	providers,
+	chosen,
+	onToggle,
+	onClear,
+}: {
+	providers: Array<{ vendor: string; count: number; model: ModelInfo }>;
+	chosen: Set<string>;
+	onToggle: (vendor: string) => void;
+	onClear: () => void;
+}) {
+	const picked = providers.filter((entry) => chosen.has(entry.vendor));
+	return (
+		<span className={cn('flex shrink-0 items-center rounded-[7px]', picked.length && 'bg-(--accent-bg-subtle)')}>
+			<Menu>
+				<MenuTrigger asChild>
+					<button
+						type="button"
+						aria-label={picked.length ? `Providers: ${picked.map((entry) => entry.vendor).join(', ')}` : 'Filter by provider'}
+						title={picked.length ? picked.map((entry) => entry.vendor).join(', ') : 'Filter by provider'}
+						className={cn(
+							'inline-flex h-7 shrink-0 items-center justify-center rounded-[7px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
+							picked.length ? 'gap-1 pr-1 pl-1.5' : 'w-7',
+						)}
+					>
+						{picked.length ? (
+							<>
+								<span className="flex items-center">
+									{picked.slice(0, 3).map((entry, index) => (
+										<span key={entry.vendor} className={cn('flex rounded-[5px] shadow-[0_0_0_1.5px_var(--pop-bg)]', index > 0 && '-ml-1')}>
+											<ModelMark model={{ ...entry.model, subscription: undefined }} size={15} />
+										</span>
+									))}
+								</span>
+								{picked.length > 3 ? <span className="in-num text-[10px] text-(--accent-text)">+{picked.length - 3}</span> : null}
+							</>
+						) : (
+							<Icon icon={Boxes} size={13} />
+						)}
+					</button>
+				</MenuTrigger>
+				<MenuContent align="end" collisionPadding={8} className="max-h-[min(360px,var(--radix-dropdown-menu-content-available-height))] min-w-[220px] overflow-y-auto">
+					<div className="flex items-center justify-between pr-1">
+						<MenuLabel>Providers</MenuLabel>
+						{picked.length ? (
+							<button
+								type="button"
+								onClick={onClear}
+								className="rounded-[5px] px-1.5 py-0.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							>
+								Clear {picked.length}
+							</button>
+						) : null}
+					</div>
+					{providers.map((entry) => (
+						<MenuItem
+							key={entry.vendor}
+							checked={chosen.has(entry.vendor)}
+							hint={entry.count}
+							onSelect={(event) => {
+								// Several can be chosen, so the menu stays open.
+								event.preventDefault();
+								onToggle(entry.vendor);
+							}}
+						>
+							<span className="flex min-w-0 items-center gap-2">
+								<ModelMark model={{ ...entry.model, subscription: undefined }} size={14} />
+								<span className="truncate">{entry.vendor}</span>
+							</span>
+						</MenuItem>
+					))}
+				</MenuContent>
+			</Menu>
+			{picked.length ? (
 				<button
 					type="button"
-					role="radio"
-					aria-checked={index === chosen}
-					tabIndex={index === chosen ? 0 : -1}
-					key={level}
-					onClick={() => onChange(level)}
-					title={level === model.defaultReasoning ? "The model's default" : undefined}
-					className={cn(
-						'h-6 min-w-0 truncate rounded-[5px] font-mono text-[10px] tracking-[0.04em] uppercase outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
-						index === chosen ? 'text-(--text-primary)' : 'text-(--text-disabled) hover:text-(--text-secondary)',
-					)}
+					aria-label="Clear the provider filter"
+					title="Clear"
+					onClick={onClear}
+					className="inline-flex size-6 items-center justify-center rounded-[6px] text-(--accent-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 				>
-					{REASONING_LABEL[level]}
+					<Icon icon={X} size={11} />
 				</button>
-			))}
-			<span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-(--segment-off)" />
-			<span
-				aria-hidden
-				className="pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full bg-(--accent-base) transition-[width] duration-(--duration-micro)"
-				style={{ width: `${centre(chosen)}%` }}
-			/>
-			<span
-				aria-hidden
-				className="pointer-events-none absolute bottom-[-2px] size-1.5 -translate-x-1/2 rounded-full bg-(--accent-base) shadow-[0_0_0_3px_var(--accent-bg-subtle)] transition-[left] duration-(--duration-micro)"
-				style={{ left: `${centre(chosen)}%` }}
-			/>
-			{levels.includes(model.defaultReasoning) && model.defaultReasoning !== value ? (
-				<span
-					aria-hidden
-					className="pointer-events-none absolute bottom-[-1px] size-1 -translate-x-1/2 rounded-full bg-(--text-disabled)"
-					style={{ left: `${centre(levels.indexOf(model.defaultReasoning))}%` }}
-				/>
 			) : null}
-		</div>
+		</span>
 	);
 }
 
@@ -332,6 +435,7 @@ export function ModelPicker({
 	const [filters, setFilters] = useState<Set<Filter>>(() => new Set());
 	const [sort, setSort] = useState<Sort>('newest');
 	const [source, setSource] = useState(ALL);
+	const [vendors, setVendors] = useState<Set<string>>(() => new Set());
 	const [cursor, setCursor] = useState(0);
 	const list = useRef<HTMLDivElement>(null);
 
@@ -343,11 +447,23 @@ export function ModelPicker({
 		[all, plans.data],
 	);
 	const unconnected = sources.filter((entry) => entry.plan && !entry.connected && (source === ALL || source === entry.name));
-	const inSource = useMemo(() => (source === ALL ? all : all.filter((model) => sourceOf(model) === source)), [all, source]);
+	const fromSource = useMemo(() => (source === ALL ? all : all.filter((model) => sourceOf(model) === source)), [all, source]);
+	// The source's providers, busiest first, each with a model to show its logo.
+	const providers = useMemo(() => {
+		const byVendor = new Map<string, { vendor: string; count: number; model: ModelInfo }>();
+		for (const model of fromSource) {
+			const entry = byVendor.get(model.vendor);
+			if (entry) entry.count++;
+			else byVendor.set(model.vendor, { vendor: model.vendor, count: 1, model });
+		}
+		return [...byVendor.values()].sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
+	}, [fromSource]);
+	const ofVendor = (model: ModelInfo) => vendors.size === 0 || vendors.has(model.vendor);
+	const inSource = useMemo(() => fromSource.filter(ofVendor), [fromSource, vendors]);
 	const browsing = !query && filters.size === 0;
 	const matching = useMemo(() => visibleModels(inSource, query, filters, sort), [inSource, query, filters, sort]);
 	const pinnedIds = useMemo(() => models.data?.pinned ?? [], [models.data]);
-	const sections = useMemo(() => sectionsFor(all, matching, browsing, source, pinnedIds), [all, matching, browsing, source, pinnedIds]);
+	const sections = useMemo(() => sectionsFor(all.filter(ofVendor), matching, browsing, source, pinnedIds), [all, vendors, matching, browsing, source, pinnedIds]);
 	const flat = sections.flatMap((section) => section.models);
 	const active = flat[Math.min(cursor, flat.length - 1)];
 	const narrowed = source !== ALL || filters.size > 0 || sort !== 'newest';
@@ -372,6 +488,15 @@ export function ModelPicker({
 		rememberModel(model.id);
 		if (model.id !== value.model) onChange({ model: model.id, reasoning: null });
 		if (close) setOpen(false);
+	}
+
+	function toggleVendor(vendor: string) {
+		setCursor(0);
+		setVendors((current) => {
+			const next = new Set(current);
+			if (!next.delete(vendor)) next.add(vendor);
+			return next;
+		});
 	}
 
 	function toggle(filter: Filter) {
@@ -452,7 +577,18 @@ export function ModelPicker({
 							aria-label="Search models"
 							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
 						/>
-						{models.isPending ? null : <Count>{browsing ? inSource.length : `${matching.length}/${inSource.length}`}</Count>}
+						{models.isPending ? null : <Count>{browsing && vendors.size === 0 ? fromSource.length : `${matching.length}/${fromSource.length}`}</Count>}
+						{providers.length > 1 ? (
+							<ProviderFilter
+								providers={providers}
+								chosen={vendors}
+								onToggle={toggleVendor}
+								onClear={() => {
+									setVendors(new Set());
+									setCursor(0);
+								}}
+							/>
+						) : null}
 						<Menu>
 							<MenuTrigger asChild>
 								<button
@@ -580,7 +716,7 @@ export function ModelPicker({
 						)}
 					</div>
 
-					<div className="flex h-11 shrink-0 items-center gap-3 border-t border-(--border-subtle) px-3">
+					<div className="flex shrink-0 items-center gap-3 border-t border-(--border-subtle) py-1.5 pr-2 pl-3">
 						<span className="in-caption shrink-0">Effort</span>
 						<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
 					</div>

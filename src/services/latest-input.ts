@@ -1,42 +1,63 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { createClient } from '@libsql/client';
+import { config } from '../config.ts';
+import { appDb } from '../db/client.ts';
 import { updateSession } from '../db/sessions.ts';
 import { logProblem } from './log.ts';
-
-/** The fields Anton reads from a runtime `message_end` event. */
-type MessageEvent = {
-	type: string;
-	instanceId?: string;
-	agentName?: string;
-	taskId?: string;
-	session?: string;
-	message?: { role?: string; content?: unknown; timestamp?: number };
-};
 
 /** Long inputs are kept to what a card can show. */
 const MAX_LENGTH = 2000;
 
-function textOf(content: unknown): string {
-	if (typeof content === 'string') return content;
-	if (!Array.isArray(content)) return '';
-	return content
-		.filter((block): block is { type: 'text'; text: string } => block?.type === 'text' && typeof block.text === 'string')
-		.map((block) => block.text)
-		.join('\n');
+/**
+ * Keeps a task's latest input: one you typed, a follow-up, or an
+ * automation's prompt. The coding agent calls this for every message it is
+ * given (`useLatestInput` in `coder.ts`).
+ */
+export async function recordLatestInput(id: string, text: string, at = new Date()): Promise<void> {
+	const input = text.trim();
+	if (!input) return;
+	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString() }).catch((error: unknown) =>
+		logProblem('warn', 'Could not keep the latest input', error, id),
+	);
+}
+
+/** The message in a stored submission: a bare string, or `{ kind: 'user', body }`. */
+function bodyOf(payload: string): string | null {
+	const message = (JSON.parse(payload) as { message?: unknown }).message;
+	if (typeof message === 'string') return message;
+	const user = message as { kind?: string; body?: unknown } | undefined;
+	return user?.kind === 'user' && typeof user.body === 'string' ? user.body : null;
 }
 
 /**
- * Keeps each task's latest input, from the runtime's event for every message
- * the coding agent is given: one you typed, a follow-up, or an automation's
- * prompt. Subagents' and the reviewer's messages are not the task's input.
+ * Fills in the latest input of tasks from before it was kept, from the
+ * runtime's own record of the messages it accepted (`flue.db`). Best effort,
+ * once at start: nothing else in Anton reads the runtime's tables, so if their
+ * shape changes, older tasks simply keep showing their first message.
  */
-export async function recordLatestInput(event: MessageEvent): Promise<void> {
-	if (event.type !== 'message_end' || event.message?.role !== 'user' || !event.instanceId || event.taskId) return;
-	// A subagent's task runs in a session of its own; only the main conversation's input is the task's.
-	if (event.session !== undefined && event.session !== 'default') return;
-	if (event.agentName && !/^coder$/i.test(event.agentName)) return;
-	const text = textOf(event.message.content).trim();
-	if (!text) return;
-	const at = new Date(event.message.timestamp ?? Date.now()).toISOString();
-	await updateSession(event.instanceId, { lastInput: text.slice(0, MAX_LENGTH), lastInputAt: at }).catch((error: unknown) =>
-		logProblem('warn', 'Could not keep the latest input', error, event.instanceId),
-	);
+export async function backfillLatestInputs(file = path.join(config.dataDir, 'flue.db')): Promise<number> {
+	if (!existsSync(file)) return 0;
+	const db = await appDb();
+	const missing = new Set((await db.execute('SELECT id FROM sessions WHERE last_input IS NULL')).rows.map((row) => String(row.id)));
+	if (!missing.size) return 0;
+	const flue = createClient({ url: `file:${file}` });
+	try {
+		const rows = (await flue.execute('SELECT session_key, payload, accepted_at FROM flue_agent_submissions ORDER BY sequence')).rows;
+		const latest = new Map<string, { text: string; at: Date }>();
+		for (const row of rows) {
+			// `agent-session:["Coder","<task id>","default","default"]`: the coding agent's main conversation.
+			const [agent, id, session] = JSON.parse(String(row.session_key).replace(/^agent-session:/, '')) as string[];
+			if (agent !== 'Coder' || session !== 'default' || !missing.has(id)) continue;
+			const text = bodyOf(String(row.payload));
+			if (text?.trim()) latest.set(id, { text, at: new Date(Number(row.accepted_at)) });
+		}
+		for (const [id, entry] of latest) await recordLatestInput(id, entry.text, entry.at);
+		return latest.size;
+	} catch (error) {
+		logProblem('warn', 'Could not fill in older tasks’ latest inputs', error);
+		return 0;
+	} finally {
+		flue.close();
+	}
 }

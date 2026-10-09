@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /* Charts drawn as plain SVG in the instrument style: thin dashed guides,
@@ -247,30 +247,180 @@ export function StackedDaysChart({
 	);
 }
 
-/** A small trend line with a soft fill under it, no axes, ending in a dot: the shape of the last few weeks. */
-export function Sparkline({ values, label, height = 44, color = 'var(--data-1)' }: { values: Array<{ key: string; value: number }>; label: string; height?: number; color?: string }) {
+/**
+ * Days as a dot matrix: a column of small cells per day, lit from the bottom
+ * in proportion to the busiest day, brightest at the top of each column. Quiet
+ * days keep their unlit column, so a month of little use still reads as a
+ * month. The busiest day is labelled; hover a day, or focus the matrix and use
+ * the arrow keys, to read it.
+ */
+export function DotMatrix({
+	values,
+	label,
+	format,
+	rows = 7,
+	color = 'var(--accent-base)',
+	className,
+}: {
+	values: Array<{ key: string; value: number }>;
+	label: string;
+	format: (value: number) => string;
+	rows?: number;
+	color?: string;
+	className?: string;
+}) {
 	const [box, width] = useWidth<HTMLDivElement>();
-	const id = useId();
-	const top = Math.max(...values.map((entry) => entry.value), 0) * 1.15 || 1;
-	const points = values.map((entry, index) => [values.length > 1 ? (index / (values.length - 1)) * (width - 4) + 2 : width / 2, height - 3 - (entry.value / top) * (height - 6)] as const);
-	const line = points.map(([px, py], index) => `${index ? 'L' : 'M'}${px.toFixed(1)} ${py.toFixed(1)}`).join(' ');
-	const last = points[points.length - 1];
+	const [active, setActive] = useState<number | null>(null);
+	const cols = values.length;
+	// The cells fill the width, up to a size, with gaps that shrink along with them.
+	const gap = width / Math.max(1, cols) < 9 ? 1.5 : 2;
+	const cell = cols ? Math.max(3, Math.min(14, (width - (cols - 1) * gap) / cols)) : 0;
+	const matrixW = cols * cell + (cols - 1) * gap;
+	const left = Math.max(0, (width - matrixW) / 2);
+	const top = 16;
+	const matrixH = rows * cell + (rows - 1) * gap;
+	const height = top + matrixH + 20;
+	const peak = Math.max(0, ...values.map((entry) => entry.value));
+	const peakIndex = peak > 0 ? values.findIndex((entry) => entry.value === peak) : -1;
+	const lit = (value: number) => (value > 0 && peak > 0 ? Math.max(1, Math.round((value / peak) * rows)) : 0);
+	const x = (index: number) => left + index * (cell + gap);
+	const y = (row: number) => top + matrixH - (row + 1) * cell - row * gap;
+	const current = active === null ? null : values[active];
+
+	function onKeyDown(event: KeyboardEvent) {
+		const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+		if (event.key === 'Escape') setActive(null);
+		if (!step) return;
+		event.preventDefault();
+		setActive((index) => Math.min(cols - 1, Math.max(0, index === null ? cols - 1 : index + step)));
+	}
+
 	return (
-		<div ref={box} role="img" aria-label={label} className="in-chart" style={{ height }}>
-			{width > 0 && points.length ? (
+		<div
+			ref={box}
+			role="figure"
+			aria-label={label}
+			tabIndex={0}
+			onKeyDown={onKeyDown}
+			onBlur={() => setActive(null)}
+			onPointerLeave={() => setActive(null)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-[8px] focus-visible:shadow-(--focus-ring)', className)}
+			style={{ height }}
+		>
+			{width > 0 && cols ? (
 				<svg width={width} height={height} aria-hidden className="block overflow-visible">
-					<defs>
-						<linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0" stopColor={color} stopOpacity="0.3" />
-							<stop offset="1" stopColor={color} stopOpacity="0" />
-						</linearGradient>
-					</defs>
-					<path d={`${line} L${last[0].toFixed(1)} ${height} L${points[0][0].toFixed(1)} ${height} Z`} fill={`url(#${id}-fill)`} />
-					<path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-					<circle cx={last[0]} cy={last[1]} r={2.5} fill={color} />
-					<circle cx={last[0]} cy={last[1]} r={5} fill={color} fillOpacity={0.2} />
+					{values.map((entry, index) => {
+						const on = lit(entry.value);
+						const today = index === cols - 1;
+						const dim = active !== null && active !== index;
+						return (
+							<g key={entry.key} opacity={dim ? 0.4 : 1} style={{ transition: 'opacity 120ms' }}>
+								<rect x={x(index) - gap / 2} y={0} width={cell + gap} height={height} fill="transparent" onPointerEnter={() => setActive(index)} />
+								{Array.from({ length: rows }, (_, row) => {
+									const isLit = row < on;
+									// Lit cells brighten towards the top of the column.
+									const opacity = isLit ? 0.35 + 0.65 * ((row + 1) / on) : today ? 0.16 : 0.08;
+									return (
+										<rect
+											key={row}
+											x={x(index)}
+											y={y(row)}
+											width={cell}
+											height={cell}
+											rx={Math.max(1, cell * 0.28)}
+											fill={isLit ? color : 'currentColor'}
+											fillOpacity={opacity}
+											pointerEvents="none"
+										/>
+									);
+								})}
+								{on > 0 && (active === index || (active === null && index === peakIndex)) ? (
+									<text x={x(index) + cell / 2} y={y(on - 1) - 5} textAnchor="middle" fill="var(--text-secondary)" pointerEvents="none">
+										{format(entry.value)}
+									</text>
+								) : null}
+							</g>
+						);
+					})}
+					<text x={left} y={height - 4} fill="currentColor">
+						{shortDay(values[0].key)}
+					</text>
+					<text x={left + matrixW} y={height - 4} textAnchor="end" fill="var(--text-secondary)">
+						Today
+					</text>
 				</svg>
 			) : null}
+			<div aria-live="polite" className="sr-only">
+				{current ? `${shortDay(current.key)}: ${format(current.value)}` : ''}
+			</div>
+			{current && active !== null && lit(current.value) === 0 ? (
+				<div
+					className="in-pop pointer-events-none absolute z-10 px-2 py-1 text-[11px] whitespace-nowrap"
+					style={{ left: Math.min(Math.max(x(active) + cell / 2, 50), width - 50), top: y(0) - 6, transform: 'translate(-50%, -100%)' }}
+				>
+					<span className="text-(--text-tertiary)">{shortDay(current.key)}</span> <span className="in-num text-(--text-secondary)">{format(current.value)}</span>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * A dial of ticks around 220 degrees: lit from the start up to the value, a
+ * warning band near the end, and a bright mark riding the arc where the value
+ * is. The middle holds whatever matters most about it.
+ */
+export function ArcDial({
+	value,
+	max,
+	warnAt = 0.8,
+	label,
+	children,
+	size = 132,
+	ticks = 44,
+}: {
+	value: number;
+	max: number;
+	/** Where the warning band starts, as a share of `max`. */
+	warnAt?: number;
+	label: string;
+	children?: ReactNode;
+	size?: number;
+	ticks?: number;
+}) {
+	const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+	const sweep = 220;
+	const start = 90 + sweep / 2;
+	const cx = size / 2;
+	const cy = size / 2;
+	const outer = size / 2 - 4;
+	const point = (t: number, radius: number) => {
+		const angle = ((start - t * sweep) * Math.PI) / 180;
+		return [cx + radius * Math.cos(angle), cy - radius * Math.sin(angle)] as const;
+	};
+	const [mx, my] = point(fraction, outer - 6);
+	const height = Math.ceil(cy + outer * Math.sin(((sweep / 2 - 90) * Math.PI) / 180) + 6);
+	return (
+		<div role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} className="relative shrink-0" style={{ width: size, height }}>
+			<svg width={size} height={height} aria-hidden className="block overflow-visible">
+				{Array.from({ length: ticks + 1 }, (_, index) => {
+					const t = index / ticks;
+					const major = index % 11 === 0;
+					const [x1, y1] = point(t, outer - (major ? 12 : 9));
+					const [x2, y2] = point(t, outer);
+					const warn = t >= warnAt;
+					const on = fraction > 0 && t <= fraction;
+					const stroke = t >= 1 ? 'var(--danger-base)' : warn ? 'var(--warning-base)' : on ? 'var(--accent-base)' : 'var(--tick-off)';
+					// The lit run fades in towards the value, like a trail behind it.
+					const opacity = on ? 0.45 + 0.55 * (t / Math.max(fraction, 1e-6)) : warn ? 0.45 : major ? 1 : 0.75;
+					return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeOpacity={opacity} strokeWidth={major ? 1.5 : 1} strokeLinecap="round" />;
+				})}
+				<circle cx={mx} cy={my} r={6} fill="var(--accent-base)" fillOpacity={0.18} />
+				<circle cx={mx} cy={my} r={2.5} fill="var(--accent-base)" />
+			</svg>
+			<div className="absolute inset-x-0 flex flex-col items-center gap-0.5" style={{ top: cy - 16 }}>
+				{children}
+			</div>
 		</div>
 	);
 }

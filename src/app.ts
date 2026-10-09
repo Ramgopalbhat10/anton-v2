@@ -51,7 +51,7 @@ import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.t
 import { previewsView } from './services/previews.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
-import { recordLatestInput } from './services/latest-input.ts';
+import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
@@ -91,7 +91,6 @@ const ENV = v.pipe(
 publishUpgradeHandler(handleTerminalUpgrade);
 observeRuntime((event) => {
 	recordAgentEvent(event);
-	void recordLatestInput(event as Parameters<typeof recordLatestInput>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
@@ -100,7 +99,9 @@ observeRuntime((event) => {
 		.catch((error: unknown) => logProblem('warn', 'Spending check failed', error));
 });
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
-appDb().catch((error: unknown) => logProblem('error', 'Database migration failed', error));
+appDb()
+	.then(() => backfillLatestInputs())
+	.catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
 setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, message: text })), 'reviewer');

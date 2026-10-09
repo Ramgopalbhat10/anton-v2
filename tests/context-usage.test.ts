@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
+import { createClient } from '@libsql/client';
 import type { ModelInfo, SubscriptionProvider } from '../src/core/ports.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-context-'));
@@ -10,7 +11,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { compactionReserve, contextView, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
-const { recordLatestInput } = await import('../src/services/latest-input.ts');
+const { backfillLatestInputs, recordLatestInput } = await import('../src/services/latest-input.ts');
 const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/subscriptions.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -108,18 +109,42 @@ test('the main conversation’s last call sets the task’s context; subagents, 
 	assert.equal((await contextView('ctx')).used, 12_000);
 });
 
-test('the task keeps its latest input from the main conversation, not a subagent’s prompt or a reply', async () => {
+test('the task keeps its latest input, trimmed and cut to what a card shows', async () => {
 	await task('latest');
-	const message = (text: string) => ({ role: 'user', content: [{ type: 'text', text }], timestamp: Date.parse('2026-10-09T03:07:53Z') });
-	await recordLatestInput({ type: 'message_end', instanceId: 'latest', agentName: 'Coder', session: 'default', message: message('Is the app using SQLite?') });
-	await recordLatestInput({ type: 'message_end', instanceId: 'latest', agentName: 'Coder', session: 'task:default:x', message: message('Investigate the database layer') });
-	await recordLatestInput({ type: 'message_end', instanceId: 'latest', agentName: 'Coder', taskId: 'x', message: message('Run the tests') });
-	await recordLatestInput({ type: 'message_end', instanceId: 'latest', agentName: 'Coder', message: { role: 'assistant', content: [{ type: 'text', text: 'Yes' }] } });
-	await recordLatestInput({ type: 'message_end', instanceId: 'latest', agentName: 'Reviewer', message: message('Review the pull request') });
-	const record = await getSessionRecord('latest');
+	await recordLatestInput('latest', '  Is the app using SQLite?  ', new Date('2026-10-09T03:07:53Z'));
+	await recordLatestInput('latest', '   ');
+	let record = await getSessionRecord('latest');
 	assert.equal(record?.lastInput, 'Is the app using SQLite?');
 	assert.equal(record?.lastInputAt, '2026-10-09T03:07:53.000Z');
 	assert.equal(record?.title, 'First question');
+	await recordLatestInput('latest', 'x'.repeat(3000));
+	record = await getSessionRecord('latest');
+	assert.equal(record?.lastInput?.length, 2000);
+});
+
+test('tasks from before inputs were kept get theirs from the runtime’s accepted messages, the coder’s main conversation only', async () => {
+	await task('older');
+	await task('kept');
+	await recordLatestInput('kept', 'Already kept');
+	const file = path.join(dir, 'flue-fixture.db');
+	const flue = createClient({ url: `file:${file}` });
+	await flue.execute('CREATE TABLE flue_agent_submissions (sequence INTEGER PRIMARY KEY, session_key TEXT, kind TEXT, payload TEXT, accepted_at INTEGER)');
+	const add = (sequence: number, key: unknown[], message: unknown, at: string) =>
+		flue.execute({
+			sql: 'INSERT INTO flue_agent_submissions VALUES (?, ?, ?, ?, ?)',
+			args: [sequence, `agent-session:${JSON.stringify(key)}`, 'direct', JSON.stringify({ kind: 'direct', message }), Date.parse(at)],
+		});
+	await add(1, ['Coder', 'older', 'default', 'default'], { kind: 'user', body: 'What is this project about?' }, '2026-10-09T02:11:15Z');
+	await add(2, ['Coder', 'older', 'default', 'default'], { kind: 'user', body: 'Is it using SQLite?' }, '2026-10-09T03:07:53Z');
+	await add(3, ['Reviewer', 'older', 'default', 'default'], 'Review the pull request', '2026-10-09T04:00:00Z');
+	await add(4, ['Coder', 'kept', 'default', 'default'], { kind: 'user', body: 'Older message' }, '2026-10-09T01:00:00Z');
+	flue.close();
+
+	assert.equal(await backfillLatestInputs(file), 1);
+	assert.equal((await getSessionRecord('older'))?.lastInput, 'Is it using SQLite?');
+	assert.equal((await getSessionRecord('older'))?.lastInputAt, '2026-10-09T03:07:53.000Z');
+	assert.equal((await getSessionRecord('kept'))?.lastInput, 'Already kept');
+	assert.equal(await backfillLatestInputs(path.join(dir, 'missing.db')), 0);
 });
 
 test('a plan’s use is counted in tokens by day, priced at OpenRouter’s price when the vendor lists none, and its limit noted', async () => {
