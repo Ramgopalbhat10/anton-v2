@@ -326,6 +326,14 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 						/>
 						</div>
 					) : null}
+					{browser.agentBusy && mode === 'use' && !notice ? (
+						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
+							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-(--text-secondary)">
+								<span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" />
+								The agent is using this browser
+							</span>
+						</div>
+					) : null}
 					{notice || mode === 'pick' || capture.isError || close.isError ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
 							<span role="status" className="in-pop px-2.5 py-1 text-[11.5px] text-(--text-secondary)">

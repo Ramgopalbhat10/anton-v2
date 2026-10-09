@@ -639,7 +639,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -651,11 +651,11 @@ test('General settings decide how a new task starts when the launcher does not s
 
 	// Each helper agent can have its own model; the others keep the task's.
 	const { agentSettingsNow, primeAgent } = await import('../src/services/agent-runner.ts');
-	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
+	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
 	await assert.rejects(() => setGeneralSettings({ ...before, agentModels: { ...agentModels, tester: { model: 'openrouter/nobody/unknown', reasoning: null } } }), /Unknown model/);
 	await setGeneralSettings({ ...before, agentModels });
 	await primeAgent(other.id);
-	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
+	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
 	await setGeneralSettings(before);
 });
 

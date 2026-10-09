@@ -1,12 +1,16 @@
+import { chromium, type Browser as PlaywrightBrowser, type Page } from 'playwright-core';
 import { announce } from '../core/changes.ts';
 import { CdpConnection, type CdpEvent } from '../core/cdp.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { BrowserHost, HostedBrowser } from '../core/ports.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
+import { writeMachineFile } from '../core/machine-fs.ts';
 import { getProviders } from '../providers/index.ts';
+import type { BrowserInput, BrowserState } from './browser.ts';
 import { DESCRIBE_ELEMENT } from './describe-element.ts';
 import { logProblem } from './log.ts';
+import { liveMachine } from './workspace.ts';
 
 /**
  * The Browser panel: a real browser on a hosted service (a `BrowserHost`,
@@ -27,7 +31,14 @@ export type BrowserPage = { url: string; title: string; canGoBack: boolean; canG
 export type BrowserView = {
 	/** False without a browser host (no KERNEL_API_KEY). */
 	available: boolean;
-	browser: { liveViewUrl: string; viewport: { width: number; height: number }; openedAt: string; page: BrowserPage | null } | null;
+	browser: {
+		liveViewUrl: string;
+		viewport: { width: number; height: number };
+		openedAt: string;
+		page: BrowserPage | null;
+		/** The agent is acting in this browser, or did a moment ago. */
+		agentBusy: boolean;
+	} | null;
 };
 
 /** What Anton read about an element you picked, for the agent. */
@@ -74,6 +85,8 @@ async function storedBrowser(id: string): Promise<Stored | null> {
 async function forget(id: string) {
 	connections.get(id)?.cdp.close();
 	connections.delete(id);
+	await drivers.get(id)?.browser.close().catch(() => undefined);
+	drivers.delete(id);
 	await setSetting(key(id), null);
 }
 
@@ -177,7 +190,7 @@ export async function browserView(id: string): Promise<BrowserView> {
 			logProblem('warn', 'Could not read the browser page', error, id);
 			return null;
 		});
-	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: browser.viewport, openedAt: browser.openedAt, page: state } };
+	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: browser.viewport, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id) } };
 }
 
 /** What you typed in the address bar as a URL: a host gets https, anything else is searched for. */
@@ -299,4 +312,129 @@ export async function browserScreenshot(id: string): Promise<{ data: string; wid
 	const { cssVisualViewport: view } = await cdp.send<{ cssVisualViewport: { clientWidth: number; clientHeight: number } }>('Page.getLayoutMetrics', {}, session);
 	const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' }, session, 30_000);
 	return { data, width: view.clientWidth, height: view.clientHeight };
+}
+
+// ---- The agent in the same browser ----
+
+/**
+ * The agent's browser steps in this browser, through Playwright over the same
+ * DevTools endpoint, on the tab the live view shows: you watch it work and
+ * can take over (to sign in, say). Kept per task while the browser lives.
+ */
+type Driver = { browserId: string; browser: PlaywrightBrowser; errors: string[]; watched: WeakSet<Page> };
+const drivers = new Map<string, Driver>();
+/** When each task's agent last acted here; the panel says so for a few seconds after. */
+const agentSteps = new Map<string, { running: number; at: number }>();
+const BUSY_MS = 8_000;
+
+export function agentBusy(id: string): boolean {
+	const step = agentSteps.get(id);
+	return Boolean(step && (step.running > 0 || Date.now() - step.at < BUSY_MS));
+}
+
+/** Whether the agent can browse here: a browser host is set up. */
+export const sharedBrowserAvailable = (): boolean => Boolean(getProviders().browsers);
+
+async function driver(id: string, browser: Stored): Promise<Driver> {
+	const open = drivers.get(id);
+	if (open && open.browserId === browser.id && open.browser.isConnected()) return open;
+	const connected = await chromium.connectOverCDP(browser.cdpUrl, { timeout: 30_000 });
+	const made: Driver = { browserId: browser.id, browser: connected, errors: [], watched: new WeakSet() };
+	connected.on('disconnected', () => {
+		if (drivers.get(id) === made) drivers.delete(id);
+	});
+	drivers.set(id, made);
+	return made;
+}
+
+/** The Playwright page for the tab the live view shows. */
+async function shownPage(id: string, browser: Stored, current: Driver): Promise<Page> {
+	const { targetId } = await connection(id, browser);
+	const pages = current.browser.contexts().flatMap((context) => context.pages());
+	let shown: Page | undefined;
+	for (const page of pages) {
+		const session = await page.context().newCDPSession(page);
+		const { targetInfo } = await session.send('Target.getTargetInfo').catch(() => ({ targetInfo: { targetId: '' } }));
+		await session.detach().catch(() => undefined);
+		if (targetInfo.targetId === targetId) shown = page;
+	}
+	const page = shown ?? pages[pages.length - 1] ?? (await (current.browser.contexts()[0] ?? (await current.browser.newContext())).newPage());
+	if (!current.watched.has(page)) {
+		current.watched.add(page);
+		page.on('console', (message) => message.type() === 'error' && current.errors.push(message.text()));
+		page.on('pageerror', (error) => current.errors.push(String(error)));
+	}
+	return page;
+}
+
+/** A page described this long is cut, so one step never floods the agent's context. */
+const MAX_SNAPSHOT = 15_000;
+
+/**
+ * One agent step in the task's shared browser, opening it if needed: the same
+ * actions and answer as the sandbox browser, so the agent uses both alike.
+ */
+export async function agentBrowse(id: string, input: BrowserInput): Promise<BrowserState> {
+	await requireTask(id);
+	if (!getProviders().browsers) throw new InvalidInputError('The Browser panel is not set up (KERNEL_API_KEY)');
+	const step = agentSteps.get(id) ?? { running: 0, at: 0 };
+	agentSteps.set(id, { running: step.running + 1, at: Date.now() });
+	changed(id);
+	try {
+		const browser = (await storedBrowser(id)) ?? (await openBrowser(id).then(() => storedBrowser(id)));
+		if (!browser) throw new ConflictError('Could not open the browser');
+		const current = await driver(id, browser);
+		const page = await shownPage(id, browser, current);
+		const target = () => {
+			if (!input.target) throw new Error('This action needs a target');
+			return page.locator(input.target).first();
+		};
+		let status: number | null = null;
+		let problem: string | null = null;
+		try {
+			if (input.action === 'open') status = (await page.goto(addressToUrl(input.url ?? ''), { waitUntil: 'domcontentloaded', timeout: 30_000 }))?.status() ?? null;
+			else if (input.action === 'click') await target().click({ timeout: 10_000 });
+			else if (input.action === 'type') {
+				await target().fill(input.text ?? '', { timeout: 10_000 });
+				if (input.submit) await target().press('Enter');
+			} else if (input.action === 'select') await target().selectOption(input.text ?? '', { timeout: 10_000 });
+			else if (input.action === 'press') await (input.target ? target().press(input.key ?? 'Enter', { timeout: 10_000 }) : page.keyboard.press(input.key ?? 'Enter'));
+			else if (input.action === 'hover') await target().hover({ timeout: 10_000 });
+			else if (input.action === 'scroll') await page.mouse.wheel(0, input.amount ?? 600);
+			else if (input.action === 'back') await page.goBack({ waitUntil: 'domcontentloaded' });
+			else if (input.action === 'wait') await (input.target ? target().waitFor({ timeout: 15_000 }) : page.waitForTimeout(Math.min(input.ms ?? 1000, 15_000)));
+		} catch (error) {
+			problem = (error instanceof Error ? error.message : String(error)).split('\n')[0];
+		}
+		await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+		let screenshot: string | null = null;
+		if (input.screenshot) {
+			// Screenshots go to the task's outputs, which live in its sandbox; the panel shows the page live otherwise.
+			const machine = await liveMachine(id);
+			if (machine) {
+				const file = `screenshots/${input.screenshot.toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 60) || 'page'}-${Date.now()}.png`;
+				await machine.exec(`mkdir -p '${machine.root}/outputs/screenshots'`);
+				await writeMachineFile(machine, `${machine.root}/outputs/${file}`, await page.screenshot({ fullPage: Boolean(input.fullPage) }));
+				screenshot = `../outputs/${file}`;
+			} else {
+				problem ??= 'No screenshot: screenshots are saved in the sandbox, which is not running. The page is described below, and the user sees it in the Browser panel.';
+			}
+		}
+		const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '');
+		return {
+			url: page.url(),
+			title: await page.title().catch(() => ''),
+			status,
+			problem,
+			errors: current.errors.splice(0).slice(0, 20),
+			screenshot,
+			snapshot: snapshot.length > MAX_SNAPSHOT ? `${snapshot.slice(0, MAX_SNAPSHOT)}\n… (cut; scroll or open a narrower page)` : snapshot,
+		};
+	} finally {
+		const after = agentSteps.get(id) ?? { running: 1, at: 0 };
+		agentSteps.set(id, { running: Math.max(0, after.running - 1), at: Date.now() });
+		changed(id);
+		// Say when the panel's "browsing" note should go.
+		setTimeout(() => changed(id), BUSY_MS + 100).unref?.();
+	}
 }

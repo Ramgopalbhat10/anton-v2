@@ -284,7 +284,7 @@ export type GeneralSettings = {
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };
-export type HelperAgent = 'explorer' | 'tester' | 'reviewer';
+export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
@@ -308,7 +308,14 @@ export type BrowserPage = { url: string; title: string; canGoBack: boolean; canG
 export type BrowserView = {
 	/** False until KERNEL_API_KEY is set. */
 	available: boolean;
-	browser: { liveViewUrl: string; viewport: { width: number; height: number }; openedAt: string; page: BrowserPage | null } | null;
+	browser: {
+		liveViewUrl: string;
+		viewport: { width: number; height: number };
+		openedAt: string;
+		page: BrowserPage | null;
+		/** The agent is acting in this browser, or did a moment ago. */
+		agentBusy: boolean;
+	} | null;
 };
 /** An element picked in the Browser panel, as the page described it. */
 export type PickedElement = {

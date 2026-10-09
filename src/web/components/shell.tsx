@@ -2,7 +2,7 @@ import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
@@ -144,6 +144,15 @@ export function SessionPage() {
 	useEffect(() => {
 		if (search.panel) showPanel(search.panel);
 	}, [search.panel]);
+
+	// The first time the agent browses while this task is open, show the Browser panel so its work can be watched.
+	const browser = useQuery({ queryKey: ['browser', sessionId], queryFn: () => api.browser(sessionId) });
+	const shownBrowsing = useRef(false);
+	useEffect(() => {
+		if (!browser.data?.browser?.agentBusy || shownBrowsing.current) return;
+		shownBrowsing.current = true;
+		showPanel('Browser');
+	}, [browser.data?.browser?.agentBusy]);
 
 	const centerVisible = !(open && expanded);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);

@@ -49,6 +49,7 @@ const open: BrowserView = {
 		viewport: { width: 1280, height: 800 },
 		openedAt: '2026-10-09T00:00:00Z',
 		page: { url: 'https://example.com/login', title: 'Log in', canGoBack: false, canGoForward: false },
+		agentBusy: false,
 	},
 };
 
@@ -98,6 +99,11 @@ describe('Picking an element in the page', () => {
 describe('Browser panel', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it('says when the agent is using the browser', () => {
+		renderWithQueries(<BrowserTab sessionId="s1" />, [[['browser', 's1'], { ...open, browser: { ...open.browser!, agentBusy: true } }]]);
+		expect(screen.getByText('The agent is using this browser')).toBeTruthy();
 	});
 
 	it('says how to turn it on without a Kernel key', () => {

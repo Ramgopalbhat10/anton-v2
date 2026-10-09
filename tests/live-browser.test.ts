@@ -10,7 +10,7 @@ import type { BrowserHost, HostedBrowser } from '../src/core/ports.ts';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-browser-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { addressToUrl, browserView, browserScreenshot, closeBrowser, inspectAt, navigate, openBrowser } = await import('../src/services/live-browser.ts');
+const { addressToUrl, agentBrowse, agentBusy, browserView, browserScreenshot, closeBrowser, inspectAt, navigate, openBrowser } = await import('../src/services/live-browser.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
@@ -170,5 +170,7 @@ test('without a browser host the panel says so, and a browser the host removed i
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'x', list: async () => [] }, browsers: null });
 	assert.deepEqual(await browserView('web'), { available: false, browser: null });
 	await assert.rejects(openBrowser('web'), /KERNEL_API_KEY/);
+	await assert.rejects(agentBrowse('web', { action: 'look' }), /KERNEL_API_KEY/);
+	assert.equal(agentBusy('web'), false, 'a step that could not start leaves no busy note behind');
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'x', list: async () => [] }, browsers: host });
 });

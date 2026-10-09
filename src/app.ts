@@ -253,7 +253,7 @@ app.put('/api/settings/general', async (c) => {
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
 			codeMode: v.boolean(),
-			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, reviewer: AGENT_MODEL }),
+			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));
