@@ -215,18 +215,4 @@ describe('Composer inbox', () => {
 		]);
 		expect(await screen.findByRole('img', { name: 'drawing.png' })).toBeTruthy();
 	});
-
-	it('keeps the unsent draft, picks and drawings while the composer is hidden', async () => {
-		const seed: Array<[unknown[], unknown]> = [
-			[['session', 's3'], session({ id: 's3' })],
-			[['models'], { models: [], default: '' }],
-			[['budget', 's3'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
-		];
-		const first = renderWithQueries(<Composer sessionId="s3" onSend={async () => undefined} onStop={async () => undefined} />, seed);
-		act(() => addToComposer('s3', { kind: 'element', id: 'e1', element: picked }));
-		expect(await screen.findByText('<button> in LoginForm')).toBeTruthy();
-		first.unmount();
-		renderWithQueries(<Composer sessionId="s3" onSend={async () => undefined} onStop={async () => undefined} />, seed);
-		expect(screen.getByText('<button> in LoginForm')).toBeTruthy();
-	});
 });

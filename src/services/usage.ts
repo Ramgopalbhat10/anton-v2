@@ -11,6 +11,11 @@ export function toUsage(usage: ResponseUsage): Usage {
 	return { inputTokens: usage.input + usage.cacheRead + usage.cacheWrite, outputTokens: usage.output, cost: usage.cost.total, cachedTokens: usage.cacheRead };
 }
 
+/** Two usages together. */
+export function addUsage(a: Usage, b: Usage): Usage {
+	return { inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, cost: a.cost + b.cost, cachedTokens: (a.cachedTokens ?? 0) + (b.cachedTokens ?? 0) };
+}
+
 /** Adds usage to the task's totals, under the model that did the work; a failed write only loses the count. */
 export async function recordUsage(id: string, usage: Usage, model: string | null = null, turnId: string | null = null): Promise<boolean> {
 	return addSessionUsage(id, usage, new Date(), model, turnId).catch((error: unknown) => {

@@ -36,18 +36,6 @@ export function useInbox(sessionId: string): InboxItem[] {
 	);
 }
 
-/** A task's unsent draft, kept while its composer is hidden (the workspace expanded, say) and given back when it shows again. */
-export type KeptDraft = { text: string; images: ImageAttachment[]; elements: Array<Extract<InboxItem, { kind: 'element' }>> };
-const drafts = new Map<string, KeptDraft>();
-const BLANK: KeptDraft = { text: '', images: [], elements: [] };
-
-export const keptDraft = (sessionId: string): KeptDraft => drafts.get(sessionId) ?? BLANK;
-
-export function keepDraft(sessionId: string, draft: KeptDraft): void {
-	if (!draft.text && !draft.images.length && !draft.elements.length) drafts.delete(sessionId);
-	else drafts.set(sessionId, draft);
-}
-
 /** A picked element's label: its tag and the nearest React component, as `<button> in LoginForm`. */
 export function elementLabel(element: PickedElement): string {
 	const component = element.components[0]?.name;

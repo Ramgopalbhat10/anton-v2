@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, PencilLine, Power, RotateCw, SquareDashedMousePointer } from 'lucide-react';
-import { type FormEvent, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type FormEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Sketch } from '@/components/sketch';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type BrowserView } from '@/lib/api';
+import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer, elementLabel } from '@/lib/composer-inbox';
+import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 
 /*
@@ -15,26 +17,6 @@ import { cn } from '@/lib/utils';
  */
 
 type Viewport = { width: number; height: number };
-
-/** The largest box with the page's proportions that fits the area, so a point in it maps straight to the page. */
-function useFit(viewport: Viewport) {
-	// A callback ref, as the area mounts only once the browser is open.
-	const [element, setElement] = useState<HTMLDivElement | null>(null);
-	const [size, setSize] = useState({ width: 0, height: 0 });
-	useLayoutEffect(() => {
-		if (!element) return;
-		const measure = () => {
-			const box = element.getBoundingClientRect();
-			const scale = Math.min(box.width / viewport.width, box.height / viewport.height);
-			setSize({ width: Math.floor(viewport.width * scale), height: Math.floor(viewport.height * scale) });
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(element);
-		return () => observer.disconnect();
-	}, [element, viewport.width, viewport.height]);
-	return [setElement, size] as const;
-}
 
 /**
  * The live view, remounted if no frames arrive in time: it reports when video
@@ -169,7 +151,11 @@ function AddressBar({ sessionId, view, children }: { sessionId: string; view: No
 function PickLayer({ sessionId, viewport, onPicked, onCancel }: { sessionId: string; viewport: Viewport; onPicked: (label: string) => void; onCancel: () => void }) {
 	const busy = useRef(false);
 	const latest = useRef<{ x: number; y: number } | null>(null);
+	const sent = useRef<{ x: number; y: number } | null>(null);
 	const [picking, setPicking] = useState(false);
+	// The latest handler, so the effect below runs once, not with every render of the panel.
+	const cancel = useRef(onCancel);
+	cancel.current = onCancel;
 
 	const toPage = (event: PointerEvent<HTMLDivElement>) => {
 		const box = event.currentTarget.getBoundingClientRect();
@@ -182,19 +168,20 @@ function PickLayer({ sessionId, viewport, onPicked, onCancel }: { sessionId: str
 		busy.current = true;
 		const point = latest.current;
 		latest.current = null;
+		sent.current = point;
 		await api.inspectBrowser(sessionId, { ...point, pick: false }).catch(() => undefined);
 		busy.current = false;
 		void highlight();
 	};
 
 	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onCancel();
+		const onKey = (event: KeyboardEvent) => event.key === 'Escape' && cancel.current();
 		window.addEventListener('keydown', onKey);
 		return () => {
 			window.removeEventListener('keydown', onKey);
 			void api.clearBrowserHighlight(sessionId).catch(() => undefined);
 		};
-	}, [sessionId, onCancel]);
+	}, [sessionId]);
 
 	return (
 		<div
@@ -203,7 +190,11 @@ function PickLayer({ sessionId, viewport, onPicked, onCancel }: { sessionId: str
 			aria-label="Pick an element on the page"
 			className={cn('absolute inset-0 z-10 cursor-crosshair', picking && 'cursor-wait')}
 			onPointerMove={(event) => {
-				latest.current = toPage(event);
+				const point = toPage(event);
+				// A few pixels on the page is the same element; only a real move asks the browser again.
+				const last = latest.current ?? sent.current;
+				if (last && Math.abs(point.x - last.x) < 4 && Math.abs(point.y - last.y) < 4) return;
+				latest.current = point;
 				void highlight();
 			}}
 			onClick={async (event) => {
@@ -231,26 +222,25 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 	const view = useQuery({ queryKey: ['browser', sessionId], queryFn: () => api.browser(sessionId) });
 	const browser = view.data?.browser ?? null;
 	const viewport = browser?.viewport ?? { width: 1280, height: 800 };
-	const [area, size] = useFit(viewport);
-	const [mode, setMode] = useState<'use' | 'pick' | 'draw'>('use');
+	// The largest box with the page's proportions that fits the area, so a point in it maps straight to the page.
+	const [area, room] = useElementSize<HTMLDivElement>();
+	const scale = Math.min(room.width / viewport.width, room.height / viewport.height);
+	const size = { width: Math.floor(viewport.width * scale), height: Math.floor(viewport.height * scale) };
+	const [picking, setPicking] = useState(false);
+	// A picture of the page while drawing on it.
+	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
 	const [playing, setPlaying] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
-	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
 
 	const close = useMutation({
 		mutationFn: () => api.closeBrowser(sessionId),
 		onSuccess: () => {
-			setMode('use');
+			setPicking(false);
+			setSketch(null);
 			void queryClient.invalidateQueries({ queryKey: ['browser', sessionId] });
 		},
 	});
-	const capture = useMutation({
-		mutationFn: () => api.browserScreenshot(sessionId),
-		onSuccess: (shot) => {
-			setSketch(shot);
-			setMode('draw');
-		},
-	});
+	const capture = useMutation({ mutationFn: () => api.browserScreenshot(sessionId), onSuccess: setSketch });
 
 	useEffect(() => {
 		if (!notice) return;
@@ -269,10 +259,9 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 	if (view.isError) return <EmptyState title="Browser unavailable" body={view.error.message} />;
 	if (!browser) return <OpenForm sessionId={sessionId} available={view.data.available} />;
 
-	const stopDrawing = () => {
-		setSketch(null);
-		setMode('use');
-	};
+	// One note over the page at a time: an error, what just happened, how to pick, or that the agent is browsing.
+	const status = capture.error?.message ?? close.error?.message ?? notice ?? (picking ? 'Click an element to add it to the message · Shift-click to keep picking · Esc to stop' : null);
+	const agentNote = !status && !sketch && browser.agentBusy;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">
@@ -281,19 +270,26 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 				<IconBtn
 					icon={SquareDashedMousePointer}
 					size="sm"
-					label={mode === 'pick' ? 'Stop picking' : 'Pick an element for the message'}
-					aria-pressed={mode === 'pick'}
-					onClick={() => setMode(mode === 'pick' ? 'use' : 'pick')}
-					className={cn(mode === 'pick' && 'bg-(--accent-bg-subtle) text-(--accent-text)')}
+					label={picking ? 'Stop picking' : 'Pick an element for the message'}
+					aria-pressed={picking}
+					onClick={() => {
+						setPicking(!picking);
+						setSketch(null);
+					}}
+					className={cn(picking && 'bg-(--accent-bg-subtle) text-(--accent-text)')}
 				/>
 				<IconBtn
 					icon={PencilLine}
 					size="sm"
-					label={mode === 'draw' ? 'Stop drawing' : 'Draw on the page'}
-					aria-pressed={mode === 'draw'}
+					label={sketch ? 'Stop drawing' : 'Draw on the page'}
+					aria-pressed={Boolean(sketch)}
 					disabled={capture.isPending}
-					onClick={() => (mode === 'draw' ? stopDrawing() : capture.mutate())}
-					className={cn(mode === 'draw' && 'bg-(--accent-bg-subtle) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
+					onClick={() => {
+						setPicking(false);
+						if (sketch) setSketch(null);
+						else capture.mutate();
+					}}
+					className={cn(sketch && 'bg-(--accent-bg-subtle) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
 				/>
 				<IconBtn icon={Power} size="sm" label="Close the browser" disabled={close.isPending} onClick={() => close.mutate()} />
 			</AddressBar>
@@ -306,42 +302,28 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 							Connecting to the browser
 						</div>
 					) : null}
-					{mode === 'pick' ? <PickLayer sessionId={sessionId} viewport={viewport} onPicked={(label) => setNotice(`Added ${label} to the message`)} onCancel={() => setMode('use')} /> : null}
-					{mode === 'draw' && sketch ? (
+					{picking ? <PickLayer sessionId={sessionId} viewport={viewport} onPicked={(label) => setNotice(`Added ${label} to the message`)} onCancel={() => setPicking(false)} /> : null}
+					{sketch ? (
 						// The picture is the page alone; a scrollbar takes the rest of the window, so it covers that much of the view.
 						<div className="absolute top-0 left-0 z-20" style={{ width: `${(sketch.width / viewport.width) * 100}%`, height: `${(sketch.height / viewport.height) * 100}%` }}>
-						<Sketch
-							image={sketch.data}
-							width={sketch.width}
-							height={sketch.height}
-							onClose={stopDrawing}
-							onAttach={(png) => {
-								addToComposer(sessionId, {
-									kind: 'image',
-									image: { id: crypto.randomUUID(), filename: 'drawing.png', mimeType: 'image/png', data: png.slice(png.indexOf(',') + 1), preview: png },
-								});
-								setNotice('Added the drawing to the message');
-								stopDrawing();
-							}}
-						/>
+							<Sketch
+								image={sketch.data}
+								width={sketch.width}
+								height={sketch.height}
+								onClose={() => setSketch(null)}
+								onAttach={(png) => {
+									addToComposer(sessionId, { kind: 'image', image: imageFromDataUrl(png, 'drawing.png') });
+									setNotice('Added the drawing to the message');
+									setSketch(null);
+								}}
+							/>
 						</div>
 					) : null}
-					{browser.agentBusy && mode === 'use' && !notice ? (
+					{status || agentNote ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
 							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-(--text-secondary)">
-								<span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" />
-								The agent is using this browser
-							</span>
-						</div>
-					) : null}
-					{notice || mode === 'pick' || capture.isError || close.isError ? (
-						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
-							<span role="status" className="in-pop px-2.5 py-1 text-[11.5px] text-(--text-secondary)">
-								{capture.isError
-									? capture.error.message
-									: close.isError
-										? close.error.message
-										: (notice ?? 'Click an element to add it to the message · Shift-click to keep picking · Esc to stop')}
+								{agentNote ? <span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" /> : null}
+								{status ?? 'The agent is using this browser'}
 							</span>
 						</div>
 					) : null}

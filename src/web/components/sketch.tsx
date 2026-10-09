@@ -1,6 +1,6 @@
 import { ArrowUpRight, Circle, Minus, Pencil, Redo2, Square, Trash2, Type, Undo2 } from 'lucide-react';
 import { type PointerEvent, useEffect, useRef, useState } from 'react';
-import { Btn, Icon } from '@/components/signal';
+import { Btn, IconBtn } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
 /*
@@ -101,7 +101,7 @@ function MarkShape({ mark }: { mark: Mark }) {
 }
 
 /** The picture with the marks on it, as a PNG data URL at the picture's own size. */
-export async function flatten(svg: SVGSVGElement, width: number, height: number): Promise<string> {
+async function flatten(svg: SVGSVGElement, width: number, height: number): Promise<string> {
 	const markup = new XMLSerializer().serializeToString(svg);
 	const image = new Image();
 	image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
@@ -135,7 +135,8 @@ export function Sketch({
 	const [color, setColor] = useState(COLORS[0].value);
 	const [marks, setMarks] = useState<Mark[]>([]);
 	const [undone, setUndone] = useState<Mark[]>([]);
-	const [drawing, setDrawing] = useState<Mark | null>(null);
+	// The shape being drawn; text goes through `typing` instead.
+	const [drawing, setDrawing] = useState<Exclude<Mark, { tool: 'text' }> | null>(null);
 	const [typing, setTyping] = useState<{ at: Point; text: string } | null>(null);
 	const [saving, setSaving] = useState(false);
 
@@ -160,19 +161,23 @@ export function Sketch({
 		setUndone(rest);
 	};
 
+	// Keys read the latest state through a ref, so the listener is added once rather than on every render.
+	const keys = useRef({ typing, onClose, undo, redo });
+	keys.current = { typing, onClose, undo, redo };
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (typing) return;
-			if (event.key === 'Escape') onClose();
+			const current = keys.current;
+			if (current.typing) return;
+			if (event.key === 'Escape') current.onClose();
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
 				event.preventDefault();
-				if (event.shiftKey) redo();
-				else undo();
+				if (event.shiftKey) current.redo();
+				else current.undo();
 			}
 		};
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	});
+	}, []);
 
 	/** The pointer in the picture's own pixels. */
 	function at(event: PointerEvent): Point {
@@ -200,12 +205,15 @@ export function Sketch({
 	function onPointerMove(event: PointerEvent<SVGSVGElement>) {
 		if (!drawing) return;
 		const point = at(event);
-		setDrawing(drawing.tool === 'pen' ? { ...drawing, points: [...drawing.points, point] } : drawing.tool === 'text' ? drawing : { ...drawing, to: point });
+		if (drawing.tool !== 'pen') return setDrawing({ ...drawing, to: point });
+		// The stroke in progress is ours alone until it is added, so its points grow in place rather than being copied on every move.
+		drawing.points.push(point);
+		setDrawing({ ...drawing });
 	}
 
 	function onPointerUp() {
 		if (!drawing) return;
-		const tiny = drawing.tool !== 'pen' && drawing.tool !== 'text' && Math.hypot(drawing.to.x - drawing.from.x, drawing.to.y - drawing.from.y) < 3;
+		const tiny = drawing.tool !== 'pen' && Math.hypot(drawing.to.x - drawing.from.x, drawing.to.y - drawing.from.y) < 3;
 		if (!tiny) add(drawing);
 		setDrawing(null);
 	}
@@ -263,20 +271,15 @@ export function Sketch({
 			<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
 				<div className="in-pop pointer-events-auto flex items-center gap-0.5 p-1" role="toolbar" aria-label="Drawing tools">
 					{TOOLS.map((entry) => (
-						<button
+						<IconBtn
 							key={entry.tool}
-							type="button"
-							aria-label={entry.label}
+							icon={entry.icon}
+							size="sm"
+							label={entry.label}
 							aria-pressed={tool === entry.tool}
-							title={entry.label}
 							onClick={() => setTool(entry.tool)}
-							className={cn(
-								'inline-flex size-7 items-center justify-center rounded-[7px] text-(--icon-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)',
-								tool === entry.tool && 'bg-(--accent-bg-subtle) text-(--accent-text)',
-							)}
-						>
-							<Icon icon={entry.icon} size={14} />
-						</button>
+							className={cn(tool === entry.tool && 'bg-(--accent-bg-subtle) text-(--accent-text)')}
+						/>
 					))}
 					<span aria-hidden className="mx-1 h-4 w-px bg-(--border-subtle)" />
 					<div role="radiogroup" aria-label="Colour" className="flex items-center gap-1 px-0.5">
@@ -305,17 +308,7 @@ export function Sketch({
 							[Trash2, 'Clear', clear, marks.length === 0],
 						] as const
 					).map(([icon, label, run, disabled]) => (
-						<button
-							key={label}
-							type="button"
-							aria-label={label}
-							title={label}
-							disabled={disabled}
-							onClick={() => run()}
-							className="inline-flex size-7 items-center justify-center rounded-[7px] text-(--icon-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring) disabled:opacity-40"
-						>
-							<Icon icon={icon} size={14} />
-						</button>
+						<IconBtn key={label} icon={icon} size="sm" label={label} disabled={disabled} onClick={() => run()} />
 					))}
 					<span aria-hidden className="mx-1 h-4 w-px bg-(--border-subtle)" />
 					<Btn size="sm" variant="ghost" onClick={onClose}>

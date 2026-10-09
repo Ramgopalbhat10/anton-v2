@@ -27,3 +27,15 @@ test('a reply whose start was not seen, as after a restart, has no count of its 
 	startReply('quiet');
 	assert.equal(finishReply('quiet'), null, 'nor one that made no calls');
 });
+
+test('a reply is on the plan only when every call ran on it; a subagent on a paid model makes it charged', () => {
+	const planned = { request: { providerId: 'openai' } };
+	startReply('plan');
+	countReplyCall(turn({ instanceId: 'plan', ...planned }, usage(100, 1)));
+	countReplyCall(turn({ instanceId: 'plan', taskId: 'sub', ...planned }, usage(100, 1)));
+	assert.equal(finishReply('plan')?.billing, 'plan');
+	startReply('mixed');
+	countReplyCall(turn({ instanceId: 'mixed', ...planned }, usage(100, 1)));
+	countReplyCall(turn({ instanceId: 'mixed', taskId: 'sub', request: { providerId: 'openrouter' } }, usage(100, 1)));
+	assert.equal(finishReply('mixed')?.billing, 'api');
+});

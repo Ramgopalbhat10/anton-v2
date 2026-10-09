@@ -27,7 +27,7 @@ import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, outputUrl, type Session, type Usage } from '@/lib/api';
+import { api, branchLabel, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
@@ -529,13 +529,12 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 }
 
 /** The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them, and whether a plan paid. */
-type UsagePart = Usage & { calls: number };
-type ReplyUsage = Usage & { parts: { main: UsagePart; subagents: UsagePart } | null; billing: 'plan' | 'api' | null };
+type ReplyUsageView = Usage & { parts: { main: UsagePart; subagents: UsagePart } | null; billing: 'plan' | 'api' | null };
 
-function usageOf(message: FlueConversationMessage): ReplyUsage | null {
+function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
 	const usage = message.metadata?.usage as Usage | undefined;
 	if (!usage || typeof usage.inputTokens !== 'number') return null;
-	const parts = message.metadata?.usageParts as ReplyUsage['parts'] | undefined;
+	const parts = message.metadata?.usageParts as ReplyUsageView['parts'] | undefined;
 	const billing = message.metadata?.billing;
 	return { ...usage, parts: parts?.main ? parts : null, billing: billing === 'plan' || billing === 'api' ? billing : null };
 }
@@ -543,7 +542,7 @@ function usageOf(message: FlueConversationMessage): ReplyUsage | null {
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 /** The reply's tokens, every model call it made counted, and what it cost; the tooltip breaks it down. */
-export function ReplyUsageLine({ usage }: { usage: ReplyUsage }) {
+function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
 	const total = usage.inputTokens + usage.outputTokens;
 	const lines = [`${total.toLocaleString()} tokens used by this reply: ${usage.inputTokens.toLocaleString()} in, ${usage.outputTokens.toLocaleString()} out.`];
 	if (usage.cachedTokens) lines.push(`${usage.cachedTokens.toLocaleString()} of the input came from the provider's cache, which costs less.`);

@@ -3,6 +3,7 @@ import { config } from '../config.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
+import { addressToUrl, BROWSER_STEP, clipSnapshot, screenshotFile } from './browser-step.ts';
 
 /**
  * Runs inside the machine: opens the page in headless Chromium, saves a
@@ -44,13 +45,10 @@ if [ "$(id -u)" = 0 ] && command -v apt-get >/dev/null; then playwright install 
 export type ScreenshotInput = { url: string; name?: string; fullPage?: boolean; width?: number; height?: number };
 export type Screenshot = { path: string; title: string; status: number | null; errors: string[] };
 
-const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
-
 /** Screenshots a page from inside the machine into its outputs, so it shows in the Library. */
 export async function takeScreenshot(machine: Machine, input: ScreenshotInput): Promise<Screenshot> {
 	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
-	// Unique per call, so an earlier screenshot in the conversation never shows a later image.
-	const file = `screenshots/${slug(input.name ?? '') || 'shot'}-${Date.now()}.png`;
+	const file = screenshotFile(input.name || 'shot');
 	const out = `${machine.root}/outputs/${file}`;
 	// Its own script per call, so two screenshots at once never read each other's half-written file.
 	const script = `/tmp/anton-screenshot-${randomUUID()}.cjs`;
@@ -92,38 +90,18 @@ async function tab(width, height) {
 	return page;
 }
 
+${BROWSER_STEP}
+
 async function act(command) {
 	const page = await tab(command.width ?? 1280, command.height ?? 800);
-	const target = () => {
-		if (!command.target) throw new Error('This action needs a target');
-		return page.locator(command.target).first();
-	};
-	let status = null;
-	let problem = null;
-	try {
-		if (command.action === 'open') status = (await page.goto(command.url, { waitUntil: 'domcontentloaded', timeout: 30000 }))?.status() ?? null;
-		else if (command.action === 'click') await target().click({ timeout: 10000 });
-		else if (command.action === 'type') {
-			await target().fill(command.text ?? '', { timeout: 10000 });
-			if (command.submit) await target().press('Enter');
-		} else if (command.action === 'select') await target().selectOption(command.text ?? '', { timeout: 10000 });
-		else if (command.action === 'press') await (command.target ? target().press(command.key, { timeout: 10000 }) : page.keyboard.press(command.key));
-		else if (command.action === 'hover') await target().hover({ timeout: 10000 });
-		else if (command.action === 'scroll') await page.mouse.wheel(0, command.amount ?? 600);
-		else if (command.action === 'back') await page.goBack({ waitUntil: 'domcontentloaded' });
-		else if (command.action === 'wait') await (command.target ? target().waitFor({ timeout: 15000 }) : page.waitForTimeout(Math.min(command.ms ?? 1000, 15000)));
-	} catch (error) {
-		problem = error.message.split('\\n')[0];
-	}
-	await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+	const result = await browserStep(page, command);
 	let screenshot = null;
 	if (command.screenshot) {
 		fs.mkdirSync(outputs + '/screenshots', { recursive: true });
-		screenshot = 'screenshots/' + command.screenshot + '.png';
+		screenshot = command.screenshot;
 		await page.screenshot({ path: outputs + '/' + screenshot, fullPage: Boolean(command.fullPage) });
 	}
-	const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '');
-	return { url: page.url(), title: await page.title().catch(() => ''), status, problem, errors: errors.splice(0).slice(0, 20), screenshot, snapshot };
+	return { ...result, errors: errors.splice(0).slice(0, 20), screenshot };
 }
 
 let queue = Promise.resolve();
@@ -188,9 +166,6 @@ export type BrowserState = {
 	snapshot: string;
 };
 
-/** A page described this long is cut, so one step never floods the agent's context. */
-const MAX_SNAPSHOT = 15_000;
-
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
 function browserFiles(machine: Machine) {
 	const base = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}`;
@@ -211,8 +186,7 @@ export async function closeBrowser(machine: Machine): Promise<void> {
 export async function browse(machine: Machine, input: BrowserInput): Promise<BrowserState> {
 	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
 	const outputs = `${machine.root}/outputs`;
-	const name = input.screenshot ? `${slug(input.screenshot) || 'page'}-${Date.now()}` : undefined;
-	const command = quote(JSON.stringify({ ...input, screenshot: name }));
+	const command = quote(JSON.stringify({ ...input, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) }));
 	const files = browserFiles(machine);
 	await writeMachineFile(machine, files.client, new TextEncoder().encode(CLIENT));
 	const send = () => machine.exec(`node ${files.client} ${files.socket} ${command}`, { timeoutMs: 120_000 });
@@ -228,10 +202,5 @@ export async function browse(machine: Machine, input: BrowserInput): Promise<Bro
 	}
 	if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
 	const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as BrowserState;
-	const snapshot = state.snapshot ?? '';
-	return {
-		...state,
-		screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null,
-		snapshot: snapshot.length > MAX_SNAPSHOT ? `${snapshot.slice(0, MAX_SNAPSHOT)}\n… (cut; scroll or open a narrower page)` : snapshot,
-	};
+	return { ...state, screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null, snapshot: clipSnapshot(state.snapshot ?? '') };
 }

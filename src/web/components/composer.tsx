@@ -6,9 +6,9 @@ import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
-import { type ImageAttachment, MAX_IMAGES, readImages } from '@/lib/attachments';
+import { type ImageAttachment, imageFromBase64, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
-import { elementContext, elementLabel, type InboxItem, keepDraft, keptDraft, takeFromInbox, useInbox } from '@/lib/composer-inbox';
+import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { askToNotify } from '@/lib/notifications';
 
 /** Sent when a message is only images, since the agent always gets text. */
@@ -103,10 +103,9 @@ export function Composer({
 	onSend: (text: string, images: ImageAttachment[]) => Promise<void>;
 	onStop: () => Promise<void>;
 }) {
-	const [text, setText] = useState(() => keptDraft(sessionId).text);
-	const [images, setImages] = useState<ImageAttachment[]>(() => keptDraft(sessionId).images);
-	const [elements, setElements] = useState<Element[]>(() => keptDraft(sessionId).elements);
-	useEffect(() => keepDraft(sessionId, { text, images, elements }), [sessionId, text, images, elements]);
+	const [text, setText] = useState('');
+	const [images, setImages] = useState<ImageAttachment[]>([]);
+	const [elements, setElements] = useState<Element[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
 	// What the Browser panel hands over (a picked element, a drawing) joins the draft.
 	const inbox = useInbox(sessionId);
@@ -117,10 +116,10 @@ export function Composer({
 		const drawn = items.flatMap((item) => (item.kind === 'image' ? [item.image] : []));
 		if (picked.length) setElements((current) => [...current, ...picked]);
 		if (drawn.length) {
-			setImages((current) => [...current, ...drawn].slice(0, MAX_IMAGES));
+			setImages([...images, ...drawn].slice(0, MAX_IMAGES));
 			setNotice(images.length + drawn.length > MAX_IMAGES ? `Up to ${MAX_IMAGES} images per message.` : null);
 		}
-	}, [inbox, sessionId]);
+	}, [inbox, sessionId, images]);
 	const [stopping, setStopping] = useState(false);
 	const picker = useRef<HTMLInputElement>(null);
 	const attach = async (files: File[]) => {
@@ -174,11 +173,7 @@ export function Composer({
 					const pictures: ImageAttachment[] =
 						model?.vision === false
 							? []
-							: picked.flatMap(({ id, element }) =>
-									element.image
-										? [{ id, filename: `${element.tag}.png`, mimeType: 'image/png', data: element.image, preview: `data:image/png;base64,${element.image}` }]
-										: [],
-								);
+							: picked.flatMap(({ id, element }) => (element.image ? [imageFromBase64(element.image, `${element.tag}.png`, 'image/png', id)] : []));
 					const context = picked.map(({ element }) => elementContext(element)).join('\n\n');
 					await onSend(context ? `${message}\n\n${context}` : message, [...sent, ...pictures].slice(0, MAX_IMAGES + picked.length));
 				} catch (error) {

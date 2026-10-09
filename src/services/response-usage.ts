@@ -1,5 +1,6 @@
 import type { Usage } from '../core/types.ts';
-import { toUsage } from './usage.ts';
+import { onPlan } from './subscriptions.ts';
+import { addUsage, toUsage } from './usage.ts';
 
 /**
  * What one reply of the coding agent used, its subagents included. The runtime
@@ -9,7 +10,8 @@ import { toUsage } from './usage.ts';
  */
 
 export type UsagePart = Usage & { calls: number };
-export type ReplyUsage = { main: UsagePart; subagents: UsagePart };
+/** `billing` is `plan` when every call ran on a plan, so nothing was charged per token. */
+export type ReplyUsage = { main: UsagePart; subagents: UsagePart; billing: 'plan' | 'api' };
 
 type TurnEvent = {
 	type: string;
@@ -17,6 +19,7 @@ type TurnEvent = {
 	agentName?: string;
 	session?: string;
 	taskId?: string;
+	request?: { providerId?: string };
 	response?: { usage?: Parameters<typeof toUsage>[0] };
 };
 
@@ -25,7 +28,7 @@ const open = new Map<string, ReplyUsage>();
 
 /** A reply starts: count its calls from now. */
 export function startReply(id: string): void {
-	open.set(id, { main: empty(), subagents: empty() });
+	open.set(id, { main: empty(), subagents: empty(), billing: 'plan' });
 }
 
 /**
@@ -38,13 +41,11 @@ export function countReplyCall(event: TurnEvent): void {
 	if (event.agentName && /^reviewer$/i.test(event.agentName)) return;
 	const reply = open.get(event.instanceId);
 	if (!reply) return;
-	const usage = toUsage(event.response.usage);
-	const part = !event.taskId && (event.session === undefined || event.session === 'default') ? reply.main : reply.subagents;
-	part.inputTokens += usage.inputTokens;
-	part.outputTokens += usage.outputTokens;
-	part.cost += usage.cost;
-	part.cachedTokens = (part.cachedTokens ?? 0) + (usage.cachedTokens ?? 0);
-	part.calls += 1;
+	const main = !event.taskId && (event.session === undefined || event.session === 'default');
+	const part = main ? reply.main : reply.subagents;
+	Object.assign(part, addUsage(part, toUsage(event.response.usage)), { calls: part.calls + 1 });
+	// A subagent on its own model may run on another gateway than the task's plan.
+	if (!onPlan(`${event.request?.providerId ?? ''}/`)) reply.billing = 'api';
 }
 
 /** The reply's calls, ending the count; null when its start was not seen (a reply resumed after a restart). */
@@ -55,11 +56,4 @@ export function finishReply(id: string): ReplyUsage | null {
 }
 
 /** Both parts together, as the reply's usage. */
-export function replyTotal({ main, subagents }: ReplyUsage): Usage {
-	return {
-		inputTokens: main.inputTokens + subagents.inputTokens,
-		outputTokens: main.outputTokens + subagents.outputTokens,
-		cost: main.cost + subagents.cost,
-		cachedTokens: (main.cachedTokens ?? 0) + (subagents.cachedTokens ?? 0),
-	};
-}
+export const replyTotal = ({ main, subagents }: ReplyUsage): Usage => addUsage(main, subagents);

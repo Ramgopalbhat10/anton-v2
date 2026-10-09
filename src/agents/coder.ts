@@ -40,6 +40,7 @@ import { gatewayToken, onPlan } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { agentBrowse, sharedBrowserAvailable } from '../services/live-browser.ts';
+import { isLocalAddress } from '../services/browser-step.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 
@@ -188,17 +189,20 @@ const BROWSER_ACTIONS = ['open', 'click', 'type', 'select', 'press', 'hover', 's
 /** Where a browser step runs: the user's Browser panel (a real browser they watch), or a headless browser in the sandbox. */
 type BrowserPlace = 'panel' | 'sandbox';
 
-const isSandboxAddress = (url: string | undefined) => Boolean(url && /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(url.trim()));
+const PLACES: Record<BrowserPlace, string> = {
+	panel: "the user's Browser panel, a real browser they watch and can take over (to sign in, say), for any site on the web",
+	sandbox: "a headless browser inside the sandbox, the only one that reaches the app's dev server on localhost",
+};
+
+/** The browser each task's steps went to last, so a step that names no page stays on the page it is on. */
+const lastPlace = new Map<string, BrowserPlace>();
 
 /**
  * One step in a browser tab that stays open between steps, for using web pages
- * the way a person would. Steps go to the Browser panel's browser when there is
- * one, where the user watches and can take over, or to the sandbox's headless
- * browser, which is the one that reaches the app's dev server on localhost.
+ * the way a person would, in the first of `places` unless the step says or the
+ * page is the sandbox's own.
  */
-function browserTool(id: string, sandbox: boolean) {
-	const panel = sharedBrowserAvailable();
-	const places: BrowserPlace[] = [...(panel ? (['panel'] as const) : []), ...(sandbox ? (['sandbox'] as const) : [])];
+function browserTool(id: string, places: BrowserPlace[]) {
 	return defineTool({
 		name: 'browser',
 		description:
@@ -206,13 +210,10 @@ function browserTool(id: string, sandbox: boolean) {
 			'The tab stays open between calls, so the page keeps its state. Each call returns the URL, title, any failure, console errors, ' +
 			'and the page as an accessibility tree (roles, names, text). Target elements with Playwright selectors from that tree, such as ' +
 			'role=button[name="Save"], role=textbox[name="Email"], text=Sign in, or CSS. Pass screenshot to save a PNG to the outputs folder; read it to see the page. ' +
-			(panel
-				? `"in": "panel" is the user's Browser panel: a real browser they watch and may use too, for any site on the web${sandbox ? '' : ' (the default)'}. `
-				: '') +
-			(sandbox ? `"in": "sandbox" is a headless browser inside the sandbox, the only one that reaches the app's dev server on localhost${panel ? '' : ' (the default)'}.` : ''),
+			places.map((place, index) => `"in": "${place}" is ${PLACES[place]}${index === 0 ? ' (the default)' : ''}.`).join(' '),
 		input: v.object({
 			action: v.picklist(BROWSER_ACTIONS),
-			in: v.optional(v.pipe(v.picklist(places), v.description('Which browser; keep using the same one for the steps of one job'))),
+			in: v.optional(v.pipe(v.picklist(places), v.description('Which browser; steps after an open stay in the browser it used'))),
 			url: v.optional(v.pipe(v.string(), v.description('For open: a site, or the dev server in the sandbox such as http://localhost:3000'))),
 			target: v.optional(v.pipe(v.string(), v.description('The element to act on, as a Playwright selector'))),
 			text: v.optional(v.pipe(v.string(), v.description('For type: what to enter, replacing what is there. For select: the option'))),
@@ -227,13 +228,15 @@ function browserTool(id: string, sandbox: boolean) {
 		}),
 		async run({ data }) {
 			const { in: chosen, ...step } = data;
-			// The dev server is only reachable from inside the sandbox.
-			const place: BrowserPlace = chosen ?? (sandbox && (!panel || isSandboxAddress(step.url)) ? 'sandbox' : 'panel');
-			if (place === 'panel' && step.action === 'open' && isSandboxAddress(step.url)) {
-				return { output: { problem: `The Browser panel cannot reach the sandbox's ${step.url}. ${sandbox ? 'Use "in": "sandbox" for it.' : 'The sandbox is not running; ask the coding agent to start it and run the dev server.'}` } };
+			// Opening the sandbox's own address goes to the sandbox; other steps stay where the last one was.
+			const local = step.action === 'open' && isLocalAddress(step.url);
+			const place: BrowserPlace =
+				chosen ?? (local && places.includes('sandbox') ? 'sandbox' : step.action === 'open' ? places[0] : (lastPlace.get(id) ?? places[0]));
+			if (place === 'panel' && local) {
+				return { output: { problem: `The Browser panel cannot reach the sandbox's ${step.url}. ${places.includes('sandbox') ? 'Use "in": "sandbox" for it.' : 'The sandbox is not running; ask the coding agent to start it and run the dev server.'}` } };
 			}
-			if (place === 'sandbox') return { output: await browse(await machineFor(id), step) };
-			return { output: await agentBrowse(id, step) };
+			lastPlace.set(id, place);
+			return { output: place === 'sandbox' ? await browse(await machineFor(id), step) : await agentBrowse(id, step) };
 		},
 	});
 }
@@ -251,17 +254,14 @@ function Browser() {
 }
 
 /** A subagent for work on web pages, so the pages it reads stay out of the coding agent's own context. */
-function useBrowserSubagent(id: string, sandbox: boolean) {
-	const panel = sharedBrowserAvailable();
+function useBrowserSubagent(id: string, places: BrowserPlace[]) {
 	const subagent = defineSubagent({
 		name: 'browser',
 		description:
 			'Does a job on web pages in a real browser and reports back: browse and read sites, click through flows, fill forms, check a web app. ' +
-			(panel ? "It works in the user's Browser panel, which they watch and can take over (to sign in, say)" : '') +
-			(panel && sandbox ? ', or in the sandbox for the dev server on localhost. ' : sandbox ? 'It works in a headless browser in the sandbox, which reaches the dev server on localhost. ' : '. ') +
-			'Give it a complete brief: the URL, what to do, and what to report.',
+			`It works in ${places.map((place) => PLACES[place]).join(', or in ')}. Give it a complete brief: the URL, what to do, and what to report.`,
 		agent: () => {
-			useTool(browserTool(id, sandbox));
+			useTool(browserTool(id, places));
 			return Browser();
 		},
 	});
@@ -414,7 +414,8 @@ export function Coder({ id }: AgentProps) {
 	useSkills(id, workspace);
 	useLatestInput(id);
 	const browsing = sharedBrowserAvailable();
-	if (browsing || workspace) useBrowserSubagent(id, workspace);
+	const places: BrowserPlace[] = [...(browsing ? (['panel'] as const) : []), ...(workspace ? (['sandbox'] as const) : [])];
+	if (places.length) useBrowserSubagent(id, places);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
 	for (const server of mcpServersFor(id)) {
 		useMcpConnection({
@@ -448,8 +449,8 @@ export function Coder({ id }: AgentProps) {
 		const reply = finishReply(id);
 		return {
 			usage: reply ? replyTotal(reply) : toUsage(response.usage),
-			...(reply ? { usageParts: reply } : {}),
-			billing: onPlan(model) ? 'plan' : 'api',
+			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents } } : {}),
+			billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};
 	});

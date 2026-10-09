@@ -4,20 +4,10 @@ type KernelBrowser = {
 	session_id: string;
 	cdp_ws_url: string;
 	browser_live_view_url?: string | null;
-	viewport?: { width: number; height: number } | null;
 	deleted_at?: string | null;
 };
 
-const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
-
-function toBrowser(browser: KernelBrowser): HostedBrowser {
-	return {
-		id: browser.session_id,
-		cdpUrl: browser.cdp_ws_url,
-		liveViewUrl: browser.browser_live_view_url ?? null,
-		viewport: browser.viewport ?? DEFAULT_VIEWPORT,
-	};
-}
+const toBrowser = (browser: KernelBrowser): HostedBrowser => ({ id: browser.session_id, cdpUrl: browser.cdp_ws_url, liveViewUrl: browser.browser_live_view_url ?? null });
 
 /**
  * Kernel's hosted Chromium (kernel.sh), over its REST API. Browsers are
@@ -50,7 +40,7 @@ export function kernelBrowsers({ apiUrl, apiKey }: { apiUrl: string; apiKey: str
 				...(startUrl ? { start_url: startUrl } : {}),
 			});
 			if (!browser) throw new Error('Kernel did not return a browser');
-			return toBrowser({ ...browser, viewport: browser.viewport ?? viewport });
+			return toBrowser(browser);
 		},
 		async get(id) {
 			const browser = await call<KernelBrowser>('GET', `/browsers/${encodeURIComponent(id)}`);

@@ -77,16 +77,20 @@ function fakeChromium() {
 const chromium = fakeChromium();
 await new Promise((resolve) => chromium.server.once('listening', resolve));
 const hosted = new Map<string, HostedBrowser>();
+let checks = 0;
 const created: Array<Parameters<BrowserHost['create']>[0]> = [];
 const host: BrowserHost = {
 	name: 'fake',
 	async create(options) {
 		created.push(options);
-		const browser = { id: `b${hosted.size + 1}`, cdpUrl: chromium.url(), liveViewUrl: 'https://live.example/view', viewport: options.viewport };
+		const browser = { id: `b${hosted.size + 1}`, cdpUrl: chromium.url(), liveViewUrl: 'https://live.example/view' };
 		hosted.set(browser.id, browser);
 		return browser;
 	},
-	get: async (id) => hosted.get(id) ?? null,
+	get: async (id) => {
+		checks += 1;
+		return hosted.get(id) ?? null;
+	},
 	async remove(id) {
 		hosted.delete(id);
 	},
@@ -105,6 +109,7 @@ test('what you type in the address bar becomes a URL, or a search', () => {
 	assert.equal(addressToUrl('example.com'), 'https://example.com');
 	assert.equal(addressToUrl('example.com/docs?a=1'), 'https://example.com/docs?a=1');
 	assert.equal(addressToUrl('localhost:3000'), 'http://localhost:3000');
+	assert.equal(addressToUrl('0.0.0.0:3000/app'), 'http://0.0.0.0:3000/app');
 	assert.equal(addressToUrl('http://localhost:5173/app'), 'http://localhost:5173/app');
 	assert.equal(addressToUrl('https://kernel.sh'), 'https://kernel.sh');
 	assert.equal(addressToUrl('react grab element picker'), 'https://www.google.com/search?q=react%20grab%20element%20picker');
@@ -125,7 +130,10 @@ test('a task opens one browser, reuses it, follows its page, and closes it', asy
 	view = await openBrowser('web');
 	assert.equal(created.length, 1, 'the open browser is reused');
 
+	// While Anton is connected to the browser, it does not ask the host whether it still exists.
+	const asked = checks;
 	const page = await navigate('web', { url: 'news.ycombinator.com' });
+	assert.equal(checks, asked);
 	assert.equal(page.url, 'https://news.ycombinator.com');
 	assert.equal(page.canGoBack, true);
 	await new Promise((resolve) => setTimeout(resolve, 20));
@@ -165,7 +173,10 @@ test('pointing highlights an element; picking reads it and takes its picture wit
 
 test('without a browser host the panel says so, and a browser the host removed is forgotten', async () => {
 	await openBrowser('web');
+	// A browser the host removes drops its connection; Anton then asks the host, and forgets it.
 	hosted.clear();
+	for (const socket of chromium.server.clients) socket.terminate();
+	await new Promise((resolve) => setTimeout(resolve, 20));
 	assert.deepEqual(await browserView('web'), { available: true, browser: null });
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'x', list: async () => [] }, browsers: null });
 	assert.deepEqual(await browserView('web'), { available: false, browser: null });

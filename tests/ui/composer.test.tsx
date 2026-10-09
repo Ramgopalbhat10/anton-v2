@@ -14,7 +14,6 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { Composer } = await import('@/components/composer');
-const { keepDraft } = await import('@/lib/composer-inbox');
 
 const model = {
 	id: 'openrouter/test/model',
@@ -46,8 +45,6 @@ function setup(patch = {}) {
 describe('Composer', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		// Drafts are kept per task between mounts; each test starts with none.
-		keepDraft('s1', { text: '', images: [], elements: [] });
 		api.editSession.mockImplementation(async (_id: string, change: object) => session(change));
 	});
 

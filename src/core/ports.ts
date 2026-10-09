@@ -316,7 +316,6 @@ export type HostedBrowser = {
 	cdpUrl: string;
 	/** A page that shows the browser and takes the viewer's input; a credential, so only Anton's own UI gets it. */
 	liveViewUrl: string | null;
-	viewport: { width: number; height: number };
 };
 
 /**

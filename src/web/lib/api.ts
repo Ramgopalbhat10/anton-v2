@@ -61,6 +61,8 @@ export type Session = {
 
 /** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */
 export type Usage = { inputTokens: number; outputTokens: number; cost: number; cachedTokens?: number };
+/** One side of a reply's usage, the agent's own calls or its subagents', as the reply's metadata carries it. */
+export type UsagePart = Usage & { calls: number };
 
 /** A problem from background work, newest first. */
 export type LogEntry = { at: string; level: 'warn' | 'error'; message: string; detail: string | null; sessionId: string | null };
