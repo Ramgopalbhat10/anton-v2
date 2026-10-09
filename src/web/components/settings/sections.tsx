@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, Blocks, Box, Cpu, Folder, HardDrive, KeyRound, Layers, Link, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
+import { Activity, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { CommandsPage } from './commands';
 import { ComputePage } from './compute';
@@ -13,6 +13,7 @@ import { SandboxesPage } from './sandboxes';
 import { SecretsPage } from './secrets';
 import { SkillsPage } from './skills';
 import { StoragePage } from './storage';
+import { SubscriptionsPage } from './subscriptions';
 import { UsagePage } from './usage';
 
 export type SectionGroup = 'anton' | 'infrastructure' | 'agent';
@@ -28,6 +29,7 @@ export type SettingsSection = { id: string; group: SectionGroup; label: string; 
 /** Every settings page, in nav order. A new page is one entry here. */
 export const SECTIONS: SettingsSection[] = [
 	{ id: 'general', group: 'anton', label: 'General', icon: Settings2, desc: 'The model and mode new tasks start with', Page: GeneralPage },
+	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Run tasks on a ChatGPT plan you already pay for', Page: SubscriptionsPage },
 	{ id: 'connections', group: 'anton', label: 'Connections', icon: Link, desc: 'GitHub, Modal, storage, models, the decision model and web search, checked live', Page: ConnectionsPage },
 	{ id: 'usage', group: 'anton', label: 'Usage and limits', icon: Activity, desc: 'Model spend and the caps that stop it', Page: UsagePage },
 	{ id: 'problems', group: 'anton', label: 'Recent problems', icon: TriangleAlert, desc: 'Warnings and errors from work that runs on its own', Page: ProblemsPage },

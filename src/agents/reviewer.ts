@@ -4,15 +4,18 @@ import { type AgentProps, defineTool, setProvider, useModel, useSandbox, useTool
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { agentSettingsNow } from '../services/agent-runner.ts';
 import { postReview } from '../services/code-review.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
+import { gatewayToken } from '../services/subscriptions.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { modelFor } from '../services/sessions.ts';
 import { machineFor } from '../services/workspace.ts';
 
 setProvider(liveOpenRouterProvider(loadedModels));
+setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 
 const PROMPT = [
 	"You are Anton's code reviewer. The coding agent working on this task has opened or updated a pull request from this repository's task branch, and you review it before a person does.",

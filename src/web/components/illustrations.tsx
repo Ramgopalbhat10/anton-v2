@@ -543,6 +543,70 @@ export function TasksArt({ className }: { className?: string }) {
 	);
 }
 
+/** Anton's unit and a plan's unit side by side on the grid. Linked, a lit
+    coupling joins them and the plan's lights are on; not yet, the plan's unit
+    is only drawn in outline, waiting to be connected. */
+export function PlanLinkArt({ className, linked, plan }: { className?: string; linked: boolean; plan: string }) {
+	const vents = (
+		<>
+			{Array.from({ length: 6 }, (_, i) => (
+				<Slot key={i} x={7 + i * 5.5} y={8} w={2.6} h={14} r={1.3} />
+			))}
+			<Bar x={7} y={30} w={20} />
+			<Bar x={7} y={34} w={12} />
+		</>
+	);
+	const front = (lit: boolean) => (
+		<>
+			<Slot x={6} y={5} w={22} h={8} r={1.6} edge />
+			<Led at={[33, 9]} lit={lit} />
+			<Led at={[38, 9]} />
+		</>
+	);
+	return (
+		<Frame label={linked ? `Anton linked to your ${plan} plan` : `Anton, with your ${plan} plan not connected yet`} viewBox="-150 -6 300 96" className={className}>
+			<Block at={[0, 64, 0]} size={[44, 44, 18]} r={3} top={vents} left={front(true)} right={<Bar x={8} y={8} w={18} />} />
+			{linked ? (
+				<>
+					<Trace points={[pt([44, 86, 6]), pt([61, 69, 6])]} stroke={ACCENT} dash="2 2.5" />
+					<Trace points={[pt([69, 61, 6]), pt([86, 44, 6])]} stroke={ACCENT} dash="2 2.5" />
+					<Block at={[61, 61, 3]} size={[8, 8, 6]} r={1} tone="accent" />
+				</>
+			) : (
+				<Trace points={[pt([44, 86, 6]), pt([86, 44, 6])]} dash="1.5 4" />
+			)}
+			<Block
+				at={[64, 0, 0]}
+				size={[44, 44, 18]}
+				r={3}
+				dashed={!linked}
+				tone={linked ? 'solid' : 'glass'}
+				top={
+					linked ? (
+						<>
+							<Ring at={[22, 22]} r={11} />
+							<Ring at={[22, 22]} r={5} stroke={ACCENT} />
+							<Bar x={7} y={38} w={14} accent />
+						</>
+					) : undefined
+				}
+				left={linked ? front(true) : undefined}
+			/>
+			<Label at={[22, 86, 18]} run={-46} rise={-30}>
+				anton
+			</Label>
+			<Label at={[86, 22, 18]} run={46} rise={-30} accent={linked}>
+				{`${plan.toLowerCase()} plan`}
+			</Label>
+			{linked ? (
+				<Label at={[65, 65, 3]} run={30} rise={14} accent>
+					signed in
+				</Label>
+			) : null}
+		</Frame>
+	);
+}
+
 /** A switch with a row of ports and a plug about to go into one, lit: a
     preview port waiting to be added. */
 export function LinkArt({ className }: { className?: string }) {

@@ -44,6 +44,13 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models`, cached for an hour) | |
+| `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
+
+### Subscriptions
+
+Instead of paying per token, tasks can run on a ChatGPT Plus or Pro plan. In **Settings › Subscriptions**, sign in with ChatGPT; OpenAI only sends the browser back to `http://127.0.0.1:1455/auth/callback`, which Anton catches itself when it runs on your computer, and which you paste into the page when Anton is hosted. You can also bring a sign-in made elsewhere: run `npx @earendil-works/pi-ai@latest login openai` on a computer with a browser and paste the `auth.json` it writes. Anton keeps the sign-in in its database and renews the token as it expires.
+
+The plan's models (`openai/<model>`) come first in the model picker, marked PLAN. Their calls go to the OpenAI Responses API with your plan's token and count toward its limits; Anton records them at $0, or at API prices toward the spending caps if you switch that on. Claude plans need Claude Code itself and are not built yet: see [docs/claude-code-subscription.md](docs/claude-code-subscription.md).
 
 ## Environment
 
@@ -82,7 +89,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | Path | What it is |
 | --- | --- |
 | `src/core/` | Ports, shared types, shell helpers, errors |
-| `src/providers/` | Modal, local, S3, disk, GitHub and OpenRouter implementations |
+| `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter and ChatGPT-plan implementations |
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |

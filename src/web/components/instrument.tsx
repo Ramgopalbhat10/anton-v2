@@ -199,6 +199,22 @@ export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode;
 	);
 }
 
+/** Labelled values on a grid, like a spec sheet: a mono caption over each value, two across on a phone and three wider. */
+export function SpecGrid({ items, className }: { items: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; title?: string }>; className?: string }) {
+	return (
+		<dl className={cn('m-0 grid grid-cols-2 gap-x-4 gap-y-3.5 border-t border-(--border-subtle) px-4 py-3.5 sm:grid-cols-3', className)}>
+			{items.map((item, index) => (
+				<div key={index} title={item.title} className="flex min-w-0 flex-col gap-1">
+					<dt>
+						<Caption>{item.label}</Caption>
+					</dt>
+					<dd className={cn('in-num m-0 truncate text-[12.5px] leading-[18px] text-(--text-primary)', item.tone && TEXT[item.tone])}>{item.value}</dd>
+				</div>
+			))}
+		</dl>
+	);
+}
+
 export type Marker = { at: number; label: string; tone?: Tone };
 
 /**

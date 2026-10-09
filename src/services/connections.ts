@@ -1,6 +1,7 @@
 import { config } from '../config.ts';
 import { appDb } from '../db/client.ts';
 import { getProviders } from '../providers/index.ts';
+import { accessToken, subscriptionProviders, subscriptionView } from './subscriptions.ts';
 
 /** `set` when it is set up but not checked from here; `off` when it is not set up; `failing` when the check did not pass. */
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
@@ -17,8 +18,29 @@ function withTimeout<T>(work: Promise<T>): Promise<T> {
 
 type Check = { id: string; name: string; provider: string; off?: string; unchecked?: boolean; run: () => Promise<string> };
 
-function checks(): Check[] {
+/** Each plan you can sign in to: off until you do, then checked by renewing its token if it needs it. */
+async function subscriptionChecks(): Promise<Check[]> {
+	return Promise.all(
+		subscriptionProviders().map(async (provider): Promise<Check> => {
+			const view = await subscriptionView(provider);
+			return {
+				id: `subscription-${provider.id}`,
+				name: `${provider.name} plan`,
+				provider: provider.gateway,
+				off: view.state === 'signed-out' ? 'Not signed in. Sign in under Settings › Subscriptions to run tasks on your plan instead of per token.' : undefined,
+				run: async () => {
+					await accessToken(provider.id);
+					const models = view.options.enabled ? `${view.models.length} models in the picker` : 'its models are switched off';
+					return `Signed in${view.email ? ` as ${view.email}` : ''}; ${models}.`;
+				},
+			};
+		}),
+	);
+}
+
+async function checks(): Promise<Check[]> {
 	const { git, sandbox, store, models, decisions } = getProviders();
+	const plans = await subscriptionChecks();
 	const web = config.web.mcpUrl === 'off' ? null : new URL(config.web.mcpUrl);
 	return [
 		{
@@ -54,6 +76,7 @@ function checks(): Check[] {
 			off: config.hasOpenRouter() ? undefined : 'OPENROUTER_API_KEY is not set, so the agent cannot answer.',
 			run: async () => `${(await models.list()).length} models that can call tools.`,
 		},
+		...plans,
 		{
 			id: 'decisions',
 			name: 'Decision model',
@@ -100,6 +123,6 @@ async function probe({ id, name, provider, off, unchecked, run }: Check): Promis
 }
 
 /** Every service Anton depends on, each checked live. */
-export function connections(): Promise<Connection[]> {
-	return Promise.all(checks().map(probe));
+export async function connections(): Promise<Connection[]> {
+	return Promise.all((await checks()).map(probe));
 }

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Box, Brain, Database, GitBranch, Globe, HardDrive, Link, RotateCw, Split } from 'lucide-react';
+import { Box, Brain, CreditCard, Database, GitBranch, Globe, HardDrive, Link, RotateCw, Split } from 'lucide-react';
 import { Card, CardSection, Figure, type Part, SplitBar, Status } from '@/components/instrument';
 import { Btn, Spinner } from '@/components/signal';
 import { api, type Connection } from '@/lib/api';
@@ -22,7 +22,7 @@ function Tile({ connection }: { connection: Connection }) {
 	return (
 		<Card
 			as="div"
-			icon={ICONS[connection.id] ?? Link}
+			icon={ICONS[connection.id] ?? (connection.id.startsWith('subscription-') ? CreditCard : Link)}
 			title={connection.name}
 			sub={<span className="font-mono text-[11px]">{connection.provider}</span>}
 			status={<Status tone={TONE[connection.state]}>{state.label}</Status>}
