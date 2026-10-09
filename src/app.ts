@@ -53,6 +53,7 @@ import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
+import { recordSubagentEvent, subagentRuns } from './services/subagent-runs.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
@@ -95,6 +96,7 @@ observeRuntime((event) => {
 	recordAgentEvent(event);
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
+	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
@@ -481,6 +483,10 @@ app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
 	return c.json({ ok: true });
 });
 app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
+app.get('/api/sessions/:id/subagents', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ runs: await subagentRuns(id) });
+});
 app.get('/api/sessions/:id/context', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json(await contextView(id));

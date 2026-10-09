@@ -15,6 +15,7 @@ import { api, type Session } from '@/lib/api';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useTaskNotifications } from '@/lib/notifications';
 import { SendToAgent } from '@/lib/review';
+import { ShowPanel } from '@/lib/workspace';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -169,50 +170,52 @@ export function SessionPage() {
 
 	return (
 		<SendToAgent.Provider value={send}>
-			<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
-				{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
-				<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
-					<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
-						<MenuButton />
-						{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
-						{status ? (
-							<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
-								<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
-								<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
-							</span>
-						) : null}
-						<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
-						{session.data ? <PullRequestChip session={session.data} /> : null}
-						{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
-						{!open ? (
-							<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
-								<span className="hidden sm:inline">Review</span>
-							</Btn>
-						) : null}
-						{session.data ? (
-							<TaskMenu
-								session={session.data}
-								onRename={() => setRenaming(true)}
-								onAskForPullRequest={() => void agent.sendMessage(pullRequestAsk(session.data))}
-							/>
-						) : null}
-						{!open ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={() => setOpen(true)} /> : null}
-					</header>
-					<Thread sessionId={sessionId} agent={agent} />
+			<ShowPanel.Provider value={showPanel}>
+				<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
+					{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
+					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
+						<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
+							<MenuButton />
+							{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
+							{status ? (
+								<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
+									<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
+									<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
+								</span>
+							) : null}
+							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
+							{session.data ? <PullRequestChip session={session.data} /> : null}
+							{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
+							{!open ? (
+								<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
+									<span className="hidden sm:inline">Review</span>
+								</Btn>
+							) : null}
+							{session.data ? (
+								<TaskMenu
+									session={session.data}
+									onRename={() => setRenaming(true)}
+									onAskForPullRequest={() => void agent.sendMessage(pullRequestAsk(session.data))}
+								/>
+							) : null}
+							{!open ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={() => setOpen(true)} /> : null}
+						</header>
+						<Thread sessionId={sessionId} agent={agent} />
+					</div>
+					{open ? (
+						<VmPanel
+							sessionId={sessionId}
+							tabs={tabs}
+							active={active}
+							onTabsChange={setTabs}
+							onActiveChange={setActive}
+							expanded={expanded}
+							onToggleExpanded={() => setExpanded((current) => !current)}
+							onClose={() => setOpen(false)}
+						/>
+					) : null}
 				</div>
-				{open ? (
-					<VmPanel
-						sessionId={sessionId}
-						tabs={tabs}
-						active={active}
-						onTabsChange={setTabs}
-						onActiveChange={setActive}
-						expanded={expanded}
-						onToggleExpanded={() => setExpanded((current) => !current)}
-						onClose={() => setOpen(false)}
-					/>
-				) : null}
-			</div>
+			</ShowPanel.Provider>
 		</SendToAgent.Provider>
 	);
 }

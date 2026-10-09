@@ -376,10 +376,53 @@
 	animation: in-sweep 2.2s linear infinite;
 }
 
+/* A working subagent's tile: a ring in its own colour that breathes out and fades. */
+@keyframes agent-breathe {
+	from {
+		box-shadow: 0 0 0 0 color-mix(in oklab, var(--agent-tone) 45%, transparent);
+	}
+	to {
+		box-shadow: 0 0 0 5px transparent;
+	}
+}
+.agent-tile--running::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	animation: agent-breathe 1.6s var(--ease-out) infinite;
+}
+
+/* What a working subagent is doing now: the words catch a slow light, left to right. */
+@keyframes agent-live {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+.agent-live-line > span:last-child {
+	background: linear-gradient(90deg, var(--text-tertiary) 0%, var(--text-tertiary) 40%, var(--text-primary) 50%, var(--text-tertiary) 60%, var(--text-tertiary) 100%);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: agent-live 2.4s linear infinite;
+}
+.agent-live-line > span:last-child * {
+	color: inherit;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.in-pulse,
-	.in-sweep::after {
+	.in-sweep::after,
+	.agent-tile--running::after,
+	.agent-live-line > span:last-child {
 		animation: none;
+	}
+	.agent-live-line > span:last-child {
+		color: var(--text-tertiary);
 	}
 }
 

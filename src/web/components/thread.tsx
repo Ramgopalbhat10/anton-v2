@@ -1,28 +1,10 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
-import {
-	Bot,
-	Braces,
-	Check,
-	Copy,
-	Camera,
-	ChevronDown,
-	ChevronRight,
-	CircleAlert,
-	FilePlus,
-	FileText,
-	FolderSearch,
-	GitPullRequest,
-	Globe,
-	ListChecks,
-	Pencil,
-	Search,
-	SquareTerminal,
-	Wrench,
-} from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, ListChecks } from 'lucide-react';
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
+import { describeTool, field, toolTone } from '@/components/tool-describe';
+import { AgentsCard, delegationOf } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
@@ -35,24 +17,10 @@ import { cn } from '@/lib/utils';
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
 type Step = ToolPart | ReasoningPart;
-type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] } | { kind: 'plan'; part: ToolPart };
+type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] } | { kind: 'plan'; part: ToolPart } | { kind: 'agents'; calls: ToolPart[] };
 
 const PLAN_TOOL = 'propose_plan';
 const APPROVED = 'Your plan is approved. Go ahead and build it.';
-
-function field(input: unknown, key: string): string {
-	if (input && typeof input === 'object' && key in input) {
-		const value = (input as Record<string, unknown>)[key];
-		return typeof value === 'string' ? value : value == null ? '' : String(value);
-	}
-	return '';
-}
-
-/** The tool returns `{ url }`; the runtime may wrap it as `{ output: { url } }`. */
-function pullRequestUrl(output: unknown): string {
-	const record = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
-	return field(record, 'url') || field(record.output, 'url');
-}
 
 /** The task whose thread is showing, for links into its Library. */
 const SessionId = createContext('');
@@ -63,53 +31,6 @@ function screenshotPath(part: ToolPart): string {
 	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
 	const key = part.toolName === 'browser' ? 'screenshot' : 'path';
 	return (field(record, key) || field(record.output, key)).replace(/^\.\.\/outputs\//, '');
-}
-
-/** One browser step as a sentence: what was done, and to what. */
-function browserStep(input: unknown) {
-	const target = <Em>{field(input, 'target')}</Em>;
-	switch (field(input, 'action')) {
-		case 'open':
-			return (
-				<>
-					Opened <Em>{field(input, 'url')}</Em>
-				</>
-			);
-		case 'click':
-			return <>Clicked {target}</>;
-		case 'type':
-			return (
-				<>
-					Typed <Em>{field(input, 'text')}</Em> into {target}
-				</>
-			);
-		case 'select':
-			return (
-				<>
-					Chose <Em>{field(input, 'text')}</Em> in {target}
-				</>
-			);
-		case 'press':
-			return (
-				<>
-					Pressed <Em>{field(input, 'key')}</Em>
-				</>
-			);
-		case 'hover':
-			return <>Hovered over {target}</>;
-		case 'scroll':
-			return <>Scrolled the page</>;
-		case 'back':
-			return <>Went back</>;
-		case 'wait':
-			return <>Waited{field(input, 'target') ? <> for {target}</> : null}</>;
-		default:
-			return <>Looked at the page</>;
-	}
-}
-
-function lineCount(text: string) {
-	return text ? text.split('\n').length : 0;
 }
 
 /** Plain text from a tool result, whichever shape the tool returned. */
@@ -124,126 +45,6 @@ function outputText(output: unknown): string {
 	return '';
 }
 
-function Em({ children }: { children: ReactNode }) {
-	return <span className="text-(--text-secondary)">{children}</span>;
-}
-
-function describeTool(part: ToolPart): { icon: LucideIcon; body: ReactNode } {
-	const input = part.input;
-	switch (part.toolName) {
-		case 'read': {
-			const offset = Number(field(input, 'offset')) || 0;
-			const limit = Number(field(input, 'limit')) || 0;
-			const range = limit ? `:${offset || 1}-${(offset || 1) + limit - 1}` : '';
-			return {
-				icon: FileText,
-				body: (
-					<>
-						Read <Em>{field(input, 'path') + range}</Em>
-					</>
-				),
-			};
-		}
-		case 'grep':
-			return {
-				icon: Search,
-				body: (
-					<>
-						Searched <Em>{field(input, 'pattern')}</Em>
-					</>
-				),
-			};
-		case 'glob':
-			return {
-				icon: FolderSearch,
-				body: (
-					<>
-						Listed <Em>{field(input, 'pattern')}</Em>
-					</>
-				),
-			};
-		case 'edit': {
-			const added = lineCount(field(input, 'newText'));
-			const removed = lineCount(field(input, 'oldText'));
-			return {
-				icon: Pencil,
-				body: (
-					<>
-						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--success-text)">+{added}</span>{' '}
-						<span className="text-(--danger-text)">-{removed}</span>
-					</>
-				),
-			};
-		}
-		case 'write':
-			return {
-				icon: FilePlus,
-				body: (
-					<>
-						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--success-text)">+{lineCount(field(input, 'content'))}</span>
-					</>
-				),
-			};
-		case 'bash':
-			return {
-				icon: SquareTerminal,
-				body: (
-					<>
-						Ran <Em>{field(input, 'command').split('\n')[0]}</Em>
-					</>
-				),
-			};
-		case 'run_script':
-			return { icon: Braces, body: <>Ran a script</> };
-		case 'task':
-			return {
-				icon: Bot,
-				body: (
-					<>
-						Delegated to <Em>{field(input, 'agent') || 'a subagent'}</Em>
-						{field(input, 'description') ? ` — ${field(input, 'description')}` : ''}
-					</>
-				),
-			};
-		case 'open_pull_request': {
-			const url = pullRequestUrl(part.state === 'output-available' ? part.output : undefined);
-			return {
-				icon: GitPullRequest,
-				body: url ? (
-					<>
-						Opened{' '}
-						<a href={url} target="_blank" rel="noreferrer" className="text-(--accent-text) underline underline-offset-2">
-							{url.replace(/^https:\/\/github\.com\//, '')}
-						</a>
-					</>
-				) : (
-					<>Opening a pull request</>
-				),
-			};
-		}
-		case 'screenshot':
-			return {
-				icon: Camera,
-				body: (
-					<>
-						Took a screenshot of <Em>{field(input, 'url')}</Em>
-					</>
-				),
-			};
-		case 'browser':
-			return { icon: Globe, body: browserStep(input) };
-		default:
-			return {
-				icon: Wrench,
-				body: (
-					<>
-						Called <Em>{part.toolName}</Em>
-					</>
-				),
-			};
-	}
-}
-
 function toBlocks(parts: FlueConversationPart[]): Block[] {
 	const blocks: Block[] = [];
 	for (const part of parts) {
@@ -251,6 +52,11 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
 		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {
 			blocks.push({ kind: 'plan', part });
+		} else if (part.type === 'dynamic-tool' && part.toolName === 'task') {
+			// Work handed to subagents gets its own card, the calls of one batch together.
+			const last = blocks[blocks.length - 1];
+			if (last?.kind === 'agents') last.calls.push(part);
+			else blocks.push({ kind: 'agents', calls: [part] });
 		} else if (part.type === 'reasoning' || part.type === 'dynamic-tool') {
 			const last = blocks[blocks.length - 1];
 			if (last?.kind === 'steps') last.steps.push(part);
@@ -366,25 +172,7 @@ function ToolRow({ part }: { part: ToolPart }) {
 
 /** What kind of work a step was, for the strip on a steps card. */
 function stepTone(step: Step): string {
-	if (step.type === 'reasoning') return 'var(--neutral-600)';
-	if (step.state === 'output-error') return 'var(--danger-base)';
-	switch (step.toolName) {
-		case 'bash':
-		case 'run_script':
-			return 'var(--data-1)';
-		case 'edit':
-		case 'write':
-			return 'var(--data-2)';
-		case 'screenshot':
-		case 'browser':
-			return 'var(--data-3)';
-		case 'open_pull_request':
-			return 'var(--data-4)';
-		case 'task':
-			return 'var(--data-5)';
-		default:
-			return 'var(--neutral-500)';
-	}
+	return step.type === 'reasoning' ? 'var(--neutral-600)' : toolTone(step.toolName, step.state === 'output-error');
 }
 
 /** Steps shown in a card's strip; a long turn shows its latest. */
@@ -584,6 +372,7 @@ function CopyResponse({ text }: { text: string }) {
 
 function AssistantMessage({ message, live }: { message: FlueConversationMessage; live: boolean }) {
 	const blocks = toBlocks(message.parts);
+	const sessionId = useContext(SessionId);
 	const usage = usageOf(message);
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
@@ -604,6 +393,8 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 					<Markdown key={index} text={block.text} />
 				) : block.kind === 'plan' ? (
 					<PlanCard key={block.part.toolCallId} part={block.part} />
+				) : block.kind === 'agents' ? (
+					<AgentsCard key={block.calls[0].toolCallId} sessionId={sessionId} calls={block.calls.map(delegationOf)} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
 				),

@@ -55,7 +55,8 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 			case 'press': await (command.target ? target().press(command.key ?? 'Enter', { timeout: 10000 }) : page.keyboard.press(command.key ?? 'Enter')); break;
 			case 'hover': await target().hover({ timeout: 10000 }); break;
 			case 'scroll': await page.mouse.wheel(0, command.amount ?? 600); break;
-			case 'back': await page.goBack({ waitUntil: 'domcontentloaded' }); break;
+			// A page restored from the back-forward cache fires no load event, so only the commit is awaited; the settle below does the rest.
+			case 'back': await page.goBack({ waitUntil: 'commit', timeout: 10000 }); break;
 			case 'wait': await (command.target ? target().waitFor({ timeout: 15000 }) : page.waitForTimeout(Math.min(command.ms ?? 1000, 15000))); break;
 		}
 	} catch (error) {

@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
 	stopAgent: vi.fn(),
 	commands: vi.fn(async () => ({ commands: [] })),
 	sessionSkills: vi.fn(async () => ({ skills: [] })),
+	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -68,6 +69,28 @@ describe('Thread', () => {
 		expect(screen.getByText('2 STEPS')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
+	});
+
+	it('shows work handed to subagents as an agents card, not as steps, matched to their runs', async () => {
+		api.subagents.mockResolvedValue({
+			runs: [
+				{
+					id: 'run-1', agent: 'browser', prompt: 'Count the posts', description: null, toolCallId: 'task-1', status: 'running', startedAt: new Date().toISOString(),
+					durationMs: null, model: 'gpt-6-luna', tokens: 6300, calls: 2,
+					steps: [{ id: 's1', tool: 'browser', input: { action: 'click', target: 'text=Blog' }, state: 'running', at: new Date().toISOString(), durationMs: null }],
+					writing: null, result: null,
+				},
+			],
+		});
+		show(agent([user('u1', 'Count the posts'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Count the posts', description: 'Count blog posts' }), tool('read', { path: 'README.md' }, { output: 'x' })])]));
+		expect(await screen.findByText('1 agent working')).toBeTruthy();
+		expect(screen.getByText('Count blog posts')).toBeTruthy();
+		expect(screen.queryByText(/Delegated to/)).toBeNull();
+		// The latest step, as the thread would describe it, and the run's numbers.
+		expect(await screen.findByText(/Clicked/)).toBeTruthy();
+		expect(screen.getByText(/1 step · \d+s · 6\.3K tok/)).toBeTruthy();
+		// Other tools stay in the steps card.
+		expect(screen.getByText('1 STEP')).toBeTruthy();
 	});
 
 	it('shows a proposed plan, and approving turns plan mode off before telling the agent to build', async () => {
