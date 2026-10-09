@@ -39,7 +39,7 @@ test('thirteen concurrent deliveries of one model call count only once in task t
 	await session('duplicates');
 	const results = await Promise.all(Array.from({ length: 13 }, () => recordTurnUsage(event('duplicates', 'turn-one'))));
 	assert.equal(results.filter(Boolean).length, 1);
-	assert.deepEqual((await getSessionRecord('duplicates'))?.usage, { inputTokens: 160, outputTokens: 20, cost: 0.01 });
+	assert.deepEqual((await getSessionRecord('duplicates'))?.usage, { inputTokens: 160, outputTokens: 20, cost: 0.01, cachedTokens: 50 });
 	const db = await appDb();
 	assert.equal((await db.execute("SELECT COUNT(*) AS n FROM usage_log WHERE session_id='duplicates'")).rows[0].n, 1);
 	assert.equal(await spentSince(new Date(0)), 0.01);
@@ -68,7 +68,7 @@ test('distinct calls with identical usage count separately, and repeated calls a
 	);
 	assert.equal(restarted.status, 0, restarted.stderr);
 	assert.equal(restarted.stdout.trim(), 'null');
-	assert.deepEqual((await getSessionRecord('distinct'))?.usage, { inputTokens: 320, outputTokens: 40, cost: 0.02 });
+	assert.deepEqual((await getSessionRecord('distinct'))?.usage, { inputTokens: 320, outputTokens: 40, cost: 0.02, cachedTokens: 100 });
 });
 
 test('a failed totals update rolls back the log insert so retrying the call records it once', async () => {
@@ -84,7 +84,7 @@ test('a failed totals update rolls back the log insert so retrying the call reco
 	assert.equal((await db.execute("SELECT COUNT(*) AS n FROM usage_log WHERE session_id = 'retry'")).rows[0].n, 0);
 	await db.execute('DROP TRIGGER fail_usage');
 	await recordTurnUsage(event('retry', 'turn-retry'));
-	assert.deepEqual((await getSessionRecord('retry'))?.usage, { inputTokens: 160, outputTokens: 20, cost: 0.01 });
+	assert.deepEqual((await getSessionRecord('retry'))?.usage, { inputTokens: 160, outputTokens: 20, cost: 0.01, cachedTokens: 50 });
 });
 
 test('turn identities are scoped to a task and ordinary non-turn usage still records each charge', async () => {
@@ -92,5 +92,5 @@ test('turn identities are scoped to a task and ordinary non-turn usage still rec
 	await recordTurnUsage(event('other', 'turn-one'));
 	await addSessionUsage('other', { inputTokens: 2, outputTokens: 1, cost: 0.001 });
 	await addSessionUsage('other', { inputTokens: 2, outputTokens: 1, cost: 0.001 });
-	assert.deepEqual((await getSessionRecord('other'))?.usage, { inputTokens: 164, outputTokens: 22, cost: 0.012 });
+	assert.deepEqual((await getSessionRecord('other'))?.usage, { inputTokens: 164, outputTokens: 22, cost: 0.012, cachedTokens: 50 });
 });

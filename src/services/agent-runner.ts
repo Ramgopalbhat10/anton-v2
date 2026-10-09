@@ -54,7 +54,7 @@ export function isPlanning(id: string): boolean {
 /** The General settings the agents read while they render: whether the coder gets run_script, and each helper agent's model (null for the task's own). */
 export type AgentSettings = { codeMode: boolean; models: Record<HelperAgent, ModelChoice | null> };
 
-let agentSettings: AgentSettings = { codeMode: false, models: { explorer: null, tester: null, reviewer: null } };
+let agentSettings: AgentSettings = { codeMode: false, models: { explorer: null, tester: null, browser: null, reviewer: null } };
 
 export const agentSettingsNow = (): AgentSettings => agentSettings;
 

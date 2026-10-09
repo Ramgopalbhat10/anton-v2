@@ -52,6 +52,11 @@ export const config = {
 		/** Optional, for higher rate limits. */
 		apiKey: read('PARALLEL_API_KEY'),
 	},
+	/** Kernel's hosted browsers, for the Browser panel; without a key the panel says how to set one. */
+	kernel: {
+		apiUrl: read('ANTON_KERNEL_API_URL', 'https://api.onkernel.com'),
+		apiKey: read('KERNEL_API_KEY'),
+	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',

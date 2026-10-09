@@ -49,8 +49,10 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
+import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
+import { countReplyCall } from './services/response-usage.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
@@ -91,6 +93,8 @@ const ENV = v.pipe(
 publishUpgradeHandler(handleTerminalUpgrade);
 observeRuntime((event) => {
 	recordAgentEvent(event);
+	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
+	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
@@ -252,7 +256,7 @@ app.put('/api/settings/general', async (c) => {
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
 			codeMode: v.boolean(),
-			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, reviewer: AGENT_MODEL }),
+			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));
@@ -454,6 +458,29 @@ app.post('/api/sessions/:id/revert', async (c) => {
 	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
+// The Browser panel: a hosted browser per task, seen through its live view and driven for the address bar, picking and drawing.
+app.get('/api/sessions/:id/browser', async (c) => c.json(await browserView(c.req.param('id'))));
+app.post('/api/sessions/:id/browser', async (c) => {
+	const { url } = await body(c, v.object({ url: v.optional(v.pipe(v.string(), v.maxLength(4000))) }));
+	return c.json(await openBrowser(c.req.param('id'), url));
+});
+app.delete('/api/sessions/:id/browser', async (c) => {
+	await closeBrowser(c.req.param('id'));
+	return c.json({ ok: true });
+});
+app.post('/api/sessions/:id/browser/navigate', async (c) => {
+	const input = await body(c, v.union([v.object({ url: v.pipe(v.string(), v.maxLength(4000)) }), v.object({ action: v.picklist(['back', 'forward', 'reload']) })]));
+	return c.json(await navigate(c.req.param('id'), input));
+});
+app.post('/api/sessions/:id/browser/inspect', async (c) => {
+	const point = await body(c, v.object({ x: v.number(), y: v.number(), pick: v.optional(v.boolean(), false) }));
+	return c.json({ element: await inspectAt(c.req.param('id'), point) });
+});
+app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
+	await clearHighlight(c.req.param('id'));
+	return c.json({ ok: true });
+});
+app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
 app.get('/api/sessions/:id/context', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json(await contextView(id));

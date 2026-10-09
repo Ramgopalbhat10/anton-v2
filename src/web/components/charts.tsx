@@ -1,4 +1,5 @@
-import { type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useMemo, useState } from 'react';
+import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 
 /* Charts drawn as plain SVG in the instrument style: thin dashed guides,
@@ -42,22 +43,6 @@ export function niceTicks(top: number, whole = false): number[] {
 	return [0, rounded, rounded * 2];
 }
 
-/** The width of the element `ref` is on, kept up to date. */
-function useWidth<T extends HTMLElement>() {
-	const ref = useRef<T>(null);
-	const [width, setWidth] = useState(0);
-	useLayoutEffect(() => {
-		const element = ref.current;
-		if (!element) return;
-		const measure = () => setWidth(Math.round(element.getBoundingClientRect().width));
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(element);
-		return () => observer.disconnect();
-	}, []);
-	return [ref, width] as const;
-}
-
 export type StackRow = { day: string; series: string; value: number };
 
 /** Room for the y labels on the left and the day labels below. */
@@ -97,7 +82,7 @@ export function StackedDaysChart({
 	height?: number;
 	className?: string;
 }) {
-	const [box, width] = useWidth<HTMLDivElement>();
+	const [box, { width }] = useElementSize<HTMLDivElement>();
 	const [active, setActive] = useState<number | null>(null);
 	const id = useId();
 	const palette = colors ?? DATA_COLORS;
@@ -269,7 +254,7 @@ export function DotMatrix({
 	color?: string;
 	className?: string;
 }) {
-	const [box, width] = useWidth<HTMLDivElement>();
+	const [box, { width }] = useElementSize<HTMLDivElement>();
 	const [active, setActive] = useState<number | null>(null);
 	const cols = values.length;
 	// The cells fill the width, up to a size, with gaps that shrink along with them.

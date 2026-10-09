@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
+import { BrowserTab } from '@/components/browser-tab';
 import { FilesTab } from '@/components/files-tab';
 import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
@@ -19,6 +20,7 @@ export const panels = [
 	{ name: 'Terminal', icon: SquareTerminal, desc: 'The sandbox shell and its command output' },
 	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
 	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
+	{ name: 'Browser', icon: AppWindow, desc: 'A real browser for any site; pick elements or draw for the agent' },
 	{ name: 'Library', icon: Library, desc: 'Reports, screenshots and exports the agent saved' },
 	{ name: 'History', icon: History, desc: 'Earlier states of the files, to compare or restore' },
 ] as const;
@@ -30,6 +32,7 @@ const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	Terminal: TerminalTab,
 	Files: FilesTab,
 	Preview: PreviewTab,
+	Browser: BrowserTab,
 	Library: LibraryTab,
 	History: HistoryTab,
 };
@@ -197,7 +200,7 @@ export function VmPanel({
 			<div
 				className={cn(
 					'min-h-0 flex-1',
-					current === 'Terminal' || current === 'Preview' || current === 'Files' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
+					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
 				)}
 			>
 				{current === null ? (

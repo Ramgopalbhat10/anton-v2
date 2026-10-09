@@ -27,7 +27,7 @@ import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, outputUrl, type Session, type Usage } from '@/lib/api';
+import { api, branchLabel, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
@@ -528,10 +528,35 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 	);
 }
 
-/** The usage the agent attached when the response finished, if any. */
-function usageOf(message: FlueConversationMessage): Usage | null {
+/** The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them, and whether a plan paid. */
+type ReplyUsageView = Usage & { parts: { main: UsagePart; subagents: UsagePart } | null; billing: 'plan' | 'api' | null };
+
+function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
 	const usage = message.metadata?.usage as Usage | undefined;
-	return usage && typeof usage.inputTokens === 'number' ? usage : null;
+	if (!usage || typeof usage.inputTokens !== 'number') return null;
+	const parts = message.metadata?.usageParts as ReplyUsageView['parts'] | undefined;
+	const billing = message.metadata?.billing;
+	return { ...usage, parts: parts?.main ? parts : null, billing: billing === 'plan' || billing === 'api' ? billing : null };
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+/** The reply's tokens, every model call it made counted, and what it cost; the tooltip breaks it down. */
+function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
+	const total = usage.inputTokens + usage.outputTokens;
+	const lines = [`${total.toLocaleString()} tokens used by this reply: ${usage.inputTokens.toLocaleString()} in, ${usage.outputTokens.toLocaleString()} out.`];
+	if (usage.cachedTokens) lines.push(`${usage.cachedTokens.toLocaleString()} of the input came from the provider's cache, which costs less.`);
+	if (usage.parts) {
+		const { main, subagents } = usage.parts;
+		lines.push(`The agent: ${tokens(main.inputTokens + main.outputTokens)} over ${plural(main.calls, 'call')}.`);
+		if (subagents.calls) lines.push(`Its subagents: ${tokens(subagents.inputTokens + subagents.outputTokens)} over ${plural(subagents.calls, 'call')}.`);
+	}
+	lines.push(usage.billing === 'plan' ? 'Run on your plan: no charge per token.' : `Charged: ${dollars(usage.cost)}.`);
+	return (
+		<div className="in-num text-[11px] text-(--text-disabled)" title={lines.join('\n')}>
+			{tokens(total)} tokens · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
+		</div>
+	);
 }
 
 function CopyResponse({ text }: { text: string }) {
@@ -586,11 +611,7 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 			{!live ? (
 				<div className="flex items-center gap-1.5">
 					<CopyResponse text={copyText} />
-					{usage ? (
-						<div className="in-num text-[11px] text-(--text-disabled)" title={`${usage.inputTokens.toLocaleString()} in · ${usage.outputTokens.toLocaleString()} out`}>
-							{tokens(usage.inputTokens + usage.outputTokens)} tokens · {dollars(usage.cost)}
-						</div>
-					) : null}
+					{usage ? <ReplyUsageLine usage={usage} /> : null}
 				</div>
 			) : null}
 		</div>

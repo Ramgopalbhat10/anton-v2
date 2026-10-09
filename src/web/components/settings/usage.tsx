@@ -288,7 +288,7 @@ function Plan({ plan, modelName }: { plan: PlanUsage; modelName: (id: string | n
 						<span className="in-caption">This month</span>
 						<Figure size="xl" value={tokens(plan.tokens.month)} unit="tokens" />
 					</div>
-					<div className="flex flex-col items-end gap-1 text-right" title="What the same calls would have cost at the vendor's API prices, input counted at the input price">
+					<div className="flex flex-col items-end gap-1 text-right" title="What the same calls would have cost at the vendor's API prices, cached input at its lower price. On the plan you pay nothing per token.">
 						<span className="in-caption">At API prices</span>
 						<span className="in-figure text-[18px] leading-6 text-(--success-text)">{plan.apiValue === null ? 'unknown' : `≈ ${dollars(plan.apiValue)}`}</span>
 					</div>

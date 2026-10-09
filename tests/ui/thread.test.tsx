@@ -175,6 +175,37 @@ describe('response details', () => {
 		fireEvent.click(command);
 		expect(details?.getAttribute('aria-hidden')).toBe('true');
 	});
+	it('counts a reply with its subagents, says a plan paid, and breaks the count down on hover', () => {
+		show(
+			agent([
+				{
+					...assistant('a1', [{ type: 'text', text: 'There are 4 posts.' }]),
+					metadata: {
+						usage: { inputTokens: 16_419, outputTokens: 276, cost: 0, cachedTokens: 6_000 },
+						usageParts: {
+							main: { inputTokens: 8_510, outputTokens: 92, cost: 0, cachedTokens: 6_000, calls: 2 },
+							subagents: { inputTokens: 7_909, outputTokens: 184, cost: 0, cachedTokens: 0, calls: 4 },
+						},
+						billing: 'plan',
+					},
+				},
+				{ ...assistant('a2', [{ type: 'text', text: 'Older reply.' }]), metadata: { usage: { inputTokens: 20, outputTokens: 10, cost: 0.01 } } },
+			]),
+		);
+		const line = screen.getByText('17K tokens · plan');
+		expect(line.getAttribute('title')).toBe(
+			[
+				'16,695 tokens used by this reply: 16,419 in, 276 out.',
+				"6,000 of the input came from the provider's cache, which costs less.",
+				'The agent: 8.6K over 2 calls.',
+				'Its subagents: 8.1K over 4 calls.',
+				'Run on your plan: no charge per token.',
+			].join('\n'),
+		);
+		// A reply from before the breakdown keeps its plain count and spend.
+		expect(screen.getByText('30 tokens · $0.010').getAttribute('title')).toContain('Charged: $0.010.');
+	});
+
 	it('copies only the response text, including markdown, before its token count', async () => {
 		const writeText = vi.fn(async () => undefined);
 		Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });

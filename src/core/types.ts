@@ -77,7 +77,8 @@ export type PullRequestStatus = {
 	runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
 };
 
-export type Usage = { inputTokens: number; outputTokens: number; cost: number };
+/** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache, which is priced lower. */
+export type Usage = { inputTokens: number; outputTokens: number; cost: number; cachedTokens?: number };
 
 /** A stored session row, before the live status is joined in. */
 export type SessionRecord = Omit<Session, 'status' | 'working' | 'workspace'> & {

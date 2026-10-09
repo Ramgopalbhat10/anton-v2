@@ -1,9 +1,10 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
+import type { BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
+import { kernelBrowsers } from './kernel/browsers.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
 import { openRouterCatalog } from './openrouter/catalog.ts';
@@ -30,6 +31,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 /**
  * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
+ * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -38,6 +40,7 @@ export type Providers = {
 	models: ModelCatalog;
 	decisions?: DecisionModel | null;
 	subscriptions?: SubscriptionProvider[];
+	browsers?: BrowserHost | null;
 };
 
 function decisionModel(): DecisionModel | null {
@@ -55,6 +58,7 @@ export function getProviders(): Providers {
 		models: openRouterCatalog(config.openrouter),
 		decisions: decisionModel(),
 		subscriptions: [chatGptSubscription()],
+		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 	};
 	return providers;
 }

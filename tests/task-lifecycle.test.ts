@@ -567,14 +567,16 @@ test('a task can be pinned, and a fork starts in a sandbox of its own with the t
 test('a task adds up the tokens and cost of its responses', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Usage' });
-	assert.deepEqual(session.usage, { inputTokens: 0, outputTokens: 0, cost: 0 });
+	assert.deepEqual(session.usage, { inputTokens: 0, outputTokens: 0, cost: 0, cachedTokens: 0 });
 	const usage = toUsage({ input: 100, output: 20, cacheRead: 50, cacheWrite: 0, cost: { total: 0.01 } });
-	assert.deepEqual(usage, { inputTokens: 150, outputTokens: 20, cost: 0.01 });
+	// Input counts the cached part too; the cached part is kept apart, as it is priced lower.
+	assert.deepEqual(usage, { inputTokens: 150, outputTokens: 20, cost: 0.01, cachedTokens: 50 });
 	await addSessionUsage(session.id, usage);
 	await addSessionUsage(session.id, usage);
 	const totals = (await sessions.getSession(session.id)).usage;
 	assert.equal(totals.inputTokens, 300);
 	assert.equal(totals.outputTokens, 40);
+	assert.equal(totals.cachedTokens, 100);
 	assert.ok(Math.abs(totals.cost - 0.02) < 1e-9);
 });
 
@@ -639,7 +641,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -651,11 +653,11 @@ test('General settings decide how a new task starts when the launcher does not s
 
 	// Each helper agent can have its own model; the others keep the task's.
 	const { agentSettingsNow, primeAgent } = await import('../src/services/agent-runner.ts');
-	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
+	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
 	await assert.rejects(() => setGeneralSettings({ ...before, agentModels: { ...agentModels, tester: { model: 'openrouter/nobody/unknown', reasoning: null } } }), /Unknown model/);
 	await setGeneralSettings({ ...before, agentModels });
 	await primeAgent(other.id);
-	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
+	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
 	await setGeneralSettings(before);
 });
 

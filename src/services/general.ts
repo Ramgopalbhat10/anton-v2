@@ -19,8 +19,8 @@ export type GeneralSettings = {
 	agentModels: Record<HelperAgent, AgentModel | null>;
 };
 
-/** The agents that work for the coder: its explorer and tester subagents, and the reviewer of its pull requests. */
-export const HELPER_AGENTS = ['explorer', 'tester', 'reviewer'] as const;
+/** The agents that work for the coder: its explorer, tester and browser subagents, and the reviewer of its pull requests. */
+export const HELPER_AGENTS = ['explorer', 'tester', 'browser', 'reviewer'] as const;
 export type HelperAgent = (typeof HELPER_AGENTS)[number];
 /** A null reasoning level uses the model's default. */
 export type AgentModel = { model: string; reasoning: Reasoning | null };
@@ -29,7 +29,7 @@ const KEY = 'general';
 
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
-	const agentModels = { explorer: null, tester: null, reviewer: null, ...stored.agentModels };
+	const agentModels = { explorer: null, tester: null, browser: null, reviewer: null, ...stored.agentModels };
 	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, ...stored, agentModels };
 }
 

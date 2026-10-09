@@ -47,7 +47,7 @@ setProviders({
 	sandbox: {} as never,
 	store: {} as never,
 	git: {} as never,
-	models: { name: 'openrouter', list: async () => [model('openrouter/openai/gpt-6-luna', 272_000, 128_000), { ...model('openrouter/acme/x', 1000, null), price: { input: 1, output: 4, cacheRead: 0, cacheWrite: 0 } }] },
+	models: { name: 'openrouter', list: async () => [{ ...model('openrouter/openai/gpt-6-luna', 272_000, 128_000), price: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 0 } }, { ...model('openrouter/acme/x', 1000, null), price: { input: 1, output: 4, cacheRead: 0, cacheWrite: 0 } }] },
 	subscriptions: [plan],
 });
 
@@ -147,7 +147,7 @@ test('tasks from before inputs were kept get theirs from the runtime’s accepte
 	assert.equal(await backfillLatestInputs(path.join(dir, 'missing.db')), 0);
 });
 
-test('a plan’s use is counted in tokens by day, priced at OpenRouter’s price when the vendor lists none, and its limit noted', async () => {
+test('a plan’s use is counted in tokens by day, priced at OpenRouter’s price when the vendor lists none (cached input at its own price), and its limit noted', async () => {
 	resetSubscriptionsForTests();
 	await setSetting('subscription.chatgpt', {
 		enabled: true,
@@ -160,12 +160,14 @@ test('a plan’s use is counted in tokens by day, priced at OpenRouter’s price
 		limitHitAt: null,
 	});
 	await task('planned');
-	await addSessionUsage('planned', { inputTokens: 900_000, outputTokens: 100_000, cost: 0 }, new Date(), 'openai/gpt-6-luna', 'p1');
+	await addSessionUsage('planned', { inputTokens: 900_000, outputTokens: 100_000, cost: 0, cachedTokens: 500_000 }, new Date(), 'openai/gpt-6-luna', 'p1');
 	await addSessionUsage('planned', { inputTokens: 1000, outputTokens: 0, cost: 0.01 }, new Date(), 'openrouter/acme/x', 'p2');
 	let [usage] = await planUsage();
 	assert.deepEqual(usage.tokens, { today: 1_000_000, week: 1_000_000, month: 1_000_000 });
 	assert.equal(usage.calls, 1);
-	assert.equal(usage.apiValue, 0, 'OpenRouter lists gpt-6-luna at $0 in this test catalog');
+	// 400K fresh input at $1, 500K cached at $0.10 and 100K output at $4 per million.
+	assert.equal(usage.apiValue?.toFixed(4), '0.8500');
+	assert.equal((await getSessionRecord('planned'))?.usage.cachedTokens, 500_000);
 	assert.equal(usage.daily.length, 1);
 	assert.equal(usage.usagePage, 'https://chatgpt.com/settings/usage');
 
