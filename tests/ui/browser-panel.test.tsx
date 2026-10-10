@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
 	inspectBrowser: vi.fn(),
 	clearBrowserHighlight: vi.fn(async () => undefined),
 	browserScreenshot: vi.fn(),
+	// Never answers unless a test says so, so it does not replace the view a test sets up.
+	watchBrowser: vi.fn((_id: string): Promise<BrowserView> => new Promise(() => undefined)),
 	editSession: vi.fn(),
 	session: vi.fn(),
 	budget: vi.fn(),
@@ -113,6 +115,43 @@ describe('Browser panel', () => {
 	it('says when the agent is using the browser', () => {
 		renderWithQueries(<BrowserTab sessionId="s1" />, [[['browser', 's1'], { ...open, browser: { ...open.browser!, agentBusy: true } }]]);
 		expect(screen.getByText('The agent is using this browser')).toBeTruthy();
+	});
+
+	it('tells Anton it is watching while the live view is on screen, and stops it in a hidden window', () => {
+		renderWithQueries(<BrowserTab sessionId="s1" />, [[['browser', 's1'], open]]);
+		expect(api.watchBrowser).toHaveBeenCalledWith('s1');
+		expect(screen.getByTitle('Browser')).toBeTruthy();
+
+		const shown = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+		Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+		act(() => void document.dispatchEvent(new Event('visibilitychange')));
+		expect(screen.queryByTitle('Browser')).toBeNull();
+		expect(screen.getByText('Paused to save browser time')).toBeTruthy();
+
+		Reflect.deleteProperty(document, 'visibilityState');
+		if (shown) expect(document.visibilityState).toBe('visible');
+		act(() => void document.dispatchEvent(new Event('visibilitychange')));
+		expect(screen.getByTitle('Browser')).toBeTruthy();
+	});
+
+	it('pauses the live view after five quiet minutes, and plays it again on Resume', () => {
+		vi.useFakeTimers();
+		try {
+			renderWithQueries(<BrowserTab sessionId="s1" />, [[['browser', 's1'], open]]);
+			act(() => void vi.advanceTimersByTime(4 * 60_000));
+			expect(screen.getByTitle('Browser')).toBeTruthy();
+			act(() => void vi.advanceTimersByTime(90_000));
+			expect(screen.queryByTitle('Browser')).toBeNull();
+			const watches = api.watchBrowser.mock.calls.length;
+			act(() => void vi.advanceTimersByTime(60_000));
+			expect(api.watchBrowser.mock.calls.length, 'a paused view stops telling Anton it is watched').toBe(watches);
+
+			fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+			expect(screen.getByTitle('Browser')).toBeTruthy();
+			expect(api.watchBrowser.mock.calls.length).toBe(watches + 1);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('says how to turn it on without a Kernel key', () => {

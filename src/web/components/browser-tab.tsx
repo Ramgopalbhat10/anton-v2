@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, PencilLine, Power, RotateCw, SquareDashedMousePointer } from 'lucide-react';
-import { type FormEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
+import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, Pause, PencilLine, Power, RotateCw, SquareDashedMousePointer } from 'lucide-react';
+import { type FormEvent, type PointerEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Sketch } from '@/components/sketch';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type BrowserView } from '@/lib/api';
@@ -17,6 +17,77 @@ import { cn } from '@/lib/utils';
  */
 
 type Viewport = { width: number; height: number };
+
+/*
+ * Kernel bills the browser for every second its live view plays (and while
+ * Anton or the agent is connected); with nothing connected it stands by, free,
+ * keeping its pages and sign-ins. So the live view plays only while it can be
+ * seen: not in a hidden window, and not after a spell with no sign of you or
+ * the agent. While it plays, the panel tells Anton so, to keep the address bar
+ * following the page.
+ */
+const PAUSE_AFTER_MS = 5 * 60_000;
+const WATCH_EVERY_MS = 20_000;
+
+const onVisibility = (notify: () => void) => {
+	document.addEventListener('visibilitychange', notify);
+	return () => document.removeEventListener('visibilitychange', notify);
+};
+const useWindowShown = () => useSyncExternalStore(onVisibility, () => document.visibilityState !== 'hidden');
+
+/** Whether the live view should play, and a way to wake it: paused after a spell with nobody about, woken by the agent at work or by you. */
+function useLiveViewAwake(on: boolean, agentBusy: boolean, url: string | undefined): [boolean, () => void] {
+	const shown = useWindowShown();
+	const [paused, setPaused] = useState(false);
+	const lastSeen = useRef(Date.now());
+	const wake = useCallback(() => {
+		lastSeen.current = Date.now();
+		setPaused(false);
+	}, []);
+	// You moving or typing anywhere in Anton, coming back to the window, or the page moving on.
+	useEffect(() => {
+		const seen = () => {
+			lastSeen.current = Date.now();
+		};
+		window.addEventListener('pointermove', seen, { passive: true });
+		window.addEventListener('keydown', seen);
+		return () => {
+			window.removeEventListener('pointermove', seen);
+			window.removeEventListener('keydown', seen);
+		};
+	}, []);
+	useEffect(() => {
+		lastSeen.current = Date.now();
+	}, [shown, url]);
+	// The agent at work in it: worth watching.
+	useEffect(() => {
+		if (agentBusy) wake();
+	}, [agentBusy, wake]);
+	useEffect(() => {
+		if (!on || paused) return;
+		const timer = setInterval(() => {
+			// Working inside the live view reaches only it, not Anton's page: its having the focus counts as you being there.
+			const inView = document.hasFocus() && document.activeElement instanceof HTMLIFrameElement && document.activeElement.title === 'Browser';
+			if (inView) lastSeen.current = Date.now();
+			else if (Date.now() - lastSeen.current > PAUSE_AFTER_MS) setPaused(true);
+		}, 15_000);
+		return () => clearInterval(timer);
+	}, [on, paused]);
+	return [on && shown && !paused, wake];
+}
+
+function Paused({ onResume }: { onResume: () => void }) {
+	return (
+		<div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--bg-inset) px-6 text-center">
+			<Icon icon={Pause} size={16} className="text-(--icon-tertiary)" />
+			<div className="text-[12.5px] text-(--text-primary)">Paused to save browser time</div>
+			<p className="m-0 max-w-[300px] text-[11.5px] text-(--text-tertiary)">Kernel bills the browser while it plays here. Its pages and sign-ins are kept.</p>
+			<Btn size="sm" variant="primary" onClick={onResume}>
+				Resume
+			</Btn>
+		</div>
+	);
+}
 
 /**
  * The live view, remounted if no frames arrive in time: it reports when video
@@ -231,6 +302,22 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
 	const [playing, setPlaying] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
+	const [showing, wake] = useLiveViewAwake(Boolean(browser), Boolean(browser?.agentBusy), browser?.page?.url);
+
+	useEffect(() => {
+		if (!showing) {
+			setPlaying(false);
+			return;
+		}
+		const watch = () =>
+			void api
+				.watchBrowser(sessionId)
+				.then((next) => queryClient.setQueryData(['browser', sessionId], next))
+				.catch(() => undefined);
+		watch();
+		const timer = setInterval(watch, WATCH_EVERY_MS);
+		return () => clearInterval(timer);
+	}, [showing, sessionId, queryClient]);
 
 	const close = useMutation({
 		mutationFn: () => api.closeBrowser(sessionId),
@@ -297,14 +384,14 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 			</AddressBar>
 			<div ref={area} className="relative flex min-h-[240px] flex-1 items-center justify-center">
 				<div className="in-well relative overflow-hidden" style={{ width: size.width, height: size.height }}>
-					<LiveView url={browser.liveViewUrl} onPlaying={setPlaying} />
-					{!playing ? (
+					{showing ? <LiveView url={browser.liveViewUrl} onPlaying={setPlaying} /> : <Paused onResume={wake} />}
+					{showing && !playing ? (
 						<div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-(--bg-inset) text-[12px] text-(--text-tertiary)">
 							<Spinner size={12} />
 							Connecting to the browser
 						</div>
 					) : null}
-					{picking ? <PickLayer sessionId={sessionId} viewport={viewport} onPicked={(label) => setNotice(`Added ${label} to the message`)} onCancel={() => setPicking(false)} /> : null}
+					{picking && showing ? <PickLayer sessionId={sessionId} viewport={viewport} onPicked={(label) => setNotice(`Added ${label} to the message`)} onCancel={() => setPicking(false)} /> : null}
 					{sketch ? (
 						// The picture is the page alone; a scrollbar takes the rest of the window, so it covers that much of the view.
 						<div className="absolute top-0 left-0 z-20" style={{ width: `${(sketch.width / viewport.width) * 100}%`, height: `${(sketch.height / viewport.height) * 100}%` }}>

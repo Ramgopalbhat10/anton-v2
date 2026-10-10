@@ -23,8 +23,21 @@ import { liveMachine } from './workspace.ts';
  * draw on. Opening it never starts the task's sandbox.
  */
 
-/** How long a browser may sit unused before the host removes it. Idle time is not billed. */
+/**
+ * How long a browser may stand by, with nothing connected, before the host
+ * removes it. Standing by is not billed and keeps its pages and sign-ins.
+ */
 const IDLE_SECONDS = 30 * 60;
+/**
+ * How long Anton keeps its connections to a browser after their last use. The
+ * host bills a browser for every second anything is connected to it, even a
+ * silent connection; five seconds after the last one goes, it stands by. So
+ * connections are let go once nothing needs them, and opened again (in under
+ * a second) when something does.
+ */
+const RELEASE_MS = Number(process.env.ANTON_BROWSER_RELEASE_MS) || 15_000;
+/** How long one note from the panel that its live view is on screen counts for; the panel sends one every 20 seconds. */
+const WATCH_MS = 45_000;
 const VIEWPORT = { width: 1280, height: 800 };
 
 type Stored = HostedBrowser & { openedAt: string };
@@ -121,12 +134,69 @@ export function askTheUser(id: string, reason: string, url: string): void {
 
 async function forget(id: string) {
 	needsYou.delete(id);
-	connections.get(id)?.cdp.close();
-	connections.delete(id);
-	await drivers.get(id)?.browser.close().catch(() => undefined);
-	drivers.delete(id);
+	lastPage.delete(id);
+	clearTimeout(uses.get(id)?.timer);
+	uses.delete(id);
+	await release(id);
 	await setSetting(key(id), null);
 }
+
+// ---- Holding connections only while they are used ----
+
+type Use = { running: number; at: number; watchedUntil: number; timer?: ReturnType<typeof setTimeout> };
+const uses = new Map<string, Use>();
+
+function useOf(id: string): Use {
+	let use = uses.get(id);
+	if (!use) {
+		use = { running: 0, at: Date.now(), watchedUntil: 0 };
+		uses.set(id, use);
+	}
+	return use;
+}
+
+/** Runs `work` on the task's browser, and lets the connections go once nothing has used them for a while. */
+async function using<T>(id: string, work: () => Promise<T>): Promise<T> {
+	const use = useOf(id);
+	use.running += 1;
+	try {
+		return await work();
+	} finally {
+		use.running -= 1;
+		use.at = Date.now();
+		releaseLater(id, use, RELEASE_MS);
+	}
+}
+
+function releaseLater(id: string, use: Use, wait: number) {
+	clearTimeout(use.timer);
+	use.timer = setTimeout(() => void releaseIfIdle(id, use), wait);
+	use.timer.unref?.();
+}
+
+async function releaseIfIdle(id: string, use: Use) {
+	if (uses.get(id) !== use) return;
+	const wait = use.running ? RELEASE_MS : Math.max(use.at + RELEASE_MS, use.watchedUntil) - Date.now();
+	if (wait > 0) return releaseLater(id, use, wait);
+	uses.delete(id);
+	await release(id);
+}
+
+/** Closes Anton's connections to the task's browser; the browser stays, standing by, with its pages. */
+async function release(id: string) {
+	connections.get(id)?.cdp.close();
+	connections.delete(id);
+	const driven = drivers.get(id);
+	drivers.delete(id);
+	// Over the DevTools protocol, closing Playwright's browser only disconnects it.
+	await driven?.browser.close().catch(() => undefined);
+}
+
+/** Whether Anton holds a connection to the task's browser now. */
+export const browserConnected = (id: string): boolean => Boolean(connections.get(id)?.cdp.isOpen || drivers.get(id)?.browser.isConnected());
+
+/** The page as last seen, shown while nothing is connected, so the panel never wakes the browser just to show its address. */
+const lastPage = new Map<string, BrowserPage>();
 
 // ---- The page connection ----
 
@@ -213,22 +283,26 @@ async function viewportSize({ cdp, session }: Connection): Promise<{ width: numb
 	return { width: view.clientWidth, height: view.clientHeight };
 }
 
-async function pageState(current: Connection): Promise<BrowserPage> {
+async function pageState(id: string, current: Connection): Promise<BrowserPage> {
 	const { currentIndex, entries } = await history(current);
 	const entry = entries[currentIndex];
-	return { url: entry?.url ?? '', title: entry?.title ?? '', canGoBack: currentIndex > 0, canGoForward: currentIndex < entries.length - 1 };
+	const state = { url: entry?.url ?? '', title: entry?.title ?? '', canGoBack: currentIndex > 0, canGoForward: currentIndex < entries.length - 1 };
+	lastPage.set(id, state);
+	return state;
 }
 
 // ---- What the routes call ----
 
-async function viewOf(id: string, browser: Stored): Promise<BrowserView> {
+/** The panel's view of the browser; with `connect`, read fresh from the browser, else from a connection already open or as last seen. */
+async function viewOf(id: string, browser: Stored, connect: boolean): Promise<BrowserView> {
 	if (!browser.liveViewUrl) return { available: true, browser: null };
-	const state = await connection(id, browser)
-		.then(pageState)
-		.catch((error: unknown) => {
-			logProblem('warn', 'Could not read the browser page', error, id);
-			return null;
-		});
+	const state =
+		connect || connections.get(id)?.cdp.isOpen
+			? await using(id, async () => pageState(id, await connection(id, browser))).catch((error: unknown) => {
+					logProblem('warn', 'Could not read the browser page', error, id);
+					return lastPage.get(id) ?? null;
+				})
+			: (lastPage.get(id) ?? null);
 	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: VIEWPORT, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id), needsYou: needsYou.get(id)?.reason ?? null } };
 }
 
@@ -236,7 +310,22 @@ export async function browserView(id: string): Promise<BrowserView> {
 	await requireTask(id);
 	if (!sharedBrowserAvailable()) return { available: false, browser: null };
 	const browser = await storedBrowser(id);
-	return browser ? viewOf(id, browser) : { available: true, browser: null };
+	return browser ? viewOf(id, browser, false) : { available: true, browser: null };
+}
+
+/**
+ * The panel shows the live view: the browser is billed while it does anyway,
+ * so Anton stays connected for that while, to keep the address bar following
+ * the page. The panel says so every 20 seconds, and stops when it is hidden
+ * or paused.
+ */
+export async function watchBrowser(id: string): Promise<BrowserView> {
+	await requireTask(id);
+	if (!sharedBrowserAvailable()) return { available: false, browser: null };
+	const browser = await storedBrowser(id);
+	if (!browser) return { available: true, browser: null };
+	useOf(id).watchedUntil = Date.now() + WATCH_MS;
+	return viewOf(id, browser, true);
 }
 
 /** Opens the task's browser, or reuses the one it has, at `address` if given. */
@@ -245,8 +334,8 @@ export async function openBrowser(id: string, address?: string): Promise<Browser
 	const url = address?.trim() ? addressToUrl(address) : undefined;
 	const existing = await storedBrowser(id);
 	const browser = existing ?? (await ensureBrowser(id, url));
-	if (existing && url) await go(await connection(id, browser), { url });
-	return viewOf(id, browser);
+	if (existing && url) await using(id, async () => go(id, await connection(id, browser), { url }));
+	return viewOf(id, browser, true);
 }
 
 export async function closeBrowser(id: string): Promise<void> {
@@ -261,7 +350,7 @@ export async function closeBrowser(id: string): Promise<void> {
 
 export type NavigateAction = { url: string } | { action: 'back' | 'forward' | 'reload' };
 
-async function go(current: Connection, action: NavigateAction): Promise<BrowserPage> {
+async function go(id: string, current: Connection, action: NavigateAction): Promise<BrowserPage> {
 	const { cdp, session } = current;
 	if ('url' in action) {
 		const result = await cdp.send<{ errorText?: string }>('Page.navigate', { url: addressToUrl(action.url) }, session);
@@ -273,10 +362,10 @@ async function go(current: Connection, action: NavigateAction): Promise<BrowserP
 		const target = entries[currentIndex + (action.action === 'back' ? -1 : 1)];
 		if (target) await cdp.send('Page.navigateToHistoryEntry', { entryId: target.id }, session);
 	}
-	return pageState(current);
+	return pageState(id, current);
 }
 
-export const navigate = async (id: string, action: NavigateAction): Promise<BrowserPage> => go(await page(id), action);
+export const navigate = (id: string, action: NavigateAction): Promise<BrowserPage> => using(id, async () => go(id, await page(id), action));
 
 const HIGHLIGHT = {
 	showInfo: true,
@@ -290,7 +379,9 @@ const HIGHLIGHT = {
  * The element at a point of the page, in CSS pixels from its top left.
  * Highlights it in the live view; with `pick`, also reads it and takes its picture.
  */
-export async function inspectAt(id: string, point: { x: number; y: number; pick: boolean }): Promise<PickedElement | null> {
+export const inspectAt = (id: string, point: { x: number; y: number; pick: boolean }): Promise<PickedElement | null> => using(id, () => inspect(id, point));
+
+async function inspect(id: string, point: { x: number; y: number; pick: boolean }): Promise<PickedElement | null> {
 	const current = await page(id);
 	const { cdp, session } = current;
 	const at = await cdp
@@ -330,15 +421,16 @@ async function elementImage(current: Connection, rect: PickedElement['rect']): P
 	return shot?.data ?? null;
 }
 
-export const clearHighlight = async (id: string): Promise<void> => void (await hideHighlight(await page(id)));
+export const clearHighlight = (id: string): Promise<void> => using(id, async () => void (await hideHighlight(await page(id))));
 
 /** The page as you see it, to draw on: a PNG, base64, at the page's CSS size. */
-export async function browserScreenshot(id: string): Promise<{ data: string; width: number; height: number }> {
-	const current = await page(id);
-	const [view] = await Promise.all([viewportSize(current), hideHighlight(current)]);
-	const { data } = await current.cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' }, current.session, 30_000);
-	return { data, ...view };
-}
+export const browserScreenshot = (id: string): Promise<{ data: string; width: number; height: number }> =>
+	using(id, async () => {
+		const current = await page(id);
+		const [view] = await Promise.all([viewportSize(current), hideHighlight(current)]);
+		const { data } = await current.cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' }, current.session, 30_000);
+		return { data, ...view };
+	});
 
 // ---- The agent in the same browser ----
 
@@ -423,7 +515,6 @@ async function asAgentStep<T>(id: string, run: () => Promise<T>): Promise<T> {
 	}
 }
 
-/** Saves the page to the task's outputs, which live in its sandbox; without one running there is nowhere to keep it. */
 /**
  * Saves the page to the task's outputs, for the Library: in its sandbox when
  * one runs (where the agent can read it back), else straight to storage.
@@ -449,12 +540,17 @@ async function saveScreenshot(id: string, page: Page, input: BrowserInput): Prom
 export async function agentBrowse(id: string, input: BrowserInput): Promise<BrowserState> {
 	await requireTask(id);
 	host(); // Throws, saying how to set one up, when there is no browser host.
-	return asAgentStep(id, async () => {
-		const browser = await ensureBrowser(id);
-		const current = await driver(id, browser);
-		const page = await shownPage(id, browser, current);
-		const result = await browserStep(page, { ...input, url: input.url && addressToUrl(input.url) });
-		const screenshot = input.screenshot ? await saveScreenshot(id, page, input) : null;
-		return { ...result, errors: current.errors.splice(0).slice(0, 20), screenshot, snapshot: clipSnapshot(result.snapshot) };
-	});
+	return asAgentStep(id, () =>
+		using(id, async () => {
+			const browser = await ensureBrowser(id);
+			const current = await driver(id, browser);
+			const page = await shownPage(id, browser, current);
+			const result = await browserStep(page, { ...input, url: input.url && addressToUrl(input.url) });
+			const screenshot = input.screenshot ? await saveScreenshot(id, page, input) : null;
+			// Where the agent left the page, for the panel's address bar once the connection is let go.
+			const shown = connections.get(id);
+			if (shown?.cdp.isOpen) await pageState(id, shown).catch(() => undefined);
+			return { ...result, errors: current.errors.splice(0).slice(0, 20), screenshot, snapshot: clipSnapshot(result.snapshot) };
+		}),
+	);
 }

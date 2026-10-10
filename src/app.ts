@@ -49,7 +49,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser } from './services/live-browser.ts';
+import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
@@ -485,6 +485,8 @@ app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
 	return c.json({ ok: true });
 });
 app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
+// The panel's live view is on screen: keep following its page for a while.
+app.post('/api/sessions/:id/browser/watch', async (c) => c.json(await watchBrowser(c.req.param('id'))));
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
