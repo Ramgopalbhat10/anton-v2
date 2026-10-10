@@ -482,6 +482,7 @@ export const api = {
 		post<{ element: PickedElement | null }>(`/api/sessions/${id}/browser/inspect`, point),
 	clearBrowserHighlight: async (id: string) => void (await post(`/api/sessions/${id}/browser/highlight/clear`)),
 	browserScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/browser/screenshot`),
+	watchBrowser: (id: string) => post<BrowserView>(`/api/sessions/${id}/browser/watch`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */
