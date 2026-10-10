@@ -3,7 +3,7 @@ import { safeRelativePath, text } from '../core/shell.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { type Checkpoint, type SavedOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput } from './checkpoints.ts';
+import { type Checkpoint, type SavedOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, savedOutputs } from './checkpoints.ts';
 import { type FileChange, type LogEntry, changes, listFiles, repoDir } from './git.ts';
 import type { Machine } from '../core/ports.ts';
 import { liveMachine } from './workspace.ts';
@@ -119,8 +119,11 @@ export async function changesView(id: string): Promise<ChangesView> {
 
 /** Outputs come from storage, so they are listed the same way whether or not the machine runs. */
 export async function outputsView(id: string): Promise<OutputsView> {
-	const ctx = await context(id);
-	const outputs = (ctx.checkpoint?.outputs ?? []).map(({ key: _key, ...output }) => output);
+	const [ctx, saved] = await Promise.all([context(id), savedOutputs(id)]);
+	// What the machine wrote, as its last checkpoint copied it, and what was saved straight to storage.
+	const fromMachine = ctx.checkpoint?.outputs ?? [];
+	const all = [...fromMachine, ...saved.filter((output) => !fromMachine.some((other) => other.path === output.path))];
+	const outputs = all.map(({ key: _key, ...output }) => output);
 	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs };
 }
 

@@ -241,7 +241,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			'and the page as an accessibility tree (roles, names, text). Target elements with Playwright selectors from that tree, such as ' +
 			'role=button[name="Save"], role=textbox[name="Email"], text=Sign in, or CSS. To keep your context small, a page you have seen before comes back as what changed (or as unchanged), ' +
 			'and parts of a long page your job does not need are left out; use look to have the page described again in full. ' +
-			'Pass screenshot to save a PNG to the outputs folder; read it to see the page. ' +
+			'Pass screenshot to save a PNG to the task\'s Library, where the user sees it; with a sandbox it is in the outputs folder, where you can read it to see the page. ' +
 			places.map((place, index) => `"in": "${place}" is ${PLACES[place]}${index === 0 ? ' (the default)' : ''}.`).join(' '),
 		input: v.object({
 			action: v.picklist(BROWSER_ACTIONS),
