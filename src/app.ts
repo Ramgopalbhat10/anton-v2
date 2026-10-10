@@ -15,7 +15,7 @@ import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
-import { changesView, fileTree, projectFiles, outputsView, readFile, readOutputFile } from './services/files.ts';
+import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
 import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
@@ -502,6 +502,18 @@ app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req
 app.get('/api/sessions/:id/output', async (c) => {
 	const path = c.req.query('path') ?? '';
 	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));
+});
+// Adding a file to the Library: the body is the file, its name in the query.
+app.post('/api/sessions/:id/outputs', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
+	const body = new Uint8Array(await c.req.arrayBuffer());
+	return c.json({ path: await uploadOutput(c.req.param('id'), name, body, c.req.header('content-type') || undefined) });
+});
+app.delete('/api/sessions/:id/output', async (c) => {
+	await removeOutput(c.req.param('id'), c.req.query('path') ?? '');
+	return c.json({ ok: true });
 });
 
 export default app;

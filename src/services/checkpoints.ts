@@ -249,6 +249,30 @@ export function saveOutput(id: string, path: string, bytes: Uint8Array, contentT
 	return next;
 }
 
+/**
+ * Removes an output from the task's Library: its stored copy, and its entry in
+ * the saved list and the latest checkpoint. The machine's own file, if any,
+ * is the caller's to remove, or the next checkpoint lists it again.
+ */
+export function deleteOutput(id: string, path: string): Promise<void> {
+	const run = async () => {
+		const { store } = getProviders();
+		await store.remove(keys.output(id, path));
+		const saved = await savedOutputs(id);
+		if (saved.some((output) => output.path === path)) {
+			await store.put(keys.saved(id), JSON.stringify(saved.filter((output) => output.path !== path)), 'application/json');
+		}
+		const latest = await readCheckpoint(id);
+		if (latest?.outputs.some((output) => output.path === path)) {
+			const next = { ...latest, outputs: latest.outputs.filter((output) => output.path !== path) };
+			await store.put(keys.latest(id), JSON.stringify(next), 'application/json');
+		}
+	};
+	const next = (saving.get(id) ?? Promise.resolve()).catch(() => undefined).then(run);
+	saving.set(id, next);
+	return next;
+}
+
 export async function readOutput(id: string, path: string): Promise<Uint8Array | null> {
 	return getProviders().store.get(keys.output(id, path));
 }

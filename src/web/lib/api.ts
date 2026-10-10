@@ -492,6 +492,14 @@ export const api = {
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
+	/** Adds a file to the task's Library, under uploads/. */
+	uploadOutput: (id: string, file: File) =>
+		json<{ path: string }>(`/api/sessions/${id}/outputs?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
+	deleteOutput: async (id: string, path: string) => void (await request(outputUrl(id, path), { method: 'DELETE' })),
 };
 
 /**
