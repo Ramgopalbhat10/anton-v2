@@ -65,6 +65,8 @@ export type Session = {
 	/** The latest message the task was given, by you or by Anton (a follow-up, an automation); null before Anton kept it. */
 	lastInput: string | null;
 	lastInputAt: string | null;
+	/** What the agent's last reply asks the user, until they send a message; null when it waits on nothing. */
+	asking: string | null;
 };
 
 /**

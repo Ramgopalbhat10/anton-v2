@@ -232,6 +232,13 @@ function apply(id: string, list: SubagentRun[], event: Event) {
 	changed(id);
 }
 
+/** The brief of the task's latest running subagent of this kind, for tools that judge a page against its job. */
+export async function currentBrief(id: string, agent: string): Promise<string | null> {
+	const list = await runsOf(id);
+	for (let index = list.length - 1; index >= 0; index--) if (list[index].agent === agent && list[index].status === 'running') return list[index].prompt;
+	return null;
+}
+
 /** The task's subagent runs, newest first. */
 export async function subagentRuns(id: string): Promise<SubagentRun[]> {
 	return [...(await runsOf(id))].reverse();

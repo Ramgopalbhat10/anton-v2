@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, ClipboardList, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, ClipboardList, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon, MessageCircleQuestion } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { Icon } from '@/components/signal';
@@ -106,6 +106,21 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 			<Link key="plan" to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={cn(CUE, 'text-(--warning-text)')}>
 				<Icon icon={ClipboardList} size={11} />
 				Review plan
+			</Link>,
+		);
+	}
+	if (session.asking && !session.working) {
+		cues.push(
+			<Link
+				key="asking"
+				to="/agents/$sessionId"
+				params={{ sessionId: session.id }}
+				search={{ app: 'code' }}
+				title={session.asking}
+				className={cn(CUE, 'text-(--warning-text)')}
+			>
+				<Icon icon={MessageCircleQuestion} size={11} />
+				Your turn
 			</Link>,
 		);
 	}

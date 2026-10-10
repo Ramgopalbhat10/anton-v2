@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleDot } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleDot, MessageCircleQuestion } from 'lucide-react';
 import { Icon, Spinner } from '@/components/signal';
 import type { Session } from '@/lib/api';
 
@@ -15,6 +15,7 @@ export function liveLabel(session: Session): string {
 export function TaskStatusIcon({ session, size = 14 }: { session: Session; size?: number }) {
 	if (session.working || session.status === 'starting') return <Spinner size={size} />;
 	if (session.status === 'error') return <Icon icon={CircleAlert} size={size} className="text-(--danger-text)" />;
+	if (session.asking) return <Icon icon={MessageCircleQuestion} size={size} className="text-(--warning-text)" />;
 	if (session.status === 'running') return <Icon icon={CircleDot} size={size} className="text-(--accent-text)" />;
 	return <Icon icon={CircleCheck} size={size} className="text-(--success-text)" />;
 }

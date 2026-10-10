@@ -31,6 +31,7 @@ function toRecord(row: Row): SessionRecord {
 		pullRequest: pullRequestOf(row),
 		lastInput: optional(row.last_input),
 		lastInputAt: optional(row.last_input_at),
+		asking: optional(row.asking),
 	};
 }
 
@@ -181,6 +182,7 @@ const columns = {
 	pullRequestJson: 'pr_json',
 	lastInput: 'last_input',
 	lastInputAt: 'last_input_at',
+	asking: 'asking',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

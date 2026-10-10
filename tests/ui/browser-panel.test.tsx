@@ -50,6 +50,7 @@ const open: BrowserView = {
 		openedAt: '2026-10-09T00:00:00Z',
 		page: { url: 'https://example.com/login', title: 'Log in', canGoBack: false, canGoForward: false },
 		agentBusy: false,
+		needsYou: null,
 	},
 };
 
@@ -99,6 +100,14 @@ describe('Picking an element in the page', () => {
 describe('Browser panel', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it('says when the agent stopped for you on a page, over its busy note', () => {
+		renderWithQueries(<BrowserTab sessionId="s1" />, [
+			[['browser', 's1'], { ...open, browser: { ...open.browser!, agentBusy: true, needsYou: 'Sign in or pass the check here, then ask the agent to carry on.' } }],
+		]);
+		expect(screen.getByText('Sign in or pass the check here, then ask the agent to carry on.')).toBeTruthy();
+		expect(screen.queryByText('The agent is using this browser')).toBeNull();
 	});
 
 	it('says when the agent is using the browser', () => {

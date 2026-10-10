@@ -261,7 +261,9 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 
 	// One note over the page at a time: an error, what just happened, how to pick, or that the agent is browsing.
 	const status = capture.error?.message ?? close.error?.message ?? notice ?? (picking ? 'Click an element to add it to the message · Shift-click to keep picking · Esc to stop' : null);
-	const agentNote = !status && !sketch && browser.agentBusy;
+	// The agent stopped for you here (a sign-in, a human check): that says so until the page moves on.
+	const needsYou = !status && !sketch ? browser.needsYou : null;
+	const agentNote = !status && !sketch && !needsYou && browser.agentBusy;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">
@@ -317,6 +319,14 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 									setSketch(null);
 								}}
 							/>
+						</div>
+					) : null}
+					{needsYou ? (
+						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
+							<span role="status" className="in-pop flex items-center gap-1.5 border-(--warning-border) px-2.5 py-1 text-[11.5px] text-(--warning-text)">
+								<span className="in-pulse size-1.5 rounded-full bg-(--warning-base)" />
+								{needsYou}
+							</span>
 						</div>
 					) : null}
 					{status || agentNote ? (

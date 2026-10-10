@@ -40,6 +40,8 @@ export type BrowserView = {
 		page: BrowserPage | null;
 		/** The agent is acting in this browser, or did a moment ago. */
 		agentBusy: boolean;
+		/** Why the agent stopped for you here (a sign-in or a human check), until the page moves on. */
+		needsYou: string | null;
 	} | null;
 };
 
@@ -107,7 +109,17 @@ async function ensureBrowser(id: string, url?: string): Promise<Stored> {
 	return created;
 }
 
+/** Pages where the agent stopped for the user, by task, until that page is left. */
+const needsYou = new Map<string, { reason: string; url: string }>();
+
+/** Says in the panel that the agent stopped for the user on this page. */
+export function askTheUser(id: string, reason: string, url: string): void {
+	needsYou.set(id, { reason, url });
+	changed(id);
+}
+
 async function forget(id: string) {
+	needsYou.delete(id);
 	connections.get(id)?.cdp.close();
 	connections.delete(id);
 	await drivers.get(id)?.browser.close().catch(() => undefined);
@@ -168,6 +180,10 @@ async function switchTo(id: string, current: Connection, targetId: string) {
 /** Keeps the address bar current, and follows a page that opens a new tab, as the live view shows only one. */
 async function follow(id: string, current: Connection, event: CdpEvent) {
 	if (event.sessionId === current.session && (event.method === 'Page.navigatedWithinDocument' || (event.method === 'Page.frameNavigated' && !(event.params.frame as { parentId?: string } | undefined)?.parentId))) {
+		// Leaving the page the agent stopped on (signed in, say) ends the ask.
+		const url = String((event.params.frame as { url?: string } | undefined)?.url ?? event.params.url ?? '');
+		const asked = needsYou.get(id);
+		if (asked && url && url.replace(/#.*$/, '') !== asked.url.replace(/#.*$/, '')) needsYou.delete(id);
 		changed(id);
 	} else if (event.method === 'Target.targetCreated') {
 		const info = event.params.targetInfo as Target;
@@ -212,7 +228,7 @@ async function viewOf(id: string, browser: Stored): Promise<BrowserView> {
 			logProblem('warn', 'Could not read the browser page', error, id);
 			return null;
 		});
-	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: VIEWPORT, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id) } };
+	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: VIEWPORT, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id), needsYou: needsYou.get(id)?.reason ?? null } };
 }
 
 export async function browserView(id: string): Promise<BrowserView> {

@@ -86,6 +86,8 @@ const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN last_input TEXT`, `ALTER TABLE sessions ADD COLUMN last_input_at TEXT`],
 	// 18: input tokens the provider read from its cache, part of input_tokens and priced lower, per call and per task.
 	[`ALTER TABLE usage_log ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE sessions ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`],
+	// 19: what the agent's last reply asks the user, until they answer, so the task shows it waits on them.
+	[`ALTER TABLE sessions ADD COLUMN asking TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

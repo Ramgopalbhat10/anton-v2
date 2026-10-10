@@ -54,6 +54,7 @@ import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.t
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
 import { recordSubagentEvent, subagentRuns } from './services/subagent-runs.ts';
+import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
@@ -97,6 +98,7 @@ observeRuntime((event) => {
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
+	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
