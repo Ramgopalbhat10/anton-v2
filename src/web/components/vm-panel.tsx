@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
+import { AgentsTab } from '@/components/agents-tab';
 import { FilesTab } from '@/components/files-tab';
 import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
@@ -17,6 +18,7 @@ import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
 export const panels = [
 	{ name: 'Changes', icon: FileDiff, desc: 'Every file the agent edited, as a diff' },
+	{ name: 'Agents', icon: Bot, desc: 'The subagents the agent hands work to, live, step by step' },
 	{ name: 'Terminal', icon: SquareTerminal, desc: 'The sandbox shell and its command output' },
 	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
 	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
@@ -29,6 +31,7 @@ export type PanelName = (typeof panels)[number]['name'];
 
 const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
 	Changes: GitTab,
+	Agents: AgentsTab,
 	Terminal: TerminalTab,
 	Files: FilesTab,
 	Preview: PreviewTab,

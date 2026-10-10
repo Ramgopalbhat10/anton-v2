@@ -335,6 +335,26 @@ export type PickedElement = {
 	image: string | null;
 };
 
+/** One tool call a subagent made, as the Agents panel shows it. */
+export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null };
+/** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
+export type SubagentRun = {
+	id: string;
+	agent: string;
+	prompt: string;
+	description: string | null;
+	toolCallId: string | null;
+	status: 'running' | 'done' | 'failed';
+	startedAt: string;
+	durationMs: number | null;
+	model: string | null;
+	tokens: number;
+	calls: number;
+	steps: SubagentStep[];
+	writing: string | null;
+	result: string | null;
+};
+
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
@@ -449,6 +469,7 @@ export const api = {
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
+	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
 	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),
 	closeBrowser: async (id: string) => void (await request(`/api/sessions/${id}/browser`, { method: 'DELETE' })),
