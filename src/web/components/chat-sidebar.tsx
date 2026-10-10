@@ -9,6 +9,7 @@ import {
 	Cpu,
 	Eye,
 	FolderGit2,
+	FolderKanban,
 	GitBranch,
 	GitPullRequest,
 	History,
@@ -26,6 +27,7 @@ import {
 	Settings,
 	SlidersHorizontal,
 	Square,
+	Waypoints,
 	X,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -46,6 +48,7 @@ import {
 } from '@/components/signal';
 import { Count, SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
+import { ProjectSidebarBody, ProjectsSection, SpaceMark } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
@@ -71,6 +74,7 @@ import {
 	taskNote,
 	toggleFilter,
 } from '@/lib/task-view';
+import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 const NAV_ROW =
@@ -416,6 +420,8 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 
 /** The line under a row's title: links to act on (pull request, CI, a plan to review), then the details the view asks for. */
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
+	const spaces = useSpaces();
+	const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
 	const details = [show.repo && repoName(session.repo), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
@@ -424,6 +430,12 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
+			{space ? (
+				<span className="flex max-w-[45%] shrink-0 items-center gap-1 truncate" title={`Thread in ${space.name}`}>
+					<SpaceMark space={space} size={12} />
+					<span className="truncate">{space.name}</span>
+				</span>
+			) : null}
 			{details.length ? <span className="truncate">{details.join(' · ')}</span> : null}
 		</div>
 	);
@@ -450,14 +462,24 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 					</div>
 				) : (
 					<>
-						<Link
-							to="/agents/$sessionId"
-							params={{ sessionId: session.id }}
-							search={{ app: 'code' }}
-							onClick={onNavigate}
-							aria-label={session.title}
-							className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
-						/>
+						{session.spaceId ? (
+							<Link
+								to="/projects/$spaceId/threads/$threadId"
+								params={{ spaceId: session.spaceId, threadId: session.id }}
+								onClick={onNavigate}
+								aria-label={session.title}
+								className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+							/>
+						) : (
+							<Link
+								to="/agents/$sessionId"
+								params={{ sessionId: session.id }}
+								search={{ app: 'code' }}
+								onClick={onNavigate}
+								aria-label={session.title}
+								className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+							/>
+						)}
 						<div
 							className={cn(
 								'pointer-events-none relative flex h-full min-w-0 flex-1 items-center gap-2 pr-1.5 pl-2',
@@ -527,7 +549,8 @@ export function ChatSidebar({
 	onCollapse: () => void;
 	onOpenPalette: () => void;
 }) {
-	const params = useParams({ strict: false }) as { sessionId?: string };
+	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
+	const inProject = Boolean(params.spaceId);
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const name = profile.data?.name ?? 'You';
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
@@ -567,12 +590,12 @@ export function ChatSidebar({
 
 			<div className="flex flex-col gap-1.5 px-2 pb-2">
 				<Link
-					to="/"
+					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
 					className="flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 				>
-					<Icon icon={Plus} />
-					<span>New task</span>
+					<Icon icon={inProject ? Waypoints : Plus} />
+					<span>{inProject ? 'New thread' : 'New task'}</span>
 				</Link>
 				<button
 					type="button"
@@ -586,7 +609,8 @@ export function ChatSidebar({
 				</button>
 			</div>
 
-			<div className="flex flex-col gap-0.5 px-2 py-1">
+			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
+			<div className={cn('flex flex-col gap-0.5 px-2 py-1', inProject && 'hidden')}>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
@@ -596,9 +620,14 @@ export function ChatSidebar({
 					<NavIcon icon={GitPullRequest} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Reviews</div>
 				</Link>
+				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
+					<NavIcon icon={FolderKanban} />
+					<div className="min-w-0 flex-1 truncate text-[13px]">Projects</div>
+				</Link>
 			</div>
 
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', inProject && 'hidden')}>
+				<ProjectsSection onNavigate={onNavigate} />
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
 					<section aria-label="Pinned">

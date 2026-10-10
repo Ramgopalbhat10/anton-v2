@@ -51,6 +51,8 @@ export type Session = {
 		state: 'open' | 'draft' | 'merged' | 'closed';
 		checks: 'passed' | 'failed' | 'pending' | null;
 		runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
+		/** Approved on GitHub and not changed since. */
+		approved?: boolean;
 	} | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
@@ -59,6 +61,61 @@ export type Session = {
 	lastInputAt?: string | null;
 	/** What the agent's last reply asks you, until you send a message. */
 	asking?: string | null;
+	/** The project the task is a thread of; null for a task of its own. */
+	spaceId?: string | null;
+	/** Where a project's thread stands; null outside a project. */
+	threadState?: ThreadState | null;
+	/** When the thread was marked done. */
+	resolvedAt?: string | null;
+	/** The brief a queued thread starts with once a slot frees. */
+	brief?: string | null;
+	/** The start of the thread's latest reply. */
+	lastReply?: string | null;
+};
+
+/** Where a project's thread stands, in the order the project lists them (src/core/thread-state.ts). */
+export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
+export type ThreadState = (typeof THREAD_STATES)[number];
+
+export type Autonomy = 'start' | 'propose';
+export type SpaceState = 'active' | 'paused' | 'archived';
+
+/** A project: a coordinator conversation over parallel threads, each a task on one of its repositories. */
+export type Space = {
+	id: string;
+	name: string;
+	icon: string | null;
+	goal: string;
+	instructions: string;
+	memory: string;
+	coordinatorModel: string | null;
+	coordinatorReasoning: Reasoning | null;
+	threadModel: string | null;
+	threadReasoning: Reasoning | null;
+	maxParallel: number;
+	autonomy: Autonomy;
+	state: SpaceState;
+	repoIds: string[];
+	repos: Array<{ id: string; repoFullName: string; defaultBranch: string }>;
+	counts: Record<ThreadState, number>;
+	threads: number;
+	activeAt: string;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
+export type SpaceChange = Partial<
+	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
+>;
+export type ThreadInput = { title?: string; brief: string; projectId?: string; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
+export type SpaceFile = { path: string; size: number; modifiedAt: string };
+export type SpaceUsage = {
+	today: number;
+	month: number;
+	byThread: Array<{ id: string; title: string; tokens: number; cost: number }>;
+	byModel: Array<{ key: string | null; tokens: number; cost: number }>;
+	daily: Array<{ day: string; cost: number }>;
 };
 
 /** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */
@@ -179,10 +236,12 @@ export type Automation = {
 	lastRunAt: string | null;
 	lastError: string | null;
 	seen: number[];
+	/** The project its tasks start in, as threads. */
+	spaceId?: string | null;
 	createdAt: string;
 };
 
-export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'>;
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';
@@ -465,7 +524,7 @@ export const api = {
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
 	forkSession: (id: string) => post<Session>(`/api/sessions/${id}/fork`),
-	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean; pinned?: boolean }) =>
+	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
@@ -503,7 +562,28 @@ export const api = {
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
 	deleteOutput: async (id: string, path: string) => void (await request(outputUrl(id, path), { method: 'DELETE' })),
+	spaces: () => json<{ spaces: Space[] }>('/api/spaces'),
+	space: (id: string) => json<Space>(`/api/spaces/${id}`),
+	createSpace: (input: SpaceInput) => post<Space>('/api/spaces', input),
+	editSpace: (id: string, change: SpaceChange) => json<Space>(`/api/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
+	deleteSpace: async (id: string) => void (await request(`/api/spaces/${id}`, { method: 'DELETE' })),
+	startThread: (id: string, input: ThreadInput) => post<Session>(`/api/spaces/${id}/threads`, input),
+	nudgeThread: (id: string, threadId: string, text: string) => post<Session>(`/api/spaces/${id}/threads/${threadId}/nudge`, { text }),
+	spaceUsage: (id: string) => json<SpaceUsage>(`/api/spaces/${id}/usage`),
+	spaceAutomations: (id: string) => json<{ automations: Automation[] }>(`/api/spaces/${id}/automations`),
+	spaceFiles: (id: string) => json<{ files: SpaceFile[] }>(`/api/spaces/${id}/files`),
+	uploadSpaceFile: (id: string, file: File) =>
+		json<SpaceFile>(`/api/spaces/${id}/files?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
+	deleteSpaceFile: async (id: string, path: string) => void (await request(spaceFileUrl(id, path), { method: 'DELETE' })),
+	/** Stops the coordinator's current turn. */
+	stopCoordinator: async (id: string) => void (await request(`/api/agents/coordinator/${id}/abort`, { method: 'POST' })),
 };
+
+export const spaceFileUrl = (id: string, path: string) => `/api/spaces/${id}/file?path=${encodeURIComponent(path)}`;
 
 /**
  * Pages refetch when the server says something changed (see live-updates.ts).

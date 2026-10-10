@@ -32,6 +32,11 @@ function toRecord(row: Row): SessionRecord {
 		lastInput: optional(row.last_input),
 		lastInputAt: optional(row.last_input_at),
 		asking: optional(row.asking),
+		spaceId: optional(row.space_id),
+		resolvedAt: optional(row.resolved_at),
+		brief: optional(row.brief),
+		lastReply: optional(row.last_reply),
+		reportedState: optional(row.reported_state),
 	};
 }
 
@@ -50,10 +55,12 @@ export async function addSessionUsage(id: string, usage: Usage, at = new Date(),
 	const result = await db.batch(
 		[
 			{
-				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model, turn_id, cached_tokens)
-					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)), ?, ?)
+				// A project's coordinator has no task: its turns are logged under the project's id, which is also its space.
+				sql: `INSERT INTO usage_log (session_id, at, input_tokens, output_tokens, cost_usd, project_id, model, turn_id, cached_tokens, space_id)
+					VALUES (?, ?, ?, ?, ?, (SELECT project_id FROM sessions WHERE id = ?), COALESCE(?, (SELECT model FROM sessions WHERE id = ?)), ?, ?,
+						COALESCE((SELECT space_id FROM sessions WHERE id = ?), (SELECT id FROM spaces WHERE id = ?)))
 					ON CONFLICT (session_id, turn_id) WHERE turn_id IS NOT NULL DO NOTHING`,
-				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id, turnId, usage.cachedTokens ?? 0],
+				args: [id, at.toISOString(), usage.inputTokens, usage.outputTokens, usage.cost, id, model, id, turnId, usage.cachedTokens ?? 0, id, id],
 			},
 			{
 				// changes() refers to the insert immediately above, on the same transaction/connection.
@@ -131,15 +138,16 @@ export async function spendByMinute(since: Date): Promise<Array<{ minute: string
 	}));
 }
 
-export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'>;
+export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'> &
+	Partial<Pick<SessionRecord, 'spaceId' | 'brief'>>;
 
 const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';
 
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId,
@@ -152,9 +160,19 @@ export async function insertSession(session: NewSession): Promise<void> {
 			session.baseSha,
 			session.planMode ? 1 : 0,
 			new Date().toISOString(),
+			session.spaceId ?? null,
+			session.brief ?? null,
 		],
 	});
 	announce({ kind: 'sessions' });
+	if (session.spaceId) announce({ kind: 'space', id: session.spaceId, what: 'threads' });
+}
+
+/** A project's threads, newest first. */
+export async function listThreadRecords(spaceId: string): Promise<SessionRecord[]> {
+	const db = await appDb();
+	const result = await db.execute({ sql: `${SELECT} WHERE s.space_id = ? AND s.base_sha IS NOT NULL ORDER BY s.created_at DESC`, args: [spaceId] });
+	return result.rows.map((row) => toRecord(row as Row));
 }
 
 export async function listSessionRecords(): Promise<SessionRecord[]> {
@@ -183,6 +201,11 @@ const columns = {
 	lastInput: 'last_input',
 	lastInputAt: 'last_input_at',
 	asking: 'asking',
+	spaceId: 'space_id',
+	resolvedAt: 'resolved_at',
+	reportedState: 'reported_state',
+	brief: 'brief',
+	lastReply: 'last_reply',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

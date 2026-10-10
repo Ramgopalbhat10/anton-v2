@@ -209,7 +209,8 @@ export type ReviewInput = { commit: string | null; body: string; comments: Revie
 
 export type ChangedFile = { path: string; patch: string | null };
 
-export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[] };
+/** `approved`: a reviewer's latest review approves it and none asks for changes. */
+export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[]; approved?: boolean };
 
 /** How hard a model reasons before answering, from none to the most it offers. */
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;

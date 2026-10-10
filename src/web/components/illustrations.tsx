@@ -1066,3 +1066,66 @@ export function Logo({ size = 20 }: { size?: number }) {
 		</svg>
 	);
 }
+
+/** A coordinator unit lit in cyan, wired across the floor to three thread units, one of them at work:
+    a project, with its threads running in parallel. */
+export function ProjectArt({ className }: { className?: string }) {
+	const unit = (at: Point, lit?: boolean) => (
+		<Block
+			at={at}
+			size={[26, 26, 13]}
+			r={2.5}
+			tone={lit ? 'accent' : 'solid'}
+			top={
+				<>
+					<Bar x={4} y={19} w={12} accent={lit} />
+					<Bar x={4} y={14.5} w={18} accent={lit} />
+					<Bar x={4} y={10} w={8} accent={lit} />
+					<Led at={[21, 5]} lit={lit} r={1.3} />
+				</>
+			}
+			left={<Slot x={4} y={4} w={18} h={4} r={1} edge />}
+		/>
+	);
+	const wire = (from: Point, to: Point, lit?: boolean) => <Trace points={[pt(from), pt(to)]} stroke={lit ? ACCENT : EDGE} dash={lit ? undefined : '2 3'} />;
+	return (
+		<Frame label="A coordinator wired to three threads running side by side" viewBox="-92 -44 186 132" className={className}>
+			{wire([40, 14, 0], [62, 14, 0])}
+			{wire([14, 40, 0], [14, 62, 0])}
+			{wire([38, 38, 0], [58, 58, 0], true)}
+			<Block
+				at={[0, 0, 0]}
+				size={[40, 40, 22]}
+				r={3.5}
+				tone="accent"
+				top={
+					<>
+						{[8, 13, 18].map((v) => (
+							<Slot key={v} x={6} y={v} w={18} h={2.6} r={1.3} />
+						))}
+						<Ring at={[31, 26]} r={4.5} fill={RECESS} stroke={ACCENT} />
+						{[6, 11, 16, 21].map((u, i) => (
+							<Led key={u} at={[u + 22, 8]} lit={i < 3} r={1.2} />
+						))}
+					</>
+				}
+				left={
+					<>
+						<Slot x={5} y={5} w={30} h={12} r={1.6} edge />
+						<Bar x={8} y={12} w={14} accent />
+						<rect className="art-blink" x={24} y={8.6} width={3} height={4} rx={0.5} fill={ACCENT} />
+					</>
+				}
+			/>
+			{unit([62, 1, 0])}
+			{unit([1, 62, 0])}
+			{unit([58, 58, 0], true)}
+			<Label at={[20, 0, 22]} run={-38} rise={-10}>
+				coordinator
+			</Label>
+			<Label at={[84, 71, 13]} run={20} accent>
+				working
+			</Label>
+		</Frame>
+	);
+}
