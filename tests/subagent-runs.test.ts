@@ -70,3 +70,22 @@ test('runs are listed newest first, and a failed run keeps why', async () => {
 	const list = await subagentRuns('task-3');
 	assert.deepEqual(list.map((run) => [run.id, run.status, run.result]), [['b', 'failed', 'npm test exited 1'], ['a', 'running', null]]);
 });
+
+test('what a tool did inside a step is kept on that step, even when it says so before the step is recorded', async () => {
+	resetSubagentRunsForTests();
+	const { noteStep } = await import('../src/services/subagent-runs.ts');
+	const at = { instanceId: 'task-n', taskId: 'sub-n' };
+	recordSubagentEvent({ type: 'task_start', ...at, agent: 'browser', prompt: 'Fill the form' });
+	await settle();
+	// The tool runs before its start event is recorded, and tells its first action then.
+	await noteStep('task-n', 'd1', { outcome: null, actions: [{ what: 'Typed name into textbox "Name"', p: 0.99 }], decisions: 1, cost: 0.0001 });
+	recordSubagentEvent({ type: 'tool_start', ...at, toolName: 'browser', toolCallId: 'd1', args: { action: 'do', goal: 'Fill the form' } });
+	await settle();
+	let [run] = await subagentRuns('task-n');
+	assert.equal(run.steps[0].detail?.actions.length, 1);
+	await noteStep('task-n', 'd1', { outcome: 'needs_confirmation', actions: [{ what: 'Typed name into textbox "Name"', p: 0.99 }, { what: 'x'.repeat(500), p: null }], decisions: 3, cost: 0.0003 });
+	[run] = await subagentRuns('task-n');
+	assert.equal(run.steps[0].detail?.outcome, 'needs_confirmation');
+	assert.equal(run.steps[0].detail?.decisions, 3);
+	assert.equal(run.steps[0].detail?.actions[1].what.length, 300);
+});

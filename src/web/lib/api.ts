@@ -340,7 +340,9 @@ export type PickedElement = {
 };
 
 /** One tool call a subagent made, as the Agents panel shows it. */
-export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null };
+/** What a browser step the decision model drove did inside it: each action, how sure the model was, and what it cost. */
+export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number };
+export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null; detail?: StepDetail };
 /** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
 export type SubagentRun = {
 	id: string;

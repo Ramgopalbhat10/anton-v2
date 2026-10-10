@@ -20,6 +20,16 @@ export type SubagentStep = {
 	state: 'running' | 'done' | 'failed';
 	at: string;
 	durationMs: number | null;
+	/** What a step the decision model drove did inside it: each action and how sure the model was, and what its calls cost. */
+	detail?: StepDetail;
+};
+
+export type StepDetail = {
+	/** How it ended, such as done or needs_confirmation; null while it works. */
+	outcome: string | null;
+	actions: Array<{ what: string; p: number | null; failed?: boolean }>;
+	decisions: number;
+	cost: number;
 };
 
 export type SubagentRun = {
@@ -199,12 +209,15 @@ function apply(id: string, list: SubagentRun[], event: Event) {
 				run.calls += 1;
 			}
 			break;
-		case 'tool_start':
+		case 'tool_start': {
 			if (!event.toolCallId || run.steps.some((step) => step.id === event.toolCallId)) return;
-			run.steps.push({ id: event.toolCallId, tool: event.toolName ?? 'tool', input: trimmed(event.args), state: 'running', at, durationMs: null });
+			const detail = notes.get(event.toolCallId);
+			notes.delete(event.toolCallId);
+			run.steps.push({ id: event.toolCallId, tool: event.toolName ?? 'tool', input: trimmed(event.args), state: 'running', at, durationMs: null, ...(detail ? { detail } : {}) });
 			run.steps.splice(0, Math.max(0, run.steps.length - MAX_STEPS));
 			run.writing = null;
 			break;
+		}
 		case 'tool': {
 			const step = run.steps.find((entry) => entry.id === event.toolCallId);
 			if (!step) return;
@@ -229,6 +242,27 @@ function apply(id: string, list: SubagentRun[], event: Event) {
 		default:
 			return;
 	}
+	changed(id);
+}
+
+/** Details a tool gave for its step before the runtime's start event was recorded, by tool call. */
+const notes = new Map<string, StepDetail>();
+const MAX_ACTIONS_KEPT = 40;
+
+/**
+ * Records what a tool did inside one step (a browser step the decision model
+ * drove, say), so the Agents panel can show it as it happens.
+ */
+export async function noteStep(id: string, toolCallId: string, detail: StepDetail): Promise<void> {
+	const kept: StepDetail = { ...detail, actions: detail.actions.slice(-MAX_ACTIONS_KEPT).map((action) => ({ ...action, what: action.what.slice(0, 300) })) };
+	const list = await runsOf(id).catch(() => null);
+	const step = list?.flatMap((run) => run.steps).find((entry) => entry.id === toolCallId);
+	if (!step) {
+		notes.set(toolCallId, kept);
+		for (const stale of [...notes.keys()].slice(0, Math.max(0, notes.size - 50))) notes.delete(stale);
+		return;
+	}
+	step.detail = kept;
 	changed(id);
 }
 

@@ -83,7 +83,7 @@ describe('Thread', () => {
 			],
 		});
 		show(agent([user('u1', 'Count the posts'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Count the posts', description: 'Count blog posts' }), tool('read', { path: 'README.md' }, { output: 'x' })])]));
-		expect(await screen.findByText('1 agent working')).toBeTruthy();
+		expect(await screen.findByText('1 agent on this reply')).toBeTruthy();
 		expect(screen.getByText('Count blog posts')).toBeTruthy();
 		expect(screen.queryByText(/Delegated to/)).toBeNull();
 		// The latest step, as the thread would describe it, and the run's numbers.

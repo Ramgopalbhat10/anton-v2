@@ -36,3 +36,10 @@ export function dollars(amount: number): string {
 	if (amount < 0.001) return '<$0.001';
 	return `$${amount.toFixed(amount < 1 ? 3 : 2)}`;
 }
+
+/** Fractions of a cent, as the decision model costs: "$0.0009". */
+export function fineDollars(amount: number): string {
+	if (amount === 0) return '$0';
+	if (amount < 0.0001) return '<$0.0001';
+	return amount < 0.01 ? `$${amount.toFixed(4)}` : dollars(amount);
+}
