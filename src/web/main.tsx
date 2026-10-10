@@ -13,6 +13,9 @@ import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
 import { SkillDetailPage } from '@/components/settings/skill-detail';
 import type { SkillsTab, ViewSearch } from '@/components/settings/skills';
+import { ProjectPage, ThreadPage } from '@/components/project-page';
+import { ProjectSettingsPage } from '@/components/project-settings';
+import { ProjectsPage } from '@/components/projects-page';
 import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
@@ -49,6 +52,41 @@ const sessionRoute = createRoute({
 		panel: panels.find((panel) => panel.name === search.panel)?.name,
 	}),
 	component: SessionPage,
+});
+
+const projectsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/projects',
+	// `create` opens the New project dialog, as the sidebar's + does.
+	validateSearch: (search: Record<string, unknown>): { create?: boolean } => ({ create: search.create === true || search.create === 'true' ? true : undefined }),
+	component: ProjectsPage,
+});
+
+const projectRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/projects/$spaceId',
+	remountDeps: ({ params }) => params.spaceId,
+	// `ask` is a first message for the coordinator, from the New project dialog; `new` opens the New thread form.
+	validateSearch: (search: Record<string, unknown>): { ask?: string; new?: boolean } => ({
+		ask: typeof search.ask === 'string' && search.ask ? search.ask : undefined,
+		new: search.new === true || search.new === 'true' ? true : undefined,
+	}),
+	component: ProjectPage,
+});
+
+const threadRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/projects/$spaceId/threads/$threadId',
+	// A fresh page per thread, so each keeps its own draft and panels.
+	remountDeps: ({ params }) => params.threadId,
+	validateSearch: (search: Record<string, unknown>): { panel?: PanelName } => ({ panel: panels.find((panel) => panel.name === search.panel)?.name }),
+	component: ThreadPage,
+});
+
+const projectSettingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/projects/$spaceId/settings',
+	component: ProjectSettingsPage,
 });
 
 const tasksRoute = createRoute({
@@ -113,6 +151,10 @@ const routeTree = rootRoute.addChildren([
 	indexRoute,
 	sessionRoute,
 	tasksRoute,
+	projectsRoute,
+	projectRoute,
+	threadRoute,
+	projectSettingsRoute,
 	reviewsRoute,
 	oldRepoSettingsRoute,
 	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, repoSettingsRoute]),

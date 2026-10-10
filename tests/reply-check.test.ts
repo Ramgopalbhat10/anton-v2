@@ -61,3 +61,12 @@ test('with one, the decision model judges; a subagent’s or the reviewer’s wo
 	await checkReply('c');
 	assert.equal((await getSessionRecord('c'))?.asking, null);
 });
+
+test('a reply in several messages comes back whole, while only its last words are checked for a question', async () => {
+	providers(null);
+	reply('a', 'The routes, grouped by area: ...');
+	reply('a', 'Reported above.');
+	assert.equal(await checkReply('a'), 'The routes, grouped by area: ...\n\nReported above.');
+	assert.equal((await getSessionRecord('a'))?.asking, null);
+	assert.equal(await checkReply('a'), null, 'the next reply starts empty');
+});

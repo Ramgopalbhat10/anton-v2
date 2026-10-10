@@ -1,14 +1,25 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-type Change = { kind: 'sessions' } | { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'subagents' } | { kind: 'subscriptions' } | { kind: 'models' };
+type Change =
+	| { kind: 'sessions' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'subagents' }
+	| { kind: 'subscriptions' }
+	| { kind: 'models' }
+	| { kind: 'spaces' }
+	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' };
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
 function staleFor(change: Change): QueryKey[] {
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections']];
 	if (change.kind === 'models') return [['models']];
-	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute']];
+	// Projects count their threads by state, so a change to any task can move a count.
+	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space']];
+	if (change.kind === 'spaces') return [['spaces'], ['space']];
+	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
+	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
+	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id]];
 	// The Browser panel's page moved, or the browser opened or closed.
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
@@ -17,6 +28,8 @@ function staleFor(change: Change): QueryKey[] {
 	if (change.what === 'files') return files;
 	return [
 		['sessions'],
+		['spaces'],
+		['space'],
 		['budget'],
 		['usage'],
 		['compute'],

@@ -9,6 +9,8 @@ import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
 import { isRestoring } from './restore.ts';
 import { type ModelChoice, primeModel } from './sessions.ts';
+import { getSpace } from '../db/spaces.ts';
+import { primeAllCoordinators, primeCoordinator } from './coordinator.ts';
 
 /**
  * The agent renders synchronously, so it reads each task's MCP servers from
@@ -35,6 +37,14 @@ const memories = new Map<string, string>();
 
 export function memoryFor(id: string): string {
 	return memories.get(id) ?? '';
+}
+
+/** What a project's thread knows of its project: name, goal, instructions and memory. Empty outside a project. */
+export type ThreadProject = { id: string; name: string; goal: string; instructions: string; memory: string };
+const threadProjects = new Map<string, ThreadProject>();
+
+export function threadProjectFor(id: string): ThreadProject | null {
+	return threadProjects.get(id) ?? null;
 }
 
 /** Tasks that have had a machine: the agent works there rather than starting read-only. */
@@ -78,6 +88,9 @@ export async function primeAgent(id: string): Promise<void> {
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);
 	memories.set(id, project?.memory ?? '');
+	const space = session?.spaceId ? await getSpace(session.spaceId) : null;
+	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
+	else threadProjects.delete(id);
 	if (session?.machineState) workspaces.add(id);
 	if (session?.planMode) planning.add(id);
 	else planning.delete(id);
@@ -90,11 +103,15 @@ export async function primeAgent(id: string): Promise<void> {
  */
 export async function primeAllAgents(): Promise<void> {
 	for (const session of await listSessionRecords()) await primeAgent(session.id).catch(() => undefined);
+	await primeAllCoordinators().catch(() => undefined);
 }
 
 type Deliver = (id: string, text: string) => Promise<void>;
-/** The agents a task has: the coder it talks to, and the reviewer that reads its pull requests. Both run on the task's machine and caps. */
-export type AgentName = 'coder' | 'reviewer';
+/**
+ * The agents a task has: the coder it talks to, and the reviewer that reads its pull requests, both on the
+ * task's machine and caps; and a project's coordinator, addressed by the project's id, which has no machine.
+ */
+export type AgentName = 'coder' | 'reviewer' | 'coordinator';
 const deliveries = new Map<AgentName, Deliver>();
 
 /** The app registers how to deliver a message to each agent, so services never import the agent modules. */
@@ -108,6 +125,7 @@ export async function sendToAgent(id: string, text: string, agent: AgentName = '
 	if (!deliver) throw new Error('Agent delivery is not set up');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored');
 	await assertWithinBudget(id);
-	await primeAgent(id);
+	if (agent === 'coordinator') await primeCoordinator(id);
+	else await primeAgent(id);
 	await deliver(id, text);
 }

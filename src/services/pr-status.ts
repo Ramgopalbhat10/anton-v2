@@ -3,6 +3,7 @@ import type { PullRequestStatus, SessionRecord } from '../core/types.ts';
 import { listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
+import { threadChanged } from './thread-reports.ts';
 
 /** A pull request read this recently is not read again by the background refresh. */
 const FRESH_MS = 4 * 60_000;
@@ -20,6 +21,8 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 	if (!session.prUrl) return;
 	if (JSON.stringify(session.pullRequest) === JSON.stringify(status)) return;
 	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: session.prUrl, ...status }) });
+	// A project's thread tells its coordinator, and is done once its pull request merges or closes.
+	if (session.spaceId) await threadChanged(session.id).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, session.id));
 }
 
 /** Reads a task's pull request from the host and keeps its state and checks for the sidebar. */
@@ -28,7 +31,12 @@ export async function readPullRequest(session: SessionRecord & { prUrl: string }
 	readAt.set(session.id, Date.now());
 	const open = activity.state === 'open' || activity.state === 'draft';
 	const runs = activity.checks.flatMap(({ name, status, url }) => (status === 'skipped' ? [] : [{ name, status, url }]));
-	await savePullRequestStatus(session, { state: activity.state, checks: open ? checksOf(activity.checks) : null, runs: open ? runs : [] });
+	await savePullRequestStatus(session, {
+		state: activity.state,
+		checks: open ? checksOf(activity.checks) : null,
+		...(open && activity.approved ? { approved: true } : {}),
+		runs: open ? runs : [],
+	});
 	return activity;
 }
 

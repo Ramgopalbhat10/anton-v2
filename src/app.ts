@@ -5,11 +5,13 @@ import { streamSSE } from 'hono/streaming';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { Reviewer } from './agents/reviewer.ts';
+import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
 import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
+import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
@@ -41,6 +43,7 @@ import {
 	createSession,
 	getSession,
 	listSessions,
+	listThreads,
 	deleteSession,
 	editSession,
 	forkSession,
@@ -60,7 +63,10 @@ import { contextView, recordContext } from './services/context-usage.ts';
 import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
-import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled } from './services/automations.ts';
+import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
+import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
+import { primeCoordinator } from './services/coordinator.ts';
+import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -113,6 +119,7 @@ appDb()
 scheduleCleanup();
 setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
 setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, message: text })), 'reviewer');
+setAgentDelivery(async (id, text) => void (await dispatch(Coordinator, { id, message: text })), 'coordinator');
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -166,11 +173,23 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
+// A project's coordinator, one conversation per project; like a prompt to a task, a message is checked
+// against the daily cap, and the coordinator loads a fresh picture of its project before it renders.
+app.post('/api/agents/coordinator/:id', async (c, next) => {
+	const id = c.req.param('id');
+	if (!(await getSpace(id))) throw new NotFoundError('Project not found');
+	await assertWithinBudget(id);
+	await primeCoordinator(id);
+	await next();
+});
+const coordinators = createAgentRouter(Coordinator);
+app.route('/api/agents/coordinator', coordinators as never);
 // The reviewer is never served over HTTP; its router only stops it.
 const reviewers = createAgentRouter(Reviewer);
 setAgentAbort(async (id) => {
 	const path = `/${encodeURIComponent(id)}/abort`;
-	await Promise.all([agents.request(path, { method: 'POST' }), reviewers.request(path, { method: 'POST' })]);
+	const routers = id.startsWith('space_') ? [coordinators] : [agents, reviewers];
+	await Promise.all(routers.map((router) => router.request(path, { method: 'POST' })));
 });
 
 /** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
@@ -392,6 +411,7 @@ app.post('/api/projects/:id/automations', async (c) => {
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planFirst: v.optional(v.boolean()),
+			spaceId: v.optional(v.nullable(v.string())),
 		}),
 	);
 	return c.json(await addAutomation(c.req.param('id'), input));
@@ -407,6 +427,85 @@ app.delete('/api/automations/:id', async (c) => {
 });
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 app.get('/api/projects/:id/files', async (c) => c.json({ paths: await projectFiles(c.req.param('id'), c.req.query('branch')) }));
+
+// Projects: a coordinator conversation over parallel threads, each a task on one of the project's repositories.
+const SPACE_FIELDS = {
+	name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))),
+	icon: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(8)))),
+	goal: v.optional(v.pipe(v.string(), v.maxLength(300))),
+	instructions: v.optional(v.pipe(v.string(), v.maxLength(MAX_INSTRUCTIONS))),
+	autonomy: v.optional(v.picklist(['start', 'propose'])),
+	maxParallel: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10))),
+};
+app.get('/api/spaces', async (c) => c.json({ spaces: await spacesView() }));
+app.post('/api/spaces', async (c) => {
+	const input = await body(
+		c,
+		v.object({ ...SPACE_FIELDS, name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)), repoIds: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(20)) }),
+	);
+	return c.json(await createSpace(input));
+});
+app.get('/api/spaces/:id', async (c) => c.json(await spaceView(c.req.param('id'))));
+app.patch('/api/spaces/:id', async (c) => {
+	const change = await body(
+		c,
+		v.object({
+			...SPACE_FIELDS,
+			memory: v.optional(v.pipe(v.string(), v.maxLength(MAX_SPACE_MEMORY))),
+			coordinatorModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
+			coordinatorReasoning: v.optional(v.nullable(REASONING)),
+			threadModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
+			threadReasoning: v.optional(v.nullable(REASONING)),
+			state: v.optional(v.picklist(['active', 'paused', 'archived'])),
+			repoIds: v.optional(v.pipe(v.array(v.string()), v.maxLength(20))),
+		}),
+	);
+	return c.json(await editSpace(c.req.param('id'), change));
+});
+app.delete('/api/spaces/:id', async (c) => {
+	await removeSpace(c.req.param('id'));
+	return c.json({ ok: true });
+});
+app.get('/api/spaces/:id/threads', async (c) => {
+	const space = await spaceView(c.req.param('id'));
+	return c.json({ threads: await listThreads(space.id) });
+});
+app.post('/api/spaces/:id/threads', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			title: v.optional(v.pipe(v.string(), v.maxLength(200)), ''),
+			brief: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40_000)),
+			projectId: v.optional(v.string()),
+			repo: v.optional(v.string()),
+			model: v.optional(v.string()),
+			reasoning: v.optional(REASONING),
+			planMode: v.optional(v.boolean()),
+		}),
+	);
+	return c.json(await startThread(c.req.param('id'), input));
+});
+app.post('/api/spaces/:id/threads/:threadId/nudge', async (c) => {
+	const { text } = await body(c, v.object({ text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20_000)) }));
+	return c.json(await nudgeThread(c.req.param('id'), c.req.param('threadId'), text));
+});
+app.get('/api/spaces/:id/usage', async (c) => c.json(await spaceUsage(c.req.param('id'))));
+app.get('/api/spaces/:id/automations', async (c) => c.json({ automations: await spaceAutomations(c.req.param('id')) }));
+app.get('/api/spaces/:id/files', async (c) => c.json({ files: await listSpaceFiles(c.req.param('id')) }));
+app.get('/api/spaces/:id/file', async (c) => {
+	const path = c.req.query('path') ?? '';
+	return bytes(c, await readSpaceFile(c.req.param('id'), path), contentType(path));
+});
+app.post('/api/spaces/:id/files', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
+	return c.json(await uploadSpaceFile(c.req.param('id'), name, new Uint8Array(await c.req.arrayBuffer()), c.req.header('content-type') || undefined));
+});
+app.delete('/api/spaces/:id/file', async (c) => {
+	await removeSpaceFile(c.req.param('id'), c.req.query('path') ?? '');
+	return c.json({ ok: true });
+});
 
 app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
 app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));
@@ -434,9 +533,13 @@ app.patch('/api/sessions/:id', async (c) => {
 			reasoning: v.optional(v.nullable(REASONING)),
 			planMode: v.optional(v.boolean()),
 			pinned: v.optional(v.boolean()),
+			resolved: v.optional(v.boolean()),
+			spaceId: v.optional(v.nullable(v.string())),
 		}),
 	);
-	return c.json(await editSession(c.req.param('id'), change));
+	const { spaceId, ...rest } = change;
+	if (spaceId !== undefined) await moveToSpace(c.req.param('id'), spaceId);
+	return c.json(await editSession(c.req.param('id'), rest));
 });
 app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
 app.delete('/api/sessions/:id', async (c) => {

@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowUpRight, Copy, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/signal';
+import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api, branchLabel, type PullRequest, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
+import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 const STATE: Record<NonNullable<PullRequest['state']>, { label: string; tone: string }> = {
@@ -132,7 +133,58 @@ export function useRewind(session: Session) {
 	return () => void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code', panel: 'History' } });
 }
 
-const taskLink = (session: Session) => new URL(`/agents/${session.id}`, window.location.origin).href;
+const taskLink = (session: Session) => new URL(session.spaceId ? `/projects/${session.spaceId}/threads/${session.id}` : `/agents/${session.id}`, window.location.origin).href;
+
+/** Moving a task into a project makes it a thread there; out of one, an ordinary task again. Done threads fold away in the project. */
+function ProjectItems({ session }: { session: Session }) {
+	const queryClient = useQueryClient();
+	const navigate = useNavigate();
+	const params = useParams({ strict: false }) as { sessionId?: string; threadId?: string };
+	const spaces = useSpaces();
+	const refresh = () => {
+		void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+		void queryClient.invalidateQueries({ queryKey: ['spaces'] });
+	};
+	const move = useMutation({
+		mutationFn: (spaceId: string | null) => api.editSession(session.id, { spaceId }),
+		onSuccess: (_, spaceId) => {
+			refresh();
+			const here = params.sessionId === session.id || params.threadId === session.id;
+			if (!here) return;
+			if (spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId: session.id } });
+			else void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
+		},
+	});
+	const resolve = useMutation({ mutationFn: (resolved: boolean) => api.editSession(session.id, { resolved }), onSuccess: refresh });
+	const others = (spaces.data?.spaces ?? []).filter((space) => space.id !== session.spaceId && space.state !== 'archived');
+	return (
+		<>
+			{session.spaceId ? (
+				<MenuItem icon={session.resolvedAt ? RotateCcw : CircleCheck} disabled={resolve.isPending} onSelect={() => resolve.mutate(!session.resolvedAt)}>
+					{session.resolvedAt ? 'Reopen thread' : 'Mark done'}
+				</MenuItem>
+			) : null}
+			{others.length ? (
+				<MenuSub>
+					<MenuSubTrigger icon={FolderKanban}>{session.spaceId ? 'Move to another project' : 'Move to project'}</MenuSubTrigger>
+					<MenuSubContent>
+						{others.map((space) => (
+							<MenuItem key={space.id} onSelect={() => move.mutate(space.id)}>
+								{space.icon ? `${space.icon} ` : ''}
+								{space.name}
+							</MenuItem>
+						))}
+					</MenuSubContent>
+				</MenuSub>
+			) : null}
+			{session.spaceId ? (
+				<MenuItem icon={FolderMinus} disabled={move.isPending} onSelect={() => move.mutate(null)}>
+					Remove from project
+				</MenuItem>
+			) : null}
+		</>
+	);
+}
 
 /** What the task has cost so far, which model it runs on and the branch it works on. */
 function TaskFacts({ session }: { session: Session }) {
@@ -241,6 +293,7 @@ export function TaskMenu({
 				<MenuItem icon={GitBranch} onSelect={() => fork.mutate()} disabled={fork.isPending}>
 					Fork into a new task
 				</MenuItem>
+				<ProjectItems session={session} />
 				<MenuSeparator />
 				{onAskForPullRequest ? (
 					<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>

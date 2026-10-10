@@ -3,7 +3,7 @@ import type { Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { getProject } from '../db/projects.ts';
-import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, updateSession } from '../db/sessions.ts';
+import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, listThreadRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
@@ -15,6 +15,7 @@ import { closeBrowser } from './live-browser.ts';
 import { forgetSubagentRuns } from './subagent-runs.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
+import { threadState } from '../core/thread-state.ts';
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -41,9 +42,10 @@ function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 	return running.has(record.id) ? 'running' : 'stopped';
 }
 
-function present(record: SessionRecord, running: Set<string>): Session {
-	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, ...session } = record;
-	return { ...session, status: statusOf(record, running), working: isWorking(record.id), workspace: record.machineState !== null };
+export function present(record: SessionRecord, running: Set<string>): Session {
+	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, reportedState: _reported, ...session } = record;
+	const shown = { ...session, status: statusOf(record, running), working: isWorking(record.id), workspace: record.machineState !== null };
+	return { ...shown, threadState: record.spaceId ? threadState(shown) : null };
 }
 
 export type ModelChoice = { model: string; reasoning: Reasoning };
@@ -88,6 +90,10 @@ export async function createSession(input: {
 	reasoning?: Reasoning;
 	title?: string;
 	planMode?: boolean;
+	/** The project the task is a thread of. */
+	spaceId?: string;
+	/** Held until the thread can start, when the project's threads are all busy. */
+	brief?: string;
 }): Promise<Session> {
 	const project = await getProject(input.projectId);
 	if (!project) throw new NotFoundError('Project not found');
@@ -100,7 +106,7 @@ export async function createSession(input: {
 	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
 	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
 	const planMode = input.planMode ?? general.planMode;
-	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, id), planMode });
+	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, id), planMode, spaceId: input.spaceId, brief: input.brief });
 	return getSession(id);
 }
 
@@ -120,8 +126,8 @@ export async function forkSession(id: string): Promise<Session> {
 	if (machine) await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before fork failed', error, id));
 	const forkId = randomUUID();
 	const title = `${source.title.slice(0, 190)} (fork)`;
-	const { projectId, model, reasoning, baseBranch, baseSha, planMode } = source;
-	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, forkId), planMode });
+	const { projectId, model, reasoning, baseBranch, baseSha, planMode, spaceId } = source;
+	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, forkId), planMode, spaceId });
 	if (await copyCheckpoint(id, forkId)) {
 		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
 	}
@@ -130,6 +136,12 @@ export async function forkSession(id: string): Promise<Session> {
 
 export async function listSessions(): Promise<Session[]> {
 	const [records, running] = await Promise.all([listSessionRecords(), runningKeys()]);
+	return records.map((record) => present(record, running));
+}
+
+/** A project's threads as the page shows them, newest first. */
+export async function listThreads(spaceId: string): Promise<Session[]> {
+	const [records, running] = await Promise.all([listThreadRecords(spaceId), runningKeys()]);
 	return records.map((record) => present(record, running));
 }
 
@@ -143,9 +155,12 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean; pinned?: boolean };
+export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean; pinned?: boolean; resolved?: boolean };
 
-/** Renames the task, changes its model or reasoning level, turns plan mode on or off, or pins it; the agent sees a change from the next prompt. */
+/**
+ * Renames the task, changes its model or reasoning level, turns plan mode on or off, pins it, or marks a
+ * project's thread done or open again; the agent sees a change from the next prompt.
+ */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));
 	const title = change.title?.trim();
@@ -155,6 +170,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
 		...(change.planMode !== undefined ? { planMode: change.planMode } : {}),
 		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
+		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
 	});
 	return getSession(id);
 }
