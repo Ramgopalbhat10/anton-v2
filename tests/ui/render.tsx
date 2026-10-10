@@ -33,5 +33,6 @@ export const session = (patch: Partial<Session> = {}): Session => ({
 	usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
 	lastInput: null,
 	lastInputAt: null,
+	asking: null,
 	...patch,
 });

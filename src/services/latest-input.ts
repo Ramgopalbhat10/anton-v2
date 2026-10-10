@@ -17,7 +17,8 @@ const MAX_LENGTH = 2000;
 export async function recordLatestInput(id: string, text: string, at = new Date()): Promise<void> {
 	const input = text.trim();
 	if (!input) return;
-	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString() }).catch((error: unknown) =>
+	// A message answers whatever the agent was waiting on.
+	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString(), asking: null }).catch((error: unknown) =>
 		logProblem('warn', 'Could not keep the latest input', error, id),
 	);
 }

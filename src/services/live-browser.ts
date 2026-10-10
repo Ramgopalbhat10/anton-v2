@@ -10,6 +10,7 @@ import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import type { BrowserInput, BrowserState } from './browser.ts';
 import { addressToUrl, BROWSER_STEP, clipSnapshot, screenshotFile, type StepResult } from './browser-step.ts';
+import { saveOutput } from './checkpoints.ts';
 import { DESCRIBE_ELEMENT } from './describe-element.ts';
 import { logProblem } from './log.ts';
 import { liveMachine } from './workspace.ts';
@@ -40,6 +41,8 @@ export type BrowserView = {
 		page: BrowserPage | null;
 		/** The agent is acting in this browser, or did a moment ago. */
 		agentBusy: boolean;
+		/** Why the agent stopped for you here (a sign-in or a human check), until the page moves on. */
+		needsYou: string | null;
 	} | null;
 };
 
@@ -107,7 +110,17 @@ async function ensureBrowser(id: string, url?: string): Promise<Stored> {
 	return created;
 }
 
+/** Pages where the agent stopped for the user, by task, until that page is left. */
+const needsYou = new Map<string, { reason: string; url: string }>();
+
+/** Says in the panel that the agent stopped for the user on this page. */
+export function askTheUser(id: string, reason: string, url: string): void {
+	needsYou.set(id, { reason, url });
+	changed(id);
+}
+
 async function forget(id: string) {
+	needsYou.delete(id);
 	connections.get(id)?.cdp.close();
 	connections.delete(id);
 	await drivers.get(id)?.browser.close().catch(() => undefined);
@@ -168,6 +181,10 @@ async function switchTo(id: string, current: Connection, targetId: string) {
 /** Keeps the address bar current, and follows a page that opens a new tab, as the live view shows only one. */
 async function follow(id: string, current: Connection, event: CdpEvent) {
 	if (event.sessionId === current.session && (event.method === 'Page.navigatedWithinDocument' || (event.method === 'Page.frameNavigated' && !(event.params.frame as { parentId?: string } | undefined)?.parentId))) {
+		// Leaving the page the agent stopped on (signed in, say) ends the ask.
+		const url = String((event.params.frame as { url?: string } | undefined)?.url ?? event.params.url ?? '');
+		const asked = needsYou.get(id);
+		if (asked && url && url.replace(/#.*$/, '') !== asked.url.replace(/#.*$/, '')) needsYou.delete(id);
 		changed(id);
 	} else if (event.method === 'Target.targetCreated') {
 		const info = event.params.targetInfo as Target;
@@ -212,7 +229,7 @@ async function viewOf(id: string, browser: Stored): Promise<BrowserView> {
 			logProblem('warn', 'Could not read the browser page', error, id);
 			return null;
 		});
-	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: VIEWPORT, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id) } };
+	return { available: true, browser: { liveViewUrl: browser.liveViewUrl, viewport: VIEWPORT, openedAt: browser.openedAt, page: state, agentBusy: agentBusy(id), needsYou: needsYou.get(id)?.reason ?? null } };
 }
 
 export async function browserView(id: string): Promise<BrowserView> {
@@ -407,12 +424,21 @@ async function asAgentStep<T>(id: string, run: () => Promise<T>): Promise<T> {
 }
 
 /** Saves the page to the task's outputs, which live in its sandbox; without one running there is nowhere to keep it. */
-async function saveScreenshot(id: string, page: Page, input: BrowserInput): Promise<string | null> {
-	const machine = await liveMachine(id);
-	if (!machine) return null;
+/**
+ * Saves the page to the task's outputs, for the Library: in its sandbox when
+ * one runs (where the agent can read it back), else straight to storage.
+ */
+async function saveScreenshot(id: string, page: Page, input: BrowserInput): Promise<string> {
 	const file = screenshotFile(input.screenshot ?? 'page');
-	await machine.exec(`mkdir -p ${quote(`${machine.root}/outputs/screenshots`)}`);
-	await writeMachineFile(machine, `${machine.root}/outputs/${file}`, await page.screenshot({ fullPage: Boolean(input.fullPage) }));
+	const png = await page.screenshot({ fullPage: Boolean(input.fullPage) });
+	const machine = await liveMachine(id);
+	if (machine) {
+		await machine.exec(`mkdir -p ${quote(`${machine.root}/outputs/screenshots`)}`);
+		await writeMachineFile(machine, `${machine.root}/outputs/${file}`, png);
+	} else {
+		await saveOutput(id, file, png, 'image/png');
+		announce({ kind: 'task', id, what: 'files' });
+	}
 	return `../outputs/${file}`;
 }
 
@@ -429,7 +455,6 @@ export async function agentBrowse(id: string, input: BrowserInput): Promise<Brow
 		const page = await shownPage(id, browser, current);
 		const result = await browserStep(page, { ...input, url: input.url && addressToUrl(input.url) });
 		const screenshot = input.screenshot ? await saveScreenshot(id, page, input) : null;
-		const missing = input.screenshot && !screenshot ? 'No screenshot: screenshots are saved in the sandbox, which is not running. The page is described below, and the user sees it in the Browser panel.' : null;
-		return { ...result, problem: result.problem ?? missing, errors: current.errors.splice(0).slice(0, 20), screenshot, snapshot: clipSnapshot(result.snapshot) };
+		return { ...result, errors: current.errors.splice(0).slice(0, 20), screenshot, snapshot: clipSnapshot(result.snapshot) };
 	});
 }

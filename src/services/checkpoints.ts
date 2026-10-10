@@ -38,6 +38,8 @@ const keys = {
 	historyPatch: (id: string, at: string) => `sessions/${id}/checkpoints/${at}.patch`,
 	patch: (id: string) => `sessions/${id}/checkpoint.patch`,
 	output: (id: string, path: string) => `sessions/${id}/outputs/${path}`,
+	/** Outputs saved straight to storage, not through the machine's outputs folder. */
+	saved: (id: string) => `sessions/${id}/saved-outputs.json`,
 	blob: (hash: string) => `blobs/${hash}`,
 };
 
@@ -216,6 +218,59 @@ export async function applyFiles(machine: Machine, files: SavedFile[]): Promise<
 		await writeFile(machine, `${root}/${file.path}`, file, bytes);
 	}
 	return skipped;
+}
+
+/** Outputs written straight to storage by tools that run on Anton's side, as the shared browser's screenshots do. */
+export async function savedOutputs(id: string): Promise<SavedOutput[]> {
+	const bytes = await getProviders().store.get(keys.saved(id));
+	return bytes ? (JSON.parse(text(bytes)) as SavedOutput[]) : [];
+}
+
+/** One task's saves, one after another, so two at once never lose each other's entry. */
+const saving = new Map<string, Promise<unknown>>();
+
+/**
+ * Saves an output for the task straight to storage, for the Library, with no
+ * machine involved: a task that never started its sandbox has outputs too.
+ * Listed alongside the outputs its checkpoints copy from the machine.
+ */
+export function saveOutput(id: string, path: string, bytes: Uint8Array, contentType?: string): Promise<SavedOutput> {
+	const run = async () => {
+		const { store } = getProviders();
+		const key = keys.output(id, path);
+		await store.put(key, bytes, contentType);
+		const entry: SavedOutput = { path, size: bytes.length, mtimeMs: Date.now(), key };
+		const list = (await savedOutputs(id)).filter((output) => output.path !== path);
+		await store.put(keys.saved(id), JSON.stringify([...list, entry]), 'application/json');
+		return entry;
+	};
+	const next = (saving.get(id) ?? Promise.resolve()).catch(() => undefined).then(run);
+	saving.set(id, next);
+	return next;
+}
+
+/**
+ * Removes an output from the task's Library: its stored copy, and its entry in
+ * the saved list and the latest checkpoint. The machine's own file, if any,
+ * is the caller's to remove, or the next checkpoint lists it again.
+ */
+export function deleteOutput(id: string, path: string): Promise<void> {
+	const run = async () => {
+		const { store } = getProviders();
+		await store.remove(keys.output(id, path));
+		const saved = await savedOutputs(id);
+		if (saved.some((output) => output.path === path)) {
+			await store.put(keys.saved(id), JSON.stringify(saved.filter((output) => output.path !== path)), 'application/json');
+		}
+		const latest = await readCheckpoint(id);
+		if (latest?.outputs.some((output) => output.path === path)) {
+			const next = { ...latest, outputs: latest.outputs.filter((output) => output.path !== path) };
+			await store.put(keys.latest(id), JSON.stringify(next), 'application/json');
+		}
+	};
+	const next = (saving.get(id) ?? Promise.resolve()).catch(() => undefined).then(run);
+	saving.set(id, next);
+	return next;
 }
 
 export async function readOutput(id: string, path: string): Promise<Uint8Array | null> {

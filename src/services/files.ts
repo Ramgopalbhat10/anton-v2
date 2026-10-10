@@ -3,7 +3,10 @@ import { safeRelativePath, text } from '../core/shell.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { type Checkpoint, type SavedOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput } from './checkpoints.ts';
+import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, saveOutput, savedOutputs } from './checkpoints.ts';
+import { announce } from '../core/changes.ts';
+import { writeMachineFile } from '../core/machine-fs.ts';
+import { quote } from '../core/shell.ts';
 import { type FileChange, type LogEntry, changes, listFiles, repoDir } from './git.ts';
 import type { Machine } from '../core/ports.ts';
 import { liveMachine } from './workspace.ts';
@@ -119,9 +122,44 @@ export async function changesView(id: string): Promise<ChangesView> {
 
 /** Outputs come from storage, so they are listed the same way whether or not the machine runs. */
 export async function outputsView(id: string): Promise<OutputsView> {
-	const ctx = await context(id);
-	const outputs = (ctx.checkpoint?.outputs ?? []).map(({ key: _key, ...output }) => output);
+	const [ctx, saved] = await Promise.all([context(id), savedOutputs(id)]);
+	// What the machine wrote, as its last checkpoint copied it, and what was saved straight to storage.
+	const fromMachine = ctx.checkpoint?.outputs ?? [];
+	const all = [...fromMachine, ...saved.filter((output) => !fromMachine.some((other) => other.path === output.path))];
+	const outputs = all.map(({ key: _key, ...output }) => output);
 	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs };
+}
+
+/** The largest file the Library takes as an upload. */
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Adds a file you upload to the task's Library, under `uploads/`. With a
+ * sandbox running it also goes into the outputs folder there, so the agent
+ * can read it.
+ */
+export async function uploadOutput(id: string, name: string, bytes: Uint8Array, contentType?: string): Promise<string> {
+	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
+	if (bytes.length > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
+	const base = name.split(/[\\/]/).pop()?.replace(/[^\w.\- ]+/g, '_').trim() || 'file';
+	const path = safeRelativePath(`uploads/${base}`);
+	await saveOutput(id, path, bytes, contentType);
+	const machine = await liveMachine(id);
+	if (machine) {
+		await machine.exec(`mkdir -p ${quote(`${machine.root}/outputs/uploads`)}`);
+		await writeMachineFile(machine, `${machine.root}/outputs/${path}`, bytes);
+	}
+	announce({ kind: 'task', id, what: 'files' });
+	return path;
+}
+
+/** Removes a file from the task's Library, from its sandbox too when one runs. */
+export async function removeOutput(id: string, rawPath: string): Promise<void> {
+	const path = safeRelativePath(rawPath);
+	const machine = await liveMachine(id);
+	if (machine) await machine.exec(`rm -f ${quote(`${machine.root}/outputs/${path}`)}`);
+	await deleteOutput(id, path);
+	announce({ kind: 'task', id, what: 'files' });
 }
 
 export async function readOutputFile(id: string, rawPath: string): Promise<Uint8Array | null> {

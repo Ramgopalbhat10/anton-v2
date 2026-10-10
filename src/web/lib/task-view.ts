@@ -45,6 +45,7 @@ export function taskNote(session: Session): TaskNote | null {
 	if (session.working) return { text: 'Working', tone: 'accent', attention: false };
 	if (session.status === 'error') return { text: 'Failed', tone: 'danger', attention: true };
 	if (planReady(session)) return { text: 'Plan ready for review', tone: 'warning', attention: true };
+	if (session.asking) return { text: 'Waiting on you', tone: 'warning', attention: true };
 	return prNote(session) ?? (isLive(session) ? { text: 'Idle', tone: 'muted', attention: false } : null);
 }
 

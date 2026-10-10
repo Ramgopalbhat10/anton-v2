@@ -57,6 +57,8 @@ export type Session = {
 	/** The latest message the task was given (by you, a follow-up or an automation), and when; null for tasks from before Anton kept it. */
 	lastInput?: string | null;
 	lastInputAt?: string | null;
+	/** What the agent's last reply asks you, until you send a message. */
+	asking?: string | null;
 };
 
 /** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */
@@ -318,6 +320,8 @@ export type BrowserView = {
 		page: BrowserPage | null;
 		/** The agent is acting in this browser, or did a moment ago. */
 		agentBusy: boolean;
+		/** Why the agent stopped for you here (a sign-in or a human check), until the page moves on. */
+		needsYou: string | null;
 	} | null;
 };
 /** An element picked in the Browser panel, as the page described it. */
@@ -488,6 +492,14 @@ export const api = {
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
+	/** Adds a file to the task's Library, under uploads/. */
+	uploadOutput: (id: string, file: File) =>
+		json<{ path: string }>(`/api/sessions/${id}/outputs?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
+	deleteOutput: async (id: string, path: string) => void (await request(outputUrl(id, path), { method: 'DELETE' })),
 };
 
 /**

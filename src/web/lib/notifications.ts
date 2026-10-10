@@ -11,8 +11,9 @@ export function askToNotify(): void {
 
 function notify(session: Session): void {
 	const failed = session.status === 'error';
-	const notification = new Notification(failed ? 'Task failed' : 'Task finished', {
-		body: session.title,
+	// A reply that waits on you says what it asks, so it can be answered without opening the task first.
+	const notification = new Notification(failed ? 'Task failed' : session.asking ? 'Anton needs you' : 'Task finished', {
+		body: session.asking && !failed ? `${session.title}: ${session.asking}` : session.title,
 		tag: `anton-${session.id}`,
 	});
 	notification.onclick = () => {

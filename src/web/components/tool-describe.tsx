@@ -78,7 +78,8 @@ export function Em({ children }: { children: ReactNode }) {
 export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNode } {
 	const input = part.input;
 	switch (part.toolName) {
-		case 'read': {
+		case 'read':
+		case 'read_file': {
 			const offset = Number(field(input, 'offset')) || 0;
 			const limit = Number(field(input, 'limit')) || 0;
 			const range = limit ? `:${offset || 1}-${(offset || 1) + limit - 1}` : '';
@@ -92,6 +93,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 			};
 		}
 		case 'grep':
+		case 'search_code':
 			return {
 				icon: Search,
 				body: (
@@ -101,11 +103,12 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				),
 			};
 		case 'glob':
+		case 'list_files':
 			return {
 				icon: FolderSearch,
 				body: (
 					<>
-						Listed <Em>{field(input, 'pattern')}</Em>
+						Listed <Em>{field(input, 'pattern') || field(input, 'glob') || field(input, 'path') || 'the repository'}</Em>
 					</>
 				),
 			};
