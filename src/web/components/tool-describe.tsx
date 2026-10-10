@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Pencil, Search, SquareTerminal, Wrench } from 'lucide-react';
+import { Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /*
@@ -62,6 +62,12 @@ function browserStep(input: unknown) {
 			return <>Went back</>;
 		case 'wait':
 			return <>Waited{field(input, 'target') ? <> for {target}</> : null}</>;
+		case 'do':
+			return (
+				<>
+					Drove the page to <Em>{field(input, 'goal')}</Em>
+				</>
+			);
 		default:
 			return <>Looked at the page</>;
 	}
@@ -181,7 +187,8 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				),
 			};
 		case 'browser':
-			return { icon: Globe, body: browserStep(input) };
+			// A step the decision model drove reads as one quick move, not a single click.
+			return { icon: field(input, 'action') === 'do' ? Zap : Globe, body: browserStep(input) };
 		default:
 			return {
 				icon: Wrench,

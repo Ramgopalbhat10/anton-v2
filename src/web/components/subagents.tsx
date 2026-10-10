@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, ArrowUpRight, Bot, Check, ChevronRight, CircleAlert, FlaskConical, Telescope } from 'lucide-react';
+import { AppWindow, Bot, Check, ChevronRight, CircleAlert, FlaskConical, Telescope } from 'lucide-react';
 import { type CSSProperties, useContext, useEffect, useState } from 'react';
-import { Icon, Spinner } from '@/components/signal';
+import { Caption, Card, CardFooter, Status } from '@/components/instrument';
+import { Btn, Icon, Spinner } from '@/components/signal';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { api, type SubagentRun, type SubagentStep } from '@/lib/api';
-import { elapsed, tokens } from '@/lib/format';
+import { elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { focusRun, ShowPanel } from '@/lib/workspace';
 
@@ -130,8 +131,51 @@ export function delegationOf(part: { toolCallId: string; input: unknown; state: 
 	};
 }
 
-/** One subagent in the thread: who, what for, how far, and what it is doing now; opens it in the Agents panel. */
-function DelegationRow({ sessionId, call, run, now }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number }) {
+/** When a run ended, or now while it works. */
+export function runEnd(run: SubagentRun, now: number): number {
+	return Date.parse(run.startedAt) + runElapsed(run, now);
+}
+
+/** What the decision model did across a run's steps: how many questions it answered and what they cost. */
+export function decisionsOf(run: SubagentRun): { decisions: number; cost: number } {
+	return run.steps.reduce((sum, step) => ({ decisions: sum.decisions + (step.detail?.decisions ?? 0), cost: sum.cost + (step.detail?.cost ?? 0) }), { decisions: 0, cost: 0 });
+}
+
+/** The time window a set of runs spans, for lanes that share one axis. */
+export function spanOf(runs: SubagentRun[], now: number): { from: number; to: number } {
+	if (!runs.length) return { from: now, to: now };
+	const from = Math.min(...runs.map((run) => Date.parse(run.startedAt)));
+	const to = Math.max(...runs.map((run) => runEnd(run, now)));
+	return { from, to: Math.max(to, from + 1000) };
+}
+
+const share = (at: number, from: number, to: number) => `${Math.min(100, Math.max(0, ((at - from) / (to - from)) * 100))}%`;
+
+/**
+ * A run as a bar on a shared time axis: where it started and how long it ran,
+ * a notch where each step began, sweeping while it works. Runs side by side
+ * read as parallel lanes.
+ */
+export function Lane({ run, from, to, now, className }: { run: SubagentRun; from: number; to: number; now: number; className?: string }) {
+	const start = Date.parse(run.startedAt);
+	const end = runEnd(run, now);
+	const tone = run.status === 'failed' ? 'var(--danger-base)' : lookOf(run.agent).tone;
+	return (
+		<span aria-hidden className={cn('relative block h-[5px] w-full min-w-0 shrink-0 rounded-full bg-(--segment-off)', className)}>
+			<span
+				className={cn('absolute inset-y-0 overflow-hidden rounded-full', run.status === 'running' && 'in-sweep')}
+				style={{ left: share(start, from, to), width: `max(${share(from + (end - start), from, to)}, 4px)`, background: tone, opacity: run.status === 'done' ? 0.75 : 1 }}
+			>
+				{run.steps.slice(1).map((step) => (
+					<span key={step.id} className="absolute inset-y-0 w-px bg-(--card-bg)" style={{ left: share(Date.parse(step.at), start, Math.max(end, start + 1000)) }} />
+				))}
+			</span>
+		</span>
+	);
+}
+
+/** One subagent in the thread: who, what for, its lane, and what it is doing now; opens it in the Agents panel. */
+function DelegationRow({ sessionId, call, run, now, span }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number; span: { from: number; to: number } }) {
 	const showPanel = useContext(ShowPanel);
 	// Without a run (one from before Anton kept them, or a call that never reached a subagent) the call's own state and answer tell it.
 	const status = run?.status ?? (call.running ? 'starting' : call.failed ? 'failed' : 'done');
@@ -144,6 +188,7 @@ function DelegationRow({ sessionId, call, run, now }: { sessionId: string; call:
 				? stepBody(latest).body
 				: 'Starting…'
 		: plainLine(run?.result ?? call.output) || (status === 'failed' ? 'Failed' : null);
+	const look = lookOf(call.agent);
 	return (
 		<button
 			type="button"
@@ -151,18 +196,19 @@ function DelegationRow({ sessionId, call, run, now }: { sessionId: string; call:
 				focusRun(sessionId, run?.id ?? null);
 				showPanel('Agents');
 			}}
-			className="group/agent flex w-full min-w-0 items-start gap-2.5 px-3 py-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
+			className="group/agent flex w-full min-w-0 items-start gap-2.5 border-t border-(--border-subtle) px-4 py-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
 		>
 			<AgentTile agent={call.agent} running={live} />
-			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+			<span className="flex min-w-0 flex-1 flex-col gap-1.5">
 				<span className="flex min-w-0 items-center gap-2">
-					<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: lookOf(call.agent).tone }}>
-						{lookOf(call.agent).label}
+					<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
+						{look.label}
 					</span>
 					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
 					{run ? <RunMeta run={run} now={now} className="hidden sm:inline" /> : null}
 					<StatusGlyph status={status} />
 				</span>
+				{run ? <Lane run={run} now={now} {...span} /> : null}
 				{detail ? (
 					<span className={cn('flex min-w-0 items-center gap-1.5 truncate text-[11.5px]', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}>
 						{live && latest ? <Icon icon={stepBody(latest).icon} size={11} className="shrink-0" /> : null}
@@ -177,7 +223,8 @@ function DelegationRow({ sessionId, call, run, now }: { sessionId: string; call:
 
 /**
  * The subagents a turn handed work to, in place of plain "Delegated to" steps:
- * one live row each, and a link to watch them in the Agents panel.
+ * a card with one live lane each on a shared time axis, so work done side by
+ * side reads that way, and a footer that sums it up and opens the Agents panel.
  */
 export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Delegation[] }) {
 	const runs = useSubagentRuns(sessionId).data?.runs ?? [];
@@ -186,32 +233,56 @@ export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Del
 	const failed = matched.filter(({ call, run }) => (run ? run.status === 'failed' : call.failed)).length;
 	const now = useNow(working > 0);
 	const showPanel = useContext(ShowPanel);
+	const found = matched.flatMap(({ run }) => (run ? [run] : []));
+	const span = spanOf(found, now);
+	const steps = found.reduce((sum, run) => sum + run.steps.length, 0);
+	const used = found.reduce((sum, run) => sum + run.tokens, 0);
+	const jev = found.map(decisionsOf).reduce((sum, item) => ({ decisions: sum.decisions + item.decisions, cost: sum.cost + item.cost }), { decisions: 0, cost: 0 });
 	const count = `${calls.length} ${calls.length === 1 ? 'agent' : 'agents'}`;
+	const status = (
+		<span className="flex shrink-0 items-center gap-3">
+			{failed ? <Status tone="danger">{failed} failed</Status> : null}
+			{working ? (
+				<Status tone="accent" pulse>
+					{working === calls.length ? (calls.length === 1 ? 'Working' : 'All working') : `${working} of ${calls.length} working`}
+				</Status>
+			) : failed ? null : (
+				<Status tone="success">Done</Status>
+			)}
+		</span>
+	);
+	const caption = [
+		found.length ? elapsed(span.to - span.from) : null,
+		`${steps} ${steps === 1 ? 'step' : 'steps'}`,
+		used ? `${tokens(used)} tok` : null,
+		jev.decisions ? `Jev ${jev.decisions} · ${fineDollars(jev.cost)}` : null,
+	].filter(Boolean);
 	return (
-		<div className="overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
-			<div className="flex h-9 items-center gap-2 border-b border-(--card-border) pr-1.5 pl-3">
-				<span className={cn('size-1.5 shrink-0 rounded-full', working ? 'in-pulse bg-(--accent-base)' : failed ? 'bg-(--danger-base)' : 'bg-(--success-base)')} />
-				<span className={cn('min-w-0 flex-1 truncate text-[12px]', working ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>
-					{working ? `${working === calls.length ? count : `${working} of ${count}`} working` : `Ran ${count}`}
-				</span>
-				{failed ? <span className="in-caption text-(--danger-text)">{failed} failed</span> : null}
-				<button
-					type="button"
-					onClick={() => {
-						focusRun(sessionId, null);
-						showPanel('Agents');
-					}}
-					className="inline-flex h-6 items-center gap-1 rounded-[6px] px-1.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
-				>
-					Agents
-					<Icon icon={ArrowUpRight} size={11} />
-				</button>
-			</div>
-			<div className="flex flex-col divide-y divide-(--border-subtle)">
+		<Card
+			as="div"
+			label="Agents"
+			title={working ? 'Agents' : `Ran ${count}`}
+			sub={working ? `${count} on this reply` : 'this reply'}
+			status={status}
+			footer={
+				<CardFooter caption={<Caption className="in-num">{caption.join(' · ')}</Caption>}>
+					<Btn
+						size="sm"
+						onClick={() => {
+							focusRun(sessionId, null);
+							showPanel('Agents');
+						}}
+					>
+						Open agents
+					</Btn>
+				</CardFooter>
+			}
+		>
+			<div className="flex flex-col">
 				{matched.map(({ call, run }) => (
-					<DelegationRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} />
+					<DelegationRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} span={span} />
 				))}
 			</div>
-		</div>
+		</Card>
 	);
 }

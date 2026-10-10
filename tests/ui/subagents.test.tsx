@@ -56,8 +56,10 @@ describe('Agents card in the thread', () => {
 			</ShowPanel.Provider>,
 			[[['subagents', 's1'], { runs: [run({}), finished] }]],
 		);
-		expect(screen.getByText('1 of 2 agents working')).toBeTruthy();
+		expect(screen.getByText('1 of 2 working')).toBeTruthy();
 		expect(screen.getByText('1 failed')).toBeTruthy();
+		// The footer sums the reply's agents up.
+		expect(screen.getByText(/^\d+s · 3 steps · 17K tok$/)).toBeTruthy();
 		expect(screen.getByText('Went back')).toBeTruthy();
 		// A finished run's answer reads as plain words.
 		expect(screen.getByText('npm test exited 1')).toBeTruthy();
@@ -91,6 +93,37 @@ describe('Agents panel', () => {
 
 		fireEvent.click(screen.getByRole('button', { name: 'All agents' }));
 		expect(screen.getByRole('region', { name: 'Working' })).toBeTruthy();
+	});
+
+	it('sums the task up over a timeline, and opens a step the decision model drove into its actions', () => {
+		const driven = run({
+			id: 'run-2',
+			toolCallId: 'call-2',
+			steps: [
+				{
+					id: 'd1',
+					tool: 'browser',
+					input: { action: 'do', goal: 'Fill in the newsletter form' },
+					state: 'done',
+					at: new Date(now - 20_000).toISOString(),
+					durationMs: 2900,
+					detail: { outcome: 'needs_confirmation', actions: [{ what: 'Typed email into textbox "Email"', p: 1 }, { what: 'Clicked checkbox "Weekly"', p: 0.62 }], decisions: 4, cost: 0.0004 },
+				},
+			],
+		});
+		focusRun('s5', null);
+		renderWithQueries(<AgentsTab sessionId="s5" />, [[['subagents', 's5'], { runs: [driven, finished] }]]);
+		const overview = screen.getByLabelText('Agents overview');
+		expect(within(overview).getByText('1 working')).toBeTruthy();
+		expect(within(overview).getByText('$0.0004')).toBeTruthy();
+
+		fireEvent.click(within(overview).getByTitle('Check top Hacker News stories'));
+		const steps = screen.getByRole('region', { name: 'Steps' });
+		expect(within(steps).getByText('Fill in the newsletter form')).toBeTruthy();
+		expect(within(steps).getByText('Typed email into textbox "Email"')).toBeTruthy();
+		expect(within(steps).getByText('0.62')).toBeTruthy();
+		expect(within(steps).getByText('Needs confirmation')).toBeTruthy();
+		expect(within(steps).getByText('Jev 4 · $0.0004')).toBeTruthy();
 	});
 
 	it('shows a failed run with why', () => {
