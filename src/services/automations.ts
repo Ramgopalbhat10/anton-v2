@@ -9,16 +9,19 @@ import {
 	insertAutomation,
 	issueTasks,
 	listAutomations,
+	listSpaceAutomations,
 	releaseIssue,
 	setIssueTask,
 	updateAutomation,
 } from '../db/automations.ts';
 import { getProject } from '../db/projects.ts';
+import { getSpace } from '../db/spaces.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
+import { startThread } from './spaces.ts';
 
 /** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
 const ISSUES_AT_ONCE = 3;
@@ -32,10 +35,17 @@ export type AutomationInput = {
 	model?: string | null;
 	reasoning?: Reasoning | null;
 	planFirst?: boolean;
+	/** A project to start its tasks in, as threads; the repository must be one of the project's. */
+	spaceId?: string | null;
 };
 
 export async function addAutomation(projectId: string, input: AutomationInput): Promise<Automation> {
 	if (!(await getProject(projectId))) throw new NotFoundError('Project not found');
+	if (input.spaceId) {
+		const space = await getSpace(input.spaceId);
+		if (!space) throw new NotFoundError('Project not found');
+		if (!space.repoIds.includes(projectId)) throw new InvalidInputError('That repository is not in this project');
+	}
 	const label = input.label?.trim() || null;
 	if (input.kind === 'issues' && !label) throw new InvalidInputError('Name the label that marks issues for Anton');
 	if (input.kind === 'schedule' && !(input.everyHours && input.prompt.trim())) throw new InvalidInputError('A schedule needs hours and instructions');
@@ -48,10 +58,12 @@ export async function addAutomation(projectId: string, input: AutomationInput): 
 		model: input.model || null,
 		reasoning: input.model ? (input.reasoning ?? null) : null,
 		planFirst: input.planFirst ?? false,
+		spaceId: input.spaceId ?? null,
 	});
 }
 
 export const automations = (projectId: string) => listAutomations(projectId);
+export const spaceAutomations = (spaceId: string) => listSpaceAutomations(spaceId);
 
 async function existing(id: string): Promise<Automation> {
 	const automation = await getAutomation(id);
@@ -82,8 +94,22 @@ function issuePrompt(issue: Issue, extra: string): string {
 	].join('\n');
 }
 
-/** Creates a task and gives its agent the instructions, the same as typing them on the launcher. */
+/**
+ * Creates a task and gives its agent the instructions, the same as typing them on the launcher. A project's
+ * routine starts it as one of the project's threads instead, which waits its turn when the project is busy.
+ */
 async function startTask(automation: Automation, title: string, prompt: string): Promise<string> {
+	if (automation.spaceId) {
+		const thread = await startThread(automation.spaceId, {
+			projectId: automation.projectId,
+			title,
+			brief: prompt,
+			model: automation.model ?? undefined,
+			reasoning: automation.reasoning ?? undefined,
+			planMode: automation.planFirst,
+		});
+		return thread.id;
+	}
 	const session = await createSession({
 		projectId: automation.projectId,
 		title,

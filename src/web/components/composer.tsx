@@ -228,9 +228,14 @@ export function Composer({
 					<ModelPicker value={choice} onChange={edit} />
 					<PlanToggle on={planning} onChange={(planMode) => edit({ planMode })} />
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
+					{/* Enter sends, as everywhere; the hint speaks up only while the agent is running. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
-						<span className="truncate">{busy ? 'Send to the running agent' : 'Send'}</span>
-						<Kbd keys="enter" size="sm" />
+						{busy ? (
+							<>
+								<span className="truncate">Send to the running agent</span>
+								<Kbd keys="enter" size="sm" />
+							</>
+						) : null}
 					</div>
 					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
 					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />

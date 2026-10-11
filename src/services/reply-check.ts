@@ -25,6 +25,8 @@ const MAX_QUESTION = 240;
 const WAITS = 0.6;
 
 const lastReply = new Map<string, string>();
+/** Everything the agent said in its current reply, as a reply can say its findings and then a closing line. */
+const replyTexts = new Map<string, string[]>();
 
 function textOf(content: unknown): string {
 	if (typeof content === 'string') return content;
@@ -38,7 +40,9 @@ export function recordReplyText(event: MessageEvent): void {
 	if (event.session !== undefined && event.session !== 'default') return;
 	if (event.agentName && !/^coder$/i.test(event.agentName)) return;
 	const text = textOf(event.message.content).trim();
-	if (text) lastReply.set(event.instanceId, text);
+	if (!text) return;
+	lastReply.set(event.instanceId, text);
+	replyTexts.set(event.instanceId, [...(replyTexts.get(event.instanceId) ?? []), text]);
 }
 
 /** The last thing the reply asks: its last sentence ending in a question mark, else its last line. */
@@ -47,7 +51,8 @@ export function questionOf(reply: string): string {
 		.split('\n')
 		.map((line) => line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/[*_`#]+/g, '').trim())
 		.filter(Boolean);
-	const sentences = lines.flatMap((line) => line.match(/[^.!?]+[.!?]*/g) ?? [line]).map((sentence) => sentence.trim());
+	// A sentence ends at a stop followed by a space, so file names like docs/projects.md stay whole.
+	const sentences = lines.flatMap((line) => line.split(/(?<=[.!?])\s+/)).map((sentence) => sentence.trim());
 	const asked = [...sentences].reverse().find((sentence) => sentence.endsWith('?'));
 	const line = asked ?? lines[lines.length - 1] ?? '';
 	return line.length > MAX_QUESTION ? `${line.slice(0, MAX_QUESTION - 1)}…` : line;
@@ -66,14 +71,17 @@ async function waitsOnUser(id: string, reply: string): Promise<boolean> {
 	return yes === null ? /\?\s*$/.test(questionOf(reply)) : yes >= WAITS;
 }
 
-/** At the end of a reply: notes what it asks the user, or that it asks nothing. */
-export async function checkReply(id: string): Promise<void> {
+/** At the end of a reply: notes what it asks the user, or that it asks nothing. Returns all the reply's text, when it had any. */
+export async function checkReply(id: string): Promise<string | null> {
 	const reply = lastReply.get(id);
+	const whole = replyTexts.get(id)?.join('\n\n');
 	lastReply.delete(id);
+	replyTexts.delete(id);
 	try {
 		const asking = reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
 		await updateSession(id, { asking });
 	} catch (error) {
 		logProblem('warn', 'Could not check whether the reply waits on you', error, id);
 	}
+	return whole ?? reply ?? null;
 }

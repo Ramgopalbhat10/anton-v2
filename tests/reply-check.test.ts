@@ -26,6 +26,7 @@ const providers = (decisions: DecisionModel | null) => setProviders({ sandbox: {
 test('the question is the reply’s last sentence that asks something, plain', () => {
 	assert.equal(questionOf('I found two configs.\n\n- **Should I** merge them into one? Or keep both.'), 'Should I merge them into one?');
 	assert.equal(questionOf('Done. Tests pass.'), 'Done. Tests pass.');
+	assert.equal(questionOf('Should the docs live in `README.md`, or in a new `docs/projects.md`?\n\nWaiting for your answer.'), 'Should the docs live in README.md, or in a new docs/projects.md?');
 });
 
 test('without a decision model, a reply ending in a question waits on you; a message from you ends that', async () => {
@@ -60,4 +61,13 @@ test('with one, the decision model judges; a subagent’s or the reviewer’s wo
 	reply('c', 'All done. Want me to add tests as well?');
 	await checkReply('c');
 	assert.equal((await getSessionRecord('c'))?.asking, null);
+});
+
+test('a reply in several messages comes back whole, while only its last words are checked for a question', async () => {
+	providers(null);
+	reply('a', 'The routes, grouped by area: ...');
+	reply('a', 'Reported above.');
+	assert.equal(await checkReply('a'), 'The routes, grouped by area: ...\n\nReported above.');
+	assert.equal((await getSessionRecord('a'))?.asking, null);
+	assert.equal(await checkReply('a'), null, 'the next reply starts empty');
 });

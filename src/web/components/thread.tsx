@@ -291,7 +291,7 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
-		<div className="flex flex-col items-end gap-1.5">
+		<div className="group/user flex flex-col items-end gap-1.5">
 			{images.length > 0 ? (
 				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
 					{images.map((image, index) => (
@@ -304,7 +304,8 @@ function UserMessage({ message, meta }: { message: FlueConversationMessage; meta
 			<div className="max-w-[520px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
 				{text}
 			</div>
-			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em]">
+			{/* The same for every message, so it waits for the pointer. */}
+			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em] opacity-0 transition-opacity duration-(--duration-micro) group-hover/user:opacity-100">
 				{meta.map((item, index) => (
 					<Fragment key={item + index}>
 						{index > 0 ? <span>·</span> : null}
@@ -370,7 +371,7 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-function AssistantMessage({ message, live }: { message: FlueConversationMessage; live: boolean }) {
+function AssistantMessage({ message, live, last }: { message: FlueConversationMessage; live: boolean; last: boolean }) {
 	const blocks = toBlocks(message.parts);
 	const sessionId = useContext(SessionId);
 	const usage = usageOf(message);
@@ -382,7 +383,7 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 		.join('\n\n');
 	if (blocks.length === 0 && !live) return null;
 	return (
-		<div className="flex flex-col gap-3">
+		<div className="group/reply flex flex-col gap-3">
 			<div className="flex items-center gap-2">
 				<Logo size={18} />
 				<div className="text-[12px] font-medium text-(--text-secondary)">Anton</div>
@@ -400,7 +401,8 @@ function AssistantMessage({ message, live }: { message: FlueConversationMessage;
 				),
 			)}
 			{!live ? (
-				<div className="flex items-center gap-1.5">
+				// Copy and usage stay on the latest reply; earlier ones show them on hover.
+				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
 					<CopyResponse text={copyText} />
 					{usage ? <ReplyUsageLine usage={usage} /> : null}
 				</div>
@@ -472,7 +474,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							) : message.role === 'user' ? (
 								<UserMessage key={message.id} message={message} meta={meta} />
 							) : (
-								<AssistantMessage key={message.id} message={message} live={busy && message === lastAssistant} />
+								<AssistantMessage key={message.id} message={message} live={busy && message === lastAssistant} last={message === lastAssistant} />
 							),
 						)}
 						{busy && messages[messages.length - 1]?.role !== 'assistant' ? (

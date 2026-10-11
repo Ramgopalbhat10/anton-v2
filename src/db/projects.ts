@@ -127,7 +127,7 @@ export async function projectSessionIds(id: string): Promise<string[]> {
 /** Removes the repo with its automations and issue claims, and any task rows its caller has not already deleted. */
 export async function deleteProjectRecord(id: string): Promise<void> {
 	const db = await appDb();
-	const tables = ['automations', 'issue_tasks', 'sessions'];
+	const tables = ['automations', 'issue_tasks', 'sessions', 'space_repos'];
 	const statements = tables.map((table) => ({ sql: `DELETE FROM ${table} WHERE project_id = ?`, args: [id] }));
 	await db.batch([...statements, { sql: 'DELETE FROM projects WHERE id = ?', args: [id] }], 'write');
 }

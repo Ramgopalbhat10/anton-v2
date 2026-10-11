@@ -24,6 +24,8 @@ export type Automation = {
 	lastError: string | null;
 	/** Issue numbers this automation started a task for. */
 	seen: number[];
+	/** The project its tasks start in, as threads; null for tasks of their own. */
+	spaceId: string | null;
 	createdAt: string;
 };
 
@@ -45,18 +47,19 @@ function toAutomation(row: Row): Automation {
 		lastRunAt: optional(row.last_run_at),
 		lastError: optional(row.last_error),
 		seen: (JSON.parse(String(row.seen_json ?? '[]')) as Array<number | null>).filter((number): number is number => number !== null),
+		spaceId: optional(row.space_id),
 		createdAt: String(row.created_at),
 	};
 }
 
-export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'>;
+export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
 
 export async function insertAutomation(input: NewAutomation): Promise<Automation> {
 	const db = await appDb();
 	const id = `auto_${randomUUID()}`;
 	await db.execute({
-		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, plan_first, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, input.planFirst ? 1 : 0, new Date().toISOString()],
+		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, plan_first, enabled, created_at, space_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, input.planFirst ? 1 : 0, new Date().toISOString(), input.spaceId ?? null],
 	});
 	return (await getAutomation(id))!;
 }
@@ -69,6 +72,13 @@ export async function listAutomations(projectId?: string): Promise<Automation[]>
 	const result = projectId
 		? await db.execute({ sql: `${SELECT} WHERE project_id = ? ORDER BY created_at`, args: [projectId] })
 		: await db.execute(`${SELECT} ORDER BY created_at`);
+	return result.rows.map((row) => toAutomation(row as Row));
+}
+
+/** A project's routines: automations whose tasks start as its threads. */
+export async function listSpaceAutomations(spaceId: string): Promise<Automation[]> {
+	const db = await appDb();
+	const result = await db.execute({ sql: `${SELECT} WHERE space_id = ? ORDER BY created_at`, args: [spaceId] });
 	return result.rows.map((row) => toAutomation(row as Row));
 }
 

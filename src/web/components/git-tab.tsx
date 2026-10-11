@@ -3,7 +3,7 @@ import { Copy, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from '
 import { Fragment, useContext, useMemo, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { BranchArt } from '@/components/illustrations';
-import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem, SplitBar } from '@/components/instrument';
+import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, refreshFor } from '@/lib/api';
 import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
@@ -250,7 +250,8 @@ export function DiffList({
 	const current = files.find((file) => file.path === selected) ?? files[0];
 	return (
 		<FileIcons>
-			<div className="in-card flex flex-col gap-px p-1">
+			{/* One file needs no list to pick from: its diff's own header names it. */}
+			<div className={cn('in-card flex flex-col gap-px p-1', files.length === 1 && 'hidden')}>
 				{files.map((file) => {
 					const active = file.path === current.path;
 					return (
@@ -360,7 +361,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 
 	return (
 		<div className="flex flex-col gap-2.5">
-			<div className="in-card gap-3 px-3.5 py-3">
+			<div className="in-card px-3.5 py-3">
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
 					<Figure value={String(files.length)} unit={files.length === 1 ? 'file changed' : 'files changed'} size="md" />
 					<span className="in-num text-[12px]">
@@ -377,14 +378,6 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						</SegmentedItem>
 					</Segmented>
 				</div>
-				<SplitBar
-					label={`${added} lines added, ${removed} removed`}
-					legend={false}
-					parts={[
-						{ key: 'added', label: 'Added', value: added, color: 'var(--success-base)' },
-						{ key: 'removed', label: 'Removed', value: removed, color: 'var(--danger-base)' },
-					]}
-				/>
 			</div>
 			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} />}
 			<ReviewBar review={review} />

@@ -98,6 +98,8 @@ describe('sidebar', () => {
 		expect(within(row('Busy task')).queryByText('Working')).toBeNull();
 		expect(within(row('Idle task')).getByText(/web/)).toBeTruthy();
 
+		// Cues are words, not icon rows: the number and a dot, no "CI" label.
+		expect(within(row('Red checks')).queryByText('CI')).toBeNull();
 		const ci = within(row('Red checks')).getByRole('link', { name: 'Checks failing on #7' });
 		expect(ci.getAttribute('href')).toBe('https://github.com/acme/demo/pull/7/checks');
 		await userEvent.hover(ci);

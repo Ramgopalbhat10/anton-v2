@@ -2,7 +2,7 @@ import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
@@ -123,41 +123,57 @@ function statusFor(agent: UseFlueAgentResult): StatusTone | null {
 	return null;
 }
 
-export function SessionPage() {
-	const { sessionId } = useParams({ from: '/agents/$sessionId' });
-	const search = useSearch({ from: '/agents/$sessionId' });
-	const navigate = useNavigate();
-	const open = search.app !== 'closed';
+/** Which workspace panels a task has open, which one shows, and whether the workspace is open at all. */
+export type TaskPanels = { tabs: PanelName[]; active: PanelName | null; open: boolean };
+
+export const DEFAULT_PANELS: TaskPanels = { tabs: ['Changes', 'Terminal', 'Files'], active: 'Changes', open: true };
+
+/**
+ * A task's conversation beside its workspace: the page for a task, and for a
+ * project's thread. Where the panels' state lives (the address and the page,
+ * or the browser per thread) is up to the page around it.
+ */
+export function TaskWorkspace({
+	sessionId,
+	panels,
+	onPanelsChange,
+	panelRequest,
+	leading,
+}: {
+	sessionId: string;
+	panels: TaskPanels;
+	onPanelsChange: (next: TaskPanels) => void;
+	/** A panel to open, such as History from the sidebar's Rewind; asking again opens it again. */
+	panelRequest?: PanelName;
+	/** Shown before the title, such as the project a thread belongs to. */
+	leading?: ReactNode;
+}) {
 	const [expanded, setExpanded] = useState(false);
 	const [renaming, setRenaming] = useState(false);
-	const [tabs, setTabs] = useState<PanelName[]>(['Changes', 'Terminal', 'Files']);
-	const [active, setActive] = useState<PanelName | null>('Changes');
 	const session = useQuery({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
+	const { open, tabs, active } = panels;
+	const latest = useRef(panels);
+	latest.current = panels;
+	const change = (next: Partial<TaskPanels>) => onPanelsChange({ ...latest.current, ...next });
 
 	function setOpen(next: boolean) {
 		if (!next) setExpanded(false);
-		void navigate({
-			to: '/agents/$sessionId',
-			params: { sessionId },
-			search: { app: next ? 'code' : 'closed' },
-		});
+		change({ open: next });
 	}
 
 	function showPanel(name: PanelName) {
-		setTabs((current) => (current.includes(name) ? current : [...current, name]));
-		setActive(name);
-		setOpen(true);
+		const current = latest.current.tabs;
+		change({ tabs: current.includes(name) ? current : [...current, name], active: name, open: true });
 	}
 
-	// Opening the panel drops it from the address, so asking again opens it again.
 	useEffect(() => {
-		if (search.panel) showPanel(search.panel);
-	}, [search.panel]);
+		if (panelRequest) showPanel(panelRequest);
+	}, [panelRequest]);
 
 	// When the agent hands work to its browser subagent, show the Browser panel so its work can be watched.
 	const browsing = handingToBrowser(agent.messages[agent.messages.length - 1]);
@@ -176,6 +192,7 @@ export function SessionPage() {
 					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
 						<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 							<MenuButton />
+							{leading}
 							{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
 							{status ? (
 								<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
@@ -207,8 +224,8 @@ export function SessionPage() {
 							sessionId={sessionId}
 							tabs={tabs}
 							active={active}
-							onTabsChange={setTabs}
-							onActiveChange={setActive}
+							onTabsChange={(next) => change({ tabs: next })}
+							onActiveChange={(next) => change({ active: next })}
 							expanded={expanded}
 							onToggleExpanded={() => setExpanded((current) => !current)}
 							onClose={() => setOpen(false)}
@@ -217,5 +234,31 @@ export function SessionPage() {
 				</div>
 			</ShowPanel.Provider>
 		</SendToAgent.Provider>
+	);
+}
+
+export function SessionPage() {
+	const { sessionId } = useParams({ from: '/agents/$sessionId' });
+	const search = useSearch({ from: '/agents/$sessionId' });
+	const navigate = useNavigate();
+	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(DEFAULT_PANELS);
+	const open = search.app !== 'closed';
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	// A project's thread opens inside its project, beside the coordinator and its other threads.
+	const spaceId = session.data?.spaceId;
+	useEffect(() => {
+		if (spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId: sessionId }, search: { panel: search.panel }, replace: true });
+	}, [spaceId]);
+	return (
+		<TaskWorkspace
+			sessionId={sessionId}
+			panels={{ ...panels, open }}
+			onPanelsChange={(next) => {
+				setPanels({ tabs: next.tabs, active: next.active });
+				// Opening a panel drops it from the address, so asking again opens it again.
+				if (next.open !== open || search.panel) void navigate({ to: '/agents/$sessionId', params: { sessionId }, search: { app: next.open ? 'code' : 'closed' } });
+			}}
+			panelRequest={search.panel}
+		/>
 	);
 }

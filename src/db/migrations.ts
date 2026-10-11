@@ -88,6 +88,24 @@ const migrations: string[][] = [
 	[`ALTER TABLE usage_log ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE sessions ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`],
 	// 19: what the agent's last reply asks the user, until they answer, so the task shows it waits on them.
 	[`ALTER TABLE sessions ADD COLUMN asking TEXT`],
+	// 20: projects (spaces in code, since `projects` means a repository): a coordinator conversation over parallel threads, each a task.
+	[
+		`CREATE TABLE IF NOT EXISTS spaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, goal TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '', memory TEXT NOT NULL DEFAULT '', coordinator_model TEXT, coordinator_reasoning TEXT, thread_model TEXT, thread_reasoning TEXT, max_parallel INTEGER NOT NULL DEFAULT 3, autonomy TEXT NOT NULL DEFAULT 'start', state TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS space_repos (space_id TEXT NOT NULL, project_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (space_id, project_id))`,
+		`ALTER TABLE sessions ADD COLUMN space_id TEXT`,
+		`ALTER TABLE sessions ADD COLUMN resolved_at TEXT`,
+		// The state the coordinator was last told about, so a thread reports each change once.
+		`ALTER TABLE sessions ADD COLUMN reported_state TEXT`,
+		// The coordinator's brief, held while the thread waits for a free slot.
+		`ALTER TABLE sessions ADD COLUMN brief TEXT`,
+		// The thread's latest reply, for the coordinator's reports and the thread's card.
+		`ALTER TABLE sessions ADD COLUMN last_reply TEXT`,
+		`CREATE INDEX IF NOT EXISTS sessions_space ON sessions (space_id)`,
+		// Coordinator turns have no task, so their spend is kept by project.
+		`ALTER TABLE usage_log ADD COLUMN space_id TEXT`,
+		// Routines scoped to a project start their tasks as its threads.
+		`ALTER TABLE automations ADD COLUMN space_id TEXT`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

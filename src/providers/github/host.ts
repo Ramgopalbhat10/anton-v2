@@ -23,7 +23,17 @@ const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
 type PullRequest = { state: 'open' | 'closed'; draft: boolean; merged_at: string | null; head: { sha: string } };
 type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
-type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
+type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
+
+/** Each reviewer's latest verdict counts: approved when one approves and none still asks for changes. */
+function approvedBy(reviews: Comment[]): boolean {
+	const latest = new Map<string, string>();
+	for (const review of reviews) {
+		if (review.user && (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED')) latest.set(review.user.login, review.state);
+	}
+	const verdicts = [...latest.values()];
+	return verdicts.includes('APPROVED') && !verdicts.includes('CHANGES_REQUESTED');
+}
 
 const FAILING = new Set(['failure', 'timed_out', 'startup_failure']);
 
@@ -281,7 +291,7 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				...reviews.filter(isTrusted).map((review) => commentOf('review', review)),
 			].filter((comment) => comment.body);
 			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
-			return { state, headSha: pull.head.sha, checks, comments };
+			return { state, headSha: pull.head.sha, checks, comments, approved: approvedBy(reviews) };
 		},
 		async changedFiles(url) {
 			const { repo, number } = pullOf(url);

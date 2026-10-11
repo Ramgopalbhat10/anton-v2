@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, ClipboardList, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon, MessageCircleQuestion } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { Icon } from '@/components/signal';
@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils';
 type PullRequest = NonNullable<Session['pullRequest']>;
 type Checks = NonNullable<PullRequest['checks']>;
 
-const PR: Record<PullRequest['state'], { icon: LucideIcon; label: string; className: string }> = {
-	open: { icon: GitPullRequest, label: 'open', className: 'text-(--text-secondary)' },
-	draft: { icon: GitPullRequestDraft, label: 'draft', className: 'text-(--text-tertiary)' },
-	merged: { icon: GitMerge, label: 'merged', className: 'text-(--success-text)' },
-	closed: { icon: GitPullRequestClosed, label: 'closed', className: 'text-(--text-tertiary)' },
+const PR: Record<PullRequest['state'], { label: string; className: string }> = {
+	open: { label: 'open', className: 'text-(--text-secondary)' },
+	draft: { label: 'draft', className: 'text-(--text-tertiary)' },
+	merged: { label: 'merged', className: 'text-(--success-text)' },
+	closed: { label: 'closed', className: 'text-(--text-tertiary)' },
 };
 
 const DOT: Record<Checks, string> = { failed: 'bg-(--danger-base)', pending: 'bg-(--warning-base)', passed: 'bg-(--success-base)' };
@@ -69,15 +69,14 @@ function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest:
 	);
 }
 
-/** "CI" with a dot in the colour of its checks; links to them, and resting on it lists each one. */
+/** A dot in the colour of its checks, after the pull request's number; links to them, and resting on it lists each one. */
 function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; pullRequest: PullRequest & { checks: Checks }; prUrl: string; onCardChange: (open: boolean) => void }) {
 	const url = `${prUrl}/checks`;
 	return (
 		<HoverCard.Root openDelay={250} closeDelay={120} onOpenChange={onCardChange}>
 			<HoverCard.Trigger asChild>
-				<a href={url} target="_blank" rel="noreferrer" aria-label={`Checks ${CHECKS[pullRequest.checks]} on ${number}`} className={CUE}>
+				<a href={url} target="_blank" rel="noreferrer" aria-label={`Checks ${CHECKS[pullRequest.checks]} on ${number}`} className={cn(CUE, '-ml-1 size-3 justify-center')}>
 					<Dot checks={pullRequest.checks} />
-					CI
 				</a>
 			</HoverCard.Trigger>
 			<HoverCard.Portal>
@@ -96,15 +95,17 @@ function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; p
 }
 
 /**
- * The few things worth acting on from the sidebar, each a link: the pull request by number,
- * its CI, and a plan waiting for review. `onCardChange` tells the row while the CI card is open.
+ * The few things worth acting on from the sidebar, each a link and in words, not icons (the
+ * row's status icon already says what state it is in): a plan to review, a question for you,
+ * the pull request by number in its state's colour, and a dot while its checks fail or run.
+ * Passing checks say nothing; resting on the row tells the rest. `onCardChange` tells the row
+ * while the checks card is open.
  */
 export function TaskCues({ session, onCardChange }: { session: Session; onCardChange: (open: boolean) => void }) {
 	const cues: ReactNode[] = [];
 	if (planReady(session)) {
 		cues.push(
 			<Link key="plan" to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={cn(CUE, 'text-(--warning-text)')}>
-				<Icon icon={ClipboardList} size={11} />
 				Review plan
 			</Link>,
 		);
@@ -119,7 +120,6 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 				title={session.asking}
 				className={cn(CUE, 'text-(--warning-text)')}
 			>
-				<Icon icon={MessageCircleQuestion} size={11} />
 				Your turn
 			</Link>,
 		);
@@ -130,11 +130,10 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 		const pr = PR[pullRequest?.state ?? 'open'];
 		cues.push(
 			<a key="pr" href={session.prUrl} target="_blank" rel="noreferrer" aria-label={`Pull request ${number}, ${pr.label}`} className={cn(CUE, pr.className)}>
-				<Icon icon={pr.icon} size={11} />
 				<span className="tabular-nums">{number}</span>
 			</a>,
 		);
-		if (pullRequest?.checks) cues.push(<CiCue key="ci" number={number} pullRequest={{ ...pullRequest, checks: pullRequest.checks }} prUrl={session.prUrl} onCardChange={onCardChange} />);
+		if (pullRequest?.checks && pullRequest.checks !== 'passed') cues.push(<CiCue key="ci" number={number} pullRequest={{ ...pullRequest, checks: pullRequest.checks }} prUrl={session.prUrl} onCardChange={onCardChange} />);
 	}
-	return cues.length ? <span className="flex shrink-0 items-center gap-2">{cues}</span> : null;
+	return cues.length ? <span className="flex shrink-0 items-center gap-1.5">{cues}</span> : null;
 }

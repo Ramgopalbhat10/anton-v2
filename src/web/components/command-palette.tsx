@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, GitPullRequest, List, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
+import { CircleCheck, FolderKanban, GitPullRequest, List, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SECTIONS } from '@/components/settings/sections';
 import { Icon, Kbd } from '@/components/signal';
@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
+import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 type Entry = { id: string; label: string; meta: string; icon: LucideIcon; onSelect: () => void };
@@ -15,6 +16,7 @@ type Entry = { id: string; label: string; meta: string; icon: LucideIcon; onSele
 const PAGES = [
 	{ to: '/tasks', label: 'Tasks', icon: List },
 	{ to: '/reviews', label: 'Reviews', icon: GitPullRequest },
+	{ to: '/projects', label: 'Projects', icon: FolderKanban },
 ] as const;
 
 /** ⌘K palette: describe a task to start it, or jump to an existing one. */
@@ -23,6 +25,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	const create = useCreateChat();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, enabled: open });
 	const project = chooseProject(useProjects().data?.projects ?? []);
+	const spaces = useSpaces();
 	const [query, setQuery] = useState('');
 	const [index, setIndex] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
@@ -47,17 +50,32 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 	const jumps = useMemo<Entry[]>(() => {
 		const needle = query.trim().toLowerCase();
+		const spaceName = new Map((spaces.data?.spaces ?? []).map((space) => [space.id, space.name]));
+		const projects = (spaces.data?.spaces ?? [])
+			.filter((space) => space.state !== 'archived' && (!needle || space.name.toLowerCase().includes(needle)))
+			.slice(0, needle ? 5 : 3)
+			.map((space) => ({
+				id: space.id,
+				label: space.name,
+				meta: space.counts.waiting ? `Project · ${space.counts.waiting} need you` : 'Project',
+				icon: FolderKanban,
+				onSelect: () => {
+					onClose();
+					void navigate({ to: '/projects/$spaceId', params: { spaceId: space.id } });
+				},
+			}));
 		const tasks = (sessions.data?.sessions ?? [])
 			.filter((session) => !needle || session.title.toLowerCase().includes(needle))
 			.slice(0, 8)
 			.map((session) => ({
 				id: session.id,
 				label: session.title,
-				meta: `${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
+				meta: `${session.spaceId ? `${spaceName.get(session.spaceId) ?? 'Project'} · ` : ''}${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
 				icon: session.working || session.status === 'starting' ? Loader : CircleCheck,
 				onSelect: () => {
 					onClose();
-					void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
+					if (session.spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: session.spaceId, threadId: session.id } });
+					else void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
 				},
 			}));
 		// Settings pages only once something is typed, so the list stays about tasks.
@@ -80,8 +98,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				void navigate({ to: page.to });
 			},
 		}));
-		return [...tasks, ...pages, ...settings];
-	}, [sessions.data, query, navigate, onClose]);
+		return [...projects, ...tasks, ...pages, ...settings];
+	}, [sessions.data, spaces.data, query, navigate, onClose]);
 
 	if (!open) return null;
 

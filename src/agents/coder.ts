@@ -30,7 +30,7 @@ import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } 
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { agentSettingsNow, hasWorkspace, isPlanning, mcpServersFor, memoryFor } from '../services/agent-runner.ts';
+import { agentSettingsNow, hasWorkspace, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
 import { hasScriptTools, runScript, scriptToolDescription } from '../services/code-mode.ts';
 import { remember } from '../services/memory.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
@@ -49,6 +49,8 @@ import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { checkReply } from '../services/reply-check.ts';
+import { threadFinished } from '../services/thread-reports.ts';
+import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -402,18 +404,61 @@ function useRunScript(id: string, workspace: boolean) {
 	);
 }
 
-/** Adds a note to the repo's memory, which every later task reads. */
-function useRemember(id: string) {
+/** Adds a note to the repo's memory, which every later task reads; a project's thread can save to the project's memory instead. */
+function useRemember(id: string, project: ThreadProject | null) {
+	const note = v.pipe(v.string(), v.minLength(1), v.description('One line'));
+	if (!project) {
+		useTool(
+			defineTool({
+				name: 'remember',
+				description:
+					'Save one short, lasting fact about this repository for future tasks: how to run or test it, a convention, a gotcha you hit. ' +
+					'Not details of this task, and nothing secret.',
+				input: v.object({ note }),
+				run: async ({ data }) => ({ output: await remember(id, data.note) }),
+			}),
+		);
+		return;
+	}
 	useTool(
 		defineTool({
 			name: 'remember',
 			description:
-				'Save one short, lasting fact about this repository for future tasks: how to run or test it, a convention, a gotcha you hit. ' +
-				'Not details of this task, and nothing secret.',
-			input: v.object({ note: v.pipe(v.string(), v.minLength(1), v.description('One line')) }),
-			run: async ({ data }) => ({ output: await remember(id, data.note) }),
+				'Save one short, lasting note for later work. scope "repo" is a fact about this repository (how to run or test it, a convention, a gotcha); ' +
+				'scope "project" is a decision, preference or pitfall for the whole project, which its coordinator and every thread read. Nothing secret.',
+			input: v.object({ note, scope: v.optional(v.picklist(['repo', 'project']), 'repo') }),
+			run: async ({ data }) => ({ output: await remember(id, data.note, data.scope) }),
 		}),
 	);
+}
+
+/** A read-only thread reads the project's Library here; with a sandbox the files are in ../project-files. */
+function useProjectFiles(id: string) {
+	useTool(
+		defineTool({
+			name: 'read_project_file',
+			description: "Read a file from the project's Library, which the user added for every thread. Without a path, lists the files.",
+			input: v.object({ path: v.optional(v.pipe(v.string(), v.description('File name as listed'))) }),
+			run: async ({ data }) => ({ output: await readProjectFileForAgent(id, data.path) }),
+		}),
+	);
+}
+
+/** What a project's thread knows of its project, after the repo notes. */
+function projectPrompt(project: ThreadProject | null, workspace: boolean): string {
+	if (!project) return '';
+	return [
+		`\n\nThis task is a thread of the project "${project.name}". The project's coordinator or the user gave you its brief; do that work, then report what you did in a few lines, since your last reply is what the coordinator reads.`,
+		'When you need a decision only the user can make, end your reply with the question.',
+		project.goal ? `The project's goal: ${project.goal}` : '',
+		workspace
+			? `Files the user added to the project are in ../${PROJECT_FILES} (beside the repo).`
+			: 'Files the user added to the project can be read with read_project_file.',
+		project.instructions ? `\nThe project's instructions from the user:\n${project.instructions}` : '',
+		project.memory ? `\nThe project's memory (decisions and preferences saved earlier; they may be out of date):\n${project.memory}` : '',
+	]
+		.filter(Boolean)
+		.join(' ');
 }
 
 /** The repo's own skills and the installed plugins' skills; the agent loads one when a task matches its description. */
@@ -521,7 +566,9 @@ export function Coder({ id }: AgentProps) {
 	if (planning) useTool(proposePlan);
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, workspace);
 	if (scripts) useRunScript(id, workspace);
-	useRemember(id);
+	const project = threadProjectFor(id);
+	useRemember(id, project);
+	if (project && !workspace) useProjectFiles(id);
 	useSkills(id, workspace);
 	useLatestInput(id);
 	const browsing = sharedBrowserAvailable();
@@ -549,7 +596,9 @@ export function Coder({ id }: AgentProps) {
 				logProblem('warn', 'Checkpoint failed', error, id);
 			}
 		})();
-		await Promise.all([checkpoint, checkReply(id)]);
+		const [, reply] = await Promise.all([checkpoint, checkReply(id)]);
+		// A project's thread frees its slot and tells its coordinator what changed.
+		await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
 	});
 	// These response hooks run at the true start/end, across all model and tool calls.
 	// The persisted start survives resumed responses; usage totals are still counted per model call.
@@ -571,5 +620,5 @@ export function Coder({ id }: AgentProps) {
 	});
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

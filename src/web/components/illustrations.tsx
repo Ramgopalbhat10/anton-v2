@@ -1047,6 +1047,139 @@ export function TaskRouteArt({ className }: { className?: string }) {
 	);
 }
 
+/**
+ * How a project runs, as four stations on the same ground line as a task's
+ * route: the coordinator plans and splits the goal, threads run side by side
+ * as blades, their pull requests come up for review, and finished work is
+ * stacked away with a check. Without `active` the stages take turns, as on the
+ * New task page; with it, the stations that have work right now are lit and
+ * stay lit, so the drawing reads as where the project's work is. The middle
+ * blade's light is amber while a thread waits on you (`waiting`).
+ */
+export function ProjectRouteArt({ className, active, waiting = true }: { className?: string; active?: boolean[]; waiting?: boolean }) {
+	const show = (stage: number, children: ReactNode) => (active ? (active[stage] ? children : null) : <Lit stage={stage}>{children}</Lit>);
+	const [tx, ty] = stationAt(1);
+	const [dx, dy] = stationAt(3);
+	const plan = (lit: boolean) => (
+		<Station
+			column={0}
+			h={22}
+			r={3.5}
+			tone={lit ? 'accent' : 'solid'}
+			top={
+				<>
+					{[8, 13, 18].map((v) => (
+						<Slot key={v} x={6} y={v} w={16} h={2.6} r={1.3} />
+					))}
+					<Ring at={[30, 27]} r={4.5} fill={RECESS} stroke={lit ? ACCENT : EDGE} />
+					{[24, 28.5, 33].map((u, i) => (
+						<Led key={u} at={[u, 9]} lit={lit && i < 2} r={1.2} />
+					))}
+				</>
+			}
+			left={
+				<>
+					<Slot x={5} y={5} w={30} h={11} r={1.6} edge />
+					<Bar x={8} y={11} w={13} accent={lit} />
+					{lit ? <rect className="art-blink" x={23} y={7.6} width={3} height={4} rx={0.5} fill={ACCENT} /> : null}
+				</>
+			}
+		/>
+	);
+	/** Three blades standing in a low cradle: threads running side by side. */
+	const blades = (lit: boolean) => (
+		<>
+			<Block at={[tx - HALF, ty - HALF, 0]} size={[HALF * 2, HALF * 2, 6]} r={3} left={[6, 16, 26].map((x) => <Slot key={x} x={x} y={2} w={8} h={1.6} r={0.8} />)} />
+			{[0, 1, 2].map((i) => (
+				<Block
+					key={i}
+					at={[tx - 15 + i * 11, ty - 13, 6]}
+					size={[7, 26, 22]}
+					r={1.4}
+					tone={lit && (i !== 1 || !waiting) ? 'accent' : 'solid'}
+					left={
+						<>
+							<Slot x={1.6} y={4} w={3.8} h={7} r={1} edge />
+							{lit && (i !== 1 || !waiting)
+								? [14, 16.6].map((v, k) => <circle key={v} className="rack-activity" style={{ '--blink': k + i } as CSSProperties} cx={3.5} cy={v} r={0.75} fill="var(--cyan-200)" />)
+								: null}
+							<circle cx={3.5} cy={19} r={1.2} fill={lit ? (i === 1 && waiting ? 'var(--warning-base)' : 'var(--cyan-300)') : DETAIL} className={lit ? 'in-pulse' : undefined} />
+						</>
+					}
+				/>
+			))}
+		</>
+	);
+	const review = (lit: boolean) => {
+		const stroke = lit ? ACCENT : EDGE;
+		const fill = lit ? 'var(--art-accent-top)' : 'var(--art-top)';
+		return (
+			<Station
+				column={2}
+				h={18}
+				r={3.5}
+				tone={lit ? 'accent' : 'solid'}
+				top={
+					<>
+						<Slot x={5} y={5} w={30} h={30} r={2.5} edge />
+						<Ring at={[12, 10]} r={2.6} stroke={stroke} fill={fill} />
+						<Ring at={[12, 30]} r={2.6} stroke={stroke} fill={fill} />
+						<Ring at={[28, 30]} r={2.6} stroke={stroke} fill={lit ? 'var(--cyan-300)' : fill} />
+						<Ln a={[12, 12.6]} b={[12, 27.4]} stroke={stroke} />
+						<Trace points={[[28, 27.4], [28, 17], [21, 11.2]]} stroke={stroke} />
+						<Trace points={[[23.6, 10.4], [21, 11.2], [21.6, 13.8]]} stroke={stroke} />
+					</>
+				}
+				left={<Led at={[6, 12]} lit={lit} />}
+			/>
+		);
+	};
+	/** Finished threads stacked flat, the top one sealed with a check. */
+	const done = (lit: boolean) => (
+		<>
+			{[0, 5, 10].map((z, i) => (
+				<Block
+					key={z}
+					at={[dx - HALF + i, dy - HALF + i, z]}
+					size={[HALF * 2 - i * 2, HALF * 2 - i * 2, 4]}
+					r={2.5}
+					tone={lit && i === 2 ? 'accent' : 'solid'}
+					left={<Bar x={5} y={1.6} w={12} accent={lit && i === 2} />}
+					top={
+						i === 2 ? (
+							<>
+								<Slot x={5} y={5} w={28} h={28} r={2.5} />
+								<polyline points="12,19 17,24 27,13" fill="none" stroke={lit ? 'var(--cyan-200)' : EDGE} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...ve} {...(lit && !active ? drawOn(3) : {})} />
+							</>
+						) : undefined
+					}
+				/>
+			))}
+		</>
+	);
+	return (
+		<Frame label="A project's route: plan, threads, review, done" viewBox="0 -64 400 90" className={className}>
+			<line x1={0} y1={0} x2={ROUTE_X[0] - SIDE - 3} y2={0} stroke={DETAIL} strokeDasharray="2 3" {...ve} />
+			<line x1={ROUTE_X[3] + SIDE + 3} y1={0} x2={400} y2={0} stroke={DETAIL} strokeDasharray="2 3" {...ve} />
+			{[0, 1, 2].map((from) =>
+				active ? (
+					<line key={from} x1={ROUTE_X[from] + SIDE + 3} y1={0} x2={ROUTE_X[from + 1] - SIDE - 3} y2={0} stroke={active[from] && active[from + 1] ? ACCENT : EDGE} strokeDasharray="2 3" {...ve} />
+				) : (
+					<Handoff key={from} from={from} />
+				),
+			)}
+			{plan(false)}
+			{show(0, plan(true))}
+			{blades(false)}
+			{show(1, blades(true))}
+			{review(false)}
+			{show(2, review(true))}
+			{done(false)}
+			{show(3, done(true))}
+		</Frame>
+	);
+}
+
 /** Anton's mark: an isometric cube on a cyan tile. */
 export function Logo({ size = 20 }: { size?: number }) {
 	const id = `anton-mark${useId().replace(/[^\w-]/g, '')}`;
@@ -1064,5 +1197,68 @@ export function Logo({ size = 20 }: { size?: number }) {
 				<path d="M5 7.4 10 10.2 15 7.4M10 10.2V15.4" />
 			</g>
 		</svg>
+	);
+}
+
+/** A coordinator unit lit in cyan, wired across the floor to three thread units, one of them at work:
+    a project, with its threads running in parallel. */
+export function ProjectArt({ className }: { className?: string }) {
+	const unit = (at: Point, lit?: boolean) => (
+		<Block
+			at={at}
+			size={[26, 26, 13]}
+			r={2.5}
+			tone={lit ? 'accent' : 'solid'}
+			top={
+				<>
+					<Bar x={4} y={19} w={12} accent={lit} />
+					<Bar x={4} y={14.5} w={18} accent={lit} />
+					<Bar x={4} y={10} w={8} accent={lit} />
+					<Led at={[21, 5]} lit={lit} r={1.3} />
+				</>
+			}
+			left={<Slot x={4} y={4} w={18} h={4} r={1} edge />}
+		/>
+	);
+	const wire = (from: Point, to: Point, lit?: boolean) => <Trace points={[pt(from), pt(to)]} stroke={lit ? ACCENT : EDGE} dash={lit ? undefined : '2 3'} />;
+	return (
+		<Frame label="A coordinator wired to three threads running side by side" viewBox="-92 -44 186 132" className={className}>
+			{wire([40, 14, 0], [62, 14, 0])}
+			{wire([14, 40, 0], [14, 62, 0])}
+			{wire([38, 38, 0], [58, 58, 0], true)}
+			<Block
+				at={[0, 0, 0]}
+				size={[40, 40, 22]}
+				r={3.5}
+				tone="accent"
+				top={
+					<>
+						{[8, 13, 18].map((v) => (
+							<Slot key={v} x={6} y={v} w={18} h={2.6} r={1.3} />
+						))}
+						<Ring at={[31, 26]} r={4.5} fill={RECESS} stroke={ACCENT} />
+						{[6, 11, 16, 21].map((u, i) => (
+							<Led key={u} at={[u + 22, 8]} lit={i < 3} r={1.2} />
+						))}
+					</>
+				}
+				left={
+					<>
+						<Slot x={5} y={5} w={30} h={12} r={1.6} edge />
+						<Bar x={8} y={12} w={14} accent />
+						<rect className="art-blink" x={24} y={8.6} width={3} height={4} rx={0.5} fill={ACCENT} />
+					</>
+				}
+			/>
+			{unit([62, 1, 0])}
+			{unit([1, 62, 0])}
+			{unit([58, 58, 0], true)}
+			<Label at={[20, 0, 22]} run={-38} rise={-10}>
+				coordinator
+			</Label>
+			<Label at={[84, 71, 13]} run={20} accent>
+				working
+			</Label>
+		</Frame>
 	);
 }

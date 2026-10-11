@@ -9,6 +9,7 @@ import { getProviders } from '../providers/index.ts';
 import { applyFiles, readCheckpoint } from './checkpoints.ts';
 import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
+import { copySpaceFiles } from './space-files.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from './secrets.ts';
 
@@ -157,6 +158,8 @@ async function provision(id: string): Promise<Machine> {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
 	}
+	// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
+	if (session.spaceId) await copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id));
 	return machine;
 }
 
