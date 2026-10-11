@@ -8,9 +8,8 @@ import { PlanToggle } from '@/components/composer';
 import { Caption } from '@/components/instrument';
 import { Markdown } from '@/components/markdown';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { ProjectArt } from '@/components/illustrations';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/signal';
-import { countKinds, StateSplit } from '@/components/project-viz';
+import { countKinds, ProjectRoute, StateSplit } from '@/components/project-viz';
 import { useNow } from '@/components/subagents';
 import { NextSteps, ThreadCard, ThreadStatePill, useOpenThread } from '@/components/thread-card';
 import { Glyph, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
@@ -387,8 +386,8 @@ const STARTERS = ['What is running right now?', 'Split this into threads: ', 'Wh
 function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => void }) {
 	return (
 		<div className="mt-[6vh] flex flex-col items-center gap-6 text-center">
-			<div className="in-well in-grid flex w-full justify-center px-6 pt-8 pb-6">
-				<ProjectArt className="w-full max-w-[340px]" />
+			<div className="w-full">
+				<ProjectRoute space={space} threads={[]} />
 			</div>
 			<div className="flex max-w-[52ch] flex-col items-center gap-1.5">
 				<h1 className="m-0 text-[20px] leading-[26px] font-semibold tracking-[-0.02em]">{space.name}</h1>

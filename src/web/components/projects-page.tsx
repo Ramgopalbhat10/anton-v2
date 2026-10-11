@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Check, FolderGit2, FolderKanban, Plus, Waypoints, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -6,13 +6,14 @@ import { ProjectArt } from '@/components/illustrations';
 import { Caption, StatRow } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { SpaceMark } from '@/components/project-sidebar';
+import { ProjectRack } from '@/components/project-rack';
 import { activity, ActivityBars, StateSplit } from '@/components/project-viz';
 import { AREA } from '@/components/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { ThreadStateIcon } from '@/components/thread-card';
-import { api, type Space } from '@/lib/api';
+import { api, SAFETY_NET_MS, type Space } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { stateOf, useSpaces, useThreads } from '@/lib/spaces';
@@ -186,6 +187,7 @@ export function ProjectsPage() {
 	const search = useSearch({ from: '/projects' });
 	const navigate = useNavigate();
 	const spaces = useSpaces();
+	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const [creating, setCreating] = useState(Boolean(search.create));
 	useEffect(() => {
 		if (search.create) {
@@ -217,6 +219,7 @@ export function ProjectsPage() {
 					</EmptyState>
 				</div>
 			) : null}
+			{list.length ? <ProjectRack spaces={list.filter((space) => space.state !== 'archived')} threads={sessions.data?.sessions ?? []} /> : null}
 			{list.length ? (
 				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					{list.map((space) => (

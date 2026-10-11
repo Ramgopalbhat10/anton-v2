@@ -120,6 +120,7 @@ export function ProjectPage() {
 					expanded={expanded}
 					onToggleExpanded={() => setExpanded((current) => !current)}
 					onClose={() => changePanel({ open: false })}
+					coordinating={busy}
 				/>
 			) : null}
 		</div>

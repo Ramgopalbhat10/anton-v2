@@ -51,7 +51,8 @@ export function questionOf(reply: string): string {
 		.split('\n')
 		.map((line) => line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/[*_`#]+/g, '').trim())
 		.filter(Boolean);
-	const sentences = lines.flatMap((line) => line.match(/[^.!?]+[.!?]*/g) ?? [line]).map((sentence) => sentence.trim());
+	// A sentence ends at a stop followed by a space, so file names like docs/projects.md stay whole.
+	const sentences = lines.flatMap((line) => line.split(/(?<=[.!?])\s+/)).map((sentence) => sentence.trim());
 	const asked = [...sentences].reverse().find((sentence) => sentence.endsWith('?'));
 	const line = asked ?? lines[lines.length - 1] ?? '';
 	return line.length > MAX_QUESTION ? `${line.slice(0, MAX_QUESTION - 1)}…` : line;

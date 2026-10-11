@@ -26,6 +26,7 @@ const providers = (decisions: DecisionModel | null) => setProviders({ sandbox: {
 test('the question is the reply’s last sentence that asks something, plain', () => {
 	assert.equal(questionOf('I found two configs.\n\n- **Should I** merge them into one? Or keep both.'), 'Should I merge them into one?');
 	assert.equal(questionOf('Done. Tests pass.'), 'Done. Tests pass.');
+	assert.equal(questionOf('Should the docs live in `README.md`, or in a new `docs/projects.md`?\n\nWaiting for your answer.'), 'Should the docs live in README.md, or in a new docs/projects.md?');
 });
 
 test('without a decision model, a reply ending in a question waits on you; a message from you ends that', async () => {

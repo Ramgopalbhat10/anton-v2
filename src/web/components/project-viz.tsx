@@ -2,27 +2,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instrument';
+import { ProjectRouteArt } from '@/components/illustrations';
+import { ProjectBay } from '@/components/project-rack';
 import { useNow } from '@/components/subagents';
 import { NextSteps, prNumber, useOpenThread } from '@/components/thread-card';
-import { Glyph, type GlyphKind, glyphKind, STATE_COLOR } from '@/components/thread-glyph';
+import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
 import { api, type Session, type Space } from '@/lib/api';
 import { age, dollars, elapsed, tokens } from '@/lib/format';
 import { stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-/** The order states take in rings, splits and legends: what needs you first, what is done last. */
-export const KINDS: GlyphKind[] = ['failed', 'waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'];
-
-export const KIND_LABEL: Record<GlyphKind, string> = {
-	failed: 'Failed',
-	waiting: 'Needs you',
-	working: 'Working',
-	queued: 'Queued',
-	review: 'Review',
-	landing: 'Approved',
-	idle: 'Idle',
-	resolved: 'Done',
-};
+export { KIND_LABEL, KINDS };
 
 export function countKinds(threads: Session[]): Record<GlyphKind, number> {
 	const counts = Object.fromEntries(KINDS.map((kind) => [kind, 0])) as Record<GlyphKind, number>;
@@ -189,63 +179,7 @@ function StateRing({ threads, maxParallel, size = 128 }: { threads: Session[]; m
 	);
 }
 
-/**
- * The parallel slots as a rack: each running thread in its blade with how long
- * it has run, empty slots dashed, and the queue stacked after them.
- */
-function SlotRack({ space, threads }: { space: Space; threads: Session[] }) {
-	const open = useOpenThread();
-	const working = threads.filter((thread) => stateOf(thread) === 'working');
-	const queued = threads.filter((thread) => stateOf(thread) === 'queued');
-	const now = useNow(working.length > 0);
-	const paused = space.state !== 'active';
-	return (
-		<div className="grid grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-1.5">
-			{Array.from({ length: Math.max(space.maxParallel, working.length) }, (_, index) => {
-				const thread = working[index];
-				if (!thread) {
-					return (
-						<div key={index} className="flex h-[52px] flex-col justify-between rounded-[9px] border border-dashed border-(--border-default) px-2.5 py-1.5">
-							<Caption>S{index + 1}</Caption>
-							<Caption className="text-(--text-disabled)">{paused ? 'paused' : 'free'}</Caption>
-						</div>
-					);
-				}
-				return (
-					<button
-						key={thread.id}
-						type="button"
-						onClick={() => open(thread)}
-						title={thread.title}
-						className="in-sweep flex h-[52px] flex-col justify-between rounded-[9px] border border-(--accent-border) bg-(--accent-bg-subtle) px-2.5 py-1.5 text-left outline-none hover:border-(--accent-base) focus-visible:shadow-(--focus-ring)"
-					>
-						<span className="flex items-center gap-1.5">
-							<Glyph kind="working" size={11} />
-							<Caption tone="accent" className="min-w-0 flex-1 truncate">
-								S{index + 1} · {short(now - ms(thread.lastInputAt ?? thread.createdAt))}
-							</Caption>
-						</span>
-						<span className="truncate text-[12px] text-(--text-primary)">{thread.title}</span>
-					</button>
-				);
-			})}
-			{queued.length ? (
-				<div className="relative mt-[3px] mr-[3px] h-[49px]" title={queued.map((thread) => thread.title).join('\n')}>
-					<span aria-hidden className="absolute inset-0 translate-x-[3px] -translate-y-[3px] rounded-[9px] border border-(--border-subtle)" />
-					<div className="relative flex h-full flex-col justify-between rounded-[9px] border border-(--border-default) bg-(--card-bg) px-2.5 py-1.5">
-						<span className="flex items-center gap-1.5">
-							<Glyph kind="queued" size={11} />
-							<Caption>+{queued.length} queued</Caption>
-						</span>
-						<span className="truncate text-[12px] text-(--text-tertiary)">{queued[0].title}</span>
-					</div>
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-/** The project's pulse: the ring and its legend, the slot rack, and recent activity. */
+/** The project's pulse: the ring and its legend, the project's bay in the rack, and recent activity. */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
 	const live = counts.working > 0;
@@ -270,8 +204,8 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 					))}
 				</div>
 			</div>
-			<CardSection label="Slots" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} in use`}>
-				<SlotRack space={space} threads={threads} />
+			<CardSection label="Rack · point at a blade" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>
+				<ProjectBay space={space} threads={threads} />
 			</CardSection>
 			<CardSection label={`Activity · last ${short(span)}`} hint={`${total} events`}>
 				<div className="flex flex-col gap-1.5">
@@ -589,5 +523,63 @@ export function BurnCard({ space }: { space: Space }) {
 				</CardSection>
 			) : null}
 		</Card>
+	);
+}
+
+/**
+ * The project's route, drawn as on the New task page: plan, threads, review,
+ * done. `live` lights the stations that have work now and puts the counts
+ * under them; without it the stages take turns and say what each does.
+ */
+export function ProjectRoute({ space, threads, coordinating, live }: { space: Space; threads: Session[]; coordinating?: boolean; live?: boolean }) {
+	const counts = countKinds(threads);
+	const running = counts.working + counts.queued + counts.waiting + counts.failed;
+	const ready = counts.review + counts.landing;
+	const finished = counts.resolved + counts.idle;
+	const needs = counts.waiting + counts.failed;
+	const active = [Boolean(coordinating), running > 0, ready > 0, finished > 0];
+	const stages: Array<{ title: string; note: ReactNode }> = live
+		? [
+				{ title: 'Plan', note: coordinating ? 'coordinating now' : 'coordinator idle' },
+				{
+					title: 'Threads',
+					note: running ? (
+						<>
+							{needs ? <span className="text-(--warning-text)">{needs} need{needs === 1 ? 's' : ''} you</span> : null}
+							{[counts.working ? `${counts.working} working` : null, counts.queued ? `${counts.queued} queued` : null]
+								.filter(Boolean)
+								.map((part, index) => (needs || index ? ` · ${part}` : part))}
+						</>
+					) : (
+						'none running'
+					),
+				},
+				{ title: 'Review', note: ready ? `${ready} ready` : 'nothing to review' },
+				{ title: 'Done', note: `${finished} done` },
+			]
+		: [
+				{ title: 'Plan', note: 'the coordinator splits the goal' },
+				{ title: 'Threads', note: `up to ${space.maxParallel} at once` },
+				{ title: 'Review', note: 'pull requests' },
+				{ title: 'Done', note: 'merged and resolved' },
+			];
+	return (
+		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
+			<ProjectRouteArt className="w-full" active={live ? active : undefined} waiting={live ? needs > 0 : true} />
+			<ol aria-label="How the project runs" className="m-0 grid list-none grid-cols-4 p-0">
+				{stages.map((stage, index) => (
+					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
+						<span
+							className={cn('in-caption', live ? (active[index] ? 'text-(--accent-text)' : 'text-(--text-tertiary)') : 'route-caption text-(--text-tertiary)')}
+							data-first={!live && index === 0 ? true : undefined}
+							style={live ? undefined : ({ '--stage': index } as CSSProperties)}
+						>
+							{String(index + 1).padStart(2, '0')} {stage.title}
+						</span>
+						<div className={cn('line-clamp-2 w-full text-[12px] leading-[16px]', live && !active[index] ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}>{stage.note}</div>
+					</li>
+				))}
+			</ol>
+		</div>
 	);
 }

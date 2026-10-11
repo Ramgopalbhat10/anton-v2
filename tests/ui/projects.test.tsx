@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,7 @@ const { ThreadCard, nextSteps } = await import('@/components/thread-card');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity } = await import('@/components/project-viz');
+const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -142,6 +143,20 @@ describe('threads', () => {
 		expect(working.querySelector('[data-glyph="working"]')).toBeTruthy();
 		expect(screen.getByRole('article', { name: failing.title }).querySelector('[data-glyph="failed"]')).toBeTruthy();
 		expect(screen.getByRole('img', { name: '1 failed, 1 needs you, 1 working, 1 review, 1 done' })).toBeTruthy();
+	});
+
+	it('racks each project as a bay of its threads, and draws a thread out with what it asks', async () => {
+		expect(bayThreads(threads).map((item) => item.id)).toEqual(['asks', 'runs', 'pr', 'done']);
+		withRouter(() => <ProjectRack spaces={[space]} threads={threads} />);
+		expect(await screen.findByRole('group', { name: '1 projects as bays, their threads as blades' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /Billing/ })).toBeTruthy();
+		fireEvent.focus(screen.getByRole('link', { name: 'Pick a name, Needs you' }));
+		const card = await screen.findByRole('dialog', { name: 'Pick a name' });
+		expect(within(card).getByText('Asks you')).toBeTruthy();
+		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
+		await userEvent.type(within(card).getByRole('textbox', { name: 'Send a follow-up to Pick a name' }), 'Invoices');
+		await userEvent.click(within(card).getByRole('button', { name: 'Send to this thread' }));
+		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'asks', 'Invoices');
 	});
 
 	it('bins recent activity, the current stretch last', () => {

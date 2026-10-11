@@ -22,6 +22,20 @@ export const STATE_COLOR: Record<GlyphKind, string> = {
 	resolved: 'var(--neutral-700)',
 };
 
+/** The order states take in rings, splits and legends: what needs you first, what is done last. */
+export const KINDS: GlyphKind[] = ['failed', 'waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'];
+
+export const KIND_LABEL: Record<GlyphKind, string> = {
+	failed: 'Failed',
+	waiting: 'Needs you',
+	working: 'Working',
+	queued: 'Queued',
+	review: 'Review',
+	landing: 'Approved',
+	idle: 'Idle',
+	resolved: 'Done',
+};
+
 const CHECK = 'M5.4 8.3l1.8 1.8 3.5-3.8';
 
 /**
