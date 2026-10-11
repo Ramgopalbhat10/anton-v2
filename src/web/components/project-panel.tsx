@@ -1,15 +1,15 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Clock, FileText, MessageCircleQuestion, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
-import { Caption, Card, CardFooter, Pips, Status, type Tone } from '@/components/instrument';
+import { CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
-import { useNow } from '@/components/subagents';
+import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
 import { WorkspacePane } from '@/components/workspace-pane';
-import { api, type Automation, type ModelChoice, outputUrl, type Session, type Space, spaceFileUrl, THREAD_STATES } from '@/lib/api';
-import { age, dollars, elapsed } from '@/lib/format';
-import { failed, STATE_LOOK, stateOf, threadActiveAt } from '@/lib/spaces';
+import { api, type Automation, type ModelChoice, outputUrl, type Session, type Space, spaceFileUrl } from '@/lib/api';
+import { age } from '@/lib/format';
+import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 export const PROJECT_TABS = [
@@ -38,129 +38,12 @@ function Tab({ name, icon, count, active, onSelect }: { name: string; icon: type
 	);
 }
 
-/** A small figure card: a mono caption, a number, and a line or chart under it. */
-function Stat({ label, value, tone, note, children }: { label: string; value: ReactNode; tone?: Tone; note?: ReactNode; children?: ReactNode }) {
-	const text = { warning: 'text-(--warning-text)', accent: 'text-(--accent-text)', success: 'text-(--success-text)', danger: 'text-(--danger-text)', neutral: 'text-(--text-primary)' }[tone ?? 'neutral'];
-	return (
-		<div className="in-card flex min-w-0 flex-col gap-1.5 px-3 pt-2.5 pb-3">
-			<Caption className="truncate">{label}</Caption>
-			<div className={cn('in-figure text-[22px] leading-[26px]', text)}>{value}</div>
-			{children}
-			{note ? <div className="truncate text-[11px] text-(--text-tertiary)">{note}</div> : null}
-		</div>
-	);
-}
-
-/** Daily spend as small bars, today's lit: the project's burn at a glance. */
-function SpendBars({ daily }: { daily: Array<{ day: string; cost: number }> }) {
-	const days = Array.from({ length: 14 }, (_, index) => {
-		const date = new Date();
-		date.setDate(date.getDate() - (13 - index));
-		const key = date.toISOString().slice(0, 10);
-		return { key, cost: daily.find((day) => day.day === key)?.cost ?? 0 };
-	});
-	const max = Math.max(...days.map((day) => day.cost), 0.0001);
-	return (
-		<div role="img" aria-label="Spend over the last 14 days" className="flex h-6 items-end gap-[2px]">
-			{days.map((day, index) => (
-				<span
-					key={day.key}
-					title={`${day.key}: ${dollars(day.cost)}`}
-					className="min-w-0 flex-1 rounded-[1.5px]"
-					style={{ height: `${Math.max(8, (day.cost / max) * 100)}%`, background: index === days.length - 1 ? 'var(--accent-base)' : day.cost ? 'var(--neutral-600)' : 'var(--segment-off)' }}
-				/>
-			))}
-		</div>
-	);
-}
-
-const TONE_FILL: Record<Tone, string> = { warning: 'var(--warning-base)', accent: 'var(--accent-base)', success: 'var(--success-base)', danger: 'var(--danger-base)', neutral: 'var(--neutral-600)' };
-
-/** When each thread ran, as bars on one line of time ending now; failures red, waiting amber, queued dashed. */
-function Timeline({ threads }: { threads: Session[] }) {
-	const open = useOpenThread();
-	const live = threads.some((thread) => stateOf(thread) === 'working');
-	const now = useNow(live);
-	const shown = threads.slice(0, 8);
-	if (shown.length === 0) return null;
-	const start = Math.min(...shown.map((thread) => new Date(thread.createdAt).getTime()), now - 10 * 60_000);
-	const span = Math.max(now - start, 60_000);
-	const x = (at: number) => `${((at - start) / span) * 100}%`;
-	const failures = shown.filter(failed).length;
-	const working = shown.filter((thread) => stateOf(thread) === 'working').length;
-	return (
-		<Card
-			icon={Clock}
-			title="Timeline"
-			sub={`last ${elapsed(span).split(' ')[0]}`}
-			status={<Status tone={working ? 'accent' : 'neutral'} pulse={working > 0}>{working ? `${working} running` : 'quiet'}{failures ? ` · ${failures} failed` : ''}</Status>}
-		>
-			<div className="relative flex flex-col gap-1.5 px-4 pt-1 pb-3">
-				<div aria-hidden className="absolute top-0 bottom-3 w-px bg-(--accent-border)" style={{ left: `calc(16px + (100% - 32px) * 1)` }} />
-				{shown.map((thread) => {
-					const state = stateOf(thread);
-					const from = new Date(thread.createdAt).getTime();
-					const to = state === 'working' ? now : Math.max(from + span / 60, new Date(threadActiveAt(thread)).getTime());
-					const tone: Tone = failed(thread) ? 'danger' : STATE_LOOK[state].tone;
-					return (
-						<button key={thread.id} type="button" onClick={() => open(thread)} className="group/bar flex h-6 items-center gap-2 text-left outline-none" title={`${thread.title} · ${STATE_LOOK[state].label}`}>
-							<span className="w-[92px] shrink-0 truncate text-[11.5px] text-(--text-tertiary) group-hover/bar:text-(--text-primary)">{thread.title}</span>
-							<span className="relative h-3.5 flex-1 rounded-[3px] bg-(--segment-off)/40">
-								<span
-									className={cn('absolute inset-y-0 rounded-[3px]', state === 'working' && 'in-sweep', state === 'queued' && 'border border-dashed border-(--border-strong)')}
-									style={{ left: x(from), width: `max(4px, calc(${x(to)} - ${x(from)}))`, background: state === 'queued' ? 'transparent' : TONE_FILL[tone], opacity: state === 'resolved' || state === 'idle' ? 0.55 : 1 }}
-								/>
-							</span>
-						</button>
-					);
-				})}
-				<div className="flex justify-between pl-[100px]">
-					<Caption>{new Date(start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</Caption>
-					<Caption tone="accent">Now</Caption>
-				</div>
-			</div>
-		</Card>
-	);
-}
-
-/** Threads waiting on you, longest first, each with what it asks and a way to answer. */
-function NeedsYou({ threads }: { threads: Session[] }) {
-	const open = useOpenThread();
-	const waiting = threads.filter((thread) => stateOf(thread) === 'waiting').sort((a, b) => threadActiveAt(a).localeCompare(threadActiveAt(b)));
-	if (waiting.length === 0) return null;
-	return (
-		<Card
-			icon={MessageCircleQuestion}
-			title={`${waiting.length} waiting on you`}
-			sub={`longest ${age(threadActiveAt(waiting[0]))}`}
-			status={<Status tone="warning">Needs you</Status>}
-			className="border-(--warning-border)"
-		>
-			<div className="flex flex-col">
-				{waiting.map((thread) => (
-					<div key={thread.id} className="flex items-start gap-2.5 border-t border-(--border-subtle) px-4 py-2.5">
-						<span className="mt-[3px] inline-flex">
-							<ThreadStateIcon thread={thread} size={12} />
-						</span>
-						<button type="button" onClick={() => open(thread)} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
-							<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
-							<span className={cn('line-clamp-2 text-[12px] leading-[17px]', failed(thread) ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-								{thread.status === 'error' ? (thread.errorMessage ?? 'Failed') : (thread.asking ?? prSummary(thread) ?? 'Waiting on you')}
-							</span>
-						</button>
-						<Caption className="mt-0.5 shrink-0">{age(threadActiveAt(thread))}</Caption>
-						<NextSteps thread={thread} size="xs" />
-					</div>
-				))}
-			</div>
-		</Card>
-	);
-}
-
+/**
+ * Overview, read top to bottom: the project's pulse (states, slots,
+ * activity), what waits on you as tracks of time, the schedule of every
+ * thread to now, what is ready for review, and what it all costs.
+ */
 function Overview({ space, threads }: { space: Space; threads: Session[] }) {
-	const usage = useQuery({ queryKey: ['space-usage', space.id], queryFn: () => api.spaceUsage(space.id) });
-	const counts = space.counts;
-	const open = threads.filter((thread) => stateOf(thread) !== 'resolved');
 	const ready = threads.filter((thread) => ['review', 'landing'].includes(stateOf(thread)));
 	const openThread = useOpenThread();
 	if (threads.length === 0) {
@@ -175,38 +58,34 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 	}
 	return (
 		<div className="flex flex-col gap-3">
-			<div className="grid grid-cols-2 gap-2 @min-[560px]/workspace:grid-cols-4">
-				<Stat label="Needs you" value={counts.waiting} tone={counts.waiting ? 'warning' : 'neutral'} note={counts.waiting ? 'answer to unblock' : 'nothing waiting'} />
-				<Stat label="Working" value={<>{counts.working}<span className="text-[13px] text-(--text-disabled)"> / {space.maxParallel}</span></>} tone={counts.working ? 'accent' : 'neutral'} note={counts.queued ? `${counts.queued} queued` : 'slots free'} />
-				<Stat label="Ready" value={counts.review + counts.landing} tone={counts.review + counts.landing ? 'success' : 'neutral'} note={counts.landing ? `${counts.landing} approved` : 'for review'} />
-				<Stat label="Spend · month" value={dollars(usage.data?.month ?? 0)}>
-					<SpendBars daily={usage.data?.daily ?? []} />
-				</Stat>
-			</div>
-			<NeedsYou threads={threads} />
-			<Timeline threads={open.length ? open : threads} />
+			<ProjectPulse space={space} threads={threads} />
+			<WaitTracks threads={threads} />
+			<ScheduleTimeline threads={threads} />
 			{ready.length ? (
 				<Card icon={GitPullRequest} title="Ready for review" sub={`${ready.length} pull request${ready.length === 1 ? '' : 's'}`}>
 					<div className="flex flex-col">
-						{ready.map((thread) => (
-							<button key={thread.id} type="button" onClick={() => openThread(thread, 'Changes')} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2 text-left hover:bg-(--bg-hover)">
-								<ThreadStateIcon thread={thread} size={12} />
-								<span className="min-w-0 flex-1 truncate text-[13px]">{thread.title}</span>
-								<Caption>{prSummary(thread)}</Caption>
-							</button>
-						))}
+						{ready.map((thread) => {
+							const runs = thread.pullRequest?.runs ?? [];
+							return (
+								<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2">
+									<ThreadStateIcon thread={thread} size={13} />
+									<button type="button" onClick={() => openThread(thread, 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
+										<span className="truncate text-[13px] hover:underline">{thread.title}</span>
+										<span className="flex items-center gap-2">
+											<Caption>{prSummary(thread)}</Caption>
+											{runs.length ? (
+												<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
+											) : null}
+										</span>
+									</button>
+									<NextSteps thread={thread} size="xs" />
+								</div>
+							);
+						})}
 					</div>
 				</Card>
 			) : null}
-			<div className="flex flex-wrap gap-x-4 gap-y-1 px-1">
-				{THREAD_STATES.filter((state) => counts[state]).map((state) => (
-					<span key={state} className="flex items-center gap-1.5 text-[11px] text-(--text-tertiary)">
-						<span className="size-1.5 rounded-full" style={{ background: TONE_FILL[STATE_LOOK[state].tone] }} />
-						{STATE_LOOK[state].label}
-						<span className="in-num text-(--text-secondary)">{counts[state]}</span>
-					</span>
-				))}
-			</div>
+			<BurnCard space={space} />
 		</div>
 	);
 }

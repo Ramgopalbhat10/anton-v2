@@ -6,9 +6,11 @@ import { ProjectArt } from '@/components/illustrations';
 import { Caption, StatRow } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { SpaceMark } from '@/components/project-sidebar';
+import { activity, ActivityBars, StateSplit } from '@/components/project-viz';
 import { AREA } from '@/components/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { useNow } from '@/components/subagents';
 import { ThreadStateIcon } from '@/components/thread-card';
 import { api, type Space } from '@/lib/api';
 import { age } from '@/lib/format';
@@ -21,6 +23,7 @@ function ProjectCard({ space }: { space: Space }) {
 	const { threads } = useThreads(space.id);
 	const open = threads.filter((thread) => stateOf(thread) !== 'resolved').slice(0, 3);
 	const counts = space.counts;
+	const now = useNow(false);
 	return (
 		<Link
 			to="/projects/$spaceId"
@@ -48,7 +51,11 @@ function ProjectCard({ space }: { space: Space }) {
 					</span>
 				))}
 			</div>
-			<div className="px-4 pt-3">
+			<div className="flex flex-col gap-2 px-4 pt-3">
+				<div className="flex items-end gap-3">
+					<StateSplit threads={threads} height={6} className="flex-1 self-center" />
+					<ActivityBars bars={activity(threads, now, 16).bars} height={18} className="w-[72px]" />
+				</div>
 				<StatRow
 					stats={[
 						{ label: 'needs you', value: counts.waiting, tone: counts.waiting ? 'warning' : 'neutral' },

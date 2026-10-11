@@ -2,14 +2,14 @@ import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { PanelRight, Settings, Waypoints } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Caption, Status } from '@/components/instrument';
+import { Status } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';
 import { ProjectFeed } from '@/components/project-feed';
 import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/project-panel';
 import { SpaceMark } from '@/components/project-sidebar';
+import { SlotPips } from '@/components/project-viz';
 import { DEFAULT_PANELS, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
-import { ThreadStatePill } from '@/components/thread-card';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -33,17 +33,6 @@ function saveProjectPanel(spaceId: string, state: ProjectPanelState) {
 	} catch {
 		// Storage is a convenience; the panel still works without it.
 	}
-}
-
-/** What the project is doing, in a few words: what needs you, then what works. */
-function summary(counts: Record<string, number>): string {
-	const parts = [
-		counts.waiting ? `${counts.waiting} need${counts.waiting === 1 ? 's' : ''} you` : null,
-		counts.working ? `${counts.working} working` : null,
-		counts.queued ? `${counts.queued} queued` : null,
-		counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null,
-	].filter(Boolean);
-	return parts.length ? parts.join(' · ') : 'quiet';
 }
 
 /**
@@ -108,7 +97,9 @@ export function ProjectPage() {
 					) : data.state !== 'active' ? (
 						<Status tone="warning">{data.state === 'paused' ? 'Paused' : 'Archived'}</Status>
 					) : null}
-					<Caption className="hidden min-w-0 truncate md:block">{summary(data.counts)}</Caption>
+					<span className="hidden min-w-0 md:flex">
+						<SlotPips space={data} threads={threads} />
+					</span>
 					<div className="min-w-0 flex-1" />
 					<Btn size="sm" variant="ghost" icon={Waypoints} onClick={() => setStarting(true)}>
 						<span className="hidden sm:inline">New thread</span>
@@ -153,8 +144,6 @@ export function ThreadPage() {
 	const search = useSearch({ from: '/projects/$spaceId/threads/$threadId' });
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
-	const { threads } = useThreads(spaceId);
-	const thread = threads.find((item) => item.id === threadId);
 	const [panels, setPanels] = useState<TaskPanels>(() => readThreadPanels(threadId, DEFAULT_PANELS));
 
 	useEffect(() => {
@@ -190,11 +179,6 @@ export function ThreadPage() {
 					<span aria-hidden className="text-(--text-disabled)">
 						/
 					</span>
-					{thread && thread.threadState && thread.threadState !== 'working' ? (
-						<span className="hidden shrink-0 lg:inline-flex">
-							<ThreadStatePill thread={thread} compact />
-						</span>
-					) : null}
 				</>
 			}
 		/>

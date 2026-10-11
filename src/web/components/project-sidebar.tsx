@@ -2,6 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, ChevronsUpDown, FolderKanban, LayoutGrid, Plus, Settings, Waypoints } from 'lucide-react';
 import { useState } from 'react';
 import { Count } from '@/components/instrument';
+import { StateSplit } from '@/components/project-viz';
 import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel, Spinner } from '@/components/signal';
 import { ThreadStateIcon } from '@/components/thread-card';
 import type { Session, Space, ThreadState } from '@/lib/api';
@@ -119,7 +120,7 @@ function StateGroup({ state, threads, activeId, onNavigate }: { state: ThreadSta
 				onClick={() => setOpen((current) => !current)}
 				className="group/fold mt-2 flex h-7 items-center gap-1.5 rounded-md px-4 text-left text-(--text-tertiary) outline-none hover:text-(--text-secondary)"
 			>
-				<span className={cn('in-caption', state === 'waiting' && 'text-(--warning-text)', state === 'working' && 'text-(--accent-text)')}>{look.label}</span>
+				<span className={cn('in-caption', state === 'waiting' && 'text-(--warning-text)', state === 'working' && 'text-(--accent-text)', (state === 'review' || state === 'landing') && 'text-(--success-text)')}>{look.label}</span>
 				<span className="in-num text-[11px] text-(--text-disabled)">{threads.length}</span>
 				<span className="flex-1" />
 				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) opacity-0 transition-transform group-hover/fold:opacity-100" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
@@ -158,7 +159,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex h-10 items-center gap-2.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-2 pl-1.5 text-left outline-none hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
+							className="relative flex h-12 items-center gap-2.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-2 pb-1.5 pl-1.5 text-left outline-none hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
 						>
 							{space ? <SpaceMark space={space} size={26} /> : <span className="size-[26px]" />}
 							<span className="flex min-w-0 flex-1 flex-col">
@@ -168,6 +169,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 								</span>
 							</span>
 							<Icon icon={ChevronsUpDown} size={13} className="text-(--icon-tertiary)" />
+							{threads.length ? <StateSplit threads={threads} height={2} className="absolute right-2.5 bottom-[5px] left-[44px]" /> : null}
 						</button>
 					</MenuTrigger>
 					<MenuContent align="start" className="w-[232px]">

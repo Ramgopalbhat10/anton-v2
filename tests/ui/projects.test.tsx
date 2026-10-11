@@ -17,6 +17,7 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 const { ThreadCard, nextSteps } = await import('@/components/thread-card');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
+const { StateSplit, countKinds, activity } = await import('@/components/project-viz');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -125,6 +126,31 @@ describe('threads', () => {
 		await userEvent.click(within(screen.getByRole('region', { name: 'Resolved' })).getByRole('button'));
 		expect(screen.getByText('Old cleanup')).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Coordinator/ }).getAttribute('aria-current')).toBe('page');
+	});
+
+	it('draws each state as its own glyph, and the project as a split by state', async () => {
+		const failing = thread({ id: 'ci', threadState: 'waiting', prUrl: 'https://github.com/acme/demo/pull/3', pullRequest: { state: 'open', checks: 'failed', runs: [] } });
+		expect(countKinds([...threads, failing])).toMatchObject({ waiting: 1, failed: 1, working: 1, review: 1, resolved: 1, queued: 0 });
+		withRouter(() => (
+			<div>
+				<ThreadCard thread={threads[1]} />
+				<ThreadCard thread={failing} />
+				<StateSplit threads={[...threads, failing]} />
+			</div>
+		));
+		const working = await screen.findByRole('article', { name: 'Add the table' });
+		expect(working.querySelector('[data-glyph="working"]')).toBeTruthy();
+		expect(screen.getByRole('article', { name: failing.title }).querySelector('[data-glyph="failed"]')).toBeTruthy();
+		expect(screen.getByRole('img', { name: '1 failed, 1 needs you, 1 working, 1 review, 1 done' })).toBeTruthy();
+	});
+
+	it('bins recent activity, the current stretch last', () => {
+		const now = Date.parse('2026-10-03T12:00:00Z');
+		const recent = [thread({ createdAt: '2026-10-03T10:00:00Z', lastInputAt: '2026-10-03T11:59:00Z' })];
+		const { bars, total } = activity(recent, now, 12);
+		expect(total).toBe(2);
+		expect(bars[0]).toBe(1);
+		expect(bars[11]).toBe(1);
 	});
 
 	it('reads thread reports back out of the coordinator message', () => {

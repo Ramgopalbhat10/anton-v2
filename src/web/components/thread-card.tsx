@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, CircleAlert, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
+import { ArrowUpRight, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
 import { Caption, Status } from '@/components/instrument';
-import { Btn, Icon, Spinner } from '@/components/signal';
+import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
+import { ThreadGlyph } from '@/components/thread-glyph';
 import { api, type Session, type ThreadState } from '@/lib/api';
 import { age, dollars, elapsed, tokens } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
@@ -22,14 +23,9 @@ export function ThreadStatePill({ thread, compact }: { thread: Session; compact?
 	);
 }
 
-/** The state as an icon, for list rows: a spinner while it works. */
+/** The state as a drawn glyph, for list rows: a turning ring while it works, a calling dot while it waits on you. */
 export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
-	const state = stateOf(thread);
-	if (state === 'working') return <Spinner size={size} />;
-	if (state === 'waiting' && failed(thread)) return <Icon icon={CircleAlert} size={size} className="text-(--danger-text)" />;
-	const look = STATE_LOOK[state];
-	const tone = { warning: 'text-(--warning-text)', success: 'text-(--success-text)', accent: 'text-(--accent-text)', neutral: 'text-(--icon-tertiary)', danger: 'text-(--danger-text)' }[look.tone];
-	return <Icon icon={look.icon} size={size} className={tone} />;
+	return <ThreadGlyph thread={thread} size={size} />;
 }
 
 export const prNumber = (url: string | null) => (url ? (/\/pull\/(\d+)/.exec(url)?.[1] ?? null) : null);
@@ -116,10 +112,12 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 }
 
 /**
- * A thread as a card, under the message that started it and in Overview:
- * its repository and age in mono, the title, its state, one line of what it
- * asks or last said, and a footer with its pull request, spend and next steps.
- * The whole card opens the thread.
+ * A thread as a live card, under the message that started it and in
+ * Overview: its glyph, title and state; a mono phase line (repository, what
+ * it is doing and for how long) with a sweeping hairline while it works; what
+ * it last said with a caret while it types, or its question as an amber
+ * quote; and a footer with its pull request, spend and next steps. The whole
+ * card opens the thread.
  */
 export function ThreadCard({ thread, className }: { thread: Session; className?: string }) {
 	const open = useOpenThread();
@@ -132,6 +130,13 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 	const spent = thread.usage.inputTokens + thread.usage.outputTokens;
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
+	const phase = working
+		? `working · ${elapsed(now - new Date(since).getTime())}`
+		: state === 'queued'
+			? 'queued · starts when a slot frees'
+			: waiting
+				? `${broken ? 'stopped' : 'on you'} · ${age(threadActiveAt(thread))}`
+				: `${STATE_LOOK[state].short} · ${age(threadActiveAt(thread))}`;
 	return (
 		<article
 			aria-label={thread.title}
@@ -144,27 +149,37 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 			)}
 		>
 			{working ? <div aria-hidden className="in-sweep absolute inset-x-0 top-0 h-px bg-(--accent-border)" /> : null}
-			<div className="flex flex-col gap-1.5 px-3.5 pt-3 pb-3">
-				<div className="flex items-center gap-2">
-					<Caption className="min-w-0 flex-1 truncate">
-						{thread.repo.split('/').pop()} · {working ? `working ${elapsed(now - new Date(since).getTime())}` : age(threadActiveAt(thread))}
-					</Caption>
+			<div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
+				<div className="flex items-center gap-2.5">
+					<ThreadGlyph thread={thread} size={16} />
+					<div className="min-w-0 flex-1 truncate text-[13.5px] leading-[19px] font-medium text-(--text-primary)">{thread.title}</div>
 					<ThreadStatePill thread={thread} />
 				</div>
-				<div className="truncate text-[13.5px] leading-[19px] font-medium text-(--text-primary)">{thread.title}</div>
+				<div className="flex items-center gap-2 pl-[26px]">
+					<Caption className="shrink-0">{thread.repo.split('/').pop()}</Caption>
+					<span aria-hidden className={cn('relative h-px min-w-6 flex-1 overflow-hidden', working ? 'in-sweep bg-(--accent-border)' : 'bg-(--border-subtle)')} />
+					<Caption tone={working ? 'accent' : waiting ? (broken ? 'danger' : 'warning') : undefined} className="shrink-0">
+						{phase}
+					</Caption>
+				</div>
 				{line ? (
-					<div
-						className={cn(
-							'line-clamp-2 text-[12.5px] leading-[18px] text-pretty',
-							broken ? 'text-(--danger-text)' : waiting ? 'text-(--warning-text)' : 'text-(--text-tertiary)',
-							working && 'agent-live-line',
-						)}
-					>
-						<span>{line}</span>
-					</div>
+					waiting ? (
+						<div
+							className={cn(
+								'ml-[26px] line-clamp-3 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty',
+								broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--warning-base) bg-(--warning-bg) text-(--warning-text)',
+							)}
+						>
+							{line}
+						</div>
+					) : (
+						<div className={cn('line-clamp-2 pl-[26px] text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', working && 'agent-live-line')}>
+							<span className={working ? 'viz-caret' : undefined}>{line}</span>
+						</div>
+					)
 				) : null}
 			</div>
-			<footer className="flex min-h-11 items-center gap-2 border-t border-(--border-subtle) px-3.5 py-2">
+			<footer className="flex min-h-11 items-center gap-2 border-t border-(--border-subtle) bg-(--well-bg)/40 px-3.5 py-2">
 				<div className="flex min-w-0 flex-1 items-center gap-2.5">
 					{pr ? (
 						<span className="flex min-w-0 items-center gap-1 truncate text-[11.5px] text-(--text-secondary)">
@@ -176,8 +191,6 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 						<Caption className="shrink-0 whitespace-nowrap">
 							{tokens(spent)} tok · {dollars(thread.usage.cost)}
 						</Caption>
-					) : state === 'queued' ? (
-						<Caption>Starts when a slot frees</Caption>
 					) : null}
 				</div>
 				<NextSteps thread={thread} size="xs" />
