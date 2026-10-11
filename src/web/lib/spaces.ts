@@ -58,8 +58,6 @@ export function threadLine(thread: Session): string {
 }
 
 /** The project's mark: its emoji, or its initial. */
-export const spaceMark = (space: { name: string; icon: string | null }) => space.icon || space.name.trim().charAt(0).toUpperCase() || 'P';
-
 /**
  * Each thread keeps its own open panels and the one shown, so switching back
  * to a thread finds them as they were. Kept in the browser.

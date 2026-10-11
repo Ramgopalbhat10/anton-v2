@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowUpRight, CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { ProjectIcon } from '@/components/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api, branchLabel, type PullRequest, type Session } from '@/lib/api';
@@ -170,8 +171,10 @@ function ProjectItems({ session }: { session: Session }) {
 					<MenuSubContent>
 						{others.map((space) => (
 							<MenuItem key={space.id} onSelect={() => move.mutate(space.id)}>
-								{space.icon ? `${space.icon} ` : ''}
-								{space.name}
+								<span className="flex min-w-0 items-center gap-2">
+									<ProjectIcon value={space.icon} name={space.name} size={16} />
+									<span className="truncate">{space.name}</span>
+								</span>
 							</MenuItem>
 						))}
 					</MenuSubContent>

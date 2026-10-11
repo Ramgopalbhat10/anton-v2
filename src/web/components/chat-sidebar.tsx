@@ -77,19 +77,15 @@ import {
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
+/* The page you are on lifts out of the well as a small card, as the active task does. */
 const NAV_ROW =
-	'group/nav relative flex h-8 items-center gap-2.5 rounded-[9px] pr-2 pl-1 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-[9px] border border-transparent pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
 
-/** A nav row's icon, on a small tile that lights up on the page you are on. */
+/** A nav row's icon, lit in the accent on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
-	return (
-		<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:border-(--accent-border) group-data-[status=active]/nav:text-(--accent-text)">
-			<Icon icon={icon} size={13} />
-		</span>
-	);
+	return <Icon icon={icon} size={15} className="shrink-0 text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--accent-text)" />;
 }
 
-/** A count in a small mono pill, beside a nav row or section heading. */
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
 function SpentToday() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
@@ -97,9 +93,9 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-lg px-1 py-0.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[9px] px-1.5 py-1 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
 			<span className={cn('in-num flex items-baseline justify-between gap-2 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-				<span className="in-caption">Today</span>
+				<span className="in-caption">Spent today</span>
 				<span>
 					<span className={budget.data.blocked ? undefined : 'text-(--text-primary)'}>{dollars(today)}</span>
 					{limits.dailyUsd !== null ? ` / $${limits.dailyUsd}` : ''}
@@ -311,7 +307,7 @@ function Toolbar({
 	};
 	if (searching || query) {
 		return (
-			<div className="mx-2 mt-2 flex h-7 items-center gap-2 rounded-lg bg-(--bg-raised) px-2">
+			<div className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5">
 				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 				<input
 					autoFocus
@@ -330,12 +326,15 @@ function Toolbar({
 	}
 	const active = filterCount(view.filters);
 	return (
-		<div className="flex min-h-7 items-center gap-0.5 pt-2 pr-1.5 pl-4">
+		<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
 			{active ? (
 				<FilterChips view={view} onChange={onChange} tasks={tasks} />
 			) : (
-				<span className="in-caption min-w-0 flex-1 truncate">
-					{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+				<span className="flex min-w-0 flex-1 items-center gap-1.5">
+					<Icon icon={List} size={12} className="text-(--icon-tertiary)" />
+					<SectionLabel className="truncate">All tasks</SectionLabel>
+					<Count>{tasks.length}</Count>
+					<span aria-hidden className="h-px min-w-3 flex-1 bg-(--border-subtle) opacity-60" />
 				</span>
 			)}
 			<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
@@ -363,7 +362,7 @@ function SectionHeader({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="group/header mt-2 flex h-7 items-center gap-0.5 pr-1.5 pl-2">
+		<div className="group/header mt-1.5 flex h-7 items-center gap-1 pr-2.5 pl-3">
 			<button
 				type="button"
 				aria-expanded={open}
@@ -385,8 +384,9 @@ function SectionHeader({
 					/>
 				</span>
 			</button>
-			{children ? (
-				// Stays while its menu is open, which Radix marks on the trigger.
+				<span aria-hidden className="h-px min-w-2 flex-1 bg-(--border-subtle) opacity-60" />
+				{children ? (
+					// Stays while its menu is open, which Radix marks on the trigger.
 				<div className="flex shrink-0 items-center opacity-0 group-focus-within/header:opacity-100 group-hover/header:opacity-100 has-data-[state=open]:opacity-100">
 					{children}
 				</div>
@@ -455,7 +455,7 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 		<TaskPeek session={session} disabled={menuOpen || renaming || cardOpen}>
 			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
 				{active ? <div className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
-				{live ? <div aria-hidden className="absolute top-2.5 bottom-2.5 -left-2 w-[2px] rounded-full bg-(--accent-base)" /> : null}
+				{live ? <div aria-hidden className="absolute top-2.5 bottom-2.5 -left-3 w-[2px] rounded-r-full bg-(--accent-base) shadow-[0_0_8px_var(--accent-base)]" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -521,10 +521,10 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 /** A section's rows, under a heading per repository when grouping. */
 function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {
 	return (
-		<div className="flex flex-col gap-0.5 px-2">
+		<div className="flex flex-col gap-0.5 px-3">
 			{groups(tasks, view.group).map((group) => (
 				<div key={group.key} className="flex flex-col gap-0.5">
-					{group.label ? <div className="truncate px-2 pt-1.5 pb-0.5 text-[11px] text-(--text-disabled)">{group.label}</div> : null}
+					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 font-mono text-[11px] text-(--text-disabled)">{group.label}</div> : null}
 					{group.tasks.map((session) => (
 						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
 					))}
@@ -535,7 +535,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 }
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="mx-2 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
+	return <div className="mx-3 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -571,28 +571,31 @@ export function ChatSidebar({
 		open: !folded(place),
 		onToggle: () => changeView({ ...view, collapsed: folded(place) ? view.collapsed.filter((item) => item !== place) : [...view.collapsed, place] }),
 	});
+	const live = sessions.filter(isLive).length;
+	const spaces = useSpaces();
+	const waiting = (spaces.data?.spaces ?? []).filter((space) => space.state !== 'archived').reduce((sum, space) => sum + space.counts.waiting, 0);
 	const rows = (tasks: Session[], place: Place) => <Rows tasks={tasks} place={place} view={view} activeId={params.sessionId} onNavigate={onNavigate} />;
 
 	return (
 		<aside
 			className={cn(
-				'w-64 min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-(--bg-surface)',
+				'w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-[linear-gradient(180deg,var(--bg-surface),color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-canvas)))]',
 				open ? 'fixed inset-y-0 left-0 z-30 flex shadow-(--shadow-modal) md:static md:shadow-none' : 'hidden md:flex',
 			)}
 		>
-			<div className="flex h-11 shrink-0 items-center gap-1.5 pr-2 pl-3">
+			<div className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-3.5">
 				<Logo size={22} />
-				<div className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em]">Anton</div>
+				<div className="min-w-0 truncate text-[13.5px] font-semibold tracking-[-0.01em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
 
-			<div className="flex flex-col gap-1.5 px-2 pb-2">
+			<div className="flex items-center gap-1.5 px-3 pb-3">
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+					className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -601,20 +604,20 @@ export function ChatSidebar({
 					type="button"
 					onClick={onOpenPalette}
 					aria-label="Command palette"
-					className="flex h-8 items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-left text-[12px] text-(--text-disabled) outline-none hover:border-(--border-default) hover:text-(--text-tertiary) focus-visible:shadow-(--focus-ring)"
+					title="Search or jump to"
+					className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-(--icon-tertiary) outline-none hover:border-(--border-default) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
 				>
-					<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-					<span className="min-w-0 flex-1 truncate">Search or jump to</span>
+					<Icon icon={Search} size={14} />
 					<Kbd keys="mod+k" size="sm" />
 				</button>
 			</div>
 
 			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
-			<div className={cn('flex flex-col gap-0.5 px-2 py-1', inProject && 'hidden')}>
+			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px rounded-[12px] border border-(--border-subtle) bg-(--well-bg) p-1', inProject && 'hidden')}>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
-					<Count>{sessions.length}</Count>
+					{live ? <Count tone="accent">{live} running</Count> : <Count>{sessions.length}</Count>}
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
@@ -623,10 +626,16 @@ export function ChatSidebar({
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Projects</div>
+					{waiting ? (
+						<span title={`${waiting} waiting on you`} className="in-num inline-flex h-[18px] items-center gap-1 rounded-full bg-(--warning-bg) px-1.5 text-[10.5px] text-(--warning-text)">
+							<span className="size-1.5 rounded-full bg-(--warning-base)" />
+							{waiting}
+						</span>
+					) : null}
 				</Link>
-			</div>
+			</nav>
 
-			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', inProject && 'hidden')}>
+			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto pt-1', inProject && 'hidden')}>
 				<ProjectsSection onNavigate={onNavigate} />
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
@@ -638,7 +647,7 @@ export function ChatSidebar({
 				<section aria-label="Running">
 					<SectionHeader {...header('running', 'Running', running.length)} />
 					{folded('running') ? null : sessionsQuery.isError ? (
-						<div className="px-4 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
+						<div className="px-5 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
 						<div className="px-3">
 							<div className="h-11 rounded-lg bg-(--bg-skeleton)" />
@@ -653,17 +662,22 @@ export function ChatSidebar({
 					<SectionHeader {...header('recent', 'Recent', recent.length)} />
 					{folded('recent') ? null : recent.length ? rows(recent, 'recent') : <Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>}
 				</section>
-				<div className="h-2 shrink-0" />
+				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="m-2 mt-0 flex shrink-0 flex-col gap-2 rounded-xl border border-(--border-subtle) bg-(--well-bg) p-2">
-				<SpentToday />
-				<div className="flex items-center gap-2">
+			<div className="m-3 mt-1 flex shrink-0 flex-col overflow-hidden rounded-[12px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] shadow-(--card-highlight)">
+				<div className="flex items-center gap-2.5 px-2.5 py-2">
 					<Avatar name={name} />
-					<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">{name}</div>
+					<div className="flex min-w-0 flex-1 flex-col">
+						<span className="truncate text-[12.5px] text-(--text-primary)">{name}</span>
+						<span className="in-caption truncate">{live ? `${live} sandbox${live === 1 ? '' : 'es'} running` : 'No sandbox running'}</span>
+					</div>
 					<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
 						<Icon icon={Settings} size={14} />
 					</Link>
+				</div>
+				<div className="border-t border-(--border-subtle) p-1">
+					<SpentToday />
 				</div>
 			</div>
 		</aside>

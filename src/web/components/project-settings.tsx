@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Caption, ShareRow, StatRow } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
+import { IconPicker } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
 import { AREA } from '@/components/repo-settings';
 import { Block, FIELD, PageHeading, SaveState, Select, SettingRow, SubBlock } from '@/components/settings/parts';
@@ -37,7 +38,7 @@ function General({ space }: { space: Space }) {
 	const models = useModels();
 	const save = useSave(space);
 	const [name, setName] = useState(space.name);
-	const [icon, setIcon] = useState(space.icon ?? '');
+	const [icon, setIcon] = useState<string | null>(space.icon);
 	const [goal, setGoal] = useState(space.goal);
 	const [coordinator, setCoordinator] = useState<ModelChoice>({ model: space.coordinatorModel ?? '', reasoning: space.coordinatorReasoning });
 	const [thread, setThread] = useState<ModelChoice>({ model: space.threadModel ?? '', reasoning: space.threadReasoning });
@@ -50,7 +51,7 @@ function General({ space }: { space: Space }) {
 				event.preventDefault();
 				save.mutate({
 					name: name.trim(),
-					icon: icon.trim() || null,
+					icon,
 					goal,
 					coordinatorModel: coordinator.model || null,
 					coordinatorReasoning: coordinator.reasoning,
@@ -74,9 +75,9 @@ function General({ space }: { space: Space }) {
 					</>
 				}
 			>
-				<div className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
-					<input aria-label="Icon" value={icon} maxLength={4} onChange={(event) => setIcon(event.target.value)} placeholder={name.charAt(0).toUpperCase() || 'P'} className={`${FIELD} text-center`} />
-					<input aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" className={FIELD} />
+				<div className="flex items-center gap-2.5">
+					<IconPicker value={icon} name={name} onChange={setIcon} size={36} />
+					<input aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" className={`${FIELD} h-9 flex-1`} />
 				</div>
 				<textarea
 					aria-label="Goal"

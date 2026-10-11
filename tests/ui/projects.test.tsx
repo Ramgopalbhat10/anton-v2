@@ -19,6 +19,7 @@ const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity } = await import('@/components/project-viz');
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
+const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -157,6 +158,24 @@ describe('threads', () => {
 		await userEvent.type(within(card).getByRole('textbox', { name: 'Send a follow-up to Pick a name' }), 'Invoices');
 		await userEvent.click(within(card).getByRole('button', { name: 'Send to this thread' }));
 		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'asks', 'Invoices');
+	});
+
+	it('marks a project with a drawn icon picked from the list, never an emoji', async () => {
+		expect(parseIcon('rocket:violet')).toMatchObject({ entry: { key: 'rocket' }, tint: 'violet' });
+		expect(parseIcon('book-open')).toMatchObject({ tint: 'cyan' });
+		expect(parseIcon('🚀')).toBeNull();
+		expect(suggestIcon('Docs refresh')).toBe('book-open');
+		expect(suggestIcon('Zzz')).toBe('folder');
+		const { container } = render(<ProjectIcon value="🚀" name="Release" />);
+		expect(container.textContent).toBe('R');
+		const onChange = vi.fn();
+		render(<IconPicker value="folder" name="Billing" onChange={onChange} />);
+		await userEvent.click(screen.getByRole('button', { name: /Change icon/ }));
+		await userEvent.type(screen.getByRole('textbox', { name: 'Search icons' }), 'billing');
+		const options = within(screen.getByRole('listbox', { name: 'Icons' })).getAllByRole('option');
+		expect(options.map((option) => option.getAttribute('aria-label'))).toContain('Card');
+		await userEvent.click(screen.getByRole('option', { name: 'Card' }));
+		expect(onChange).toHaveBeenLastCalledWith('credit-card');
 	});
 
 	it('bins recent activity, the current stretch last', () => {

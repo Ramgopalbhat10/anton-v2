@@ -431,7 +431,8 @@ app.get('/api/projects/:id/files', async (c) => c.json({ paths: await projectFil
 // Projects: a coordinator conversation over parallel threads, each a task on one of the project's repositories.
 const SPACE_FIELDS = {
 	name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))),
-	icon: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(8)))),
+	// A drawn icon and optional tint, like "rocket" or "rocket:violet"; never an emoji.
+	icon: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(40), v.regex(/^[a-z0-9-]+(:[a-z0-9-]+)?$/, 'Pick an icon from the list')))),
 	goal: v.optional(v.pipe(v.string(), v.maxLength(300))),
 	instructions: v.optional(v.pipe(v.string(), v.maxLength(MAX_INSTRUCTIONS))),
 	autonomy: v.optional(v.picklist(['start', 'propose'])),

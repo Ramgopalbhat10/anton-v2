@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ProjectArt } from '@/components/illustrations';
 import { Caption, StatRow } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
+import { IconPicker, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
 import { ProjectRack } from '@/components/project-rack';
 import { activity, ActivityBars, StateSplit } from '@/components/project-viz';
@@ -79,7 +80,7 @@ function ProjectCard({ space }: { space: Space }) {
 			</div>
 			<footer className="mt-auto flex items-center gap-2 border-t border-(--border-subtle) px-4 py-2">
 				<Caption className="flex-1">
-					{space.threads} thread{space.threads === 1 ? '' : 's'} · active {age(space.activeAt)} ago
+					{space.threads} thread{space.threads === 1 ? '' : 's'} · {age(space.activeAt) === 'now' ? 'active now' : `active ${age(space.activeAt)} ago`}
 				</Caption>
 				<Icon icon={Waypoints} size={12} className="text-(--icon-tertiary)" />
 			</footer>
@@ -93,12 +94,13 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 	const queryClient = useQueryClient();
 	const projects = useProjects();
 	const [name, setName] = useState('');
-	const [icon, setIcon] = useState('');
+	const [icon, setIcon] = useState<string | null>(null);
+	const mark = icon ?? suggestIcon(name);
 	const [goal, setGoal] = useState('');
 	const [repoIds, setRepoIds] = useState<string[]>([]);
 	const [ask, setAsk] = useState('');
 	const create = useMutation({
-		mutationFn: () => api.createSpace({ name: name.trim(), icon: icon.trim() || null, goal: goal.trim(), repoIds }),
+		mutationFn: () => api.createSpace({ name: name.trim(), icon: mark, goal: goal.trim(), repoIds }),
 		onSuccess: (space) => {
 			void queryClient.invalidateQueries({ queryKey: ['spaces'] });
 			onClose();
@@ -128,9 +130,9 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 					<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
 				</header>
 				<div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5">
-					<div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
-						<input aria-label="Icon" value={icon} maxLength={4} onChange={(event) => setIcon(event.target.value)} placeholder={name.charAt(0).toUpperCase() || '✦'} className={`${FIELD} text-center`} />
-						<input autoFocus aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, like Billing v2" className={FIELD} />
+					<div className="flex items-center gap-2.5">
+						<IconPicker value={mark} name={name} onChange={setIcon} size={36} />
+						<input autoFocus aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, like Billing v2" className={`${FIELD} h-9 flex-1`} />
 					</div>
 					<textarea aria-label="Goal" value={goal} onChange={(event) => setGoal(event.target.value)} rows={2} placeholder="Goal: what this project is for" className={`${AREA} text-[13px] leading-[19px]`} />
 					<div className="flex flex-col gap-1.5">

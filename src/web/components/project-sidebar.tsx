@@ -1,26 +1,20 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, ChevronRight, ChevronsUpDown, FolderKanban, LayoutGrid, Plus, Settings, Waypoints } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ChevronRight, ChevronsUpDown, FolderKanban, LayoutGrid, type LucideIcon, Plus, Settings, Waypoints } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { Count } from '@/components/instrument';
-import { StateSplit } from '@/components/project-viz';
-import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel, Spinner } from '@/components/signal';
+import { ProjectIcon } from '@/components/project-icon';
+import { SlotPips, StateSplit } from '@/components/project-viz';
+import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
 import { ThreadStateIcon } from '@/components/thread-card';
+import { Glyph } from '@/components/thread-glyph';
 import type { Session, Space, ThreadState } from '@/lib/api';
 import { age } from '@/lib/format';
-import { groupByState, STATE_LOOK, spaceMark, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
+import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-/** A project's mark on a small tile: its emoji, or its initial in the accent. */
-export function SpaceMark({ space, size = 24 }: { space: Pick<Space, 'name' | 'icon'>; size?: number }) {
-	return (
-		<span
-			aria-hidden
-			className="inline-flex shrink-0 items-center justify-center rounded-[7px] border border-(--border-subtle) bg-(--well-bg) font-medium text-(--accent-text)"
-			style={{ width: size, height: size, fontSize: Math.round(size * 0.5) }}
-		>
-			{spaceMark(space)}
-		</span>
-	);
+/** A project's mark: its icon on a tinted tile, or its initial when it has none. */
+export function SpaceMark({ space, size = 24, className }: { space: Pick<Space, 'name' | 'icon'>; size?: number; className?: string }) {
+	return <ProjectIcon value={space.icon} name={space.name} size={size} className={className} />;
 }
 
 /** The amber count of threads waiting on you, or a spinner while threads work. */
@@ -32,12 +26,37 @@ function SpaceSignal({ space }: { space: Space }) {
 			</span>
 		);
 	}
-	if (space.counts.working) return <Spinner size={11} />;
-	return null;
+	if (space.counts.working) return <Glyph kind="working" size={13} title={`${space.counts.working} working`} />;
+	const open = space.threads - space.counts.resolved;
+	return open ? <span className="in-num text-[11px] text-(--text-disabled) opacity-0 group-hover/row:opacity-100">{open}</span> : null;
 }
 
 const ROW =
-	'group/row relative flex min-w-0 items-center gap-2 rounded-[10px] pr-2 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+	'group/row relative flex min-w-0 items-center gap-2.5 rounded-[10px] border border-transparent pr-2 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+
+/** The page you are on, lifted out as a small card. */
+const LIFTED = 'data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
+
+/** A sidebar section's heading: its label and count, a hairline to the edge, and actions on hover. */
+export function SidebarHeading({ label, icon, count, open, onToggle, tone, children }: { label: string; icon?: LucideIcon; count?: number; open: boolean; onToggle: () => void; tone?: string; children?: ReactNode }) {
+	return (
+		<div className="group/header mt-1.5 flex h-7 items-center gap-1 pr-2.5 pl-3">
+			<button
+				type="button"
+				aria-expanded={open}
+				onClick={onToggle}
+				className="group/fold flex h-6 min-w-0 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+			>
+				{icon ? <Icon icon={icon} size={12} className="text-(--icon-tertiary)" /> : null}
+				<SectionLabel className={cn('truncate', tone)}>{label}</SectionLabel>
+				{count ? <Count>{count}</Count> : null}
+				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) opacity-0 transition-transform group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
+			</button>
+			<span aria-hidden className="h-px min-w-2 flex-1 bg-(--border-subtle) opacity-60" />
+			{children}
+		</div>
+	);
+}
 
 /** The projects in the main sidebar, under Tasks and Reviews: each with what waits on you. */
 export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
@@ -47,26 +66,16 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	if (!spaces.data) return null;
 	return (
 		<section aria-label="Projects" className="flex flex-col">
-			<div className="group/header mt-2 flex h-7 items-center gap-0.5 pr-1.5 pl-2">
-				<button
-					type="button"
-					aria-expanded={open}
-					onClick={() => setOpen((current) => !current)}
-					className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={FolderKanban} size={12} className="text-(--icon-tertiary)" />
-					<SectionLabel className="truncate">Projects</SectionLabel>
-					<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) opacity-0 transition-transform group-hover/header:opacity-100" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
-				</button>
+			<SidebarHeading label="Projects" icon={FolderKanban} count={list.length} open={open} onToggle={() => setOpen((current) => !current)}>
 				<Link to="/projects" search={{ create: true }} onClick={onNavigate} aria-label="New project" title="New project" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100">
 					<Icon icon={Plus} size={12} />
 				</Link>
-			</div>
+			</SidebarHeading>
 			{open ? (
-				<div className="flex flex-col gap-0.5 px-2">
+				<div className="flex flex-col gap-0.5 px-3">
 					{list.map((space) => (
-						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, 'h-8')} activeProps={{ 'data-active': true } as object}>
-							<SpaceMark space={space} size={20} />
+						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-9 pl-1.5')}>
+							<SpaceMark space={space} size={24} />
 							<span className="min-w-0 flex-1 truncate text-[13px]">{space.name}</span>
 							<SpaceSignal space={space} />
 						</Link>
@@ -94,7 +103,7 @@ function ThreadRow({ thread, active, onNavigate }: { thread: Session; active: bo
 			className={cn(ROW, 'h-11', active && 'text-(--text-primary)', state === 'working' && 'text-(--text-primary)')}
 		>
 			{active ? <span aria-hidden className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
-			{state === 'working' ? <span aria-hidden className="absolute top-2.5 bottom-2.5 -left-2 w-[2px] rounded-full bg-(--accent-base)" /> : null}
+			{state === 'working' ? <span aria-hidden className="absolute top-2.5 bottom-2.5 -left-3 w-[2px] rounded-r-full bg-(--accent-base) shadow-[0_0_8px_var(--accent-base)]" /> : null}
 			<span className="relative inline-flex shrink-0 self-start pt-[7px]">
 				<ThreadStateIcon thread={thread} size={13} />
 			</span>
@@ -114,19 +123,15 @@ function StateGroup({ state, threads, activeId, onNavigate }: { state: ThreadSta
 	const look = STATE_LOOK[state];
 	return (
 		<section aria-label={look.label} className="flex flex-col">
-			<button
-				type="button"
-				aria-expanded={open}
-				onClick={() => setOpen((current) => !current)}
-				className="group/fold mt-2 flex h-7 items-center gap-1.5 rounded-md px-4 text-left text-(--text-tertiary) outline-none hover:text-(--text-secondary)"
-			>
-				<span className={cn('in-caption', state === 'waiting' && 'text-(--warning-text)', state === 'working' && 'text-(--accent-text)', (state === 'review' || state === 'landing') && 'text-(--success-text)')}>{look.label}</span>
-				<span className="in-num text-[11px] text-(--text-disabled)">{threads.length}</span>
-				<span className="flex-1" />
-				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) opacity-0 transition-transform group-hover/fold:opacity-100" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
-			</button>
+			<SidebarHeading
+				label={look.label}
+				count={threads.length}
+				open={open}
+				onToggle={() => setOpen((current) => !current)}
+				tone={state === 'waiting' ? 'text-(--warning-text)' : state === 'working' ? 'text-(--accent-text)' : state === 'review' || state === 'landing' ? 'text-(--success-text)' : undefined}
+			/>
 			{open ? (
-				<div className="flex flex-col gap-0.5 px-2">
+				<div className="flex flex-col gap-0.5 px-3">
 					{threads.map((thread) => (
 						<ThreadRow key={thread.id} thread={thread} active={thread.id === activeId} onNavigate={onNavigate} />
 					))}
@@ -150,29 +155,42 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 	const coordinatorActive = !threadId;
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex flex-col gap-1 px-2 pb-1">
-				<Link to="/" onClick={onNavigate} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
-					<Icon icon={ArrowLeft} size={12} />
-					All tasks
-				</Link>
+			<div className="flex flex-col gap-1.5 px-3 pb-1">
+				<div className="flex h-6 items-center gap-1">
+					<Link to="/" onClick={onNavigate} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[12px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+						<Icon icon={ArrowLeft} size={12} />
+						All tasks
+					</Link>
+					<span className="text-[12px] text-(--text-disabled)">/</span>
+					<Link to="/projects" onClick={onNavigate} className="flex h-6 items-center rounded-md px-1.5 text-[12px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+						Projects
+					</Link>
+				</div>
 				<Menu>
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="relative flex h-12 items-center gap-2.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-2 pb-1.5 pl-1.5 text-left outline-none hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
+							className="flex flex-col gap-2.5 rounded-[12px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-2.5 text-left shadow-(--card-highlight) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong)"
 						>
-							{space ? <SpaceMark space={space} size={26} /> : <span className="size-[26px]" />}
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate text-[13px] font-medium text-(--text-primary)">{space?.name ?? 'Project'}</span>
-								<span className="in-num truncate text-[10.5px] text-(--text-tertiary)">
-									{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
+							<span className="flex w-full min-w-0 items-center gap-2.5">
+								{space ? <SpaceMark space={space} size={34} /> : <span className="size-[34px]" />}
+								<span className="flex min-w-0 flex-1 flex-col gap-px">
+									<span className="truncate text-[13.5px] font-medium text-(--text-primary)">{space?.name ?? 'Project'}</span>
+									<span className="in-num truncate text-[11px] text-(--text-tertiary)">
+										{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
+									</span>
 								</span>
+								<Icon icon={ChevronsUpDown} size={14} className="text-(--icon-tertiary)" />
 							</span>
-							<Icon icon={ChevronsUpDown} size={13} className="text-(--icon-tertiary)" />
-							{threads.length ? <StateSplit threads={threads} height={2} className="absolute right-2.5 bottom-[5px] left-[44px]" /> : null}
+							{space ? (
+								<span className="flex w-full flex-col gap-2 border-t border-(--border-subtle) pt-2.5">
+									<StateSplit threads={threads} height={4} />
+									<SlotPips space={space} threads={threads} />
+								</span>
+							) : null}
 						</button>
 					</MenuTrigger>
-					<MenuContent align="start" className="w-[232px]">
+					<MenuContent align="start" className="w-[264px]">
 						{(spaces.data?.spaces ?? [])
 							.filter((item) => item.state !== 'archived')
 							.map((item) => (
@@ -196,18 +214,18 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					</MenuContent>
 				</Menu>
 			</div>
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-2">
-				<div className="px-2 pt-1">
+			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
+				<div className="px-3 pt-1.5">
 					<Link
 						to="/projects/$spaceId"
 						params={{ spaceId }}
 						onClick={onNavigate}
 						aria-current={coordinatorActive ? 'page' : undefined}
-						className={cn(ROW, 'h-10', coordinatorActive && 'text-(--text-primary)')}
+						className={cn(ROW, 'h-11 pl-1.5', coordinatorActive && 'text-(--text-primary)')}
 					>
 						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
-						<span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)">
-							<Icon icon={Waypoints} size={13} />
+						<span className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)">
+							<Icon icon={Waypoints} size={15} />
 						</span>
 						<span className="relative flex min-w-0 flex-1 flex-col">
 							<span className="truncate text-[13px]">Coordinator</span>
@@ -224,7 +242,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} onNavigate={onNavigate} />
 				))}
 				{threads.length === 0 ? (
-					<div className="mx-2 mt-3 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">Threads the coordinator or you start show here, by state.</div>
+					<div className="mx-3 mt-3 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">Threads the coordinator or you start show here, by state.</div>
 				) : null}
 			</div>
 		</div>
