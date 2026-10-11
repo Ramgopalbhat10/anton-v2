@@ -7,7 +7,6 @@ import { MenuButton } from '@/components/nav';
 import { ProjectFeed } from '@/components/project-feed';
 import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/project-panel';
 import { SpaceMark } from '@/components/project-sidebar';
-import { SlotPips } from '@/components/project-viz';
 import { DEFAULT_PANELS, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
@@ -97,9 +96,6 @@ export function ProjectPage() {
 					) : data.state !== 'active' ? (
 						<Status tone="warning">{data.state === 'paused' ? 'Paused' : 'Archived'}</Status>
 					) : null}
-					<span className="hidden min-w-0 md:flex">
-						<SlotPips space={data} threads={threads} />
-					</span>
 					<div className="min-w-0 flex-1" />
 					<Btn size="sm" variant="ghost" icon={Waypoints} onClick={() => setStarting(true)}>
 						<span className="hidden sm:inline">New thread</span>

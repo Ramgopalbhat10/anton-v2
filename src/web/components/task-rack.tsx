@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { ArrowUp, ArrowUpRight, ChevronLeft, ChevronRight, GitFork, GitPullRequest, Server, Square } from 'lucide-react';
 import { type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Block, COS, DETAIL, EDGE, fmt, Ln, type Pair, pt, RECESS, Slot, ve } from '@/components/illustrations';
-import { Card, CardFooter, CardSection } from '@/components/instrument';
+import { Card, CardSection } from '@/components/instrument';
 import { Btn, Icon, IconBtn } from '@/components/signal';
 import { useFork } from '@/components/task-actions';
 import { isLive, liveLabel } from '@/components/task-status';
@@ -638,15 +638,7 @@ export function RackCard({ sessions }: { sessions: Session[] }) {
 			icon={Server}
 			title="Rack"
 			sub="every task, newest first"
-			status={
-				<div className="flex items-center gap-1">
-					<span className="in-caption in-num mr-1">
-						{sessions.length} {sessions.length === 1 ? 'task' : 'tasks'}
-					</span>
-					<RackArrows state={scroll} newer="Scroll to newer tasks" older="Scroll to older tasks" />
-				</div>
-			}
-			footer={<CardFooter caption={scroll?.scrolls ? 'Scroll sideways for older tasks · point at a blade to draw it out' : 'Lights as in the split bar · point at a blade to draw it out'} />}
+			status={<RackArrows state={scroll} newer="Scroll to newer tasks" older="Scroll to older tasks" />}
 		>
 			<CardSection ruled={false} className="pt-1">
 				<RackWell

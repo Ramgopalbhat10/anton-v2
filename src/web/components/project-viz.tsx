@@ -50,32 +50,6 @@ export function StateSplit({ threads, className, height = 4 }: { threads: Sessio
 	);
 }
 
-/** One blade per parallel slot, lit while a thread holds it: how full the project runs. */
-export function SlotPips({ space, threads }: { space: Space; threads: Session[] }) {
-	const counts = countKinds(threads);
-	const busy = Math.min(counts.working, space.maxParallel);
-	const label = `${busy} of ${space.maxParallel} slots working${counts.queued ? `, ${counts.queued} queued` : ''}`;
-	return (
-		<span className="flex shrink-0 items-center gap-2" title={label}>
-			<span role="img" aria-label={label} className="flex items-center gap-[3px]">
-				{Array.from({ length: space.maxParallel }, (_, index) => (
-					<span key={index} className={cn('h-3 w-[5px] rounded-[1.5px]', index < busy ? 'in-pulse bg-(--accent-base)' : 'bg-(--segment-off)')} style={{ animationDelay: `${index * 200}ms` }} />
-				))}
-			</span>
-			<span className="in-num text-[11px] text-(--text-tertiary)">
-				{busy}/{space.maxParallel}
-			</span>
-			{counts.queued ? <Caption>+{counts.queued} queued</Caption> : null}
-			{counts.waiting + counts.failed ? (
-				<span className="flex items-center gap-1 rounded-full border border-(--warning-border) bg-(--warning-bg) px-1.5 text-[11px] leading-[18px] text-(--warning-text)">
-					<span className="size-1.5 rounded-full bg-(--warning-base)" />
-					{counts.waiting + counts.failed} need{counts.waiting + counts.failed === 1 ? 's' : ''} you
-				</span>
-			) : null}
-		</span>
-	);
-}
-
 /** Events in the project (threads started, given messages, saved, resolved) binned over the recent stretch: the last six hours at most, half an hour at least. */
 export function activity(threads: Session[], now: number, bins = 24) {
 	const window = 6 * 3600_000;
@@ -204,7 +178,7 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 					))}
 				</div>
 			</div>
-			<CardSection label="Rack · point at a blade" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>
+			<CardSection label="Rack" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>
 				<ProjectBay space={space} threads={threads} />
 			</CardSection>
 			<CardSection label={`Activity · last ${short(span)}`} hint={`${total} events`}>

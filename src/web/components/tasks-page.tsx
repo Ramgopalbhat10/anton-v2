@@ -80,7 +80,6 @@ function Summary({ sessions }: { sessions: Session[] }) {
 		return [...counts.values()];
 	}, [sessions]);
 	const cost = sessions.reduce((sum, session) => sum + session.usage.cost, 0);
-	const recent = rows.filter((row) => days.includes(row.day)).reduce((sum, row) => sum + row.value, 0);
 	const parts: Part[] = [
 		{ key: 'live', label: 'Running', value: sessions.filter(isLive).length, color: 'var(--accent-base)' },
 		{ key: 'pr', label: 'With a pull request', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && session.prUrl).length, color: 'var(--data-2)' },
@@ -102,7 +101,7 @@ function Summary({ sessions }: { sessions: Session[] }) {
 					]}
 				/>
 			</Card>
-			<Card icon={CalendarDays} title="Started" sub={`last ${DAYS} days`} status={<Status>{recent} {recent === 1 ? 'task' : 'tasks'}</Status>}>
+			<Card icon={CalendarDays} title="Started" sub={`last ${DAYS} days`}>
 				<CardSection ruled={false} className="pt-1">
 					<StackedDaysChart
 						rows={rows}

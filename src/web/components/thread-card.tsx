@@ -6,7 +6,7 @@ import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { ThreadGlyph } from '@/components/thread-glyph';
 import { api, type Session, type ThreadState } from '@/lib/api';
-import { age, dollars, elapsed, tokens } from '@/lib/format';
+import { age, elapsed } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -127,7 +127,6 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 	const since = thread.lastInputAt ?? thread.createdAt;
 	const line = threadLine(thread);
 	const pr = prSummary(thread);
-	const spent = thread.usage.inputTokens + thread.usage.outputTokens;
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
 	const phase = working
@@ -186,11 +185,6 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 							<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : thread.pullRequest ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
 							<span className="truncate">{pr}</span>
 						</span>
-					) : null}
-					{spent > 0 ? (
-						<Caption className="shrink-0 whitespace-nowrap">
-							{tokens(spent)} tok · {dollars(thread.usage.cost)}
-						</Caption>
 					) : null}
 				</div>
 				<NextSteps thread={thread} size="xs" />

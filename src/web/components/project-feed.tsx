@@ -9,9 +9,9 @@ import { Caption } from '@/components/instrument';
 import { Markdown } from '@/components/markdown';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/signal';
-import { countKinds, ProjectRoute, StateSplit } from '@/components/project-viz';
+import { countKinds, ProjectRoute } from '@/components/project-viz';
 import { useNow } from '@/components/subagents';
-import { NextSteps, ThreadCard, ThreadStatePill, useOpenThread } from '@/components/thread-card';
+import { NextSteps, ThreadCard, useOpenThread } from '@/components/thread-card';
 import { Glyph, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
 import { field } from '@/components/tool-describe';
 import { api, type ModelChoice, SAFETY_NET_MS, type Session, type Space } from '@/lib/api';
@@ -263,9 +263,7 @@ function Dispatch({ parts, threads }: { parts: ToolPart[]; threads: Session[] })
 							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 								<div className="flex min-w-0 items-center gap-2">
 									<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{thread.title}</span>
-									<Caption className="shrink-0">
-										{thread.repo.split('/').pop()} · {phase}
-									</Caption>
+									<Caption className="shrink-0">{phase}</Caption>
 								</div>
 								<span
 									className={cn(
@@ -277,17 +275,11 @@ function Dispatch({ parts, threads }: { parts: ToolPart[]; threads: Session[] })
 									<span>{threadLine(thread) || STATE_LOOK[state].label}</span>
 								</span>
 							</div>
-							<span className="hidden shrink-0 @min-[560px]/workspace:inline-flex">
-								<ThreadStatePill thread={thread} compact />
-							</span>
 							<NextSteps thread={thread} size="xs" />
 						</article>
 					);
 				})}
 			</div>
-			<footer className="flex items-center gap-2 border-t border-(--border-subtle) px-3.5 py-2">
-				<StateSplit threads={rows.flatMap((row) => (row.thread ? [row.thread] : []))} className="flex-1" height={3} />
-			</footer>
 		</section>
 	);
 }
@@ -536,10 +528,14 @@ function CoordinatorComposer({ space, agent, draft, onDraft, onNewThread }: { sp
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
 					<ModelPicker value={choice} onChange={(change) => edit.mutate(change)} />
-					<span className="hidden text-[11px] text-(--text-disabled) sm:inline">coordinator</span>
+					{/* Enter sends, as everywhere; the hint speaks up only while the coordinator is busy. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
-						<span className="truncate">{busy ? 'Send to the coordinator' : 'Send'}</span>
-						<Kbd keys="enter" size="sm" />
+						{busy ? (
+							<>
+								<span className="truncate">Send to the coordinator</span>
+								<Kbd keys="enter" size="sm" />
+							</>
+						) : null}
 					</div>
 					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the coordinator" onClick={() => void api.stopCoordinator(space.id)} /> : null}
 					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!draft.trim() || Boolean(blocked)} />

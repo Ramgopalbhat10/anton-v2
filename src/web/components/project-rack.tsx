@@ -179,7 +179,6 @@ export function ProjectRack({ spaces, threads }: { spaces: Space[]; threads: Ses
 			plate: <Plate space={space} threads={own} shown={items.length} />,
 		};
 	});
-	const total = threads.filter((thread) => spaces.some((space) => space.id === thread.spaceId)).length;
 	return (
 		<Card
 			icon={Server}
@@ -187,17 +186,10 @@ export function ProjectRack({ spaces, threads }: { spaces: Space[]; threads: Ses
 			sub="each project a bay, its threads the blades"
 			status={
 				<div className="flex items-center gap-1">
-					<span className="in-caption in-num mr-1">
-						{spaces.length} project{spaces.length === 1 ? '' : 's'} · {total} thread{total === 1 ? '' : 's'}
-					</span>
 					<RackArrows state={scroll} newer="Scroll back" older="Scroll on" />
 				</div>
 			}
-			footer={
-				<CardFooter caption={<Legend />}>
-					<Caption className="hidden md:inline">Point at a blade to draw it out</Caption>
-				</CardFooter>
-			}
+			footer={<CardFooter caption={<Legend />} />}
 		>
 			<CardSection ruled={false} className="pt-1">
 				<RackWell

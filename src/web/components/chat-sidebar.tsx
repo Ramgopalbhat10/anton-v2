@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-	Activity,
 	ArrowUpDown,
 	CalendarDays,
 	ChevronRight,
@@ -12,7 +11,6 @@ import {
 	FolderKanban,
 	GitBranch,
 	GitPullRequest,
-	History,
 	List,
 	ListFilter,
 	type LucideIcon,
@@ -46,9 +44,9 @@ import {
 	MenuTrigger,
 	SectionLabel,
 } from '@/components/signal';
-import { Count, SegmentMeter, usedTone } from '@/components/instrument';
+import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
-import { ProjectSidebarBody, ProjectsSection, SpaceMark } from '@/components/project-sidebar';
+import { ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
@@ -326,24 +324,22 @@ function Toolbar({
 	}
 	const active = filterCount(view.filters);
 	return (
-		<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
+		<div className="group/tools flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
 			{active ? (
 				<FilterChips view={view} onChange={onChange} tasks={tasks} />
 			) : (
-				<span className="flex min-w-0 flex-1 items-center gap-1.5">
-					<Icon icon={List} size={12} className="text-(--icon-tertiary)" />
-					<SectionLabel className="truncate">All tasks</SectionLabel>
-					<Count>{tasks.length}</Count>
-					<span aria-hidden className="h-px min-w-3 flex-1 bg-(--border-subtle) opacity-60" />
+				<span className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5">
+					<SectionLabel className="truncate">Tasks</SectionLabel>
 				</span>
 			)}
-			<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
-			<ViewMenu view={view} onChange={onChange} tasks={tasks} />
+			{/* Out of the way until wanted: on hover or focus, and always while a filter is on. */}
+			<span className={cn('flex shrink-0 items-center', !active && 'opacity-0 group-focus-within/tools:opacity-100 group-hover/tools:opacity-100 has-data-[state=open]:opacity-100')}>
+				<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
+				<ViewMenu view={view} onChange={onChange} tasks={tasks} />
+			</span>
 		</div>
 	);
 }
-
-const SECTION_ICON: Record<Place, LucideIcon> = { pinned: Pin, running: Activity, recent: History };
 
 /** A section's heading: click it to fold the section away. Its actions show while the pointer is on it. */
 function SectionHeader({
@@ -362,19 +358,18 @@ function SectionHeader({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="group/header mt-1.5 flex h-7 items-center gap-1 pr-2.5 pl-3">
+		<div className="group/header mt-2 flex h-7 items-center gap-1 pr-2.5 pl-3">
 			<button
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
 				className="group/fold flex h-6 min-w-0 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
-				<Icon icon={SECTION_ICON[place]} size={12} className={place === 'running' && count ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
 				<SectionLabel className="truncate">{label}</SectionLabel>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
-						<Count className="transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</Count>
+						<span className="in-num text-[11px] text-(--text-disabled) transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
 					) : null}
 					<Icon
 						icon={ChevronRight}
@@ -384,7 +379,7 @@ function SectionHeader({
 					/>
 				</span>
 			</button>
-				<span aria-hidden className="h-px min-w-2 flex-1 bg-(--border-subtle) opacity-60" />
+				<span className="flex-1" />
 				{children ? (
 					// Stays while its menu is open, which Radix marks on the trigger.
 				<div className="flex shrink-0 items-center opacity-0 group-focus-within/header:opacity-100 group-hover/header:opacity-100 has-data-[state=open]:opacity-100">
@@ -422,20 +417,15 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
 	const spaces = useSpaces();
 	const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
-	const details = [show.repo && repoName(session.repo), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
+	// A thread names its project where a task names its repository: one place, in words.
+	const details = [show.repo && (space ? space.name : repoName(session.repo)), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
 	return (
-		<div className="flex min-w-0 items-center gap-2 text-[11px] tracking-[0.01em] text-(--text-tertiary)">
+		<div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
 			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
-			{space ? (
-				<span className="flex max-w-[45%] shrink-0 items-center gap-1 truncate" title={`Thread in ${space.name}`}>
-					<SpaceMark space={space} size={12} />
-					<span className="truncate">{space.name}</span>
-				</span>
-			) : null}
 			{details.length ? <span className="truncate">{details.join(' · ')}</span> : null}
 		</div>
 	);
@@ -455,7 +445,6 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 		<TaskPeek session={session} disabled={menuOpen || renaming || cardOpen}>
 			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
 				{active ? <div className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
-				{live ? <div aria-hidden className="absolute top-2.5 bottom-2.5 -left-3 w-[2px] rounded-r-full bg-(--accent-base) shadow-[0_0_8px_var(--accent-base)]" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -571,9 +560,6 @@ export function ChatSidebar({
 		open: !folded(place),
 		onToggle: () => changeView({ ...view, collapsed: folded(place) ? view.collapsed.filter((item) => item !== place) : [...view.collapsed, place] }),
 	});
-	const live = sessions.filter(isLive).length;
-	const spaces = useSpaces();
-	const waiting = (spaces.data?.spaces ?? []).filter((space) => space.state !== 'archived').reduce((sum, space) => sum + space.counts.waiting, 0);
 	const rows = (tasks: Session[], place: Place) => <Rows tasks={tasks} place={place} view={view} activeId={params.sessionId} onNavigate={onNavigate} />;
 
 	return (
@@ -617,7 +603,6 @@ export function ChatSidebar({
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
-					{live ? <Count tone="accent">{live} running</Count> : <Count>{sessions.length}</Count>}
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
@@ -626,12 +611,6 @@ export function ChatSidebar({
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Projects</div>
-					{waiting ? (
-						<span title={`${waiting} waiting on you`} className="in-num inline-flex h-[18px] items-center gap-1 rounded-full bg-(--warning-bg) px-1.5 text-[10.5px] text-(--warning-text)">
-							<span className="size-1.5 rounded-full bg-(--warning-base)" />
-							{waiting}
-						</span>
-					) : null}
 				</Link>
 			</nav>
 
@@ -668,10 +647,7 @@ export function ChatSidebar({
 			<div className="m-3 mt-1 flex shrink-0 flex-col overflow-hidden rounded-[12px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] shadow-(--card-highlight)">
 				<div className="flex items-center gap-2.5 px-2.5 py-2">
 					<Avatar name={name} />
-					<div className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate text-[12.5px] text-(--text-primary)">{name}</span>
-						<span className="in-caption truncate">{live ? `${live} sandbox${live === 1 ? '' : 'es'} running` : 'No sandbox running'}</span>
-					</div>
+					<div className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)">{name}</div>
 					<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
 						<Icon icon={Settings} size={14} />
 					</Link>

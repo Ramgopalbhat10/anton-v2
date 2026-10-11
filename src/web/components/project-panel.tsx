@@ -385,7 +385,6 @@ export function ProjectPanel({
 							key={item.name}
 							name={item.name}
 							icon={item.icon}
-							count={item.name === 'Overview' ? space.counts.waiting || undefined : undefined}
 							active={tab === item.name}
 							onSelect={() => onTab(item.name)}
 						/>

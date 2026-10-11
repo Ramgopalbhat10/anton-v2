@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Check, FolderGit2, FolderKanban, Plus, Waypoints, X } from 'lucide-react';
+import { Check, FolderGit2, FolderKanban, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ProjectArt } from '@/components/illustrations';
-import { Caption, StatRow } from '@/components/instrument';
+import { Caption } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { IconPicker, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
@@ -47,24 +47,15 @@ function ProjectCard({ space }: { space: Space }) {
 			</div>
 			<div className="flex flex-wrap gap-1 px-4 pt-2.5">
 				{space.repos.map((repo) => (
-					<span key={repo.id} className="flex h-5 items-center gap-1 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[10.5px] text-(--text-secondary)">
-						<Icon icon={FolderGit2} size={10} className="text-(--icon-tertiary)" />
+					<span key={repo.id} className="flex h-5 items-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[10.5px] text-(--text-secondary)">
 						{repo.repoFullName.split('/').pop()}
 					</span>
 				))}
 			</div>
-			<div className="flex flex-col gap-2 px-4 pt-3">
-				<div className="flex items-end gap-3">
-					<StateSplit threads={threads} height={6} className="flex-1 self-center" />
-					<ActivityBars bars={activity(threads, now, 16).bars} height={18} className="w-[72px]" />
-				</div>
-				<StatRow
-					stats={[
-						{ label: 'needs you', value: counts.waiting, tone: counts.waiting ? 'warning' : 'neutral' },
-						{ label: 'working', value: `${counts.working}/${space.maxParallel}`, tone: counts.working ? 'accent' : 'neutral' },
-						{ label: 'ready', value: counts.review + counts.landing, tone: counts.review + counts.landing ? 'success' : 'neutral' },
-					]}
-				/>
+			{/* The split and the list below say what needs you and what runs; no figures to repeat them. */}
+			<div className="flex items-end gap-3 px-4 pt-3">
+				<StateSplit threads={threads} height={6} className="flex-1 self-center" />
+				<ActivityBars bars={activity(threads, now, 16).bars} height={18} className="w-[72px]" />
 			</div>
 			<div className="mt-3 flex flex-col border-t border-(--border-subtle) px-4 py-2">
 				{open.length ? (
@@ -82,7 +73,6 @@ function ProjectCard({ space }: { space: Space }) {
 				<Caption className="flex-1">
 					{space.threads} thread{space.threads === 1 ? '' : 's'} · {age(space.activeAt) === 'now' ? 'active now' : `active ${age(space.activeAt)} ago`}
 				</Caption>
-				<Icon icon={Waypoints} size={12} className="text-(--icon-tertiary)" />
 			</footer>
 		</Link>
 	);
