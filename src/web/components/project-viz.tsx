@@ -323,7 +323,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 		return sum + Math.max(0, (state === 'working' ? now : ms(threadActiveAt(thread))) - ms(thread.createdAt));
 	}, 0);
 	const left = [counts.working ? `${counts.working} running` : null, counts.failed ? `${counts.failed} failed` : null].filter(Boolean).join(' · ');
-	const right = [counts.queued ? `${counts.queued} queued` : null, counts.resolved + counts.idle ? `${counts.resolved + counts.idle} done` : null, counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null].filter(Boolean).join(' · ');
+	const right = [counts.queued ? `${counts.queued} queued` : null, counts.idle ? `${counts.idle} idle` : null, counts.resolved ? `${counts.resolved} done` : null, counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null].filter(Boolean).join(' · ');
 	return (
 		<Card
 			icon={Clock}
@@ -509,7 +509,8 @@ export function ProjectRoute({ space, threads, coordinating, live }: { space: Sp
 	const counts = countKinds(threads);
 	const running = counts.working + counts.queued + counts.waiting + counts.failed;
 	const ready = counts.review + counts.landing;
-	const finished = counts.resolved + counts.idle;
+	// Done is resolved, as in the Pulse; an idle thread finished its turn but stays open, so it counts with the threads.
+	const finished = counts.resolved;
 	const needs = counts.waiting + counts.failed;
 	const active = [Boolean(coordinating), running > 0, ready > 0, finished > 0];
 	const stages: Array<{ title: string; note: ReactNode }> = live
@@ -524,12 +525,14 @@ export function ProjectRoute({ space, threads, coordinating, live }: { space: Sp
 								.filter(Boolean)
 								.map((part, index) => (needs || index ? ` · ${part}` : part))}
 						</>
+					) : counts.idle ? (
+						`${counts.idle} idle`
 					) : (
 						'none running'
 					),
 				},
 				{ title: 'Review', note: ready ? `${ready} ready` : 'nothing to review' },
-				{ title: 'Done', note: `${finished} done` },
+				{ title: 'Done', note: finished ? `${finished} done` : 'none yet' },
 			]
 		: [
 				{ title: 'Plan', note: 'the coordinator splits the goal' },

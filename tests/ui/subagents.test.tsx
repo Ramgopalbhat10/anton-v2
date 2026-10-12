@@ -126,6 +126,18 @@ describe('Agents panel', () => {
 		expect(within(steps).getByText('Jev 4 · $0.0004')).toBeTruthy();
 	});
 
+	it('lists a burst of runs in the order they started, as the timeline does, and times a quick step in milliseconds', () => {
+		focusRun('s6', null);
+		const started = (id: string, ago: number, description: string): SubagentRun =>
+			run({ id, description, status: 'done', startedAt: new Date(now - ago).toISOString(), durationMs: 4000, steps: [{ id: `${id}-1`, tool: 'read', input: { path: 'src/app.ts' }, state: 'done', at: new Date(now - ago).toISOString(), durationMs: 44 }] });
+		// Newest first, as the server lists them.
+		renderWithQueries(<AgentsTab sessionId="s6" />, [[['subagents', 's6'], { runs: [started('c', 1000, 'Batch 3'), started('b', 2000, 'Batch 2'), started('a', 3000, 'Batch 1')] }]]);
+		const done = screen.getByRole('region', { name: 'Finished' });
+		expect(within(done).getAllByText(/^Batch/).map((item) => item.textContent)).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
+		fireEvent.click(within(done).getAllByRole('button')[0]);
+		expect(within(screen.getByRole('region', { name: 'Steps' })).getByText('44ms')).toBeTruthy();
+	});
+
 	it('shows a failed run with why', () => {
 		focusRun('s3', 'run-0');
 		renderWithQueries(<AgentsTab sessionId="s3" />, [[['subagents', 's3'], { runs: [finished] }]]);

@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-reply-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { checkReply, questionOf, recordReplyText } = await import('../src/services/reply-check.ts');
+const { checkReply, closingOf, questionOf, recordReplyText } = await import('../src/services/reply-check.ts');
 const { recordLatestInput } = await import('../src/services/latest-input.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -70,4 +70,11 @@ test('a reply in several messages comes back whole, while only its last words ar
 	assert.equal(await checkReply('a'), 'The routes, grouped by area: ...\n\nReported above.');
 	assert.equal((await getSessionRecord('a'))?.asking, null);
 	assert.equal(await checkReply('a'), null, 'the next reply starts empty');
+});
+
+test('a reply comes to its last message of substance and what follows it, not the narration before', () => {
+	const report = `I have a thorough picture now. ${'The modules are listed below. '.repeat(12)}`;
+	assert.equal(closingOf(["I'll start by exploring the repository.", 'Let me read the entry point.', report, 'Want me to go deeper?']), `${report}\n\nWant me to go deeper?`);
+	assert.equal(closingOf(['Short.', 'Also short.']), 'Short.\n\nAlso short.');
+	assert.equal(closingOf([]), null);
 });

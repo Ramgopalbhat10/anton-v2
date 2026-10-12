@@ -143,9 +143,20 @@ function Overview({ sessionId, runs, now }: { sessionId: string; runs: SubagentR
 	);
 }
 
+/** Runs come newest first; each burst keeps that place but lists in the order it started, as the timeline above and the thread's card draw it. */
+function inBursts(runs: SubagentRun[]): SubagentRun[] {
+	const bursts: SubagentRun[][] = [];
+	for (const run of runs) {
+		const burst = bursts.at(-1);
+		if (burst && Date.parse(burst[0].startedAt) - Date.parse(run.startedAt) <= BATCH_MS) burst.push(run);
+		else bursts.push([run]);
+	}
+	return bursts.flatMap((burst) => burst.reverse());
+}
+
 function RunList({ sessionId, runs, now }: { sessionId: string; runs: SubagentRun[]; now: number }) {
-	const working = runs.filter((run) => run.status === 'running');
-	const finished = runs.filter((run) => run.status !== 'running');
+	const working = inBursts(runs.filter((run) => run.status === 'running'));
+	const finished = inBursts(runs.filter((run) => run.status !== 'running'));
 	const section = (title: string, list: SubagentRun[]) =>
 		list.length ? (
 			<section aria-label={title} className="flex flex-col gap-1.5">
@@ -229,7 +240,7 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 						style={{ left: `${Math.min(100, ((start - from) / (to - from)) * 100)}%`, width: `max(${Math.min(100, (took / (to - from)) * 100)}%, 2px)`, background: tone }}
 					/>
 				</span>
-				<span className="in-num w-9 shrink-0 text-right text-[10.5px] text-(--text-disabled)">{step.durationMs !== null || step.state === 'running' ? elapsed(took) : ''}</span>
+				<span className="in-num w-9 shrink-0 text-right text-[10.5px] text-(--text-disabled)">{step.durationMs !== null || step.state === 'running' ? (took < 1000 ? `${Math.round(took)}ms` : elapsed(took)) : ''}</span>
 			</span>
 			{step.detail ? <Decisions detail={step.detail} live={step.state === 'running'} /> : null}
 		</li>

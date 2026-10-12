@@ -71,10 +71,28 @@ async function waitsOnUser(id: string, reply: string): Promise<boolean> {
 	return yes === null ? /\?\s*$/.test(questionOf(reply)) : yes >= WAITS;
 }
 
-/** At the end of a reply: notes what it asks the user, or that it asks nothing. Returns all the reply's text, when it had any. */
+/** How long a message must be to say something of substance, rather than narrate a step ("Let me read the entry point."). */
+const SUBSTANCE = 280;
+
+/**
+ * What a reply in several messages comes to: its last message, with those
+ * before it back to the last one of substance, since a reply often reports
+ * and then closes with a line. Narration from earlier steps is left out, so
+ * the thread's card and the coordinator read the outcome, not the opening.
+ */
+export function closingOf(texts: string[]): string | null {
+	const kept: string[] = [];
+	for (const text of [...texts].reverse()) {
+		kept.unshift(text);
+		if (text.length >= SUBSTANCE) break;
+	}
+	return kept.length ? kept.join('\n\n') : null;
+}
+
+/** At the end of a reply: notes what it asks the user, or that it asks nothing. Returns what the reply comes to (`closingOf`), when it had any text. */
 export async function checkReply(id: string): Promise<string | null> {
 	const reply = lastReply.get(id);
-	const whole = replyTexts.get(id)?.join('\n\n');
+	const whole = closingOf(replyTexts.get(id) ?? []);
 	lastReply.delete(id);
 	replyTexts.delete(id);
 	try {
