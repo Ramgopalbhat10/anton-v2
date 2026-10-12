@@ -1,10 +1,10 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Clock, FileText, GitPullRequest, Workflow, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
+import { CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { Caption, Card, CardFooter, Pips, Status } from '@/components/instrument';
+import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
-import { BurnCard, ProjectPulse, ProjectRoute, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
+import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, outputUrl, type Session, type Space, spaceFileUrl } from '@/lib/api';
@@ -39,12 +39,11 @@ function Tab({ name, icon, count, active, onSelect }: { name: string; icon: type
 }
 
 /**
- * Overview, read top to bottom: the pipeline (which of plan, threads,
- * review and done have work now), the project's pulse (states, its bay in the
- * rack, activity), what waits on you as tracks of time, the schedule of every
+ * Overview, read top to bottom: the project's pulse (what it comes to, its
+ * states, its bay in the rack, activity), what waits on you as tracks of time, the schedule of every
  * thread to now, what is ready for review, and what it all costs.
  */
-function Overview({ space, threads, coordinating }: { space: Space; threads: Session[]; coordinating: boolean }) {
+function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 	const ready = threads.filter((thread) => ['review', 'landing'].includes(stateOf(thread)));
 	const openThread = useOpenThread();
 	if (threads.length === 0) {
@@ -59,16 +58,6 @@ function Overview({ space, threads, coordinating }: { space: Space; threads: Ses
 	}
 	return (
 		<div className="flex flex-col gap-3">
-			<Card
-				icon={Workflow}
-				title="Pipeline"
-				sub="where the work is now"
-				status={coordinating ? <Status tone="accent" pulse>Coordinating</Status> : null}
-			>
-				<div className="px-3 pb-3">
-					<ProjectRoute space={space} threads={threads} coordinating={coordinating} live />
-				</div>
-			</Card>
 			<ProjectPulse space={space} threads={threads} />
 			<WaitTracks threads={threads} />
 			<ScheduleTimeline threads={threads} />
@@ -365,11 +354,9 @@ export function ProjectPanel({
 	expanded,
 	onToggleExpanded,
 	onClose,
-	coordinating = false,
 }: {
 	space: Space;
 	threads: Session[];
-	coordinating?: boolean;
 	tab: ProjectTab;
 	onTab: (tab: ProjectTab) => void;
 	expanded: boolean;
@@ -400,7 +387,7 @@ export function ProjectPanel({
 				<IconBtn icon={PanelRight} size="sm" label="Hide the panel" onClick={onClose} />
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-				{tab === 'Overview' ? <Overview space={space} threads={threads} coordinating={coordinating} /> : null}
+				{tab === 'Overview' ? <Overview space={space} threads={threads} /> : null}
 				{tab === 'Library' ? <ProjectLibrary space={space} threads={threads} /> : null}
 				{tab === 'Pull requests' ? <PullRequests threads={threads} /> : null}
 				{tab === 'Routines' ? <Routines space={space} /> : null}

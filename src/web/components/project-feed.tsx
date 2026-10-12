@@ -379,7 +379,7 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 	return (
 		<div className="mt-[6vh] flex flex-col items-center gap-6 text-center">
 			<div className="w-full">
-				<ProjectRoute space={space} threads={[]} />
+				<ProjectRoute space={space} />
 			</div>
 			<div className="flex max-w-[52ch] flex-col items-center gap-1.5">
 				<h1 className="m-0 text-[20px] leading-[26px] font-semibold tracking-[-0.02em]">{space.name}</h1>

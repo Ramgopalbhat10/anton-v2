@@ -17,7 +17,7 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 const { ThreadCard, nextSteps } = await import('@/components/thread-card');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
-const { StateSplit, countKinds, activity, ProjectRoute } = await import('@/components/project-viz');
+const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/components/project-viz');
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 
@@ -146,20 +146,18 @@ describe('threads', () => {
 		expect(screen.getByRole('img', { name: '1 failed, 1 needs you, 1 working, 1 review, 1 done' })).toBeTruthy();
 	});
 
-	it('says an idle thread’s state once, drops an empty footer, and counts it open, not done', async () => {
+	it('says an idle thread’s state once and drops an empty footer; the Pulse says what the project comes to', async () => {
 		const idle = thread({ id: 'idle', title: 'Explore the repo', lastReply: 'I have a thorough picture now.' });
 		withRouter(() => (
 			<div>
 				<ThreadCard thread={idle} />
-				<ProjectRoute space={space} threads={[idle]} live />
+				<ProjectPulse space={space} threads={[idle, ...threads]} />
 			</div>
 		));
 		const card = await screen.findByRole('article', { name: 'Explore the repo' });
 		expect(within(card).getAllByText(/idle/i)).toHaveLength(1);
 		expect(card.querySelector('footer')).toBeNull();
-		const route = screen.getByRole('list', { name: 'How the project runs' });
-		expect(within(route).getByText('1 idle')).toBeTruthy();
-		expect(within(route).getByText('none yet')).toBeTruthy();
+		expect(screen.getByText('1 thread needs you')).toBeTruthy();
 	});
 
 	it('racks each project as a bay of its threads, and draws a thread out with what it asks', async () => {

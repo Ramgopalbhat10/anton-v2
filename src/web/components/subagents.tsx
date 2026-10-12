@@ -88,7 +88,29 @@ export function stepBody(step: SubagentStep) {
 	return describeTool({ toolName: step.tool, input: step.input, state: step.state === 'failed' ? 'output-error' : step.state === 'done' ? 'output-available' : 'input-available' });
 }
 
-export const stepTone = (step: SubagentStep) => toolTone(step.tool, step.state === 'failed');
+export type WorkKind = 'read' | 'search' | 'run' | 'edit' | 'browse' | 'other';
+
+/** The kinds of work a subagent's steps add up to: reading and searching quiet greys, doing things lit in colour. */
+export const WORK: Record<WorkKind, { label: string; doing: string; tone: string }> = {
+	read: { label: 'Read', doing: 'reading', tone: 'var(--neutral-300)' },
+	search: { label: 'Searched', doing: 'searching', tone: 'var(--neutral-500)' },
+	run: { label: 'Ran', doing: 'running commands', tone: 'var(--data-1)' },
+	edit: { label: 'Edited', doing: 'editing', tone: 'var(--data-2)' },
+	browse: { label: 'Browsed', doing: 'browsing', tone: 'var(--data-3)' },
+	other: { label: 'Other', doing: 'other tools', tone: 'var(--data-5)' },
+};
+
+export function workKind(tool: string): WorkKind {
+	if (tool === 'read' || tool === 'read_file') return 'read';
+	if (['grep', 'search_code', 'glob', 'list_files'].includes(tool)) return 'search';
+	if (tool === 'bash' || tool === 'run_script') return 'run';
+	if (tool === 'edit' || tool === 'write') return 'edit';
+	if (tool === 'browser' || tool === 'screenshot') return 'browse';
+	return 'other';
+}
+
+/** A step's colour: its kind of work, or red when it failed. */
+export const stepTone = (step: SubagentStep) => (step.state === 'failed' ? toolTone(step.tool, true) : WORK[workKind(step.tool)].tone);
 
 /** Steps, time and tokens, in the instrument's mono. */
 export function RunMeta({ run, now, className }: { run: SubagentRun; now: number; className?: string }) {

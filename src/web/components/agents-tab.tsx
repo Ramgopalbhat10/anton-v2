@@ -2,8 +2,8 @@ import { ArrowLeft, Bot, ChevronDown, CornerDownRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { Card, Caption, StatRow, Status, type Tone, Well } from '@/components/instrument';
-import { AgentTile, decisionsOf, Lane, lookOf, plainLine, RunMeta, runElapsed, spanOf, StatusGlyph, stepBody, stepTone, titleOf, useNow, useSubagentRuns } from '@/components/subagents';
+import { Card, Caption, StatRow, Status, type Tone } from '@/components/instrument';
+import { AgentTile, decisionsOf, lookOf, plainLine, RunMeta, runElapsed, runEnd, spanOf, StatusGlyph, stepBody, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
 import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
 import { elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -76,24 +76,68 @@ function RunCard({ run, now, onOpen }: { run: SubagentRun; now: number; onOpen: 
 /** Runs started within this long of the newest one are drawn together, as one burst of work. */
 const BATCH_MS = 10 * 60_000;
 
-/** A round step for a time axis about four ticks long. */
-function tickStep(totalMs: number): number {
-	const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600].map((seconds) => seconds * 1000);
-	return steps.find((step) => totalMs / step <= 4) ?? steps[steps.length - 1];
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+/** The most runs at work at once in a burst. */
+function peakOf(runs: SubagentRun[], now: number): number {
+	const edges = runs.flatMap((run) => [
+		{ at: Date.parse(run.startedAt), step: 1 },
+		{ at: runEnd(run, now), step: -1 },
+	]);
+	edges.sort((a, b) => a.at - b.at || a.step - b.step);
+	let open = 0;
+	let peak = 0;
+	for (const edge of edges) peak = Math.max(peak, (open += edge.step));
+	return peak;
+}
+
+/** How many steps of each kind of work, most first. */
+export function workMix(runs: SubagentRun[]): Array<{ kind: WorkKind; count: number }> {
+	const counts = new Map<WorkKind, number>();
+	for (const run of runs) for (const step of run.steps) counts.set(workKind(step.tool), (counts.get(workKind(step.tool)) ?? 0) + 1);
+	return [...counts].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count);
 }
 
 /**
- * The panel's summary: who is working, steps, tokens and what the decision
- * model spent, over the latest burst of runs drawn as lanes on one time axis.
+ * The latest burst in a sentence: who ran, side by side or one after
+ * another, for how long; then what the work mostly was.
  */
-function Overview({ sessionId, runs, now }: { sessionId: string; runs: SubagentRun[]; now: number }) {
+export function burstLine(runs: SubagentRun[], now: number): { headline: string; why: string } {
+	const agents = new Set(runs.map((run) => run.agent));
+	const noun = (count: number) => plural(count, agents.size === 1 ? lookOf(runs[0]?.agent ?? 'agent').label.toLowerCase() : 'agent');
+	const working = runs.filter((run) => run.status === 'running').length;
+	const failed = runs.filter((run) => run.status === 'failed').length;
+	const span = spanOf(runs, now);
+	const peak = peakOf(runs, now);
+	const together = runs.length < 2 ? '' : peak === runs.length ? ' side by side' : peak > 1 ? ` ${peak} at a time` : ' one after another';
+	const headline = working ? `${noun(working)} working${runs.length > working ? `, ${runs.length - working} finished` : ''}` : `${noun(runs.length)} ran${together} for ${elapsed(span.to - span.from)}`;
+	const mix = workMix(runs);
+	const total = mix.reduce((sum, item) => sum + item.count, 0);
+	const top = mix[0];
+	const kinds = mix
+		.slice(0, 3)
+		.map((item) => WORK[item.kind].doing)
+		.join(', ')
+		.replace(/, ([^,]*)$/, ' and $1');
+	let work = 'No steps yet.';
+	if (top && top.count === total) work = `All ${WORK[top.kind].doing}: ${plural(total, 'step')}.`;
+	else if (top && top.count / total > 0.5) work = `Mostly ${WORK[top.kind].doing}: ${top.count} of ${plural(total, 'step')}.`;
+	else if (top) work = `A mix of ${kinds} over ${plural(total, 'step')}.`;
+	return { headline, why: failed ? `${failed} failed. ${work}` : work };
+}
+
+/**
+ * The panel's summary in the shape of an ops card: what the latest burst of
+ * runs came to in a sentence, the work it did as one bar split by kind, and
+ * runs, steps, tokens and what the decision model spent across the task.
+ */
+function Overview({ runs, now }: { runs: SubagentRun[]; now: number }) {
 	const working = runs.filter((run) => run.status === 'running').length;
 	const failed = runs.filter((run) => run.status === 'failed').length;
 	const newest = Math.max(...runs.map((run) => Date.parse(run.startedAt)));
-	const batch = runs.filter((run) => Date.parse(run.startedAt) >= newest - BATCH_MS).slice(0, 8).reverse();
-	const span = spanOf(batch, now);
-	const step = tickStep(span.to - span.from);
-	const ticks = Array.from({ length: Math.floor((span.to - span.from) / step) + 1 }, (_, index) => index * step);
+	const batch = runs.filter((run) => Date.parse(run.startedAt) >= newest - BATCH_MS);
+	const line = burstLine(batch, now);
+	const mix = workMix(batch);
 	const jev = runs.map(decisionsOf).reduce((sum, item) => ({ decisions: sum.decisions + item.decisions, cost: sum.cost + item.cost }), { decisions: 0, cost: 0 });
 	const stats: Array<{ label: string; value: string; tone?: Tone; title?: string }> = [
 		{ label: working ? 'working' : 'runs', value: String(working || runs.length), tone: working ? 'accent' : undefined },
@@ -109,41 +153,36 @@ function Overview({ sessionId, runs, now }: { sessionId: string; runs: SubagentR
 			sub="this task"
 			status={working ? <Status tone="accent" pulse>{working} working</Status> : failed ? <Status tone="danger">{failed} failed</Status> : <Status tone="success">All done</Status>}
 		>
-			<div className="flex flex-col gap-2 px-4 pb-3.5">
-				<div className="flex items-center gap-3">
-					<Caption className="flex-1">{batch.length === runs.length ? 'Timeline' : 'Latest runs'}</Caption>
-					<Caption className="in-num">{elapsed(span.to - span.from)}</Caption>
-				</div>
-				<Well grid className="flex flex-col gap-2.5 px-3 pt-3 pb-2">
-					{batch.map((run) => (
-						<button
-							key={run.id}
-							type="button"
-							title={titleOf(run.prompt, run.description ?? undefined)}
-							onClick={() => focusRun(sessionId, run.id)}
-							className="flex min-w-0 items-center gap-2.5 rounded-[4px] text-left outline-none focus-visible:shadow-(--focus-ring)"
-						>
-							<span className="w-[58px] shrink-0 truncate font-mono text-[10px] tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
-								{lookOf(run.agent).label}
-							</span>
-							<Lane run={run} now={now} {...span} />
-						</button>
-					))}
-					<span aria-hidden className="relative ml-[68px] h-4">
-						{ticks.map((at) => (
-							<span key={at} className="in-num absolute top-0 -translate-x-1/2 text-[9.5px] text-(--text-disabled)" style={{ left: `${(at / (span.to - span.from)) * 100}%` }}>
-								{elapsed(at)}
+			<div className="flex flex-col gap-0.5 px-4 pb-3">
+				{batch.length < runs.length ? <Caption className="mb-1">Latest runs</Caption> : null}
+				<span className="text-[15px] leading-[21px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
+				<span className="text-[12.5px] leading-[18px] text-(--text-tertiary)">{line.why}</span>
+			</div>
+			{/* One kind of work is said in the sentence; the bar shows only a split. */}
+			{mix.length > 1 ? (
+				<div className="flex flex-col gap-2 px-4 pb-3.5">
+					<span role="img" aria-label={mix.map((item) => `${WORK[item.kind].label} ${item.count}`).join(', ')} className="flex h-2 gap-[2px] overflow-hidden rounded-full">
+						{mix.map((item) => (
+							<span key={item.kind} className={cn('min-w-[3px]', working && 'in-sweep')} style={{ flexGrow: item.count, flexBasis: 0, background: WORK[item.kind].tone }} />
+						))}
+					</span>
+					<span aria-hidden className="flex flex-wrap gap-x-3.5 gap-y-1">
+						{mix.map((item) => (
+							<span key={item.kind} className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+								<span className="size-[7px] rounded-[2px]" style={{ background: WORK[item.kind].tone }} />
+								{WORK[item.kind].label}
+								<span className="in-num text-(--text-secondary)">{item.count}</span>
 							</span>
 						))}
 					</span>
-				</Well>
-			</div>
+				</div>
+			) : null}
 			<StatRow stats={stats} />
 		</Card>
 	);
 }
 
-/** Runs come newest first; each burst keeps that place but lists in the order it started, as the timeline above and the thread's card draw it. */
+/** Runs come newest first; each burst keeps that place but lists in the order it started, as the thread's card draws it. */
 function inBursts(runs: SubagentRun[]): SubagentRun[] {
 	const bursts: SubagentRun[][] = [];
 	for (const run of runs) {
@@ -171,7 +210,7 @@ function RunList({ sessionId, runs, now }: { sessionId: string; runs: SubagentRu
 		) : null;
 	return (
 		<div className="flex flex-col gap-4 pt-1">
-			<Overview sessionId={sessionId} runs={runs} now={now} />
+			<Overview runs={runs} now={now} />
 			{section('Working', working)}
 			{section('Finished', finished)}
 		</div>

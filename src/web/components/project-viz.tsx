@@ -153,29 +153,74 @@ function StateRing({ threads, maxParallel, size = 128 }: { threads: Session[]; m
 	);
 }
 
-/** The project's pulse: the ring and its legend, the project's bay in the rack, and recent activity. */
+const threadsWord = (count: number) => `${count} thread${count === 1 ? '' : 's'}`;
+
+/**
+ * What the project comes to in a sentence, the most pressing first (it needs
+ * you, it works, it waits on review, it is quiet), and a line of what else
+ * holds, or when it last moved.
+ */
+export function pulseLine(threads: Session[], now: number): { headline: string; tone?: 'warning' | 'accent' | 'success'; why: string } {
+	const counts = countKinds(threads);
+	const needs = counts.waiting + counts.failed;
+	const ready = counts.review + counts.landing;
+	const open = threads.length - counts.resolved;
+	const last = Math.max(...threads.map((thread) => ms(threadActiveAt(thread))).filter((at) => !Number.isNaN(at)));
+	const facts = (skip: string) =>
+		[
+			skip !== 'needs' && needs ? `${needs} need${needs === 1 ? 's' : ''} you` : null,
+			skip !== 'working' && counts.working ? `${counts.working} working` : null,
+			counts.queued ? `${counts.queued} queued` : null,
+			skip !== 'ready' && ready ? `${ready} ready for review` : null,
+			skip !== 'idle' && counts.idle ? `${counts.idle} idle` : null,
+		].filter(Boolean);
+	const ago = Number.isFinite(last) ? age(new Date(last).toISOString(), now) : null;
+	const moved = ago === null ? 'Nothing has moved yet' : ago === 'now' ? 'Last moved just now' : `Last moved ${ago} ago`;
+	const why = (skip: string) => facts(skip).join(' · ') || moved;
+	if (needs) return { headline: `${threadsWord(needs)} need${needs === 1 ? 's' : ''} you`, tone: 'warning', why: why('needs') };
+	if (counts.working) return { headline: `${threadsWord(counts.working)} working`, tone: 'accent', why: why('working') };
+	if (ready) return { headline: `${threadsWord(ready)} ready for review`, tone: 'success', why: why('ready') };
+	if (open) return { headline: 'Quiet, nothing running', why: counts.idle ? `${threadsWord(counts.idle)} idle, waiting for a next step` : moved };
+	return { headline: 'All threads resolved', why: moved };
+}
+
+/** The project's pulse: the ring beside what it comes to and its states, the project's bay in the rack, and recent activity. */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
 	const live = counts.working > 0;
 	const now = useNow(live);
 	const { bars, span, total } = activity(threads, now);
+	const line = pulseLine(threads, now);
 	return (
 		<Card
 			icon={Activity}
 			title="Pulse"
-			sub={`${threads.length} thread${threads.length === 1 ? '' : 's'}`}
+			sub={threadsWord(threads.length)}
 			status={live ? <Status tone="accent" pulse>Live</Status> : <Status>Quiet</Status>}
 		>
-			<div className="flex items-center gap-5 px-4 pt-1 pb-4">
+			<div className="flex items-stretch gap-5 px-4 pt-1 pb-4">
 				<StateRing threads={threads} maxParallel={space.maxParallel} />
-				<div className="flex min-w-0 flex-1 flex-col">
-					{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
-						<div key={kind} className="flex h-[26px] items-center gap-2 border-b border-dashed border-(--border-subtle) last:border-b-0">
-							<Glyph kind={kind} size={12} />
-							<span className={cn('min-w-0 flex-1 truncate text-[12px]', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
-							<span className="in-num text-[12px] text-(--text-primary)">{counts[kind]}</span>
-						</div>
-					))}
+				<div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-1">
+					<div className="flex min-w-0 flex-col gap-0.5">
+						<span
+							className={cn(
+								'text-[14px] leading-[20px] font-medium text-pretty',
+								line.tone === 'warning' ? 'text-(--warning-text)' : line.tone === 'accent' ? 'text-(--accent-text)' : line.tone === 'success' ? 'text-(--success-text)' : 'text-(--text-primary)',
+							)}
+						>
+							{line.headline}
+						</span>
+						<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{line.why}</span>
+					</div>
+					<div className="flex min-w-0 flex-col">
+						{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
+							<div key={kind} className="flex h-[24px] items-center gap-2 border-t border-dashed border-(--border-subtle)">
+								<Glyph kind={kind} size={12} />
+								<span className={cn('min-w-0 flex-1 truncate text-[12px]', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
+								<span className="in-num text-[12px] text-(--text-primary)">{counts[kind]}</span>
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 			<CardSection label="Rack" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>
@@ -502,58 +547,25 @@ export function BurnCard({ space }: { space: Space }) {
 
 /**
  * The project's route, drawn as on the New task page: plan, threads, review,
- * done. `live` lights the stations that have work now and puts the counts
- * under them; without it the stages take turns and say what each does.
+ * done, the stages taking turns and saying what each does.
  */
-export function ProjectRoute({ space, threads, coordinating, live }: { space: Space; threads: Session[]; coordinating?: boolean; live?: boolean }) {
-	const counts = countKinds(threads);
-	const running = counts.working + counts.queued + counts.waiting + counts.failed;
-	const ready = counts.review + counts.landing;
-	// Done is resolved, as in the Pulse; an idle thread finished its turn but stays open, so it counts with the threads.
-	const finished = counts.resolved;
-	const needs = counts.waiting + counts.failed;
-	const active = [Boolean(coordinating), running > 0, ready > 0, finished > 0];
-	const stages: Array<{ title: string; note: ReactNode }> = live
-		? [
-				{ title: 'Plan', note: coordinating ? 'coordinating now' : 'coordinator idle' },
-				{
-					title: 'Threads',
-					note: running ? (
-						<>
-							{needs ? <span className="text-(--warning-text)">{needs} need{needs === 1 ? 's' : ''} you</span> : null}
-							{[counts.working ? `${counts.working} working` : null, counts.queued ? `${counts.queued} queued` : null]
-								.filter(Boolean)
-								.map((part, index) => (needs || index ? ` · ${part}` : part))}
-						</>
-					) : counts.idle ? (
-						`${counts.idle} idle`
-					) : (
-						'none running'
-					),
-				},
-				{ title: 'Review', note: ready ? `${ready} ready` : 'nothing to review' },
-				{ title: 'Done', note: finished ? `${finished} done` : 'none yet' },
-			]
-		: [
-				{ title: 'Plan', note: 'the coordinator splits the goal' },
-				{ title: 'Threads', note: `up to ${space.maxParallel} at once` },
-				{ title: 'Review', note: 'pull requests' },
-				{ title: 'Done', note: 'merged and resolved' },
-			];
+export function ProjectRoute({ space }: { space: Space }) {
+	const stages = [
+		{ title: 'Plan', note: 'the coordinator splits the goal' },
+		{ title: 'Threads', note: `up to ${space.maxParallel} at once` },
+		{ title: 'Review', note: 'pull requests' },
+		{ title: 'Done', note: 'merged and resolved' },
+	];
 	return (
 		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
-			<ProjectRouteArt className="w-full" active={live ? active : undefined} waiting={live ? needs > 0 : true} />
+			<ProjectRouteArt className="w-full" />
 			<ol aria-label="How the project runs" className="m-0 grid list-none grid-cols-4 p-0">
 				{stages.map((stage, index) => (
 					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
-						<span
-							className={cn('in-caption', live ? (active[index] ? 'text-(--accent-text)' : 'text-(--text-tertiary)') : 'route-caption text-(--text-tertiary)')}
-							data-first={!live && index === 0 ? true : undefined}
-							style={live ? undefined : ({ '--stage': index } as CSSProperties)}
-						>
+						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 ? true : undefined} style={{ '--stage': index } as CSSProperties}>
 							{String(index + 1).padStart(2, '0')} {stage.title}
 						</span>
-						<div className={cn('line-clamp-2 w-full text-[12px] leading-[16px]', live && !active[index] ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}>{stage.note}</div>
+						<div className="line-clamp-2 w-full text-[12px] leading-[16px] text-(--text-secondary)">{stage.note}</div>
 					</li>
 				))}
 			</ol>
