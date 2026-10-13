@@ -193,6 +193,26 @@ export const DEFAULT_PANELS: TaskPanels = { tabs: ['Changes', 'Terminal', 'Files
 export const CHAT_PANELS: TaskPanels = { tabs: ['Browser', 'Library', 'Files', 'Terminal'], active: 'Browser', open: true };
 
 /**
+ * A change to the workspace's panels that keeps one identity, so the memoized
+ * panels skip the stream's renders. Each change builds on the one before it,
+ * not on the last render: closing a tab changes the tabs and then which one is
+ * shown, in one click, and the second must not bring back the first's tabs.
+ */
+export function usePanelChange(
+	panels: TaskPanels,
+	onPanelsChange: (next: TaskPanels) => void,
+): (next: Partial<TaskPanels> | ((current: TaskPanels) => Partial<TaskPanels>)) => void {
+	const latest = useRef(panels);
+	latest.current = panels;
+	const report = useRef(onPanelsChange);
+	report.current = onPanelsChange;
+	return useCallback((next: Partial<TaskPanels> | ((current: TaskPanels) => Partial<TaskPanels>)) => {
+		latest.current = { ...latest.current, ...(typeof next === 'function' ? next(latest.current) : next) };
+		report.current(latest.current);
+	}, []);
+}
+
+/**
  * A task's conversation beside its workspace: the page for a task, and for a
  * project's thread. Where the panels' state lives (the address and the page,
  * or the browser per thread) is up to the page around it.
@@ -221,12 +241,7 @@ export function TaskWorkspace({
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
 	const { open, tabs, active } = panels;
-	// The latest panels and handler, read by callbacks that keep one identity, so the memoized panels skip the stream's renders.
-	const latest = useRef(panels);
-	latest.current = panels;
-	const report = useRef(onPanelsChange);
-	report.current = onPanelsChange;
-	const change = useCallback((next: Partial<TaskPanels>) => report.current({ ...latest.current, ...next }), []);
+	const change = usePanelChange(panels, onPanelsChange);
 
 	const setOpen = useCallback(
 		(next: boolean) => {
@@ -238,8 +253,7 @@ export function TaskWorkspace({
 
 	const showPanel = useCallback(
 		(name: PanelName) => {
-			const current = latest.current.tabs;
-			change({ tabs: current.includes(name) ? current : [...current, name], active: name, open: true });
+			change(({ tabs }) => ({ tabs: tabs.includes(name) ? tabs : [...tabs, name], active: name, open: true }));
 		},
 		[change],
 	);
