@@ -5,6 +5,7 @@ import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
+import { TodoPill } from '@/components/todo-pill';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, imageFromBase64, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
@@ -194,6 +195,10 @@ export const Composer = memo(function Composer({
 				}
 			}}
 		>
+			{/* The agent's todo list, while the task has one; it renders nothing otherwise. */}
+			<div className="mx-auto mb-1.5 flex max-w-[700px] empty:hidden">
+				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
+			</div>
 			<div
 				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)"
 				onDragOver={(event) => event.preventDefault()}
