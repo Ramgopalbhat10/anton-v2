@@ -128,6 +128,32 @@ describe('Agents panel', () => {
 		expect(within(steps).getByText('Jev 4 · $0.0004')).toBeTruthy();
 	});
 
+	it('shows the checks the decision model made on a plain step, with what it judged and what it cost', () => {
+		const read = run({
+			id: 'run-7',
+			toolCallId: 'call-7',
+			status: 'done',
+			steps: [
+				{
+					id: 'o1',
+					tool: 'browser',
+					input: { action: 'open', url: 'https://mrgb.in' },
+					state: 'done',
+					at: new Date(now - 9000).toISOString(),
+					durationMs: 1200,
+					detail: { outcome: null, actions: [{ what: 'Kept 3 of 7 parts of the page for the job', p: null }], decisions: 1, cost: 0.0002 },
+				},
+			],
+		});
+		focusRun('s7', 'run-7');
+		renderWithQueries(<AgentsTab sessionId="s7" />, [[['subagents', 's7'], { runs: [read] }]]);
+		const steps = screen.getByRole('region', { name: 'Steps' });
+		expect(within(steps).getByText('Kept 3 of 7 parts of the page for the job')).toBeTruthy();
+		expect(within(steps).getByText('Jev 1 · $0.0002')).toBeTruthy();
+		// A finished check is not a page being driven.
+		expect(within(steps).queryByText('Driving')).toBeNull();
+	});
+
 	it('lists a burst of runs in the order they started, says how they ran, and times a quick step in milliseconds', () => {
 		focusRun('s6', null);
 		const started = (id: string, ago: number, description: string): SubagentRun =>

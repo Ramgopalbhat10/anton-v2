@@ -89,7 +89,7 @@ async function checks(): Promise<Check[]> {
 			run: async () => {
 				// One tiny question, a hundred-thousandth of a dollar.
 				await decisions!.decide({ check: 'connection' }, { ok: { type: 'yes-no', instructions: 'Is this a connection check?' } });
-				return 'Skips pull request comments that ask nothing and automatic reviews of documentation-only changes; decide() in code mode.';
+				return 'Skips pull request comments that ask nothing and automatic reviews of documentation-only changes, drives the browser agent through sites, and answers decide() in code mode.';
 			},
 		},
 		{

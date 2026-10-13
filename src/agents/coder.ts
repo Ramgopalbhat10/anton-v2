@@ -25,7 +25,7 @@ import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
 import { browse, type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
-import { decide, hasDecisionModel, yesOf } from '../services/decisions.ts';
+import { decide, hasDecisionModel, newTally, type Tally, yesOf } from '../services/decisions.ts';
 import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } from '../services/browser-autopilot.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
@@ -44,7 +44,7 @@ import { finishReply, replyTotal, startReply } from '../services/response-usage.
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
-import { currentBrief, noteStep } from '../services/subagent-runs.ts';
+import { currentBrief, noteStep, type StepDetail } from '../services/subagent-runs.ts';
 import { isLocalAddress } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
@@ -246,9 +246,9 @@ function browserTool(id: string, places: BrowserPlace[]) {
 		description:
 			`Use a web page in a browser${autopiloted ? '' : ', one step per call'}: open a URL, click, type, select, press a key, hover, scroll, go back, wait, or look. ` +
 			(autopiloted
-				? 'Or do: name one outcome on the page in goal (such as "open the closed pull requests" or "fill in the sign-up form") with any text to type in values, ' +
+				? 'Or do: name one outcome on the page in goal (such as "open the About page", "open the closed pull requests" or "fill in the sign-up form") with any text to type in values, ' +
 					'and a fast decision model drives the page there in several actions for a fraction of a cent, then reports done, stuck, unsure or needs_confirmation with the actions it took. ' +
-					'Prefer do for getting around a site and filling forms; take single steps when it reports stuck or unsure, or for exact work. Clicks that may buy, send, post or delete stop for confirmation. '
+					'Use do, not click, type, select or press, to move around a site or fill a form; take those single steps only after do reports stuck or unsure. Clicks that may buy, send, post or delete stop for confirmation. '
 				: '') +
 			'The tab stays open between calls, so the page keeps its state. Each call returns the URL, title, any failure, console errors, ' +
 			'and the page as an accessibility tree (roles, names, text). Target elements with Playwright selectors from that tree, such as ' +
@@ -293,6 +293,9 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const go = async (command: BrowserInput) => (place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command));
 			let state: BrowserState;
 			let report: Record<string, unknown> = {};
+			// What do drove, then every other call the decision model made in this step, for the Agents panel to show under it.
+			let driven: StepDetail | null = null;
+			const tally = newTally();
 			if (rest.action === 'do') {
 				if (!goal?.trim()) return { output: { problem: 'do needs a goal: the outcome the page should reach.' } };
 				if (rest.url) {
@@ -305,7 +308,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 					{ goal, values, confirm, maxActions },
 					{ signal, onAction: (actions, decisions, cost) => void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost }) },
 				);
-				await noteStep(id, toolCallId, { outcome: result.outcome, actions: result.actions, decisions: result.decisions, cost: result.cost });
+				driven = { outcome: result.outcome, actions: result.actions, decisions: result.decisions, cost: result.cost };
 				state = result.state;
 				report = {
 					outcome: result.outcome,
@@ -316,7 +319,8 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				const step = rest as BrowserInput;
 				// A click or Enter that reads like buying, sending or deleting is put to the decision model first, unless the agent confirms it.
 				const pressing = step.action === 'click' || (step.action === 'press' && (step.key ?? 'Enter') === 'Enter');
-				if (pressing && step.target && !confirm && mayBeIrreversible(step.target) && (await mayNotUndo(id, step.target, await currentBrief(id, 'browser')))) {
+				if (pressing && step.target && !confirm && mayBeIrreversible(step.target) && (await mayNotUndo(id, step.target, await currentBrief(id, 'browser'), tally))) {
+					await noteJudgements(id, toolCallId, null, tally);
 					return {
 						output: {
 							problem: `Not clicked: ${step.target} may buy, send, post or delete something. Only if your brief explicitly asks for exactly this, repeat the step with confirm set to its name; otherwise stop and report.`,
@@ -326,22 +330,40 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				state = await go(step);
 			}
 			// A sign-in wall or human check in the user's browser is theirs to pass: the panel asks them, and the subagent stops.
-			if (place === 'panel' && (await needsTheUser(id, state.url, state.title, state.snapshot))) {
+			if (place === 'panel' && (await needsTheUser(id, state.url, state.title, state.snapshot, tally))) {
 				askTheUser(id, 'Sign in or pass the check here, then ask the agent to carry on.', state.url);
 				state = { ...state, problem: 'This page needs the user to sign in or pass a human check. Stop and report that they can do it in the Browser panel; do not try to get past it.' };
 			}
 			// A page seen before comes back as what changed; one seen whole comes back with only the parts the job needs.
 			const seen = pageForAgent(`${id}:${place}`, state.url, state.snapshot, full);
-			const snapshot = seen === state.snapshot && !full ? await trimToJob(id, goal ?? (await currentBrief(id, 'browser')), state.url, seen) : seen;
+			const snapshot = seen === state.snapshot && !full ? await trimToJob(id, goal ?? (await currentBrief(id, 'browser')), state.url, seen, tally) : seen;
+			await noteJudgements(id, toolCallId, driven, tally);
 			return { output: { ...report, ...state, snapshot } };
 		},
 	});
 }
 
 /** Whether the decision model judges a click on `target` to be one that cannot be undone; without one, a click is let through as before. */
-async function mayNotUndo(id: string, target: string, brief: string | null): Promise<boolean> {
-	const answers = await decide(id, { element: target, ...(brief ? { job: brief.slice(0, 2000) } : {}) }, { risky: { type: 'yes-no', instructions: IRREVERSIBLE } });
-	return (yesOf(answers?.risky) ?? 0) >= 0.5;
+async function mayNotUndo(id: string, target: string, brief: string | null, tally: Tally): Promise<boolean> {
+	const answers = await decide(id, { element: target, ...(brief ? { job: brief.slice(0, 2000) } : {}) }, { risky: { type: 'yes-no', instructions: IRREVERSIBLE } }, tally);
+	const risky = yesOf(answers?.risky);
+	if (risky !== null) tally.actions.push({ what: risky >= 0.5 ? `Held back ${target}: it may not be undone` : `Judged ${target} safe to click`, p: risky >= 0.5 ? risky : 1 - risky });
+	return (risky ?? 0) >= 0.5;
+}
+
+/**
+ * Puts what the decision model did in one browser step on the step: what do
+ * drove, then the checks around it (a risky click, a sign-in wall, a long page
+ * trimmed), so every call it made shows in the Agents panel, not only in cost.
+ */
+async function noteJudgements(id: string, toolCallId: string, driven: StepDetail | null, tally: Tally): Promise<void> {
+	if (!driven && !tally.decisions) return;
+	await noteStep(id, toolCallId, {
+		outcome: driven?.outcome ?? null,
+		actions: [...(driven?.actions ?? []), ...tally.actions],
+		decisions: (driven?.decisions ?? 0) + tally.decisions,
+		cost: (driven?.cost ?? 0) + tally.cost,
+	});
 }
 
 function Browser() {
@@ -350,8 +372,8 @@ function Browser() {
 		'Work step by step: open the page, read the accessibility tree each step returns, and target elements with role selectors from it.',
 		...(hasDecisionModel()
 			? [
-					'To get around a site or fill a form, use do with a goal that names one checkable outcome, a step at a time ("open the Pricing page", then "fill in the contact form"), and the values to type; it is much faster and cheaper than single steps.',
-					'Check what do reports against the page it returns. When it is stuck or unsure, take single steps. When it needs confirmation, confirm only if the brief explicitly asks for exactly that action.',
+					'Use open for a URL you know, and look or scroll to read the page you are on. Every other move goes through do: to reach another page or state of a site, or to fill a form, call do with a goal that names one checkable outcome and the values to type, a step at a time ("open the Pricing page", then "fill in the contact form"). To explore a site, do the same for each page you want to read ("open the Blog page"). do is faster and cheaper than single steps, and the user sees what it decided.',
+					'Take a single click, type, select or press only after do reports stuck or unsure, and check what do reports against the page it returns. When it needs confirmation, confirm only if the brief explicitly asks for exactly that action.',
 				]
 			: []),
 		'When something fails, look again before retrying; pages change, and the user may be using the same browser.',

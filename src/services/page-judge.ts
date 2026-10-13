@@ -1,12 +1,13 @@
 import type { Question } from '../core/ports.ts';
-import { decide, yesOf } from './decisions.ts';
+import { decide, type Tally, yesOf } from './decisions.ts';
 
 /**
  * The decision model's judgements about a page the browser subagent reads:
  * which parts of a long page matter for its job, and whether the page needs
  * the user (a sign-in or a human check) before anything else can happen.
  * Each is one call of a fraction of a cent; without a decision model, or when
- * it cannot answer, the page is left as it was.
+ * it cannot answer, the page is left as it was. A `tally` notes each call and
+ * what it judged, for the step to show.
  */
 
 /** Pages shorter than this are given whole; trimming them saves too little. */
@@ -54,7 +55,7 @@ export function partsOf(snapshot: string): Part[] {
  * A long page cut to the parts that matter for `job`: the others become one
  * line each saying how much was left out, so the agent can ask for them.
  */
-export async function trimToJob(id: string, job: string | null, url: string, snapshot: string): Promise<string> {
+export async function trimToJob(id: string, job: string | null, url: string, snapshot: string, tally?: Tally): Promise<string> {
 	if (!job || snapshot.length < MIN_TRIM) return snapshot;
 	const parts = partsOf(snapshot);
 	if (parts.length < 3) return snapshot;
@@ -64,7 +65,7 @@ export async function trimToJob(id: string, job: string | null, url: string, sna
 		state[`part${index}`] = part.lines.join('\n').slice(0, EXCERPT);
 		questions[`part${index}`] = { type: 'yes-no', instructions: `Does part${index} of the page hold anything the job needs: content to read, or a link, button or field to use?` };
 	});
-	const answers = await decide(id, state, questions);
+	const answers = await decide(id, state, questions, tally);
 	if (!answers) return snapshot;
 	let left = 0;
 	const kept = parts.flatMap((part, index) => {
@@ -74,6 +75,7 @@ export async function trimToJob(id: string, job: string | null, url: string, sna
 		const indent = /^\s*/.exec(part.lines[0])?.[0] ?? '';
 		return [`${indent}${part.lines[0].trim().replace(/:$/, '')}: (${part.lines.length - 1} lines left out as not needed for the job)`];
 	});
+	tally?.actions.push({ what: left ? `Kept ${parts.length - left} of ${parts.length} parts of the page for the job` : `Kept all ${parts.length} parts of the page for the job`, p: null });
 	if (!left) return snapshot;
 	return `(Parts of this page that do not bear on your job are left out; use look to see them.)\n${kept.join('\n')}`;
 }
@@ -86,12 +88,15 @@ export async function trimToJob(id: string, job: string | null, url: string, sna
 const LOOKS_GATED = /textbox "[^"]*password|password:|captcha|verify (?:you are|that you are) (?:a )?human|are you a robot|security check|just a moment/i;
 
 /** Whether the page needs the user to sign in or prove they are human before it shows what it is for. */
-export async function needsTheUser(id: string, url: string, title: string, snapshot: string): Promise<boolean> {
+export async function needsTheUser(id: string, url: string, title: string, snapshot: string, tally?: Tally): Promise<boolean> {
 	if (!LOOKS_GATED.test(`${title}\n${snapshot}`)) return false;
 	const answers = await decide(
 		id,
 		{ url, title, page: snapshot.slice(0, 6000) },
 		{ gated: { type: 'yes-no', instructions: 'Must a person sign in, or prove they are human (a CAPTCHA or security check), before this page shows what it is for?' } },
+		tally,
 	);
-	return (yesOf(answers?.gated) ?? 0) >= 0.6;
+	const gated = yesOf(answers?.gated);
+	if (gated !== null) tally?.actions.push({ what: gated >= 0.6 ? 'Found a sign-in or human check for the user to pass' : 'Checked for a sign-in wall: none', p: gated >= 0.6 ? gated : 1 - gated });
+	return (gated ?? 0) >= 0.6;
 }

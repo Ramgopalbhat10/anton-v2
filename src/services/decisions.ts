@@ -20,11 +20,24 @@ export async function ask(id: string, state: Record<string, unknown>, questions:
 	return (await consult(id, state, questions, signal)).answers;
 }
 
-/** `ask`, or null when there is no decision model or it fails, so the caller does what it did without one. */
-export async function decide(id: string, state: Record<string, unknown>, questions: Record<string, Question>): Promise<Record<string, Answer> | null> {
+/**
+ * The decision model's calls inside one step, and what each judged, so the
+ * step can show them (the Agents panel lists them under the step).
+ */
+export type Tally = { decisions: number; cost: number; actions: Array<{ what: string; p: number | null; failed?: boolean }> };
+
+export const newTally = (): Tally => ({ decisions: 0, cost: 0, actions: [] });
+
+/** `ask`, or null when there is no decision model or it fails, so the caller does what it did without one. A `tally` counts the call. */
+export async function decide(id: string, state: Record<string, unknown>, questions: Record<string, Question>, tally?: Tally): Promise<Record<string, Answer> | null> {
 	if (!hasDecisionModel()) return null;
 	try {
-		return await ask(id, state, questions);
+		const decision = await consult(id, state, questions);
+		if (tally) {
+			tally.decisions += 1;
+			tally.cost += decision.cost;
+		}
+		return decision.answers;
 	} catch (error) {
 		logProblem('warn', 'The decision model could not answer', error, id);
 		return null;
