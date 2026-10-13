@@ -14,7 +14,7 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { DESKTOP_TOOLS, desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
-const { act, asAgentStep, computerScreenshot, computerView, connectComputer, inputCommand, setComputerControl, startComputer, userHasControl } = await import('../src/services/computer.ts');
+const { act, asAgentStep, computerScreenshot, computerView, connectComputer, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
 const { liveMachine } = await import('../src/services/workspace.ts');
 const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/vision.ts');
 const { openRouterVision } = await import('../src/providers/openrouter/vision.ts');
@@ -116,6 +116,17 @@ test('the agent launches a program, types into it, and sees the screen', { skip:
 	assert.equal(shot.width, 1280);
 	assert.deepEqual(pngSize(Buffer.from(shot.data, 'base64')), SCREEN);
 	await act(machine, { action: 'key', keys: 'ctrl+d' });
+});
+
+test('Turn off closes the desktop and leaves the sandbox running; Start computer brings it back', { skip: !hasDesktop && 'needs the desktop packages' }, async () => {
+	await setComputerControl('pc', 'user');
+	const off = await stopComputer('pc');
+	assert.deepEqual({ live: off.live, running: off.running, userControl: off.userControl }, { live: true, running: false, userControl: false });
+	assert.equal((await local.running()).size, 1, 'the sandbox runs on for the task');
+	const { socketPort } = desktopLayout(path.join(dir, 'data', 'machines', 'pc'));
+	await assert.rejects(fetch(`http://127.0.0.1:${socketPort}`), 'nothing listens for the panel');
+	const on = await startComputer('pc');
+	assert.equal(on.running, true);
 });
 
 test('steps called at once run one after another, in the order they were called', async () => {

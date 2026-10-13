@@ -1,6 +1,6 @@
 import { announce } from '../core/changes.ts';
 import { browserCommand } from '../core/desktop-look.ts';
-import { desktopEnv, desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN, startDesktop } from '../core/desktop.ts';
+import { desktopEnv, desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN, startDesktop, stopDesktop } from '../core/desktop.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
@@ -142,6 +142,25 @@ export async function connectComputer(id: string): Promise<ComputerConnection> {
 	const machine = await liveMachine(id);
 	if (!machine) throw new ConflictError('The sandbox is not running. Start the computer first.');
 	return connection(id, machine);
+}
+
+/**
+ * Turn off: closes the desktop and everything open on it, while the sandbox
+ * runs on for the task. With nothing else running, the sandbox then stops
+ * itself after the idle minutes in Settings, as it does without a desktop.
+ * Not while the agent is using the computer.
+ */
+export async function stopComputer(id: string): Promise<ComputerView> {
+	await requireTask(id);
+	const machine = await liveMachine(id);
+	if (!machine) return viewOf(id, null);
+	if (agentBusy(id)) throw new ConflictError('The agent is using the computer. Stop the task, or wait until it is done.');
+	userControl.delete(id);
+	// The sandbox's browser is on the screen; closed, it opens headless at the agent's next step.
+	await closeBrowser(machine).catch(() => undefined);
+	await run(machine, stopDesktop(desktopLayout(machine.root)), { timeoutMs: 30_000 });
+	changed(id);
+	return viewOf(id, machine);
 }
 
 /** Take over (you drive, the agent waits) or hand back to the agent. */

@@ -1,6 +1,6 @@
 import RFB from '@novnc/novnc';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Hand, Monitor, Pause, PencilLine, RotateCw } from 'lucide-react';
+import { Bot, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWindowShown } from '@/components/browser-tab';
 import { Sketch } from '@/components/sketch';
@@ -124,7 +124,7 @@ function StartComputer({ sessionId, live }: { sessionId: string; live: boolean }
 			title="A computer for this task"
 			body={
 				live
-					? 'A desktop inside this task’s sandbox, where the agent uses programs and pages and you can take over. The sandbox is running; its desktop starts now.'
+					? 'A desktop inside this task’s sandbox, where the agent uses programs and pages and you can take over. The sandbox is running, so the desktop starts at once; with nothing running, the sandbox stops itself after a quiet spell.'
 					: 'A desktop inside this task’s sandbox, where the agent uses programs and pages and you can take over. Starting it starts the sandbox.'
 			}
 		>
@@ -161,6 +161,13 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 		onSuccess: (next) => queryClient.setQueryData(['computer', sessionId], next),
 	});
 	const capture = useMutation({ mutationFn: () => api.computerScreenshot(sessionId), onSuccess: setSketch });
+	const turnOff = useMutation({
+		mutationFn: () => api.stopComputer(sessionId),
+		onSuccess: (next) => {
+			setSketch(null);
+			queryClient.setQueryData(['computer', sessionId], next);
+		},
+	});
 
 	useEffect(() => {
 		if (!notice) return;
@@ -180,7 +187,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 	if (!running || !computer) return <StartComputer sessionId={sessionId} live={Boolean(computer?.live)} />;
 
 	const yours = computer.userControl;
-	const status = capture.error?.message ?? control.error?.message ?? notice;
+	const status = capture.error?.message ?? control.error?.message ?? turnOff.error?.message ?? notice;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">
@@ -208,6 +215,14 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 					disabled={capture.isPending}
 					onClick={() => (sketch ? setSketch(null) : capture.mutate())}
 					className={cn(sketch && 'bg-(--accent-bg-subtle) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
+				/>
+				<IconBtn
+					icon={Power}
+					size="sm"
+					label={computer.agentBusy ? 'The agent is using the computer' : 'Turn off the computer'}
+					disabled={turnOff.isPending || computer.agentBusy}
+					onClick={() => turnOff.mutate()}
+					className={cn(turnOff.isPending && '[&_svg]:animate-pulse')}
 				/>
 				<Btn size="sm" variant={yours ? 'primary' : 'secondary'} icon={yours ? Bot : Hand} disabled={control.isPending} onClick={() => control.mutate(yours ? 'agent' : 'user')}>
 					{yours ? 'Give back' : 'Take over'}

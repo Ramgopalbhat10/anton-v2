@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
 	computer: vi.fn(),
 	startComputer: vi.fn(),
 	connectComputer: vi.fn(),
+	stopComputer: vi.fn(),
 	setComputerControl: vi.fn(),
 	computerScreenshot: vi.fn(),
 }));
@@ -92,6 +93,25 @@ describe('The Computer panel', () => {
 		expect(api.setComputerControl).toHaveBeenLastCalledWith('s1', 'agent');
 		await screen.findByText('Watching. Take over to use it yourself.');
 		expect(clients[0].viewOnly).toBe(true);
+	});
+
+	it('turns the computer off, back to Start computer, but not while the agent uses it', async () => {
+		api.computer.mockResolvedValue(view());
+		api.stopComputer.mockResolvedValue(view({ running: false }));
+		renderWithQueries(<ComputerTab sessionId="s1" />);
+		await waitFor(() => expect(clients).toHaveLength(1));
+		await userEvent.click(screen.getByRole('button', { name: 'Turn off the computer' }));
+		expect(api.stopComputer).toHaveBeenCalledWith('s1');
+		expect(await screen.findByRole('button', { name: 'Start computer' })).toBeTruthy();
+		expect(screen.getByText(/the sandbox stops itself after a quiet spell/)).toBeTruthy();
+		expect(clients[0].disconnect).toHaveBeenCalled();
+	});
+
+	it('keeps Turn off disabled while the agent uses the computer', async () => {
+		api.computer.mockResolvedValue(view({ agentBusy: true }));
+		renderWithQueries(<ComputerTab sessionId="s1" />);
+		const off = await screen.findByRole('button', { name: 'The agent is using the computer' });
+		expect((off as HTMLButtonElement).disabled).toBe(true);
 	});
 
 	it('says when the connection closes, and reconnects with a fresh address', async () => {

@@ -94,6 +94,14 @@ export const desktopEnv = (layout: DesktopLayout) => `DISPLAY=${layout.display} 
 export const desktopRunning = ({ display, socketPort }: DesktopLayout) =>
 	`DISPLAY=${display} xdpyinfo >/dev/null 2>&1 && (exec 3<>/dev/tcp/127.0.0.1/${socketPort}) 2>/dev/null`;
 
+/** Turns the desktop off: the display, and with it every program on it, and the socket. Waits for the display to go. */
+export function stopDesktop({ display, files }: DesktopLayout): string {
+	return `
+for name in socket panel icons wm x; do [ -f ${files}-$name.pid ] && kill "$(cat ${files}-$name.pid)" 2>/dev/null; rm -f ${files}-$name.pid; done
+for i in $(seq 1 50); do DISPLAY=${display} xdpyinfo >/dev/null 2>&1 || exit 0; sleep 0.1; done
+`;
+}
+
 /**
  * Starts the desktop unless it runs: the display, the window manager and the
  * socket, each waited for. The socket listens on ANTON_SCREEN_BIND when the

@@ -52,7 +52,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { computerScreenshot, computerView, connectComputer, setComputerControl, startComputer } from './services/computer.ts';
+import { computerScreenshot, computerView, connectComputer, setComputerControl, startComputer, stopComputer } from './services/computer.ts';
 import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
@@ -598,6 +598,7 @@ app.post('/api/sessions/:id/browser/watch', async (c) => c.json(await watchBrows
 // The Computer panel: the desktop inside the task's sandbox. Viewing never starts it; Start computer does.
 app.get('/api/sessions/:id/computer', async (c) => c.json(await computerView(c.req.param('id'))));
 app.post('/api/sessions/:id/computer', async (c) => c.json(await startComputer(c.req.param('id'))));
+app.post('/api/sessions/:id/computer/stop', async (c) => c.json(await stopComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/connect', async (c) => c.json(await connectComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/control', async (c) => {
 	const { driver } = await body(c, v.object({ driver: v.picklist(['user', 'agent']) }));

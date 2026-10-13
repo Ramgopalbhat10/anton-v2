@@ -583,6 +583,7 @@ export const api = {
 	/** Starts the sandbox if it is not running, then its desktop. */
 	startComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer`),
 	connectComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/connect`),
+	stopComputer: (id: string) => post<ComputerView>(`/api/sessions/${id}/computer/stop`),
 	setComputerControl: (id: string, driver: 'user' | 'agent') => post<ComputerView>(`/api/sessions/${id}/computer/control`, { driver }),
 	computerScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/computer/screenshot`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
