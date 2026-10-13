@@ -135,14 +135,14 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Content
 					side="top"
-					align="start"
+					align="center"
 					sideOffset={6}
 					collisionPadding={12}
 					{...hover}
 					// Hover should not pull focus away from the composer.
 					onOpenAutoFocus={(event) => event.preventDefault()}
 					onCloseAutoFocus={(event) => event.preventDefault()}
-					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] origin-(--radix-popover-content-transform-origin) in-pop flex-col overflow-hidden text-(--text-primary) outline-none duration-(--duration-overlay) ease-(--ease-out) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1"
 				>
 					<header className="flex items-baseline gap-2 px-3.5 pt-3 pb-1.5">
 						<span className="text-[13px] font-medium">Todos</span>

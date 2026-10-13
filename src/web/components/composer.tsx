@@ -196,7 +196,7 @@ export const Composer = memo(function Composer({
 			}}
 		>
 			{/* The agent's todo list, while the task has one; it renders nothing otherwise. */}
-			<div className="mx-auto mb-1.5 flex max-w-[700px] empty:hidden">
+			<div className="mx-auto mb-1.5 flex max-w-[700px] justify-center empty:hidden">
 				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
 			</div>
 			<div
