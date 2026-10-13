@@ -37,3 +37,4 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - `npm run build && npm start` — production on `PORT`; `npm run start:backup` does the same under Litestream, which restores and streams both SQLite files to Tigris (`litestream.yml`)
 - `npx flue run src/agents/coder.ts --message "Say ready."` (needs an LLM key)
 - `npx flue docs search <query>`
+- `npx vite build --config scripts/perf/vite.config.ts && node scripts/perf/profile.ts [label] [--panel=Files|Changes|Agents]` — profiles a task page in Chromium while a scripted reply streams with three subagents (fake runtime and API, no keys): renders, long tasks, frames, input delay and heap

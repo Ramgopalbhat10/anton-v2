@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { type KeyboardEvent, type PointerEvent, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, memo, type PointerEvent, useMemo, useRef, useState } from 'react';
 import { Count } from '@/components/instrument';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type Reasoning, REASONING_LEVELS } from '@/lib/api';
@@ -416,7 +416,7 @@ function sectionsFor(models: ModelInfo[], visible: ModelInfo[], browsing: boolea
  * Picking a model keeps the panel open so its effort can be set; Enter picks
  * and closes.
  */
-export function ModelPicker({
+export const ModelPicker = memo(function ModelPicker({
 	value,
 	onChange,
 	side = 'top',
@@ -724,4 +724,4 @@ export function ModelPicker({
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
 	);
-}
+});

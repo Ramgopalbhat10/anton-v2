@@ -28,7 +28,7 @@ import {
 	Waypoints,
 	X,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { memo, type ReactNode, useState } from 'react';
 import {
 	Avatar,
 	Icon,
@@ -72,7 +72,7 @@ import {
 	taskNote,
 	toggleFilter,
 } from '@/lib/task-view';
-import { useSpaces } from '@/lib/spaces';
+import { useSpaceName } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
@@ -415,10 +415,9 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 
 /** The line under a row's title: links to act on (pull request, CI, a plan to review), then the details the view asks for. */
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
-	const spaces = useSpaces();
-	const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
+	const spaceName = useSpaceName(session.spaceId);
 	// A thread names its project where a task names its repository: one place, in words.
-	const details = [show.repo && (space ? space.name : repoName(session.repo)), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
+	const details = [show.repo && (spaceName ?? repoName(session.repo)), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
 	return (
@@ -435,7 +434,7 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
  * One task in the sidebar. The whole row links to the task, under the links its line holds;
  * its actions show on hover and stay while its menu is open, and resting on it shows a card of details.
  */
-function TaskRow({ session, place, view, active, onNavigate }: { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void }) {
+const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate }: { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void }) {
 	const [renaming, setRenaming] = useState(false);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [cardOpen, setCardOpen] = useState(false);
@@ -505,7 +504,7 @@ function TaskRow({ session, place, view, active, onNavigate }: { session: Sessio
 			</div>
 		</TaskPeek>
 	);
-}
+});
 
 /** A section's rows, under a heading per repository when grouping. */
 function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {

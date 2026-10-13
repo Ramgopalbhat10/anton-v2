@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { DATA_COLORS } from '@/components/charts';
 import { useModels } from '@/components/model-picker';
 import { Icon } from '@/components/signal';
@@ -147,7 +147,7 @@ function SpendSection({ sessionId }: { sessionId: string }) {
  * the breakdown: what fills the window, how far it is from being compacted,
  * and what the task's model costs, on a plan or per token.
  */
-export function ContextMeter({ sessionId, model }: { sessionId: string; model: string }) {
+export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { sessionId: string; model: string }) {
 	const [open, setOpen] = useState(false);
 	const context = useQuery({ queryKey: ['context', sessionId], queryFn: () => api.context(sessionId) });
 	const models = useModels();
@@ -245,4 +245,4 @@ export function ContextMeter({ sessionId, model }: { sessionId: string; model: s
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
 	);
-}
+});

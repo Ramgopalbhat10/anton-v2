@@ -1,5 +1,5 @@
 import { createFileTreeIconResolver, getBuiltInSpriteSheet } from '@pierre/trees';
-import { createContext, type ReactNode, useContext, useId } from 'react';
+import { createContext, type ReactNode, useContext, useId, useMemo } from 'react';
 
 const resolver = createFileTreeIconResolver({ set: 'standard', colored: true });
 const sprite = getBuiltInSpriteSheet('standard');
@@ -26,9 +26,11 @@ const colors = Object.fromEntries(COLOR_GROUPS.flatMap(([color, tokens]) => toke
 /** Pierre's built-in symbols, scoped so separate viewers never share SVG IDs. */
 export function FileIcons({ children }: { children: ReactNode }) {
 	const id = useId().replace(/:/g, '') + '-';
+	// The sheet is large; it is renamed once, not on every render.
+	const html = useMemo(() => ({ __html: sprite.replaceAll('id="', `id="${id}`) }), [id]);
 	return (
 		<SpriteId.Provider value={id}>
-			<div className="absolute size-0 overflow-hidden" aria-hidden dangerouslySetInnerHTML={{ __html: sprite.replaceAll('id="', `id="${id}`) }} />
+			<div className="absolute size-0 overflow-hidden" aria-hidden dangerouslySetInnerHTML={html} />
 			{children}
 		</SpriteId.Provider>
 	);

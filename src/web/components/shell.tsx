@@ -2,7 +2,7 @@ import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
@@ -26,12 +26,23 @@ function readCollapsed() {
 	}
 }
 
+/** Watches the task list for notifications on its own, so a change to the list does not re-render the whole shell. */
+function TaskNotifications() {
+	useTaskNotifications();
+	return null;
+}
+
 export function AppShell() {
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
-	useTaskNotifications();
+	const closeNav = useCallback(() => setNavOpen(false), []);
+	const collapse = useCallback(() => setCollapsed(true), []);
+	const openPalette = useCallback(() => {
+		setNavOpen(false);
+		setPaletteOpen(true);
+	}, []);
 	useLiveUpdates();
 
 	useEffect(() => {
@@ -68,18 +79,16 @@ export function AppShell() {
 				<div className={collapsed ? 'contents md:hidden' : 'contents'}>
 					<ChatSidebar
 						open={navOpen}
-						onNavigate={() => setNavOpen(false)}
-						onCollapse={() => setCollapsed(true)}
-						onOpenPalette={() => {
-							setNavOpen(false);
-							setPaletteOpen(true);
-						}}
+						onNavigate={closeNav}
+						onCollapse={collapse}
+						onOpenPalette={openPalette}
 					/>
 				</div>
 				<main className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--bg-canvas)">
 					<Outlet />
 				</main>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
+				<TaskNotifications />
 			</div>
 		</NavContext.Provider>
 	);
@@ -111,17 +120,69 @@ function handingToBrowser(message: UseFlueAgentResult['messages'][number] | unde
 	);
 }
 
+// One object per state, so the header sees the same status from chunk to chunk.
+const WORKING: StatusTone = { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent-base)' };
+const STOPPED: StatusTone = { label: 'Stopped', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
+const FAILED: StatusTone = { label: 'Failed', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
+const FINISHED: StatusTone = { label: 'Finished', text: 'text-(--success-text)', dot: 'bg-(--success-base)' };
+
 function statusFor(agent: UseFlueAgentResult): StatusTone | null {
-	if (agent.status === 'submitted' || agent.status === 'streaming') {
-		return { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent-base)' };
-	}
+	if (agent.status === 'submitted' || agent.status === 'streaming') return WORKING;
 	const settled = agent.settlements[agent.settlements.length - 1];
-	if (agent.status === 'error' || (settled && settled.outcome !== 'completed')) {
-		return { label: settled?.outcome === 'aborted' ? 'Stopped' : 'Failed', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
-	}
-	if (agent.messages.length > 0) return { label: 'Finished', text: 'text-(--success-text)', dot: 'bg-(--success-base)' };
+	if (agent.status === 'error' || (settled && settled.outcome !== 'completed')) return settled?.outcome === 'aborted' ? STOPPED : FAILED;
+	if (agent.messages.length > 0) return FINISHED;
 	return null;
 }
+
+/**
+ * The task's header: its state, title, pull request and menu. Memoized, as
+ * the workspace around it re-renders with every streamed chunk.
+ */
+const TaskHeader = memo(function TaskHeader({
+	session,
+	status,
+	leading,
+	workspaceOpen,
+	renaming,
+	onRenamingChange,
+	onShowPanel,
+	onOpenWorkspace,
+	onAskForPullRequest,
+}: {
+	session: Session | undefined;
+	status: StatusTone | null;
+	leading?: ReactNode;
+	workspaceOpen: boolean;
+	renaming: boolean;
+	onRenamingChange: (renaming: boolean) => void;
+	onShowPanel: (name: PanelName) => void;
+	onOpenWorkspace: () => void;
+	onAskForPullRequest: () => void;
+}) {
+	return (
+		<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
+			<MenuButton />
+			{leading}
+			{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
+			{status ? (
+				<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
+					<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
+					<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
+				</span>
+			) : null}
+			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
+			{session ? <PullRequestChip session={session} /> : null}
+			{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
+			{!workspaceOpen ? (
+				<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => onShowPanel('Changes')}>
+					<span className="hidden sm:inline">Review</span>
+				</Btn>
+			) : null}
+			{session ? <TaskMenu session={session} onRename={() => onRenamingChange(true)} onAskForPullRequest={onAskForPullRequest} /> : null}
+			{!workspaceOpen ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={onOpenWorkspace} /> : null}
+		</header>
+	);
+});
 
 /** Which workspace panels a task has open, which one shows, and whether the workspace is open at all. */
 export type TaskPanels = { tabs: PanelName[]; active: PanelName | null; open: boolean };
@@ -157,19 +218,33 @@ export function TaskWorkspace({
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
 	const { open, tabs, active } = panels;
+	// The latest panels and handler, read by callbacks that keep one identity, so the memoized panels skip the stream's renders.
 	const latest = useRef(panels);
 	latest.current = panels;
-	const change = (next: Partial<TaskPanels>) => onPanelsChange({ ...latest.current, ...next });
+	const report = useRef(onPanelsChange);
+	report.current = onPanelsChange;
+	const change = useCallback((next: Partial<TaskPanels>) => report.current({ ...latest.current, ...next }), []);
 
-	function setOpen(next: boolean) {
-		if (!next) setExpanded(false);
-		change({ open: next });
-	}
+	const setOpen = useCallback(
+		(next: boolean) => {
+			if (!next) setExpanded(false);
+			change({ open: next });
+		},
+		[change],
+	);
 
-	function showPanel(name: PanelName) {
-		const current = latest.current.tabs;
-		change({ tabs: current.includes(name) ? current : [...current, name], active: name, open: true });
-	}
+	const showPanel = useCallback(
+		(name: PanelName) => {
+			const current = latest.current.tabs;
+			change({ tabs: current.includes(name) ? current : [...current, name], active: name, open: true });
+		},
+		[change],
+	);
+	const openWorkspace = useCallback(() => setOpen(true), [setOpen]);
+	const closeWorkspace = useCallback(() => setOpen(false), [setOpen]);
+	const changeTabs = useCallback((next: PanelName[]) => change({ tabs: next }), [change]);
+	const changeActive = useCallback((next: PanelName | null) => change({ active: next }), [change]);
+	const toggleExpanded = useCallback(() => setExpanded((current) => !current), []);
 
 	useEffect(() => {
 		if (panelRequest) showPanel(panelRequest);
@@ -183,6 +258,10 @@ export function TaskWorkspace({
 
 	const centerVisible = !(open && expanded);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);
+	const sessionData = session.data;
+	const askForPullRequest = useCallback(() => {
+		if (sessionData) void agent.sendMessage(pullRequestAsk(sessionData));
+	}, [agent.sendMessage, sessionData]);
 
 	return (
 		<SendToAgent.Provider value={send}>
@@ -190,33 +269,17 @@ export function TaskWorkspace({
 				<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
 					{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
 					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
-						<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
-							<MenuButton />
-							{leading}
-							{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
-							{status ? (
-								<span className={`flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap ${status.text}`} title={status.label}>
-									<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
-									<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
-								</span>
-							) : null}
-							<TaskTitle session={session.data} editing={renaming} onEditingChange={setRenaming} />
-							{session.data ? <PullRequestChip session={session.data} /> : null}
-							{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
-							{!open ? (
-								<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => showPanel('Changes')}>
-									<span className="hidden sm:inline">Review</span>
-								</Btn>
-							) : null}
-							{session.data ? (
-								<TaskMenu
-									session={session.data}
-									onRename={() => setRenaming(true)}
-									onAskForPullRequest={() => void agent.sendMessage(pullRequestAsk(session.data))}
-								/>
-							) : null}
-							{!open ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={() => setOpen(true)} /> : null}
-						</header>
+						<TaskHeader
+							session={sessionData}
+							status={status}
+							leading={leading}
+							workspaceOpen={open}
+							renaming={renaming}
+							onRenamingChange={setRenaming}
+							onShowPanel={showPanel}
+							onOpenWorkspace={openWorkspace}
+							onAskForPullRequest={askForPullRequest}
+						/>
 						<Thread sessionId={sessionId} agent={agent} />
 					</div>
 					{open ? (
@@ -224,11 +287,11 @@ export function TaskWorkspace({
 							sessionId={sessionId}
 							tabs={tabs}
 							active={active}
-							onTabsChange={(next) => change({ tabs: next })}
-							onActiveChange={(next) => change({ active: next })}
+							onTabsChange={changeTabs}
+							onActiveChange={changeActive}
 							expanded={expanded}
-							onToggleExpanded={() => setExpanded((current) => !current)}
-							onClose={() => setOpen(false)}
+							onToggleExpanded={toggleExpanded}
+							onClose={closeWorkspace}
 						/>
 					) : null}
 				</div>

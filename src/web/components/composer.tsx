@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -73,7 +73,7 @@ function Thumbnails({ images, onRemove }: { images: ImageAttachment[]; onRemove:
 }
 
 /** Plan mode: the agent investigates and proposes a plan, and changes nothing until the plan is approved. */
-export function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
 	return (
 		<Btn
 			size="xs"
@@ -86,13 +86,15 @@ export function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boole
 			Plan
 		</Btn>
 	);
-}
+});
 
 /**
  * Messages sent while the agent works join its current turn: it reads them
  * after the step it is on, so they redirect it without stopping it.
+ * Memoized: the thread around it re-renders with every streamed chunk, and
+ * the draft need not.
  */
-export function Composer({
+export const Composer = memo(function Composer({
 	sessionId,
 	busy,
 	onSend,
@@ -139,13 +141,20 @@ export function Composer({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
-	const choice = { model: session.data?.model ?? models.data?.default ?? '', reasoning: session.data?.reasoning ?? null };
+	const chosen = session.data?.model ?? models.data?.default ?? '';
+	const reasoning = session.data?.reasoning ?? null;
+	// One object while the choice holds, so the model picker skips the renders typing causes.
+	const choice = useMemo(() => ({ model: chosen, reasoning }), [chosen, reasoning]);
 	const planning = session.data?.planMode ?? false;
-	const edit = (change: Partial<Session>) => {
-		// Show the choice at once; the server's copy replaces it when it lands.
-		queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
-		void api.editSession(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
-	};
+	const edit = useCallback(
+		(change: Partial<Session>) => {
+			// Show the choice at once; the server's copy replaces it when it lands.
+			queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
+			void api.editSession(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
+		},
+		[queryClient, sessionId],
+	);
+	const togglePlan = useCallback((planMode: boolean) => edit({ planMode }), [edit]);
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
@@ -226,7 +235,7 @@ export function Composer({
 					/>
 					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
 					<ModelPicker value={choice} onChange={edit} />
-					<PlanToggle on={planning} onChange={(planMode) => edit({ planMode })} />
+					<PlanToggle on={planning} onChange={togglePlan} />
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
 					{/* Enter sends, as everywhere; the hint speaks up only while the agent is running. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
@@ -243,4 +252,4 @@ export function Composer({
 			</div>
 		</form>
 	);
-}
+});

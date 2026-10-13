@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AppWindow, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
 import { AgentsTab } from '@/components/agents-tab';
@@ -29,15 +29,20 @@ export const panels = [
 
 export type PanelName = (typeof panels)[number]['name'];
 
-const VIEWS: Record<PanelName, (props: { sessionId: string }) => ReactNode> = {
-	Changes: GitTab,
-	Agents: AgentsTab,
-	Terminal: TerminalTab,
-	Files: FilesTab,
-	Preview: PreviewTab,
-	Browser: BrowserTab,
-	Library: LibraryTab,
-	History: HistoryTab,
+/**
+ * Each panel takes only the task's id and keeps itself current from its own
+ * queries, so it is memoized: nothing the conversation beside it does, such
+ * as streaming a reply, re-renders a file tree or a diff.
+ */
+const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
+	Changes: memo(GitTab),
+	Agents: memo(AgentsTab),
+	Terminal: memo(TerminalTab),
+	Files: memo(FilesTab),
+	Preview: memo(PreviewTab),
+	Browser: memo(BrowserTab),
+	Library: memo(LibraryTab),
+	History: memo(HistoryTab),
 };
 
 /**
@@ -105,7 +110,7 @@ function ResumeButton({ sessionId }: { sessionId: string }) {
 	);
 }
 
-export function VmPanel({
+export const VmPanel = memo(function VmPanel({
 	sessionId,
 	tabs,
 	active,
@@ -235,4 +240,4 @@ export function VmPanel({
 			</div>
 		</WorkspacePane>
 	);
-}
+});
