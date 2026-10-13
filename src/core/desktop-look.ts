@@ -19,10 +19,12 @@ export type LookPaths = {
  * The variables the desktop's programs run with, so they find its settings and
  * theme. GTK_THEME makes GTK 3's apps dark (settings.ini's dark preference
  * alone leaves them light), and GTK2_RC_FILES does the same for GTK 2's, as
- * Debian's PCManFM is.
+ * Debian's PCManFM is. Caches stay where they are: Playwright finds its
+ * browsers in the usual one. SHELL is what the terminal runs, which leaves the
+ * desktop's settings out of the shell.
  */
 export const lookEnv = ({ home }: LookPaths) =>
-	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data XDG_CACHE_HOME=${home}/cache GTK_THEME=Adwaita:dark GTK2_RC_FILES=${home}/gtkrc-2.0 NO_AT_BRIDGE=1`;
+	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data GTK_THEME=Adwaita:dark GTK2_RC_FILES=${home}/gtkrc-2.0 NO_AT_BRIDGE=1 SHELL=${home}/bin/anton-shell`;
 
 /** A small seeded random, so the stars sit in the same places on every machine. */
 function seeded(seed: number) {
@@ -91,6 +93,14 @@ b=$(NODE_PATH="$(npm root -g 2>/dev/null)" node -e "process.stdout.write(require
 [ -n "$b" ] || { echo 'No browser in the sandbox' >&2; exit 3; }
 # Its own profile, apart from the browser tool's; --test-type and no Google keys keep infobars off the page.
 exec env GOOGLE_API_KEY=no GOOGLE_DEFAULT_CLIENT_ID=no GOOGLE_DEFAULT_CLIENT_SECRET=no "$b" --no-sandbox --test-type --no-first-run --no-default-browser-check --start-maximized --user-data-dir=${home}/browser "$@"
+`;
+
+/** The terminal's shell: the machine's own settings, not the desktop's, for the programs run in it (git, npm and the rest). */
+const SHELL_SCRIPT = `#!/bin/sh
+unset XDG_CONFIG_HOME XDG_DATA_HOME
+SHELL=$(command -v bash || echo /bin/sh)
+export SHELL
+exec "$SHELL" "$@"
 `;
 
 const execOf = (exec: string, paths: LookPaths) => exec.replace('BROWSER', browserCommand(paths)).replace('ROOT', paths.root);
@@ -306,6 +316,7 @@ export function writeLook(paths: LookPaths, screen: { width: number; height: num
 		[`${home}/config/lxterminal/lxterminal.conf`, LXTERMINAL],
 		[`${home}/config/user-dirs.dirs`, `XDG_DESKTOP_DIR="${home}/Desktop"\n`],
 		[`${home}/bin/anton-browser`, browserScript(paths)],
+		[`${home}/bin/anton-shell`, SHELL_SCRIPT],
 		[`${home}/wallpaper.svg`, WALLPAPER],
 		...APPS.flatMap((app): Array<[string, string]> => [
 			[`${home}/data/applications/anton-${app.id}.desktop`, desktopEntry(app, paths)],
@@ -314,9 +325,9 @@ export function writeLook(paths: LookPaths, screen: { width: number; height: num
 	];
 	const folders = [...new Set(files.map(([file]) => file.slice(0, file.lastIndexOf('/'))))];
 	return [
-		`mkdir -p ${folders.join(' ')} ${home}/cache`,
+		`mkdir -p ${folders.join(' ')}`,
 		...files.map(([file, content]) => `cat > '${file}' <<'ANTON_EOF'\n${content}${content.endsWith('\n') ? '' : '\n'}ANTON_EOF`),
-		`chmod +x ${home}/bin/anton-browser ${home}/Desktop/*.desktop`,
+		`chmod +x ${home}/bin/* ${home}/Desktop/*.desktop`,
 		// The task's folder on the desktop too, as a folder to open.
 		`ln -sfn '${paths.root}' '${home}/Desktop/Workspace'`,
 		// Openbox's own settings, with the theme above, its fonts, and one desktop.
