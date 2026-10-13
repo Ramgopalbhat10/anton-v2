@@ -390,6 +390,14 @@ test('the Claude plan shows what Claude Code says, lists its models when signed 
 		['runtime', 'connected', 'ada@example.com', 'max', '2.5.0', fake.runtime.signInCommand, 1],
 	);
 	await assert.rejects(subscriptions.disconnect('claude'), /auth logout/);
+
+	// A list an older Anton saved is not trusted after a start: Claude Code is asked again.
+	const listedBefore = fake.calls.list;
+	await subscriptions.subscriptionsView();
+	assert.equal(fake.calls.list, listedBefore, 'listed once per start, then reused');
+	listed[0] = { ...listed[0], name: 'Claude Opus 5 (renamed)' };
+	subscriptions.resetSubscriptionsForTests();
+	assert.equal((await subscriptions.subscriptionsView())[0].models[0].name, 'Claude Opus 5 (renamed)');
 	await assert.rejects(subscriptions.beginLogin('claude'), /auth login/);
 
 	await subscriptions.noteExtraUsage('claude');

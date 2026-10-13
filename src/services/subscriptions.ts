@@ -184,9 +184,12 @@ export function priced(model: SubscriptionModel, plan: string, options: Subscrip
 
 const listing = new Map<string, Promise<SubscriptionModel[]>>();
 const retryAt = new Map<string, number>();
+/** Plans whose models this process has listed. */
+const listedHere = new Set<string>();
 
 /** A plan Anton signs in to, or a program that signs in itself, as the model list sees them. */
-type Plan = { id: string; name: string; list: () => Promise<SubscriptionModel[]> };
+/** `local`: listed on this server for nothing (Claude Code), so listed again after each start rather than trusting a list an older Anton saved. */
+type Plan = { id: string; name: string; list: () => Promise<SubscriptionModel[]>; local?: boolean };
 
 const oauthPlan = (provider: SubscriptionProvider): Plan => ({
 	id: provider.id,
@@ -194,18 +197,19 @@ const oauthPlan = (provider: SubscriptionProvider): Plan => ({
 	list: async () => provider.listModels(await accessToken(provider.id)),
 });
 
-const runtimePlan = (runtime: AgentRuntime): Plan => ({ id: runtime.id, name: runtime.name, list: () => runtime.listModels() });
+const runtimePlan = (runtime: AgentRuntime): Plan => ({ id: runtime.id, name: runtime.name, list: () => runtime.listModels(), local: true });
 
 async function listNow(plan: Plan): Promise<SubscriptionModel[]> {
 	const models = await plan.list();
 	await save(plan.id, { models, modelsAt: Date.now() });
 	retryAt.delete(plan.id);
+	listedHere.add(plan.id);
 	return models;
 }
 
 /** The account's models, listed again once the last list is an hour old; a failure serves the last list for a while. */
 async function freshModels(provider: Plan, current: Stored): Promise<SubscriptionModel[]> {
-	const fresh = current.modelsAt !== null && Date.now() - current.modelsAt < MODELS_TTL_MS;
+	const fresh = current.modelsAt !== null && Date.now() - current.modelsAt < MODELS_TTL_MS && (!provider.local || listedHere.has(provider.id));
 	if (fresh || (retryAt.get(provider.id) ?? 0) > Date.now()) return current.models;
 	let pending = listing.get(provider.id);
 	if (!pending) {
@@ -494,7 +498,7 @@ async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView
 /** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */
 export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionView> {
 	const [current, status] = await Promise.all([stored(runtime.id), runtime.status()]);
-	const models = status.signedIn ? await withTokens(current.models) : [];
+	const models = status.signedIn ? await withTokens(await freshModels(runtimePlan(runtime), current)) : [];
 	return {
 		id: runtime.id,
 		name: runtime.name,
@@ -637,4 +641,5 @@ export function resetSubscriptionsForTests(): void {
 	for (const id of attempts.keys()) endAttempt(id);
 	cache.clear();
 	retryAt.clear();
+	listedHere.clear();
 }
