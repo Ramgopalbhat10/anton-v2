@@ -94,6 +94,14 @@ describe('Subscriptions', () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [plan(), claude] });
 		api.refreshSubscriptionModels.mockResolvedValue(claude);
 		page();
+		const tabs = within(await screen.findByRole('tablist', { name: 'Plans' })).getAllByRole('tab');
+		expect(tabs.map((tab) => [tab.getAttribute('aria-selected'), tab.querySelector('svg title')?.textContent])).toEqual([
+			['true', 'OpenAI'],
+			['false', 'Anthropic'],
+		]);
+		expect(screen.getByRole('tab', { name: 'Claude' })).toBe(tabs[1]);
+		expect(screen.queryByLabelText('Command that signs Claude Code in')).toBeNull();
+		fireEvent.click(tabs[1]);
 		const command = await screen.findByLabelText('Command that signs Claude Code in');
 		expect(command.textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth login');
 		expect(screen.getByText('Sign in on the server')).toBeTruthy();
@@ -118,7 +126,8 @@ describe('Subscriptions', () => {
 		expect(screen.getByText('max', { selector: 'dd' })).toBeTruthy();
 		expect(screen.getByText('2.5.0', { selector: 'dd' })).toBeTruthy();
 		expect(screen.getByText(/calls now bill extra usage/)).toBeTruthy();
-		expect(screen.getByText('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth logout')).toBeTruthy();
+		expect(screen.getByLabelText('Command that signs Claude Code out').textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth logout');
+		expect(screen.getByText(/For your own use only/).textContent).not.toContain('auth logout');
 		expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
 	});
 

@@ -237,20 +237,28 @@ function piEntry(id: string): PiAnthropic | undefined {
  */
 const PLAN_CONTEXT = 200_000;
 
+/** `claude-opus-4-7` as "Claude Opus 4.7"; a dated snapshot drops its date. */
+export function nameOf(id: string): string {
+	const [, family = '', ...version] = id.replace(/-\d{8}$/, '').split('-');
+	return `Claude ${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`.trim();
+}
+
 /** One of the models Claude Code offers the account, as Anton lists it. Aliases such as `default` are left out. */
 export function toSubscriptionModel(listed: ClaudeModel, gateway = GATEWAY): SubscriptionModel | null {
 	const id = listed.resolvedModel ?? listed.value;
 	if (!id.startsWith('claude-')) return null;
 	const pi = piEntry(id);
-	const [label, ...rest] = listed.description.split(' · ');
+	// Claude Code describes a model as "Opus 4.7 · Best for everyday tasks", or with the second part only.
+	const parts = listed.description.split(' · ');
+	const description = parts.length > 1 ? parts.slice(1).join(' · ') : listed.description;
 	const efforts = (listed.supportedEffortLevels ?? []) as Reasoning[];
 	const levels: Reasoning[] = listed.supportsAdaptiveThinking || efforts.length ? ['off', ...efforts] : [];
 	const reasoning = REASONING_LEVELS.filter((level) => levels.includes(level));
 	return {
 		id: `${gateway}/${id}`,
-		name: label ? `Claude ${label}` : listed.displayName,
+		name: nameOf(id),
 		vendor: 'Anthropic',
-		description: rest.join(' · ') || 'Runs on your Claude plan through Claude Code.',
+		description: description || 'Runs on your Claude plan through Claude Code.',
 		createdAt: 0,
 		contextLength: Math.min(PLAN_CONTEXT, pi?.contextWindow ?? PLAN_CONTEXT),
 		maxOutput: pi?.maxTokens ?? null,
@@ -267,7 +275,8 @@ export function toModels(listed: ClaudeModel[], gateway = GATEWAY): Subscription
 		const model = toSubscriptionModel(entry, gateway);
 		if (model && !models.has(model.id)) models.set(model.id, model);
 	}
-	return [...models.values()];
+	// A dated snapshot listed beside its undated name is the same model twice.
+	return [...models.values()].filter((model) => !/-\d{8}$/.test(model.id) || !models.has(model.id.replace(/-\d{8}$/, '')));
 }
 
 type Account = { email?: string; subscriptionType?: string; tokenSource?: string; apiKeySource?: string; apiProvider?: string };

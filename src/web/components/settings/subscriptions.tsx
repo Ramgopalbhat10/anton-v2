@@ -8,6 +8,8 @@ import { AREA } from '@/components/repo-settings';
 import { Btn, Icon, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type Subscription, type SubscriptionOptions } from '@/lib/api';
 import { age, tokens } from '@/lib/format';
+import { logoFor } from '@/lib/provider-logos';
+import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
 import { FIELD, PageHeading, SaveState, SettingRow } from './parts';
 
@@ -380,7 +382,7 @@ function Command({ text, label }: { text: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
 		<div className="flex items-start gap-2">
-			<pre aria-label={label} className="m-0 min-w-0 flex-1 overflow-x-auto rounded-md bg-(--well-bg) px-3 py-2 font-mono text-[11.5px] leading-[18px] text-(--text-primary)">
+			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-md bg-(--well-bg) px-3 py-2 font-mono text-[11.5px] leading-[18px] break-all whitespace-pre-wrap text-(--text-primary)">
 				{text}
 			</pre>
 			<Btn
@@ -466,6 +468,11 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					) : null}
 					<Models subscription={subscription} />
 					<PlanSettings subscription={subscription} error={refresh.error} />
+					{signOut ? (
+						<CardSection label="Sign out on the server">
+							<Command text={signOut} label="Command that signs Claude Code out" />
+						</CardSection>
+					) : null}
 				</>
 			) : (
 				<CardSection label="Sign in on the server" hint="Once">
@@ -479,15 +486,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 			)}
 			<CardFooter
 				caption={
-					<Caption>
-						For your own use only: Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.
-						{connected && signOut ? (
-							<>
-								{' '}
-								Sign out with <InlineCode>{signOut}</InlineCode>.
-							</>
-						) : null}
-					</Caption>
+					<Caption>For your own use only: Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</Caption>
 				}
 			>
 				<Btn size="sm" variant={connected ? 'ghost' : 'primary'} icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
@@ -498,8 +497,41 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
+/** The tab for one plan: its vendor's logo, its name and whether it is connected. */
+function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; on: boolean; onSelect: () => void }) {
+	const logo = logoFor({ id: `${subscription.gateway}/` });
+	const connected = subscription.state === 'connected';
+	return (
+		<button
+			type="button"
+			role="tab"
+			id={`plan-tab-${subscription.id}`}
+			aria-selected={on}
+			aria-controls={`plan-panel-${subscription.id}`}
+			onClick={onSelect}
+			className={cn(
+				'-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-1 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
+				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{logo ? (
+				// LobeHub's one-colour logos take the text colour, sized by the font size.
+				<span aria-hidden className={cn('flex text-[15px]', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
+			) : null}
+			{subscription.name}
+			<span
+				title={connected ? 'Connected' : STATUS[subscription.state].label}
+				className={cn('size-1.5 rounded-full', connected ? 'bg-(--success-base)' : subscription.state === 'expired' ? 'bg-(--danger-base)' : 'bg-(--border-strong)')}
+			/>
+		</button>
+	);
+}
+
 export function SubscriptionsPage() {
 	const view = useQuery({ queryKey: ['subscriptions'], queryFn: api.subscriptions });
+	const [picked, setPicked] = useState<string | null>(null);
+	const plans = view.data?.subscriptions ?? [];
+	const current = plans.find((plan) => plan.id === picked) ?? plans[0];
 	return (
 		<>
 			<PageHeading title="Subscriptions">
@@ -510,17 +542,18 @@ export function SubscriptionsPage() {
 				<Spinner size={12} />
 			) : view.isError ? (
 				<p className="m-0 text-[12px] text-(--danger-text)">{view.error.message}</p>
-			) : (
-				<div className="flex flex-col gap-6">
-					{view.data.subscriptions.map((subscription) =>
-						subscription.kind === 'runtime' ? (
-							<ClaudePlan key={subscription.id} subscription={subscription} />
-						) : (
-							<Plan key={subscription.id} subscription={subscription} />
-						),
-					)}
+			) : current ? (
+				<div className="flex flex-col gap-5">
+					<div role="tablist" aria-label="Plans" className="flex gap-6 border-b border-(--border-subtle)">
+						{plans.map((plan) => (
+							<PlanTab key={plan.id} subscription={plan} on={plan.id === current.id} onSelect={() => setPicked(plan.id)} />
+						))}
+					</div>
+					<div role="tabpanel" id={`plan-panel-${current.id}`} aria-labelledby={`plan-tab-${current.id}`}>
+						{current.kind === 'runtime' ? <ClaudePlan key={current.id} subscription={current} /> : <Plan key={current.id} subscription={current} />}
+					</div>
 				</div>
-			)}
+			) : null}
 		</>
 	);
 }

@@ -347,12 +347,15 @@ test('a sign-in counts only when it bills a plan, and the models Claude Code off
 		{ value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus', description: 'Opus 5.5 · Most capable', supportsAdaptiveThinking: true, supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
 		{ value: 'claude-opus-5-5', displayName: 'Opus', description: 'Opus 5.5' },
 		{ value: 'haiku', resolvedModel: 'claude-haiku-4-5', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest' },
+		{ value: 'claude-haiku-4-5-20251001', displayName: 'Haiku', description: 'Fastest for quick answers' },
+		{ value: 'claude-fable-5-1', displayName: 'Fable', description: 'For your toughest challenges' },
 	]);
 	assert.deepEqual(
 		models.map((model) => [model.id, model.name, model.description, model.contextLength, model.reasoning, model.defaultReasoning, model.listPrice?.input]),
 		[
 			['claude-code/claude-opus-5-5', 'Claude Opus 5.5', 'Most capable', 200_000, ['off', 'low', 'medium', 'high', 'max'], 'high', 5],
 			['claude-code/claude-haiku-4-5', 'Claude Haiku 4.5', 'Fastest', 200_000, [], 'off', 1],
+			['claude-code/claude-fable-5-1', 'Claude Fable 5.1', 'For your toughest challenges', 200_000, [], 'off', 10],
 		],
 	);
 });
