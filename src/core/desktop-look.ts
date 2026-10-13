@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /*
  * What makes the desktop look like a computer's: a wallpaper, a taskbar
  * (tint2) with launchers, a clock and the open windows, icons on the desktop
@@ -26,55 +28,102 @@ export type LookPaths = {
 export const lookEnv = ({ home }: LookPaths) =>
 	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data GTK_THEME=Adwaita:dark GTK2_RC_FILES=${home}/gtkrc-2.0 NO_AT_BRIDGE=1 SHELL=${home}/bin/anton-shell`;
 
-/** A small seeded random, so the stars sit in the same places on every machine. */
-function seeded(seed: number) {
-	return () => {
-		seed = (seed + 0x6d2b79f5) | 0;
-		let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
+/*
+ * The wallpaper is Anton's own drawing: its cube mark, lit in Signal Cyan on a
+ * floor of grid, wired to the machines it runs, one of them at work, as the
+ * app's illustrations draw them. Isometric, at 1280×800, rendered in the
+ * machine with rsvg-convert to the screen's size.
+ */
+const ISO_ORIGIN = { x: 790, y: 360 };
+const COS30 = Math.cos(Math.PI / 6);
+
+/** A point on or above the floor: along the floor's two axes, and its height. */
+type Iso = [u: number, v: number, z: number];
+const iso = ([u, v, z]: Iso) => [ISO_ORIGIN.x + (u - v) * COS30, ISO_ORIGIN.y + (u + v) * 0.5 - z] as const;
+const isoPoints = (points: Iso[]) => points.map((point) => iso(point).map((n) => n.toFixed(1)).join(',')).join(' ');
+
+/** A block standing on the floor, its three faces filled and its outline and near edges drawn, as the mark's are. */
+function block(u: number, v: number, size: number, h: number, faces: { top: string; left: string; right: string }, edge: string, edgeWidth = 1): string {
+	const [u1, v1] = [u + size, v + size];
+	return [
+		`<polygon points="${isoPoints([[u, v1, h], [u1, v1, h], [u1, v1, 0], [u, v1, 0]])}" fill="${faces.left}"/>`,
+		`<polygon points="${isoPoints([[u1, v, h], [u1, v1, h], [u1, v1, 0], [u1, v, 0]])}" fill="${faces.right}"/>`,
+		`<polygon points="${isoPoints([[u, v, h], [u1, v, h], [u1, v1, h], [u, v1, h]])}" fill="${faces.top}"/>`,
+		`<g fill="none" stroke="${edge}" stroke-width="${edgeWidth}" stroke-linejoin="round">`,
+		`<polygon points="${isoPoints([[u, v, h], [u1, v, h], [u1, v, 0], [u1, v1, 0], [u, v1, 0], [u, v1, h]])}"/>`,
+		`<polyline points="${isoPoints([[u, v1, h], [u1, v1, h], [u1, v, h]])}"/>`,
+		`<polyline points="${isoPoints([[u1, v1, h], [u1, v1, 0]])}"/>`,
+		'</g>',
+	].join('');
 }
 
-function stars(): string {
-	const random = seeded(7);
-	return Array.from({ length: 90 }, () => {
-		const x = Math.round(random() * 1280);
-		const y = Math.round(random() * 430);
-		const r = [0.6, 0.8, 1, 1.2, 1.6][Math.floor(random() * 5)];
-		const opacity = [0.35, 0.5, 0.7, 0.9][Math.floor(random() * 4)];
-		return `<circle cx="${x}" cy="${y}" r="${r}" fill-opacity="${opacity}"/>`;
-	}).join('');
+/** A machine the mark runs: a dark block with bars and a light on top, lit when at work. */
+function machine(u: number, v: number, lit: boolean): string {
+	const [size, h] = [80, 36];
+	const [x, y] = iso([u + size - 14, v + 14, h]).map((n) => n.toFixed(1));
+	const bars = [40, 28, 50].map(
+		(length, i) =>
+			`<polyline points="${isoPoints([[u + 12, v + 24 + i * 14, h], [u + 12 + length, v + 24 + i * 14, h]])}" fill="none" stroke="${lit && i === 0 ? '#3FB6D8' : 'rgba(255,255,255,0.18)'}" stroke-width="3" stroke-linecap="round"/>`,
+	);
+	return (
+		block(u, v, size, h, { top: '#1C1C21', left: '#16161A', right: '#101012' }, lit ? 'rgba(111,205,232,0.7)' : 'rgba(255,255,255,0.14)') +
+		bars.join('') +
+		`<circle cx="${x}" cy="${y}" r="3.2" fill="${lit ? '#6FCDE8' : '#3A3A43'}"/>` +
+		(lit ? `<circle cx="${x}" cy="${y}" r="9" fill="#3FB6D8" fill-opacity="0.35" filter="url(#soft)"/>` : '')
+	);
 }
 
-/** An aurora over mountains at night, drawn as SVG at 1280×800 and rendered in the machine with rsvg-convert to the screen's size. */
-export const WALLPAPER = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+/** A wire across the floor, square to the grid: solid cyan when it carries work, dashed when idle. */
+const wire = (points: Iso[], lit: boolean) =>
+	`<polyline points="${isoPoints(points)}" fill="none" stroke="${lit ? '#3FB6D8' : 'rgba(255,255,255,0.16)'}" stroke-width="${lit ? 2 : 1.5}"${lit ? '' : ' stroke-dasharray="4 6"'} stroke-linejoin="round"/>`;
+
+function floor(): string {
+	const lines: string[] = [];
+	for (let n = -1400; n <= 1400; n += 40) lines.push(`<polyline points="${isoPoints([[n, -1400, 0], [n, 1400, 0]])}"/>`, `<polyline points="${isoPoints([[-1400, n, 0], [1400, n, 0]])}"/>`);
+	return lines.join('');
+}
+
+export const WALLPAPER = (() => {
+	const [width, height] = [1280, 800];
+	const [glowX, glowY] = iso([0, 0, 0]);
+	const [pulseX, pulseY] = iso([180, 50, 0]).map((n) => n.toFixed(1));
+	const centre = (ISO_ORIGIN.x / width).toFixed(3);
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
 <defs>
-<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04060f"/><stop offset="0.6" stop-color="#0b1233"/><stop offset="1" stop-color="#1a1240"/></linearGradient>
-<filter id="glow" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2080" height="1600"><feGaussianBlur stdDeviation="60"/></filter>
-<filter id="ribbon" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2080" height="1600"><feGaussianBlur stdDeviation="14"/></filter>
-<filter id="haze" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2080" height="1600"><feGaussianBlur stdDeviation="4"/></filter>
-<linearGradient id="aurora" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2dd4bf"/><stop offset="0.5" stop-color="#818cf8"/><stop offset="1" stop-color="#e879f9"/></linearGradient>
-<linearGradient id="far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset="1" stop-color="#0f0d2e"/></linearGradient>
-<linearGradient id="near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0a24"/><stop offset="1" stop-color="#05040f"/></linearGradient>
-<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0"/></filter>
+<radialGradient id="bg" cx="${centre}" cy="0.42" r="0.85"><stop offset="0" stop-color="#0F1C22"/><stop offset="0.55" stop-color="#0B0E11"/><stop offset="1" stop-color="#0A0A0B"/></radialGradient>
+<radialGradient id="fade" cx="${centre}" cy="0.5" r="0.62"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<mask id="near"><rect width="${width}" height="${height}" fill="url(#fade)"/></mask>
+<linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9EE1F3"/><stop offset="1" stop-color="#3FB6D8"/></linearGradient>
+<linearGradient id="left" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2C9BBD"/><stop offset="1" stop-color="#17627A"/></linearGradient>
+<linearGradient id="right" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17627A"/><stop offset="1" stop-color="#0D3644"/></linearGradient>
+<filter id="glow" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2080" height="1600"><feGaussianBlur stdDeviation="70"/></filter>
+<filter id="soft" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2080" height="1600"><feGaussianBlur stdDeviation="6"/></filter>
+<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.035 0"/></filter>
 </defs>
-<rect width="1280" height="800" fill="url(#sky)"/>
-<g fill="#ffffff">${stars()}</g>
-<g filter="url(#glow)">
-<ellipse cx="640" cy="330" rx="560" ry="120" fill="#4f46e5" fill-opacity="0.45" transform="rotate(-10 640 330)"/>
-<ellipse cx="330" cy="420" rx="300" ry="90" fill="#14b8a6" fill-opacity="0.45" transform="rotate(-14 330 420)"/>
-<ellipse cx="1000" cy="230" rx="300" ry="90" fill="#c026d3" fill-opacity="0.35" transform="rotate(-8 1000 230)"/>
-</g>
-<g fill="none" stroke="url(#aurora)" stroke-linecap="round">
-<path filter="url(#ribbon)" d="M -60 470 C 200 380, 420 430, 640 330 S 1060 170, 1340 150" stroke-width="40" stroke-opacity="0.55"/>
-<path filter="url(#haze)" d="M -60 470 C 200 380, 420 430, 640 330 S 1060 170, 1340 150" stroke-width="3" stroke-opacity="0.8"/>
-<path filter="url(#ribbon)" d="M -60 520 C 240 430, 470 480, 700 380 S 1100 250, 1340 240" stroke-width="22" stroke-opacity="0.35"/>
-</g>
-<path d="M0 800 L0 565 L70 535 L130 552 L210 472 L262 506 L320 488 L400 545 L470 515 L545 452 L602 500 L652 488 L722 543 L800 502 L862 428 L930 492 L992 470 L1062 528 L1132 482 L1202 512 L1280 474 L1280 800 Z" fill="url(#far)"/>
-<path d="M0 800 L0 650 Q 120 606 240 644 T 480 636 T 720 656 T 960 622 T 1200 652 T 1440 634 L1280 800 Z" fill="url(#near)"/>
-<rect width="1280" height="800" filter="url(#grain)"/>
+<rect width="${width}" height="${height}" fill="url(#bg)"/>
+<g mask="url(#near)" fill="none" stroke="#3FB6D8" stroke-opacity="0.11">${floor()}</g>
+<ellipse cx="${glowX}" cy="${glowY + 40}" rx="330" ry="170" fill="#3FB6D8" fill-opacity="0.28" filter="url(#glow)"/>
+${wire([[118, -40, 0], [180, -40, 0], [180, -190, 0], [220, -190, 0]], false)}
+${wire([[118, 50, 0], [250, 50, 0]], true)}
+${wire([[-40, 118, 0], [-40, 270, 0], [-170, 270, 0]], false)}
+${wire([[50, 118, 0], [50, 260, 0]], false)}
+${wire([[118, 118, 0], [250, 250, 0]], false)}
+<circle cx="${pulseX}" cy="${pulseY}" r="4" fill="#CBEEF8"/>
+<circle cx="${pulseX}" cy="${pulseY}" r="12" fill="#3FB6D8" fill-opacity="0.5" filter="url(#soft)"/>
+${machine(220, -230, false)}
+${machine(250, 10, true)}
+${machine(-250, 230, false)}
+${machine(10, 260, false)}
+${machine(250, 230, false)}
+${block(-118, -118, 236, 10, { top: '#121418', left: '#0D0F12', right: '#0A0B0D' }, 'rgba(111,205,232,0.45)')}
+${block(-80, -80, 160, 160, { top: 'url(#top)', left: 'url(#left)', right: 'url(#right)' }, '#CBEEF8', 2)}
+<text x="${width - 36}" y="${height - 66}" text-anchor="end" font-family="Inter" font-weight="600" font-size="15" letter-spacing="5" fill="#EDEDEF" fill-opacity="0.32">ANTON</text>
+<rect width="${width}" height="${height}" filter="url(#grain)"/>
 </svg>`;
+})();
+
+/** The rendered wallpaper's name changes with the drawing, so a machine that rendered an older one renders the new one. */
+const WALLPAPER_PNG = `wallpaper-${createHash('sha256').update(WALLPAPER).digest('hex').slice(0, 10)}.png`;
 
 /** The programs on the taskbar, the desktop and the right-click menu. */
 const APPS = [
@@ -120,50 +169,50 @@ padding.height: 5
 window.handle.width: 0
 window.client.padding.width: 0
 window.client.padding.height: 0
-window.active.border.color: #2b3245
-window.inactive.border.color: #1a1e2b
-window.active.title.separator.color: #2b3245
-window.inactive.title.separator.color: #1a1e2b
+window.active.border.color: #2C2C34
+window.inactive.border.color: #1C1C21
+window.active.title.separator.color: #2C2C34
+window.inactive.title.separator.color: #1C1C21
 window.active.title.bg: flat solid
-window.active.title.bg.color: #161a26
+window.active.title.bg.color: #16161A
 window.inactive.title.bg: flat solid
-window.inactive.title.bg.color: #10131c
+window.inactive.title.bg.color: #101012
 window.*.label.bg: parentrelative
-window.active.label.text.color: #e6e9f2
-window.inactive.label.text.color: #7c8499
+window.active.label.text.color: #EDEDEF
+window.inactive.label.text.color: #6E6E78
 window.label.text.justify: center
 window.*.button.*.bg: parentrelative
-window.active.button.*.image.color: #c3c9d9
+window.active.button.*.image.color: #C8C8CE
 window.active.button.hover.bg: flat solid
-window.active.button.hover.bg.color: #2b3245
+window.active.button.hover.bg.color: #2C2C34
 window.active.button.hover.image.color: #ffffff
 window.active.button.pressed.bg: flat solid
-window.active.button.pressed.bg.color: #3b4460
-window.active.button.disabled.image.color: #4a5166
-window.inactive.button.*.image.color: #5c6378
+window.active.button.pressed.bg.color: #3A3A43
+window.active.button.disabled.image.color: #4A4A52
+window.inactive.button.*.image.color: #4A4A52
 menu.border.width: 1
-menu.border.color: #2b3245
+menu.border.color: #2C2C34
 menu.items.bg: flat solid
-menu.items.bg.color: #161a26
-menu.items.text.color: #e6e9f2
-menu.items.disabled.text.color: #5c6378
+menu.items.bg.color: #16161A
+menu.items.text.color: #EDEDEF
+menu.items.disabled.text.color: #4A4A52
 menu.items.active.bg: flat solid
-menu.items.active.bg.color: #6d5df6
-menu.items.active.text.color: #ffffff
+menu.items.active.bg.color: #3FB6D8
+menu.items.active.text.color: #06181F
 menu.title.bg: flat solid
-menu.title.bg.color: #10131c
-menu.title.text.color: #9aa3b8
+menu.title.bg.color: #101012
+menu.title.text.color: #A0A0A8
 menu.title.text.justify: center
-menu.separator.color: #2b3245
+menu.separator.color: #2C2C34
 osd.border.width: 1
-osd.border.color: #2b3245
+osd.border.color: #2C2C34
 osd.bg: flat solid
-osd.bg.color: #161a26
-osd.label.text.color: #e6e9f2
+osd.bg.color: #16161A
+osd.label.text.color: #EDEDEF
 osd.hilight.bg: flat solid
-osd.hilight.bg.color: #6d5df6
+osd.hilight.bg.color: #3FB6D8
 osd.unhilight.bg: flat solid
-osd.unhilight.bg.color: #2b3245
+osd.unhilight.bg.color: #2C2C34
 `;
 
 const menu = (paths: LookPaths) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -180,7 +229,7 @@ rounded = 0
 border_width = 1
 border_sides = T
 border_color = #ffffff 10
-background_color = #0b0f1c 92
+background_color = #0A0A0B 92
 # 2: a window
 rounded = 6
 border_width = 0
@@ -225,7 +274,7 @@ task_centered = 0
 task_maximum_size = 220 32
 task_padding = 8 4 8
 task_font = Inter 9
-task_font_color = #c3c9d9 100
+task_font_color = #C8C8CE 100
 task_active_font_color = #ffffff 100
 task_background_id = 2
 task_active_background_id = 3
@@ -236,7 +285,7 @@ time1_format = %H:%M
 time1_font = Inter Bold 10
 time2_format = %a %d %b
 time2_font = Inter 8
-clock_font_color = #e6e9f2 100
+clock_font_color = #EDEDEF 100
 clock_padding = 8 0
 clock_background_id = 0
 `;
@@ -244,8 +293,8 @@ clock_background_id = 0
 const DESKTOP_ITEMS = (paths: LookPaths) => `[*]
 wallpaper_mode=crop
 wallpaper_common=1
-wallpaper=${paths.home}/wallpaper.png
-desktop_bg=#04060f
+wallpaper=${paths.home}/${WALLPAPER_PNG}
+desktop_bg=#0A0A0B
 desktop_fg=#ffffff
 desktop_shadow=#000000
 desktop_font=Inter 10
@@ -276,7 +325,7 @@ gtk-font-name="Inter 10"
 /** The terminal: dark, with colours that read on it (the default blue is too dark to). */
 const LXTERMINAL = `[general]
 fontname=DejaVu Sans Mono 11
-bgcolor=rgb(13,17,30)
+bgcolor=rgb(16,16,18)
 fgcolor=rgb(220,225,235)
 hidescrollbar=true
 hidemenubar=true
@@ -284,7 +333,7 @@ geometry_columns=100
 geometry_rows=30
 cursorblinks=true
 color_preset=Custom
-palette_color_0=rgb(27,31,46)
+palette_color_0=rgb(35,35,42)
 palette_color_1=rgb(247,118,142)
 palette_color_2=rgb(158,206,106)
 palette_color_3=rgb(224,175,104)
@@ -332,6 +381,6 @@ export function writeLook(paths: LookPaths, screen: { width: number; height: num
 		`ln -sfn '${paths.root}' '${home}/Desktop/Workspace'`,
 		// Openbox's own settings, with the theme above, its fonts, and one desktop.
 		`sed -e 's|<name>Clearlooks</name>|<name>Anton</name>|' -e 's|<name>sans</name>|<name>Inter</name>|g' -e 's|<size>[0-9]*</size>|<size>10</size>|g' -e 's|<number>4</number>|<number>1</number>|' /etc/xdg/openbox/rc.xml > ${home}/config/openbox/rc.xml`,
-		`[ -s ${home}/wallpaper.png ] || rsvg-convert -w ${screen.width} -h ${screen.height} ${home}/wallpaper.svg -o ${home}/wallpaper.png`,
+		`[ -s ${home}/${WALLPAPER_PNG} ] || rsvg-convert -w ${screen.width} -h ${screen.height} ${home}/wallpaper.svg -o ${home}/${WALLPAPER_PNG}`,
 	].join('\n');
 }

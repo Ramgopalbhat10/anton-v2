@@ -115,7 +115,7 @@ ${detach(`Xvnc ${display} -geometry ${width}x${height} -depth 24 -SecurityTypes 
 echo $! > ${files}-x.pid
 for i in $(seq 1 100); do DISPLAY=${display} xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; done
 DISPLAY=${display} xdpyinfo >/dev/null 2>&1 || { tail -n 20 ${files}-x.log >&2; exit 1; }
-DISPLAY=${display} xsetroot -solid '#04060f' 2>/dev/null
+DISPLAY=${display} xsetroot -solid '#0A0A0B' 2>/dev/null
 ${env} ${detach('openbox', `${files}-wm.log`)}
 echo $! > ${files}-wm.pid
 ${env} ${detach('pcmanfm --desktop --profile anton', `${files}-icons.log`)}
