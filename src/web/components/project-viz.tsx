@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { HoverCard } from 'radix-ui';
 import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instrument';
@@ -84,75 +85,6 @@ export function ActivityBars({ bars, height = 32, className }: { bars: number[];
 	);
 }
 
-/** Arcs of a ring, each a share of the whole with a small gap between them. */
-function arcs(values: Array<{ key: string; value: number; color: string; className?: string }>, radius: number, gap: number) {
-	const circumference = 2 * Math.PI * radius;
-	const total = values.reduce((sum, item) => sum + item.value, 0);
-	const shown = values.filter((item) => item.value > 0);
-	let offset = 0;
-	return shown.map((item) => {
-		const length = (item.value / total) * circumference;
-		const arc = { ...item, dash: `${Math.max(0.5, length - (shown.length > 1 ? gap : 0))} ${circumference}`, offset: -offset };
-		offset += length;
-		return arc;
-	});
-}
-
-/**
- * The project as a ring: the outer ring split by state, the inner one by
- * parallel slots, lit while threads hold them, and what is open in the
- * middle.
- */
-function StateRing({ threads, maxParallel, size = 128 }: { threads: Session[]; maxParallel: number; size?: number }) {
-	const counts = countKinds(threads);
-	const c = size / 2;
-	const outer = c - 6;
-	const inner = c - 19;
-	const open = threads.length - counts.resolved;
-	const busy = Math.min(counts.working, maxParallel);
-	const states = arcs(
-		KINDS.map((kind) => ({ key: kind, value: counts[kind], color: kind === 'resolved' ? 'var(--neutral-600)' : STATE_COLOR[kind] })),
-		outer,
-		3,
-	);
-	const slots = arcs(
-		Array.from({ length: maxParallel }, (_, index) => ({ key: String(index), value: 1, color: index < busy ? 'var(--accent-base)' : 'var(--segment-off)', className: index < busy ? 'in-pulse' : undefined })),
-		inner,
-		4,
-	);
-	return (
-		<div className="relative shrink-0" style={{ width: size, height: size }}>
-			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-				<circle cx={c} cy={c} r={outer} fill="none" stroke="var(--segment-off)" strokeWidth={9} />
-				{states.map((arc) => (
-					<circle key={arc.key} cx={c} cy={c} r={outer} fill="none" stroke={arc.color} strokeWidth={9} strokeDasharray={arc.dash} strokeDashoffset={arc.offset} transform={`rotate(-90 ${c} ${c})`} />
-				))}
-				{slots.map((arc) => (
-					<circle
-						key={arc.key}
-						className={arc.className}
-						cx={c}
-						cy={c}
-						r={inner}
-						fill="none"
-						stroke={arc.color}
-						strokeWidth={3}
-						strokeLinecap="round"
-						strokeDasharray={arc.dash}
-						strokeDashoffset={arc.offset}
-						transform={`rotate(-90 ${c} ${c})`}
-					/>
-				))}
-			</svg>
-			<div className="absolute inset-0 flex flex-col items-center justify-center">
-				<span className="in-figure text-[30px] leading-[32px]">{open}</span>
-				<Caption>open</Caption>
-				<span className="in-num mt-0.5 text-[10.5px] text-(--text-disabled)">{counts.resolved} done</span>
-			</div>
-		</div>
-	);
-}
-
 const threadsWord = (count: number) => `${count} thread${count === 1 ? '' : 's'}`;
 
 /**
@@ -184,13 +116,49 @@ export function pulseLine(threads: Session[], now: number): { headline: string; 
 	return { headline: 'All threads resolved', why: moved };
 }
 
-/** The project's pulse: the ring beside what it comes to and its states, the project's bay in the rack, and recent activity. */
+/** One thread in the Pulse's strip: a cell in its state's colour that names it on a point and opens it. */
+function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) {
+	const kind = glyphKind(thread);
+	return (
+		<HoverCard.Root openDelay={120} closeDelay={80}>
+			<HoverCard.Trigger asChild>
+				<button
+					type="button"
+					onClick={onOpen}
+					aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
+					className={cn('h-full min-w-[4px] flex-1 rounded-[3px] outline-none hover:brightness-125 focus-visible:shadow-(--focus-ring)', kind === 'resolved' && 'in-hatch text-(--neutral-600)', kind === 'working' && 'in-sweep')}
+					style={kind === 'resolved' ? { backgroundColor: 'var(--segment-off)' } : { background: STATE_COLOR[kind] }}
+				/>
+			</HoverCard.Trigger>
+			<HoverCard.Portal>
+				<HoverCard.Content side="top" sideOffset={8} collisionPadding={12} className="in-pop z-50 flex w-[260px] flex-col gap-1 px-3 py-2.5 outline-none">
+					<span className="flex items-center gap-1.5">
+						<Glyph kind={kind} size={12} />
+						<span className={cn('in-caption', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
+						<span className="in-caption ml-auto">{age(threadActiveAt(thread))}</span>
+					</span>
+					<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
+					{threadLine(thread) ? <span className="line-clamp-2 text-[12px] leading-[17px] text-(--text-tertiary)">{threadLine(thread)}</span> : null}
+				</HoverCard.Content>
+			</HoverCard.Portal>
+		</HoverCard.Root>
+	);
+}
+
+/**
+ * The project's pulse: how many threads are open beside a sentence on what
+ * the project comes to; every thread as a cell in a strip, in order of
+ * state, with the states counted under it; the project's bay in the rack;
+ * and recent activity.
+ */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
 	const live = counts.working > 0;
 	const now = useNow(live);
+	const open = useOpenThread();
 	const { bars, span, total } = activity(threads, now);
 	const line = pulseLine(threads, now);
+	const strip = [...threads].sort((a, b) => KINDS.indexOf(glyphKind(a)) - KINDS.indexOf(glyphKind(b)) || threadActiveAt(b).localeCompare(threadActiveAt(a)));
 	return (
 		<Card
 			icon={Activity}
@@ -198,9 +166,12 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 			sub={threadsWord(threads.length)}
 			status={live ? <Status tone="accent" pulse>Live</Status> : <Status>Quiet</Status>}
 		>
-			<div className="flex items-stretch gap-5 px-4 pt-1 pb-4">
-				<StateRing threads={threads} maxParallel={space.maxParallel} />
-				<div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-1">
+			<div className="flex flex-col gap-3 px-4 pt-1 pb-4">
+				<div className="flex min-w-0 items-center gap-4">
+					<div className="flex shrink-0 flex-col items-start border-r border-(--border-subtle) pr-4">
+						<span className="in-figure text-[28px] leading-[30px]">{threads.length - counts.resolved}</span>
+						<Caption>open</Caption>
+					</div>
 					<div className="flex min-w-0 flex-col gap-0.5">
 						<span
 							className={cn(
@@ -212,15 +183,20 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 						</span>
 						<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{line.why}</span>
 					</div>
-					<div className="flex min-w-0 flex-col">
-						{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
-							<div key={kind} className="flex h-[24px] items-center gap-2 border-t border-dashed border-(--border-subtle)">
-								<Glyph kind={kind} size={12} />
-								<span className={cn('min-w-0 flex-1 truncate text-[12px]', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
-								<span className="in-num text-[12px] text-(--text-primary)">{counts[kind]}</span>
-							</div>
-						))}
-					</div>
+				</div>
+				<div role="group" aria-label="Threads by state" className="flex h-2.5 gap-[3px]">
+					{strip.map((thread) => (
+						<StripCell key={thread.id} thread={thread} onOpen={() => open(thread)} />
+					))}
+				</div>
+				<div className="flex flex-wrap gap-x-4 gap-y-1">
+					{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
+						<span key={kind} className="flex items-center gap-1.5 text-[12px]">
+							<Glyph kind={kind} size={11} />
+							<span className={kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)'}>{KIND_LABEL[kind]}</span>
+							<span className="in-num text-(--text-primary)">{counts[kind]}</span>
+						</span>
+					))}
 				</div>
 			</div>
 			<CardSection label="Rack" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>

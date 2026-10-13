@@ -95,7 +95,7 @@ describe('Agents panel', () => {
 		expect(screen.getByRole('region', { name: 'Working' })).toBeTruthy();
 	});
 
-	it('sums the task up in a sentence and its work by kind, and opens a step the decision model drove into its actions', () => {
+	it('sums the task up in a sentence over a timeline of its runs, and opens a step the decision model drove into its actions', () => {
 		const driven = run({
 			id: 'run-2',
 			toolCallId: 'call-2',
@@ -117,10 +117,9 @@ describe('Agents panel', () => {
 		expect(within(overview).getByText('1 working')).toBeTruthy();
 		expect(within(overview).getByText('$0.0004')).toBeTruthy();
 		expect(within(overview).getByText('1 agent working, 1 finished')).toBeTruthy();
-		expect(within(overview).getByText('1 failed. A mix of browsing and running commands over 2 steps.')).toBeTruthy();
-		expect(within(overview).getByRole('img', { name: 'Browsed 1, Ran 1' })).toBeTruthy();
+		expect(within(overview).getByText('1 failed. A mix of running commands and browsing over 2 steps.')).toBeTruthy();
 
-		fireEvent.click(within(screen.getByRole('region', { name: 'Working' })).getByRole('button'));
+		fireEvent.click(within(overview).getByTitle('Check top Hacker News stories'));
 		const steps = screen.getByRole('region', { name: 'Steps' });
 		expect(within(steps).getByText('Fill in the newsletter form')).toBeTruthy();
 		expect(within(steps).getByText('Typed email into textbox "Email"')).toBeTruthy();
