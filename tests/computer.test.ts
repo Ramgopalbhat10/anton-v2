@@ -13,7 +13,7 @@ const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
-const { desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
+const { DESKTOP_TOOLS, desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
 const { act, asAgentStep, computerScreenshot, computerView, connectComputer, inputCommand, setComputerControl, startComputer, userHasControl } = await import('../src/services/computer.ts');
 const { liveMachine } = await import('../src/services/workspace.ts');
 const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/vision.ts');
@@ -35,7 +35,7 @@ await insertSession({ id: 'pc', projectId: null, title: 'Computer', model: 'x', 
 
 const hasDesktop = (() => {
 	try {
-		execSync('command -v Xvnc && command -v websockify && command -v xdotool && command -v import', { stdio: 'ignore', shell: '/bin/bash' });
+		execSync(DESKTOP_TOOLS.map((tool) => `command -v ${tool}`).join(' && '), { stdio: 'ignore', shell: '/bin/bash' });
 		return true;
 	} catch {
 		return false;
@@ -45,7 +45,7 @@ const hasDesktop = (() => {
 after(() => {
 	// Local machines share this computer, so the desktop the tests started is stopped here.
 	const layout = desktopLayout(path.join(dir, 'data', 'machines', 'pc'));
-	execSync(`pkill -f "[X]vnc ${layout.display} " ; pkill -f "[w]ebsockify.*:${layout.socketPort} " ; true`, { shell: '/bin/bash' });
+	execSync(`for name in x wm panel icons socket; do [ -f ${layout.files}-$name.pid ] && kill "$(cat ${layout.files}-$name.pid)" 2>/dev/null; done; rm -rf ${layout.home}; true`, { shell: '/bin/bash' });
 	rmSync(dir, { recursive: true, force: true });
 });
 
@@ -78,7 +78,7 @@ test('looking at the panel never starts the sandbox', async () => {
 	await assert.rejects(computerView('nope'), /not found/);
 });
 
-test('Start computer starts the sandbox and its desktop, and the panel can connect', { skip: !hasDesktop && 'needs Xvnc, websockify, xdotool and ImageMagick' }, async () => {
+test('Start computer starts the sandbox and its desktop, and the panel can connect', { skip: !hasDesktop && 'needs the desktop packages' }, async () => {
 	const changes: string[] = [];
 	const stop = onChange((change) => change.kind === 'task' && changes.push(change.what));
 	const started = await startComputer('pc');
@@ -103,7 +103,7 @@ test('Start computer starts the sandbox and its desktop, and the panel can conne
 	assert.equal((await connectComputer('pc')).url, started.url);
 });
 
-test('the agent launches a program, types into it, and sees the screen', { skip: !hasDesktop && 'needs Xvnc, websockify, xdotool and ImageMagick' }, async () => {
+test('the agent launches a program, types into it, and sees the screen', { skip: !hasDesktop && 'needs the desktop packages' }, async () => {
 	const machine = await liveMachine('pc');
 	assert.ok(machine);
 	const launched = await act(machine, { action: 'launch', command: "xterm -title anton-test -xrm 'XTerm*allowTitleOps: false' -geometry 80x20+0+0" });

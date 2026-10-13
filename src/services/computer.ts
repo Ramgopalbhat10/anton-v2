@@ -1,5 +1,6 @@
 import { announce } from '../core/changes.ts';
-import { desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN, startDesktop } from '../core/desktop.ts';
+import { browserCommand } from '../core/desktop-look.ts';
+import { desktopEnv, desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN, startDesktop } from '../core/desktop.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
@@ -186,17 +187,8 @@ export type ComputerInput = {
 	command?: string;
 };
 
-/**
- * Opens a page in a browser window on the screen: the Chromium the sandbox's
- * browser tool uses, else one installed in the machine. Its own profile, so it
- * never meets the browser tool's.
- */
-const openPage = (url: string) =>
-	`b=$(NODE_PATH="$(npm root -g 2>/dev/null)" node -e "process.stdout.write(require('playwright').chromium.executablePath())" 2>/dev/null); ` +
-	`[ -x "$b" ] || b=$(command -v chromium || command -v chromium-browser || command -v google-chrome); ` +
-	`[ -n "$b" ] || { echo 'No browser in the sandbox' >&2; exit 3; }; ` +
-	// --test-type and no Google keys: no infobars about --no-sandbox or missing keys over the page.
-	`exec env GOOGLE_API_KEY=no GOOGLE_DEFAULT_CLIENT_ID=no GOOGLE_DEFAULT_CLIENT_SECRET=no "$b" --no-sandbox --test-type --no-first-run --no-default-browser-check --user-data-dir=/tmp/anton-desktop-browser --window-position=0,0 --window-size=${SCREEN.width},${SCREEN.height} ${quote(url)}`;
+/** Opens a page in a browser window on the screen, the desktop's Web Browser. */
+const openPage = (machine: Machine, url: string) => `${quote(browserCommand(desktopLayout(machine.root)))} ${quote(url)}`;
 
 const within = (value: number, max: number) => Math.min(max - 1, Math.max(0, Math.round(value)));
 
@@ -242,10 +234,10 @@ export function inputCommand(input: ComputerInput): string | null {
 }
 
 /** The program a step starts on the screen, for open and launch. */
-function programOf(input: ComputerInput): string | null {
+function programOf(machine: Machine, input: ComputerInput): string | null {
 	if (input.action === 'open') {
 		if (!input.url?.trim()) throw new InvalidInputError('open needs a url');
-		return openPage(addressToUrl(input.url));
+		return openPage(machine, addressToUrl(input.url));
 	}
 	return input.action === 'launch' ? (input.command ?? null) : null;
 }
@@ -274,11 +266,11 @@ export async function act(machine: Machine, input: ComputerInput, signal?: Abort
 	await ensureDesktop(machine);
 	const display = displayOf(machine);
 	const command = inputCommand(input);
-	const program = programOf(input);
+	const program = programOf(machine, input);
 	if (command) await run(machine, `DISPLAY=${display} ${command}`, { timeoutMs: 60_000, signal });
 	if (program) {
-		// Its own session, out of the step's reach, so a program left open stays open.
-		await run(machine, `cd ${quote(machine.root)} && DISPLAY=${display} env -u ANTON_EXEC setsid nohup bash -lc ${quote(program)} > /tmp/anton-launch.log 2>&1 < /dev/null &`);
+		// Its own session, out of the step's reach, so a program left open stays open; with the desktop's theme.
+		await run(machine, `cd ${quote(machine.root)} && ${desktopEnv(desktopLayout(machine.root))} env -u ANTON_EXEC setsid nohup bash -lc ${quote(program)} > /tmp/anton-launch.log 2>&1 < /dev/null &`);
 	}
 	const settle = input.action === 'wait' ? Math.min(Math.max(input.ms ?? 1000, 0), 15_000) : input.action === 'look' ? 0 : (SETTLE_MS[input.action] ?? 400);
 	if (settle) await new Promise((resolve) => setTimeout(resolve, settle));
