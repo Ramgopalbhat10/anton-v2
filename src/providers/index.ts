@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
+import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
+import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
@@ -31,6 +32,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 /**
  * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
+ * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
  * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
  */
 export type Providers = {
@@ -40,6 +42,7 @@ export type Providers = {
 	models: ModelCatalog;
 	decisions?: DecisionModel | null;
 	subscriptions?: SubscriptionProvider[];
+	runtimes?: AgentRuntime[];
 	browsers?: BrowserHost | null;
 };
 
@@ -58,6 +61,7 @@ export function getProviders(): Providers {
 		models: openRouterCatalog(config.openrouter),
 		decisions: decisionModel(),
 		subscriptions: [chatGptSubscription()],
+		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 	};
 	return providers;

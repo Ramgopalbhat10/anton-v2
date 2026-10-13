@@ -21,6 +21,7 @@ import {
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { claudeCodeProvider } from '../flue/claude-code-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
@@ -39,7 +40,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
-import { gatewayToken, onPlan } from '../services/subscriptions.ts';
+import { gatewayToken, onPlan, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
@@ -57,6 +58,8 @@ import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.
 setProvider(liveOpenRouterProvider(loadedModels));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
+// Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
+setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
 const OUTPUTS = '../outputs';
