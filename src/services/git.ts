@@ -17,6 +17,25 @@ const AUTHOR = ['user.name "Anton"', 'user.email "anton@users.noreply.github.com
 const withScratchIndex = (command: string) =>
 	`export GIT_INDEX_FILE="$(mktemp)"; cp .git/index "$GIT_INDEX_FILE" 2>/dev/null; git add -A >/dev/null 2>&1; ${command}; status=$?; rm -f "$GIT_INDEX_FILE"; exit $status`;
 
+/**
+ * A chat has no repository; when it needs a sandbox it gets an empty folder
+ * under git, so its files, changes and checkpoints work as a repo task's do.
+ * The first commit is empty and dated the epoch, so every chat's is this one.
+ */
+export const SCRATCH_BRANCH = 'scratch';
+export const SCRATCH_BASE = '5dbaf08032448172a03f0a1292bf74bcd21a8898';
+const SCRATCH_DATE = '1970-01-01T00:00:00Z';
+
+/** Makes the empty scratch folder a chat's sandbox works in, at `SCRATCH_BASE`. */
+export async function initScratch(machine: Machine): Promise<void> {
+	await run(machine, `rm -rf repo && mkdir repo && git -C repo init -q -b ${SCRATCH_BRANCH}`, { cwd: machine.root });
+	await run(machine, AUTHOR.map((setting) => `git config ${setting}`).join(' && '), { cwd: repoDir(machine) });
+	await run(machine, "git -c commit.gpgsign=false commit -q --allow-empty -m 'Scratch folder'", {
+		cwd: repoDir(machine),
+		env: { GIT_AUTHOR_DATE: SCRATCH_DATE, GIT_COMMITTER_DATE: SCRATCH_DATE },
+	});
+}
+
 export async function cloneRepo(machine: Machine, url: string, auth: Record<string, string>): Promise<void> {
 	await run(machine, `rm -rf repo && git clone --filter=blob:none ${quote(url)} repo`, { cwd: machine.root, env: auth });
 	await run(machine, AUTHOR.map((setting) => `git config ${setting}`).join(' && '), { cwd: repoDir(machine) });

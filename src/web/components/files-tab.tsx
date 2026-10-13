@@ -5,7 +5,7 @@ import { FileIcon, FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
 import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, refreshFor } from '@/lib/api';
+import { api, isChat, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
 
@@ -71,6 +71,8 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
 	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const chat = session.data ? isChat(session.data) : false;
 	const listing = useQuery({
 		queryKey: ['files', sessionId],
 		queryFn: () => api.files(sessionId),
@@ -142,7 +144,11 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 								statusOf={(path) => changes.get(path)}
 							/>
 						) : tree.children.size === 0 ? (
-							<EmptyState icon={Folder} title="Repository is empty" body="Files the agent creates show up here." />
+							<EmptyState
+								icon={Folder}
+								title={chat ? 'No files yet' : 'Repository is empty'}
+								body={chat ? 'This chat has no repository. Files the agent makes in its scratch sandbox show up here.' : 'Files the agent creates show up here.'}
+							/>
 						) : (
 							<Branch
 								selected={selected}

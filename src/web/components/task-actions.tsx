@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ProjectIcon } from '@/components/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
-import { api, branchLabel, type PullRequest, type Session } from '@/lib/api';
+import { api, branchLabel, isChat, type PullRequest, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -165,7 +165,8 @@ function ProjectItems({ session }: { session: Session }) {
 					{session.resolvedAt ? 'Reopen thread' : 'Mark done'}
 				</MenuItem>
 			) : null}
-			{others.length ? (
+			{/* A project's threads each work on one of its repositories, so a chat stays out. */}
+			{others.length && !isChat(session) ? (
 				<MenuSub>
 					<MenuSubTrigger icon={FolderKanban}>{session.spaceId ? 'Move to another project' : 'Move to project'}</MenuSubTrigger>
 					<MenuSubContent>
@@ -195,7 +196,7 @@ function TaskFacts({ session }: { session: Session }) {
 	const facts: Array<[string, string]> = [
 		['Spend', inputTokens + outputTokens > 0 ? `${dollars(cost)} · ${tokens(inputTokens + outputTokens)}` : dollars(cost)],
 		['Model', session.model.split('/').pop() ?? session.model],
-		['Branch', branchLabel(session)],
+		[isChat(session) ? 'Sandbox' : 'Branch', branchLabel(session)],
 	];
 	return (
 		<div className="flex max-w-[260px] flex-col gap-1 px-2 pt-1 pb-1.5 text-[11px]">
@@ -240,6 +241,7 @@ export function TaskMenu({
 	const params = useParams({ strict: false }) as { sessionId?: string };
 	const [confirming, setConfirming] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const repoId = session.projectId;
 	const refresh = () => void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 	const stop = useMutation({ mutationFn: () => api.stopSession(session.id), onSuccess: refresh });
 	const review = useMutation({ mutationFn: () => api.reviewPullRequest(session.id), onSuccess: refresh });
@@ -298,7 +300,7 @@ export function TaskMenu({
 				</MenuItem>
 				<ProjectItems session={session} />
 				<MenuSeparator />
-				{onAskForPullRequest ? (
+				{onAskForPullRequest && !isChat(session) ? (
 					<MenuItem icon={GitPullRequest} onSelect={onAskForPullRequest}>
 						{session.prUrl ? 'Update the pull request' : 'Open a pull request'}
 					</MenuItem>
@@ -316,9 +318,11 @@ export function TaskMenu({
 						{review.isPending ? 'Starting the review…' : review.isSuccess ? 'Reviewing; it comments on GitHub' : review.isError ? review.error.message : 'Review the pull request'}
 					</MenuItem>
 				) : null}
-				<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/settings/repos/$projectId', params: { projectId: session.projectId } })}>
-					Repository settings
-				</MenuItem>
+				{repoId ? (
+					<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/settings/repos/$projectId', params: { projectId: repoId } })}>
+						Repository settings
+					</MenuItem>
+				) : null}
 				{isLive(session) ? (
 					<MenuItem icon={Square} onSelect={() => stop.mutate()} disabled={stop.isPending}>
 						Stop sandbox

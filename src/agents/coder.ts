@@ -30,7 +30,7 @@ import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } 
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { agentSettingsNow, hasWorkspace, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
+import { agentSettingsNow, hasWorkspace, isChat, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
 import { hasScriptTools, runScript, scriptToolDescription } from '../services/code-mode.ts';
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, writeTodos } from '../services/todos.ts';
@@ -166,17 +166,20 @@ function useSnapshotExplorer(id: string) {
 	useSubagent(withSettingsModel(subagent, 'explorer'));
 }
 
-function useStartWorkspace(id: string, startWorkspace: () => void) {
+function useStartWorkspace(id: string, chat: boolean, startWorkspace: () => void) {
 	useTool(
 		defineTool({
 			name: 'start_workspace',
-			description:
-				'Start this task\'s sandbox: a clone of the repository on its own branch, with a shell. ' +
-				'Call it before editing files, running commands or tests, or opening a pull request. Takes a minute or two.',
+			description: chat
+				? 'Start a scratch sandbox for this chat: an empty folder with a shell, not a repository. ' +
+					'Call it before running code or commands, making files, or installing anything. Takes a minute.'
+				: 'Start this task\'s sandbox: a clone of the repository on its own branch, with a shell. ' +
+					'Call it before editing files, running commands or tests, or opening a pull request. Takes a minute or two.',
 			input: v.object({ reason: v.pipe(v.string(), v.description('What you need the workspace for, in a few words')) }),
 			async run() {
 				await machineFor(id);
 				startWorkspace();
+				if (chat) return { output: 'Scratch sandbox ready, with an empty folder as your working directory. Your shell and file editing tools are available from your next step.' };
 				const session = await getSessionRecord(id);
 				return { output: `Workspace ready on branch ${session?.branch}. Your shell and file editing tools are available from your next step.` };
 			},
@@ -187,18 +190,21 @@ function useStartWorkspace(id: string, startWorkspace: () => void) {
 /**
  * The sandbox and everything that needs it: shell and file tools, subagents,
  * pull requests, and a browser to use web apps in. In plan mode the file tools cannot write and
- * there is no pull request.
+ * there is no pull request. A chat's sandbox is a scratch folder: no repository to investigate,
+ * test or open a pull request on.
  */
-function useWorkspace(id: string, planning: boolean) {
+function useWorkspace(id: string, planning: boolean, chat: boolean) {
 	useSandbox({
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 	});
-	useSubagent(withSettingsModel(explorer, 'explorer'));
-	useSubagent(withSettingsModel(tester, 'tester'));
-	if (!planning) useOpenPullRequest(id);
+	if (!chat) {
+		useSubagent(withSettingsModel(explorer, 'explorer'));
+		useSubagent(withSettingsModel(tester, 'tester'));
+		if (!planning) useOpenPullRequest(id);
+	}
 	useTool(
 		defineTool({
 			name: 'screenshot',
@@ -551,6 +557,8 @@ const BROWSER_HINT =
 
 const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
 
+const CHAT_WEB_HINT = 'For current facts, documentation or anything you are unsure of, use the web_search and web_fetch tools if you have them.';
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
@@ -572,6 +580,24 @@ const WORKSPACE_PROMPT = [
 	'Check UI changes with the browser subagent: brief it with the dev server URL (http://localhost:<port>), what to click and type through, and what to report; use the screenshot tool for a quick full-page capture yourself.',
 	WEB_HINT,
 	'Be concise. Explain what you changed.',
+].join(' ');
+
+const CHAT_PROMPT = [
+	'You are Anton, a capable assistant. This chat is not tied to any repository: answer questions directly, and do jobs on the web when asked.',
+	'When a job needs code run, files made or anything installed, call start_workspace for a scratch sandbox: an empty folder with a shell, with no repository and no pull request.',
+	'Do not start one for questions you can answer yourself or with web search.',
+	CHAT_WEB_HINT,
+	'Be concise.',
+].join(' ');
+
+const CHAT_WORKSPACE_PROMPT = [
+	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
+	'Make files, run commands and install what the job needs there.',
+	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	'There is no repository, so there is no pull request: give results in your reply or as files.',
+	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file; the user can open it from the Preview panel.',
+	CHAT_WEB_HINT,
+	'Be concise.',
 ].join(' ');
 
 const PLAN_PROMPT = [
@@ -606,18 +632,23 @@ export function Coder({ id }: AgentProps) {
 	useModel(model, { thinkingLevel: reasoning });
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);
+	// A chat has no repository: no snapshot to read, notes to keep or pull request to open.
+	const chat = isChat(id);
 	const planning = isPlanning(id);
-	if (workspace) useWorkspace(id, planning);
+	if (workspace) useWorkspace(id, planning, chat);
 	else {
-		useRepoSnapshot(id);
-		useSnapshotExplorer(id);
-		if (!planning) useStartWorkspace(id, () => setStarted(true));
+		if (!chat) {
+			useRepoSnapshot(id);
+			useSnapshotExplorer(id);
+		}
+		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
 	if (planning) useTool(proposePlan);
-	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, workspace);
-	if (scripts) useRunScript(id, workspace);
+	// Code mode's repo tools read the snapshot, which a chat does not have; it still gets MCP servers and decide().
+	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, workspace || chat);
+	if (scripts) useRunScript(id, workspace || chat);
 	const project = threadProjectFor(id);
-	useRemember(id, project);
+	if (!chat) useRemember(id, project);
 	useTodos(id);
 	if (project && !workspace) useProjectFiles(id);
 	useSkills(id, workspace);
@@ -669,6 +700,10 @@ export function Coder({ id }: AgentProps) {
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};
 	});
+	if (chat) {
+		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${TODO_HINT} ${SKILL_HINT}`;
+	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
 	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${TODO_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;

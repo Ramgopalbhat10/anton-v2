@@ -515,7 +515,8 @@ app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,
 		v.object({
-			projectId: v.string(),
+			// Left out for a chat, which has no repository.
+			projectId: v.optional(v.string()),
 			branch: v.optional(v.string()),
 			model: v.optional(v.string()),
 			reasoning: v.optional(REASONING),

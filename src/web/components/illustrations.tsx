@@ -871,6 +871,52 @@ function Handoff({ from }: { from: number }) {
 	);
 }
 
+/** A sandbox station: a dashed outline until it is needed, then it boots with a cursor blinking. */
+function SandboxStation({ column }: { column: number }) {
+	return (
+		<>
+			<Station
+				column={column}
+				h={30}
+				r={4}
+				tone="glass"
+				dashed
+				top={[8, 13, 18, 23].map((v) => (
+					<Ln key={v} a={[7, v]} b={[25, v]} />
+				))}
+				left={<rect x={5} y={12} width={30} height={13} rx={2} fill="none" stroke={DETAIL} strokeDasharray="2 2" {...ve} />}
+			/>
+			<Lit stage={column}>
+				<Station
+					column={column}
+					h={30}
+					r={4}
+					tone="accent"
+					top={
+						<>
+							{[8, 13, 18, 23].map((v) => (
+								<Slot key={v} x={7} y={v} w={18} h={2.4} r={1.2} />
+							))}
+							<Led at={[31, 30]} lit r={1.8} />
+					</>
+					}
+					left={
+						<>
+							<Slot x={5} y={12} w={30} h={13} r={2} edge />
+							<Trace points={[[8.5, 20], [10.6, 18.6], [8.5, 17.2]]} stroke={ACCENT} />
+							<rect className="art-blink" x={12} y={16.6} width={3} height={3.6} rx={0.5} fill={ACCENT} />
+							<Bar x={8} y={22} w={16} accent />
+					</>
+					}
+					right={[6, 10, 14].map((v) => (
+						<Slot key={v} x={8} y={v} w={24} h={1.8} r={0.9} />
+					))}
+				/>
+			</Lit>
+		</>
+	);
+}
+
 /**
  * How a task runs, as four stations on one ground line. The stages take turns:
  * each lights up cyan and does its work, then hands off along the line to the
@@ -986,44 +1032,7 @@ export function TaskRouteArt({ className }: { className?: string }) {
 			</Lit>
 
 			{/* 03 Sandbox: a dashed outline until it is needed, then it boots. */}
-			<Station
-				column={2}
-				h={30}
-				r={4}
-				tone="glass"
-				dashed
-				top={[8, 13, 18, 23].map((v) => (
-					<Ln key={v} a={[7, v]} b={[25, v]} />
-				))}
-				left={<rect x={5} y={12} width={30} height={13} rx={2} fill="none" stroke={DETAIL} strokeDasharray="2 2" {...ve} />}
-			/>
-			<Lit stage={2}>
-				<Station
-					column={2}
-					h={30}
-					r={4}
-					tone="accent"
-					top={
-						<>
-							{[8, 13, 18, 23].map((v) => (
-								<Slot key={v} x={7} y={v} w={18} h={2.4} r={1.2} />
-							))}
-							<Led at={[31, 30]} lit r={1.8} />
-						</>
-					}
-					left={
-						<>
-							<Slot x={5} y={12} w={30} h={13} r={2} edge />
-							<Trace points={[[8.5, 20], [10.6, 18.6], [8.5, 17.2]]} stroke={ACCENT} />
-							<rect className="art-blink" x={12} y={16.6} width={3} height={3.6} rx={0.5} fill={ACCENT} />
-							<Bar x={8} y={22} w={16} accent />
-						</>
-					}
-					right={[6, 10, 14].map((v) => (
-						<Slot key={v} x={8} y={v} w={24} h={1.8} r={0.9} />
-					))}
-				/>
-			</Lit>
+			<SandboxStation column={2} />
 
 			{/* 04 Pull request: the case is sealed with a check. */}
 			<Station column={3} h={22} r={3.5} top={merge(false)} left={<Slot x={27} y={13} w={10} h={5} r={1} edge />} />
@@ -1034,6 +1043,96 @@ export function TaskRouteArt({ className }: { className?: string }) {
 					r={3.5}
 					tone="accent"
 					top={merge(true)}
+					left={
+						<>
+							<Slot x={27} y={13} w={10} h={5} r={1} edge />
+							<polyline points="29,15.4 30.4,14.2 33,16.8" fill="none" stroke="var(--cyan-200)" strokeLinecap="round" strokeLinejoin="round" {...ve} {...drawOn(3)} />
+							<Led at={[6, 15.5]} lit />
+						</>
+					}
+				/>
+			</Lit>
+		</Frame>
+	);
+}
+
+/**
+ * How a chat runs, on the same line as a task's route: the question comes in,
+ * the agent looks things up and works in the Browser panel, starts a scratch
+ * sandbox only when it has to run something, and answers with a check.
+ */
+export function ChatRouteArt({ className }: { className?: string }) {
+	const bubble = (lit: boolean) => (
+		<>
+			<Slot x={5} y={6} w={30} h={21} r={3} edge />
+			<Trace points={[[12, 27], [10, 33], [18, 27]]} stroke={lit ? ACCENT : DETAIL} />
+			{(
+				[
+					[9, 11, 20],
+					[9, 15, 14],
+					[9, 19, 18],
+				] as const
+			).map(([x, y, w]) => (
+				<Bar key={y} x={x} y={y} w={w} accent={lit} />
+			))}
+		</>
+	);
+	const page = (lit: boolean) => (
+		<>
+			<Slot x={5} y={5} w={30} h={30} r={2.5} edge />
+			{[9, 12.5, 16].map((u) => (
+				<Led key={u} at={[u, 8.8]} lit={lit} r={1.1} />
+			))}
+			<Ln a={[5, 12.5]} b={[35, 12.5]} stroke={lit ? ACCENT : DETAIL} />
+			{(
+				[
+					[9, 17, 18],
+					[9, 21, 12],
+					[9, 25, 20],
+					[9, 29, 9],
+				] as const
+			).map(([x, y, w]) => (
+				<Bar key={y} x={x} y={y} w={w} accent={lit} />
+			))}
+			{lit ? (
+				<g className="art-scan">
+					<line x1={6} y1={15} x2={34} y2={15} stroke="var(--cyan-100)" strokeWidth={1.4} {...ve} />
+				</g>
+			) : null}
+		</>
+	);
+	return (
+		<Frame label="A chat's route: ask, browse, scratch sandbox, answer" viewBox="0 -64 400 90" className={className}>
+			<line x1={0} y1={0} x2={ROUTE_X[0] - SIDE - 3} y2={0} stroke={DETAIL} strokeDasharray="2 3" {...ve} />
+			<line x1={ROUTE_X[3] + SIDE + 3} y1={0} x2={400} y2={0} stroke={DETAIL} strokeDasharray="2 3" {...ve} />
+			<Handoff from={0} />
+			<Handoff from={1} />
+			<Handoff from={2} />
+
+			{/* 01 Ask: the question arrives as a bubble. */}
+			<Station column={0} h={16} r={3.5} top={bubble(false)} left={<Led at={[6, 11]} />} />
+			<Lit stage={0}>
+				<Station column={0} h={16} r={3.5} tone="accent" top={bubble(true)} left={<Led at={[6, 11]} lit />} />
+			</Lit>
+
+			{/* 02 Browse: a page is read in the Browser panel. */}
+			<Station column={1} h={18} r={3.5} top={page(false)} left={<Led at={[33, 13]} />} />
+			<Lit stage={1}>
+				<Station column={1} h={18} r={3.5} tone="accent" top={page(true)} left={<Led at={[33, 13]} lit />} />
+			</Lit>
+
+			{/* 03 Scratch: a sandbox with no repository, only when something has to run. */}
+			<SandboxStation column={2} />
+
+			{/* 04 Answer: the reply, sealed with a check. */}
+			<Station column={3} h={22} r={3.5} top={bubble(false)} left={<Slot x={27} y={13} w={10} h={5} r={1} edge />} />
+			<Lit stage={3}>
+				<Station
+					column={3}
+					h={22}
+					r={3.5}
+					tone="accent"
+					top={bubble(true)}
 					left={
 						<>
 							<Slot x={27} y={13} w={10} h={5} r={1} edge />

@@ -6,7 +6,7 @@ import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
-import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, imageFromBase64, MAX_IMAGES, readImages } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
@@ -219,7 +219,7 @@ export const Composer = memo(function Composer({
 						event.preventDefault();
 						void attach(files);
 					}}
-					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : 'Ask Anton to change the workspace'}
+					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Ask Anton to change the workspace'}
 				/>
 				{blocked || blind || notice ? (
 					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
@@ -240,7 +240,8 @@ export const Composer = memo(function Composer({
 					/>
 					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
 					<ModelPicker value={choice} onChange={edit} />
-					<PlanToggle on={planning} onChange={togglePlan} />
+					{/* A chat has no code to plan changes to. */}
+					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
 					{/* Enter sends, as everywhere; the hint speaks up only while the agent is running. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">

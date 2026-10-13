@@ -4,7 +4,7 @@ import { CircleCheck, FolderKanban, GitPullRequest, List, Loader, type LucideIco
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SECTIONS } from '@/components/settings/sections';
 import { Icon, Kbd } from '@/components/signal';
-import { api } from '@/lib/api';
+import { api, repoShort } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, useProjects } from '@/lib/projects';
@@ -24,7 +24,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	const navigate = useNavigate();
 	const create = useCreateChat();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, enabled: open });
-	const project = chooseProject(useProjects().data?.projects ?? []);
+	const projects = useProjects();
+	// The repo the last task used; none when it was a chat, or there are no repos, so a prompt starts a chat.
+	const project = chooseProject(projects.data?.projects ?? []);
 	const spaces = useSpaces();
 	const [query, setQuery] = useState('');
 	const [index, setIndex] = useState(0);
@@ -70,7 +72,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 			.map((session) => ({
 				id: session.id,
 				label: session.title,
-				meta: `${session.spaceId ? `${spaceName.get(session.spaceId) ?? 'Project'} · ` : ''}${session.repo.split('/').pop()} · ${age(session.createdAt)}`,
+				meta: `${session.spaceId ? `${spaceName.get(session.spaceId) ?? 'Project'} · ` : ''}${repoShort(session)} · ${age(session.createdAt)}`,
 				icon: session.working || session.status === 'starting' ? Loader : CircleCheck,
 				onSelect: () => {
 					onClose();
@@ -106,7 +108,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	function start() {
 		onClose();
 		const prompt = query.trim();
-		if (prompt && project) create.mutate({ prompt, projectId: project.id });
+		if (prompt && projects.isSuccess) create.mutate({ prompt, projectId: project?.id });
 		else void navigate({ to: '/' });
 	}
 
@@ -163,7 +165,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 					>
 						<Icon icon={Plus} className="text-(--accent-text)" />
 						<div className="min-w-0 flex-1 truncate text-[13px]">
-							Start a task{' '}
+							{project || !projects.isSuccess ? 'Start a task' : 'Start a chat'}{' '}
 							<span className="text-(--text-tertiary)">{query.trim() ? `“${query.trim()}”` : 'with a prompt…'}</span>
 						</div>
 						<Kbd keys="enter" />

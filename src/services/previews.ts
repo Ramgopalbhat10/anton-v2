@@ -3,7 +3,7 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { NotFoundError } from '../core/errors.ts';
 import type { Machine } from '../core/ports.ts';
-import { liveMachine } from './workspace.ts';
+import { liveMachine, previewPortsFor } from './workspace.ts';
 
 export type Preview = { port: number; url: string | null; listening: boolean };
 export type PreviewsView = { live: boolean; previews: Preview[] };
@@ -19,10 +19,10 @@ async function listening(machine: Machine, ports: number[]): Promise<Set<number>
 export async function previewsView(id: string): Promise<PreviewsView> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new NotFoundError('Session not found');
+	if (!session || (session.projectId && !project)) throw new NotFoundError('Session not found');
 	const machine = await liveMachine(id);
 	if (!machine) return { live: false, previews: [] };
-	const ports = project.previewPorts;
+	const ports = previewPortsFor(project);
 	const [up, urls] = await Promise.all([listening(machine, ports), Promise.all(ports.map((port) => machine.previewUrl(port)))]);
 	return { live: true, previews: ports.map((port, index) => ({ port, url: urls[index], listening: up.has(port) })) };
 }

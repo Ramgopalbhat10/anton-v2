@@ -35,8 +35,9 @@ export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
 export type Session = {
 	id: string;
-	projectId: string;
-	/** `owner/name` of the project's repository. */
+	/** The repository the task works on; null for a chat, which has no repository. */
+	projectId: string | null;
+	/** `owner/name` of the project's repository; empty for a chat. */
 	repo: string;
 	title: string;
 	model: string;

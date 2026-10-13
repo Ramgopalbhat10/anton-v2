@@ -3,7 +3,7 @@ import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
 import { Icon } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
-import { branchLabel, type Session } from '@/lib/api';
+import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { activeAt, modelName, prNumber, taskNote, type Tone } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
@@ -57,8 +57,8 @@ function Peek({ session }: { session: Session }) {
 				</div>
 			) : null}
 			<div className="flex flex-col gap-1 border-t border-(--border-subtle) pt-2.5">
-				<Fact label="Repository">{session.repo}</Fact>
-				<Fact label="Branch">
+				<Fact label="Repository">{isChat(session) ? 'None, a chat' : session.repo}</Fact>
+				<Fact label={isChat(session) ? 'Sandbox' : 'Branch'}>
 					<span className="font-mono text-[11px]">{branchLabel(session)}</span>
 				</Fact>
 				<Fact label="Model">{modelName(session.model)}</Fact>

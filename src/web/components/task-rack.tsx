@@ -7,7 +7,7 @@ import { Card, CardSection } from '@/components/instrument';
 import { Btn, Icon, IconBtn } from '@/components/signal';
 import { useFork } from '@/components/task-actions';
 import { isLive, liveLabel } from '@/components/task-status';
-import { api, type Session } from '@/lib/api';
+import { api, branchLabel, repoShort, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { useModels } from '@/components/model-picker';
 import { setPendingPrompt } from '@/lib/pending-prompt';
@@ -366,7 +366,7 @@ function TaskDetails({ session }: { session: Session }) {
 					<p className="m-0 line-clamp-3 text-[13px] leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
 				</div>
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
-					{session.repo.split('/').pop()} · {session.workspace ? session.branch : `${session.baseBranch} (read-only)`}
+					{repoShort(session)} · {branchLabel(session)}
 				</div>
 			</div>
 			<RackStats stats={stats} />

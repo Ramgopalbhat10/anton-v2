@@ -3,11 +3,11 @@ import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
-import { getProject, setWarmImage } from '../db/projects.ts';
+import { DEFAULT_PREVIEW_PORTS, getProject, setWarmImage } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { applyFiles, readCheckpoint } from './checkpoints.ts';
-import { checkoutTaskBranch, cloneRepo, repoDir } from './git.ts';
+import { checkoutTaskBranch, cloneRepo, initScratch, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
 import { copySpaceFiles } from './space-files.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
@@ -45,21 +45,26 @@ async function refreshWarmImage(machine: Machine, project: Project): Promise<voi
 		.catch((error: unknown) => logProblem('warn', 'Warm image failed', error));
 }
 
-type Context = { machine: Machine; session: SessionRecord; project: Project };
+/** A chat's project is null: it has no repository, so its sandbox starts from an empty scratch folder. */
+type Context = { machine: Machine; session: SessionRecord; project: Project | null };
 
 /** The repo's own setup, after dependencies and on the task branch. A failure fails the task's setup. */
-async function runSetupScript(machine: Machine, project: Project): Promise<void> {
-	if (!project.setupScript.trim()) return;
+async function runSetupScript(machine: Machine, project: Project | null): Promise<void> {
+	if (!project?.setupScript.trim()) return;
 	await run(machine, project.setupScript, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
 }
 
-/** Puts the repo on the task branch: from a prepared image, or cloned from scratch. */
-const setup: Record<'image' | 'clone', (context: Context) => Promise<void>> = {
+/** Puts the repo on the task branch: from a prepared image, or cloned from scratch; a chat gets its empty folder. */
+const setup: Record<'image' | 'clone' | 'scratch', (context: Context) => Promise<void>> = {
+	async scratch({ machine }) {
+		await initScratch(machine);
+	},
 	async image({ machine, session }) {
 		await checkoutTaskBranch(machine, session.branch, session.baseSha, getProviders().git.gitAuthEnv());
 		await installDependencies(machine);
 	},
 	async clone({ machine, session, project }) {
+		if (!project) throw new Error('A chat has no repository to clone');
 		const { git } = getProviders();
 		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
 		await installDependencies(machine);
@@ -92,11 +97,11 @@ async function isReady(machine: Machine, session: SessionRecord, origin: Machine
 /** Sets up a machine that is not ready yet: one fresh from an image or the toolchain. */
 async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	const { machine, session } = context;
-	await setup[origin === 'image' ? 'image' : 'clone'](context);
+	await setup[!context.project ? 'scratch' : origin === 'image' ? 'image' : 'clone'](context);
 	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
-	if (origin !== 'image') await refreshWarmImage(machine, context.project);
+	if (origin !== 'image' && context.project) await refreshWarmImage(machine, context.project);
 	await putBackSavedFiles(machine, session.id);
 }
 
@@ -115,12 +120,15 @@ async function putBackSavedFiles(machine: Machine, id: string): Promise<void> {
 	if (skipped.length > 0) logProblem('warn', 'Some saved files were too large to put back', skipped.join(', '), id);
 }
 
-async function load(id: string): Promise<{ session: SessionRecord; project: Project }> {
+async function load(id: string): Promise<{ session: SessionRecord; project: Project | null }> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new Error(`Session ${id} not found`);
+	if (!session || (session.projectId && !project)) throw new Error(`Session ${id} not found`);
 	return { session, project };
 }
+
+/** The ports a task's sandbox serves previews on: its repository's, or the usual ones for a chat. */
+export const previewPortsFor = (project: Project | null) => project?.previewPorts ?? DEFAULT_PREVIEW_PORTS;
 
 const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resumed';
 
@@ -129,14 +137,14 @@ const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resum
  * the marker may have been used by the agent or the terminal since, and
  * setup runs with Anton's credentials, so it is set aside for a fresh one.
  */
-async function acquireReady(session: SessionRecord, project: Project): Promise<{ acquired: Acquired; ready: boolean }> {
+async function acquireReady(session: SessionRecord, project: Project | null): Promise<{ acquired: Acquired; ready: boolean }> {
 	const { sandbox } = getProviders();
 	const settings = await sandboxSettings();
 	const request = {
 		key: session.id,
-		image: warmImageFor(project, settings),
-		baseImage: project.baseImage ?? settings.baseImage,
-		ports: project.previewPorts,
+		image: project && warmImageFor(project, settings),
+		baseImage: project?.baseImage ?? settings.baseImage,
+		ports: previewPortsFor(project),
 		resources: resourcesFrom(settings),
 	};
 	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
@@ -150,7 +158,7 @@ async function provision(id: string): Promise<Machine> {
 	const { session, project } = await load(id);
 	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
-	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: project.previewPorts.join(' '), ...(await envFor(project)) });
+	const machine = withEnv(acquired.machine, { ANTON_PREVIEW_PORTS: previewPortsFor(project).join(' '), ...(await envFor(project)) });
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {
 		if (!ready) await prepare({ machine, session, project }, acquired.origin);

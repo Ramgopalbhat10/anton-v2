@@ -263,6 +263,7 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 	const record = await getSessionRecord(threadId);
 	if (!record) throw new NotFoundError('Session not found');
 	if (spaceId) {
+		if (!record.projectId) throw new InvalidInputError('A chat has no repository, so it cannot be a thread of a project.');
 		const space = await existing(spaceId);
 		if (!space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
 	}

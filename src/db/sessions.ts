@@ -9,7 +9,8 @@ const optional = (value: unknown) => (value == null ? null : String(value));
 function toRecord(row: Row): SessionRecord {
 	return {
 		id: String(row.id),
-		projectId: String(row.project_id),
+		// A chat has no repository; the column cannot be null, so it holds ''.
+		projectId: row.project_id ? String(row.project_id) : null,
 		repo: String(row.repo ?? ''),
 		title: String(row.title),
 		model: String(row.model),
@@ -83,7 +84,8 @@ export async function spentSince(since: Date): Promise<number> {
 /** Spend since a time grouped by one key; `key` is null for responses logged before it was recorded. */
 export type SpendRow = { key: string | null; tokens: number; cost: number };
 
-const GROUPS = { repo: 'p.repo_full_name', model: 'u.model' } as const;
+/** A chat's spend is logged with project_id '' and grouped under '', apart from repositories since removed (null). */
+const GROUPS = { repo: "CASE WHEN u.project_id = '' THEN '' ELSE p.repo_full_name END", model: 'u.model' } as const;
 
 /** Dollars and tokens since `since`, by repository or by model, most spent first. */
 export async function spendBy(group: keyof typeof GROUPS, since: Date): Promise<SpendRow[]> {
@@ -141,7 +143,8 @@ export async function spendByMinute(since: Date): Promise<Array<{ minute: string
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'> &
 	Partial<Pick<SessionRecord, 'spaceId' | 'brief'>>;
 
-const SELECT = 'SELECT s.*, p.repo_full_name AS repo FROM sessions s JOIN projects p ON p.id = s.project_id';
+/** A task's repository joined in; a chat has none, and a task whose repository is gone is left out as before. */
+const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN projects p ON p.id = s.project_id WHERE (s.project_id = '' OR p.id IS NOT NULL)";
 
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
@@ -150,7 +153,7 @@ export async function insertSession(session: NewSession): Promise<void> {
 			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
-			session.projectId,
+			session.projectId ?? '',
 			session.id,
 			session.model,
 			session.reasoning,
@@ -171,19 +174,19 @@ export async function insertSession(session: NewSession): Promise<void> {
 /** A project's threads, newest first. */
 export async function listThreadRecords(spaceId: string): Promise<SessionRecord[]> {
 	const db = await appDb();
-	const result = await db.execute({ sql: `${SELECT} WHERE s.space_id = ? AND s.base_sha IS NOT NULL ORDER BY s.created_at DESC`, args: [spaceId] });
+	const result = await db.execute({ sql: `${SELECT} AND s.space_id = ? AND s.base_sha IS NOT NULL ORDER BY s.created_at DESC`, args: [spaceId] });
 	return result.rows.map((row) => toRecord(row as Row));
 }
 
 export async function listSessionRecords(): Promise<SessionRecord[]> {
 	const db = await appDb();
-	const result = await db.execute(`${SELECT} WHERE s.base_sha IS NOT NULL ORDER BY s.created_at DESC`);
+	const result = await db.execute(`${SELECT} AND s.base_sha IS NOT NULL ORDER BY s.created_at DESC`);
 	return result.rows.map((row) => toRecord(row as Row));
 }
 
 export async function getSessionRecord(id: string): Promise<SessionRecord | null> {
 	const db = await appDb();
-	const result = await db.execute({ sql: `${SELECT} WHERE s.id = ?`, args: [id] });
+	const result = await db.execute({ sql: `${SELECT} AND s.id = ?`, args: [id] });
 	return result.rows[0] ? toRecord(result.rows[0] as Row) : null;
 }
 

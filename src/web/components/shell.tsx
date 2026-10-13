@@ -11,7 +11,7 @@ import { Btn, IconBtn } from '@/components/signal';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
 import { type PanelName, VmPanel } from '@/components/vm-panel';
-import { api, type Session } from '@/lib/api';
+import { api, isChat, type Session } from '@/lib/api';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useTaskNotifications } from '@/lib/notifications';
 import { SendToAgent } from '@/lib/review';
@@ -172,8 +172,8 @@ const TaskHeader = memo(function TaskHeader({
 			) : null}
 			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
 			{session ? <PullRequestChip session={session} /> : null}
-			{/* The workspace has its own Changes tab, so Review only shows while it is closed. */}
-			{!workspaceOpen ? (
+			{/* The workspace has its own Changes tab, so Review only shows while it is closed; a chat has no code to review. */}
+			{!workspaceOpen && session && !isChat(session) ? (
 				<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => onShowPanel('Changes')}>
 					<span className="hidden sm:inline">Review</span>
 				</Btn>
@@ -188,6 +188,9 @@ const TaskHeader = memo(function TaskHeader({
 export type TaskPanels = { tabs: PanelName[]; active: PanelName | null; open: boolean };
 
 export const DEFAULT_PANELS: TaskPanels = { tabs: ['Changes', 'Terminal', 'Files'], active: 'Changes', open: true };
+
+/** A chat has no repository to review, so its workspace leads with the browser it works in and what it saves. */
+export const CHAT_PANELS: TaskPanels = { tabs: ['Browser', 'Library', 'Files', 'Terminal'], active: 'Browser', open: true };
 
 /**
  * A task's conversation beside its workspace: the page for a task, and for a
@@ -307,6 +310,11 @@ export function SessionPage() {
 	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(DEFAULT_PANELS);
 	const open = search.app !== 'closed';
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	// A chat starts on its own panels, unless some have been picked already.
+	const chat = session.data ? isChat(session.data) : false;
+	useEffect(() => {
+		if (chat) setPanels((current) => (current === DEFAULT_PANELS ? CHAT_PANELS : current));
+	}, [chat]);
 	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {

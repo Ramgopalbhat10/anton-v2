@@ -32,7 +32,9 @@ export async function listProjects(): Promise<Project[]> {
 	return result.rows.map((row) => toProject(row as Row));
 }
 
-export async function getProject(id: string): Promise<Project | null> {
+/** Null for no id, which is a chat's: it has no repository. */
+export async function getProject(id: string | null): Promise<Project | null> {
+	if (!id) return null;
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] });
 	return result.rows[0] ? toProject(result.rows[0] as Row) : null;

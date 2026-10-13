@@ -17,6 +17,7 @@ import type { PullRequestState } from '../core/ports.ts';
  */
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {
 	const session = await getSessionRecord(id);
+	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to open a pull request on.');
 	const project = session && (await getProject(session.projectId));
 	if (!session || !project) throw new NotFoundError('Session not found');
 	const { git } = getProviders();

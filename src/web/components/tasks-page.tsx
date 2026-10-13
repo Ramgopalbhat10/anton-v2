@@ -9,7 +9,7 @@ import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
-import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, branchLabel, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 
 const FILTERS = {
@@ -23,7 +23,7 @@ type Filter = keyof typeof FILTERS;
 const statusWord = (session: Session) => (isLive(session) ? liveLabel(session) : session.status === 'error' ? 'Failed' : 'Stopped');
 
 function matches(session: Session, query: string, filter: Filter | null): boolean {
-	const text = `${session.title} ${session.repo} ${session.branch}`.toLowerCase();
+	const text = `${session.title} ${isChat(session) ? 'chat' : `${session.repo} ${session.branch}`}`.toLowerCase();
 	return text.includes(query.trim().toLowerCase()) && (!filter || FILTERS[filter].test(session));
 }
 
@@ -47,7 +47,7 @@ function Row({ session }: { session: Session }) {
 					<div className="truncate text-[13px] font-medium">{session.title}</div>
 					<div className="flex min-w-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
 						{session.prUrl ? <Icon icon={GitPullRequest} size={11} className="shrink-0 text-(--accent-text)" /> : null}
-						<span className="truncate font-mono">{session.workspace ? session.branch : `${session.baseBranch} (read-only)`}</span>
+						<span className="truncate font-mono">{branchLabel(session)}</span>
 					</div>
 				</div>
 			</div>
@@ -55,7 +55,7 @@ function Row({ session }: { session: Session }) {
 				<span className="size-1.5 shrink-0 rounded-full" style={{ background: toneFill(STATE_TONE(session)) }} />
 				{statusWord(session)}
 			</span>
-			<span className="hidden truncate text-[12px] text-(--text-secondary) md:block">{session.repo}</span>
+			<span className="hidden truncate text-[12px] text-(--text-secondary) md:block">{isChat(session) ? 'Chat' : session.repo}</span>
 			<span className="in-num hidden text-right text-[12px] text-(--text-secondary) md:block">{dollars(session.usage.cost)}</span>
 			<span className="in-num hidden text-right text-[12px] text-(--text-tertiary) md:block">{age(session.createdAt)}</span>
 		</Link>
