@@ -145,7 +145,7 @@ async function acquireReady(session: SessionRecord, project: Project | null): Pr
 		image: project && warmImageFor(project, settings),
 		baseImage: project?.baseImage ?? settings.baseImage,
 		ports: previewPortsFor(project),
-		resources: resourcesFrom(settings),
+		resources: resourcesFrom(settings, project?.fullVm ? 'vm' : 'container'),
 	};
 	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
 	const ready = await isReady(acquired.machine, session, acquired.origin);

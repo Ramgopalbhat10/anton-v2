@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Check, ChevronRight, CircleAlert, FlaskConical, Telescope } from 'lucide-react';
+import { AppWindow, Bot, Check, ChevronRight, CircleAlert, FlaskConical, Monitor, Telescope } from 'lucide-react';
 import { type CSSProperties, useContext, useEffect, useState } from 'react';
 import { Caption, Card, CardFooter, Status } from '@/components/instrument';
 import { Btn, Icon, Spinner } from '@/components/signal';
@@ -20,6 +20,7 @@ type Look = { icon: LucideIcon; tone: string; label: string };
 
 const LOOKS: Record<string, Look> = {
 	browser: { icon: AppWindow, tone: 'var(--data-3)', label: 'Browser' },
+	computer: { icon: Monitor, tone: 'var(--data-3)', label: 'Computer' },
 	explorer: { icon: Telescope, tone: 'var(--data-1)', label: 'Explorer' },
 	tester: { icon: FlaskConical, tone: 'var(--data-2)', label: 'Tester' },
 	'flue-general': { icon: Bot, tone: 'var(--data-5)', label: 'General' },
@@ -105,7 +106,7 @@ export function workKind(tool: string): WorkKind {
 	if (['grep', 'search_code', 'glob', 'list_files'].includes(tool)) return 'search';
 	if (tool === 'bash' || tool === 'run_script') return 'run';
 	if (tool === 'edit' || tool === 'write') return 'edit';
-	if (tool === 'browser' || tool === 'screenshot') return 'browse';
+	if (tool === 'browser' || tool === 'screenshot' || tool === 'computer') return 'browse';
 	return 'other';
 }
 

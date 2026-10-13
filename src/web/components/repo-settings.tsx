@@ -35,7 +35,7 @@ function parsePorts(text: string): number[] {
 	return [...new Set(text.split(/[\s,]+/).filter(Boolean).map(Number))];
 }
 
-type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; followUps: boolean; servers: Server[] };
+type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; servers: Server[] };
 
 export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
 
@@ -47,7 +47,7 @@ export function toEnv(variables: Variable[]): Record<string, string | null> {
 	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
 }
 
-function toChange({ variables, setupScript, ports, baseImage, followUps, servers }: Draft): SettingsChange {
+function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, servers }: Draft): SettingsChange {
 	const env = toEnv(variables);
 	const mcpServers = servers
 		.filter((row) => row.name.trim() || row.url.trim())
@@ -58,7 +58,7 @@ function toChange({ variables, setupScript, ports, baseImage, followUps, servers
 			auth: row.token ? row.token : row.hasAuth ? null : '',
 			tools: row.tools.split(/[\s,]+/).filter(Boolean),
 		}));
-	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, followUps, mcpServers };
+	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, mcpServers };
 }
 
 export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
@@ -160,10 +160,11 @@ function SettingsForm({ project }: { project: Project }) {
 	const [setupScript, setSetupScript] = useState(project.setupScript);
 	const [ports, setPorts] = useState(project.previewPorts.join(', '));
 	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
+	const [fullVm, setFullVm] = useState(project.fullVm);
 	const [followUps, setFollowUps] = useState(project.followUps);
 	const [servers, setServers] = useState(() => toServers(project));
 	const save = useMutation({
-		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, followUps, servers })),
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, servers })),
 		onSuccess: (saved) => {
 			setVariables(storedVariables(saved.envKeys));
 			setServers(toServers(saved));
@@ -223,6 +224,12 @@ function SettingsForm({ project }: { project: Project }) {
 						placeholder="Default image"
 						className={`${FIELD} font-mono`}
 					/>
+				</Section>
+				<Section
+					title="Full virtual machine"
+					help="Runs each task's sandbox on Modal as a virtual machine with its own kernel instead of a container, so Docker, FUSE and system services work inside it, at the same price. Its desktop in the Computer panel works either way. Sandboxes started after you save use it."
+				>
+					<Switch checked={fullVm} onChange={setFullVm} label="Run sandboxes as full VMs" className="self-start" />
 				</Section>
 				<Section
 					title="Pull request follow-ups"

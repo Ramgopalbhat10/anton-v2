@@ -200,6 +200,8 @@ export type ProjectSettings = {
 	/** Whether the agent hears about failed checks and new comments on its pull requests. */
 	followUps: boolean;
 	mcpServers: McpServer[];
+	/** Tasks run in a full virtual machine (Docker, FUSE, their own kernel) rather than a container. */
+	fullVm: boolean;
 };
 
 export type Project = {
@@ -359,7 +361,7 @@ export type GeneralSettings = {
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };
-export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'reviewer';
+export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
@@ -394,6 +396,22 @@ export type BrowserView = {
 		needsYou: string | null;
 	} | null;
 };
+/** The desktop inside the task's sandbox, as the Computer panel shows it. */
+export type ComputerView = {
+	/** The task's sandbox runs. */
+	live: boolean;
+	/** Its desktop runs. */
+	running: boolean;
+	screen: { width: number; height: number };
+	/** The agent is using the computer, or did a moment ago. */
+	agentBusy: boolean;
+	/** You took over: the agent's steps wait until you hand it back. */
+	userControl: boolean;
+};
+
+/** The view with a short-lived address to connect to. */
+export type ComputerConnection = ComputerView & { url: string };
+
 /** An element picked in the Browser panel, as the page described it. */
 export type PickedElement = {
 	tag: string;
@@ -561,6 +579,12 @@ export const api = {
 	clearBrowserHighlight: async (id: string) => void (await post(`/api/sessions/${id}/browser/highlight/clear`)),
 	browserScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/browser/screenshot`),
 	watchBrowser: (id: string) => post<BrowserView>(`/api/sessions/${id}/browser/watch`),
+	computer: (id: string) => json<ComputerView>(`/api/sessions/${id}/computer`),
+	/** Starts the sandbox if it is not running, then its desktop. */
+	startComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer`),
+	connectComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/connect`),
+	setComputerControl: (id: string, driver: 'user' | 'agent') => post<ComputerView>(`/api/sessions/${id}/computer/control`, { driver }),
+	computerScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/computer/screenshot`),
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */

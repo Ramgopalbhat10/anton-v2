@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'subagents' | 'todos' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' }
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
@@ -22,6 +22,8 @@ function staleFor(change: Change): QueryKey[] {
 	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id]];
 	// The Browser panel's page moved, or the browser opened or closed.
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
+	// The Computer panel's desktop started, or who drives it changed.
+	if (change.kind === 'task' && change.what === 'computer') return [['computer', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
 	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
@@ -39,6 +41,8 @@ function staleFor(change: Change): QueryKey[] {
 		['context', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],
+		// The sandbox starting or stopping starts or ends its desktop.
+		['computer', change.id],
 		...files,
 	];
 }

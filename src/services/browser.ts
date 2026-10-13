@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { config } from '../config.ts';
+import { desktopLayout, desktopRunning } from '../core/desktop.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
@@ -74,12 +75,15 @@ const [socket, outputs] = process.argv.slice(2);
 const IDLE_MS = 15 * 60 * 1000;
 let browser = null;
 let page = null;
+const NO_GOOGLE_KEYS = { GOOGLE_API_KEY: 'no', GOOGLE_DEFAULT_CLIENT_ID: 'no', GOOGLE_DEFAULT_CLIENT_SECRET: 'no' };
 let errors = [];
 let quit = null;
 const idle = () => { clearTimeout(quit); quit = setTimeout(async () => { await browser?.close().catch(() => {}); process.exit(0); }, IDLE_MS); };
 
 async function tab(width, height) {
-	browser ??= await chromium.launch();
+	// On the task's desktop when it has one, full screen, so you watch it in the Computer panel; else headless.
+	// Without Google's keys, and as a test browser, it shows no infobars about them or --no-sandbox.
+	browser ??= await chromium.launch(process.env.DISPLAY ? { headless: false, args: ['--kiosk', '--no-first-run', '--test-type'], env: { ...process.env, ...NO_GOOGLE_KEYS } } : {});
 	if (!page || page.isClosed()) {
 		page = await browser.newPage({ viewport: { width, height } });
 		page.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
@@ -193,9 +197,11 @@ export async function browse(machine: Machine, input: BrowserInput): Promise<Bro
 	let result = await send();
 	if (result.exitCode === 4) {
 		await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
+		const layout = desktopLayout(machine.root);
+		const onScreen = (await machine.exec(desktopRunning(layout))).exitCode === 0;
 		await run(
 			machine,
-			`NODE_PATH="$(npm root -g)" nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
+			`${onScreen ? `DISPLAY=${layout.display} ` : ''}NODE_PATH="$(npm root -g)" nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
 				`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
 		);
 		result = await send();

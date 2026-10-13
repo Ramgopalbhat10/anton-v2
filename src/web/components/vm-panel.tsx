@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
+import { ComputerTab } from '@/components/computer-tab';
 import { AgentsTab } from '@/components/agents-tab';
 import { FilesTab } from '@/components/files-tab';
 import { HistoryTab } from '@/components/history-tab';
@@ -23,6 +24,7 @@ export const panels = [
 	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
 	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
 	{ name: 'Browser', icon: AppWindow, desc: 'A real browser for any site; pick elements or draw for the agent' },
+	{ name: 'Computer', icon: Monitor, desc: "The sandbox's own screen; watch the agent use it, or take over" },
 	{ name: 'Library', icon: Library, desc: 'Reports, screenshots and exports the agent saved' },
 	{ name: 'History', icon: History, desc: 'Earlier states of the files, to compare or restore' },
 ] as const;
@@ -41,6 +43,7 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	Files: memo(FilesTab),
 	Preview: memo(PreviewTab),
 	Browser: memo(BrowserTab),
+	Computer: memo(ComputerTab),
 	Library: memo(LibraryTab),
 	History: memo(HistoryTab),
 };

@@ -37,13 +37,23 @@ export type Machine = {
 	openPty(options: { cols: number; rows: number; cwd: string; env?: Record<string, string> }): Promise<Pty>;
 	/** A URL the user's browser can open for a server listening on `port`, or null when none is exposed. */
 	previewUrl(port: number): Promise<string | null>;
+	/**
+	 * A WebSocket address the user's browser can open for a server listening
+	 * on `port` inside the machine, carrying its own short-lived credential, so
+	 * only Anton's own UI gets it. Null when the provider has no way in.
+	 */
+	socketUrl(port: number): Promise<string | null>;
 };
 
 /** How a machine came to be: decides how much setup the workspace still needs. */
 export type MachineOrigin = 'live' | 'resumed' | 'image' | 'base';
 
+/** What a machine runs on: a container, or a full VM with its own kernel, for Docker, FUSE and the like. */
+export type SandboxRuntime = 'container' | 'vm';
+
 /** How big a new machine is, how long it may live, and what it may reach. Providers that cannot apply one ignore it. */
 export type SandboxResources = {
+	runtime: SandboxRuntime;
 	cpu: number;
 	memoryMiB: number;
 	/** Shut down after this long with nothing running. */
@@ -388,6 +398,17 @@ export type DecisionModel = {
 	/** The model specifier, `<gateway>/<model>`, as usage is logged under. */
 	readonly name: string;
 	decide(state: Record<string, unknown>, questions: Record<string, Question>, signal?: AbortSignal): Promise<Decision>;
+};
+
+/**
+ * A model that reads an image and answers in text, with no tools: for code
+ * that must see something, such as the computer tool finding what to click on
+ * the screen and saying what the screen shows.
+ */
+export type VisionModel = {
+	/** Whether it runs this `<gateway>/<model>` specifier. */
+	runs(model: string): boolean;
+	look(input: { model: string; prompt: string; image: Uint8Array; mimeType: string }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };
 
 /** A browser running on a hosted service: Chrome DevTools Protocol for code, a live view for people. */

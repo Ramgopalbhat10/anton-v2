@@ -108,6 +108,8 @@ const migrations: string[][] = [
 	],
 	// 21: the agent's latest todo list for the task, shown as the progress pill above the composer.
 	[`ALTER TABLE sessions ADD COLUMN todos_json TEXT`],
+	// 22: a repository's sandboxes can run as full VMs (Docker, FUSE) instead of containers.
+	[`ALTER TABLE projects ADD COLUMN full_vm INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

@@ -1,4 +1,4 @@
-import type { SandboxResources } from '../core/ports.ts';
+import type { SandboxResources, SandboxRuntime } from '../core/ports.ts';
 import { config } from '../config.ts';
 import { retireDefaultWarmImages } from '../db/projects.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
@@ -50,8 +50,10 @@ export async function setSandboxSettings(next: SandboxSettings): Promise<Sandbox
 /** Setup clones and fetches from GitHub inside the sandbox, so an allowlist always keeps it reachable. */
 const GIT_HOST_DOMAINS = ['github.com', '*.github.com', '*.githubusercontent.com'];
 
-export function resourcesFrom(settings: SandboxSettings): SandboxResources {
+/** A repository can ask for a full VM (Settings › Repositories); everything else runs in a container. */
+export function resourcesFrom(settings: SandboxSettings, runtime: SandboxRuntime = 'container'): SandboxResources {
 	return {
+		runtime,
 		cpu: settings.cpu,
 		memoryMiB: settings.memoryMiB,
 		idleTimeoutMs: settings.idleMinutes * 60_000,

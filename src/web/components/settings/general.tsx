@@ -9,6 +9,11 @@ const HELPERS: Array<{ agent: HelperAgent; title: string; help: string }> = [
 	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code for the agent and reports what it found.' },
 	{ agent: 'tester', title: 'Tester', help: 'Runs the project\'s tests and reports the failures.' },
 	{ agent: 'browser', title: 'Browser', help: 'Does tasks on web pages for the agent, in the Browser panel or the sandbox, and reports back.' },
+	{
+		agent: 'computer',
+		title: 'Computer',
+		help: "Uses the desktop in the sandbox for the agent: apps, dialogs, a visual check. It sees the screen with this model when it is an OpenRouter model that reads images, else with the task's, else with ANTON_VISION_MODEL.",
+	},
 	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews each pull request the agent opens or updates and comments on GitHub.' },
 ];
 

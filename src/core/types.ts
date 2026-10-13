@@ -25,6 +25,8 @@ export type ProjectSettings = {
 	previewPorts: number[];
 	/** Container image to start from instead of the default, such as `python:3.12`. */
 	baseImage: string | null;
+	/** Sandboxes run as full VMs with their own kernel, for Docker, FUSE and the like, where the provider has them. */
+	fullVm: boolean;
 	/** The agent fixes failed checks and answers review comments on its pull requests by itself. */
 	followUps: boolean;
 	mcpServers: McpServer[];

@@ -627,9 +627,18 @@ test('sandbox settings reach new machines, and a new default base image retires 
 	const session = await sessions.createSession({ projectId: project.id, title: 'Sizes' });
 	await sessions.resumeSession(session.id);
 	assert.equal(lastAcquire?.baseImage, 'python:3.12');
-	assert.deepEqual({ ...lastAcquire?.resources, allowedDomains: undefined }, { cpu: 4, memoryMiB: 8192, idleTimeoutMs: 30 * 60_000, lifetimeMs: 24 * 3_600_000, regions: ['eu'], allowedDomains: undefined });
+	assert.deepEqual({ ...lastAcquire?.resources, allowedDomains: undefined }, { runtime: 'container', cpu: 4, memoryMiB: 8192, idleTimeoutMs: 30 * 60_000, lifetimeMs: 24 * 3_600_000, regions: ['eu'], allowedDomains: undefined });
 	assert.ok(lastAcquire?.resources.allowedDomains.includes('registry.npmjs.org') && lastAcquire.resources.allowedDomains.includes('github.com'));
 	await sessions.stopSession(session.id);
+
+	// A repository set to full VMs gets them for the sandboxes started after; other settings keep.
+	const vm = await updateSettings(project.id, { env: {}, setupScript: '', previewPorts: [], baseImage: null, fullVm: true });
+	assert.equal(vm.fullVm, true);
+	assert.equal((await updateSettings(project.id, { env: {}, setupScript: '', previewPorts: [], baseImage: null })).fullVm, true, 'left out, it is kept');
+	await sessions.resumeSession(session.id);
+	assert.equal(lastAcquire?.resources.runtime, 'vm');
+	await sessions.stopSession(session.id);
+	await updateSettings(project.id, { env: {}, setupScript: '', previewPorts: [], baseImage: null, fullVm: false });
 
 	await setWarmImage(project.id, 'image-new');
 	assert.equal((await rebuildPreparedImage(project.id)).warmedAt, null);
@@ -641,7 +650,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -653,11 +662,11 @@ test('General settings decide how a new task starts when the launcher does not s
 
 	// Each helper agent can have its own model; the others keep the task's.
 	const { agentSettingsNow, primeAgent } = await import('../src/services/agent-runner.ts');
-	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
+	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, browser: null, computer: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
 	await assert.rejects(() => setGeneralSettings({ ...before, agentModels: { ...agentModels, tester: { model: 'openrouter/nobody/unknown', reasoning: null } } }), /Unknown model/);
 	await setGeneralSettings({ ...before, agentModels });
 	await primeAgent(other.id);
-	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, browser: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
+	assert.deepEqual(agentSettingsNow().models, { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: 'off' }, tester: null, browser: null, computer: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' } });
 	await setGeneralSettings(before);
 });
 

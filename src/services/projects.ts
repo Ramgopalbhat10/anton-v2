@@ -72,18 +72,19 @@ export async function branches(projectId: string): Promise<string[]> {
 /**
  * A settings change from the browser. A variable set to null keeps its stored
  * value and one left out is removed; a server sent without a token keeps its
- * stored one and an empty token removes it. Leaving out `followUps` or `mcpServers` keeps them as they are.
+ * stored one and an empty token removes it. Leaving out `followUps`, `fullVm` or `mcpServers` keeps them as they are.
  */
-export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'mcpServers'> & {
+export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'fullVm' | 'mcpServers'> & {
 	env: Record<string, string | null>;
 	followUps?: boolean;
+	fullVm?: boolean;
 	mcpServers?: Array<Omit<McpServer, 'auth'> & { auth?: string | null }>;
 };
 
 /**
  * Saves the repo's settings. New tasks use them. Running tasks get variable
- * changes from their next command batch; preview ports and the base image
- * apply once their sandbox restarts.
+ * changes from their next command batch; preview ports, the base image and
+ * the full VM apply once their sandbox restarts.
  */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
@@ -101,6 +102,7 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 		...change,
 		env,
 		followUps: change.followUps ?? project.followUps,
+		fullVm: change.fullVm ?? project.fullVm,
 		mcpServers,
 		baseImage: change.baseImage?.trim() || null,
 	});

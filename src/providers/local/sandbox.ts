@@ -17,10 +17,13 @@ const OUTPUT_GRACE_MS = 1000;
  */
 const UNSIGNED = { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'tag.gpgsign', GIT_CONFIG_VALUE_1: 'false' };
 
-/** Only what a shell needs; host secrets never reach a task. */
+/**
+ * Only what a shell needs; host secrets never reach a task. Machines share this
+ * computer's network, so a task's desktop listens on this computer alone.
+ */
 function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 	const pick = (name: string) => (process.env[name] ? { [name]: process.env[name] as string } : {});
-	return { ...pick('PATH'), ...pick('HOME'), ...pick('LANG'), TERM: 'xterm-256color', ...UNSIGNED, ...extra };
+	return { ...pick('PATH'), ...pick('HOME'), ...pick('LANG'), TERM: 'xterm-256color', ANTON_SCREEN_BIND: '127.0.0.1', ...UNSIGNED, ...extra };
 }
 
 /**
@@ -132,6 +135,8 @@ function localMachine(root: string): Machine {
 		},
 		/** Dev servers in a local task listen on this computer. */
 		previewUrl: async (port) => `http://localhost:${port}`,
+		// Only the browser on this computer reaches it: the desktop listens on this computer's own address (ANTON_SCREEN_BIND).
+		socketUrl: async (port) => `ws://localhost:${port}`,
 		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
 			const ttyFile = path.join(root, `.anton-tty-${randomUUID()}`);
 			const child = spawn('script', ['-qfc', `tty > ${quote(ttyFile)}; cd ${quote(cwd)}; exec bash -l`, '/dev/null'], {

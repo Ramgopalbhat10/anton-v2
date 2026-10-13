@@ -33,7 +33,7 @@ const onVisibility = (notify: () => void) => {
 	document.addEventListener('visibilitychange', notify);
 	return () => document.removeEventListener('visibilitychange', notify);
 };
-const useWindowShown = () => useSyncExternalStore(onVisibility, () => document.visibilityState !== 'hidden');
+export const useWindowShown = () => useSyncExternalStore(onVisibility, () => document.visibilityState !== 'hidden');
 
 /** Whether the live view should play, and a way to wake it: paused after a spell with nobody about, woken by the agent at work or by you. */
 function useLiveViewAwake(on: boolean, agentBusy: boolean, url: string | undefined): [boolean, () => void] {

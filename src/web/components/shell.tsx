@@ -107,17 +107,15 @@ function pullRequestAsk(session: Session): string {
 
 type StatusTone = { label: string; text: string; dot: string };
 
-/** Whether a message is handing work to the browser subagent right now. */
-function handingToBrowser(message: UseFlueAgentResult['messages'][number] | undefined): boolean {
-	return Boolean(
-		message?.parts.some(
-			(part) =>
-				part.type === 'dynamic-tool' &&
-				part.toolName === 'task' &&
-				part.state === 'input-available' &&
-				(part.input as { agent?: unknown } | undefined)?.agent === 'browser',
-		),
-	);
+/** The panel to show when the agent hands work to its browser or computer subagent, so its work can be watched. */
+function handingTo(message: UseFlueAgentResult['messages'][number] | undefined): 'Browser' | 'Computer' | null {
+	for (const part of message?.parts ?? []) {
+		if (part.type !== 'dynamic-tool' || part.toolName !== 'task' || part.state !== 'input-available') continue;
+		const agent = (part.input as { agent?: unknown } | undefined)?.agent;
+		if (agent === 'browser') return 'Browser';
+		if (agent === 'computer') return 'Computer';
+	}
+	return null;
 }
 
 // One object per state, so the header sees the same status from chunk to chunk.
@@ -267,11 +265,11 @@ export function TaskWorkspace({
 		if (panelRequest) showPanel(panelRequest);
 	}, [panelRequest]);
 
-	// When the agent hands work to its browser subagent, show the Browser panel so its work can be watched.
-	const browsing = handingToBrowser(agent.messages[agent.messages.length - 1]);
+	// When the agent hands work to its browser or computer subagent, show that panel so its work can be watched.
+	const watching = handingTo(agent.messages[agent.messages.length - 1]);
 	useEffect(() => {
-		if (browsing) showPanel('Browser');
-	}, [browsing]);
+		if (watching) showPanel(watching);
+	}, [watching]);
 
 	const centerVisible = !(open && expanded);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);

@@ -12,5 +12,6 @@ export function withEnv(machine: Machine, env: Record<string, string>): Machine 
 		exec: (command, options = {}) => machine.exec(command, { ...options, env: { ...env, ...options.env } }),
 		openPty: (options) => machine.openPty({ ...options, env: { ...env, ...options.env } }),
 		previewUrl: (port) => machine.previewUrl(port),
+		socketUrl: (port) => machine.socketUrl(port),
 	};
 }
