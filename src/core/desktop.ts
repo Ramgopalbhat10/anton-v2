@@ -28,6 +28,8 @@ export const DESKTOP_PACKAGES = [
 	// Mousepad warns in red across every window when run as root, as the sandbox does.
 	'l3afpad',
 	'papirus-icon-theme',
+	// Adwaita's dark theme for GTK 2 apps (GTK 3 has it built in).
+	'gnome-themes-extra',
 	'librsvg2-common',
 	'librsvg2-bin',
 	'fonts-inter',

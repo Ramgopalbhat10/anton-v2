@@ -17,11 +17,12 @@ export type LookPaths = {
 
 /**
  * The variables the desktop's programs run with, so they find its settings and
- * theme. GTK_THEME makes GTK's apps dark: settings.ini's dark preference
- * alone leaves them light.
+ * theme. GTK_THEME makes GTK 3's apps dark (settings.ini's dark preference
+ * alone leaves them light), and GTK2_RC_FILES does the same for GTK 2's, as
+ * Debian's PCManFM is.
  */
 export const lookEnv = ({ home }: LookPaths) =>
-	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data XDG_CACHE_HOME=${home}/cache GTK_THEME=Adwaita:dark NO_AT_BRIDGE=1`;
+	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data XDG_CACHE_HOME=${home}/cache GTK_THEME=Adwaita:dark GTK2_RC_FILES=${home}/gtkrc-2.0 NO_AT_BRIDGE=1`;
 
 /** A small seeded random, so the stars sit in the same places on every machine. */
 function seeded(seed: number) {
@@ -257,6 +258,11 @@ gtk-icon-theme-name=Papirus-Dark
 gtk-font-name=Inter 10
 `;
 
+const GTK2 = `gtk-theme-name="Adwaita-dark"
+gtk-icon-theme-name="Papirus-Dark"
+gtk-font-name="Inter 10"
+`;
+
 /** The terminal: dark, with colours that read on it (the default blue is too dark to). */
 const LXTERMINAL = `[general]
 fontname=DejaVu Sans Mono 11
@@ -296,6 +302,7 @@ export function writeLook(paths: LookPaths, screen: { width: number; height: num
 		[`${home}/config/pcmanfm/anton/desktop-items-0.conf`, DESKTOP_ITEMS(paths)],
 		[`${home}/config/libfm/libfm.conf`, LIBFM],
 		[`${home}/config/gtk-3.0/settings.ini`, GTK],
+		[`${home}/gtkrc-2.0`, GTK2],
 		[`${home}/config/lxterminal/lxterminal.conf`, LXTERMINAL],
 		[`${home}/config/user-dirs.dirs`, `XDG_DESKTOP_DIR="${home}/Desktop"\n`],
 		[`${home}/bin/anton-browser`, browserScript(paths)],
