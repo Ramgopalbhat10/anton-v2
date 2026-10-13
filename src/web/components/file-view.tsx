@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
 import { Markdown } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
@@ -215,7 +215,20 @@ export function MarkdownToggle({ preview, onChange, className }: { preview: bool
  * Pass `preview` to choose how Markdown shows from outside, as a tab bar does;
  * without it the file has its own icons for that, in its top corner.
  */
-export function FileView({ path, queryKey, read, preview: chosen }: { path: string; queryKey: unknown[]; read: () => Promise<Uint8Array>; preview?: boolean }) {
+export function FileView({
+	path,
+	queryKey,
+	read,
+	preview: chosen,
+	line: markedLine,
+}: {
+	path: string;
+	queryKey: unknown[];
+	read: () => Promise<Uint8Array>;
+	preview?: boolean;
+	/** A line to bring into view and mark, as when a reply links to it. */
+	line?: number;
+}) {
 	const imageType = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
 	const markdown = isMarkdown(path);
 	const [own, setOwn] = useState(true);
@@ -240,6 +253,10 @@ export function FileView({ path, queryKey, read, preview: chosen }: { path: stri
 		gcTime: 10_000,
 	});
 	const tokens = colored.data ?? null;
+	const marked = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (markedLine && lines.length) marked.current?.scrollIntoView({ block: 'center' });
+	}, [markedLine, lines.length]);
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="absolute top-2 right-3 z-10" /> : null}
@@ -263,7 +280,7 @@ export function FileView({ path, queryKey, read, preview: chosen }: { path: stri
 					<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[19px]">
 						<div className="min-w-max">
 							{lines.map((line, index) => (
-								<div key={index} className="flex">
+								<div key={index} ref={index + 1 === markedLine ? marked : undefined} className={cn('flex', index + 1 === markedLine && 'bg-(--accent-bg-subtle)')}>
 									<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{index + 1}</span>
 									<span className="pr-3 pl-3 whitespace-pre text-(--text-secondary)">
 										{tokens?.[index]

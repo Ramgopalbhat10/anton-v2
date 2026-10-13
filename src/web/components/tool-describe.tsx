@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /*
@@ -248,6 +248,35 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 			return { icon: field(input, 'action') === 'do' ? Zap : Globe, body: browserStep(input) };
 		case 'computer':
 			return { icon: Monitor, body: computerStep(input) };
+		case 'ask':
+			return {
+				icon: MessageCircleQuestion,
+				body: (
+					<>
+						Asked <Em>{field(input, 'question')}</Em>
+					</>
+				),
+			};
+		case 'show':
+			return {
+				icon: LayoutPanelTop,
+				body: field(input, 'title') ? (
+					<>
+						Showed <Em>{field(input, 'title')}</Em>
+					</>
+				) : (
+					<>Showed a card</>
+				),
+			};
+		case 'render_html':
+			return {
+				icon: AppWindow,
+				body: (
+					<>
+						Drew the page <Em>{field(input, 'title')}</Em>
+					</>
+				),
+			};
 		default:
 			return {
 				icon: Wrench,

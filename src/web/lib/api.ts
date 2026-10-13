@@ -359,6 +359,8 @@ export type GeneralSettings = {
 	planMode: boolean;
 	reviewPullRequests: boolean;
 	codeMode: boolean;
+	/** How much the agent draws its replies (cards, charts, pages) rather than writing them. */
+	visualReplies: 'off' | 'some' | 'more';
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };

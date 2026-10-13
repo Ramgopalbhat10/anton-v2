@@ -118,6 +118,8 @@ export const Composer = memo(function Composer({
 		const picked = items.filter((item): item is Element => item.kind === 'element');
 		const drawn = items.flatMap((item) => (item.kind === 'image' ? [item.image] : []));
 		if (picked.length) setElements((current) => [...current, ...picked]);
+		const handed = items.flatMap((item) => (item.kind === 'text' ? [item.text] : []));
+		if (handed.length) setText((current) => [current.trimEnd(), ...handed].filter(Boolean).join('\n\n'));
 		if (drawn.length) {
 			setImages([...images, ...drawn].slice(0, MAX_IMAGES));
 			setNotice(images.length + drawn.length > MAX_IMAGES ? `Up to ${MAX_IMAGES} images per message.` : null);

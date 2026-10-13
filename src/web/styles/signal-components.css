@@ -138,3 +138,9 @@
 .sg-file-row[aria-current='true'] { background: var(--bg-selected); }
 .sg-file-row[aria-current='true']:hover { background: var(--bg-selected-hover); }
 
+
+.sg-markdown .sg-code pre{padding:10px 12px}
+.sg-markdown .sg-file-ref{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer}
+.sg-markdown .sg-file-ref code{color:var(--accent-text);border-color:var(--accent-border)}
+.sg-markdown .sg-file-ref:hover code{background:var(--accent-bg-subtle)}
+.sg-markdown .sg-file-ref:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Folder, FolderOpen, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
 import { ResizeHandle, useStoredState } from '@/components/split-pane';
@@ -8,6 +8,7 @@ import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, isChat, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
+import { useFocusedFile } from '@/lib/workspace';
 
 /** Paths that match a search, as a flat list. */
 function Matches({
@@ -67,6 +68,13 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		setOpened(next);
 		if (selected === path) setSelected(next[Math.min(opened.indexOf(path), next.length - 1)] ?? null);
 	};
+	// A file a reply points at, such as src/app.ts:42, opens at its line.
+	const focus = useFocusedFile(sessionId);
+	useEffect(() => {
+		if (!focus) return;
+		open(focus.path);
+		if (focus.line && isMarkdown(focus.path)) setSourceShown((current) => new Set(current).add(focus.path));
+	}, [focus?.at]);
 	const [query, setQuery] = useState('');
 	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
 	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
@@ -236,6 +244,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 										queryKey={['file', sessionId, selected]}
 										read={() => api.file(sessionId, selected)}
 										preview={!sourceShown.has(selected)}
+										line={focus?.path === selected ? focus.line : undefined}
 									/>
 							</div>
 						) : (

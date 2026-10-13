@@ -1,4 +1,5 @@
 import { updateSession } from '../db/sessions.ts';
+import { takeAsk } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { logProblem } from './log.ts';
 
@@ -93,13 +94,16 @@ export function closingOf(texts: string[]): string | null {
 export async function checkReply(id: string): Promise<string | null> {
 	const reply = lastReply.get(id);
 	const whole = closingOf(replyTexts.get(id) ?? []);
+	const ask = takeAsk(id);
 	lastReply.delete(id);
 	replyTexts.delete(id);
 	try {
-		const asking = reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
+		// A question asked with the ask tool waits on the user by its nature.
+		const asking = ask ? ask.slice(0, MAX_QUESTION) : reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
 		await updateSession(id, { asking });
 	} catch (error) {
 		logProblem('warn', 'Could not check whether the reply waits on you', error, id);
 	}
-	return whole ?? reply ?? null;
+	// The coordinator and the thread's card read the question too, when it was asked with the tool.
+	return [whole ?? reply, ask].filter(Boolean).join('\n\n') || null;
 }

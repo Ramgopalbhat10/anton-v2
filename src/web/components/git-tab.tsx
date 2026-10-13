@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
-import { Fragment, useContext, useMemo, useState } from 'react';
+import { Fragment, useContext, useEffect, useMemo, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { BranchArt } from '@/components/illustrations';
 import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem } from '@/components/instrument';
@@ -10,6 +10,7 @@ import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { type ReviewComment, reviewMessage, SendToAgent, useReviewComments } from '@/lib/review';
 import { cn } from '@/lib/utils';
+import { useFocusedChange } from '@/lib/workspace';
 
 /** Draft comments on one file of the diff; absent where the diff is read-only. */
 export type Commenting = {
@@ -244,6 +245,11 @@ export function DiffList({
 	sessionId?: string;
 }) {
 	const [selected, setSelected] = useState<string | null>(null);
+	// A changed file a reply points at is picked here.
+	const focus = useFocusedChange(sessionId);
+	useEffect(() => {
+		if (focus) setSelected(focus.path);
+	}, [focus?.at]);
 	if (files.length === 0) {
 		return <EmptyState art={<BranchArt className="w-full max-w-[380px]" />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}

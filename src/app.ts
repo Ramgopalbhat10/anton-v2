@@ -17,11 +17,12 @@ import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
+import { PAGE_CSP, renderFrame, renderPage } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
 import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
-import { defaultModel, generalSettings, setGeneralSettings } from './services/general.ts';
+import { defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
@@ -282,6 +283,7 @@ app.put('/api/settings/general', async (c) => {
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
 			codeMode: v.boolean(),
+			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
@@ -632,6 +634,15 @@ app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req
 app.get('/api/sessions/:id/output', async (c) => {
 	const path = c.req.query('path') ?? '';
 	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));
+});
+// A page the agent wrote with render_html: the frame page the thread shows, and the page inside it (src/services/renders.ts).
+app.get('/api/sessions/:id/render-frame', async (c) => {
+	const { html, csp } = renderFrame(c.req.param('id'), c.req.query('path') ?? '');
+	return c.html(html, 200, { 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
+});
+app.get('/api/sessions/:id/render', async (c) => {
+	const html = await renderPage(c.req.param('id'), c.req.query('path') ?? '');
+	return c.html(html, 200, { 'Content-Security-Policy': PAGE_CSP, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300' });
 });
 // Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {

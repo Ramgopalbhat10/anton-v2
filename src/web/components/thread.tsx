@@ -6,7 +6,10 @@ import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { AgentsCard, delegationOf } from '@/components/subagents';
 import { Composer } from '@/components/composer';
-import { Markdown } from '@/components/markdown';
+import { FileLinks, Markdown } from '@/components/markdown';
+import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
+import { ShowCard } from '@/components/show-card';
+import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
@@ -14,16 +17,57 @@ import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
+import { focusFile, ShowPanel } from '@/lib/workspace';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
 type Step = ToolPart | ReasoningPart;
-type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] } | { kind: 'plan'; part: ToolPart } | { kind: 'agents'; calls: ToolPart[] };
+type Block =
+	| { kind: 'text'; text: string }
+	| { kind: 'steps'; steps: Step[] }
+	| { kind: 'plan'; part: ToolPart }
+	| { kind: 'agents'; calls: ToolPart[] }
+	| { kind: 'ask'; part: ToolPart }
+	| { kind: 'show'; part: ToolPart }
+	| { kind: 'page'; part: ToolPart };
 
 const PLAN_TOOL = 'propose_plan';
 /** The todo list shows as the pill above the composer, not as steps in the thread. */
 const TODO_TOOL = 'update_todos';
 const APPROVED = 'Your plan is approved. Go ahead and build it.';
+/** Tools whose calls draw in the reply itself rather than as a step; one that failed stays a step, with its error. */
+const DRAWN: Record<string, 'ask' | 'show' | 'page'> = { ask: 'ask', show: 'show', render_html: 'page' };
+
+/** What a page from render_html says it is, from the tool's result. */
+function pageOf(part: ToolPart): { path: string; title: string; height: number } | null {
+	if (part.state !== 'output-available') return null;
+	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
+	const output = record.output && typeof record.output === 'object' ? (record.output as Record<string, unknown>) : record;
+	const path = field(output, 'path');
+	return path ? { path, title: field(output, 'title') || 'Page', height: Number(field(output, 'height')) || 360 } : null;
+}
+
+/** Files a reply wrote or edited, in the order it first touched them. */
+function changedPaths(parts: FlueConversationPart[]): string[] {
+	const paths: string[] = [];
+	for (const part of parts) {
+		if (part.type !== 'dynamic-tool' || part.state !== 'output-available' || (part.toolName !== 'edit' && part.toolName !== 'write')) continue;
+		const path = field(part.input, 'path').replace(/^\.\//, '');
+		if (path && !paths.includes(path)) paths.push(path);
+	}
+	return paths;
+}
+
+/** The pull request a reply opened, with its title. */
+function openedPullRequest(parts: FlueConversationPart[]): { url: string; title: string } | null {
+	for (const part of [...parts].reverse()) {
+		if (part.type !== 'dynamic-tool' || part.toolName !== 'open_pull_request' || part.state !== 'output-available') continue;
+		const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
+		const url = field(record, 'url') || field(record.output, 'url');
+		if (url) return { url, title: field(part.input, 'title') };
+	}
+	return null;
+}
 
 /** The task whose thread is showing, for links into its Library. */
 const SessionId = createContext('');
@@ -56,6 +100,8 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
 		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {
 			blocks.push({ kind: 'plan', part });
+		} else if (part.type === 'dynamic-tool' && DRAWN[part.toolName] && part.state !== 'output-error') {
+			blocks.push({ kind: DRAWN[part.toolName], part });
 		} else if (part.type === 'dynamic-tool' && part.toolName === 'task') {
 			// Work handed to subagents gets its own card, the calls of one batch together.
 			const last = blocks[blocks.length - 1];
@@ -426,16 +472,28 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-const AssistantMessage = memo(function AssistantMessage({ message, live, last }: { message: FlueConversationMessage; live: boolean; last: boolean }) {
+const AssistantMessage = memo(function AssistantMessage({
+	message,
+	live,
+	last,
+	answer,
+}: {
+	message: FlueConversationMessage;
+	live: boolean;
+	last: boolean;
+	/** The user's message that followed this reply, for its cards to show what was picked. */
+	answer: string | null;
+}) {
 	const blocks = useMemo(() => toBlocks(message.parts), [message.parts]);
+	const place = useMemo<ReplyPlace>(() => ({ latest: last, answer }), [last, answer]);
+	const changed = useMemo(() => (live ? [] : changedPaths(message.parts)), [live, message.parts]);
+	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
 	const sessionId = useContext(SessionId);
 	const usage = usageOf(message);
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
 	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
-	const copyText = blocks
-		.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : []))
-		.join('\n\n');
+	const copyText = blocks.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
 	if (blocks.length === 0 && !live) return null;
 	return (
 		<div className="group/reply flex flex-col gap-3">
@@ -451,10 +509,22 @@ const AssistantMessage = memo(function AssistantMessage({ message, live, last }:
 					<PlanCard key={block.part.toolCallId} part={block.part} />
 				) : block.kind === 'agents' ? (
 					<AgentsBlock key={block.calls[0].toolCallId} sessionId={sessionId} calls={block.calls} />
+				) : block.kind === 'ask' ? (
+					<AskCard key={block.part.toolCallId} input={block.part.input} place={place} />
+				) : block.kind === 'show' ? (
+					block.part.state === 'output-available' ? (
+						<ShowCard key={block.part.toolCallId} sessionId={sessionId} input={block.part.input} place={place} />
+					) : (
+						<Drawing key={block.part.toolCallId} what="Drawing a card" />
+					)
+				) : block.kind === 'page' ? (
+					<PageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
 				),
 			)}
+			{pull ? <PullRequestCard sessionId={sessionId} url={pull.url} title={pull.title} /> : null}
+			{changed.length && !pull ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
 			{!live ? (
 				// Copy and usage stay on the latest reply; earlier ones show them on hover.
 				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
@@ -464,6 +534,37 @@ const AssistantMessage = memo(function AssistantMessage({ message, live, last }:
 			) : null}
 		</div>
 	);
+});
+
+/** The text a drawn block adds to Copy response: the question and its options, or what a card says. */
+function copiedText(block: Block): string[] {
+	if (block.kind === 'ask') {
+		const options = (block.part.input as { options?: Array<{ label?: string }> } | undefined)?.options ?? [];
+		return [[field(block.part.input, 'question'), ...options.map((option) => `- ${option.label ?? ''}`)].join('\n')];
+	}
+	if (block.kind === 'show' && block.part.state === 'output-available') {
+		// The tool's result says what the card shows, between its first line and its closing advice.
+		const text = typeof block.part.output === 'string' ? block.part.output : field(block.part.output, 'output');
+		const parts = text.split('\n\n');
+		return parts.length > 2 ? [parts.slice(1, -1).filter((part) => !part.startsWith('When the user presses')).join('\n\n')] : [];
+	}
+	return [];
+}
+
+/** A card or page still being drawn. */
+function Drawing({ what }: { what: string }) {
+	return (
+		<div className="flex h-9 items-center gap-2 rounded-[12px] border border-dashed border-(--card-border) px-3 text-[12px] text-(--text-tertiary)">
+			<Spinner size={12} />
+			{what}
+		</div>
+	);
+}
+
+const PageBlock = memo(function PageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
+	const page = pageOf(part);
+	if (!page) return <Drawing what="Drawing a page" />;
+	return <HtmlFrame sessionId={sessionId} path={page.path} title={page.title} height={page.height} />;
 });
 
 /** A batch of subagent calls; its list is rebuilt each render, so it re-renders only when one of its calls changed. */
@@ -493,6 +594,23 @@ const SettlementNotice = memo(function SettlementNotice({ message }: { message: 
 	return <Notice>{text || `The agent turn ${verb}. Send the message again to retry.`}</Notice>;
 });
 
+/** File references in replies link to the task's files, and open in the Files panel at their line. */
+function useThreadFileLinks(sessionId: string): FileLinks {
+	const showPanel = useContext(ShowPanel);
+	const files = useQuery({ queryKey: ['files', sessionId], queryFn: () => api.files(sessionId), staleTime: 30_000 });
+	const paths = useMemo(() => new Set(files.data?.paths ?? []), [files.data?.paths]);
+	return useMemo(
+		() => ({
+			has: (path: string) => paths.has(path),
+			open: (path: string, line?: number) => {
+				focusFile(sessionId, path, line);
+				showPanel('Files');
+			},
+		}),
+		[paths, sessionId, showPanel],
+	);
+}
+
 export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlueAgentResult }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
@@ -506,6 +624,18 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const branch = session.data ? branchLabel(session.data) : undefined;
 	const meta = useMemo(() => (repo && branch ? [repo, branch] : []), [repo, branch]);
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
+	// The message after each reply, for the cards in it: an option tapped, a form sent or anything typed.
+	const answers = useMemo(() => {
+		const map = new Map<string, string>();
+		messages.forEach((message, index) => {
+			const next = messages[index + 1];
+			if (message.role === 'assistant' && next?.role === 'user') map.set(message.id, next.parts.map((part) => (part.type === 'text' ? part.text : '')).join(''));
+		});
+		return map;
+	}, [messages]);
+	const send = agent.sendMessage;
+	const actions = useMemo<ReplyActions>(() => ({ send: (text: string) => void send(text), busy }), [send, busy]);
+	const fileLinks = useThreadFileLinks(sessionId);
 	const planned = Boolean(session.data?.planMode) && !busy && messages[messages.length - 1]?.role === 'assistant';
 
 	useEffect(() => {
@@ -532,6 +662,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 
 	return (
 		<SessionId.Provider value={sessionId}>
+			<ReplyActions.Provider value={actions}>
+			<FileLinks.Provider value={fileLinks}>
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
 					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
@@ -558,7 +690,13 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							) : message.role === 'user' ? (
 								<UserMessage key={message.id} message={message} meta={meta} />
 							) : (
-								<AssistantMessage key={message.id} message={message} live={busy && message === lastAssistant} last={message === lastAssistant} />
+								<AssistantMessage
+									key={message.id}
+									message={message}
+									live={busy && message === lastAssistant}
+									last={message === lastAssistant}
+									answer={answers.get(message.id) ?? null}
+								/>
 							),
 						)}
 						{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
@@ -579,6 +717,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 				{planned ? <ApproveBar sessionId={sessionId} send={(text) => agent.sendMessage(text)} /> : null}
 				<Composer busy={busy} onSend={onSend} onStop={onStop} sessionId={sessionId} />
 			</div>
+			</FileLinks.Provider>
+			</ReplyActions.Provider>
 		</SessionId.Provider>
 	);
 }

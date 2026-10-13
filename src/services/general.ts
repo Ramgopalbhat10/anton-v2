@@ -15,9 +15,14 @@ export type GeneralSettings = {
 	reviewPullRequests: boolean;
 	/** The agent gets run_script, to do many reads, searches or lookups in one short program, and reaches the repo's MCP servers through it. */
 	codeMode: boolean;
+	/** How much the agent draws its replies (cards, charts, pages) rather than writing them: off, when it helps, or freely. */
+	visualReplies: VisualReplies;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
 };
+
+export const VISUAL_REPLIES = ['off', 'some', 'more'] as const;
+export type VisualReplies = (typeof VISUAL_REPLIES)[number];
 
 /** The agents that work for the coder: its explorer, tester, browser and computer subagents, and the reviewer of its pull requests. */
 export const HELPER_AGENTS = ['explorer', 'tester', 'browser', 'computer', 'reviewer'] as const;
@@ -30,7 +35,7 @@ const KEY = 'general';
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
 	const agentModels = { explorer: null, tester: null, browser: null, computer: null, reviewer: null, ...stored.agentModels };
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, ...stored, agentModels };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', ...stored, agentModels };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {

@@ -78,3 +78,16 @@ test('a reply comes to its last message of substance and what follows it, not th
 	assert.equal(closingOf(['Short.', 'Also short.']), 'Short.\n\nAlso short.');
 	assert.equal(closingOf([]), null);
 });
+
+test('a question asked with the ask tool marks the task waiting on you, whatever the reply says', async () => {
+	const { noteAsk } = await import('../src/services/asks.ts');
+	providers(null);
+	reply('a', 'I compared both options.');
+	noteAsk('a', 'Which database should the app use?');
+	assert.equal(await checkReply('a'), 'I compared both options.\n\nWhich database should the app use?');
+	assert.equal((await getSessionRecord('a'))?.asking, 'Which database should the app use?');
+	// Asked once: the next reply is judged on its own words again.
+	reply('a', 'Done. Tests pass.');
+	await checkReply('a');
+	assert.equal((await getSessionRecord('a'))?.asking, null);
+});

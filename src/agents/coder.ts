@@ -36,6 +36,10 @@ import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDe
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, writeTodos } from '../services/todos.ts';
+import { noteAsk } from '../services/asks.ts';
+import { checkSpec, shownNote } from '../services/show.ts';
+import { PAGE_GUIDE, saveRender } from '../services/renders.ts';
+import { UI_LIMITS } from '../core/ui-spec.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
@@ -649,6 +653,91 @@ function useTodos(id: string) {
 	);
 }
 
+/** A question with options to tap, for a decision only the user can make; the thread shows it as a card and marks the task waiting on you. */
+function useAsk(id: string) {
+	useTool(
+		defineTool({
+			name: 'ask',
+			description:
+				'Ask the user to decide something only they can, with two to four options they tap to answer (they can also type their own). ' +
+				'Use it instead of ending your reply with a question. Ask one thing at a time, then stop and wait for their answer.',
+			input: v.object({
+				question: v.pipe(v.string(), v.minLength(1), v.maxLength(300), v.description('The question, one sentence naming what to decide')),
+				options: v.pipe(
+					v.array(
+						v.object({
+							label: v.pipe(v.string(), v.minLength(1), v.maxLength(60), v.description('The answer as the user would say it, a few words')),
+							detail: v.optional(v.pipe(v.string(), v.maxLength(200), v.description('What happens if they pick it, one line'))),
+						}),
+					),
+					v.minLength(2),
+					v.maxLength(4),
+				),
+				recommended: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(3), v.description('Index of the option you recommend'))),
+			}),
+			run: async ({ data }) => {
+				noteAsk(id, data.question);
+				return { output: 'The user sees your question with its options and answers with their next message. Stop here and wait; write nothing after this.' };
+			},
+		}),
+	);
+}
+
+const SHOW_TYPES = [
+	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
+	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
+] as const;
+
+/** The catalog, as the agent reads it; src/core/ui-spec.ts has the types. */
+const SHOW_DESCRIPTION = [
+	'Show the user components in your reply, drawn in the thread with Anton\'s own look: figures, tables, charts, timelines, and inputs they press.',
+	'children is a list of components; each is an object with a type and the fields below ("?" is optional). Containers hold children.',
+	'Layout: card {title?, caption?, children} · row {children} (side by side, wraps on phones) · col {children} · divider.',
+	'Content: text {text (Markdown), muted?} · stat {label, value, change? ("+12%"), tone?, format?} · badge {label, tone?} · list {items (Markdown), ordered?} · code {code, language?} · diff {patch (unified diff), path?} · file {path (in the repository), line?, label?} opens it in the Files panel · image {path (in the Library, e.g. a screenshot you saved), alt?}.',
+	`Data: table {columns: [{key, label?, format?, align?}], rows: [{key: value}]} (sortable, up to ${UI_LIMITS.rows} rows) · chart {kind: bar|stacked-bar|line|area|donut, title?, x (the key of the label or category), series: [{key, label?}] (up to ${UI_LIMITS.series}), data: [{x key and series keys: values}], format?} · progress {label, value, max? (100)} · timeline {items: [{title, time?, detail?, state?: done|active|pending|failed}]}.`,
+	'Inputs (each needs a unique name): choice {name, label?, options: [{label, value?, detail?}], multiple?} · select {name, label?, options} · text_input {name, label?, placeholder?, multiline?} · number {name, label?, value?, min?, max?, step?, slider?} · toggle {name, label, value?}.',
+	'value {label, formula, format?} works out a formula over the inputs\' names in the browser as the user changes them, e.g. "round(price * seats * (1 - discount / 100), 2)": + - * / % ** ( ) comparisons, a ? b : c, and min max round floor ceil abs sqrt pow. Use it for calculators.',
+	'Actions: button {label, message?, primary?} sends message (or its label) as the user\'s next message · form {title, submit?, children} gathers the inputs inside it and sends their values when submitted. Sorting, sliders and formulas need no message.',
+	'tone is neutral|accent|success|warning|danger; format is text|number|percent|currency|duration (milliseconds).',
+	'Put related things in one card rather than many. The result says what the user sees; do not repeat it in your reply.',
+].join('\n');
+
+function useShow() {
+	useTool(
+		defineTool({
+			name: 'show',
+			description: SHOW_DESCRIPTION,
+			input: v.object({
+				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
+				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
+			}),
+			run: async ({ data }) => ({ output: shownNote(checkSpec(data)) }),
+		}),
+	);
+}
+
+/** An open-ended page, for what the catalog can't draw: shown in the thread, in a sandbox with no network, and kept in the Library. */
+function useRenderHtml(id: string) {
+	useTool(
+		defineTool({
+			name: 'render_html',
+			description:
+				'Show a page you write in HTML in the thread, above your reply: an interactive explainer, a diagram, a UI mockup, a small tool or game. ' +
+				`Prefer show for figures, tables, charts and forms; use this only for what its components can't express. ${PAGE_GUIDE} ` +
+				'The page is also saved in the Library. Your reply should not announce it or restate it.',
+			input: v.object({
+				title: v.pipe(v.string(), v.minLength(1), v.maxLength(120), v.description('A short name for the page')),
+				html: v.pipe(v.string(), v.minLength(1), v.description('The complete HTML document')),
+				height: v.optional(v.pipe(v.number(), v.description('The frame height in pixels until the page reports its own, 80-1600'))),
+			}),
+			run: async ({ data }) => {
+				const page = await saveRender(id, data);
+				return { output: { ...page, note: `The user sees the page "${page.title}" in the thread; it is saved in the Library as ${page.path}.` } };
+			},
+		}),
+	);
+}
+
 /** A read-only thread reads the project's Library here; with a sandbox the files are in ../project-files. */
 function useProjectFiles(id: string) {
 	useTool(
@@ -666,7 +755,7 @@ function projectPrompt(project: ThreadProject | null, workspace: boolean): strin
 	if (!project) return '';
 	return [
 		`\n\nThis task is a thread of the project "${project.name}". The project's coordinator or the user gave you its brief; do that work, then report what you did in a few lines, since your last reply is what the coordinator reads.`,
-		'When you need a decision only the user can make, end your reply with the question.',
+		'When you need a decision only the user can make, ask it with the ask tool, or end your reply with the question.',
 		project.goal ? `The project's goal: ${project.goal}` : '',
 		workspace
 			? `Files the user added to the project are in ../${PROJECT_FILES} (beside the repo).`
@@ -711,6 +800,17 @@ const REMEMBER_HINT = 'When you learn something about this repository that a lat
 const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start.';
 
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
+
+/** How freely the agent draws its replies, by the Visual replies setting; off leaves only the ask card. */
+function visualHint(level: 'off' | 'some' | 'more'): string {
+	const ask = 'When you need a decision only the user can make, call ask with two to four options rather than ending your reply with a question.';
+	if (level === 'off') return ask;
+	const when =
+		level === 'more'
+			? 'Reach for show whenever a reply has figures, things to compare, steps over time or a choice for the user, and keep the text around it short.'
+			: 'Use show when components say it better than prose: figures and stats, comparisons and tables, data worth a chart, a timeline, or a choice the user makes with buttons or a form. Answer short questions and explanations in plain text.';
+	return `${when} Use render_html only for what show can't draw. ${ask}`;
+}
 
 const SCRIPT_HINT =
 	'When a job needs several lookups you can name now (reading every match of a search, calling an MCP tool for each item, a few web searches), or results you only need part of, write one run_script program instead of many separate tool calls.';
@@ -822,6 +922,12 @@ export function Coder({ id }: AgentProps) {
 	const project = threadProjectFor(id);
 	if (!chat) useRemember(id, project);
 	useTodos(id);
+	const visual = agentSettingsNow().visualReplies;
+	useAsk(id);
+	if (visual !== 'off') {
+		useShow();
+		useRenderHtml(id);
+	}
 	if (project && !workspace) useProjectFiles(id);
 	useSkills(id, workspace);
 	useLatestInput(id);
@@ -877,9 +983,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${SKILL_HINT}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${visualHint(visual)} ${SKILL_HINT}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
