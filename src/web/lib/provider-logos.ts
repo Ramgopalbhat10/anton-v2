@@ -86,9 +86,13 @@ const LOGOS: Record<string, string> = {
 	'z-ai': zai,
 };
 
-/** The vendor a model id names: `openrouter/anthropic/…` is Anthropic's, `openai/…` (a ChatGPT plan's) is OpenAI's. */
+/**
+ * The vendor a model id names: `openrouter/anthropic/…` is Anthropic's, `openai/…` (a ChatGPT plan's) is OpenAI's,
+ * and `claude-code/…` (a Claude plan's) is Anthropic's.
+ */
 export function vendorSlug(model: Pick<ModelInfo, 'id'>): string {
 	const [gateway, vendor] = model.id.split('/');
+	if (gateway === 'claude-code') return 'anthropic';
 	return (gateway === 'openrouter' ? (vendor ?? gateway) : gateway).replace(/^~/, '').toLowerCase();
 }
 

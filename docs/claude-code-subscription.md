@@ -1,6 +1,6 @@
 # Claude plans through Claude Code — design
 
-Status: proposed, not built. Settings › Subscriptions shows Claude as "Planned" and points here.
+Status: built, not yet tried against a real Claude account. Settings › Subscriptions has a Claude card. Where the build differs from the first design, this document now says what was built.
 
 ChatGPT plans already work (`src/services/subscriptions.ts`, `src/providers/chatgpt/`, `src/flue/subscription-models.ts`): Anton signs in with OpenAI's Sign in with ChatGPT, keeps the token, and calls the Responses API with it. Claude cannot work the same way. This document says why, and how Anton can run tasks on a Claude Pro or Max plan anyway.
 
@@ -48,8 +48,9 @@ On Anton's server, next to the agents, **not** in the task's sandbox:
 
 Anton never sees the token. Claude Code keeps it.
 
-- Anton runs the binary with `CLAUDE_CONFIG_DIR=<dataDir>/claude-code` (on the Litestream-backed disk, so it survives restarts).
-- Signing in: Settings › Subscriptions › Claude shows the one command to run once on the server, for example `fly ssh console -C "CLAUDE_CONFIG_DIR=/data/claude-code claude auth login"`. The login screen tells you to paste a code when the browser cannot reach the callback, as on any remote machine. Locally, a "Sign in" button can run the same command in Anton's terminal panel.
+- Anton runs the binary with `CLAUDE_CONFIG_DIR=<dataDir>/claude-code` (and `HOME` set to the same folder), so it reads no other sign-in on the server. Litestream backs up only the databases, so the sign-in survives a restart only where the data folder is a lasting disk.
+- Signing in: Settings › Subscriptions › Claude shows the one command to run once on the server, with the path of the `claude` the SDK bundles, for example `CLAUDE_CONFIG_DIR=/data/claude-code /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude auth login` (over `fly ssh console` when hosted). The login screen tells you to paste a code when the browser cannot reach the callback, as on any remote machine. "Check again" on the card then reads the sign-in.
+- The child process gets only `PATH`, locale, `TMPDIR`, proxy and CA variables from Anton's environment: never `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN`, so its calls can only bill the plan it signed in to. A sign-in that reports an API key or a cloud provider shows as "Needs attention" and lists no models.
 - Status: the SDK's `accountInfo()` and `supportedModels()` (or `claude auth status`), which report whether it is signed in, the plan and the email without handing Anton the token, fill the card and a Connections check.
 - Not used: `claude setup-token` with `CLAUDE_CODE_OAUTH_TOKEN`. That would have Anton store a session token, which the rules above forbid.
 
@@ -58,11 +59,11 @@ Anton never sees the token. Claude Code keeps it.
 `src/flue/claude-code-models.ts`, registered by both agents next to the OpenRouter and ChatGPT providers:
 
 ```ts
-setProvider(claudeCodeProvider(loadedModels, claudeCodeRuntime));
+setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 ```
 
-- Provider id `claude-code`; models `claude-code/claude-opus-5` etc., from the SDK's `supportedModels()` for the plan, with context sizes and prices filled in from pi's Anthropic catalog (`ANTHROPIC_MODELS`).
-- `auth.apiKey.resolve` returns a placeholder: the binary authenticates itself. It throws "Claude Code is not signed in" when the status check says so, so the turn fails with a useful message.
+- Provider id `claude-code`; models `claude-code/claude-opus-5` etc., from the SDK's `supportedModels()` for the plan (aliases resolved to their full ids, `default` left out), with output sizes and prices filled in from pi's Anthropic catalog (`ANTHROPIC_MODELS`), or the newest model of the same family for one pi does not know yet. Every plan model gets a 200K context, since 1M is served only on some plans and only under a `[1m]` name; Flue compacts at that size.
+- `auth.apiKey.resolve` returns a placeholder: the binary authenticates itself. A model is listed only while Claude Code says it is signed in, and a call made after a sign-out fails with Claude Code's own message.
 - `api: { stream, streamSimple }` is custom: it turns a pi `Context` into an Agent SDK `query()` and the SDK's messages back into pi's `AssistantMessageEventStream`.
 
 ### One model call, step by step
@@ -72,50 +73,36 @@ Flue calls the model once per step: context in, one assistant message out (text,
 1. Flue calls `streamSimple(model, context)`. The bridge looks up a live **bridge session** for this conversation, keyed by `options.sessionId` (Flue's session id).
 2. With none, or when `context` no longer extends what the session has seen (compaction, a fork, an edited message, a restart), it starts a new `query()`:
    - `systemPrompt: { type: 'preset', preset: 'claude_code', append: context.systemPrompt }`. Claude Code's own prompt stays; Anton's instructions are appended. A fully custom prompt is possible, but keeping Claude Code's is the safer reading of "unmodified".
-   - `tools: []` (no built-in tools); `mcpServers: { anton: createSdkMcpServer({ tools: context.tools.map(toSdkTool) }) }`; `allowedTools: ['mcp__anton__*']`; `permissionMode: 'bypassPermissions'`, which only reaches Anton's tools; `settingSources: []` and `strictMcpConfig`, so no user or project settings, hooks or MCP servers load.
-   - `cwd`: an empty directory per task; `model`: the Claude id; `thinking` and `effort` from Flue's thinking level (`maxThinkingTokens` is deprecated).
-   - Earlier turns are replayed by writing them as a Claude Code session file and passing `resume`, as pi-claude-bridge does with `cc-session-io`. A first version can instead send a compact transcript as the first user message.
-3. The bridge streams SDK `assistant` messages out as pi `text_*` and `thinking_*` events.
-4. When Claude Code calls `mcp__anton__<tool>`, the MCP handler **does not run the tool**. It parks a promise, and the bridge ends this pi stream with a `toolCall` and stop reason `toolUse`.
-5. Flue runs the tool (in the sandbox, or on Anton for read-only tools), appends the `toolResult` and calls `streamSimple` again. The bridge sees that the new context is the old one plus tool results, resolves the parked MCP promises with them, and keeps streaming the same `query()`.
-6. The SDK's `result` message ends the turn with stop reason `stop`. Its `usage` becomes pi `Usage`.
-7. On abort (`options.signal`) the bridge calls `query.interrupt()`. Sessions idle for 10 minutes are closed.
+   - `tools: []` (no built-in tools); `mcpServers: { anton: <an in-process MCP server> }` that serves each tool's JSON Schema as Flue gives it, marked `anthropic/alwaysLoad` since there is no tool search; `allowedTools: ['mcp__anton']`; `permissionMode: 'dontAsk'`, which refuses anything not allowed instead of asking; `settingSources: []`, `strictMcpConfig` and `persistSession: false`, so no user or project settings, hooks, memory or MCP servers load and nothing is written to Claude Code's session history. Auto-compaction and auto-memory are off by environment, since Flue compacts.
+   - `cwd`: an empty folder under the config directory; `model`: the Claude id; `thinking` (adaptive, or disabled when the level is off) and `effort` from Flue's thinking level, moved to the nearest level the model offers.
+   - Built: earlier turns are sent as a text transcript (`<conversation_so_far>`) in the first user message, followed by the latest user message. Writing a Claude Code session file and passing `resume`, as pi-claude-bridge does, would keep signed thinking; it is left for later.
+3. The bridge streams the SDK's raw stream events (`includePartialMessages`) out as pi `text_*`, `thinking_*` and `toolcall_*` events. A step ends at the model call's `message_stop`.
+4. A model call that ends with tool calls ends the pi stream with them and stop reason `toolUse`. When Claude Code then calls `mcp__anton__<tool>`, the MCP handler **does not run the tool**: it parks a promise, paired with the tool call by the `claudecode/toolUseId` Claude Code puts on each MCP call.
+5. Flue runs the tools (in the sandbox, or on Anton for read-only tools), appends the `toolResult`s and calls `streamSimple` again. The bridge sees that the new context is the old one plus those results, resolves the parked MCP calls with them (or keeps a result until Claude Code asks for it), and streams on in the same `query()`.
+6. A model call with no tool calls ends the step with stop reason `stop` and its usage. The SDK's `result` that follows is skipped on the next step; the user's next message is sent into the same `query()`.
+7. On abort (`options.signal`), an error or a mismatch the bridge closes the `query()`, and the next step starts a new one with the transcript. Conversations idle for 10 minutes are closed.
 
-Parallel tool calls: Claude Code may call several MCP tools before waiting on any. The bridge collects every call made within one SDK assistant message and returns them together, as one pi message with several `toolCall`s.
+Parallel tool calls: one model call can ask for several tools, and they come back as one pi message with several `toolCall`s; Claude Code calls them one by one or together, and each gets its result whenever it asks.
 
 ### Cost, caps and limits
 
 - Usage is recorded in tokens, at $0, or at Anthropic API prices when "Count toward the spending caps" is on. These are the same two options the ChatGPT card has (`SubscriptionOptions`).
-- The SDK reports rate-limit events and a `result` with `is_error` when the plan's limit is reached. The bridge turns these into a pi error such as "Claude plan limit reached; resets at …", which the thread already shows.
-- At most two Claude Code processes run at once (one coder and one helper); more queue.
+- The SDK reports rate-limit events and an `assistant` message with `error` (or a `result` with `is_error`) when the plan's limit is reached. The bridge turns these into a pi error "Claude plan limit reached: <Claude Code's message>", which the thread already shows, and notes the time for the usage views.
+- When Claude Code says the plan has moved on to paid extra usage, the Claude card warns and links claude.ai/settings/usage. Turn extra usage off there so tasks stop at the limit instead.
+- At most `ANTON_CLAUDE_CODE_MAX_OPEN` (default 3) Claude Code conversations stay open across all agents; a new one closes the longest idle. Busy ones are never closed, so the cap can be passed briefly rather than block a step.
 
 ### Ports and files
 
-The ChatGPT `SubscriptionProvider` port is built around Anton holding an OAuth token, which does not fit here. Add a port to `src/core/ports.ts`:
-
-```ts
-/** A vendor's own agent program that Anton drives as a model, signed in through the program itself. */
-export type AgentRuntime = {
-	readonly id: string;            // 'claude-code'
-	readonly name: string;          // 'Claude'
-	readonly gateway: string;       // 'claude-code'
-	status(): Promise<{ signedIn: boolean; email: string | null; plan: string | null; version: string | null; problem: string | null }>;
-	listModels(): Promise<SubscriptionModel[]>;
-	/** One Agent SDK conversation; the bridge in src/flue drives it. */
-	open(options: AgentRuntimeSession): AgentRuntimeConversation;
-};
-```
+The ChatGPT `SubscriptionProvider` port is built around Anton holding an OAuth token, which does not fit here. `src/core/ports.ts` has an `AgentRuntime` port instead: a vendor's own agent program that Anton drives as a model, signed in through the program itself. It reports `status()` (signed in, email, plan, version, problem), `listModels()`, the `signInCommand` for the card, and `open()`, which starts one conversation that takes user content, calls back for each tool result (`callTool`) and yields `RuntimeEvent`s (the model call's stream events, errors with whether the plan's limit caused them, extra-usage notices and turn ends). The bridge sees only these, never the SDK's own types.
 
 - `src/providers/claude-code/runtime.ts`: the Agent SDK, its `accountInfo()` and `supportedModels()`. It is the only file that imports `@anthropic-ai/claude-agent-sdk`.
 - `src/flue/claude-code-models.ts`: the pi provider and the bridge (steps 1–7).
-- `src/services/subscriptions.ts`: lists runtimes next to OAuth plans in `subscriptionsView()` and `subscriptionModels()`, with the same options and change announcements.
-- Settings › Subscriptions: the Claude card shows status, the sign-in command, the two options and the model list.
+- `src/services/subscriptions.ts`: lists runtimes next to OAuth plans in `subscriptionsView()`, `subscriptionModels()` and `planUsage()`, with the same options and change announcements; `runtimeHooks()` gives the bridge where to note limits and extra usage. Disconnecting is refused with the `auth logout` command, since Anton holds nothing to forget. Settings › Connections checks the sign-in too.
+- Settings › Subscriptions: the Claude card shows status, the sign-in command with a copy button, the account and plan, the two options, the model list and an extra-usage warning.
 
 ### Tests
 
-- The bridge against a fake `AgentRuntime` that plays scripted SDK messages: text only; one tool call; two parallel tool calls; abort mid-tool; the context no longer extending the session, which starts a new `query()`; a plan-limit error.
-- The tool schema mapping (valibot JSON schema to the SDK's MCP tool), including images in tool results.
-- One opt-in end-to-end test, skipped without a signed-in `claude`: "Say ready." through `npx flue run src/agents/coder.ts`.
+`tests/claude-code.test.ts`: the bridge against a fake `AgentRuntime` (a plain answer; two tool calls, one delivered while Claude Code waits and one before it asks, then the user's next message in the same conversation; a context that no longer extends, which starts a new conversation with the transcript; a plan limit, extra usage, an early turn end and an abort; the open-conversation cap), the SDK message mapping, the sign-in status, model listing, the child environment and the subscriptions service. `tests/ui/subscriptions.test.tsx` covers the card. Still to do: one opt-in end-to-end run against a signed-in `claude`, with extra usage off.
 
 ## Risks and open questions
 

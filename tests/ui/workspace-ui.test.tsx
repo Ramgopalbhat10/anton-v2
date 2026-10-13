@@ -1,6 +1,8 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { TaskPanels } from '@/components/shell';
 import type { ContextView, ModelInfo, PlanUsage, Session } from '@/lib/api';
 import { renderWithQueries, session } from './render';
 
@@ -22,6 +24,7 @@ const { RackCard } = await import('@/components/task-rack');
 const { ContextMeter } = await import('@/components/context-meter');
 const { ArcDial, DotMatrix, StackedDaysChart } = await import('@/components/charts');
 const { VmPanel } = await import('@/components/vm-panel');
+const { usePanelChange } = await import('@/components/shell');
 
 const model = (patch: Partial<ModelInfo>): ModelInfo => ({
 	id: 'openai/gpt-6-luna',
@@ -237,5 +240,43 @@ describe('Workspace panel header', () => {
 	it('hides Resume once the sandbox runs', () => {
 		panel('running');
 		expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull();
+	});
+
+	/** The panel as the task page holds it: tabs and the shown one changed through one handler. */
+	function Workspace() {
+		const [panels, setPanels] = useState<TaskPanels>({ tabs: ['Changes', 'Library', 'History'], active: 'Library', open: true });
+		const change = usePanelChange(panels, setPanels);
+		return (
+			<VmPanel
+				sessionId="s1"
+				tabs={panels.tabs}
+				active={panels.active}
+				onTabsChange={(tabs) => change({ tabs })}
+				onActiveChange={(active) => change({ active })}
+				expanded={false}
+				onToggleExpanded={() => {}}
+				onClose={() => {}}
+			/>
+		);
+	}
+
+	it('closes a tab and shows its neighbour, and opens a new panel as the shown tab', async () => {
+		renderWithQueries(<Workspace />, [
+			[['session', 's1'], session({ id: 's1', status: 'running' })],
+			[['changes', 's1'], { source: 'base', patch: '', log: [] }],
+		]);
+		const tabs = () => within(screen.getByRole('tablist', { name: 'Workspace panels' })).queryAllByRole('tab');
+		const shown = () => tabs().find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent ?? null;
+
+		fireEvent.click(screen.getByRole('button', { name: 'Close Library' }));
+		expect(tabs().map((tab) => tab.textContent)).toEqual(['Changes', 'History']);
+		expect(shown()).toBe('Changes');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Close Changes' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Close History' }));
+		expect(tabs()).toHaveLength(0);
+		fireEvent.click(screen.getByRole('button', { name: /^Library/ }));
+		expect(tabs().map((tab) => tab.textContent)).toEqual(['Library']);
+		expect(shown()).toBe('Library');
 	});
 });

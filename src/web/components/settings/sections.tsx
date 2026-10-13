@@ -29,7 +29,7 @@ export type SettingsSection = { id: string; group: SectionGroup; label: string; 
 /** Every settings page, in nav order. A new page is one entry here. */
 export const SECTIONS: SettingsSection[] = [
 	{ id: 'general', group: 'anton', label: 'General', icon: Settings2, desc: 'The model and mode new tasks start with', Page: GeneralPage },
-	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Run tasks on a ChatGPT plan you already pay for', Page: SubscriptionsPage },
+	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Run tasks on a ChatGPT or Claude plan you already pay for', Page: SubscriptionsPage },
 	{ id: 'connections', group: 'anton', label: 'Connections', icon: Link, desc: 'GitHub, Modal, storage, models, the decision model and web search, checked live', Page: ConnectionsPage },
 	{ id: 'usage', group: 'anton', label: 'Usage and limits', icon: Activity, desc: 'Model spend and the caps that stop it', Page: UsagePage },
 	{ id: 'problems', group: 'anton', label: 'Recent problems', icon: TriangleAlert, desc: 'Warnings and errors from work that runs on its own', Page: ProblemsPage },

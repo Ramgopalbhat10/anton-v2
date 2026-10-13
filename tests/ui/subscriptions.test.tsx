@@ -18,6 +18,7 @@ const planModel = (id: string, name: string, tokens = 0) => ({
 const plan = (patch: Partial<Subscription> = {}): Subscription => ({
 	id: 'chatgpt',
 	name: 'ChatGPT',
+	kind: 'oauth',
 	gateway: 'openai',
 	state: 'signed-out',
 	email: null,
@@ -29,6 +30,11 @@ const plan = (patch: Partial<Subscription> = {}): Subscription => ({
 	monthTokens: 0,
 	modelsAt: null,
 	login: null,
+	plan: null,
+	version: null,
+	signIn: null,
+	limitHitAt: null,
+	extraUsageAt: null,
 	...patch,
 });
 
@@ -73,15 +79,56 @@ function page() {
 }
 
 describe('Subscriptions', () => {
-	it('offers both ways to connect a plan, and says Claude needs Claude Code', async () => {
+	it('offers both ways to connect a plan', async () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [plan()] });
 		page();
 		expect(await screen.findByText('Not connected')).toBeTruthy();
 		expect(screen.getByRole('img', { name: /ChatGPT plan not connected yet/ })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Sign in with ChatGPT' })).toBeTruthy();
 		expect(screen.getByLabelText('Sign-in to import')).toBeTruthy();
-		expect(screen.getByText('Planned')).toBeTruthy();
-		expect(screen.getByText('docs/claude-code-subscription.md')).toBeTruthy();
+	});
+
+	const claude = plan({ id: 'claude', name: 'Claude', kind: 'runtime', gateway: 'claude-code', signIn: 'CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth login' });
+
+	it('shows a Claude plan with the command that signs Claude Code in on the server', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [plan(), claude] });
+		api.refreshSubscriptionModels.mockResolvedValue(claude);
+		page();
+		const tabs = within(await screen.findByRole('tablist', { name: 'Plans' })).getAllByRole('tab');
+		expect(tabs.map((tab) => [tab.getAttribute('aria-selected'), tab.querySelector('svg title')?.textContent])).toEqual([
+			['true', 'OpenAI'],
+			['false', 'Anthropic'],
+		]);
+		expect(screen.getByRole('tab', { name: 'Claude' })).toBe(tabs[1]);
+		expect(screen.queryByLabelText('Command that signs Claude Code in')).toBeNull();
+		fireEvent.click(tabs[1]);
+		const command = await screen.findByLabelText('Command that signs Claude Code in');
+		expect(command.textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth login');
+		expect(screen.getByText('Sign in on the server')).toBeTruthy();
+		expect(screen.getByText(/For your own use only/)).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+		await waitFor(() => expect(api.refreshSubscriptionModels).toHaveBeenCalledWith('claude'));
+	});
+
+	it('shows a signed-in Claude plan’s account and models, and warns when it bills extra usage', async () => {
+		const signedIn = {
+			...claude,
+			state: 'connected' as const,
+			email: 'ada@example.com',
+			plan: 'max',
+			version: '2.5.0',
+			extraUsageAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+			models: [{ ...planModel('claude-code/claude-opus-5', 'Claude Opus 5'), contextLength: 200_000 }],
+		};
+		api.subscriptions.mockResolvedValue({ subscriptions: [signedIn] });
+		page();
+		expect(await screen.findByText('1 model on your plan')).toBeTruthy();
+		expect(screen.getByText('max', { selector: 'dd' })).toBeTruthy();
+		expect(screen.getByText('2.5.0', { selector: 'dd' })).toBeTruthy();
+		expect(screen.getByText(/calls now bill extra usage/)).toBeTruthy();
+		expect(screen.getByLabelText('Command that signs Claude Code out').textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth logout');
+		expect(screen.getByText(/For your own use only/).textContent).not.toContain('auth logout');
+		expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
 	});
 
 	it('opens ChatGPT in a new tab during the click, then finishes with the pasted address', async () => {

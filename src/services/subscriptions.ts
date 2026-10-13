@@ -1,18 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
-import type { ModelInfo, SubscriptionCredential, SubscriptionLogin, SubscriptionModel, SubscriptionProvider } from '../core/ports.ts';
+import type { AgentRuntime, ModelInfo, SubscriptionCredential, SubscriptionLogin, SubscriptionModel, SubscriptionProvider } from '../core/ports.ts';
 import { spendBy, tokensByMinute } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
 
 /**
- * Plans you already pay for (a ChatGPT plan), signed in to from Settings ›
- * Subscriptions. Their models join the model picker, and their calls bill the
- * plan rather than per token. Anton keeps each sign-in and renews its token;
- * the agents ask for a fresh one on every call.
+ * Plans you already pay for, from Settings › Subscriptions. Their models join
+ * the model picker, and their calls bill the plan rather than per token.
+ *
+ * A ChatGPT plan is signed in to here: Anton keeps the sign-in and renews its
+ * token, and the agents ask for a fresh one on every call. A Claude plan runs
+ * through Claude Code (an `AgentRuntime`), which signs in through its own flow
+ * on the server and keeps its token to itself; Anton only reads its status.
  */
 
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the spending caps as if billed per token. */
@@ -28,11 +32,15 @@ type Stored = SubscriptionOptions & {
 	problem: string | null;
 	/** When the vendor last said the plan's usage limit was reached. */
 	limitHitAt: string | null;
+	/** When the vendor last said the plan's limit ran out and calls now bill paid extra usage. */
+	extraUsageAt: string | null;
 };
 
 export type SubscriptionView = {
 	id: string;
 	name: string;
+	/** `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`). */
+	kind: 'oauth' | 'runtime';
 	/** The `<gateway>` its models are named under. */
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
@@ -49,9 +57,25 @@ export type SubscriptionView = {
 	modelsAt: string | null;
 	/** A sign-in waiting for the address the browser is sent back to; `listening` when Anton can catch it itself. */
 	login: { url: string; redirectUri: string; listening: boolean; startedAt: string } | null;
+	/** A runtime's plan as it names it (`max`), its version, and the command that signs it in on the server. */
+	plan: string | null;
+	version: string | null;
+	signIn: string | null;
+	limitHitAt: string | null;
+	extraUsageAt: string | null;
 };
 
-const DEFAULTS: Stored = { enabled: true, countAtApiPrices: false, credential: null, connectedAt: null, models: [], modelsAt: null, problem: null, limitHitAt: null };
+const DEFAULTS: Stored = {
+	enabled: true,
+	countAtApiPrices: false,
+	credential: null,
+	connectedAt: null,
+	models: [],
+	modelsAt: null,
+	problem: null,
+	limitHitAt: null,
+	extraUsageAt: null,
+};
 const MODELS_TTL_MS = 60 * 60_000;
 /** After a failed listing, how long the last list is served before asking again. */
 const MODELS_RETRY_MS = 5 * 60_000;
@@ -61,14 +85,26 @@ const HOST_KEY = 'subscription-host';
 const settingKey = (id: string) => `subscription.${id}`;
 
 export const subscriptionProviders = (): SubscriptionProvider[] => getProviders().subscriptions ?? [];
+export const agentRuntimes = (): AgentRuntime[] => getProviders().runtimes ?? [];
 
 /** Whether a model (`<gateway>/<model>`) runs on a plan, where calls cost nothing per token. */
-export const onPlan = (model: string): boolean => subscriptionProviders().some((provider) => model.startsWith(`${provider.gateway}/`));
+export const onPlan = (model: string): boolean => [...subscriptionProviders(), ...agentRuntimes()].some((plan) => model.startsWith(`${plan.gateway}/`));
+
+/** The program that runs the models named under `gateway`, for the agents. */
+export const runtimeFor = (gateway: string): AgentRuntime | undefined => agentRuntimes().find((runtime) => runtime.gateway === gateway);
 
 function providerById(id: string): SubscriptionProvider {
 	const provider = subscriptionProviders().find((candidate) => candidate.id === id);
-	if (!provider) throw new NotFoundError(`No subscription named "${id}"`);
+	if (!provider) {
+		const runtime = agentRuntimes().find((candidate) => candidate.id === id);
+		if (runtime) throw new ConflictError(`${runtime.name} signs in through Claude Code on the server: ${runtime.signInCommand}`);
+		throw new NotFoundError(`No subscription named "${id}"`);
+	}
 	return provider;
+}
+
+function runtimeById(id: string): AgentRuntime | undefined {
+	return agentRuntimes().find((candidate) => candidate.id === id);
 }
 
 /** Each plan's stored state, read once and written through, so lookups while the agent renders stay cheap. */
@@ -148,17 +184,32 @@ export function priced(model: SubscriptionModel, plan: string, options: Subscrip
 
 const listing = new Map<string, Promise<SubscriptionModel[]>>();
 const retryAt = new Map<string, number>();
+/** Plans whose models this process has listed. */
+const listedHere = new Set<string>();
 
-async function listNow(provider: SubscriptionProvider): Promise<SubscriptionModel[]> {
-	const models = await provider.listModels(await accessToken(provider.id));
-	await save(provider.id, { models, modelsAt: Date.now() });
-	retryAt.delete(provider.id);
+/** A plan Anton signs in to, or a program that signs in itself, as the model list sees them. */
+/** `local`: listed on this server for nothing (Claude Code), so listed again after each start rather than trusting a list an older Anton saved. */
+type Plan = { id: string; name: string; list: () => Promise<SubscriptionModel[]>; local?: boolean };
+
+const oauthPlan = (provider: SubscriptionProvider): Plan => ({
+	id: provider.id,
+	name: provider.name,
+	list: async () => provider.listModels(await accessToken(provider.id)),
+});
+
+const runtimePlan = (runtime: AgentRuntime): Plan => ({ id: runtime.id, name: runtime.name, list: () => runtime.listModels(), local: true });
+
+async function listNow(plan: Plan): Promise<SubscriptionModel[]> {
+	const models = await plan.list();
+	await save(plan.id, { models, modelsAt: Date.now() });
+	retryAt.delete(plan.id);
+	listedHere.add(plan.id);
 	return models;
 }
 
 /** The account's models, listed again once the last list is an hour old; a failure serves the last list for a while. */
-async function freshModels(provider: SubscriptionProvider, current: Stored): Promise<SubscriptionModel[]> {
-	const fresh = current.modelsAt !== null && Date.now() - current.modelsAt < MODELS_TTL_MS;
+async function freshModels(provider: Plan, current: Stored): Promise<SubscriptionModel[]> {
+	const fresh = current.modelsAt !== null && Date.now() - current.modelsAt < MODELS_TTL_MS && (!provider.local || listedHere.has(provider.id));
 	if (fresh || (retryAt.get(provider.id) ?? 0) > Date.now()) return current.models;
 	let pending = listing.get(provider.id);
 	if (!pending) {
@@ -176,13 +227,18 @@ async function freshModels(provider: SubscriptionProvider, current: Stored): Pro
 
 /** Every signed-in plan's models that are switched on, for the model picker and the agents. */
 export async function subscriptionModels(): Promise<ModelInfo[]> {
-	const lists = await Promise.all(
-		subscriptionProviders().map(async (provider) => {
+	const lists = await Promise.all([
+		...subscriptionProviders().map(async (provider) => {
 			const current = await stored(provider.id);
 			if (!current.enabled || !current.credential) return [];
-			return (await freshModels(provider, current)).map((model) => priced(model, provider.name, current));
+			return (await freshModels(oauthPlan(provider), current)).map((model) => priced(model, provider.name, current));
 		}),
-	);
+		...agentRuntimes().map(async (runtime) => {
+			const current = await stored(runtime.id);
+			if (!current.enabled || !(await runtime.status()).signedIn) return [];
+			return (await freshModels(runtimePlan(runtime), current)).map((model) => priced(model, runtime.name, current));
+		}),
+	]);
 	return lists.flat();
 }
 
@@ -262,7 +318,7 @@ export async function cancelLogin(id: string): Promise<SubscriptionView> {
 async function connect(provider: SubscriptionProvider, credential: SubscriptionCredential): Promise<void> {
 	await save(provider.id, { credential, connectedAt: new Date().toISOString(), problem: null, models: [], modelsAt: null });
 	retryAt.delete(provider.id);
-	await listNow(provider).catch((error: unknown) => logProblem('warn', `Could not list ${provider.name} models`, error));
+	await listNow(oauthPlan(provider)).catch((error: unknown) => logProblem('warn', `Could not list ${provider.name} models`, error));
 }
 
 /** Finishes a sign-in with the address the browser was sent back to, pasted or caught on the loopback address. */
@@ -330,6 +386,8 @@ export async function importLogin(id: string, input: string): Promise<Subscripti
 
 /** Forgets the sign-in here; the vendor keeps Anton listed until you remove it there. */
 export async function disconnect(id: string): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) throw new ConflictError(`Claude Code keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
 	const provider = providerById(id);
 	endAttempt(id);
 	await save(id, { credential: null, connectedAt: null, models: [], modelsAt: null, problem: null });
@@ -337,16 +395,56 @@ export async function disconnect(id: string): Promise<SubscriptionView> {
 }
 
 export async function setSubscriptionOptions(id: string, options: SubscriptionOptions): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) {
+		await save(id, options);
+		return runtimeView(runtime);
+	}
 	const provider = providerById(id);
 	await save(id, options);
 	return subscriptionView(provider);
 }
 
+/** Lists the models again; for Claude Code, its sign-in is read again first, so a sign-in on the server shows at once. */
 export async function refreshSubscriptionModels(id: string): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) {
+		const status = await runtime.status(true);
+		if (!status.signedIn) {
+			await save(id, { models: [], modelsAt: null });
+			return runtimeView(runtime);
+		}
+		await listNow(runtimePlan(runtime));
+		return runtimeView(runtime);
+	}
 	const provider = providerById(id);
 	if (!(await stored(id)).credential) throw new ConflictError(`${provider.name} is not signed in.`);
-	await listNow(provider);
+	await listNow(oauthPlan(provider));
 	return subscriptionView(provider);
+}
+
+/** Notes that a plan's usage limit stopped a call, for the usage views. */
+export async function notePlanLimit(id: string): Promise<void> {
+	await save(id, { limitHitAt: new Date().toISOString() });
+}
+
+/** Notes that the vendor moved the account onto paid extra usage, so the plan's card can say so. */
+export async function noteExtraUsage(id: string): Promise<void> {
+	const current = await stored(id);
+	// Claude Code says so on each call while it lasts; one note an hour is enough.
+	if (current.extraUsageAt && Date.now() - new Date(current.extraUsageAt).getTime() < 60 * 60_000) return;
+	logProblem('warn', 'Claude Code says the Claude plan is now using paid extra usage', null);
+	await save(id, { extraUsageAt: new Date().toISOString() });
+}
+
+/** What the agents tell the Claude Code bridge: what to report for the plan whose models are named under `gateway`, and how many conversations it keeps open. */
+export function runtimeHooks(gateway: string): { onLimit(): void; onExtraUsage(): void; maxOpen: number } {
+	const id = () => runtimeFor(gateway)?.id;
+	const report = (note: (id: string) => Promise<void>) => () => {
+		const plan = id();
+		if (plan) note(plan).catch((error: unknown) => logProblem('warn', 'Could not note the plan usage', error));
+	};
+	return { onLimit: report(notePlanLimit), onExtraUsage: report(noteExtraUsage), maxOpen: config.claudeCode.maxOpen };
 }
 
 function startOfMonth(now = new Date()): Date {
@@ -356,21 +454,11 @@ function startOfMonth(now = new Date()): Date {
 export async function subscriptionView(provider: SubscriptionProvider): Promise<SubscriptionView> {
 	const current = await stored(provider.id);
 	const attempt = attempts.get(provider.id);
-	// Usage is logged under `<gateway>/<model>`, the way tasks name the plan's models.
-	const spent = current.models.length ? await spendBy('model', startOfMonth()).catch(() => []) : [];
-	const tokensOf = (id: string) => spent.find((row) => row.key === id)?.tokens ?? 0;
-	const models = current.models.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => ({
-		id,
-		name,
-		contextLength,
-		vision,
-		reasoning,
-		defaultReasoning,
-		tokens: tokensOf(id),
-	}));
+	const models = await withTokens(current.models);
 	return {
 		id: provider.id,
 		name: provider.name,
+		kind: 'oauth',
 		gateway: provider.gateway,
 		state: !current.credential ? 'signed-out' : current.problem ? 'expired' : 'connected',
 		email: current.credential?.email ?? null,
@@ -384,10 +472,60 @@ export async function subscriptionView(provider: SubscriptionProvider): Promise<
 		login: attempt
 			? { url: attempt.login.url, redirectUri: attempt.login.redirectUri, listening: attempt.listening, startedAt: new Date(attempt.startedAt).toISOString() }
 			: null,
+		plan: null,
+		version: null,
+		signIn: null,
+		limitHitAt: current.limitHitAt,
+		extraUsageAt: current.extraUsageAt,
 	};
 }
 
-export const subscriptionsView = (): Promise<SubscriptionView[]> => Promise.all(subscriptionProviders().map(subscriptionView));
+/** The models with this month's tokens on each, as the card lists them. */
+async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView['models']> {
+	// Usage is logged under `<gateway>/<model>`, the way tasks name the plan's models.
+	const spent = models.length ? await spendBy('model', startOfMonth()).catch(() => []) : [];
+	return models.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => ({
+		id,
+		name,
+		contextLength,
+		vision,
+		reasoning,
+		defaultReasoning,
+		tokens: spent.find((row) => row.key === id)?.tokens ?? 0,
+	}));
+}
+
+/** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */
+export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionView> {
+	const [current, status] = await Promise.all([stored(runtime.id), runtime.status()]);
+	const models = status.signedIn ? await withTokens(await freshModels(runtimePlan(runtime), current)) : [];
+	return {
+		id: runtime.id,
+		name: runtime.name,
+		kind: 'runtime',
+		gateway: runtime.gateway,
+		state: status.signedIn ? 'connected' : status.problem ? 'expired' : 'signed-out',
+		email: status.email,
+		connectedAt: null,
+		problem: status.problem,
+		expiresAt: null,
+		options: { enabled: current.enabled, countAtApiPrices: current.countAtApiPrices },
+		models,
+		monthTokens: models.reduce((sum, model) => sum + model.tokens, 0),
+		modelsAt: current.modelsAt === null ? null : new Date(current.modelsAt).toISOString(),
+		login: null,
+		plan: status.plan,
+		version: status.version,
+		signIn: runtime.signInCommand,
+		limitHitAt: current.limitHitAt,
+		extraUsageAt: current.extraUsageAt,
+	};
+}
+
+export const subscriptionsView = async (): Promise<SubscriptionView[]> => [
+	...(await Promise.all(subscriptionProviders().map(subscriptionView))),
+	...(await Promise.all(agentRuntimes().map(runtimeView))),
+];
 
 /** What the vendor calls a plan whose usage limit is reached (OpenAI's Sign in with ChatGPT). */
 const LIMIT_CODES = ['subscription_sharing_usage_limit_exceeded', 'usage_limit_reached', 'usage_limit_exceeded'];
@@ -405,7 +543,7 @@ export async function recordPlanLimit(event: TurnEvent): Promise<void> {
 }
 
 /** Where each vendor shows the plan's own limits and what is left of them. */
-const USAGE_PAGES: Record<string, string> = { chatgpt: 'https://chatgpt.com/settings/usage' };
+const USAGE_PAGES: Record<string, string> = { chatgpt: 'https://chatgpt.com/settings/usage', claude: 'https://claude.ai/settings/usage' };
 
 /**
  * A plan's use as Anton saw it: tokens and calls on its models, and what the
@@ -440,8 +578,12 @@ export async function planUsage(now = new Date()): Promise<PlanUsage[]> {
 	const thirty = new Date(midnight);
 	thirty.setDate(thirty.getDate() - 29);
 	const since = thirty < monthStart ? thirty : monthStart;
+	const plans = [
+		...subscriptionProviders().map((provider) => ({ ...provider, connected: async (current: Stored) => current.credential !== null && !current.problem })),
+		...agentRuntimes().map((runtime) => ({ ...runtime, connected: async () => (await runtime.status()).signedIn })),
+	];
 	return Promise.all(
-		subscriptionProviders().map(async (provider) => {
+		plans.map(async (provider) => {
 			const current = await stored(provider.id);
 			const rows = await tokensByMinute(`${provider.gateway}/`, since).catch(() => []);
 			// The vendor's own list price, else what OpenRouter lists the same model at.
@@ -482,7 +624,7 @@ export async function planUsage(now = new Date()): Promise<PlanUsage[]> {
 				id: provider.id,
 				name: provider.name,
 				gateway: provider.gateway,
-				connected: current.credential !== null && !current.problem,
+				connected: await provider.connected(current),
 				tokens,
 				calls,
 				apiValue: priced || tokens.month === 0 ? apiValue : null,
@@ -499,4 +641,5 @@ export function resetSubscriptionsForTests(): void {
 	for (const id of attempts.keys()) endAttempt(id);
 	cache.clear();
 	retryAt.clear();
+	listedHere.clear();
 }

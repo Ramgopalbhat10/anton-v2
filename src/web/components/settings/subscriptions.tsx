@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ExternalLink, MessageSquareCode, RotateCw } from 'lucide-react';
+import { Bot, Check, Copy, ExternalLink, MessageSquareCode, RotateCw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SpecGrid, Status, Well } from '@/components/instrument';
@@ -8,6 +8,8 @@ import { AREA } from '@/components/repo-settings';
 import { Btn, Icon, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type Subscription, type SubscriptionOptions } from '@/lib/api';
 import { age, tokens } from '@/lib/format';
+import { logoFor } from '@/lib/provider-logos';
+import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
 import { FIELD, PageHeading, SaveState, SettingRow } from './parts';
 
@@ -254,14 +256,50 @@ function Models({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** A signed-in plan: its account and token, its models, and how its calls are counted. */
-function Connected({ subscription }: { subscription: Subscription }) {
+/** Whether the plan's models are offered, and whether their calls count toward the spending caps. */
+function PlanSettings({ subscription, error }: { subscription: Subscription; error?: Error | null }) {
 	const saved = useSaved();
-	const [confirming, setConfirming] = useState(false);
 	const options = useMutation({
 		mutationFn: (patch: Partial<SubscriptionOptions>) => api.setSubscriptionOptions(subscription.id, { ...subscription.options, ...patch }),
 		onSuccess: saved,
 	});
+	const { enabled, countAtApiPrices } = subscription.options;
+	const vendorApi = subscription.kind === 'runtime' ? 'the Anthropic API' : 'the OpenAI API';
+	return (
+		<CardSection label="Settings">
+			<div className="flex flex-col">
+				<SettingRow
+					title={`Use ${subscription.name} models`}
+					help="Off hides them from the model picker. Tasks already set to one of them stop until you pick another model."
+				>
+					<Switch
+						checked={enabled}
+						disabled={options.isPending}
+						onChange={(next) => options.mutate({ enabled: next })}
+						label={<span className="sr-only">Use {subscription.name} models</span>}
+					/>
+				</SettingRow>
+				<SettingRow
+					title="Count toward the spending caps"
+					help={`Records each call at what ${vendorApi} would charge for it, so the daily and per-task caps also stop a runaway task on your plan. Off, calls are recorded at $0 and only the plan's own limits apply.`}
+				>
+					<Switch
+						checked={countAtApiPrices}
+						disabled={options.isPending}
+						onChange={(next) => options.mutate({ countAtApiPrices: next })}
+						label={<span className="sr-only">Count toward the spending caps</span>}
+					/>
+				</SettingRow>
+			</div>
+			<SaveState pending={options.isPending} success={false} error={options.error ?? error ?? null} />
+		</CardSection>
+	);
+}
+
+/** A signed-in plan: its account and token, its models, and how its calls are counted. */
+function Connected({ subscription }: { subscription: Subscription }) {
+	const saved = useSaved();
+	const [confirming, setConfirming] = useState(false);
 	const refresh = useMutation({ mutationFn: () => api.refreshSubscriptionModels(subscription.id), onSuccess: saved });
 	const disconnect = useMutation({ mutationFn: () => api.disconnectSubscription(subscription.id), onSuccess: saved });
 	const { enabled, countAtApiPrices } = subscription.options;
@@ -278,33 +316,7 @@ function Connected({ subscription }: { subscription: Subscription }) {
 				]}
 			/>
 			<Models subscription={subscription} />
-			<CardSection label="Settings">
-				<div className="flex flex-col">
-					<SettingRow
-						title={`Use ${subscription.name} models`}
-						help="Off hides them from the model picker. Tasks already set to one of them stop until you pick another model."
-					>
-						<Switch
-							checked={enabled}
-							disabled={options.isPending}
-							onChange={(next) => options.mutate({ enabled: next })}
-							label={<span className="sr-only">Use {subscription.name} models</span>}
-						/>
-					</SettingRow>
-					<SettingRow
-						title="Count toward the spending caps"
-						help="Records each call at what the OpenAI API would charge for it, so the daily and per-task caps also stop a runaway task on your plan. Off, calls are recorded at $0 and only the plan's own limits apply."
-					>
-						<Switch
-							checked={countAtApiPrices}
-							disabled={options.isPending}
-							onChange={(next) => options.mutate({ countAtApiPrices: next })}
-							label={<span className="sr-only">Count toward the spending caps</span>}
-						/>
-					</SettingRow>
-				</div>
-				<SaveState pending={options.isPending} success={false} error={options.error ?? refresh.error ?? disconnect.error} />
-			</CardSection>
+			<PlanSettings subscription={subscription} error={refresh.error ?? disconnect.error} />
 			<CardFooter caption={subscription.modelsAt ? `Models checked ${age(subscription.modelsAt)} ago` : 'Models not checked yet'}>
 				<Btn size="sm" variant="ghost" icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
 					{refresh.isPending ? 'Checking…' : 'Check again'}
@@ -344,7 +356,7 @@ function Plan({ subscription }: { subscription: Subscription }) {
 				</Well>
 			</CardSection>
 			{connected ? (
-				<Lead title={`${subscription.models.length} models on your plan`}>
+				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}>
 					Tasks on these models bill your {subscription.name} plan's usage instead of paying per token. Their names start with{' '}
 					<InlineCode>{subscription.gateway}/</InlineCode>, and Anton renews the sign-in on its own a few minutes before each token lapses.
 				</Lead>
@@ -365,22 +377,161 @@ function Plan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** Claude plans need Claude Code itself; docs/claude-code-subscription.md has the design. */
-function ClaudePlanned() {
+/** A command to run on the server, with a button that copies it. */
+function Command({ text, label }: { text: string; label: string }) {
+	const [copied, setCopied] = useState(false);
 	return (
-		<Card icon={Bot} title="Claude plan" sub="through Claude Code" label="Claude plan" status={<Status>Planned</Status>}>
-			<Lead title="Needs Claude Code itself">
-				Anthropic allows Claude Pro and Max plans only inside its own Claude Code program, so Anton cannot sign in to Claude the way it does to
-				ChatGPT. The design for running Claude Code on your plan is in <InlineCode>docs/claude-code-subscription.md</InlineCode>. Until then, Claude
-				models work per token through OpenRouter.
-			</Lead>
-			<CardFooter caption={<Caption>Design written · not built</Caption>} />
+		<div className="flex items-start gap-2">
+			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-md bg-(--well-bg) px-3 py-2 font-mono text-[11.5px] leading-[18px] break-all whitespace-pre-wrap text-(--text-primary)">
+				{text}
+			</pre>
+			<Btn
+				size="sm"
+				variant="ghost"
+				icon={copied ? Check : Copy}
+				onClick={() => void navigator.clipboard?.writeText(text).then(() => setCopied(true))}
+				onBlur={() => setCopied(false)}
+			>
+				{copied ? 'Copied' : 'Copy'}
+			</Btn>
+		</div>
+	);
+}
+
+/**
+ * A Claude plan, run by Claude Code on Anton's server. Claude Code signs in
+ * through its own flow, so the card shows the command to run once there, and
+ * what Claude Code then says about the account; Anton never holds the token.
+ */
+function ClaudePlan({ subscription }: { subscription: Subscription }) {
+	const saved = useSaved();
+	const refresh = useMutation({ mutationFn: () => api.refreshSubscriptionModels(subscription.id), onSuccess: saved });
+	const connected = subscription.state === 'connected';
+	const status = STATUS[subscription.state];
+	const { enabled, countAtApiPrices } = subscription.options;
+	const signOut = subscription.signIn?.replace(/ login$/, ' logout');
+	return (
+		<Card
+			icon={Bot}
+			title={`${subscription.name} plan`}
+			sub={subscription.email ?? 'through Claude Code'}
+			label={`${subscription.name} plan`}
+			status={
+				<Status tone={status.tone} pulse={connected}>
+					{connected ? 'Connected' : subscription.state === 'expired' ? 'Needs attention' : status.label}
+				</Status>
+			}
+		>
+			<CardSection ruled={false} className="pt-0">
+				<Well grid className="flex items-center justify-center px-4 py-6">
+					<PlanLinkArt linked={connected} plan={subscription.name} className="w-full max-w-[440px]" />
+				</Well>
+			</CardSection>
+			{connected ? (
+				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}>
+					Tasks on these models run through Claude Code on this server, which uses only Anton's tools and bills your {subscription.name} plan's usage
+					instead of paying per token. Their names start with <InlineCode>{subscription.gateway}/</InlineCode>.
+				</Lead>
+			) : subscription.state === 'expired' ? (
+				<Lead title="Claude Code cannot use your plan">
+					<span className="text-(--danger-text)">{subscription.problem}</span>
+				</Lead>
+			) : (
+				<Lead title={`Run tasks on your ${subscription.name} plan`}>
+					Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on this server with its built-in tools off: Claude does the
+					thinking, and Anton runs every tool. Claude Code signs in through its own flow and keeps the sign-in to itself.
+				</Lead>
+			)}
+			{connected ? (
+				<>
+					<SpecGrid
+						items={[
+							{ label: 'Account', value: subscription.email ?? 'Signed in', title: subscription.email ?? undefined },
+							{ label: 'Plan', value: subscription.plan ?? '—' },
+							{ label: 'Claude Code', value: subscription.version ?? '—' },
+							{ label: 'Models', value: enabled ? `${subscription.models.length} in the picker` : 'Switched off', tone: enabled ? undefined : 'warning' },
+							{ label: 'This month', value: `${tokens(subscription.monthTokens)} tokens`, tone: 'accent' },
+							{ label: 'Counted as', value: countAtApiPrices ? 'API prices' : '$0 per call' },
+						]}
+					/>
+					{subscription.extraUsageAt ? (
+						<CardSection label="Extra usage">
+							<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--warning-text)">
+								Claude Code said {age(subscription.extraUsageAt)} ago that your plan's limit ran out and calls now bill extra usage, which costs money.
+								Turn extra usage off at{' '}
+								<a href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer" className="text-(--accent-text) hover:underline">
+									claude.ai/settings/usage
+								</a>{' '}
+								to have tasks stop at the limit instead.
+							</p>
+						</CardSection>
+					) : null}
+					<Models subscription={subscription} />
+					<PlanSettings subscription={subscription} error={refresh.error} />
+					{signOut ? (
+						<CardSection label="Sign out on the server">
+							<Command text={signOut} label="Command that signs Claude Code out" />
+						</CardSection>
+					) : null}
+				</>
+			) : (
+				<CardSection label="Sign in on the server" hint="Once">
+					<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+						Run this in a shell on the computer Anton runs on, such as over ssh. Claude Code shows a link: open it, approve, and paste the code it gives
+						you back into the shell. Then check again here.
+					</p>
+					{subscription.signIn ? <Command text={subscription.signIn} label="Command that signs Claude Code in" /> : null}
+					<SaveState pending={refresh.isPending} success={false} error={refresh.error} />
+				</CardSection>
+			)}
+			<CardFooter
+				caption={
+					<Caption>For your own use only: Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</Caption>
+				}
+			>
+				<Btn size="sm" variant={connected ? 'ghost' : 'primary'} icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+					{refresh.isPending ? 'Checking…' : 'Check again'}
+				</Btn>
+			</CardFooter>
 		</Card>
+	);
+}
+
+/** The tab for one plan: its vendor's logo, its name and whether it is connected. */
+function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; on: boolean; onSelect: () => void }) {
+	const logo = logoFor({ id: `${subscription.gateway}/` });
+	const connected = subscription.state === 'connected';
+	return (
+		<button
+			type="button"
+			role="tab"
+			id={`plan-tab-${subscription.id}`}
+			aria-selected={on}
+			aria-controls={`plan-panel-${subscription.id}`}
+			onClick={onSelect}
+			className={cn(
+				'-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-1 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
+				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{logo ? (
+				// LobeHub's one-colour logos take the text colour, sized by the font size.
+				<span aria-hidden className={cn('flex text-[15px]', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
+			) : null}
+			{subscription.name}
+			<span
+				title={connected ? 'Connected' : STATUS[subscription.state].label}
+				className={cn('size-1.5 rounded-full', connected ? 'bg-(--success-base)' : subscription.state === 'expired' ? 'bg-(--danger-base)' : 'bg-(--border-strong)')}
+			/>
+		</button>
 	);
 }
 
 export function SubscriptionsPage() {
 	const view = useQuery({ queryKey: ['subscriptions'], queryFn: api.subscriptions });
+	const [picked, setPicked] = useState<string | null>(null);
+	const plans = view.data?.subscriptions ?? [];
+	const current = plans.find((plan) => plan.id === picked) ?? plans[0];
 	return (
 		<>
 			<PageHeading title="Subscriptions">
@@ -391,14 +542,18 @@ export function SubscriptionsPage() {
 				<Spinner size={12} />
 			) : view.isError ? (
 				<p className="m-0 text-[12px] text-(--danger-text)">{view.error.message}</p>
-			) : (
-				<div className="flex flex-col gap-6">
-					{view.data.subscriptions.map((subscription) => (
-						<Plan key={subscription.id} subscription={subscription} />
-					))}
-					<ClaudePlanned />
+			) : current ? (
+				<div className="flex flex-col gap-5">
+					<div role="tablist" aria-label="Plans" className="flex gap-6 border-b border-(--border-subtle)">
+						{plans.map((plan) => (
+							<PlanTab key={plan.id} subscription={plan} on={plan.id === current.id} onSelect={() => setPicked(plan.id)} />
+						))}
+					</div>
+					<div role="tabpanel" id={`plan-panel-${current.id}`} aria-labelledby={`plan-tab-${current.id}`}>
+						{current.kind === 'runtime' ? <ClaudePlan key={current.id} subscription={current} /> : <Plan key={current.id} subscription={current} />}
+					</div>
 				</div>
-			)}
+			) : null}
 		</>
 	);
 }

@@ -1,7 +1,7 @@
 import { config } from '../config.ts';
 import { appDb } from '../db/client.ts';
 import { getProviders } from '../providers/index.ts';
-import { accessToken, subscriptionProviders, subscriptionView } from './subscriptions.ts';
+import { accessToken, agentRuntimes, subscriptionProviders, subscriptionView } from './subscriptions.ts';
 
 /** `set` when it is set up but not checked from here; `off` when it is not set up; `failing` when the check did not pass. */
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
@@ -20,7 +20,25 @@ type Check = { id: string; name: string; provider: string; off?: string; uncheck
 
 /** Each plan you can sign in to: off until you do, then checked by renewing its token if it needs it. */
 async function subscriptionChecks(): Promise<Check[]> {
-	return Promise.all(
+	const runtimes = await Promise.all(
+		agentRuntimes().map(async (runtime): Promise<Check> => {
+			const status = await runtime.status();
+			return {
+				id: `subscription-${runtime.id}`,
+				name: `${runtime.name} plan`,
+				provider: runtime.gateway,
+				off: status.signedIn || status.problem ? undefined : 'Claude Code is not signed in. Settings › Subscriptions has the command to run once on the server.',
+				run: async () => {
+					const fresh = await runtime.status(true);
+					if (!fresh.signedIn) throw new Error(fresh.problem ?? 'Claude Code is not signed in.');
+					const who = fresh.email ? ` as ${fresh.email}` : '';
+					const plan = fresh.plan ? ` on the ${fresh.plan} plan` : '';
+					return `Claude Code${fresh.version ? ` ${fresh.version}` : ''} is signed in${who}${plan}. Anton never sees its token.`;
+				},
+			};
+		}),
+	);
+	const plans = await Promise.all(
 		subscriptionProviders().map(async (provider): Promise<Check> => {
 			const view = await subscriptionView(provider);
 			return {
@@ -36,6 +54,7 @@ async function subscriptionChecks(): Promise<Check[]> {
 			};
 		}),
 	);
+	return [...plans, ...runtimes];
 }
 
 async function checks(): Promise<Check[]> {

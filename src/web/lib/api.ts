@@ -311,6 +311,8 @@ export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean 
 export type Subscription = {
 	id: string;
 	name: string;
+	/** `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`). */
+	kind: 'oauth' | 'runtime';
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
 	email: string | null;
@@ -325,6 +327,13 @@ export type Subscription = {
 	modelsAt: string | null;
 	/** A sign-in waiting for the address the browser is sent back to; `listening` when Anton catches it itself. */
 	login: { url: string; redirectUri: string; listening: boolean; startedAt: string } | null;
+	/** A runtime's plan as it names it (`max`), its version, and the command that signs it in on the server. */
+	plan: string | null;
+	version: string | null;
+	signIn: string | null;
+	limitHitAt: string | null;
+	/** When the vendor last said the plan's limit ran out and calls now bill paid extra usage. */
+	extraUsageAt: string | null;
 };
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };

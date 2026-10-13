@@ -57,6 +57,16 @@ export const config = {
 		apiUrl: read('ANTON_KERNEL_API_URL', 'https://api.onkernel.com'),
 		apiKey: read('KERNEL_API_KEY'),
 	},
+	/**
+	 * Claude Code, which runs tasks on a Claude plan (Settings › Subscriptions). Its sign-in lives in its own
+	 * config directory under the data directory; `path` runs your own `claude` instead of the one the SDK bundles.
+	 */
+	claudeCode: {
+		configDir: path.join(dataDir, 'claude-code'),
+		path: read('ANTON_CLAUDE_CODE_PATH'),
+		/** At most this many Claude Code conversations stay open; the longest idle closes first. */
+		maxOpen: Number(read('ANTON_CLAUDE_CODE_MAX_OPEN', '3')),
+	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',

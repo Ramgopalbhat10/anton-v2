@@ -291,6 +291,86 @@ export type SubscriptionProvider = {
 	listModels(accessToken: string): Promise<SubscriptionModel[]>;
 };
 
+/** What a vendor's agent program says about its own sign-in; the token itself never leaves the program. */
+export type AgentRuntimeStatus = {
+	signedIn: boolean;
+	email: string | null;
+	/** The plan as the program names it, such as "max". */
+	plan: string | null;
+	version: string | null;
+	/** Why the program cannot run tasks on a plan now, such as a sign-in with an API key instead. */
+	problem: string | null;
+};
+
+/** One of Anton's tools as the program is offered it, over MCP. */
+export type RuntimeTool = { name: string; description: string; inputSchema: Record<string, unknown> };
+
+export type RuntimeContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+
+/** What a tool call answers; Anton runs the tool, the program only waits for this. */
+export type RuntimeToolOutput = { content: RuntimeContent[]; isError: boolean };
+
+export type RuntimeUsage = { input: number; output: number; cacheRead: number; cacheWrite: number };
+
+/**
+ * What the program streams for one turn, in the shape of Anthropic's Messages
+ * stream: each model call opens with `message_start` and closes with
+ * `message_stop`; `turn_end` comes once the program has finished the turn.
+ * Tool names are Anton's own, without the program's MCP prefix.
+ */
+export type RuntimeEvent =
+	| { type: 'message_start'; id: string; usage: RuntimeUsage }
+	| { type: 'block_start'; index: number; block: { type: 'text' } | { type: 'thinking' } | { type: 'tool_use'; id: string; name: string } }
+	| { type: 'block_delta'; index: number; text?: string; thinking?: string; signature?: string; json?: string }
+	| { type: 'block_stop'; index: number }
+	| { type: 'message_delta'; stopReason: string | null; usage: Partial<RuntimeUsage> }
+	| { type: 'message_stop' }
+	/** A model call the program gave up on; `limit` when the plan's usage limit stopped it. */
+	| { type: 'error'; message: string; limit: boolean }
+	/** The plan's own limit ran out and the account now pays for extra usage. */
+	| { type: 'extra_usage' }
+	| { type: 'turn_end' };
+
+export type RuntimeConversationOptions = {
+	/** The vendor's model id, without the gateway. */
+	model: string;
+	/** Anton's instructions, added after the program's own. */
+	instructions: string;
+	tools: RuntimeTool[];
+	/** The program's effort level, or null for its default; `off` turns thinking off. */
+	effort: string | null;
+	/** Runs one tool call; the program waits until it answers. */
+	callTool(toolUseId: string, name: string): Promise<RuntimeToolOutput>;
+};
+
+/** One conversation with the program: messages in, events out, until it is closed. */
+export type RuntimeConversation = {
+	send(content: RuntimeContent[]): void;
+	readonly events: AsyncIterable<RuntimeEvent>;
+	/** Stops the current turn and ends the conversation. */
+	close(): void;
+};
+
+/**
+ * A vendor's own agent program (Claude Code) that Anton drives as a model,
+ * signed in through the program's own flow. Anton never sees its token: it
+ * hands the program Anton's tools and runs every call the program makes.
+ */
+export type AgentRuntime = {
+	/** `claude-code`: how settings and routes name it. */
+	readonly id: string;
+	/** The plan, as the model picker shows it: "Claude". */
+	readonly name: string;
+	/** The Flue provider id its models resolve under. */
+	readonly gateway: string;
+	/** The command to run once on the server to sign in, in the program's own flow. */
+	readonly signInCommand: string;
+	/** Read again with `fresh`; otherwise the last answer is reused for a few minutes. */
+	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
+	listModels(): Promise<SubscriptionModel[]>;
+	open(options: RuntimeConversationOptions): RuntimeConversation;
+};
+
 /** A question with a bounded answer: yes or no, or one of a few named options, each with what it means. */
 export type Question = { type: 'yes-no'; instructions: string } | { type: 'choice'; instructions: string; options: Record<string, string> };
 
