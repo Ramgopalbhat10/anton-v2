@@ -33,6 +33,7 @@ import { toUsage } from '../services/usage.ts';
 import { agentSettingsNow, hasWorkspace, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
 import { hasScriptTools, runScript, scriptToolDescription } from '../services/code-mode.ts';
 import { remember } from '../services/memory.ts';
+import { MAX_TODOS, writeTodos } from '../services/todos.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
@@ -432,6 +433,30 @@ function useRemember(id: string, project: ThreadProject | null) {
 	);
 }
 
+/** The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer. */
+function useTodos(id: string) {
+	useTool(
+		defineTool({
+			name: 'update_todos',
+			description:
+				'Write your todo list for the work in hand: every item each time, in order, with its status. ' +
+				'It replaces the list you wrote before, so for a new piece of work write a new list. Keep one item in_progress at a time.',
+			input: v.object({
+				todos: v.pipe(
+					v.array(
+						v.object({
+							content: v.pipe(v.string(), v.minLength(1), v.description('The step, a few words in the imperative, such as "Add the migration"')),
+							status: v.picklist(['pending', 'in_progress', 'completed']),
+						}),
+					),
+					v.maxLength(MAX_TODOS),
+				),
+			}),
+			run: async ({ data }) => ({ output: await writeTodos(id, data.todos) }),
+		}),
+	);
+}
+
 /** A read-only thread reads the project's Library here; with a sandbox the files are in ../project-files. */
 function useProjectFiles(id: string) {
 	useTool(
@@ -485,6 +510,9 @@ const proposePlan = defineTool({
 	}),
 	run: async () => ({ output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' }),
 });
+
+const TODO_HINT =
+	'For work of three or more steps, write a todo list with update_todos before you start, and update it as each step starts and finishes, so the user can follow along. Skip it for quick questions and one-step changes.';
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
@@ -568,6 +596,7 @@ export function Coder({ id }: AgentProps) {
 	if (scripts) useRunScript(id, workspace);
 	const project = threadProjectFor(id);
 	useRemember(id, project);
+	useTodos(id);
 	if (project && !workspace) useProjectFiles(id);
 	useSkills(id, workspace);
 	useLatestInput(id);
@@ -620,5 +649,5 @@ export function Coder({ id }: AgentProps) {
 	});
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${TODO_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

@@ -403,6 +403,11 @@ export type PickedElement = {
 export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number };
 export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null; detail?: StepDetail };
 /** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
+/** The agent's latest todo list for a task (src/services/todos.ts); each one it writes replaces the last. */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+export type Todo = { content: string; status: TodoStatus };
+export type TodoList = { todos: Todo[]; updatedAt: string };
+
 export type SubagentRun = {
 	id: string;
 	agent: string;
@@ -535,6 +540,7 @@ export const api = {
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
+	todos: (id: string) => json<{ list: TodoList | null }>(`/api/sessions/${id}/todos`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
 	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),
 	closeBrowser: async (id: string) => void (await request(`/api/sessions/${id}/browser`, { method: 'DELETE' })),

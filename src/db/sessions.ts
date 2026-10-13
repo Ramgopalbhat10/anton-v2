@@ -228,6 +228,20 @@ export async function updateSession(id: string, update: SessionUpdate): Promise<
 	announce({ kind: 'task', id, what: 'state' });
 }
 
+/** The agent's latest todo list for the task, as saved; null before it writes one. Kept apart from the record, which every page reads. */
+export async function getSessionTodos(id: string): Promise<string | null> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT todos_json FROM sessions WHERE id = ?', args: [id] });
+	return optional(result.rows[0]?.todos_json);
+}
+
+/** Replaces the task's todo list. Announced on its own, so only the pill refetches as the agent ticks items off. */
+export async function setSessionTodos(id: string, json: string | null): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE sessions SET todos_json = ? WHERE id = ?', args: [json, id] });
+	announce({ kind: 'task', id, what: 'todos' });
+}
+
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM sessions WHERE id = ?', args: [id] });

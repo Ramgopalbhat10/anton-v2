@@ -21,6 +21,8 @@ type Step = ToolPart | ReasoningPart;
 type Block = { kind: 'text'; text: string } | { kind: 'steps'; steps: Step[] } | { kind: 'plan'; part: ToolPart } | { kind: 'agents'; calls: ToolPart[] };
 
 const PLAN_TOOL = 'propose_plan';
+/** The todo list shows as the pill above the composer, not as steps in the thread. */
+const TODO_TOOL = 'update_todos';
 const APPROVED = 'Your plan is approved. Go ahead and build it.';
 
 /** The task whose thread is showing, for links into its Library. */
@@ -49,6 +51,7 @@ function outputText(output: unknown): string {
 function toBlocks(parts: FlueConversationPart[]): Block[] {
 	const blocks: Block[] = [];
 	for (const part of parts) {
+		if (part.type === 'dynamic-tool' && part.toolName === TODO_TOOL) continue;
 		if (part.type === 'text') {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
 		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {

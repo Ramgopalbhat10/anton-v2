@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'subagents' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'subagents' | 'todos' }
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
@@ -23,6 +23,8 @@ function staleFor(change: Change): QueryKey[] {
 	// The Browser panel's page moved, or the browser opened or closed.
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
+	// The agent wrote its todo list: only the pill above the composer reads it.
+	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id]];
 	if (change.what === 'files') return files;

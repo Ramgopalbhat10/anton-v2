@@ -106,6 +106,8 @@ const migrations: string[][] = [
 		// Routines scoped to a project start their tasks as its threads.
 		`ALTER TABLE automations ADD COLUMN space_id TEXT`,
 	],
+	// 21: the agent's latest todo list for the task, shown as the progress pill above the composer.
+	[`ALTER TABLE sessions ADD COLUMN todos_json TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

@@ -57,6 +57,7 @@ import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.t
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
 import { recordSubagentEvent, subagentRuns } from './services/subagent-runs.ts';
+import { todosFor } from './services/todos.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
@@ -594,6 +595,10 @@ app.post('/api/sessions/:id/browser/watch', async (c) => c.json(await watchBrows
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
+});
+app.get('/api/sessions/:id/todos', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ list: await todosFor(id) });
 });
 app.get('/api/sessions/:id/context', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
