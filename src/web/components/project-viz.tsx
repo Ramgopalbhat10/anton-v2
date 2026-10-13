@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { HoverCard } from 'radix-ui';
 import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instrument';
@@ -84,97 +85,117 @@ export function ActivityBars({ bars, height = 32, className }: { bars: number[];
 	);
 }
 
-/** Arcs of a ring, each a share of the whole with a small gap between them. */
-function arcs(values: Array<{ key: string; value: number; color: string; className?: string }>, radius: number, gap: number) {
-	const circumference = 2 * Math.PI * radius;
-	const total = values.reduce((sum, item) => sum + item.value, 0);
-	const shown = values.filter((item) => item.value > 0);
-	let offset = 0;
-	return shown.map((item) => {
-		const length = (item.value / total) * circumference;
-		const arc = { ...item, dash: `${Math.max(0.5, length - (shown.length > 1 ? gap : 0))} ${circumference}`, offset: -offset };
-		offset += length;
-		return arc;
-	});
+const threadsWord = (count: number) => `${count} thread${count === 1 ? '' : 's'}`;
+
+/**
+ * What the project comes to in a sentence, the most pressing first (it needs
+ * you, it works, it waits on review, it is quiet), and a line of what else
+ * holds, or when it last moved.
+ */
+export function pulseLine(threads: Session[], now: number): { headline: string; tone?: 'warning' | 'accent' | 'success'; why: string } {
+	const counts = countKinds(threads);
+	const needs = counts.waiting + counts.failed;
+	const ready = counts.review + counts.landing;
+	const open = threads.length - counts.resolved;
+	const last = Math.max(...threads.map((thread) => ms(threadActiveAt(thread))).filter((at) => !Number.isNaN(at)));
+	const facts = (skip: string) =>
+		[
+			skip !== 'needs' && needs ? `${needs} need${needs === 1 ? 's' : ''} you` : null,
+			skip !== 'working' && counts.working ? `${counts.working} working` : null,
+			counts.queued ? `${counts.queued} queued` : null,
+			skip !== 'ready' && ready ? `${ready} ready for review` : null,
+			skip !== 'idle' && counts.idle ? `${counts.idle} idle` : null,
+		].filter(Boolean);
+	const ago = Number.isFinite(last) ? age(new Date(last).toISOString(), now) : null;
+	const moved = ago === null ? 'Nothing has moved yet' : ago === 'now' ? 'Last moved just now' : `Last moved ${ago} ago`;
+	const why = (skip: string) => facts(skip).join(' · ') || moved;
+	if (needs) return { headline: `${threadsWord(needs)} need${needs === 1 ? 's' : ''} you`, tone: 'warning', why: why('needs') };
+	if (counts.working) return { headline: `${threadsWord(counts.working)} working`, tone: 'accent', why: why('working') };
+	if (ready) return { headline: `${threadsWord(ready)} ready for review`, tone: 'success', why: why('ready') };
+	if (open) return { headline: 'Quiet, nothing running', why: counts.idle ? `${threadsWord(counts.idle)} idle, waiting for a next step` : moved };
+	return { headline: 'All threads resolved', why: moved };
+}
+
+/** One thread in the Pulse's strip: a cell in its state's colour that names it on a point and opens it. */
+function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) {
+	const kind = glyphKind(thread);
+	return (
+		<HoverCard.Root openDelay={120} closeDelay={80}>
+			<HoverCard.Trigger asChild>
+				<button
+					type="button"
+					onClick={onOpen}
+					aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
+					className={cn('h-full min-w-[4px] flex-1 rounded-[3px] outline-none hover:brightness-125 focus-visible:shadow-(--focus-ring)', kind === 'resolved' && 'in-hatch text-(--neutral-600)', kind === 'working' && 'in-sweep')}
+					style={kind === 'resolved' ? { backgroundColor: 'var(--segment-off)' } : { background: STATE_COLOR[kind] }}
+				/>
+			</HoverCard.Trigger>
+			<HoverCard.Portal>
+				<HoverCard.Content side="top" sideOffset={8} collisionPadding={12} className="in-pop z-50 flex w-[260px] flex-col gap-1 px-3 py-2.5 outline-none">
+					<span className="flex items-center gap-1.5">
+						<Glyph kind={kind} size={12} />
+						<span className={cn('in-caption', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
+						<span className="in-caption ml-auto">{age(threadActiveAt(thread))}</span>
+					</span>
+					<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
+					{threadLine(thread) ? <span className="line-clamp-2 text-[12px] leading-[17px] text-(--text-tertiary)">{threadLine(thread)}</span> : null}
+				</HoverCard.Content>
+			</HoverCard.Portal>
+		</HoverCard.Root>
+	);
 }
 
 /**
- * The project as a ring: the outer ring split by state, the inner one by
- * parallel slots, lit while threads hold them, and what is open in the
- * middle.
+ * The project's pulse: how many threads are open beside a sentence on what
+ * the project comes to; every thread as a cell in a strip, in order of
+ * state, with the states counted under it; the project's bay in the rack;
+ * and recent activity.
  */
-function StateRing({ threads, maxParallel, size = 128 }: { threads: Session[]; maxParallel: number; size?: number }) {
-	const counts = countKinds(threads);
-	const c = size / 2;
-	const outer = c - 6;
-	const inner = c - 19;
-	const open = threads.length - counts.resolved;
-	const busy = Math.min(counts.working, maxParallel);
-	const states = arcs(
-		KINDS.map((kind) => ({ key: kind, value: counts[kind], color: kind === 'resolved' ? 'var(--neutral-600)' : STATE_COLOR[kind] })),
-		outer,
-		3,
-	);
-	const slots = arcs(
-		Array.from({ length: maxParallel }, (_, index) => ({ key: String(index), value: 1, color: index < busy ? 'var(--accent-base)' : 'var(--segment-off)', className: index < busy ? 'in-pulse' : undefined })),
-		inner,
-		4,
-	);
-	return (
-		<div className="relative shrink-0" style={{ width: size, height: size }}>
-			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-				<circle cx={c} cy={c} r={outer} fill="none" stroke="var(--segment-off)" strokeWidth={9} />
-				{states.map((arc) => (
-					<circle key={arc.key} cx={c} cy={c} r={outer} fill="none" stroke={arc.color} strokeWidth={9} strokeDasharray={arc.dash} strokeDashoffset={arc.offset} transform={`rotate(-90 ${c} ${c})`} />
-				))}
-				{slots.map((arc) => (
-					<circle
-						key={arc.key}
-						className={arc.className}
-						cx={c}
-						cy={c}
-						r={inner}
-						fill="none"
-						stroke={arc.color}
-						strokeWidth={3}
-						strokeLinecap="round"
-						strokeDasharray={arc.dash}
-						strokeDashoffset={arc.offset}
-						transform={`rotate(-90 ${c} ${c})`}
-					/>
-				))}
-			</svg>
-			<div className="absolute inset-0 flex flex-col items-center justify-center">
-				<span className="in-figure text-[30px] leading-[32px]">{open}</span>
-				<Caption>open</Caption>
-				<span className="in-num mt-0.5 text-[10.5px] text-(--text-disabled)">{counts.resolved} done</span>
-			</div>
-		</div>
-	);
-}
-
-/** The project's pulse: the ring and its legend, the project's bay in the rack, and recent activity. */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
 	const live = counts.working > 0;
 	const now = useNow(live);
+	const open = useOpenThread();
 	const { bars, span, total } = activity(threads, now);
+	const line = pulseLine(threads, now);
+	const strip = [...threads].sort((a, b) => KINDS.indexOf(glyphKind(a)) - KINDS.indexOf(glyphKind(b)) || threadActiveAt(b).localeCompare(threadActiveAt(a)));
 	return (
 		<Card
 			icon={Activity}
 			title="Pulse"
-			sub={`${threads.length} thread${threads.length === 1 ? '' : 's'}`}
+			sub={threadsWord(threads.length)}
 			status={live ? <Status tone="accent" pulse>Live</Status> : <Status>Quiet</Status>}
 		>
-			<div className="flex items-center gap-5 px-4 pt-1 pb-4">
-				<StateRing threads={threads} maxParallel={space.maxParallel} />
-				<div className="flex min-w-0 flex-1 flex-col">
+			<div className="flex flex-col gap-3 px-4 pt-1 pb-4">
+				<div className="flex min-w-0 items-center gap-4">
+					<div className="flex shrink-0 flex-col items-start border-r border-(--border-subtle) pr-4">
+						<span className="in-figure text-[28px] leading-[30px]">{threads.length - counts.resolved}</span>
+						<Caption>open</Caption>
+					</div>
+					<div className="flex min-w-0 flex-col gap-0.5">
+						<span
+							className={cn(
+								'text-[14px] leading-[20px] font-medium text-pretty',
+								line.tone === 'warning' ? 'text-(--warning-text)' : line.tone === 'accent' ? 'text-(--accent-text)' : line.tone === 'success' ? 'text-(--success-text)' : 'text-(--text-primary)',
+							)}
+						>
+							{line.headline}
+						</span>
+						<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{line.why}</span>
+					</div>
+				</div>
+				<div role="group" aria-label="Threads by state" className="flex h-2.5 gap-[3px]">
+					{strip.map((thread) => (
+						<StripCell key={thread.id} thread={thread} onOpen={() => open(thread)} />
+					))}
+				</div>
+				<div className="flex flex-wrap gap-x-4 gap-y-1">
 					{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
-						<div key={kind} className="flex h-[26px] items-center gap-2 border-b border-dashed border-(--border-subtle) last:border-b-0">
-							<Glyph kind={kind} size={12} />
-							<span className={cn('min-w-0 flex-1 truncate text-[12px]', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
-							<span className="in-num text-[12px] text-(--text-primary)">{counts[kind]}</span>
-						</div>
+						<span key={kind} className="flex items-center gap-1.5 text-[12px]">
+							<Glyph kind={kind} size={11} />
+							<span className={kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)'}>{KIND_LABEL[kind]}</span>
+							<span className="in-num text-(--text-primary)">{counts[kind]}</span>
+						</span>
 					))}
 				</div>
 			</div>
@@ -323,7 +344,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 		return sum + Math.max(0, (state === 'working' ? now : ms(threadActiveAt(thread))) - ms(thread.createdAt));
 	}, 0);
 	const left = [counts.working ? `${counts.working} running` : null, counts.failed ? `${counts.failed} failed` : null].filter(Boolean).join(' · ');
-	const right = [counts.queued ? `${counts.queued} queued` : null, counts.resolved + counts.idle ? `${counts.resolved + counts.idle} done` : null, counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null].filter(Boolean).join(' · ');
+	const right = [counts.queued ? `${counts.queued} queued` : null, counts.idle ? `${counts.idle} idle` : null, counts.resolved ? `${counts.resolved} done` : null, counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null].filter(Boolean).join(' · ');
 	return (
 		<Card
 			icon={Clock}
@@ -502,55 +523,25 @@ export function BurnCard({ space }: { space: Space }) {
 
 /**
  * The project's route, drawn as on the New task page: plan, threads, review,
- * done. `live` lights the stations that have work now and puts the counts
- * under them; without it the stages take turns and say what each does.
+ * done, the stages taking turns and saying what each does.
  */
-export function ProjectRoute({ space, threads, coordinating, live }: { space: Space; threads: Session[]; coordinating?: boolean; live?: boolean }) {
-	const counts = countKinds(threads);
-	const running = counts.working + counts.queued + counts.waiting + counts.failed;
-	const ready = counts.review + counts.landing;
-	const finished = counts.resolved + counts.idle;
-	const needs = counts.waiting + counts.failed;
-	const active = [Boolean(coordinating), running > 0, ready > 0, finished > 0];
-	const stages: Array<{ title: string; note: ReactNode }> = live
-		? [
-				{ title: 'Plan', note: coordinating ? 'coordinating now' : 'coordinator idle' },
-				{
-					title: 'Threads',
-					note: running ? (
-						<>
-							{needs ? <span className="text-(--warning-text)">{needs} need{needs === 1 ? 's' : ''} you</span> : null}
-							{[counts.working ? `${counts.working} working` : null, counts.queued ? `${counts.queued} queued` : null]
-								.filter(Boolean)
-								.map((part, index) => (needs || index ? ` · ${part}` : part))}
-						</>
-					) : (
-						'none running'
-					),
-				},
-				{ title: 'Review', note: ready ? `${ready} ready` : 'nothing to review' },
-				{ title: 'Done', note: `${finished} done` },
-			]
-		: [
-				{ title: 'Plan', note: 'the coordinator splits the goal' },
-				{ title: 'Threads', note: `up to ${space.maxParallel} at once` },
-				{ title: 'Review', note: 'pull requests' },
-				{ title: 'Done', note: 'merged and resolved' },
-			];
+export function ProjectRoute({ space }: { space: Space }) {
+	const stages = [
+		{ title: 'Plan', note: 'the coordinator splits the goal' },
+		{ title: 'Threads', note: `up to ${space.maxParallel} at once` },
+		{ title: 'Review', note: 'pull requests' },
+		{ title: 'Done', note: 'merged and resolved' },
+	];
 	return (
 		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
-			<ProjectRouteArt className="w-full" active={live ? active : undefined} waiting={live ? needs > 0 : true} />
+			<ProjectRouteArt className="w-full" />
 			<ol aria-label="How the project runs" className="m-0 grid list-none grid-cols-4 p-0">
 				{stages.map((stage, index) => (
 					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
-						<span
-							className={cn('in-caption', live ? (active[index] ? 'text-(--accent-text)' : 'text-(--text-tertiary)') : 'route-caption text-(--text-tertiary)')}
-							data-first={!live && index === 0 ? true : undefined}
-							style={live ? undefined : ({ '--stage': index } as CSSProperties)}
-						>
+						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 ? true : undefined} style={{ '--stage': index } as CSSProperties}>
 							{String(index + 1).padStart(2, '0')} {stage.title}
 						</span>
-						<div className={cn('line-clamp-2 w-full text-[12px] leading-[16px]', live && !active[index] ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}>{stage.note}</div>
+						<div className="line-clamp-2 w-full text-[12px] leading-[16px] text-(--text-secondary)">{stage.note}</div>
 					</li>
 				))}
 			</ol>

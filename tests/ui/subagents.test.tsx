@@ -95,7 +95,7 @@ describe('Agents panel', () => {
 		expect(screen.getByRole('region', { name: 'Working' })).toBeTruthy();
 	});
 
-	it('sums the task up over a timeline, and opens a step the decision model drove into its actions', () => {
+	it('sums the task up in a sentence over a timeline of its runs, and opens a step the decision model drove into its actions', () => {
 		const driven = run({
 			id: 'run-2',
 			toolCallId: 'call-2',
@@ -116,6 +116,8 @@ describe('Agents panel', () => {
 		const overview = screen.getByLabelText('Agents overview');
 		expect(within(overview).getByText('1 working')).toBeTruthy();
 		expect(within(overview).getByText('$0.0004')).toBeTruthy();
+		expect(within(overview).getByText('1 agent working, 1 finished')).toBeTruthy();
+		expect(within(overview).getByText('1 failed. A mix of running commands and browsing over 2 steps.')).toBeTruthy();
 
 		fireEvent.click(within(overview).getByTitle('Check top Hacker News stories'));
 		const steps = screen.getByRole('region', { name: 'Steps' });
@@ -124,6 +126,20 @@ describe('Agents panel', () => {
 		expect(within(steps).getByText('0.62')).toBeTruthy();
 		expect(within(steps).getByText('Needs confirmation')).toBeTruthy();
 		expect(within(steps).getByText('Jev 4 · $0.0004')).toBeTruthy();
+	});
+
+	it('lists a burst of runs in the order they started, says how they ran, and times a quick step in milliseconds', () => {
+		focusRun('s6', null);
+		const started = (id: string, ago: number, description: string): SubagentRun =>
+			run({ id, description, status: 'done', startedAt: new Date(now - ago).toISOString(), durationMs: 4000, steps: [{ id: `${id}-1`, tool: 'read', input: { path: 'src/app.ts' }, state: 'done', at: new Date(now - ago).toISOString(), durationMs: 44 }] });
+		// Newest first, as the server lists them.
+		renderWithQueries(<AgentsTab sessionId="s6" />, [[['subagents', 's6'], { runs: [started('c', 1000, 'Batch 3'), started('b', 2000, 'Batch 2'), started('a', 3000, 'Batch 1')] }]]);
+		expect(screen.getByText('3 browsers ran side by side for 6s')).toBeTruthy();
+		expect(screen.getByText('All reading: 3 steps.')).toBeTruthy();
+		const done = screen.getByRole('region', { name: 'Finished' });
+		expect(within(done).getAllByText(/^Batch/).map((item) => item.textContent)).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
+		fireEvent.click(within(done).getAllByRole('button')[0]);
+		expect(within(screen.getByRole('region', { name: 'Steps' })).getByText('44ms')).toBeTruthy();
 	});
 
 	it('shows a failed run with why', () => {

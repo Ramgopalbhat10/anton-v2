@@ -113,11 +113,11 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 
 /**
  * A thread as a live card, under the message that started it and in
- * Overview: its glyph, title and state; a mono phase line (repository, what
- * it is doing and for how long) with a sweeping hairline while it works; what
+ * Overview: its glyph, title and state; a mono phase line (repository and
+ * for how long) with a sweeping hairline while it works; what
  * it last said with a caret while it types, or its question as an amber
- * quote; and a footer with its pull request, spend and next steps. The whole
- * card opens the thread.
+ * quote; and, when it has either, a footer with its pull request and next
+ * steps. The whole card opens the thread.
  */
 export function ThreadCard({ thread, className }: { thread: Session; className?: string }) {
 	const open = useOpenThread();
@@ -129,13 +129,10 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 	const pr = prSummary(thread);
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
-	const phase = working
-		? `working · ${elapsed(now - new Date(since).getTime())}`
-		: state === 'queued'
-			? 'queued · starts when a slot frees'
-			: waiting
-				? `${broken ? 'stopped' : 'on you'} · ${age(threadActiveAt(thread))}`
-				: `${STATE_LOOK[state].short} · ${age(threadActiveAt(thread))}`;
+	// The pill says the state, so the phase line says only for how long, or when a queued thread starts.
+	const ago = age(threadActiveAt(thread));
+	const phase = working ? elapsed(now - new Date(since).getTime()) : state === 'queued' ? 'starts when a slot frees' : ago === 'now' ? 'just now' : `${ago} ago`;
+	const steps = nextSteps(thread);
 	return (
 		<article
 			aria-label={thread.title}
@@ -178,17 +175,19 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 					)
 				) : null}
 			</div>
-			<footer className="flex min-h-11 items-center gap-2 border-t border-(--border-subtle) bg-(--well-bg)/40 px-3.5 py-2">
-				<div className="flex min-w-0 flex-1 items-center gap-2.5">
-					{pr ? (
-						<span className="flex min-w-0 items-center gap-1 truncate text-[11.5px] text-(--text-secondary)">
-							<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : thread.pullRequest ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
-							<span className="truncate">{pr}</span>
-						</span>
-					) : null}
-				</div>
-				<NextSteps thread={thread} size="xs" />
-			</footer>
+			{pr || steps.length ? (
+				<footer className="flex min-h-11 items-center gap-2 border-t border-(--border-subtle) bg-(--well-bg)/40 px-3.5 py-2">
+					<div className="flex min-w-0 flex-1 items-center gap-2.5">
+						{pr ? (
+							<span className="flex min-w-0 items-center gap-1 truncate text-[11.5px] text-(--text-secondary)">
+								<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : thread.pullRequest ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
+								<span className="truncate">{pr}</span>
+							</span>
+						) : null}
+					</div>
+					<NextSteps thread={thread} size="xs" />
+				</footer>
+			) : null}
 		</article>
 	);
 }
