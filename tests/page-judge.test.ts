@@ -63,3 +63,20 @@ test('only a page that looks like a sign-in wall or human check is asked about, 
 	assert.equal(await needsTheUser('t1', 'https://example.com/', 'Just a moment...', '- text: Verify you are human'), false);
 	assert.equal(asked.length, 2);
 });
+
+test('a tally counts each call the step made and what it judged, for the Agents panel', async () => {
+	const { newTally } = await import('../src/services/decisions.ts');
+	const tally = newTally();
+	await trimToJob('t1', 'Report the top stories', 'https://news.ycombinator.com/', page, tally);
+	await needsTheUser('t1', 'https://example.com/login', 'Sign in', '- textbox "Password"', tally);
+	await needsTheUser('t1', 'https://example.com/', 'Home', '- paragraph: no password: here', tally);
+	// A page that does not look gated is not asked about, and so is not counted.
+	await needsTheUser('t1', 'https://example.com/', 'Home', '- paragraph: hello', tally);
+	assert.equal(tally.decisions, 3);
+	assert.ok(Math.abs(tally.cost - 0.0003) < 1e-9);
+	assert.deepEqual(tally.actions, [
+		{ what: 'Kept 1 of 4 parts of the page for the job', p: null },
+		{ what: 'Found a sign-in or human check for the user to pass', p: 0.95 },
+		{ what: 'Checked for a sign-in wall: none', p: 0.95 },
+	]);
+});
