@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /*
@@ -22,6 +22,63 @@ export function field(input: unknown, key: string): string {
 function pullRequestUrl(output: unknown): string {
 	const record = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
 	return field(record, 'url') || field(record.output, 'url');
+}
+
+/** A step on the sandbox's desktop, named by what it acted on. */
+function computerStep(input: unknown) {
+	const target = field(input, 'target') ? <Em>{field(input, 'target')}</Em> : <>a point on the screen</>;
+	switch (field(input, 'action')) {
+		case 'click':
+			return <>Clicked {target}</>;
+		case 'double_click':
+			return <>Double-clicked {target}</>;
+		case 'right_click':
+			return <>Right-clicked {target}</>;
+		case 'move':
+			return <>Pointed at {target}</>;
+		case 'drag':
+			return (
+				<>
+					Dragged {target}
+					{field(input, 'to') ? (
+						<>
+							{' '}
+							to <Em>{field(input, 'to')}</Em>
+						</>
+					) : null}
+				</>
+			);
+		case 'type':
+			return (
+				<>
+					Typed <Em>{field(input, 'text')}</Em>
+				</>
+			);
+		case 'key':
+			return (
+				<>
+					Pressed <Em>{field(input, 'keys')}</Em>
+				</>
+			);
+		case 'scroll':
+			return <>Scrolled {field(input, 'direction') || 'down'}</>;
+		case 'wait':
+			return <>Waited for the screen</>;
+		case 'open':
+			return (
+				<>
+					Opened <Em>{field(input, 'url')}</Em> on the computer
+				</>
+			);
+		case 'launch':
+			return (
+				<>
+					Started <Em>{field(input, 'command')}</Em> on the computer
+				</>
+			);
+		default:
+			return <>Looked at the screen</>;
+	}
 }
 
 /** One browser step as a sentence: what was done, and to what. */
@@ -189,6 +246,8 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 		case 'browser':
 			// A step the decision model drove reads as one quick move, not a single click.
 			return { icon: field(input, 'action') === 'do' ? Zap : Globe, body: browserStep(input) };
+		case 'computer':
+			return { icon: Monitor, body: computerStep(input) };
 		default:
 			return {
 				icon: Wrench,
@@ -213,6 +272,7 @@ export function toolTone(toolName: string, failed: boolean): string {
 			return 'var(--data-2)';
 		case 'screenshot':
 		case 'browser':
+		case 'computer':
 			return 'var(--data-3)';
 		case 'open_pull_request':
 			return 'var(--data-4)';

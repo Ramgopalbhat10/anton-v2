@@ -13,3 +13,13 @@ test('Coder declares explorer, tester, and open_pull_request without useSandbox 
 	assert.doesNotMatch(explorerFn, /useSandbox/);
 	assert.doesNotMatch(testerFn, /useSandbox/);
 });
+
+test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /name: 'computer'/);
+	assert.match(source, /if \(workspace\) useComputerSubagent\(id\);/);
+	const tool = source.slice(source.indexOf('function computerTool'), source.indexOf('function Computer()'));
+	// A model prompted through the harness keeps the subagent's tools and may act instead of answering.
+	assert.doesNotMatch(tool, /harness/);
+	assert.match(tool, /asAgentStep\(id/);
+});

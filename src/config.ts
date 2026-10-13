@@ -68,6 +68,12 @@ export const config = {
 		maxOpen: Number(read('ANTON_CLAUDE_CODE_MAX_OPEN', '3')),
 	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
+	/**
+	 * The OpenRouter model the computer tool sees the screen with when neither the computer subagent's own model
+	 * (Settings › General) nor the task's is an OpenRouter model that reads images: it finds what to click and
+	 * says what the screen shows.
+	 */
+	visionModel: read('ANTON_VISION_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */

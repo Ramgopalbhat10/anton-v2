@@ -52,6 +52,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
+import { computerScreenshot, computerView, connectComputer, setComputerControl, startComputer, stopComputer } from './services/computer.ts';
 import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
@@ -280,7 +281,7 @@ app.put('/api/settings/general', async (c) => {
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
 			codeMode: v.boolean(),
-			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
+			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));
@@ -381,6 +382,7 @@ app.put('/api/projects/:id/settings', async (c) => {
 				v.check((ports) => new Set(ports).size === ports.length, 'List each preview port once'),
 			),
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
+			fullVm: v.optional(v.boolean()),
 			followUps: v.optional(v.boolean()),
 			mcpServers: v.optional(
 				v.pipe(
@@ -593,6 +595,16 @@ app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
 app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
 // The panel's live view is on screen: keep following its page for a while.
 app.post('/api/sessions/:id/browser/watch', async (c) => c.json(await watchBrowser(c.req.param('id'))));
+// The Computer panel: the desktop inside the task's sandbox. Viewing never starts it; Start computer does.
+app.get('/api/sessions/:id/computer', async (c) => c.json(await computerView(c.req.param('id'))));
+app.post('/api/sessions/:id/computer', async (c) => c.json(await startComputer(c.req.param('id'))));
+app.post('/api/sessions/:id/computer/stop', async (c) => c.json(await stopComputer(c.req.param('id'))));
+app.post('/api/sessions/:id/computer/connect', async (c) => c.json(await connectComputer(c.req.param('id'))));
+app.post('/api/sessions/:id/computer/control', async (c) => {
+	const { driver } = await body(c, v.object({ driver: v.picklist(['user', 'agent']) }));
+	return c.json(await setComputerControl(c.req.param('id'), driver));
+});
+app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await computerScreenshot(c.req.param('id'))));
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });

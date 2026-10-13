@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider } from '../core/ports.ts';
+import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, SandboxProvider, SubscriptionProvider, VisionModel } from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { diskStore } from './disk/store.ts';
@@ -10,6 +10,7 @@ import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
 import { openRouterCatalog } from './openrouter/catalog.ts';
 import { openRouterDecisions } from './openrouter/decisions.ts';
+import { openRouterVision } from './openrouter/vision.ts';
 import { s3Store } from './s3/store.ts';
 
 /** Add a provider by adding one entry; choose it with ANTON_SANDBOX / ANTON_STORE. */
@@ -34,6 +35,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
  * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
  * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
+ * `vision` is null without an OpenRouter key; the computer tool then says it cannot see the screen.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -44,6 +46,7 @@ export type Providers = {
 	subscriptions?: SubscriptionProvider[];
 	runtimes?: AgentRuntime[];
 	browsers?: BrowserHost | null;
+	vision?: VisionModel | null;
 };
 
 function decisionModel(): DecisionModel | null {
@@ -63,6 +66,7 @@ export function getProviders(): Providers {
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
+		vision: config.openrouter.apiKey ? openRouterVision(config.openrouter) : null,
 	};
 	return providers;
 }

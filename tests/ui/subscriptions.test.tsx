@@ -49,7 +49,7 @@ const connected = plan({
 	modelsAt: new Date().toISOString(),
 });
 
-const general = { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, reviewer: null } };
+const general = { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } };
 
 const api = vi.hoisted(() => ({
 	subscriptions: vi.fn(),

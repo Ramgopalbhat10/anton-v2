@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { type App, type Image, ModalClient, type Sandbox } from 'modal';
 import type { Acquired, AcquireRequest, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider, SandboxResources } from '../../core/ports.ts';
 import { quote } from '../../core/shell.ts';
+import { DESKTOP_PACKAGES } from '../../core/desktop.ts';
 
 export type ModalOptions = {
 	app: string;
@@ -20,6 +21,8 @@ const toolchain = (browserPackage: string) => [
 	'RUN command -v corepack >/dev/null && corepack enable || true',
 	// Images without Node skip the browser; the screenshot tool then says what is missing.
 	`RUN command -v npm >/dev/null && npm install -g ${browserPackage} && playwright install --with-deps chromium || true`,
+	// The desktop for the Computer panel; it starts only when the panel or the agent first needs it.
+	`RUN apt-get update && apt-get install -y --no-install-recommends ${DESKTOP_PACKAGES.join(' ')} && rm -rf /var/lib/apt/lists/*`,
 	`RUN mkdir -p ${ROOT}/outputs`,
 ];
 
@@ -36,6 +39,8 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 
 	async function create(key: string, image: Image, ports: number[], resources: SandboxResources): Promise<Sandbox> {
 		return client.sandboxes.create(await appRef(), image, {
+			// Unset lets Modal pick, which is gVisor; a VM brings its own kernel for Docker and FUSE at the same price.
+			...(resources.runtime === 'vm' ? { runtime: 'vm' as const } : {}),
 			encryptedPorts: ports,
 			name: nameFor(key),
 			tags: { [TAG]: key },
@@ -189,6 +194,11 @@ function modalMachine(sandbox: Sandbox): Machine {
 		async previewUrl(port) {
 			const tunnels = await sandbox.tunnels(10_000).catch(() => ({}) as Record<number, { url: string }>);
 			return tunnels[port]?.url ?? null;
+		},
+		// A connect token, unlike a preview tunnel, refuses anyone without it; it rides in the query, since a socket cannot send headers.
+		async socketUrl(port) {
+			const { url, token } = await sandbox.createConnectToken({ port });
+			return `${url.replace(/^http/, 'ws').replace(/\/$/, '')}/?_modal_connect_token=${encodeURIComponent(token)}`;
 		},
 		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
 			const ttyFile = `/tmp/anton-tty-${randomUUID()}`;
