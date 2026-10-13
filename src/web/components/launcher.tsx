@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Clock, Folder, GitBranch, Play, Plus, Settings } from 'lucide-react';
-import { type CSSProperties, useState } from 'react';
+import { Clock, Folder, GitBranch, MessageSquare, Play, Plus, Settings } from 'lucide-react';
+import { type CSSProperties, type ReactNode, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
-import { TaskRouteArt } from '@/components/illustrations';
+import { ChatRouteArt, TaskRouteArt } from '@/components/illustrations';
 import { Caption, Card } from '@/components/instrument';
 import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -11,26 +11,34 @@ import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
-import { api, branchLabel, type ModelChoice, type Project } from '@/lib/api';
+import { api, type ModelChoice, placeLabel, type Project } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
-import { chooseProject, useProjects } from '@/lib/projects';
+import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
 
+/**
+ * The repo a task works on, or No repository for a chat: a question, a job on
+ * the web, or work in a scratch sandbox, with no branch or pull request.
+ */
 function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[]; value?: Project; onChange: (id: string) => void; onAdd: () => void }) {
 	const navigate = useNavigate();
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<PickerChip icon={Folder} label={value ? value.repoFullName.split('/').pop()! : 'Choose a repo'} height={28} />
+				<PickerChip icon={value ? Folder : MessageSquare} label={value ? value.repoFullName.split('/').pop()! : 'No repository'} height={28} />
 			</MenuTrigger>
-			<MenuContent align="start" className="min-w-[220px]">
+			<MenuContent align="start" className="min-w-[240px]">
+				<MenuItem icon={MessageSquare} checked={!value} onSelect={() => onChange(NO_REPO)}>
+					No repository
+				</MenuItem>
+				{projects.length > 0 ? <MenuLabel>Repositories</MenuLabel> : null}
 				{projects.map((project) => (
 					<MenuItem key={project.id} checked={project.id === value?.id} onSelect={() => onChange(project.id)}>
 						{project.repoFullName}
 					</MenuItem>
 				))}
-				{projects.length > 0 ? <MenuSeparator /> : null}
+				<MenuSeparator />
 				<MenuItem icon={Plus} onSelect={onAdd}>
 					Add a repository
 				</MenuItem>
@@ -147,10 +155,25 @@ function Route({ repo, branch, planMode }: { repo?: string; branch: string; plan
 		{ title: 'Sandbox', note: 'when it edits' },
 		{ title: 'Pull request', note: 'for your review' },
 	];
+	return <RouteWell art={<TaskRouteArt className="w-full" />} label="How a task runs" stages={stages} />;
+}
+
+/** A chat's route: no repository, so it answers, browses, and runs things in a scratch sandbox only when it must. */
+function ChatRoute() {
+	const stages: Stage[] = [
+		{ title: 'Ask', note: 'no repository' },
+		{ title: 'Browse', note: 'web and Browser panel' },
+		{ title: 'Scratch', note: 'when it runs code' },
+		{ title: 'Answer', note: 'right in the chat' },
+	];
+	return <RouteWell art={<ChatRouteArt className="w-full" />} label="How a chat runs" stages={stages} />;
+}
+
+function RouteWell({ art, label, stages }: { art: ReactNode; label: string; stages: Stage[] }) {
 	return (
 		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
-			<TaskRouteArt className="w-full" />
-			<ol aria-label="How a task runs" className="m-0 grid list-none grid-cols-4 p-0">
+			{art}
+			<ol aria-label={label} className="m-0 grid list-none grid-cols-4 p-0">
 				{stages.map((stage, index) => (
 					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
 						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
@@ -181,7 +204,9 @@ export function Launcher() {
 	const model = choice.model ?? models.data?.default ?? '';
 	// Picking a model sets its reasoning to null, so the default level only rides with the default model.
 	const reasoning = choice.reasoning !== undefined ? choice.reasoning : (general.data?.reasoning ?? null);
-	const planMode = planChoice ?? general.data?.planMode ?? false;
+	// No repository picked (or none added yet): the task is a chat, with no branch to pick or plan to make.
+	const chat = projects.isSuccess && !project;
+	const planMode = !chat && (planChoice ?? general.data?.planMode ?? false);
 	const chosenBranch = branch || project?.defaultBranch || '';
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
 
@@ -191,12 +216,12 @@ export function Launcher() {
 	}
 
 	async function start() {
-		if (create.isPending || !project) return;
+		if (create.isPending || !projects.isSuccess) return;
 		const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] }));
 		create.mutate({
 			prompt: expandCommand(prompt, saved.commands, true),
-			projectId: project.id,
-			branch: chosenBranch || undefined,
+			projectId: project?.id,
+			branch: project ? chosenBranch || undefined : undefined,
 			model: model || undefined,
 			reasoning: reasoning ?? undefined,
 			planMode,
@@ -215,7 +240,9 @@ export function Launcher() {
 						<Caption>New task</Caption>
 						<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">What should the agent do?</h1>
 						<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">
-							Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the terminal, and the files as it goes.
+							{chat
+								? 'Ask anything, or hand off a job on the web. With no repository, Anton answers directly, works in the Browser panel, and starts a scratch sandbox only when it has to run something.'
+								: 'Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the terminal, and the files as it goes.'}
 						</p>
 					</div>
 
@@ -234,17 +261,21 @@ export function Launcher() {
 							branch={chosenBranch}
 							submitOn="mod-enter"
 							suggestionsPosition="below"
-							placeholder="Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test."
+							placeholder={
+								chat
+									? 'Compare the free tiers on the Vercel, Netlify and Fly.io pricing pages, and tell me which suits a hobby app.'
+									: 'Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test.'
+							}
 							className="min-h-[96px] px-4 pt-4 text-[14px] leading-[21px]"
 						/>
 						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
-							<BranchPicker project={project} value={chosenBranch} onChange={setBranch} />
+							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
 							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />
-							<PlanToggle on={planMode} onChange={setPlanMode} />
+							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 							<div className="min-w-0 flex-[1_1_8px]" />
-							<Btn type="submit" variant="primary" icon={Play} disabled={create.isPending || !project}>
-								{create.isPending ? 'Starting…' : 'Start task'}
+							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={create.isPending || !projects.isSuccess}>
+								{create.isPending ? 'Starting…' : chat ? 'Start chat' : 'Start task'}
 							</Btn>
 						</div>
 					</form>
@@ -258,7 +289,7 @@ export function Launcher() {
 						/>
 					) : null}
 					{create.isError ? <p className="m-0 text-[12px] text-(--danger-text)">Could not start the task: {create.error.message}</p> : null}
-					<Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />
+					{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 
 					{recent.length > 0 ? (
 						<Card icon={Clock} title="Recent tasks" sub={`latest ${recent.length}`}>
@@ -277,7 +308,7 @@ export function Launcher() {
 										<div className="flex min-w-0 flex-1 flex-col gap-px">
 											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
 											<div className="truncate font-mono text-[11px] text-(--text-disabled)">
-												{session.repo} · {branchLabel(session)}
+												{placeLabel(session)}
 											</div>
 										</div>
 										<div className="text-[11px] whitespace-nowrap text-(--text-tertiary)">

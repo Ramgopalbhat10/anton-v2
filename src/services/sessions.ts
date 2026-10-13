@@ -12,6 +12,7 @@ import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { generalSettings } from './general.ts';
 import { closeBrowser } from './live-browser.ts';
+import { SCRATCH_BASE, SCRATCH_BRANCH } from './git.ts';
 import { forgetSubagentRuns } from './subagent-runs.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
@@ -83,8 +84,18 @@ function slug(title: string): string {
 	);
 }
 
+/** Where a new task starts: a repository at a branch's head, or, for a chat, the empty scratch folder. */
+async function startingPoint(projectId: string | undefined, branch: string | undefined) {
+	if (!projectId) return { projectId: null, baseBranch: SCRATCH_BRANCH, baseSha: SCRATCH_BASE };
+	const project = await getProject(projectId);
+	if (!project) throw new NotFoundError('Project not found');
+	const baseBranch = branch || project.defaultBranch;
+	return { projectId: project.id, baseBranch, baseSha: await getProviders().git.resolveRef(project.repoFullName, baseBranch) };
+}
+
+/** A task on a repository, or without `projectId` a chat: no repository, and a scratch sandbox if it needs one. */
 export async function createSession(input: {
-	projectId: string;
+	projectId?: string;
 	branch?: string;
 	model?: string;
 	reasoning?: Reasoning;
@@ -95,18 +106,18 @@ export async function createSession(input: {
 	/** Held until the thread can start, when the project's threads are all busy. */
 	brief?: string;
 }): Promise<Session> {
-	const project = await getProject(input.projectId);
-	if (!project) throw new NotFoundError('Project not found');
-	const baseBranch = input.branch || project.defaultBranch;
-	const baseSha = await getProviders().git.resolveRef(project.repoFullName, baseBranch);
+	if (!input.projectId && input.spaceId) throw new InvalidInputError("A project's thread works on one of its repositories.");
+	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch);
 	const id = randomUUID();
 	const title = input.title?.trim() || 'New task';
 	const general = await generalSettings();
 	// The default reasoning level belongs to the default model; another model starts at its own default.
 	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
 	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
-	const planMode = input.planMode ?? general.planMode;
-	await insertSession({ id, projectId: project.id, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, id), planMode, spaceId: input.spaceId, brief: input.brief });
+	// Plan mode plans changes to code; a chat has none to plan.
+	const planMode = projectId ? (input.planMode ?? general.planMode) : false;
+	const branch = projectId ? branchFor(title, id) : SCRATCH_BRANCH;
+	await insertSession({ id, projectId, title, model, reasoning, baseBranch, baseSha, branch, planMode, spaceId: input.spaceId, brief: input.brief });
 	return getSession(id);
 }
 
@@ -127,7 +138,7 @@ export async function forkSession(id: string): Promise<Session> {
 	const forkId = randomUUID();
 	const title = `${source.title.slice(0, 190)} (fork)`;
 	const { projectId, model, reasoning, baseBranch, baseSha, planMode, spaceId } = source;
-	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: branchFor(title, forkId), planMode, spaceId });
+	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId });
 	if (await copyCheckpoint(id, forkId)) {
 		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
 	}

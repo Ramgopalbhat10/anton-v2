@@ -89,4 +89,28 @@ describe('new task composer', () => {
 		expect(screen.queryByRole('option', { name: /view.ts/ })).toBeNull();
 		expect(api.projectFiles).toHaveBeenCalledWith('p2', 'main');
 	});
+	it('starts a chat with no repository: no branch or plan mode, and the choice is remembered', async () => {
+		const { unmount } = setup();
+		expect(screen.getByRole('button', { name: 'Plan' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'demo' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'No repository' }));
+		expect(screen.getByRole('button', { name: 'No repository' })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'main' })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Plan' })).toBeNull();
+		expect(screen.getByLabelText('How a chat runs')).toBeTruthy();
+		await userEvent.type(screen.getByRole('textbox'), 'What is new in React 19?');
+		await userEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+		await waitFor(() =>
+			expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ projectId: undefined, branch: undefined, planMode: false, prompt: 'What is new in React 19?' })),
+		);
+		unmount();
+		// The real create remembers it; the next New task starts as a chat too, and a repo can be picked back.
+		localStorage.setItem('anton.project', 'none');
+		setup();
+		expect(screen.getByRole('button', { name: 'Start chat' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'No repository' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'acme/demo' }));
+		expect(screen.getByRole('button', { name: 'Start task' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'main' })).toBeTruthy();
+	});
 });

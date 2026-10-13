@@ -28,6 +28,7 @@ export async function remember(sessionId: string, note: string, scope: 'repo' | 
 	const session = await getSessionRecord(sessionId);
 	if (!session) throw new NotFoundError('Session not found');
 	if (scope === 'project' && session.spaceId) return rememberForSpace(session.spaceId, note);
+	if (!session.projectId) return 'This chat has no repository to keep notes for.';
 	const line = noteLine(note);
 	if (line.length > MAX_NOTE) return `Keep a note under ${MAX_NOTE} characters.`;
 	const saved = await appendProjectMemory(session.projectId, line, MAX_MEMORY);

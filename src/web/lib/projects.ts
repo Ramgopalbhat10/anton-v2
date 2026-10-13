@@ -7,7 +7,10 @@ export function useProjects() {
 	return useQuery({ queryKey: ['projects'], queryFn: api.projects });
 }
 
-/** Remembers the repo of the last task, so the next one starts there too. */
+/** Picked in place of a repo for a chat, which has none; remembered like a repo. */
+export const NO_REPO = 'none';
+
+/** Remembers the repo of the last task, or that it was a chat, so the next one starts the same way. */
 export function rememberProject(id: string) {
 	try {
 		localStorage.setItem(KEY, id);
@@ -16,10 +19,13 @@ export function rememberProject(id: string) {
 	}
 }
 
+/** The repo a new task starts on: the one picked, else the last one used, else the first; none when a chat was picked or there are no repos. */
 export function chooseProject(projects: Project[], preferred?: string): Project | undefined {
 	let remembered: string | null = null;
 	try {
 		remembered = localStorage.getItem(KEY);
 	} catch {}
-	return projects.find((project) => project.id === (preferred || remembered)) ?? projects[0];
+	const choice = preferred || remembered;
+	if (choice === NO_REPO) return undefined;
+	return projects.find((project) => project.id === choice) ?? projects[0];
 }

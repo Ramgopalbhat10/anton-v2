@@ -25,7 +25,9 @@ export type ModelChoice = { model: string; reasoning: Reasoning | null };
 
 export type Session = {
 	id: string;
-	projectId: string;
+	/** The repository the task works on; null for a chat, which has none. */
+	projectId: string | null;
+	/** `owner/name`; empty for a chat. */
 	repo: string;
 	title: string;
 	model: string;
@@ -523,7 +525,7 @@ export const api = {
 	projectFiles: (projectId: string, branch?: string) =>
 		json<{ paths: string[] }>(`/api/projects/${projectId}/files${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
-	createSession: (body: { projectId: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
+	createSession: (body: { projectId?: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
@@ -601,5 +603,15 @@ export const SAFETY_NET_MS = 60_000;
 /** A live sandbox can change under the terminal, so its views are checked more often. */
 export const refreshFor = (source: Source | undefined) => (source === 'live' ? 15_000 : SAFETY_NET_MS);
 
-/** The branch a task works on, or the one it reads from while it has no workspace. */
-export const branchLabel = (session: Session) => (session.workspace ? session.branch : `${session.baseBranch} (read-only)`);
+/** A chat: a task with no repository, which answers, browses and uses a scratch sandbox. */
+export const isChat = (session: Pick<Session, 'projectId'>) => session.projectId === null;
+
+/** The branch a task works on, or the one it reads from while it has no workspace; a chat's scratch sandbox has neither. */
+export const branchLabel = (session: Session) =>
+	isChat(session) ? (session.workspace ? 'scratch sandbox' : 'no sandbox') : session.workspace ? session.branch : `${session.baseBranch} (read-only)`;
+
+/** The repository's short name, or Chat for a task without one. */
+export const repoShort = (session: Pick<Session, 'projectId' | 'repo'>) => (isChat(session) ? 'Chat' : (session.repo.split('/').pop() ?? session.repo));
+
+/** Where a task works, in a line: repository and branch, or Chat and whether it has a sandbox. */
+export const placeLabel = (session: Session) => `${isChat(session) ? 'Chat' : session.repo} · ${branchLabel(session)}`;

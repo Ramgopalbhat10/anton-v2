@@ -1189,6 +1189,44 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 	await sessions.stopSession(session.id);
 });
 
+test('a chat has no repository: a scratch sandbox when it needs one, its files and changes, and no pull request', async () => {
+	const { listRepoFiles } = await import('../src/services/repo-snapshot.ts');
+	const { primeAgent, isChat } = await import('../src/services/agent-runner.ts');
+	const { SCRATCH_BASE } = await import('../src/services/git.ts');
+	const { remember } = await import('../src/services/memory.ts');
+	const { moveToSpace } = await import('../src/services/spaces.ts');
+	const chat = await sessions.createSession({ title: 'What is the weather in Paris?', planMode: true });
+	assert.equal(chat.projectId, null);
+	assert.equal(chat.repo, '');
+	assert.equal(chat.planMode, false, 'nothing to plan without code');
+	assert.ok((await sessions.listSessions()).some((session) => session.id === chat.id), 'listed with the other tasks');
+	assert.deepEqual((await files.fileTree(chat.id)).paths, [], 'nothing to read before it has a sandbox');
+	await assert.rejects(() => listRepoFiles(chat.id, {}), /no repository/);
+	await primeAgent(chat.id);
+	assert.equal(isChat(chat.id), true);
+	assert.match(await remember(chat.id, 'Paris is in France'), /no repository/);
+
+	const machine = await machineFor(chat.id);
+	assert.equal(await run(machine, 'git rev-parse HEAD'), `${SCRATCH_BASE}\n`, 'every chat starts from the same empty commit');
+	assert.equal(await run(machine, 'git ls-files'), '');
+	assert.ok(lastAcquire?.ports.length, 'preview ports to serve a web app on');
+	await machine.exec(`cd ${machine.root}/repo && echo 'print(1)' > hello.py`);
+	sessions.invalidateRunning();
+	assert.deepEqual((await files.fileTree(chat.id)).paths, ['hello.py']);
+	assert.match((await files.changesView(chat.id)).patch, /\+print\(1\)/);
+	await saveCheckpoint(chat.id, machine);
+	await sessions.stopSession(chat.id);
+	assert.equal(text(await files.readFile(chat.id, 'hello.py')), 'print(1)\n', 'readable after its sandbox stops');
+	await assert.rejects(() => files.readFile(chat.id, 'missing.py'));
+
+	await assert.rejects(() => openPullRequest(chat.id, { title: 'No', body: '' }), /no repository/);
+	await assert.rejects(() => moveToSpace(chat.id, 'any'), /no repository/);
+	await assert.rejects(() => sessions.createSession({ spaceId: 'any' }), /repositories/);
+	await addSessionUsage(chat.id, { inputTokens: 7, outputTokens: 3, cost: 0.01 });
+	await sessions.deleteSession(chat.id);
+	assert.equal((await usageView()).byRepo.find((row) => row.key === '')?.tokens, 10, "chats' spend is kept under Chats, even once deleted");
+});
+
 test('checkpoints and restore keep odd file names, symlinks and executables as they were', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Odd files' });

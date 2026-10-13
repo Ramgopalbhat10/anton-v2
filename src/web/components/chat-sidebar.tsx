@@ -417,7 +417,7 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
 	const spaceName = useSpaceName(session.spaceId);
 	// A thread names its project where a task names its repository: one place, in words.
-	const details = [show.repo && (spaceName ?? repoName(session.repo)), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
+	const details = [show.repo && (spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
 	return (

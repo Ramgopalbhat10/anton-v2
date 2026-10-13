@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'n
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { config } from '../config.ts';
-import { NotFoundError } from '../core/errors.ts';
+import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { safeRelativePath } from '../core/shell.ts';
 import type { RepoFiles } from '../core/plugins.ts';
 import { readTar } from '../core/tar.ts';
@@ -122,6 +122,7 @@ export async function snapshotFiles(repo: string, sha: string): Promise<RepoFile
 
 async function snapshotFor(id: string): Promise<Snapshot> {
 	const session = await getSessionRecord(id);
+	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to read.');
 	const project = session && (await getProject(session.projectId));
 	if (!session || !project) throw new NotFoundError('Session not found');
 	return snapshot(project.repoFullName, session.baseSha);

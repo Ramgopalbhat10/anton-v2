@@ -54,6 +54,13 @@ export function hasWorkspace(id: string): boolean {
 	return workspaces.has(id);
 }
 
+/** Chats: tasks with no repository, which answer, browse and use a scratch sandbox rather than read and change code. */
+const chats = new Set<string>();
+
+export function isChat(id: string): boolean {
+	return chats.has(id);
+}
+
 /** Tasks in plan mode: the agent may look but not change anything until the plan is approved. */
 const planning = new Set<string>();
 
@@ -92,6 +99,8 @@ export async function primeAgent(id: string): Promise<void> {
 	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
 	else threadProjects.delete(id);
 	if (session?.machineState) workspaces.add(id);
+	if (session && !session.projectId) chats.add(id);
+	else chats.delete(id);
 	if (session?.planMode) planning.add(id);
 	else planning.delete(id);
 	await primeSkills(id);

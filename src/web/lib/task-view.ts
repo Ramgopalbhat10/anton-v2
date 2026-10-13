@@ -52,7 +52,8 @@ export function taskNote(session: Session): TaskNote | null {
 /** When the task last did something: its last checkpoint, or when it started. */
 export const activeAt = (session: Session) => session.checkpointAt ?? session.createdAt;
 
-export const repoName = (repo: string) => repo.split('/').pop() ?? repo;
+/** A repository's short name; chats have none, so they read and group as Chats. */
+export const repoName = (repo: string) => (repo ? (repo.split('/').pop() ?? repo) : 'Chats');
 export const modelName = (model: string) => model.split('/').pop() ?? model;
 
 export const SORTS = {
@@ -140,7 +141,7 @@ export function sections(tasks: Session[], view: TaskView, search: string): Sect
 	const needle = search.trim().toLowerCase();
 	const shown = tasks
 		.filter((task) => matches(task, view.filters))
-		.filter((task) => !needle || `${task.title} ${task.repo} ${task.branch}`.toLowerCase().includes(needle))
+		.filter((task) => !needle || `${task.title} ${task.repo ? `${task.repo} ${task.branch}` : 'chat'}`.toLowerCase().includes(needle))
 		.sort(SORTS[view.sort].compare);
 	return {
 		pinned: shown.filter((task) => task.pinnedAt),

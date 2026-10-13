@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Facts, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useRefreshTask } from '@/components/source-bar';
-import { api } from '@/lib/api';
+import { api, isChat, repoShort } from '@/lib/api';
 
 /** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
 const theme = {
@@ -115,7 +115,7 @@ export function TerminalTab({ sessionId }: { sessionId: string }) {
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-2">
 			<div className="flex h-7 shrink-0 items-center gap-2.5">
-				<Facts items={['Sandbox', session.data?.repo.split('/').pop(), health.data?.providers.sandbox]} className="flex-1" />
+				<Facts items={['Sandbox', session.data && repoShort(session.data), health.data?.providers.sandbox]} className="flex-1" />
 				<Status tone={LINK[link].tone} pulse={link === 'connecting'}>
 					{LINK[link].label}
 				</Status>
@@ -126,7 +126,7 @@ export function TerminalTab({ sessionId }: { sessionId: string }) {
 			<div className="in-well flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 				<div aria-hidden className="flex h-8 shrink-0 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-3">
 					<Icon icon={SquareTerminal} size={12} className={link === 'connected' ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
-					<span className="in-num min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{session.data ? `${session.data.repo.split('/').pop()} — shell` : 'shell'}</span>
+					<span className="in-num min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{session.data ? `${isChat(session.data) ? 'scratch' : repoShort(session.data)} — shell` : 'shell'}</span>
 				</div>
 				<div className="min-h-0 flex-1 p-3">
 					<Shell key={generation} sessionId={sessionId} onConnected={onConnected} onLink={setLink} />

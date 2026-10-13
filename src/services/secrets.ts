@@ -23,9 +23,9 @@ export function sharedEnv(): Promise<Record<string, string>> {
 	return getSetting<Record<string, string>>(SHARED, {});
 }
 
-/** What a repo's sandboxes get: the shared variables, with the repo's own over them. */
-export async function envFor(project: Project): Promise<Record<string, string>> {
-	return { ...(await sharedEnv()), ...project.env };
+/** What a repo's sandboxes get: the shared variables, with the repo's own over them; a chat's get the shared ones. */
+export async function envFor(project: Project | null): Promise<Record<string, string>> {
+	return { ...(await sharedEnv()), ...project?.env };
 }
 
 export type Guardrails = { hideSecrets: boolean };
@@ -43,7 +43,7 @@ export async function setGuardrails(next: Guardrails): Promise<Guardrails> {
 export async function secretsToHide(sessionId: string): Promise<Record<string, string>> {
 	const session = await getSessionRecord(sessionId);
 	const project = session && (await getProject(session.projectId));
-	return project && (await guardrails()).hideSecrets ? envFor(project) : {};
+	return session && (await guardrails()).hideSecrets ? envFor(project) : {};
 }
 
 /** Names only, never values: the shared variables and each repository's own. */

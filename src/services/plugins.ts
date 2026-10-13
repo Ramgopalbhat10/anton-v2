@@ -362,11 +362,14 @@ const primed = new Map<string, { repo: RepoContext; plugins: MountedSkill[] }>()
 export async function primeSkills(id: string): Promise<void> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) return;
-	const repo = await repoContext(project.repoFullName, session.baseSha).catch((error: unknown) => {
-		logProblem('warn', "Could not read the repository's skills", error, id);
-		return NO_CONTEXT;
-	});
+	if (!session || (session.projectId && !project)) return;
+	// A chat has no repository, so only the installed plugins' skills.
+	const repo = !project
+		? NO_CONTEXT
+		: await repoContext(project.repoFullName, session.baseSha).catch((error: unknown) => {
+				logProblem('warn', "Could not read the repository's skills", error, id);
+				return NO_CONTEXT;
+			});
 	const installed = marked(await listPlugins())
 		.filter((item) => item.active)
 		.map((item) => toMounted(item.skill));

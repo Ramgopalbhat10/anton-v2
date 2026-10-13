@@ -25,6 +25,7 @@ export type OutputsView = { source: Source; at: string | null; outputs: Array<Om
 
 type Context = {
 	id: string;
+	/** Empty for a chat, whose scratch folder starts empty. */
 	repo: string;
 	baseSha: string;
 	branch: string;
@@ -37,12 +38,12 @@ type Context = {
 async function context(id: string): Promise<Context> {
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new NotFoundError('Session not found');
+	if (!session || (session.projectId && !project)) throw new NotFoundError('Session not found');
 	const [machine, checkpoint] = await Promise.all([liveMachine(id), readCheckpoint(id)]);
 	const source: Source = machine ? 'live' : checkpoint ? 'saved' : 'base';
 	return {
 		id,
-		repo: project.repoFullName,
+		repo: project?.repoFullName ?? '',
 		baseSha: session.baseSha,
 		branch: session.branch,
 		baseBranch: session.baseBranch,
@@ -52,8 +53,9 @@ async function context(id: string): Promise<Context> {
 	};
 }
 
-/** The repo tree at a commit, cached forever because commits never change. */
+/** The repo tree at a commit, cached forever because commits never change; a chat's starts with none. */
 async function baseTree(repo: string, sha: string): Promise<string[]> {
+	if (!repo) return [];
 	const { store, git } = getProviders();
 	const key = `trees/${repo}/${sha}.json`;
 	const cached = await store.get(key);
@@ -100,6 +102,7 @@ async function savedOrBase(ctx: Context, path: string): Promise<Uint8Array> {
 	if (saved?.status === 'D') throw new NotFoundError('File was deleted');
 	if (saved?.blob) return (await readBlob(saved.blob)) ?? Promise.reject(new NotFoundError('Saved file is missing'));
 	if (saved) throw new InvalidInputError('File too large to preview');
+	if (!ctx.repo) throw new NotFoundError('File not found');
 	return getProviders().git.file(ctx.repo, ctx.baseSha, path);
 }
 

@@ -9,7 +9,7 @@ import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { api, branchLabel, isChat, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
 import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
@@ -468,7 +468,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
 	const messages = useMemo(() => conversation.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [conversation]);
-	const repo = session.data?.repo;
+	// A chat's messages carry no repository or branch under them.
+	const repo = session.data && !isChat(session.data) ? session.data.repo : undefined;
 	const branch = session.data ? branchLabel(session.data) : undefined;
 	const meta = useMemo(() => (repo && branch ? [repo, branch] : []), [repo, branch]);
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
@@ -509,8 +510,12 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						{messages.length === 0 && !busy ? (
 							<EmptyState
 								art={<SandboxArt className="w-full max-w-[300px]" label="ready" />}
-								title="Workspace is ready"
-								body="Describe the outcome you want. Anton works in the sandbox on the right and shows every step here."
+								title={session.data && isChat(session.data) ? 'Ready to chat' : 'Workspace is ready'}
+								body={
+									session.data && isChat(session.data)
+										? 'Ask anything, or describe a job on the web. Anton answers here, and starts a scratch sandbox only when it has to run something.'
+										: 'Describe the outcome you want. Anton works in the sandbox on the right and shows every step here.'
+								}
 								className="mt-[10vh]"
 							/>
 						) : null}

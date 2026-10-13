@@ -364,14 +364,14 @@ function Breakdown({
 					<CardSection ruled={false} className="pt-1">
 						<SplitBar
 							label={`${title}, share of this month's tokens`}
-							parts={ranked.slice(0, DATA_COLORS.length).map((row, index) => ({ key: row.key ?? '', label: label(row.key), value: row.tokens, color: DATA_COLORS[index] }))}
+							parts={ranked.slice(0, DATA_COLORS.length).map((row, index) => ({ key: String(row.key), label: label(row.key), value: row.tokens, color: DATA_COLORS[index] }))}
 							format={(_, share) => `${Math.round(share * 100)}%`}
 						/>
 					</CardSection>
 					<CardSection className="gap-0 py-1.5">
 						{ranked.map((row, index) => (
 							<ShareRow
-								key={row.key ?? ''}
+								key={String(row.key)}
 								label={label(row.key)}
 								sub={`${tokens(row.tokens)} tokens · ${totalTokens ? Math.round((row.tokens / totalTokens) * 100) : 0}%`}
 								share={row.tokens / top}
@@ -431,7 +431,7 @@ export function UsagePage() {
 						note="Each response counts against the model that gave it, so helper agents on their own model and the decision model show up on their own."
 						planOf={(key) => Boolean(catalog?.find((model) => model.id === key)?.subscription)}
 					/>
-					<Breakdown title="By repository" sub="this month" icon={Folder} rows={usage.data.byRepo} label={(key) => key ?? 'Removed repository'} empty="Nothing spent this month." />
+					<Breakdown title="By repository" sub="this month" icon={Folder} rows={usage.data.byRepo} label={(key) => (key === '' ? 'Chats' : (key ?? 'Removed repository'))} empty="Nothing spent this month." />
 				</>
 			) : null}
 		</>
