@@ -1,7 +1,7 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { PanelRight, Settings, Waypoints } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Status } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';
 import { ProjectFeed } from '@/components/project-feed';
@@ -52,13 +52,20 @@ export function ProjectPage() {
 	const asked = useRef(false);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 
-	const changePanel = (next: Partial<ProjectPanelState>) =>
-		setPanel((current) => {
-			const updated = { ...current, ...next };
-			saveProjectPanel(spaceId, updated);
-			if (!updated.open) setExpanded(false);
-			return updated;
-		});
+	// Kept to one identity each, so the memoized panel skips the renders the coordinator's stream causes.
+	const changePanel = useCallback(
+		(next: Partial<ProjectPanelState>) =>
+			setPanel((current) => {
+				const updated = { ...current, ...next };
+				saveProjectPanel(spaceId, updated);
+				if (!updated.open) setExpanded(false);
+				return updated;
+			}),
+		[spaceId],
+	);
+	const changeTab = useCallback((tab: ProjectTab) => changePanel({ tab }), [changePanel]);
+	const closePanel = useCallback(() => changePanel({ open: false }), [changePanel]);
+	const toggleExpanded = useCallback(() => setExpanded((current) => !current), []);
 
 	// A first message from the New project dialog goes to the coordinator once, then leaves the address.
 	useEffect(() => {
@@ -112,10 +119,10 @@ export function ProjectPage() {
 					space={data}
 					threads={threads}
 					tab={panel.tab}
-					onTab={(tab) => changePanel({ tab })}
+					onTab={changeTab}
 					expanded={expanded}
-					onToggleExpanded={() => setExpanded((current) => !current)}
-					onClose={() => changePanel({ open: false })}
+					onToggleExpanded={toggleExpanded}
+					onClose={closePanel}
 				/>
 			) : null}
 		</div>

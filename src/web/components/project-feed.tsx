@@ -2,7 +2,7 @@ import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAg
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Caption } from '@/components/instrument';
@@ -346,7 +346,8 @@ function blocks(parts: FlueConversationPart[]): Block[] {
 	return out;
 }
 
-function CoordinatorMessage({ message, live, space, threads }: { message: FlueConversationMessage; live: boolean; space: Space; threads: Session[] }) {
+/** Memoized: the coordinator's stream re-renders the feed with every chunk, and only the reply being written changes. */
+const CoordinatorMessage = memo(function CoordinatorMessage({ message, live, space, threads }: { message: FlueConversationMessage; live: boolean; space: Space; threads: Session[] }) {
 	const parts = message.parts.filter((part) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool');
 	if (parts.length === 0 && !live) return null;
 	return (
@@ -370,7 +371,17 @@ function CoordinatorMessage({ message, live, space, threads }: { message: FlueCo
 			) : null}
 		</div>
 	);
-}
+});
+
+/** Something you said, or the threads' reports; compared by its parts, as the client gives your messages a new object each chunk. */
+const UserEntry = memo(
+	function UserEntry({ message, threads }: { message: FlueConversationMessage; threads: Session[] }) {
+		const text = textOf(message);
+		const reports = useMemo(() => parseReports(text), [text]);
+		return reports ? <ReportRow reports={reports} threads={threads} /> : <Bubble text={text} />;
+	},
+	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads,
+);
 
 const STARTERS = ['What is running right now?', 'Split this into threads: ', 'Which pull requests are ready for review?'];
 
@@ -478,10 +489,23 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 }
 
 /** The coordinator's message box: what you type goes to the coordinator, which answers or starts threads. */
-function CoordinatorComposer({ space, agent, draft, onDraft, onNewThread }: { space: Space; agent: UseFlueAgentResult; draft: string; onDraft: (text: string) => void; onNewThread: () => void }) {
+const CoordinatorComposer = memo(function CoordinatorComposer({
+	space,
+	busy,
+	send,
+	draft,
+	onDraft,
+	onNewThread,
+}: {
+	space: Space;
+	busy: boolean;
+	send: UseFlueAgentResult['sendMessage'];
+	draft: string;
+	onDraft: (text: string) => void;
+	onNewThread: () => void;
+}) {
 	const queryClient = useQueryClient();
 	const models = useModels();
-	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const [notice, setNotice] = useState<string | null>(null);
@@ -507,7 +531,7 @@ function CoordinatorComposer({ space, agent, draft, onDraft, onNewThread }: { sp
 				setNotice(null);
 				try {
 					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
-					await agent.sendMessage(expandCommand(text, saved.commands, true));
+					await send(expandCommand(text, saved.commands, true));
 				} catch (error) {
 					onDraft(text);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
@@ -543,7 +567,7 @@ function CoordinatorComposer({ space, agent, draft, onDraft, onNewThread }: { sp
 			</div>
 		</form>
 	);
-}
+});
 
 /**
  * The coordinator's conversation: what you asked, what it answered, the
@@ -566,12 +590,17 @@ export function ProjectFeed({
 	const scroller = useRef<HTMLDivElement>(null);
 	const [draft, setDraft] = useState('');
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
-	const messages = agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'));
-	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+	const messages = useMemo(() => agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [agent.messages]);
+	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
+	const newThread = useCallback(() => setStarting(true), [setStarting]);
 
+	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
 	useEffect(() => {
-		const el = scroller.current;
-		if (el) el.scrollTop = el.scrollHeight;
+		const frame = requestAnimationFrame(() => {
+			const el = scroller.current;
+			if (el) el.scrollTop = el.scrollHeight;
+		});
+		return () => cancelAnimationFrame(frame);
 	}, [agent.messages, starting]);
 
 	return (
@@ -587,11 +616,7 @@ export function ProjectFeed({
 								</ActionRow>
 							);
 						}
-						if (message.role === 'user') {
-							const text = textOf(message);
-							const reports = parseReports(text);
-							return reports ? <ReportRow key={message.id} reports={reports} threads={threads} /> : <Bubble key={message.id} text={text} />;
-						}
+						if (message.role === 'user') return <UserEntry key={message.id} message={message} threads={threads} />;
 						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} />;
 					})}
 					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
@@ -608,7 +633,7 @@ export function ProjectFeed({
 					{starting ? <NewThreadForm space={space} onDone={() => setStarting(false)} /> : null}
 				</div>
 			</div>
-			<CoordinatorComposer space={space} agent={agent} draft={draft} onDraft={setDraft} onNewThread={() => setStarting(true)} />
+			<CoordinatorComposer space={space} busy={busy} send={agent.sendMessage} draft={draft} onDraft={setDraft} onNewThread={newThread} />
 		</div>
 	);
 }

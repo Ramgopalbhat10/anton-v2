@@ -1,7 +1,7 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, ListChecks } from 'lucide-react';
-import { createContext, Fragment, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { AgentsCard, delegationOf } from '@/components/subagents';
@@ -10,6 +10,7 @@ import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
+import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
@@ -66,7 +67,19 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 	return blocks;
 }
 
-function ThoughtRow({ part }: { part: ReasoningPart }) {
+/** True when two lists hold the same items in the same order, so a list rebuilt each render can still skip one. */
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+	return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+/*
+ * Every streamed chunk gives the reply being written a new object, and only
+ * that one: the parts and messages before it keep theirs. The pieces below
+ * are memoized on those objects, so a chunk re-renders the reply it lands in
+ * and not the whole conversation.
+ */
+
+const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	const [open, setOpen] = useState(false);
 	const words = part.text.trim().split(/\s+/).filter(Boolean).length;
 	return (
@@ -84,9 +97,9 @@ function ThoughtRow({ part }: { part: ReasoningPart }) {
 			) : null}
 		</>
 	);
-}
+});
 
-function ToolRow({ part }: { part: ToolPart }) {
+const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const { icon, body } = describeTool(part);
 	const failed = part.state === 'output-error';
 	const script = part.toolName === 'run_script';
@@ -168,7 +181,7 @@ function ToolRow({ part }: { part: ToolPart }) {
 			)}
 		</>
 	);
-}
+});
 
 /** What kind of work a step was, for the strip on a steps card. */
 function stepTone(step: Step): string {
@@ -203,7 +216,7 @@ function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 /** A step's mark on the card's rail: it sits over the line so the line runs between steps. */
 const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-(--card-bg) ring-[3px] ring-(--card-bg)';
 
-function StepsCard({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
+function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
 	const detailsId = useId();
 	useEffect(() => setOpen(live), [live]);
@@ -238,8 +251,11 @@ function StepsCard({ steps, live, duration }: { steps: Step[]; live: boolean; du
 	);
 }
 
+/** Its steps list is rebuilt each render; the card re-renders only when a step in it changed. */
+const StepsCard = memo(StepsCardView, (prev, next) => prev.live === next.live && prev.duration === next.duration && sameItems(prev.steps, next.steps));
+
 /** A proposed plan, shown in full. */
-function PlanCard({ part }: { part: ToolPart }) {
+const PlanCard = memo(function PlanCard({ part }: { part: ToolPart }) {
 	const plan = field(part.input, 'plan');
 	return (
 		<div className="in-card overflow-hidden">
@@ -253,7 +269,7 @@ function PlanCard({ part }: { part: ToolPart }) {
 			<div className="px-4 pt-3 pb-3.5">{plan ? <Markdown text={plan} /> : <Spinner size={12} />}</div>
 		</div>
 	);
-}
+});
 
 /**
  * While plan mode is on and the agent has answered, approving turns plan
@@ -287,7 +303,10 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 
 type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
 
-function UserMessage({ message, meta }: { message: FlueConversationMessage; meta: string[] }) {
+/** Your message gets a new object each chunk (the client gives it back its local id), so it compares by its parts. */
+const UserMessage = memo(UserMessageView, (prev, next) => prev.message.parts === next.message.parts && sameItems(prev.meta, next.meta));
+
+function UserMessageView({ message, meta }: { message: FlueConversationMessage; meta: string[] }) {
 	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
@@ -371,8 +390,8 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-function AssistantMessage({ message, live, last }: { message: FlueConversationMessage; live: boolean; last: boolean }) {
-	const blocks = toBlocks(message.parts);
+const AssistantMessage = memo(function AssistantMessage({ message, live, last }: { message: FlueConversationMessage; live: boolean; last: boolean }) {
+	const blocks = useMemo(() => toBlocks(message.parts), [message.parts]);
 	const sessionId = useContext(SessionId);
 	const usage = usageOf(message);
 	// This is the whole response's wall time, including model thinking, not tool execution time.
@@ -395,7 +414,7 @@ function AssistantMessage({ message, live, last }: { message: FlueConversationMe
 				) : block.kind === 'plan' ? (
 					<PlanCard key={block.part.toolCallId} part={block.part} />
 				) : block.kind === 'agents' ? (
-					<AgentsCard key={block.calls[0].toolCallId} sessionId={sessionId} calls={block.calls.map(delegationOf)} />
+					<AgentsBlock key={block.calls[0].toolCallId} sessionId={sessionId} calls={block.calls} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
 				),
@@ -409,7 +428,16 @@ function AssistantMessage({ message, live, last }: { message: FlueConversationMe
 			) : null}
 		</div>
 	);
-}
+});
+
+/** A batch of subagent calls; its list is rebuilt each render, so it re-renders only when one of its calls changed. */
+const AgentsBlock = memo(
+	function AgentsBlock({ sessionId, calls }: { sessionId: string; calls: ToolPart[] }) {
+		const delegations = useMemo(() => calls.map(delegationOf), [calls]);
+		return <AgentsCard sessionId={sessionId} calls={delegations} />;
+	},
+	(prev, next) => prev.sessionId === next.sessionId && sameItems(prev.calls, next.calls),
+);
 
 function Notice({ children }: { children: ReactNode }) {
 	return (
@@ -420,23 +448,27 @@ function Notice({ children }: { children: ReactNode }) {
 	);
 }
 
-function SettlementNotice({ message }: { message: FlueConversationMessage }) {
+const SettlementNotice = memo(function SettlementNotice({ message }: { message: FlueConversationMessage }) {
 	const text = message.parts
 		.map((part) => (part.type === 'text' ? part.text : ''))
 		.join('')
 		.trim();
 	const verb = message.settlement?.outcome === 'aborted' ? 'was stopped' : 'failed';
 	return <Notice>{text || `The agent turn ${verb}. Send the message again to retry.`}</Notice>;
-}
+});
 
 export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlueAgentResult }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const scroller = useRef<HTMLDivElement>(null);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
-	const messages = agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'));
-	const meta = session.data ? [session.data.repo, branchLabel(session.data)] : [];
-	const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
+	const conversation = useDeferredValue(agent.messages);
+	const messages = useMemo(() => conversation.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [conversation]);
+	const repo = session.data?.repo;
+	const branch = session.data ? branchLabel(session.data) : undefined;
+	const meta = useMemo(() => (repo && branch ? [repo, branch] : []), [repo, branch]);
+	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
 	const planned = Boolean(session.data?.planMode) && !busy && messages[messages.length - 1]?.role === 'assistant';
 
 	useEffect(() => {
@@ -445,10 +477,21 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		if (prompt) void agent.sendMessage(prompt);
 	}, [agent.historyReady, agent.sendMessage, sessionId]);
 
+	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
 	useEffect(() => {
-		const el = scroller.current;
-		if (el) el.scrollTop = el.scrollHeight;
-	}, [agent.messages]);
+		const frame = requestAnimationFrame(() => {
+			const el = scroller.current;
+			if (el) el.scrollTop = el.scrollHeight;
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [conversation]);
+
+	const onSend = useCallback(
+		(text: string, images: ImageAttachment[]) =>
+			agent.sendMessage(text, { images: images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename })) }),
+		[agent.sendMessage],
+	);
+	const onStop = useCallback(() => api.stopAgent(sessionId), [sessionId]);
 
 	return (
 		<SessionId.Provider value={sessionId}>
@@ -493,16 +536,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 					</div>
 				</div>
 				{planned ? <ApproveBar sessionId={sessionId} send={(text) => agent.sendMessage(text)} /> : null}
-				<Composer
-					busy={busy}
-					onSend={(text, images) =>
-						agent.sendMessage(text, {
-							images: images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename })),
-						})
-					}
-					onStop={() => api.stopAgent(sessionId)}
-					sessionId={sessionId}
-				/>
+				<Composer busy={busy} onSend={onSend} onStop={onStop} sessionId={sessionId} />
 			</div>
 		</SessionId.Provider>
 	);

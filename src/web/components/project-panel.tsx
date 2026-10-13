@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
@@ -346,7 +346,7 @@ function Routines({ space }: { space: Space }) {
  * Library, pull requests and routines. A thread's own panels replace it when
  * a thread is selected.
  */
-export function ProjectPanel({
+export const ProjectPanel = memo(function ProjectPanel({
 	space,
 	threads,
 	tab,
@@ -394,4 +394,4 @@ export function ProjectPanel({
 			</div>
 		</WorkspacePane>
 	);
-}
+});

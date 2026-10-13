@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
 import { Markdown } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
@@ -121,6 +121,26 @@ export function Branch({
 	);
 }
 
+/** True when two reads of a file returned the same bytes. */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+	if (a.length !== b.length) return false;
+	for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
+	return true;
+}
+
+/**
+ * A number for each distinct read of a file. The highlighted copy is kept by
+ * it, so a refetch that brings the same bytes reuses the colours it has
+ * rather than highlighting the file again and caching another copy.
+ */
+const versions = new WeakMap<Uint8Array, number>();
+let nextVersion = 0;
+function versionOf(bytes: Uint8Array): number {
+	let version = versions.get(bytes);
+	if (version === undefined) versions.set(bytes, (version = nextVersion++));
+	return version;
+}
+
 /** Decodes a file for display, or returns null for binary content. */
 function asText(bytes: Uint8Array): string | null {
 	if (bytes.subarray(0, 8000).includes(0)) return null;
@@ -201,8 +221,10 @@ export function FileView({ path, queryKey, read, preview: chosen }: { path: stri
 	const [own, setOwn] = useState(true);
 	const preview = chosen ?? own;
 	const [imageUrl, setImageUrl] = useState('');
-	const file = useQuery({ queryKey, queryFn: read });
-	const contents = file.data && !imageType ? asText(file.data) : '';
+	// Tool calls refetch open files; the same bytes keep the same array, so nothing below re-renders or re-highlights.
+	const file = useQuery({ queryKey, queryFn: read, structuralSharing: (old, next) => (old instanceof Uint8Array && next instanceof Uint8Array && sameBytes(old, next) ? old : next) });
+	const contents = useMemo(() => (file.data && !imageType ? asText(file.data) : ''), [file.data, imageType]);
+	const lines = useMemo(() => (contents ? contents.split('\n') : []), [contents]);
 	useEffect(() => {
 		if (!file.data || !imageType) return;
 		const url = URL.createObjectURL(new Blob([new Uint8Array(file.data)], { type: imageType }));
@@ -210,10 +232,12 @@ export function FileView({ path, queryKey, read, preview: chosen }: { path: stri
 		return () => URL.revokeObjectURL(url);
 	}, [file.data, imageType]);
 	const colored = useQuery({
-		queryKey: ['highlight', ...queryKey, file.dataUpdatedAt],
+		queryKey: ['highlight', ...queryKey, file.data ? versionOf(file.data) : -1],
 		queryFn: () => highlight(contents ?? '', path),
 		enabled: Boolean(contents) && !imageType && (!markdown || !preview),
 		staleTime: Number.POSITIVE_INFINITY,
+		// An earlier version's colours are only wanted again while the file shows it.
+		gcTime: 10_000,
 	});
 	const tokens = colored.data ?? null;
 	return (
@@ -238,7 +262,7 @@ export function FileView({ path, queryKey, read, preview: chosen }: { path: stri
 				) : (
 					<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[19px]">
 						<div className="min-w-max">
-							{contents.split('\n').map((line, index) => (
+							{lines.map((line, index) => (
 								<div key={index} className="flex">
 									<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{index + 1}</span>
 									<span className="pr-3 pl-3 whitespace-pre text-(--text-secondary)">

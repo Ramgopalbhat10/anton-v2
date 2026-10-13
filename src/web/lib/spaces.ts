@@ -1,21 +1,35 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Clock, GitMerge, GitPullRequest, type LucideIcon, MessageCircleQuestion, Moon } from 'lucide-react';
 import type { Tone } from '@/components/instrument';
-import { api, SAFETY_NET_MS, type Session, THREAD_STATES, type ThreadState } from '@/lib/api';
+import { useCallback, useMemo } from 'react';
+import { api, SAFETY_NET_MS, type Session, type Space, THREAD_STATES, type ThreadState } from '@/lib/api';
 
 /** Every project, newest activity first. */
 export function useSpaces() {
 	return useQuery({ queryKey: ['spaces'], queryFn: api.spaces, refetchInterval: SAFETY_NET_MS });
 }
 
+/** One project's name, for a row that shows it: the row re-renders only when that name changes, not whenever the list refetches. */
+export function useSpaceName(id: string | null | undefined): string | undefined {
+	const select = useCallback((data: { spaces: Space[] }) => (id ? data.spaces.find((space) => space.id === id)?.name : undefined), [id]);
+	return useQuery({ queryKey: ['spaces'], queryFn: api.spaces, refetchInterval: SAFETY_NET_MS, select, enabled: Boolean(id) }).data;
+}
+
 export function useSpace(id: string) {
 	return useQuery({ queryKey: ['space', id], queryFn: () => api.space(id), refetchInterval: SAFETY_NET_MS });
 }
 
-/** A project's threads, newest first, from the task list every page already keeps current. */
+const NO_THREADS: Session[] = [];
+
+/**
+ * A project's threads, newest first, from the task list every page already
+ * keeps current. The list keeps its identity until the tasks change, so the
+ * panels and cards it feeds can skip renders.
+ */
 export function useThreads(spaceId: string) {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
-	const threads = (sessions.data?.sessions ?? []).filter((session) => session.spaceId === spaceId);
+	const all = sessions.data?.sessions;
+	const threads = useMemo(() => all?.filter((session) => session.spaceId === spaceId) ?? NO_THREADS, [all, spaceId]);
 	return { threads, isPending: sessions.isPending, isError: sessions.isError };
 }
 
