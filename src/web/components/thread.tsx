@@ -1,6 +1,6 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CornerDownRight, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
@@ -9,7 +9,7 @@ import { Composer } from '@/components/composer';
 import { Markdown } from '@/components/markdown';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, isChat, outputUrl, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
 import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { takePendingPrompt } from '@/lib/pending-prompt';
@@ -102,6 +102,32 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	);
 });
 
+/** The calls a run_script program made, read from Anton (the runtime only has the program and its result); live while it runs. */
+function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean): ScriptCall[] {
+	const { data } = useQuery({ queryKey: ['scripts', sessionId], queryFn: () => api.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
+	return data?.scripts[toolCallId] ?? [];
+}
+
+/** Each call of a program on its own line: the tool, its input, and how long it took or that it failed. */
+function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
+	return (
+		<ul className="flex min-w-0 flex-col gap-0.5 pt-1 pr-1 pl-6">
+			{calls.map((call, index) => (
+				<li key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] leading-[18px] text-(--text-tertiary)">
+					{call.state === 'running' ? <Spinner size={10} /> : <Icon icon={call.state === 'failed' ? CircleAlert : CornerDownRight} size={10} className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'} />}
+					<span className={cn('shrink-0', call.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{call.tool.replace(/^mcp__/, '').replace('__', ' · ')}</span>
+					<span className="min-w-0 flex-1 truncate" title={call.input}>
+						{call.input}
+					</span>
+					{call.durationMs !== null ? (
+						<span className="in-num shrink-0 text-[10.5px] text-(--text-disabled)">{call.durationMs < 1000 ? `${call.durationMs}ms` : elapsed(call.durationMs)}</span>
+					) : null}
+				</li>
+			))}
+		</ul>
+	);
+}
+
 const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const { icon, body } = describeTool(part);
 	const failed = part.state === 'output-error';
@@ -114,6 +140,7 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
 	const command = script ? field(part.input, 'code').trim() : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
+	const calls = useScriptCalls(sessionId, part.toolCallId, script);
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
 	const heading = (
 		<>
@@ -141,10 +168,16 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 				) : null}
 			</span>
 			<span className="min-w-0 flex-1 truncate">{body}</span>
+			{script && calls.length ? (
+				<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">
+					{calls.length} {calls.length === 1 ? 'call' : 'calls'}
+				</span>
+			) : null}
 		</>
 	);
 	const details = (
 		<>
+			{script && calls.length ? <ScriptCalls calls={calls} /> : null}
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
 			{image ? (
 				<a href={outputUrl(sessionId, image)} target="_blank" rel="noreferrer" className="mx-1 mb-1 ml-6 block w-fit">

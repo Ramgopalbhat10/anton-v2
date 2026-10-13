@@ -12,10 +12,10 @@ import { useProjects } from '@/lib/projects';
 export type Variable = { name: string; value: string; stored: boolean };
 
 /** An MCP server row; `token` is only what was typed, since a stored token is never sent back. */
-type Server = { name: string; url: string; token: string; hasAuth: boolean; tools: string };
+type Server = { name: string; url: string; token: string; hasAuth: boolean; tools: string; codeMode: boolean };
 
 const toServers = (project: Project): Server[] =>
-	project.mcpServers.map((server) => ({ ...server, token: '', tools: server.tools.join(', ') }));
+	project.mcpServers.map((server) => ({ ...server, token: '', tools: server.tools.join(', '), codeMode: server.codeMode !== false }));
 
 const FIELD = WELL_FIELD;
 
@@ -57,6 +57,7 @@ function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps,
 			// Null keeps a stored token; an empty one says there is none.
 			auth: row.token ? row.token : row.hasAuth ? null : '',
 			tools: row.tools.split(/[\s,]+/).filter(Boolean),
+			...(row.codeMode ? {} : { codeMode: false }),
 		}));
 	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, mcpServers };
 }
@@ -103,7 +104,7 @@ export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange
 function ServersEditor({ rows, onChange }: { rows: Server[]; onChange: (rows: Server[]) => void }) {
 	const update = (index: number, patch: Partial<Server>) => onChange(rows.map((row, at) => (at === index ? { ...row, ...patch } : row)));
 	return (
-		<div className="flex flex-col gap-2">
+		<div className="flex flex-col gap-3">
 			{rows.map((row, index) => (
 				<div key={index} className="flex items-start gap-1.5">
 					<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-1.5">
@@ -137,6 +138,12 @@ function ServersEditor({ rows, onChange }: { rows: Server[]; onChange: (rows: Se
 							aria-label={`Tools of ${row.name || 'the server'}`}
 							className={`${FIELD} font-mono`}
 						/>
+						<Switch
+							checked={row.codeMode}
+							onChange={(codeMode) => update(index, { codeMode })}
+							label={<span className="text-[12px] text-(--text-secondary)">Through code mode</span>}
+							className="col-span-2 self-start py-0.5"
+						/>
 					</div>
 					<IconBtn icon={X} size="sm" label="Remove server" onClick={() => onChange(rows.filter((_, at) => at !== index))} />
 				</div>
@@ -146,7 +153,7 @@ function ServersEditor({ rows, onChange }: { rows: Server[]; onChange: (rows: Se
 				variant="ghost"
 				icon={Plus}
 				className="self-start"
-				onClick={() => onChange([...rows, { name: '', url: '', token: '', hasAuth: false, tools: '' }])}
+				onClick={() => onChange([...rows, { name: '', url: '', token: '', hasAuth: false, tools: '', codeMode: true }])}
 			>
 				Add a server
 			</Btn>
@@ -239,7 +246,7 @@ function SettingsForm({ project }: { project: Project }) {
 				</Section>
 				<Section
 					title="MCP servers"
-					help="Remote MCP servers the agent can call, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those."
+					help="Remote MCP servers the agent can call, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, which costs a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
 				>
 					<ServersEditor rows={servers} onChange={setServers} />
 				</Section>

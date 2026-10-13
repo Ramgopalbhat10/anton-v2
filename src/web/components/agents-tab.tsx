@@ -341,9 +341,26 @@ function Sureness({ p }: { p: number | null }) {
 	return <span className={cn('in-num shrink-0 text-[10.5px]', p >= 0.9 ? 'text-(--success-text)' : p >= 0.7 ? 'text-(--text-tertiary)' : 'text-(--warning-text)')}>{p.toFixed(2)}</span>;
 }
 
-/** What the decision model did inside a step: each action with how sure it was, how it ended, and what it cost. */
+/**
+ * What the decision model did inside a step: each action with how sure it was, how it ended, and what it cost.
+ * A run_script step lists the calls its program made instead, with the decision model's share if it asked any.
+ */
 function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	const outcome = detail.outcome ? OUTCOME[detail.outcome] : null;
+	if (detail.script) {
+		return (
+			<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
+				{detail.actions.map((action, index) => (
+					<span key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-(--text-tertiary)">
+						<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
+						<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
+							{action.what}
+						</span>
+					</span>
+				))}
+			</div>
+		);
+	}
 	return (
 		<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
 			{detail.actions.map((action, index) => (

@@ -649,6 +649,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
+	assert.equal(before.codeMode, true, 'code mode is on unless turned off');
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
 	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
 
@@ -1048,8 +1049,9 @@ test('run_script runs a program over the read-only repo and the decision model, 
 	try {
 		const project = await addProject('acme/demo');
 		const session = await sessions.createSession({ projectId: project.id, title: 'Scripted' });
-		assert.match(scriptToolDescription(session.id, false), /list_files[\s\S]*read_file[\s\S]*search_code[\s\S]*decide/);
-		assert.doesNotMatch(scriptToolDescription(session.id, true), /list_files/, 'a workspace has its own shell for files');
+		assert.match(scriptToolDescription(session.id, { repo: true, mcp: true }), /list_files[\s\S]*read_file[\s\S]*search_code[\s\S]*decide/);
+		assert.doesNotMatch(scriptToolDescription(session.id, { repo: false, mcp: true }), /list_files/, 'a workspace has its own shell for files');
+		const seen: Array<Array<{ tool: string; state: string }>> = [];
 		const output = await runScript(
 			session.id,
 			`const paths = await tools.list_files({ glob: '*.md' });
@@ -1057,16 +1059,134 @@ test('run_script runs a program over the read-only repo and the decision model, 
 			const answers = await decide({ file: paths[0] }, { docs: { type: 'yes-no', instructions: 'Is this documentation?' } });
 			console.log('read', texts.length);
 			return { paths, first: texts[0].trim(), docs: answers.docs.yes };`,
-			{ workspace: false },
+			{ repo: true, mcp: false, onCalls: (calls) => seen.push(calls) },
 		);
 		assert.match(output, /^read 1\n/);
 		assert.deepEqual(JSON.parse(output.slice(output.indexOf('\n') + 1)), { paths: ['README.md'], first: '# demo', docs: 0.03 });
 		assert.equal(asked.length, 1);
-		assert.match(await runScript(session.id, 'await tools.read_file({ path: "missing.ts" });', { workspace: false }), /The program failed[\s\S]*does not exist/);
-		assert.match(await runScript(session.id, 'return await tools.read_file({ path: "README.md" });', { workspace: true }), /read_file does not exist/);
+		// Every call is told as it starts and as it ends, in the order the program made them.
+		assert.deepEqual(
+			seen.at(-1)?.map(({ tool, state }) => ({ tool, state })),
+			[
+				{ tool: 'list_files', state: 'done' },
+				{ tool: 'read_file', state: 'done' },
+				{ tool: 'decide', state: 'done' },
+			],
+		);
+		assert.ok(seen.some((calls) => calls.some((call) => call.state === 'running')));
+		assert.match(await runScript(session.id, 'await tools.read_file({ path: "missing.ts" });', { repo: true, mcp: false }), /The program failed[\s\S]*does not exist/);
+		assert.match(await runScript(session.id, 'return await tools.read_file({ path: "README.md" });', { repo: false, mcp: true }), /read_file does not exist/);
 		assert.ok(!(await local.running()).has(session.id), 'no sandbox was started');
 	} finally {
 		setProviders(providers);
+	}
+});
+
+test('with code mode on, a repo MCP server is reached only through run_script: listed a line per tool, searched, called, and kept connected', async () => {
+	const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
+	const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+	const { z } = await import('zod');
+	const { directServer, runScript, scriptServers, scriptToolDescription } = await import('../src/services/code-mode.ts');
+	const { primeAgent } = await import('../src/services/agent-runner.ts');
+	const { resetMcpToolsForTests } = await import('../src/services/mcp-tools.ts');
+	const { forgetScriptCalls, noteScriptCalls, scriptCalls } = await import('../src/services/script-runs.ts');
+	let connects = 0;
+	const tokens: string[] = [];
+	// A stateless MCP server: one server and transport per request, as a remote one may be.
+	const http = createServer(async (request, response) => {
+		tokens.push(String(request.headers.authorization ?? ''));
+		if (request.method === 'POST') {
+			const chunks: Buffer[] = [];
+			for await (const chunk of request) chunks.push(chunk as Buffer);
+			const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (body.method === 'initialize') connects += 1;
+			const server = new McpServer({ name: 'tracker', version: '1' });
+			server.registerTool('find_issues', { description: 'Find issues whose title matches words.\nLonger help.', inputSchema: { query: z.string().describe('Words to match') } }, async ({ query }) => ({
+				content: [{ type: 'text', text: `issue 7: ${query}` }],
+			}));
+			server.registerTool('issue_picture', { description: 'A picture of an issue.', inputSchema: { id: z.number() } }, async () => ({
+				content: [
+					{ type: 'text', text: 'picture follows' },
+					{ type: 'image', data: 'AAAA', mimeType: 'image/png' },
+				],
+			}));
+			server.registerTool('broken', { description: 'Always fails.' }, async () => ({ content: [{ type: 'text', text: 'tracker is down' }], isError: true }));
+			const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+			response.on('close', () => void transport.close());
+			await server.connect(transport);
+			await transport.handleRequest(request, response, body);
+			return;
+		}
+		response.writeHead(405).end();
+	});
+	await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+	const url = `http://127.0.0.1:${(http.address() as AddressInfo).port}/mcp`;
+	let sessionId = '';
+	try {
+		const project = await addProject('acme/tracker');
+		const stored = (await getProject(project.id))!;
+		await updateSettings(project.id, {
+			...stored,
+			env: {},
+			mcpServers: [
+				{ name: 'tracker', url, auth: 'tracker-token', tools: [] },
+				{ name: 'docs', url: `${url}?direct`, auth: null, tools: [], codeMode: false },
+			],
+		});
+		const session = await sessions.createSession({ projectId: project.id, title: 'Tracker' });
+		sessionId = session.id;
+		await primeAgent(session.id);
+		const tracker = scriptServers(session.id).find((server) => server.name === 'tracker')!;
+		assert.ok(tracker, 'the tracker is reached from programs');
+		assert.ok(!scriptServers(session.id).some((server) => server.name === 'docs'), 'a server that opted out is not');
+		assert.equal(directServer(tracker, true), false, 'the agent does not connect to it itself');
+		assert.equal(directServer(tracker, false), true, 'unless code mode is off');
+		assert.equal(directServer({ name: 'docs', url, auth: null, tools: [], codeMode: false }, true), true);
+
+		// Its tools were listed before the agent rendered: one line each, with the start of their description.
+		const description = scriptToolDescription(session.id, { repo: true, mcp: true });
+		assert.match(description, /tracker \(3 tools\):/);
+		assert.match(description, /- tools\.mcp__tracker__find_issues\(args: \{ query: string; \}\): Promise<string> \/\/ Find issues whose title matches words\.\n/);
+		assert.doesNotMatch(description, /Longer help|Words to match/, 'a listing is one line');
+		assert.match(description, /search_tools\(query: string/);
+		assert.doesNotMatch(description, /docs/);
+
+		const calls: Array<{ tool: string; state: string }> = [];
+		const output = await runScript(
+			session.id,
+			`const [found] = await search_tools('issues matching words');
+			const issues = await Promise.all(['crash', 'slow'].map((query) => tools.mcp__tracker__find_issues({ query })));
+			const picture = await tools.mcp__tracker__issue_picture({ id: 7 });
+			let failure = '';
+			try { await tools.mcp__tracker__broken({}); } catch (error) { failure = error.message; }
+			return { found: found.name, declared: found.declaration.includes('Words to match'), issues, picture, failure };`,
+			{ repo: true, mcp: true, onCalls: (list) => calls.splice(0, calls.length, ...list) },
+		);
+		assert.deepEqual(JSON.parse(output), {
+			found: 'mcp__tracker__find_issues',
+			declared: true,
+			issues: ['issue 7: crash', 'issue 7: slow'],
+			picture: 'picture follows\n[image/png image left out: a program cannot pass it on]',
+			failure: 'tracker is down',
+		});
+		assert.deepEqual(
+			calls.map(({ tool, state }) => `${tool} ${state}`),
+			['mcp__tracker__find_issues done', 'mcp__tracker__find_issues done', 'mcp__tracker__issue_picture done', 'mcp__tracker__broken failed'],
+		);
+		assert.ok(tokens.every((token) => token === 'Bearer tracker-token'), 'the token goes to its server as a bearer header');
+		const before = connects;
+		await runScript(session.id, 'return await tools.mcp__tracker__find_issues({ query: "again" });', { repo: false, mcp: true });
+		assert.equal(connects, before, 'the next program reuses the connection');
+
+		// The thread reads each program's calls back, inputs cut to a line.
+		await noteScriptCalls(session.id, 'call-1', [{ tool: 'mcp__tracker__find_issues', input: { query: 'x'.repeat(500) } as never, state: 'done', durationMs: 12 }]);
+		const [kept] = (await scriptCalls(session.id))['call-1'];
+		assert.equal(kept.tool, 'mcp__tracker__find_issues');
+		assert.ok(kept.input.startsWith('{"query":"xxx') && kept.input.length <= 160);
+	} finally {
+		if (sessionId) await forgetScriptCalls(sessionId);
+		await resetMcpToolsForTests();
+		await new Promise((resolve) => http.close(resolve));
 	}
 });
 

@@ -5,6 +5,7 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
 import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent } from './general.ts';
+import { warmServerTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
 import { isRestoring } from './restore.ts';
@@ -25,6 +26,11 @@ function webServer(repoServers: McpServer[]): McpServer[] {
 }
 
 const WEB = 'web';
+
+/** The built-in web search server: cheap to list, so its two tools stay direct even with code mode on. */
+export function isWebServer(server: McpServer): boolean {
+	return server.name === WEB && server.url === config.web.mcpUrl;
+}
 
 /** The MCP servers a task's agent connects to: web search, then its repo's own. */
 export function mcpServersFor(id: string): McpServer[] {
@@ -71,7 +77,7 @@ export function isPlanning(id: string): boolean {
 /** The General settings the agents read while they render: whether the coder gets run_script, and each helper agent's model (null for the task's own). */
 export type AgentSettings = { codeMode: boolean; models: Record<HelperAgent, ModelChoice | null> };
 
-let agentSettings: AgentSettings = { codeMode: false, models: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } };
+let agentSettings: AgentSettings = { codeMode: true, models: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } };
 
 export const agentSettingsNow = (): AgentSettings => agentSettings;
 
@@ -87,13 +93,20 @@ async function primeAgentSettings(): Promise<void> {
 	agentSettings = { codeMode, models: models as AgentSettings['models'] };
 }
 
-/** Loads what the agent reads while it renders: the task's model, its repo's MCP servers, notes and skills, whether it has a machine and whether it is planning. */
-export async function primeAgent(id: string): Promise<void> {
+/** How long a message waits for its repo's MCP servers to list their tools, so run_script can describe them. */
+const WARM_MS = 5000;
+
+/**
+ * Loads what the agent reads while it renders: the task's model, its repo's MCP servers (and, with code mode on,
+ * their tool lists), notes and skills, whether it has a machine and whether it is planning.
+ */
+export async function primeAgent(id: string, { warm = true }: { warm?: boolean } = {}): Promise<void> {
 	await primeModel(id);
 	await primeAgentSettings();
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
 	servers.set(id, project?.mcpServers ?? []);
+	if (warm && agentSettings.codeMode) await warmServerTools(mcpServersFor(id).filter((server) => server.codeMode !== false && !isWebServer(server)), WARM_MS);
 	memories.set(id, project?.memory ?? '');
 	const space = session?.spaceId ? await getSpace(session.spaceId) : null;
 	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
@@ -111,7 +124,8 @@ export async function primeAgent(id: string): Promise<void> {
  * at startup, which reach the agent without passing through a prompt.
  */
 export async function primeAllAgents(): Promise<void> {
-	for (const session of await listSessionRecords()) await primeAgent(session.id).catch(() => undefined);
+	// Tool lists are read when a message needs them, not for every task at startup.
+	for (const session of await listSessionRecords()) await primeAgent(session.id, { warm: false }).catch(() => undefined);
 	await primeAllCoordinators().catch(() => undefined);
 }
 

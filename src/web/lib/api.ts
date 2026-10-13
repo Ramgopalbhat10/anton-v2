@@ -190,7 +190,8 @@ export type CheckpointSummary = { at: string; files: number; added: number | nul
 
 /** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
 /** An MCP server the agent can use; its token is never sent back, only whether it has one. */
-export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean };
+/** `codeMode: false` keeps the server's tools in the agent's tool list rather than only in run_script. */
+export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; codeMode?: boolean };
 
 export type ProjectSettings = {
 	envKeys: string[];
@@ -429,7 +430,9 @@ export type PickedElement = {
 
 /** One tool call a subagent made, as the Agents panel shows it. */
 /** What a browser step the decision model drove did inside it: each action, how sure the model was, and what it cost. */
-export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number };
+/** One call a run_script program made, as the thread lists it. */
+export type ScriptCall = { tool: string; input: string; state: 'running' | 'done' | 'failed'; durationMs: number | null };
+export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number; script?: boolean };
 export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null; detail?: StepDetail };
 /** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
 /** The agent's latest todo list for a task (src/services/todos.ts); each one it writes replaces the last. */
@@ -569,6 +572,7 @@ export const api = {
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
+	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),
 	todos: (id: string) => json<{ list: TodoList | null }>(`/api/sessions/${id}/todos`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
 	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),

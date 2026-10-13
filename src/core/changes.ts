@@ -1,12 +1,12 @@
 import { EventEmitter } from 'node:events';
 
 /**
- * What changed, so open pages refetch only that: the task list, one task's state, files, browser, computer, subagents or todo list,
+ * What changed, so open pages refetch only that: the task list, one task's state, files, browser, computer, subagents, todo list or script calls,
  * a subscription sign-in, the pinned models, or a project's list, threads, files or settings.
  */
 export type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' }
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }

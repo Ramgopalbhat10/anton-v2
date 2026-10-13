@@ -30,6 +30,8 @@ export type StepDetail = {
 	actions: Array<{ what: string; p: number | null; failed?: boolean }>;
 	decisions: number;
 	cost: number;
+	/** The step was a run_script program, and the actions are the calls it made. */
+	script?: boolean;
 };
 
 export type SubagentRun = {

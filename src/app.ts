@@ -58,6 +58,7 @@ import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.t
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
 import { recordSubagentEvent, subagentRuns } from './services/subagent-runs.ts';
+import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
@@ -392,6 +393,7 @@ app.put('/api/projects/:id/settings', async (c) => {
 							url: v.pipe(v.string(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
 							auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
 							tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
+							codeMode: v.optional(v.boolean()),
 						}),
 					),
 					v.maxLength(10),
@@ -608,6 +610,10 @@ app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await comp
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
+});
+app.get('/api/sessions/:id/scripts', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ scripts: await scriptCalls(id) });
 });
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
