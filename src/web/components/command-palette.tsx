@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, FolderKanban, GitPullRequest, List, Loader, type LucideIcon, Plus, Search } from 'lucide-react';
+import { CircleCheck, FolderKanban, GitPullRequest, List, Loader, type LucideIcon, Plus, Search, Shapes } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SECTIONS } from '@/components/settings/sections';
 import { Icon, Kbd } from '@/components/signal';
@@ -17,6 +17,7 @@ const PAGES = [
 	{ to: '/tasks', label: 'Tasks', icon: List },
 	{ to: '/reviews', label: 'Reviews', icon: GitPullRequest },
 	{ to: '/projects', label: 'Projects', icon: FolderKanban },
+	{ to: '/artifacts', label: 'Artifacts', icon: Shapes },
 ] as const;
 
 /** ⌘K palette: describe a task to start it, or jump to an existing one. */

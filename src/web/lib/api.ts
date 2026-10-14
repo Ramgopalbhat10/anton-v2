@@ -477,6 +477,8 @@ export type PushView = { publicKey: string; devices: PushDevice[]; finished: boo
 export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 export type Output = { path: string; size: number; mtimeMs: number };
+/** Something the agent made in a task, for the Artifacts page (src/services/artifacts.ts). */
+export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean } };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
 async function request(input: string, init?: RequestInit): Promise<Response> {
@@ -624,6 +626,7 @@ export const api = {
 	file: async (id: string, path: string) =>
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
+	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
 	/** Adds a file to the task's Library, under uploads/. */
 	uploadOutput: (id: string, file: File) =>

@@ -1,14 +1,18 @@
-import { Maximize2 } from 'lucide-react';
-import { memo, useEffect, useRef, useState } from 'react';
+import { Link } from '@tanstack/react-router';
+import { ExternalLink, Maximize2 } from 'lucide-react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/signal';
 import { addToComposer } from '@/lib/composer-inbox';
+import { onPageChange } from '@/lib/live-updates';
 
 /*
  * A page the agent wrote with render_html, in the thread. It loads inside
  * Anton's frame page (src/services/renders.ts), sandboxed and cut off from
  * the network; the two speak the MCP Apps protocol over postMessage. The
  * frame takes the page's height as it reports it, opens links only after
- * asking, and puts text the page hands over into the composer, unsent.
+ * asking, and puts text the page hands over into the composer, unsent. When
+ * another copy of the page (a tab of its own, the Library, Artifacts) saves
+ * its state, the frame page hears it from here and brings the page up to date.
  */
 
 const MIN_HEIGHT = 60;
@@ -48,9 +52,44 @@ function themeVariables(): Record<string, string> {
 
 export const frameUrl = (sessionId: string, path: string) => `/api/sessions/${encodeURIComponent(sessionId)}/render-frame?path=${encodeURIComponent(path)}`;
 
-export const HtmlFrame = memo(function HtmlFrame({ sessionId, path, title, height: initial }: { sessionId: string; path: string; title: string; height: number }) {
+const chrome =
+	'inline-flex size-7 items-center justify-center rounded-lg border border-(--card-border) bg-(--bg-overlay) text-(--icon-secondary) shadow-(--card-highlight) outline-none hover:text-(--icon-primary) focus-visible:shadow-(--focus-ring)';
+
+/**
+ * The page, live. In the thread it is as tall as the page says and offers to
+ * open it in Artifacts or a tab of its own; with `fill` it fills its box and
+ * scrolls inside it, for the Library and Artifacts.
+ */
+export const HtmlFrame = memo(function HtmlFrame({
+	sessionId,
+	path,
+	title,
+	height: initial = 360,
+	fill = false,
+	actions = true,
+}: {
+	sessionId: string;
+	path: string;
+	title: string;
+	height?: number;
+	fill?: boolean;
+	/** Whether it offers to open the page in Artifacts or a tab of its own; off where the page around it does. */
+	actions?: boolean;
+}) {
 	const frame = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(() => Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, initial)));
+	// Another copy saved the page's state: the frame page fetches it, unless the save was its own.
+	useEffect(
+		() =>
+			onPageChange((change) => {
+				if (change.id !== sessionId || change.path !== path) return;
+				frame.current?.contentWindow?.postMessage(
+					{ jsonrpc: '2.0', method: 'anton/page-changed', params: { version: change.version, from: change.from } },
+					window.location.origin,
+				);
+			}),
+		[sessionId, path],
+	);
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
 			if (event.source !== frame.current?.contentWindow || event.origin !== window.location.origin) return;
@@ -87,19 +126,59 @@ export const HtmlFrame = memo(function HtmlFrame({ sessionId, path, title, heigh
 		return () => window.removeEventListener('message', onMessage);
 	}, [sessionId, title]);
 	const url = frameUrl(sessionId, path);
+	if (fill) {
+		return <iframe ref={frame} src={url} title={title} className="block size-full border-0 bg-transparent" style={{ colorScheme: 'dark' }} />;
+	}
 	return (
 		<figure className="group/page relative m-0">
 			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-[10px] border-0 bg-transparent" style={{ height, colorScheme: 'dark' }} />
-			<a
-				href={url}
-				target="_blank"
-				rel="noreferrer"
-				aria-label={`Open ${title} in a new tab`}
-				title="Open in a new tab"
-				className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-lg border border-(--card-border) bg-(--bg-overlay) text-(--icon-secondary) opacity-0 shadow-(--card-highlight) transition-opacity duration-(--duration-micro) group-hover/page:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-			>
-				<Icon icon={Maximize2} size={13} />
-			</a>
+			{actions ? (
+			<div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--duration-micro) group-hover/page:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+				<Link to="/artifacts/$taskId" params={{ taskId: sessionId }} search={{ path }} aria-label={`Open ${title} in Artifacts`} title="Open in Artifacts" className={chrome}>
+					<Icon icon={Maximize2} size={13} />
+				</Link>
+				<a href={url} target="_blank" rel="noreferrer" aria-label={`Open ${title} in a new tab`} title="Open in a new tab" className={chrome}>
+					<Icon icon={ExternalLink} size={13} />
+				</a>
+			</div>
+			) : null}
 		</figure>
 	);
 });
+
+/** The width a thumbnail lays the page out at, about the thread's, before scaling it down to its card. */
+const THUMBNAIL_WIDTH = 520;
+
+/**
+ * A page drawn small on a card: laid out at the thread's width and scaled to
+ * fit, behind the card's own link, so it can be seen but not used.
+ */
+export function PageThumbnail({ sessionId, path }: { sessionId: string; path: string }) {
+	const box = useRef<HTMLDivElement>(null);
+	const [size, setSize] = useState<{ scale: number; height: number } | null>(null);
+	useLayoutEffect(() => {
+		const element = box.current;
+		if (!element) return;
+		const observer = new ResizeObserver(([entry]) => {
+			const { width, height } = entry.contentRect;
+			if (width > 0) setSize({ scale: width / THUMBNAIL_WIDTH, height: height / (width / THUMBNAIL_WIDTH) });
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	return (
+		// Inset from the card's edges, as the page sits inside a reply's margins.
+		<div ref={box} aria-hidden className="pointer-events-none absolute inset-x-3 top-3 bottom-0 overflow-hidden">
+			{size ? (
+				<iframe
+					src={frameUrl(sessionId, path)}
+					title=""
+					tabIndex={-1}
+					loading="lazy"
+					className="block origin-top-left border-0 bg-transparent"
+					style={{ width: THUMBNAIL_WIDTH, height: size.height, transform: `scale(${size.scale})`, colorScheme: 'dark' }}
+				/>
+			) : null}
+		</div>
+	);
+}

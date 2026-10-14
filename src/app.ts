@@ -17,7 +17,8 @@ import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
-import { PAGE_CSP, renderFrame, renderPage } from './services/renders.ts';
+import { listArtifacts } from './services/artifacts.ts';
+import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
 import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
@@ -678,13 +679,19 @@ app.get('/api/sessions/:id/output', async (c) => {
 });
 // A page the agent wrote with render_html: the frame page the thread shows, and the page inside it (src/services/renders.ts).
 app.get('/api/sessions/:id/render-frame', async (c) => {
-	const { html, csp } = renderFrame(c.req.param('id'), c.req.query('path') ?? '');
+	const { html, csp } = await pageFrame(c.req.param('id'), c.req.query('path') ?? '');
 	return c.html(html, 200, { 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
 });
 app.get('/api/sessions/:id/render', async (c) => {
 	const html = await renderPage(c.req.param('id'), c.req.query('path') ?? '');
-	return c.html(html, 200, { 'Content-Security-Policy': PAGE_CSP, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300' });
+	// Served with its state as it stands, so never from a cache.
+	return c.html(html, 200, { 'Content-Security-Policy': PAGE_CSP, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
 });
+// The state every open copy of a page shares: its frame page reads it after a change elsewhere, and saves the page's own changes.
+app.get('/api/sessions/:id/page-state', async (c) => c.json(await pageState(c.req.param('id'), c.req.query('path') ?? ''), 200, { 'Cache-Control': 'no-store' }));
+app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null))));
+// Everything the agent made in every task, for the Artifacts page.
+app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
 // Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {
 	const name = c.req.query('name') ?? '';
