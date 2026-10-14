@@ -52,6 +52,11 @@ test('the page has no network, and its frame page lets it go nowhere but this or
 	assert.match(html, /<iframe id="page" title="Page" sandbox="allow-scripts allow-forms" src="\/api\/sessions\/r1\/render\?path=renders%2Fchart-ab12cd\.html">/);
 });
 
+test('the page and its frame page are dark like the frames that hold them, so neither paints a white canvas', () => {
+	assert.match(renderFrame('r1', 'renders/chart-ab12cd.html').html, /<style>:root\{color-scheme:dark\}/);
+	assert.match(injectBootstrap('<html><head><style>:root{color-scheme:light}</style></head></html>'), /:root\{color-scheme:dark!important;/);
+});
+
 test('a page without a head still gets the bootstrap at its start', () => {
 	assert.match(injectBootstrap('<div>x</div>'), /^<head><meta charset="utf-8">.*<\/head><div>x<\/div>$/);
 	assert.match(injectBootstrap('<!DOCTYPE html><body>x</body>'), /^<!DOCTYPE html><head>/);
