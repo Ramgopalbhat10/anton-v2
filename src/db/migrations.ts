@@ -116,6 +116,11 @@ const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN plan TEXT`],
 	// 25: tasks that review someone else's pull request, and repos whose pull requests Anton reviews from when it was turned on.
 	[`ALTER TABLE sessions ADD COLUMN review_json TEXT`, `ALTER TABLE projects ADD COLUMN review_others_at TEXT`],
+	// 26: pages the agent drew (their titles, and the state every open copy of one shares), and each task's Library as listed last, for the Artifacts page.
+	[
+		`CREATE TABLE IF NOT EXISTS pages (session_id TEXT NOT NULL, path TEXT NOT NULL, title TEXT NOT NULL, state_json TEXT, version INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`,
+		`CREATE TABLE IF NOT EXISTS output_index (session_id TEXT PRIMARY KEY, outputs_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+	],
 ];
 
 export async function migrate(db: Client): Promise<void> {

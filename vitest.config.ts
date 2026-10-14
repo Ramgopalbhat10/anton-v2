@@ -7,6 +7,8 @@ export default defineConfig({
 	resolve: { alias: { '@': new URL('./src/web', import.meta.url).pathname } },
 	test: {
 		environment: 'happy-dom',
+		// Frames (an agent's page, live) stay empty: there is no server behind them here.
+		environmentOptions: { happyDOM: { settings: { disableIframePageLoading: true } } },
 		include: ['tests/ui/**/*.test.tsx'],
 		setupFiles: ['tests/ui/setup.ts'],
 	},

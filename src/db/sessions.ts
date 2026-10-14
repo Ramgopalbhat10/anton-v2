@@ -254,6 +254,9 @@ export async function setSessionTodos(id: string, json: string | null): Promise<
 
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
-	await db.execute({ sql: 'DELETE FROM sessions WHERE id = ?', args: [id] });
+	await db.batch(
+		['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+		'write',
+	);
 	announce({ kind: 'sessions' });
 }

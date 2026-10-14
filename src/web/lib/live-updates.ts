@@ -7,15 +7,29 @@ type Change =
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
-	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' };
+	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
+	| PageChange;
+
+/** A copy of a page saved its state (src/services/renders.ts). */
+export type PageChange = { kind: 'page'; id: string; path: string; version: number; from: string };
+
+const pageListeners = new Set<(change: PageChange) => void>();
+
+/** Calls `listener` whenever a page's state is saved, so a page shown here can fetch it; returns the function that stops it. */
+export function onPageChange(listener: (change: PageChange) => void): () => void {
+	pageListeners.add(listener);
+	return () => void pageListeners.delete(listener);
+}
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
 function staleFor(change: Change): QueryKey[] {
+	// The pages themselves fetch their state; only the Artifacts page's edited times move.
+	if (change.kind === 'page') return [['artifacts']];
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections']];
 	if (change.kind === 'models') return [['models']];
 	// Projects count their threads by state, so a change to any task can move a count.
-	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space']];
+	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts']];
 	if (change.kind === 'spaces') return [['spaces'], ['space']];
 	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
 	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
@@ -30,7 +44,7 @@ function staleFor(change: Change): QueryKey[] {
 	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
-	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id]];
+	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;
 	return [
 		['sessions'],
@@ -76,7 +90,11 @@ export function useLiveUpdates() {
 		const refetch = refetcher(queryClient);
 		const events = new EventSource('/api/events');
 		let dropped = false;
-		events.onmessage = (event) => refetch(staleFor(JSON.parse(event.data) as Change));
+		events.onmessage = (event) => {
+			const change = JSON.parse(event.data) as Change;
+			if (change.kind === 'page') for (const listener of pageListeners) listener(change);
+			refetch(staleFor(change));
+		};
 		events.onerror = () => {
 			dropped = true;
 		};
