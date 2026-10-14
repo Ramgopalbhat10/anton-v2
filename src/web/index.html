@@ -2,7 +2,18 @@
 <html lang="en" class="dark">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!-- viewport-fit=cover lets the app reach under a phone's notch and home bar; the shell pads itself with the safe-area insets. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+		<meta name="theme-color" content="#0A0A0B" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="Anton" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+		<link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+		<!-- With credentials, so the manifest loads behind Cloudflare Access like the page does. -->
+		<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
 		<title>Anton v2</title>
 	</head>
 	<body class="bg-background text-foreground">

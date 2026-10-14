@@ -91,6 +91,7 @@ import {
 import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
+import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sendTest, setPushOptions } from './services/push.ts';
 
 const app = new Hono();
 
@@ -112,6 +113,7 @@ observeRuntime((event) => {
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
+	recordFailedReply(event as Parameters<typeof recordFailedReply>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
 		.then((id) => (id ? stopIfOverBudget(id) : undefined))
 		.catch((error: unknown) => logProblem('warn', 'Spending check failed', error));
@@ -318,6 +320,30 @@ app.delete('/api/plugins/:id', async (c) => {
 });
 app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
 app.put('/api/settings/guardrails', async (c) => c.json(await setGuardrails(await body(c, v.object({ hideSecrets: v.boolean() })))));
+// Notifications on your phone and in closed browsers (Settings › Notifications).
+const KEY = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]+={0,2}$/, 'Keys are base64url'), v.maxLength(200));
+app.get('/api/push', async (c) => c.json(await pushView()));
+app.post('/api/push/devices', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			endpoint: v.pipe(v.string(), v.url(), v.startsWith('https://', 'Push endpoints use https'), v.maxLength(2000)),
+			keys: v.object({ p256dh: KEY, auth: KEY }),
+			name: v.optional(v.pipe(v.string(), v.maxLength(100)), ''),
+			/** The endpoint a renewed subscription takes over from, keeping its name. */
+			replaces: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+		}),
+	);
+	return c.json(await addDevice({ endpoint: input.endpoint, keys: input.keys }, input.name, input.replaces));
+});
+app.delete('/api/push/devices/:id', async (c) => c.json(await removeDevice(c.req.param('id'))));
+app.post('/api/push/test', async (c) => c.json(await sendTest((await body(c, v.object({ device: v.optional(v.string()) }))).device)));
+app.put('/api/push/options', async (c) => c.json(await setPushOptions(await body(c, v.object({ finished: v.boolean() })))));
+// Pages say while they are in front of you, so your phone stays quiet while you are at Anton.
+app.post('/api/push/presence', async (c) => {
+	notePresence((await body(c, v.object({ present: v.boolean() }))).present);
+	return c.json({ ok: true });
+});
 app.get('/api/secrets', async (c) => c.json(await secretsView()));
 app.put('/api/secrets/shared', async (c) => {
 	const { env } = await body(c, v.object({ env: ENV }));

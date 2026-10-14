@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
@@ -155,6 +155,8 @@ export const VmPanel = memo(function VmPanel({
 	return (
 		<WorkspacePane expanded={expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
+				{/* On a phone the workspace covers the conversation; this goes back to it. */}
+				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
 				<div data-noscrollbar role="tablist" aria-label="Workspace panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
 					{tabs.map((name) => (
 						<PanelTab
@@ -204,7 +206,7 @@ export const VmPanel = memo(function VmPanel({
 						onClick={onToggleExpanded}
 						className="hidden @min-[700px]/workspace:inline-flex"
 					/>
-					<IconBtn icon={PanelRight} size="sm" label="Hide workspace" onClick={onClose} />
+					<IconBtn icon={PanelRight} size="sm" label="Hide workspace" onClick={onClose} className="hidden @min-[700px]/workspace:inline-flex" />
 				</div>
 			</div>
 
