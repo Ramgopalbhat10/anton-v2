@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { Card, Caption, StatRow, Status, type Tone } from '@/components/instrument';
-import { AgentTile, decisionsOf, lookOf, plainLine, RunMeta, runElapsed, runEnd, spanOf, StatusGlyph, stepBody, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
+import { AgentTile, decisionsOf, lookOf, plainLine, RunMeta, runElapsed, runEnd, spanOf, StatusGlyph, stepBody, StopRunButton, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
 import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
 import { elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,11 @@ import { focusRun, useFocusedRun } from '@/lib/workspace';
  * its transcript: the brief, each step as it happens, and the answer.
  */
 
-const STATUS_LABEL: Record<SubagentRun['status'], string> = { running: 'Working', done: 'Finished', failed: 'Failed' };
+const STATUS_LABEL: Record<SubagentRun['status'], string> = { running: 'Working', done: 'Finished', failed: 'Failed', stopped: 'Stopped' };
+
+/** What a finished run's result is, by how it ended. */
+const RESULT_LABEL: Record<SubagentRun['status'], string> = { running: 'Answer', done: 'Answer', failed: 'Why it failed', stopped: 'Stopped' };
+const RESULT_HEADING: Record<SubagentRun['status'], string> = { running: 'Answer to the agent', done: 'Answer to the agent', failed: 'Why it failed', stopped: 'Stopped' };
 
 /** Steps as ticks in their colours, newest at the right, the last one lit while the run works. */
 function StepTicks({ steps, live }: { steps: SubagentStep[]; live: boolean }) {
@@ -41,7 +45,7 @@ function RunCard({ run, now, onOpen }: { run: SubagentRun; now: number; onOpen: 
 	const live = run.status === 'running';
 	const latest = run.steps[run.steps.length - 1];
 	// What it is doing now, or what it came back with, in one line.
-	const headline = live ? (run.writing ? plainLine(run.writing.split('\n').pop()) : latest ? stepBody(latest).body : null) : plainLine(run.result);
+	const headline = live ? (run.writing ? plainLine(run.writing.split('\n').pop()) : latest ? stepBody(latest).body : null) : run.status === 'stopped' ? 'Stopped by you' : plainLine(run.result);
 	return (
 		<button
 			type="button"
@@ -450,6 +454,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 					<StatusGlyph status={run.status} />
 					{STATUS_LABEL[run.status]}
 				</span>
+				{live ? <StopRunButton sessionId={sessionId} run={run} /> : null}
 			</div>
 
 			<dl className="in-well m-0 grid divide-x divide-(--border-subtle)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
@@ -501,8 +506,8 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 			</section>
 
 			{run.result ? (
-				<section aria-label={run.status === 'failed' ? 'Why it failed' : 'Answer'} className={cn('in-card px-3.5 py-3', run.status === 'failed' && 'border-(--danger-border)')}>
-					<h3 className={cn('in-caption m-0 mb-2', run.status === 'failed' && 'text-(--danger-text)')}>{run.status === 'failed' ? 'Why it failed' : 'Answer to the agent'}</h3>
+				<section aria-label={RESULT_LABEL[run.status]} className={cn('in-card px-3.5 py-3', run.status === 'failed' && 'border-(--danger-border)')}>
+					<h3 className={cn('in-caption m-0 mb-2', run.status === 'failed' && 'text-(--danger-text)')}>{RESULT_HEADING[run.status]}</h3>
 					<Markdown text={run.result} />
 				</section>
 			) : null}

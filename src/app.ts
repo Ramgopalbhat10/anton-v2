@@ -60,7 +60,8 @@ import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
-import { recordSubagentEvent, subagentRuns } from './services/subagent-runs.ts';
+import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/subagent-runs.ts';
+import { installSubagentStop } from './flue/subagent-stop.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
 import { recordReplyText } from './services/reply-check.ts';
@@ -106,6 +107,7 @@ const ENV = v.pipe(
 );
 
 publishUpgradeHandler(handleTerminalUpgrade);
+installSubagentStop();
 observeRuntime((event) => {
 	recordAgentEvent(event);
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
@@ -186,6 +188,11 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 		throw error;
 	}
 	if (c.error || c.res.status >= 400) turnedAway();
+});
+// Stop: its running subagents end as stopped, not failed.
+app.post('/api/agents/coder/:id/abort', async (c, next) => {
+	noteRepliesStopping(c.req.param('id'));
+	await next();
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
@@ -654,6 +661,12 @@ app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await comp
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
+});
+// One subagent stopped on its own: the agent gets what it had done and carries on.
+app.post('/api/sessions/:id/subagents/:run/stop', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	if (!(await stopSubagent(id, c.req.param('run')))) throw new ConflictError('That agent is not running, or cannot be stopped on its own; use Stop to stop the whole reply');
+	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/scripts', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
