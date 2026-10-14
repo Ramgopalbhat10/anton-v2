@@ -37,6 +37,7 @@ export function prSummary(thread: Session): string | null {
 	const name = `#${prNumber(thread.prUrl) ?? '?'}`;
 	if (!pr) return `${name} opened`;
 	if (pr.state === 'merged' || pr.state === 'closed') return `${name} ${pr.state}`;
+	if (pr.conflicts) return `${name} · merge conflicts`;
 	if (pr.checks === 'failed') return `${name} · checks failing`;
 	if (pr.checks === 'pending') return `${name} · checks running`;
 	if (pr.approved) return `${name} · approved`;
@@ -52,6 +53,7 @@ export function nextSteps(thread: Session): Step[] {
 	if (state === 'working') return [{ label: 'Stop', icon: Square, stop: true }];
 	if (state === 'queued') return [];
 	if (thread.status === 'error') return [{ label: 'Try again', icon: RotateCcw, send: 'Something failed. Look at what went wrong and try again.', primary: true }];
+	if (pr?.conflicts && !thread.review) return [{ label: 'Fix conflicts', icon: Wrench, send: 'The pull request has merge conflicts. Merge the latest base branch with merge_base_branch, resolve them, check the result and update the pull request.', primary: true }];
 	if (pr?.checks === 'failed') return [{ label: 'Fix CI', icon: Wrench, send: 'Checks are failing on the pull request. Find out why, fix it and push.', primary: true }];
 	if (state === 'waiting') return [{ label: 'Answer', icon: MessageCircleReply, open: true, primary: true }];
 	if (state === 'review') return [{ label: 'Review', icon: GitPullRequest, open: true, panel: 'Changes', primary: true }, ...(thread.prUrl ? [{ label: 'PR', icon: ArrowUpRight, href: thread.prUrl }] : [])];

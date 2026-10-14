@@ -55,6 +55,8 @@ export type Session = {
 		runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
 		/** Approved on GitHub and not changed since. */
 		approved?: boolean;
+		/** It cannot merge until its conflicts with the base branch are resolved. */
+		conflicts?: boolean;
 	} | null;
 	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
@@ -75,6 +77,8 @@ export type Session = {
 	brief?: string | null;
 	/** The start of the thread's latest reply. */
 	lastReply?: string | null;
+	/** Someone else's pull request (`prUrl`) the task reviews; null for a task doing its own work. */
+	review?: { number: number; author: string; trusted: boolean; reviewedHead: string | null; automatic: boolean } | null;
 };
 
 /** Where a project's thread stands, in the order the project lists them (src/core/thread-state.ts). */
@@ -200,8 +204,10 @@ export type ProjectSettings = {
 	setupScript: string;
 	previewPorts: number[];
 	baseImage: string | null;
-	/** Whether the agent hears about failed checks and new comments on its pull requests. */
+	/** Whether the agent hears about failed checks, merge conflicts and new comments on its pull requests. */
 	followUps: boolean;
+	/** Whether Anton reviews the pull requests people open on the repo, and again after their pushes. */
+	reviewOthers: boolean;
 	mcpServers: McpServer[];
 	/** Tasks run in a full virtual machine (Docker, FUSE, their own kernel) rather than a container. */
 	fullVm: boolean;
@@ -370,7 +376,7 @@ export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'revi
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
-/** A pull request the agent opened, grouped by who it waits on. */
+/** A pull request the agent opened or reviews, grouped by who it waits on. */
 export type ReviewGroup = 'failing' | 'checking' | 'ready' | 'merged' | 'closed' | 'unknown';
 export type ReviewItem = {
 	sessionId: string;
@@ -379,6 +385,9 @@ export type ReviewItem = {
 	url: string;
 	group: ReviewGroup;
 	draft: boolean;
+	/** Someone else's pull request, which the task reviews; its author's login. */
+	reviewing: string | null;
+	conflicts: boolean;
 	checks: { passed: number; failed: number; pending: number };
 	comments: number;
 	createdAt: string;
@@ -507,6 +516,7 @@ export const api = {
 	secrets: () => json<SecretsView>('/api/secrets'),
 	saveSharedEnv: (env: Record<string, string | null>) => json<SecretsView>('/api/secrets/shared', { method: 'PUT', body: JSON.stringify({ env }) }),
 	reviews: () => json<{ reviews: ReviewItem[] }>('/api/reviews'),
+	reviewAnyPullRequest: (url: string) => post<Session>('/api/reviews', { url }),
 	stopAllSandboxes: () => post<{ stopped: number }>('/api/compute/stop-all'),
 	setLimits: (limits: Limits) => json<Budget>('/api/settings/limits', { method: 'PUT', body: JSON.stringify(limits) }),
 	storage: () => json<StorageView>('/api/storage'),

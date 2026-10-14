@@ -1,13 +1,13 @@
 'use agent';
 
-import { type AgentProps, defineTool, setProvider, useModel, useSandbox, useTool } from '@flue/runtime';
-import * as v from 'valibot';
+import { type AgentProps, setProvider, useModel, useSandbox, useTool } from '@flue/runtime';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider } from '../flue/claude-code-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { agentSettingsNow } from '../services/agent-runner.ts';
-import { postReview } from '../services/code-review.ts';
+import { REVIEW_GUIDE } from '../services/code-review.ts';
+import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
 import { gatewayToken, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
@@ -21,34 +21,9 @@ setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), ru
 
 const PROMPT = [
 	"You are Anton's code reviewer. The coding agent working on this task has opened or updated a pull request from this repository's task branch, and you review it before a person does.",
-	'Review the change, not the whole repository: read the diff, then read the surrounding code, callers and tests you need to judge it.',
-	"If the repository has a REVIEW.md, follow it; its AGENTS.md and CLAUDE.md rules apply too.",
-	'Report only problems a careful reviewer would ask to fix before merging: bugs and wrong behavior, security issues, data loss, unhandled failures that matter, changed behavior with no test where the repository tests that kind of code, and clear breaks of the repository\'s written rules.',
-	'Leave out style, naming and matters of taste unless REVIEW.md asks for them. Confirm each problem in the code before you report it, and drop anything you are not sure of.',
 	'You may run read-only commands such as git, grep and the tests. Change no files, and do not commit, push, check out other branches or install anything.',
-	'Finish by calling post_review once. Put each finding on the line it is about, a line of the new file that the change added or modified. With no findings, call it with an empty list.',
-	'When this conversation has earlier reviews, report a problem again only if it is still there.',
+	REVIEW_GUIDE,
 ].join(' ');
-
-const postReviewTool = (id: string) =>
-	defineTool({
-		name: 'post_review',
-		description: 'Post your review on the pull request: a short summary and one comment per problem. Call it once, at the end.',
-		input: v.object({
-			summary: v.pipe(v.string(), v.description('One to three sentences: what the change does and whether it is ready')),
-			findings: v.pipe(
-				v.array(
-					v.object({
-						path: v.pipe(v.string(), v.minLength(1), v.description('File path relative to the repository root')),
-						line: v.pipe(v.number(), v.integer(), v.minValue(1), v.description('Line in the new version of the file, on a line the change added or modified')),
-						body: v.pipe(v.string(), v.minLength(1), v.description('The problem, why it matters, and how to fix it')),
-					}),
-				),
-				v.maxLength(20),
-			),
-		}),
-		run: async ({ data }) => ({ output: await postReview(id, data) }),
-	});
 
 /**
  * Reads a task's pull request in the task's own sandbox and posts what it

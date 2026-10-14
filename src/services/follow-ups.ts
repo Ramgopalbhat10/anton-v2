@@ -15,10 +15,11 @@ export const MAX_FOLLOW_UPS = 5;
 
 /**
  * What has been handled on one pull request: the last head commit whose
- * failures were sent, the comments sent, how many messages since a person
- * last wrote, and whether it is merged or closed.
+ * failures were sent, the head and base its conflicts were last sent for,
+ * the comments sent, how many messages since a person last wrote, and
+ * whether it is merged or closed.
  */
-type FollowState = { url?: string; sha: string | null; seen: string[]; sent: number; done?: boolean };
+type FollowState = { url?: string; sha: string | null; conflict?: string | null; seen: string[]; sent: number; done?: boolean };
 
 const initial: FollowState = { sha: null, seen: [], sent: 0 };
 
@@ -58,6 +59,13 @@ function checksMessage(url: string, sha: string, failed: CheckResult[]): string 
 	].join('\n');
 }
 
+function conflictsMessage(url: string, base: string): string {
+	return [
+		`Your pull request (${url}) has merge conflicts with ${base}, so it cannot be merged.`,
+		`Call merge_base_branch to merge the latest ${base} into your branch, resolve the conflicts it leaves, run the relevant checks, commit the merge, then call open_pull_request to update the pull request.`,
+	].join('\n');
+}
+
 function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	return [
 		`New comments on your pull request (${url}):`,
@@ -72,29 +80,43 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 /**
  * What to tell the agent about the pull request now, and the state that
  * records it as handled. `quiet` comments ask nothing; they are marked seen
- * without a message.
+ * without a message. Conflicts are sent once for each head and base.
  */
-export function nextFollowUp(url: string, activity: PullRequestActivity, state: FollowState, quiet: string[] = []): { message: string | null; state: FollowState } {
+export function nextFollowUp(
+	url: string,
+	activity: PullRequestActivity,
+	state: FollowState,
+	quiet: string[] = [],
+	base = 'the base branch',
+): { message: string | null; state: FollowState } {
 	const settled = !activity.checks.some((check) => check.status === 'pending');
 	const failed = activity.checks.filter((check) => check.status === 'failed');
 	const reportChecks = settled && failed.length > 0 && state.sha !== activity.headSha;
+	const conflict = activity.conflicts ? `${activity.headSha} ${activity.baseSha ?? ''}` : null;
+	const reportConflict = conflict !== null && state.conflict !== conflict;
 	const unseen = unseenComments(activity, state);
 	const fresh = unseen.filter((comment) => !quiet.includes(comment.id));
-	const parts = [...(reportChecks ? [checksMessage(url, activity.headSha, failed)] : []), ...(fresh.length ? [commentsMessage(url, fresh)] : [])];
+	const parts = [
+		...(reportConflict ? [conflictsMessage(url, base)] : []),
+		...(reportChecks ? [checksMessage(url, activity.headSha, failed)] : []),
+		...(fresh.length ? [commentsMessage(url, fresh)] : []),
+	];
 	if (parts.length === 0 && fresh.length === unseen.length) return { message: null, state };
 	return {
 		message: parts.length ? parts.join('\n\n') : null,
 		state: {
 			sha: reportChecks ? activity.headSha : state.sha,
+			conflict: reportConflict ? conflict : (state.conflict ?? null),
 			seen: [...state.seen, ...unseen.map((comment) => comment.id)].slice(-500),
 			sent: state.sent + (parts.length ? 1 : 0),
 		},
 	};
 }
 
-/** Sends the agent anything new on its pull request: failed checks on the latest commit, and new comments. */
+/** Sends the agent anything new on its pull request: merge conflicts, failed checks on the latest commit, and new comments. */
 export async function followUp(session: SessionRecord): Promise<boolean> {
-	if (!session.prUrl || isWorking(session.id)) return false;
+	// A task reviewing someone else's pull request has nothing to fix there; its reviews follow pushes instead.
+	if (!session.prUrl || session.review || isWorking(session.id)) return false;
 	const project = await getProject(session.projectId);
 	const state = stateFor(session);
 	if (!project?.followUps || state.done || state.sent >= MAX_FOLLOW_UPS) return false;
@@ -105,7 +127,7 @@ export async function followUp(session: SessionRecord): Promise<boolean> {
 		await save({ ...state, done: true });
 		return false;
 	}
-	const next = nextFollowUp(session.prUrl, activity, state, await askingNothing(session.id, unseenComments(activity, state)));
+	const next = nextFollowUp(session.prUrl, activity, state, await askingNothing(session.id, unseenComments(activity, state)), session.baseBranch);
 	if (next.message) await sendToAgent(session.id, next.message);
 	if (next.state !== state) await save(next.state);
 	return next.message !== null;

@@ -2,9 +2,10 @@ import { runDueAutomations } from './automations.ts';
 import { runFollowUps } from './follow-ups.ts';
 import { logProblem } from './log.ts';
 import { refreshPullRequests } from './pr-status.ts';
+import { runAutomaticReviews } from './review-tasks.ts';
 import { resolveIdleThreads } from './thread-reports.ts';
 
-/** How often Anton looks for labeled issues, due schedules and news on its pull requests. */
+/** How often Anton looks for labeled issues, due schedules, news on its pull requests and pull requests to review. */
 const POLL_MS = 5 * 60_000;
 
 /** Work that starts without anyone typing. Polling, since a personal server has no public URL for webhooks. */
@@ -16,6 +17,7 @@ export function scheduleHeadlessWork(): void {
 		busy = true;
 		await runDueAutomations().catch((error: unknown) => logProblem('warn', 'Automations failed', error));
 		await runFollowUps().catch((error: unknown) => logProblem('warn', 'Follow-ups failed', error));
+		await runAutomaticReviews().catch((error: unknown) => logProblem('warn', 'Automatic reviews failed', error));
 		// After follow-ups, which read most of the same pull requests already.
 		await refreshPullRequests().catch((error: unknown) => logProblem('warn', 'Reading pull requests failed', error));
 		await resolveIdleThreads().catch((error: unknown) => logProblem('warn', 'Resolving idle threads failed', error));

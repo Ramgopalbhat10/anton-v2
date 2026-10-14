@@ -23,7 +23,7 @@ const note = (id: number, login: string, association: string, type = 'User') => 
 test('pull request activity keeps only trusted comments, reads every page and ignores cancelled checks', async () => {
 	const pull = '/repos/acme/demo/pulls/7';
 	stubFetch({
-		[pull]: { body: { state: 'open', draft: false, merged_at: null, head: { sha: 'abc' } } },
+		[pull]: { body: { state: 'open', draft: false, merged_at: null, mergeable: false, head: { sha: 'abc', ref: 'feature' }, base: { sha: 'base1', ref: 'main' } } },
 		'/repos/acme/demo/commits/abc/check-runs?per_page=100': {
 			body: {
 				check_runs: [
@@ -53,6 +53,48 @@ test('pull request activity keeps only trusted comments, reads every page and ig
 		['failed', 'skipped', 'skipped', 'passed', 'failed'],
 		'commit statuses count as checks too',
 	);
+	assert.equal(activity.conflicts, true, 'GitHub says it cannot merge');
+	assert.equal(activity.baseSha, 'base1');
+});
+
+test("someone else's pull request, open pull requests, merge bases, trees and files are read for reviews and merges", async () => {
+	const pull = {
+		html_url: 'https://github.com/acme/demo/pull/7',
+		number: 7,
+		title: 'Add things',
+		body: ' Does things. ',
+		user: { login: 'grace' },
+		author_association: 'CONTRIBUTOR',
+		state: 'open',
+		draft: false,
+		merged_at: null,
+		updated_at: '2026-10-02T00:00:00Z',
+		head: { sha: 'head1', ref: 'feature' },
+		base: { sha: 'base1', ref: 'main' },
+	};
+	stubFetch({
+		'/repos/acme/demo/pulls/7': { body: pull },
+		'/repos/acme/demo/pulls/7/commits?per_page=100': { body: [{ sha: 'c1', commit: { message: 'First\n\nbody' } }, { sha: 'head1', commit: { message: 'Second' } }] },
+		'/repos/acme/demo/pulls?state=open&sort=updated&direction=desc&per_page=100': { body: [{ ...pull, author_association: 'MEMBER' }] },
+		'/repos/acme/demo/compare/main...head1?per_page=1': { body: { merge_base_commit: { sha: 'mb1' } } },
+		'/repos/acme/demo/git/commits/head1': { body: { tree: { sha: 'tree1' } } },
+		'/repos/acme/demo/git/trees/tree1?recursive=1': { body: { sha: 'tree1', truncated: false, tree: [{ path: 'src', mode: '040000', type: 'tree', sha: 't2', url: 'x' }, { path: 'src/a.ts', mode: '100644', type: 'blob', sha: 'b1', size: 3 }] } },
+	});
+	const host = githubHost({ token: 't', apiUrl: API });
+	const info = await host.pullRequest('https://github.com/acme/demo/pull/7');
+	assert.deepEqual(
+		{ repo: info.repo, author: info.author, trusted: info.trusted, body: info.body, baseBranch: info.baseBranch, headSha: info.headSha, commits: info.commits },
+		{ repo: 'acme/demo', author: 'grace', trusted: false, body: 'Does things.', baseBranch: 'main', headSha: 'head1', commits: [{ sha: 'c1', subject: 'First' }, { sha: 'head1', subject: 'Second' }] },
+	);
+	assert.equal((await host.listPullRequests('acme/demo'))[0].trusted, true, 'a member can push to the repo');
+	assert.equal(await host.mergeBase('acme/demo', 'main', 'head1'), 'mb1');
+	assert.deepEqual(await host.treeEntries('acme/demo', 'head1'), {
+		sha: 'tree1',
+		entries: [
+			{ path: 'src', mode: '040000', type: 'tree', sha: 't2' },
+			{ path: 'src/a.ts', mode: '100644', type: 'blob', sha: 'b1' },
+		],
+	});
 });
 
 test('a merged pull request is not read any further', async () => {

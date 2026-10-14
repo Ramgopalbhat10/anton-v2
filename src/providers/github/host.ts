@@ -4,11 +4,14 @@ import type {
 	CommitSource,
 	GitHost,
 	PullRequestComment,
+	PullRequestInfo,
 	PullRequestInput,
 	PullRequestState,
+	PullRequestSummary,
 	RepoInfo,
 	ReviewComment,
 	TreeChange,
+	TreeEntry,
 } from '../../core/ports.ts';
 
 /** Requests that take longer than this fail, so a stuck connection never stalls the headless loop. */
@@ -20,7 +23,22 @@ const MAX_PAGES = 10;
 
 const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
 
-type PullRequest = { state: 'open' | 'closed'; draft: boolean; merged_at: string | null; head: { sha: string } };
+type PullRequest = {
+	html_url: string;
+	number: number;
+	title: string;
+	body: string | null;
+	user: { login: string; type?: string } | null;
+	author_association?: string;
+	state: 'open' | 'closed';
+	draft: boolean;
+	merged_at: string | null;
+	updated_at: string;
+	/** Null while the host is still working out whether it merges cleanly. */
+	mergeable?: boolean | null;
+	head: { sha: string; ref: string };
+	base: { sha: string; ref: string };
+};
 type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
 type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
@@ -60,6 +78,20 @@ const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
 /** People who can push to the repo, and apps installed on it; anyone else could steer the agent from a public repo. */
 const isTrusted = (comment: Comment) => TRUSTED.has(comment.author_association ?? '') || comment.user?.type === 'Bot';
+
+function summaryOf(pull: PullRequest): PullRequestSummary {
+	return {
+		url: pull.html_url,
+		number: pull.number,
+		title: pull.title,
+		author: pull.user?.login ?? 'someone',
+		trusted: TRUSTED.has(pull.author_association ?? ''),
+		draft: pull.draft,
+		headBranch: pull.head.ref,
+		headSha: pull.head.sha,
+		updatedAt: pull.updated_at,
+	};
+}
 
 function commentOf(kind: string, comment: Comment): PullRequestComment {
 	return {
@@ -291,7 +323,40 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				...reviews.filter(isTrusted).map((review) => commentOf('review', review)),
 			].filter((comment) => comment.body);
 			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
-			return { state, headSha: pull.head.sha, checks, comments, approved: approvedBy(reviews) };
+			return { state, headSha: pull.head.sha, checks, comments, approved: approvedBy(reviews), conflicts: pull.mergeable === false, baseSha: pull.base.sha };
+		},
+		async pullRequest(url): Promise<PullRequestInfo> {
+			const { repo, number } = pullOf(url);
+			const [pull, commits] = await Promise.all([
+				json<PullRequest>(`/repos/${repo}/pulls/${number}`),
+				all<{ sha: string; commit: { message: string } }>(`/repos/${repo}/pulls/${number}/commits?per_page=100`),
+			]);
+			return {
+				...summaryOf(pull),
+				repo,
+				body: (pull.body ?? '').trim(),
+				state: stateOf(pull),
+				baseBranch: pull.base.ref,
+				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
+			};
+		},
+		async listPullRequests(fullName) {
+			const pulls = await json<PullRequest[]>(`/repos/${fullName}/pulls?state=open&sort=updated&direction=desc&per_page=100`);
+			return pulls.map(summaryOf);
+		},
+		async mergeBase(fullName, a, b) {
+			const compared = await json<{ merge_base_commit: { sha: string } }>(`/repos/${fullName}/compare/${a}...${b}?per_page=1`);
+			return compared.merge_base_commit.sha;
+		},
+		async treeEntries(fullName, commit) {
+			const { tree } = await json<{ tree: { sha: string } }>(`/repos/${fullName}/git/commits/${commit}`);
+			const listing = await json<{ sha: string; truncated: boolean; tree: TreeEntry[] }>(`/repos/${fullName}/git/trees/${tree.sha}?recursive=1`);
+			if (listing.truncated) throw new Error(`${fullName} has too many files at ${commit.slice(0, 7)} for GitHub to list them all`);
+			return { sha: listing.sha, entries: listing.tree.map(({ path, mode, type, sha }) => ({ path, mode, type, sha })) };
+		},
+		async blob(fullName, sha) {
+			const response = await call(`/repos/${fullName}/git/blobs/${sha}`, { accept: 'application/vnd.github.raw+json', signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
+			return new Uint8Array(await response.arrayBuffer());
 		},
 		async changedFiles(url) {
 			const { repo, number } = pullOf(url);

@@ -180,6 +180,16 @@ export type GitHost = {
 	pullRequestActivity(url: string): Promise<PullRequestActivity>;
 	/** The files a pull request changes, each with its diff when the host shows one (not for binary or very large files). */
 	changedFiles(url: string): Promise<ChangedFile[]>;
+	/** Who opened a pull request, what it says and where its head and base are, by its URL. */
+	pullRequest(url: string): Promise<PullRequestInfo>;
+	/** A repository's open pull requests, most recently updated first. */
+	listPullRequests(fullName: string): Promise<PullRequestSummary[]>;
+	/** The newest commit both `a` and `b` contain. */
+	mergeBase(fullName: string, a: string, b: string): Promise<string>;
+	/** Every entry of a commit's tree, subtrees included, so a machine can rebuild it without fetching. */
+	treeEntries(fullName: string, commit: string): Promise<TreeListing>;
+	/** One file's contents by its blob hash. */
+	blob(fullName: string, sha: string): Promise<Uint8Array>;
 	/**
 	 * Posts a review on a pull request as Anton's account, never approving or
 	 * blocking it: a summary, and comments on lines of the change. Comments the
@@ -219,8 +229,46 @@ export type ReviewInput = { commit: string | null; body: string; comments: Revie
 
 export type ChangedFile = { path: string; patch: string | null };
 
-/** `approved`: a reviewer's latest review approves it and none asks for changes. */
-export type PullRequestActivity = { state: PullRequestState; headSha: string; checks: CheckResult[]; comments: PullRequestComment[]; approved?: boolean };
+/** `trusted`: the author can push to the repository (an owner, member or collaborator). */
+export type PullRequestSummary = {
+	url: string;
+	number: number;
+	title: string;
+	author: string;
+	trusted: boolean;
+	draft: boolean;
+	headBranch: string;
+	headSha: string;
+	updatedAt: string;
+};
+
+/** `commits` are the pull request's own, oldest first, each as its hash and first line. */
+export type PullRequestInfo = PullRequestSummary & {
+	repo: string;
+	body: string;
+	state: PullRequestState;
+	baseBranch: string;
+	commits: Array<{ sha: string; subject: string }>;
+};
+
+/** A tree entry as git lists it; `path` is from the root, `type` blob, tree or commit (a submodule). */
+export type TreeEntry = { path: string; mode: string; type: 'blob' | 'tree' | 'commit'; sha: string };
+export type TreeListing = { sha: string; entries: TreeEntry[] };
+
+/**
+ * `approved`: a reviewer's latest review approves it and none asks for changes. `conflicts`: it cannot
+ * merge into its base without someone resolving them, as far as the host has worked out; `baseSha` is
+ * the base branch's head the host last compared it with.
+ */
+export type PullRequestActivity = {
+	state: PullRequestState;
+	headSha: string;
+	checks: CheckResult[];
+	comments: PullRequestComment[];
+	approved?: boolean;
+	conflicts?: boolean;
+	baseSha?: string;
+};
 
 /** How hard a model reasons before answering, from none to the most it offers. */
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;

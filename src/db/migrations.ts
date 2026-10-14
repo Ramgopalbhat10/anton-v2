@@ -114,6 +114,8 @@ const migrations: string[][] = [
 	[`UPDATE settings SET value = json_set(value, '$.codeMode', json('true')) WHERE key = 'general' AND json_valid(value)`],
 	// 24: the plan the latest reply proposed in plan mode, waiting for approval; null when none waits.
 	[`ALTER TABLE sessions ADD COLUMN plan TEXT`],
+	// 25: tasks that review someone else's pull request, and repos whose pull requests Anton reviews from when it was turned on.
+	[`ALTER TABLE sessions ADD COLUMN review_json TEXT`, `ALTER TABLE projects ADD COLUMN review_others_at TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

@@ -25,6 +25,7 @@ import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox
 import { defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
+import { reviewPullRequest } from './services/review-tasks.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
 import { commands, setCommands } from './services/commands.ts';
 import {
@@ -325,6 +326,11 @@ app.put('/api/secrets/shared', async (c) => {
 });
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
+// Reviews any pull request by its link, in a task of its own unless Anton opened it.
+app.post('/api/reviews', async (c) => {
+	const { url } = await body(c, v.object({ url: v.pipe(v.string(), v.maxLength(500)) }));
+	return c.json(await reviewPullRequest(url), 201);
+});
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
 app.get('/api/compute', async (c) => c.json(await computeView()));
 app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));
@@ -387,6 +393,7 @@ app.put('/api/projects/:id/settings', async (c) => {
 			baseImage: v.nullable(v.pipe(v.string(), v.maxLength(300))),
 			fullVm: v.optional(v.boolean()),
 			followUps: v.optional(v.boolean()),
+			reviewOthers: v.optional(v.boolean()),
 			mcpServers: v.optional(
 				v.pipe(
 					v.array(

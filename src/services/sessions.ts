@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Session, SessionRecord, SessionStatus } from '../core/types.ts';
+import type { ReviewOf, Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { getProject } from '../db/projects.ts';
@@ -85,13 +85,13 @@ function slug(title: string): string {
 	);
 }
 
-/** Where a new task starts: a repository at a branch's head, or, for a chat, the empty scratch folder. */
-async function startingPoint(projectId: string | undefined, branch: string | undefined) {
+/** Where a new task starts: a repository at a branch's head (or a given commit on it), or, for a chat, the empty scratch folder. */
+async function startingPoint(projectId: string | undefined, branch: string | undefined, sha: string | undefined) {
 	if (!projectId) return { projectId: null, baseBranch: SCRATCH_BRANCH, baseSha: SCRATCH_BASE };
 	const project = await getProject(projectId);
 	if (!project) throw new NotFoundError('Project not found');
 	const baseBranch = branch || project.defaultBranch;
-	return { projectId: project.id, baseBranch, baseSha: await getProviders().git.resolveRef(project.repoFullName, baseBranch) };
+	return { projectId: project.id, baseBranch, baseSha: sha ?? (await getProviders().git.resolveRef(project.repoFullName, baseBranch)) };
 }
 
 /** A task on a repository, or without `projectId` a chat: no repository, and a scratch sandbox if it needs one. */
@@ -106,9 +106,13 @@ export async function createSession(input: {
 	spaceId?: string;
 	/** Held until the thread can start, when the project's threads are all busy. */
 	brief?: string;
+	/** Someone else's pull request the task reviews, starting from `baseSha`, its merge base on `branch`. */
+	review?: ReviewOf;
+	prUrl?: string;
+	baseSha?: string;
 }): Promise<Session> {
 	if (!input.projectId && input.spaceId) throw new InvalidInputError("A project's thread works on one of its repositories.");
-	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch);
+	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch, input.baseSha);
 	const id = randomUUID();
 	const title = input.title?.trim() || 'New task';
 	const general = await generalSettings();
@@ -118,7 +122,7 @@ export async function createSession(input: {
 	// Plan mode plans changes to code; a chat has none to plan.
 	const planMode = projectId ? (input.planMode ?? general.planMode) : false;
 	const branch = projectId ? branchFor(title, id) : SCRATCH_BRANCH;
-	await insertSession({ id, projectId, title, model, reasoning, baseBranch, baseSha, branch, planMode, spaceId: input.spaceId, brief: input.brief });
+	await insertSession({ id, projectId, title, model, reasoning, baseBranch, baseSha, branch, planMode, spaceId: input.spaceId, brief: input.brief, review: input.review, prUrl: input.prUrl });
 	return getSession(id);
 }
 

@@ -35,6 +35,7 @@ export async function readPullRequest(session: SessionRecord & { prUrl: string }
 		state: activity.state,
 		checks: open ? checksOf(activity.checks) : null,
 		...(open && activity.approved ? { approved: true } : {}),
+		...(open && activity.conflicts ? { conflicts: true } : {}),
 		runs: open ? runs : [],
 	});
 	return activity;
