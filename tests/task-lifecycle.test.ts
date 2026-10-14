@@ -1111,7 +1111,9 @@ test('any pull request can be reviewed in a task of its own, with a security pas
 	pulls = [pull(first, [{ sha: first, subject: 'Add the API' }])];
 	activity = { state: 'open', headSha: first, checks: [], comments: [] };
 	const repo = await addProject('acme/reviewing');
-	await updateSettings(repo.id, { env: { REVIEW_SECRET: 'kept-from-outsiders' }, setupScript: 'echo "$REVIEW_SECRET" > ../setup-saw.txt', previewPorts: [], baseImage: null });
+	await updateSettings(repo.id, { env: { REVIEW_SECRET: 'kept-from-outsiders' }, setupScript: 'echo "$REVIEW_SECRET ${SHARED_SECRET:-no-shared}" > ../setup-saw.txt', previewPorts: [], baseImage: null });
+	const { setSharedEnv } = await import('../src/services/secrets.ts');
+	await setSharedEnv({ SHARED_SECRET: 'never-in-reviews' });
 	delivered.length = 0;
 	const session = await reviewPullRequest('https://github.com/acme/reviewing/pull/7');
 	assert.equal(session.prUrl, 'https://github.com/acme/reviewing/pull/7');
@@ -1124,7 +1126,8 @@ test('any pull request can be reviewed in a task of its own, with a security pas
 	const machine = await machineFor(session.id);
 	assert.equal((await run(machine, 'git rev-parse HEAD')).trim(), first, 'the head is checked out');
 	assert.match(await run(machine, 'cat src/api.ts'), /eval/);
-	assert.equal((await run(machine, 'echo "${REVIEW_SECRET:-none}"; cat ../setup-saw.txt')).trim(), 'none\nkept-from-outsiders', "setup on the repo's own code gets its variables; an outsider's code does not");
+	assert.equal((await run(machine, 'echo "${REVIEW_SECRET:-none}"; cat ../setup-saw.txt')).trim(), 'none\nkept-from-outsiders no-shared', "setup gets the repo's own variables, never the shared ones, and an outsider's code gets none");
+	await setSharedEnv({});
 
 	// The review is posted on GitHub, most severe first, a security finding with its exploit path.
 	reviews.length = 0;
@@ -1152,6 +1155,9 @@ test('any pull request can be reviewed in a task of its own, with a security pas
 	activity = { state: 'open', headSha: second, checks: [], comments: [] };
 	delivered.length = 0;
 	await reviewPullRequest('https://github.com/acme/reviewing/pull/7/files');
+	const { requestReview } = await import('../src/services/code-review.ts');
+	await assert.rejects(() => requestReview(session.id, { automatic: false }), /already starting/, 'a second request never races the first in the sandbox');
+	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await waitFor(() => delivered.some((message) => message.id === session.id));
 	assert.equal((await run(machine, 'git rev-parse HEAD')).trim(), second);
 	assert.match(await run(machine, 'cat src/api.ts'), /JSON\.parse/);

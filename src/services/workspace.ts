@@ -159,8 +159,11 @@ async function provision(id: string): Promise<Machine> {
 	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
 	const ports = { ANTON_PREVIEW_PORTS: previewPortsFor(project).join(' ') };
-	const setupMachine = withEnv(acquired.machine, { ...ports, ...(await envFor(project)) });
-	// Setup runs on the repo's own code; the code of a pull request whose author cannot push to the repo never sees its variables.
+	// A review task may be on a repo added only by pasting a link, whose own install scripts are its owner's code:
+	// it gets the repo's own variables (none unless you set some), never the shared ones, and the code of a
+	// pull request whose author cannot push to the repo gets none at all.
+	const variables = session.review ? (project?.env ?? {}) : await envFor(project);
+	const setupMachine = withEnv(acquired.machine, { ...ports, ...variables });
 	const machine = session.review && !session.review.trusted ? withEnv(acquired.machine, ports) : setupMachine;
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	try {

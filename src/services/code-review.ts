@@ -94,9 +94,9 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	if (!session) throw new NotFoundError('Session not found');
 	if (!session.prUrl) throw new InvalidInputError('This task has no pull request to review.');
 	if (automatic && !(await reviewsOn(session))) return false;
-	if (session.review && isWorking(id)) {
+	if (session.review && (isWorking(id) || preparing.has(id))) {
 		if (automatic) return false;
-		throw new InvalidInputError('The agent is still replying; ask for the review once it is done.');
+		throw new InvalidInputError(preparing.has(id) ? 'A review is already starting.' : 'The agent is still replying; ask for the review once it is done.');
 	}
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
 	if (activity.state === 'merged' || activity.state === 'closed') {
@@ -111,13 +111,18 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha), 'reviewer');
 		return true;
 	}
-	await updateSession(id, { reviewJson: JSON.stringify({ ...session.review, reviewedHead: activity.headSha }) });
-	reviewTheirs(session.id, session.prUrl).catch(async (error: unknown) => {
-		logProblem('warn', 'Could not start the pull request review', error, id);
-		await updateSession(id, { errorMessage: `The review could not start: ${error instanceof Error ? error.message : String(error)}` });
-	});
+	preparing.add(id);
+	reviewTheirs(session.id, session.prUrl)
+		.catch(async (error: unknown) => {
+			logProblem('warn', 'Could not start the pull request review', error, id);
+			await updateSession(id, { errorMessage: `The review could not start: ${error instanceof Error ? error.message : String(error)}` });
+		})
+		.finally(() => preparing.delete(id));
 	return true;
 }
+
+/** Tasks whose review of someone else's pull request is being set up, so a second request never races it in the machine. */
+const preparing = new Set<string>();
 
 /** Someone else's pull request at its head, in the task's sandbox, then the review asked of the task's agent. */
 async function reviewTheirs(id: string, url: string): Promise<void> {
@@ -127,7 +132,8 @@ async function reviewTheirs(id: string, url: string): Promise<void> {
 	if (!session) return;
 	const base = await checkOutPullRequest(session, info, machine);
 	reviewing.set(id, info.headSha);
-	await updateSession(id, { errorMessage: null });
+	// Recorded only once the head is in the sandbox, so a review that failed to start is tried again.
+	if (session.review) await updateSession(id, { errorMessage: null, reviewJson: JSON.stringify({ ...session.review, reviewedHead: info.headSha }) });
 	await sendToAgent(id, theirReviewMessage(info, base));
 }
 

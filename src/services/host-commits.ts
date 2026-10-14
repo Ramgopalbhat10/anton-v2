@@ -79,7 +79,9 @@ async function writeTrees(machine: Machine, root: string, entries: TreeEntry[]):
 	for (const entry of entries) {
 		if (entry.type === 'tree') children.set(entry.path, children.get(entry.path) ?? []);
 		const parent = parentOf(entry.path);
-		children.set(parent, [...(children.get(parent) ?? []), entry]);
+		const siblings = children.get(parent);
+		if (siblings) siblings.push(entry);
+		else children.set(parent, [entry]);
 	}
 	const expected = new Map(entries.filter((entry) => entry.type === 'tree').map((entry) => [entry.path, entry.sha]));
 	expected.set('', root);
