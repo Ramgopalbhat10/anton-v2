@@ -18,6 +18,14 @@ const api = vi.hoisted(() => ({
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
+// The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
+vi.mock('@tanstack/react-router', async (original) => ({
+	...(await original<typeof import('@tanstack/react-router')>()),
+	Link: ({ to, params, search, ...rest }: { to: string; params?: Record<string, string>; search?: Record<string, string> } & Record<string, unknown>) => {
+		const href = `${Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}${search ? `?${new URLSearchParams(search)}` : ''}`;
+		return <a href={href} {...rest} />;
+	},
+}));
 
 const { Thread } = await import('@/components/thread');
 const { setPendingPrompt } = await import('@/lib/pending-prompt');
@@ -365,5 +373,8 @@ describe('response details', () => {
 		const frame = screen.getByTitle('Explainer') as HTMLIFrameElement;
 		expect(frame.getAttribute('src')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
 		expect(frame.style.height).toBe('300px');
+		// It opens full size in Artifacts, or in a tab of its own.
+		expect(screen.getByRole('link', { name: 'Open Explainer in Artifacts' }).getAttribute('href')).toBe('/artifacts/s1?path=renders%2Fexplainer-abc123.html');
+		expect(screen.getByRole('link', { name: 'Open Explainer in a new tab' }).getAttribute('href')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
 	});
 });

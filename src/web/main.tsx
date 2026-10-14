@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { type ArtifactsSearch, ArtifactsPage, ArtifactView } from '@/components/artifacts-page';
 import { RepoSettingsPage } from '@/components/repo-settings';
 import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
@@ -21,6 +22,7 @@ import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/vm-panel';
+import { CATEGORIES } from '@/lib/artifacts';
 import './styles.css';
 
 const queryClient = new QueryClient();
@@ -95,6 +97,25 @@ const tasksRoute = createRoute({
 	component: TasksPage,
 });
 
+const artifactsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/artifacts',
+	// `type` narrows the page to one kind (apps, documents…), `q` searches it.
+	validateSearch: (search: Record<string, unknown>): ArtifactsSearch => ({
+		type: CATEGORIES.find((category) => category.key === search.type)?.key,
+		q: typeof search.q === 'string' && search.q ? search.q : undefined,
+	}),
+	component: ArtifactsPage,
+});
+
+const artifactRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/artifacts/$taskId',
+	// The file in that task's Library to show.
+	validateSearch: (search: Record<string, unknown>): { path: string } => ({ path: typeof search.path === 'string' ? search.path : '' }),
+	component: ArtifactView,
+});
+
 const reviewsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/reviews',
@@ -156,6 +177,8 @@ const routeTree = rootRoute.addChildren([
 	threadRoute,
 	projectSettingsRoute,
 	reviewsRoute,
+	artifactsRoute,
+	artifactRoute,
 	oldRepoSettingsRoute,
 	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, repoSettingsRoute]),
 ]);

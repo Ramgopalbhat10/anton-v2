@@ -3,6 +3,7 @@ import { listMachineFiles, readMachineFile, writeMachineFile } from '../core/mac
 import type { Machine, ObjectStore } from '../core/ports.ts';
 import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
+import { forgetOutputIndex } from '../db/pages.ts';
 import { getProviders } from '../providers/index.ts';
 import { type FileChange, type LogEntry, changes, repoDir } from './git.ts';
 
@@ -153,6 +154,7 @@ async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint
 	}
 	await store.put(keys.latest(id), manifest, 'application/json');
 	await updateSession(id, { checkpointAt: checkpoint.at });
+	await forgetOutputIndex(id);
 	return checkpoint;
 }
 
@@ -242,6 +244,7 @@ export function saveOutput(id: string, path: string, bytes: Uint8Array, contentT
 		const entry: SavedOutput = { path, size: bytes.length, mtimeMs: Date.now(), key };
 		const list = (await savedOutputs(id)).filter((output) => output.path !== path);
 		await store.put(keys.saved(id), JSON.stringify([...list, entry]), 'application/json');
+		await forgetOutputIndex(id);
 		return entry;
 	};
 	const next = (saving.get(id) ?? Promise.resolve()).catch(() => undefined).then(run);
@@ -267,6 +270,7 @@ export function deleteOutput(id: string, path: string): Promise<void> {
 			const next = { ...latest, outputs: latest.outputs.filter((output) => output.path !== path) };
 			await store.put(keys.latest(id), JSON.stringify(next), 'application/json');
 		}
+		await forgetOutputIndex(id);
 	};
 	const next = (saving.get(id) ?? Promise.resolve()).catch(() => undefined).then(run);
 	saving.set(id, next);

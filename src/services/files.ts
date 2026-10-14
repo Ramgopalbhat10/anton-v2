@@ -1,5 +1,6 @@
 import { readMachineFile } from '../core/machine-fs.ts';
 import { safeRelativePath, text } from '../core/shell.ts';
+import { deletePage } from '../db/pages.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
@@ -124,13 +125,22 @@ export async function changesView(id: string): Promise<ChangesView> {
 }
 
 /** Outputs come from storage, so they are listed the same way whether or not the machine runs. */
+/** What the machine wrote, as its last checkpoint copied it, and what was saved straight to storage. */
+function library(checkpoint: Checkpoint | null, saved: SavedOutput[]): OutputsView['outputs'] {
+	const fromMachine = checkpoint?.outputs ?? [];
+	const all = [...fromMachine, ...saved.filter((output) => !fromMachine.some((other) => other.path === output.path))];
+	return all.map(({ key: _key, ...output }) => output);
+}
+
 export async function outputsView(id: string): Promise<OutputsView> {
 	const [ctx, saved] = await Promise.all([context(id), savedOutputs(id)]);
-	// What the machine wrote, as its last checkpoint copied it, and what was saved straight to storage.
-	const fromMachine = ctx.checkpoint?.outputs ?? [];
-	const all = [...fromMachine, ...saved.filter((output) => !fromMachine.some((other) => other.path === output.path))];
-	const outputs = all.map(({ key: _key, ...output }) => output);
-	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs };
+	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs: library(ctx.checkpoint, saved) };
+}
+
+/** The task's Library as stored, without asking its machine: for the Artifacts page. */
+export async function storedOutputs(id: string): Promise<OutputsView['outputs']> {
+	const [checkpoint, saved] = await Promise.all([readCheckpoint(id), savedOutputs(id)]);
+	return library(checkpoint, saved);
 }
 
 /** The largest file the Library takes as an upload. */
@@ -162,6 +172,7 @@ export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	const machine = await liveMachine(id);
 	if (machine) await machine.exec(`rm -f ${quote(`${machine.root}/outputs/${path}`)}`);
 	await deleteOutput(id, path);
+	await deletePage(id, path);
 	announce({ kind: 'task', id, what: 'files' });
 }
 

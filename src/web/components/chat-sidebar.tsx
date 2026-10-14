@@ -23,6 +23,7 @@ import {
 	Rows3,
 	Search,
 	Settings,
+	Shapes,
 	SlidersHorizontal,
 	Square,
 	Waypoints,
@@ -610,6 +611,10 @@ export function ChatSidebar({
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Projects</div>
+				</Link>
+				<Link to="/artifacts" onClick={onNavigate} className={NAV_ROW}>
+					<NavIcon icon={Shapes} />
+					<div className="min-w-0 flex-1 truncate text-[13px]">Artifacts</div>
 				</Link>
 			</nav>
 

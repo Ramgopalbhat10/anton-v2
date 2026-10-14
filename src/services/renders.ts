@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { announce } from "../core/changes.ts";
 import { InvalidInputError, NotFoundError } from "../core/errors.ts";
+import { safeRelativePath } from "../core/shell.ts";
+import { getPageState, getPageTitle, notePage, putPageState } from "../db/pages.ts";
 import { getSessionRecord } from "../db/sessions.ts";
 import { readOutput, saveOutput } from "./checkpoints.ts";
 
@@ -20,11 +22,20 @@ import { readOutput, saveOutput } from "./checkpoints.ts";
  * The frame page passes messages between the page and the thread, in the MCP
  * Apps protocol's terms (JSON-RPC over postMessage): the page's height, links
  * to open (the thread asks first), and text for the composer.
+ *
+ * A page keeps its state on Anton's side, so every copy of it shows the same
+ * thing: the one in the thread, one opened in a tab of its own, and the one in
+ * the Library. The page sets and reads it through `window.anton` (or, when it
+ * keeps none, its form fields are kept for it); the frame page saves it and,
+ * told of a save by another copy (by the thread, or by the server's events
+ * when it has a tab of its own), hands the page the new state. The page itself
+ * still reaches nothing: the frame page, Anton's own, does the requests.
  */
 
 export const RENDER_DIR = "renders";
 export const MAX_RENDER_BYTES = 512 * 1024;
-const RENDER_PATH = /^renders\/[a-z0-9][a-z0-9-]{0,60}\.html$/;
+/** The most a page's state takes, its value and fields together. */
+export const MAX_STATE_BYTES = 256 * 1024;
 
 export const PAGE_CSP = [
   "sandbox allow-scripts allow-forms",
@@ -44,6 +55,8 @@ export const frameCsp = (nonce: string) =>
   [
     "default-src 'none'",
     "frame-src 'self'",
+    // Its own requests, for the page's state: the page inside has none of its own.
+    "connect-src 'self'",
     `script-src 'nonce-${nonce}'`,
     "style-src 'unsafe-inline'",
     "base-uri 'none'",
@@ -58,6 +71,7 @@ export const PAGE_GUIDE = [
   "Give charts fixed pixel heights, and let content set the height: no 100vh or height:100% on html or body. The frame grows to fit the page.",
   "Anton sets these CSS variables on :root: --text-primary, --text-secondary, --text-tertiary, --accent, --accent-text, --border, --surface (a card), --surface-inset, --success, --warning, --danger, --data-1 … --data-5 (series colours), --radius, --font-sans, --font-mono. Use them rather than your own colours.",
   'Links open in a new tab after the user agrees. To hand the user text to send you, call window.anton.send("text"): it goes into their message box, and they send it.',
+  "The page is a small app the user comes back to, and every copy of it (in the thread, in a tab of its own, in the Library) shows the same state. Keep whatever the user does that should last (entries, choices, progress, a game's score) with window.anton.setState(value), any JSON value; start from window.anton.state (null at first), and redraw from window.anton.onStateChange(function (state) { … }) when another copy changes it. localStorage and cookies are not available. A page that keeps no state this way has its form fields' values kept for it.",
 ].join(" ");
 
 /** Variables the page gets before the thread sends its own, so its first paint is already right. */
@@ -107,9 +121,43 @@ const BASE_CSS =
  */
 const BOOTSTRAP = `(function(){var p=window.parent,s=document.getElementById("anton-theme"),n=0,h=-1;function post(m,q){p.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}function theme(v){if(!v||typeof v!=="object")return;var c=":root{";for(var k in v){if(/^--[a-z0-9-]+$/.test(k))c+=k+":"+String(v[k]).replace(/[;{}<>]/g,"")+";"}s.textContent=c+"}"}window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(d&&d.jsonrpc==="2.0"&&d.method==="ui/notifications/host-context-changed"&&d.params&&d.params.styles)theme(d.params.styles.variables)});function size(){var r=document.documentElement,v=Math.ceil(Math.max(r.scrollHeight,document.body?document.body.scrollHeight:0));if(v===h)return;h=v;post("ui/notifications/size-changed",{height:v})}if(window.ResizeObserver){var o=new ResizeObserver(size);o.observe(document.documentElement);document.addEventListener("DOMContentLoaded",function(){if(document.body)o.observe(document.body)})}window.addEventListener("load",size);document.addEventListener("DOMContentLoaded",size);document.addEventListener("click",function(e){if(!e.isTrusted)return;var a=e.target&&e.target.closest?e.target.closest("a[href]"):null,u;if(!a)return;try{u=new URL(a.getAttribute("href"),document.baseURI)}catch(x){return}if(u.href.split("#")[0]===location.href.split("#")[0])return;e.preventDefault();if(/^https?:$/.test(u.protocol))post("ui/open-link",{url:u.href})},true);window.anton={send:function(t){if(typeof t==="string"&&t.trim())post("ui/message",{role:"user",content:[{type:"text",text:t.slice(0,4000)}]})}};post("ui/notifications/initialized",{})})();`;
 
+/**
+ * Runs next: `window.anton.state`, `setState` and `onStateChange`, starting
+ * from the state served with the page. A page that never uses them has its
+ * form fields kept instead: their values are saved after you change them, and
+ * set (with input and change events, so the page redraws) when it opens or
+ * another copy changes them. Changes from elsewhere wait while one of yours is
+ * on its way, so typing is never overwritten.
+ */
+const STATE_BOOTSTRAP = `(function(){
+var p=window.parent,a=window.anton,seed=window.__antonPage||{},state=seed.state===undefined?null:seed.state,fields=seed.fields||{},own=false,applying=false,listeners=[],timer=0;
+try{delete window.__antonPage}catch(x){}
+function post(m,q){p.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
+function same(x,y){return JSON.stringify(x)===JSON.stringify(y)}
+var SKIP=/^(password|file|hidden|button|submit|reset|image)$/;
+function box(el){return el.type==="checkbox"||el.type==="radio"}
+function controls(){var all=document.querySelectorAll("input,select,textarea"),seen={},out=[];for(var i=0;i<all.length;i++){var el=all[i];if(SKIP.test(String(el.type||"").toLowerCase())||(el.closest&&el.closest("[data-anton-sync=off]")))continue;var base=el.id?"#"+el.id:el.name?"@"+el.name:el.tagName.toLowerCase(),n=seen[base]||0;seen[base]=n+1;out.push([n?base+"~"+n:base,el])}return out}
+function read(){var out={},list=controls();for(var i=0;i<list.length;i++){var el=list[i][1];out[list[i][0]]=box(el)?el.checked:String(el.value).slice(0,20000)}return out}
+function fire(el){el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))}
+function apply(next){applying=true;try{var list=controls();for(var i=0;i<list.length;i++){var k=list[i][0],el=list[i][1];if(!Object.prototype.hasOwnProperty.call(next,k))continue;var v=next[k];if(box(el)){if(el.checked!==!!v){el.checked=!!v;fire(el)}}else if(typeof v==="string"&&el.value!==v){el.value=v;fire(el)}}}finally{applying=false}}
+function noteFields(){if(own||applying)return;clearTimeout(timer);timer=setTimeout(function(){timer=0;if(own)return;var now=read();if(same(now,fields))return;fields=now;post("anton/state/set",{fields:now})},250)}
+["input","change","click","keyup"].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)noteFields()},true)});
+Object.defineProperty(a,"state",{get:function(){return state},enumerable:true});
+a.setState=function(v){own=true;var c=JSON.parse(JSON.stringify(v===undefined?null:v));state=c;if(!applying)post("anton/state/set",{state:c})};
+a.onStateChange=function(f){own=true;if(typeof f==="function")listeners.push(f);return function(){listeners=listeners.filter(function(g){return g!==f})}};
+window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(!d||d.jsonrpc!=="2.0"||d.method!=="anton/state/changed"||!d.params)return;var q=d.params;if(Object.prototype.hasOwnProperty.call(q,"state")&&!same(q.state,state)){state=q.state;applying=true;try{for(var i=0;i<listeners.length;i++){try{listeners[i](state)}catch(x){setTimeout(function(){throw x})}}}finally{applying=false}}if(q.fields&&!own&&!timer&&!same(q.fields,fields)){fields=q.fields;apply(fields)}});
+window.addEventListener("load",function(){setTimeout(function(){if(!own&&Object.keys(fields).length)apply(fields);post("anton/state/ready",{version:Number(seed.version)||0})},0)});
+})();`.replace(/\n/g, "");
+
+/** What a page starts from: its saved state, as a script that can't end early or be read as markup. */
+function seedScript(seed: { state: unknown; fields: Record<string, unknown>; version: number }): string {
+  const json = JSON.stringify(seed).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  return `<script>window.__antonPage=${json}</script>`;
+}
+
 /** Puts the theme and the bootstrap first in the document, ahead of anything the page has, so its own styles still win. */
-export function injectBootstrap(html: string): string {
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style><script>${BOOTSTRAP}</script>`;
+export function injectBootstrap(html: string, seed: { state: unknown; fields: Record<string, unknown>; version: number } = { state: null, fields: {}, version: 0 }): string {
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style>${seedScript(seed)}<script>${BOOTSTRAP}</script><script>${STATE_BOOTSTRAP}</script>`;
   const opening = /<head(\s[^>]*)?>/i.exec(html);
   if (opening)
     return (
@@ -153,33 +201,115 @@ export async function saveRender(
   )
     throw new InvalidInputError("Write a complete HTML document.");
   const path = `${RENDER_DIR}/${slug(input.title)}-${randomBytes(3).toString("hex")}.html`;
+  const title = input.title.trim().slice(0, 120);
   await saveOutput(id, path, bytes, "text/html");
+  await notePage(id, path, title);
   announce({ kind: "task", id, what: "files" });
   const height = Math.round(Math.min(1600, Math.max(80, input.height ?? 360)));
-  return { path, title: input.title.trim().slice(0, 120), height };
+  return { path, title, height };
 }
 
+/** Any HTML file in a task's Library shows as a page: the agent's under renders/, and any other it or you saved. */
 export function isRenderPath(path: string): boolean {
-  return RENDER_PATH.test(path);
+  if (path.length > 400 || !/\.html?$/i.test(path)) return false;
+  try {
+    return safeRelativePath(path) === path;
+  } catch {
+    return false;
+  }
 }
 
-/** The page, ready to serve: its bootstrap added. */
+/** A name for a page with no title kept: the file's, without the suffix render_html adds. */
+export function pageTitle(path: string): string {
+  const name = (path.split("/").pop() ?? path)
+    .replace(/\.html?$/i, "")
+    .replace(/-[0-9a-f]{6}$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return name ? name[0].toUpperCase() + name.slice(1) : "Page";
+}
+
+/** The page, ready to serve: its bootstrap added, and its state as it stands. */
 export async function renderPage(id: string, path: string): Promise<string> {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
-  const bytes = await readOutput(id, path);
+  const [bytes, saved] = await Promise.all([readOutput(id, path), getPageState(id, path)]);
   if (!bytes) throw new NotFoundError("Page not found");
-  return injectBootstrap(new TextDecoder().decode(bytes));
+  return injectBootstrap(new TextDecoder().decode(bytes), saved);
 }
 
-/** The frame page around a page: it holds the page in a sandboxed frame and passes messages between it and the thread. */
+/** A page's state, for a copy that heard it changed. */
+export async function pageState(id: string, path: string) {
+  if (!isRenderPath(path)) throw new NotFoundError("Not a page");
+  return getPageState(id, path);
+}
+
+/** Field values a page's form controls hold: strings or checked states, by a key the page's bootstrap gives each. */
+function checkFields(value: unknown): Record<string, string | boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new InvalidInputError("Fields are an object.");
+  const entries = Object.entries(value);
+  if (entries.length > 2000) throw new InvalidInputError("Too many fields.");
+  for (const [key, field] of entries) {
+    if (key.length > 300 || (typeof field !== "string" && typeof field !== "boolean")) throw new InvalidInputError("Each field is a string or a checked state.");
+  }
+  return value as Record<string, string | boolean>;
+}
+
+/**
+ * Saves a copy's change to the page's state and tells every other copy, by
+ * `from`, the id the saving copy gave itself, so it can skip its own echo.
+ */
+export async function savePageState(id: string, path: string, body: unknown): Promise<{ version: number }> {
+  if (!isRenderPath(path)) throw new NotFoundError("Not a page");
+  if (!(await getSessionRecord(id))) throw new NotFoundError("Session not found");
+  const input = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const change: { state?: unknown; fields?: Record<string, string | boolean> } = {};
+  if ("state" in input) change.state = input.state ?? null;
+  if ("fields" in input) change.fields = checkFields(input.fields);
+  if (new TextEncoder().encode(JSON.stringify(change)).length > MAX_STATE_BYTES)
+    throw new InvalidInputError(`A page keeps up to ${MAX_STATE_BYTES / 1024} KB of state.`);
+  const from = typeof input.from === "string" ? input.from.slice(0, 40) : "";
+  const version = await putPageState(id, path, change, pageTitle(path));
+  announce({ kind: "page", id, path, version, from });
+  return { version };
+}
+
+/**
+ * Runs in the frame page: passes messages between the page and whatever holds
+ * it, and keeps the page's state. Saves are batched (a burst of typing is one
+ * request) and sent on as the frame closes. A change elsewhere is fetched and
+ * handed to the page, except while a save of this copy's is waiting or on its
+ * way: that save is newer, and the copy fetches again once it lands. Inside
+ * Anton the thread says when the state changed; in a tab of its own the frame
+ * page listens to the server's events itself.
+ */
+const FRAME_SCRIPT = `var f=document.getElementById("page"),url="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-state?path="+encodeURIComponent(PAGE.path),me=Math.random().toString(36).slice(2),known=-1,pending=null,flying=false,stale=false,timer=0,alone=window.parent===window;
+function toPage(m,q){if(f.contentWindow)f.contentWindow.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
+function pull(){if(pending||flying){stale=true;return}fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(s){if(!s||!(s.version>known))return;if(pending||flying){stale=true;return}known=s.version;toPage("anton/state/changed",{state:s.state,fields:s.fields})}).catch(function(){})}
+function flush(keep){clearTimeout(timer);timer=0;if(!pending||flying)return;var body=pending;pending=null;flying=true;body.from=me;fetch(url,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(body),keepalive:keep===true}).then(function(r){return r.ok?r.json():null}).then(function(s){if(s&&s.version>known)known=s.version}).catch(function(){}).then(function(){flying=false;if(pending)flush();else if(stale){stale=false;pull()}})}
+function queue(q){pending=pending||{};if(Object.prototype.hasOwnProperty.call(q,"state"))pending.state=q.state;if(q.fields&&typeof q.fields==="object")pending.fields=q.fields;clearTimeout(timer);timer=setTimeout(flush,150)}
+function changed(q){if(q&&q.from!==me&&q.version>known)pull()}
+window.addEventListener("pagehide",function(){flush(true)});
+window.addEventListener("message",function(e){var d=e.data;if(e.source===f.contentWindow){if(d&&d.jsonrpc==="2.0"&&typeof d.method==="string"&&d.method.indexOf("anton/state/")===0){var q=d.params||{};if(d.method==="anton/state/set")queue(q);else if(d.method==="anton/state/ready"){if(known<0)known=Number(q.version)||0;pull()}return}if(!alone)window.parent.postMessage(d,"*");else if(d&&d.method==="ui/open-link"&&d.params&&/^https?:/.test(d.params.url))window.open(d.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){if(d&&d.method==="anton/page-changed"){changed(d.params);return}if(f.contentWindow)f.contentWindow.postMessage(d,"*")}});
+if(alone&&window.EventSource){var events=new EventSource("/api/events"),dropped=false;events.onmessage=function(e){var c;try{c=JSON.parse(e.data)}catch(x){return}if(c&&c.kind==="page"&&c.id===PAGE.id&&c.path===PAGE.path)changed(c)};events.onerror=function(){dropped=true};events.onopen=function(){if(dropped){dropped=false;pull()}}}`;
+
+const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
+
+/** The frame page around a page: it holds the page in a sandboxed frame, passes messages between it and the thread, and keeps its state. */
 export function renderFrame(
   id: string,
   path: string,
+  title = pageTitle(path),
 ): { html: string; csp: string } {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   const nonce = randomBytes(16).toString("base64");
   const src = `/api/sessions/${encodeURIComponent(id)}/render?path=${encodeURIComponent(path)}`;
-  const relay = `(function(){window.addEventListener("message",function(e){var f=document.getElementById("page");if(!f)return;if(e.source===f.contentWindow){if(window.parent!==window)window.parent.postMessage(e.data,"*");else if(e.data&&e.data.method==="ui/open-link"&&e.data.params&&/^https?:/.test(e.data.params.url))window.open(e.data.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){f.contentWindow.postMessage(e.data,"*")}})})();`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${path.slice(RENDER_DIR.length + 1)}</title><style>:root{color-scheme:dark}html,body{margin:0;height:100%;background:transparent}body{background:#0b0b0b}html.framed body{background:transparent}iframe{display:block;border:0;width:100%;height:100%;color-scheme:dark}</style></head><body><script nonce="${nonce}">if(window.parent!==window)document.documentElement.className="framed";${relay}</script><iframe id="page" title="Page" sandbox="allow-scripts allow-forms" src="${src}"></iframe></body></html>`;
+  const page = JSON.stringify({ id, path }).replace(/</g, "\\u003c");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>:root{color-scheme:dark}html,body{margin:0;height:100%;background:transparent}body{background:#0b0b0b}html.framed body{background:transparent}iframe{display:block;border:0;width:100%;height:100%;color-scheme:dark}html:not(.framed) body{box-sizing:border-box;padding:28px 20px}html:not(.framed) iframe{max-width:960px;margin:0 auto}</style><script nonce="${nonce}">if(window.parent!==window)document.documentElement.className="framed"</script></head><body><iframe id="page" title="Page" sandbox="allow-scripts allow-forms" src="${src}"></iframe><script nonce="${nonce}">(function(){var PAGE=${page};${FRAME_SCRIPT}})();</script></body></html>`;
   return { html, csp: frameCsp(nonce) };
+}
+
+/** The frame page, named for its page: the title the agent gave it, or its file's. */
+export async function pageFrame(id: string, path: string): Promise<{ html: string; csp: string }> {
+  if (!isRenderPath(path)) throw new NotFoundError("Not a page");
+  return renderFrame(id, path, (await getPageTitle(id, path)) ?? pageTitle(path));
 }

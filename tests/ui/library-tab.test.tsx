@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
 	outputs: vi.fn(),
 	uploadOutput: vi.fn(async () => ({ path: 'uploads/notes.txt' })),
 	deleteOutput: vi.fn(async () => ({ ok: true })),
+	outputText: vi.fn(async () => '<!doctype html><title>Budget</title><p>Hello</p>'),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -78,5 +79,19 @@ describe('LibraryTab', () => {
 		expect(screen.getByText('Modified')).toBeTruthy();
 		expect(screen.getByText('Size')).toBeTruthy();
 		expect(localStorage.getItem('anton.library.view')).toContain('list');
+	});
+
+	it('opens an HTML file as its live page, with its source a click away', async () => {
+		localStorage.removeItem('anton.library.view');
+		const pages = { ...listing, outputs: [{ path: 'renders/budget-a1b2c3.html', size: 900, mtimeMs: at }] };
+		renderWithQueries(<LibraryTab sessionId="s1" />, [[['outputs', 's1'], pages]]);
+		fireEvent.click(screen.getByRole('button', { name: /^renders\s*1 item/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'budget-a1b2c3.html' }));
+		const frame = screen.getByTitle('budget-a1b2c3.html') as HTMLIFrameElement;
+		expect(frame.getAttribute('src')).toBe('/api/sessions/s1/render-frame?path=renders%2Fbudget-a1b2c3.html');
+		expect(screen.getByRole('link', { name: 'Open in a new tab' }).getAttribute('href')).toBe(frame.getAttribute('src'));
+		fireEvent.click(screen.getByRole('radio', { name: 'Code' }));
+		expect(await screen.findByText(/<p>Hello<\/p>/)).toBeTruthy();
+		expect(screen.queryByTitle('budget-a1b2c3.html')).toBeNull();
 	});
 });
