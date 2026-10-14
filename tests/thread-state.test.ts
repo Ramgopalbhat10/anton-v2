@@ -7,7 +7,7 @@ const base = {
 	status: 'stopped' as const,
 	asking: null,
 	planMode: false,
-	usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
+	plan: null,
 	pullRequest: null,
 	prUrl: null,
 	resolvedAt: null,
@@ -25,7 +25,8 @@ test('a thread is in the first state whose rule holds', () => {
 	assert.equal(threadState({ ...base, status: 'starting' }), 'working');
 	assert.equal(threadState({ ...base, asking: 'Which one?' }), 'waiting');
 	assert.equal(threadState({ ...base, status: 'error' }), 'waiting');
-	assert.equal(threadState({ ...base, planMode: true, usage: { inputTokens: 10, outputTokens: 10, cost: 0 } }), 'waiting', 'a plan to approve');
+	assert.equal(threadState({ ...base, planMode: true, plan: '1. Change app.ts' }), 'waiting', 'a plan to approve');
+	assert.equal(threadState({ ...base, planMode: true }), 'idle', 'plan mode alone waits on nothing');
 	assert.equal(threadState({ ...base, ...pr('open') }), 'review');
 	assert.equal(threadState({ ...base, ...pr('draft', { approved: true }) }), 'review', 'a draft does not land');
 	assert.equal(threadState({ ...base, ...pr('open', { approved: true }) }), 'landing');

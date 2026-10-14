@@ -17,3 +17,21 @@ export function takeAsk(id: string): string | null {
 	asked.delete(id);
 	return question;
 }
+
+/**
+ * The plan the reply proposed with `propose_plan` in plan mode, per task. At
+ * the reply's end `checkReply` keeps it with the task, so the task waits on
+ * your approval; a reply that proposes none leaves no plan waiting.
+ */
+const plans = new Map<string, string>();
+
+export function notePlan(id: string, plan: string): void {
+	plans.set(id, plan);
+}
+
+/** The plan the reply proposed, if it proposed one, and forgets it. */
+export function takePlan(id: string): string | null {
+	const plan = plans.get(id) ?? null;
+	plans.delete(id);
+	return plan;
+}
