@@ -1,10 +1,10 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CornerDownRight, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
-import { AgentsCard, delegationOf } from '@/components/subagents';
+import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown } from '@/components/markdown';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
@@ -15,6 +15,7 @@ import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
 import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
+import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
@@ -412,7 +413,8 @@ function UserMessageView({ message, meta }: { message: FlueConversationMessage; 
 					))}
 				</div>
 			) : null}
-			<div className="max-w-[520px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
+			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
+			<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
 				{text}
 			</div>
 			{/* The same for every message, so it waits for the pointer. */}
@@ -596,13 +598,64 @@ function Notice({ children }: { children: ReactNode }) {
 }
 
 const SettlementNotice = memo(function SettlementNotice({ message }: { message: FlueConversationMessage }) {
+	// Stopping is something you did, not a failure: one quiet line, however many messages it stopped.
+	if (message.settlement?.outcome === 'aborted') {
+		return (
+			<div className="flex items-center gap-1.5 text-[12px] text-(--text-tertiary)">
+				<Icon icon={CircleStop} size={12} />
+				Stopped
+			</div>
+		);
+	}
 	const text = message.parts
 		.map((part) => (part.type === 'text' ? part.text : ''))
 		.join('')
 		.trim();
-	const verb = message.settlement?.outcome === 'aborted' ? 'was stopped' : 'failed';
-	return <Notice>{text || `The agent turn ${verb}. Send the message again to retry.`}</Notice>;
+	return <Notice>{text || 'The agent turn failed. Send the message again to retry.'}</Notice>;
 });
+
+/**
+ * A message sent while the agent works waits for its next step. While a
+ * subagent runs, that step comes only when the subagent finishes, so this says
+ * so and lets you stop it to have the message read now.
+ */
+function Waiting({ sessionId }: { sessionId: string }) {
+	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
+	const stop = useStopRun(sessionId);
+	if (!running.length) {
+		return (
+			<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
+				<Spinner size={12} />
+				<span>Starting the agent</span>
+			</div>
+		);
+	}
+	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
+	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
+	return (
+		<div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-(--card-border) bg-(--card-bg) px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
+			<Spinner size={12} />
+			<span className="min-w-0 flex-1">
+				Anton reads your message when {who} {running.length === 1 ? 'finishes' : 'finish'}. Stop {running.length === 1 ? 'it' : 'them'} to have it read now.
+			</span>
+			<Btn
+				size="sm"
+				disabled={stop.isPending}
+				onClick={() => {
+					for (const run of running) stop.mutate(run.id);
+				}}
+			>
+				{running.length === 1 ? `Stop ${names[0]} agent` : 'Stop agents'}
+			</Btn>
+		</div>
+	);
+}
+
+const textOf = (message: FlueConversationMessage) =>
+	message.parts
+		.map((part) => (part.type === 'text' ? part.text : ''))
+		.join('')
+		.trim();
 
 /** File references in replies link to the task's files, and open in the Files panel at their line. */
 function useThreadFileLinks(sessionId: string): FileLinks {
@@ -628,7 +681,14 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
-	const messages = useMemo(() => conversation.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [conversation]);
+	const messages = useMemo(
+		() =>
+			conversation
+				.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
+				// One Stop settles the reply and every message queued behind it; it reads as one stop.
+				.filter((message, index, list) => !(message.settlement?.outcome === 'aborted' && list[index - 1]?.settlement?.outcome === 'aborted')),
+		[conversation],
+	);
 	// A chat's messages carry no repository or branch under them.
 	const repo = session.data && !isChat(session.data) ? session.data.repo : undefined;
 	const branch = session.data ? branchLabel(session.data) : undefined;
@@ -668,7 +728,28 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 			agent.sendMessage(text, { images: images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename })) }),
 		[agent.sendMessage],
 	);
-	const onStop = useCallback(() => api.stopAgent(sessionId), [sessionId]);
+	// Stop also drops messages still waiting for the agent's next step, unread; they go back to the composer.
+	const waiting = useRef<{ texts: string[]; until: number } | null>(null);
+	const latest = useRef(messages);
+	latest.current = messages;
+	const onStop = useCallback(() => {
+		const shown = latest.current;
+		const last = shown.findLastIndex((message) => message.role === 'assistant');
+		const texts = shown.slice(last + 1).flatMap((message) => (message.role === 'user' ? [textOf(message)] : [])).filter(Boolean);
+		waiting.current = texts.length ? { texts, until: Number.POSITIVE_INFINITY } : null;
+		return api.stopAgent(sessionId);
+	}, [sessionId]);
+	useEffect(() => {
+		const pending = waiting.current;
+		if (!pending || busy) return;
+		// Read ones stay in the thread; give the thread a few seconds to drop the unread ones.
+		if (pending.until === Number.POSITIVE_INFINITY) pending.until = Date.now() + 10_000;
+		const shown = new Set(messages.flatMap((message) => (message.role === 'user' ? [textOf(message)] : [])));
+		const lost = pending.texts.filter((text) => !shown.has(text));
+		pending.texts = pending.texts.filter((text) => shown.has(text));
+		for (const text of lost) addToComposer(sessionId, { kind: 'text', text });
+		if (!pending.texts.length || Date.now() > pending.until) waiting.current = null;
+	}, [busy, messages, sessionId]);
 
 	return (
 		<SessionId.Provider value={sessionId}>
@@ -709,12 +790,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								/>
 							),
 						)}
-						{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-							<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
-								<Spinner size={12} />
-								<span>Starting the agent</span>
-							</div>
-						) : null}
+						{busy && messages[messages.length - 1]?.role !== 'assistant' ? <Waiting sessionId={sessionId} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
 								{agent.error?.message

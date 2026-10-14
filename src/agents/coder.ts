@@ -67,7 +67,7 @@ import { SCREEN } from '../core/desktop.ts';
 import { describe, locate } from '../services/vision.ts';
 import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
-import { currentBrief, noteStep, type StepDetail } from '../services/subagent-runs.ts';
+import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
 import { isLocalAddress } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
@@ -664,6 +664,27 @@ function useRemember(id: string, project: ThreadProject | null) {
 	);
 }
 
+/**
+ * What the task's subagents did and are doing. Their own conversations never
+ * reach the agent, only their answers; this lets it say what one did, why it
+ * took long, or how far one got before it was stopped or failed.
+ */
+function useAgentRuns(id: string) {
+	useTool(
+		defineTool({
+			name: 'agent_runs',
+			description:
+				"What this task's subagents did or are doing, newest first: each one's brief, state, time, latest steps and its answer or how it ended. " +
+				'Read it when the user asks what a subagent did or why something took long, or after one was stopped or failed, instead of guessing.',
+			input: v.object({ count: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10)), 3) }),
+			run: async ({ data }) => {
+				const runs = (await subagentRuns(id)).slice(0, data.count);
+				return { output: runs.length ? runs.map((run) => runReport(run)).join('\n\n') : 'No subagent has run in this task.' };
+			},
+		}),
+	);
+}
+
 /** The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer. */
 function useTodos(id: string) {
 	useTool(
@@ -980,6 +1001,7 @@ export function Coder({ id }: AgentProps) {
 	const project = threadProjectFor(id);
 	if (!chat) useRemember(id, project);
 	useTodos(id);
+	useAgentRuns(id);
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
 	if (visual !== 'off') {

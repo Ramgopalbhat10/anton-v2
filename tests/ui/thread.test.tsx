@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
 	budget: vi.fn(),
 	models: vi.fn(),
 	stopAgent: vi.fn(),
+	stopSubagent: vi.fn(async () => undefined),
 	commands: vi.fn(async () => ({ commands: [] })),
 	sessionSkills: vi.fn(async () => ({ skills: [] })),
 	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
@@ -146,9 +147,23 @@ describe('Thread', () => {
 		expect(screen.getByText('Approved')).toBeTruthy();
 	});
 
-	it('says when a turn was stopped', () => {
-		show(agent([user('u1', 'Go'), { id: 'x', role: 'assistant', purpose: 'assistant', display: 'visible', parts: [], settlement: { outcome: 'aborted' } }]));
-		expect(screen.getByText('The agent turn was stopped. Send the message again to retry.')).toBeTruthy();
+	it('says once, quietly, that a turn was stopped, however many messages the stop settled', () => {
+		const stopped = (id: string) => ({ id, role: 'system', purpose: 'advisory', display: 'visible', parts: [{ type: 'text', text: 'Submission was aborted.' }], settlement: { outcome: 'aborted' } });
+		show(agent([user('u1', 'Go'), stopped('x'), stopped('y')]));
+		expect(screen.getAllByText('Stopped')).toHaveLength(1);
+		expect(screen.queryByText('Submission was aborted.')).toBeNull();
+	});
+
+	it('says a message waits for a running subagent, and stops it to have the message read now', async () => {
+		api.subagents.mockResolvedValue({
+			runs: [{ id: 'run-1', agent: 'browser', prompt: 'Check the page', description: null, toolCallId: 'task-1', status: 'running', startedAt: new Date().toISOString(), durationMs: null, model: null, tokens: 0, calls: 0, steps: [], writing: null, result: null }],
+		});
+		show(agent([user('u1', 'Check it'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Check the page' })]), user('u2', 'Why so long?')], { status: 'streaming' }));
+		expect(await screen.findByText('Anton reads your message when the browser agent finishes. Stop it to have it read now.')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Stop browser agent' }));
+		await waitFor(() => expect(api.stopSubagent).toHaveBeenCalledWith('s1', 'run-1'));
+		// The agents card stops it too.
+		expect(screen.getByRole('button', { name: 'Stop the browser agent' })).toBeTruthy();
 	});
 
 	it('sends the prompt typed on the launcher once the history has loaded', async () => {

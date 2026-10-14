@@ -89,3 +89,72 @@ test('what a tool did inside a step is kept on that step, even when it says so b
 	assert.equal(run.steps[0].detail?.decisions, 3);
 	assert.equal(run.steps[0].detail?.actions[1].what.length, 300);
 });
+
+test('one subagent is stopped on its own: its task call answers with what it had done, and the run ends stopped', async () => {
+	resetSubagentRunsForTests();
+	const { stopSubagent } = await import('../src/services/subagent-runs.ts');
+	const { subagentStopInterceptor } = await import('../src/flue/subagent-stop.ts');
+	const at = { instanceId: 'task-s', taskId: 'sub-s' };
+	recordSubagentEvent({ type: 'task_start', ...at, agent: 'browser', prompt: 'Check the Library page\nin detail' });
+	recordSubagentEvent({ type: 'tool_start', ...at, toolName: 'bash', toolCallId: 's1', args: { command: 'sleep   12' } });
+	recordSubagentEvent({ type: 'message_end', ...at, message: { role: 'assistant', content: 'Waiting on the page…' } });
+	await settle();
+	assert.equal(await stopSubagent('task-s', 'sub-s'), false, 'nothing to stop until the run is in the runtime');
+
+	let aborted = false;
+	// The subagent's own work, which only ends when the runtime aborts it.
+	const work = new Promise<{ text: string }>((_, reject) => setTimeout(() => ((aborted = true), reject(new Error('aborted'))), 50));
+	const call = subagentStopInterceptor({ type: 'task', taskId: 'sub-s' }, {}, () => work);
+	assert.equal(await stopSubagent('task-s', 'sub-s'), true);
+	const answer = (await call) as { text: string };
+	assert.match(answer.text, /^The user stopped this subagent before it finished\. Do not start it again unless they ask/);
+	assert.match(answer.text, /browser subagent, stopped: "Check the Library page"\. 1 steps over/);
+	assert.match(answer.text, /- bash sleep 12 \(running\)/);
+	assert.match(answer.text, /What it last wrote: Waiting on the page…/);
+	await new Promise((resolve) => setTimeout(resolve, 80));
+	assert.ok(aborted, "the subagent's own end is left to the runtime");
+
+	recordSubagentEvent({ type: 'task', ...at, isError: false, result: answer.text, durationMs: 4000 });
+	await settle();
+	const [run] = await subagentRuns('task-s');
+	assert.equal(run.status, 'stopped');
+	assert.equal(run.result, answer.text);
+	assert.equal(run.steps[0].state, 'done', 'an interrupted step is not a failure');
+	assert.equal(await stopSubagent('task-s', 'sub-s'), false, 'a finished run is not stopped again');
+});
+
+test('stopping the whole reply ends its running subagents as stopped, not failed', async () => {
+	resetSubagentRunsForTests();
+	const { noteRepliesStopping } = await import('../src/services/subagent-runs.ts');
+	const at = { instanceId: 'task-a', taskId: 'sub-a' };
+	recordSubagentEvent({ type: 'task_start', ...at, agent: 'tester', prompt: 'Run the tests' });
+	await settle();
+	noteRepliesStopping('task-a');
+	recordSubagentEvent({ type: 'task', ...at, isError: true, result: 'This operation was aborted' });
+	await settle();
+	const [run] = await subagentRuns('task-a');
+	assert.deepEqual([run.status, run.result], ['stopped', 'Stopped with the reply.']);
+});
+
+test("the agent reads its subagents' runs as a short report", async () => {
+	const { runReport } = await import('../src/services/subagent-runs.ts');
+	const run = {
+		id: 'r',
+		agent: 'explorer',
+		prompt: 'Map the code',
+		description: 'Map it',
+		toolCallId: null,
+		status: 'done' as const,
+		startedAt: '2026-10-14T10:00:00.000Z',
+		durationMs: 125_000,
+		model: null,
+		tokens: 0,
+		calls: 0,
+		steps: Array.from({ length: 14 }, (_, index) => ({ id: `s${index}`, tool: 'read', input: { path: `src/${index}.ts` }, state: 'done' as const, at: '2026-10-14T10:00:00.000Z', durationMs: 5 })),
+		writing: null,
+		result: 'It is a Hono app.',
+	};
+	const report = runReport(run);
+	assert.match(report, /^explorer subagent, done: "Map it"\. 14 steps over 2m 5s\.\nIts last 12 steps:\n- read src\/2\.ts/);
+	assert.match(report, /Its answer: It is a Hono app\.$/);
+});

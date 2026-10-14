@@ -44,7 +44,8 @@ export type SubagentRun = {
 	description: string | null;
 	/** The task tool call that started it, when the runtime said. */
 	toolCallId: string | null;
-	status: 'running' | 'done' | 'failed';
+	/** Stopped: the user stopped it, alone or with the whole reply. */
+	status: 'running' | 'done' | 'failed' | 'stopped';
 	startedAt: string;
 	durationMs: number | null;
 	model: string | null;
@@ -232,10 +233,12 @@ function apply(id: string, list: SubagentRun[], event: Event) {
 			run.writing = textOf(event.message.content).trim().slice(-400) || run.writing;
 			break;
 		case 'task': {
-			run.status = event.isError ? 'failed' : 'done';
+			const stopped = stopping.delete(run.id);
+			run.status = stopped ? 'stopped' : event.isError ? 'failed' : 'done';
 			run.durationMs = event.durationMs ?? Date.now() - Date.parse(run.startedAt);
 			const result = typeof event.result === 'string' ? event.result : event.result == null ? '' : JSON.stringify(event.result);
-			run.result = result.slice(0, MAX_RESULT) || null;
+			// Stopped alone, the result is what the agent was told; stopped with the reply, only the abort's own error.
+			run.result = stopped && event.isError ? STOPPED_WITH_REPLY : result.slice(0, MAX_RESULT) || null;
 			run.writing = null;
 			// Steps the runtime never closed (an interrupted batch) end with the run.
 			for (const step of run.steps) if (step.state === 'running') step.state = run.status === 'failed' ? 'failed' : 'done';
@@ -286,8 +289,82 @@ export async function forgetSubagentRuns(id: string): Promise<void> {
 	await setSetting(key(id), null);
 }
 
+/**
+ * Stopping one subagent. The runtime keeps no handle to a running subagent
+ * outside itself, so the call that runs one (`src/flue/subagent-stop.ts`)
+ * says here how to end it; ending it answers the agent's `task` call with
+ * what the run had done, and the agent carries on.
+ */
+const stoppers = new Map<string, (note: string) => void>();
+/** Runs being stopped, by run id, so their end reads Stopped rather than Failed. */
+const stopping = new Set<string>();
+
+/** Registers how to end a running subagent; returns what to call once it has ended. */
+export function onSubagentStop(runId: string, stop: (note: string) => void): () => void {
+	stoppers.set(runId, stop);
+	return () => {
+		if (stoppers.get(runId) === stop) stoppers.delete(runId);
+	};
+}
+
+const STOPPED_WITH_REPLY = 'Stopped with the reply.';
+
+/** Stops one of the task's running subagents; false when it is not running here (finished, or from before a restart). */
+export async function stopSubagent(id: string, runId: string): Promise<boolean> {
+	const run = (await runsOf(id)).find((entry) => entry.id === runId);
+	const stop = stoppers.get(runId);
+	if (!run || run.status !== 'running' || !stop) return false;
+	stoppers.delete(runId);
+	stopping.add(runId);
+	stop(stoppedNote(run));
+	return true;
+}
+
+/** The whole reply is being stopped: its running subagents end as stopped, not failed. */
+export function noteRepliesStopping(id: string): void {
+	for (const run of runs.get(id) ?? []) if (run.status === 'running') stopping.add(run.id);
+}
+
+const MAX_NOTE_STEPS = 12;
+
+/** A step in a line: the tool and what it was given, the part that tells most. */
+export function stepLine(step: SubagentStep): string {
+	const input = (step.input ?? {}) as Record<string, unknown>;
+	const named = ['command', 'path', 'url', 'goal', 'action', 'query', 'pattern', 'code'].map((name) => input[name]).find((value) => typeof value === 'string' && value.trim());
+	const what = typeof named === 'string' ? named : step.input === undefined ? '' : JSON.stringify(step.input);
+	const line = `${step.tool} ${what.replace(/\s+/g, ' ').trim()}`.trim();
+	const cut = line.length > 160 ? `${line.slice(0, 160)}…` : line;
+	return `${cut}${step.state === 'failed' ? ' (failed)' : step.state === 'running' ? ' (running)' : ''}`;
+}
+
+const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`);
+
+/** What a run did, for the agent: how long, how many steps, the latest of them, and what it wrote last. */
+export function runReport(run: SubagentRun, now = Date.now(), status: string = run.status): string {
+	const took = run.durationMs ?? Math.max(0, now - Date.parse(run.startedAt));
+	const lines = [`${run.agent} subagent, ${status}: "${(run.description ?? run.prompt.split('\n')[0] ?? '').slice(0, 120)}". ${run.steps.length} steps over ${minutes(took)}.`];
+	const shown = run.steps.slice(-MAX_NOTE_STEPS);
+	if (shown.length) {
+		lines.push(run.steps.length > shown.length ? `Its last ${shown.length} steps:` : 'Its steps:');
+		for (const step of shown) lines.push(`- ${stepLine(step)}`);
+	}
+	if (run.status === 'running' && run.writing) lines.push(`What it last wrote: ${run.writing}`);
+	if (run.status !== 'running' && run.result) lines.push(`${run.status === 'done' ? 'Its answer' : 'How it ended'}: ${run.result.slice(0, 1500)}`);
+	return lines.join('\n');
+}
+
+/** What the agent's `task` call answers when the user stops a subagent: that they did, and how far it got. */
+function stoppedNote(run: SubagentRun): string {
+	return [
+		'The user stopped this subagent before it finished. Do not start it again unless they ask; carry on with what you have and their latest message.',
+		runReport(run, Date.now(), 'stopped'),
+	].join('\n');
+}
+
 /** For tests: forget everything kept in memory. */
 export function resetSubagentRunsForTests(): void {
 	runs.clear();
 	loading.clear();
+	stoppers.clear();
+	stopping.clear();
 }
