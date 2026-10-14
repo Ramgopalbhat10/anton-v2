@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { LucideIcon } from 'lucide-react';
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileText, Image, LayoutGrid, List as List_, MoreVertical, Plus, Sheet, Trash2 } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { CodeBlock } from '@/components/code-block';
 import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
@@ -415,7 +415,8 @@ function Grid({ sessionId, outputs, folder, onFolder, onOpen }: { sessionId: str
 
 /** The tree's own look, in the app's tokens, so it sits in the panel like the rest. */
 const TREE_STYLE = {
-	'--trees-bg-override': 'transparent',
+	// The panel's own ground, which also backs the ellipsis a long name truncates to.
+	'--trees-bg-override': 'var(--bg-canvas)',
 	'--trees-fg-override': 'var(--text-secondary)',
 	'--trees-fg-muted-override': 'var(--text-tertiary)',
 	'--trees-bg-muted-override': 'var(--bg-hover)',
@@ -434,9 +435,32 @@ const TREE_STYLE = {
 	height: '100%',
 } as CSSProperties;
 
-/** Modified and size as columns: fixed-width text in Anton's mono type, kept on one line with its spaces. */
-const TREE_CSS = `[data-item-section="decoration"] > span { white-space: pre; font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }`;
+/**
+ * Modified and size as columns: fixed-width text in Anton's mono type, kept on
+ * one line with its spaces, and kept whole while a long name gives way.
+ */
+const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }`;
 const COLUMN_GAP = 3;
+
+/**
+ * How wide a lane the tree keeps for its scrollbar (none where scrollbars
+ * overlay). Rows end before it, but the headings above and the tree's own
+ * row menu button measure from the panel's edge, so both allow for it.
+ */
+function useScrollbarLane(box: RefObject<HTMLElement | null>) {
+	const [lane, setLane] = useState(0);
+	useEffect(() => {
+		const host = box.current?.querySelector('file-tree-container');
+		if (!host) return;
+		const observer = new ResizeObserver(() => {
+			const scroll = host.shadowRoot?.querySelector<HTMLElement>('[data-file-tree-virtualized-scroll]');
+			if (scroll) setLane(scroll.offsetWidth - scroll.clientWidth);
+		});
+		observer.observe(host);
+		return () => observer.disconnect();
+	}, [box]);
+	return lane;
+}
 
 /**
  * Every saved file in folders, as Pierre's file tree: when each file changed
@@ -472,6 +496,8 @@ function List({ sessionId, outputs, onOpen }: { sessionId: string; outputs: Outp
 	// New and removed files, as the agent saves or you delete them.
 	const paths = outputs.map((output) => output.path).join('\n');
 	const shown = useRef(paths);
+	const box = useRef<HTMLDivElement>(null);
+	const lane = useScrollbarLane(box);
 	useEffect(() => {
 		if (shown.current === paths) return;
 		shown.current = paths;
@@ -479,8 +505,8 @@ function List({ sessionId, outputs, onOpen }: { sessionId: string; outputs: Outp
 	}, [model, paths]);
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			{/* The rows' padding, then the lane the tree keeps for its row menu button (18px and a 6px gap), sit right of the columns. */}
-			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--border-subtle) pr-8 pl-2">
+			{/* The rows' padding, then the lane the tree keeps for its row menu button (18px and a 6px gap), and its scrollbar's, sit right of the columns. */}
+			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--border-subtle) pl-2" style={{ paddingRight: `calc(2rem + ${lane}px)` }}>
 				<span className="in-caption">Name</span>
 				{/* Measured in the rows' own type, so each heading ends where its column does. */}
 				<span className="flex font-mono text-[11px]">
@@ -492,11 +518,11 @@ function List({ sessionId, outputs, onOpen }: { sessionId: string; outputs: Outp
 					</span>
 				</span>
 			</div>
-			<div className="min-h-0 flex-1 pt-1">
+			<div ref={box} className="min-h-0 flex-1 pt-1">
 				<FileTree
 					model={model}
 					aria-label="Library files"
-					style={TREE_STYLE}
+					style={{ ...TREE_STYLE, '--trees-context-menu-trigger-inline-offset': `calc(var(--trees-item-padding-x) - var(--trees-focus-ring-width) + ${lane}px)` } as CSSProperties}
 					renderContextMenu={(item, context) => (
 						<ItemActions
 							sessionId={sessionId}
