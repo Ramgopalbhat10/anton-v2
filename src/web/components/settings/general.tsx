@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Braces, Cpu, GitPullRequest, ListChecks } from 'lucide-react';
+import { Bot, Braces, Cpu, GitPullRequest, LayoutPanelTop, ListChecks } from 'lucide-react';
+import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Spinner, Switch } from '@/components/signal';
 import { api, type GeneralSettings, type HelperAgent, type Reasoning } from '@/lib/api';
@@ -18,6 +19,12 @@ const HELPERS: Array<{ agent: HelperAgent; title: string; help: string }> = [
 ];
 
 type AgentModel = { model: string; reasoning: Reasoning | null };
+
+const VISUAL_LEVELS: Array<{ value: GeneralSettings['visualReplies']; label: string }> = [
+	{ value: 'off', label: 'Off' },
+	{ value: 'some', label: 'Some' },
+	{ value: 'more', label: 'More' },
+];
 
 /** One helper agent: the task's model, or its own when switched on. */
 function HelperModel({
@@ -108,6 +115,20 @@ function Form({ settings }: { settings: GeneralSettings }) {
 						onChange={(codeMode) => save.mutate({ codeMode })}
 						label={<span className="sr-only">Code mode</span>}
 					/>
+				</SettingRow>
+			</Block>
+			<Block title="Replies" icon={LayoutPanelTop}>
+				<SettingRow
+					title="Visual replies"
+					help="The agent can answer with cards in the thread: figures, tables, charts, timelines, buttons and forms you press, and small pages it draws in a sandbox with no network. Some uses them when they say it better than text; More reaches for them whenever a reply has numbers or choices; Off keeps replies to text. Questions it needs you to decide still come with options to tap."
+				>
+					<Segmented label="Visual replies" role="radiogroup">
+						{VISUAL_LEVELS.map((level) => (
+							<SegmentedItem key={level.value} role="radio" on={settings.visualReplies === level.value} onClick={() => save.mutate({ visualReplies: level.value })}>
+								{level.label}
+							</SegmentedItem>
+						))}
+					</Segmented>
 				</SettingRow>
 			</Block>
 			<Block

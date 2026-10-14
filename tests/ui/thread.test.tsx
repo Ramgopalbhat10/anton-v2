@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { FlueConversationMessage, UseFlueAgentResult } from '@flue/react';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueries, session } from './render';
 
@@ -261,5 +261,65 @@ describe('response details', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Copy response' }));
 		await waitFor(() => expect(writeText).toHaveBeenCalledWith('**Done**'));
 		expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+	});
+
+	it('shows a question from the ask tool as options to tap, and the pick once answered', () => {
+		const ask = tool('ask', { question: 'Which database?', options: [{ label: 'Postgres', detail: 'Managed, on Neon' }, { label: 'SQLite' }], recommended: 0 }, 'Stop here.');
+		const flue = agent([user('u1', 'Set up storage'), assistant('a1', [ask])]);
+		const { unmount } = show(flue);
+		expect(screen.getByRole('heading', { name: 'Which database?' })).toBeTruthy();
+		expect(screen.getByText('Recommended')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /SQLite/ }));
+		expect(flue.sendMessage).toHaveBeenCalledWith('SQLite');
+		unmount();
+
+		show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Postgres'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
+		expect(screen.getByRole('button', { name: /Postgres/ }).getAttribute('aria-pressed')).toBe('true');
+		expect((screen.getByRole('button', { name: /SQLite/ }) as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it('draws a show card: stats, a sortable table, a live formula, and a form that sends its values', () => {
+		const card = tool(
+			'show',
+			{
+				title: 'Plan the seats',
+				children: [
+					{ type: 'stat', label: 'Monthly', value: 1200, format: 'currency', change: '+4%' },
+					{ type: 'table', columns: [{ key: 'name' }, { key: 'seats' }], rows: [{ name: 'Ada', seats: 3 }, { name: 'Bo', seats: 9 }, { name: 'Cy', seats: 1 }] },
+					{ type: 'number', name: 'seats', label: 'Seats', value: 2, slider: true, min: 1, max: 10 },
+					{ type: 'value', label: 'Total', formula: 'seats * 10', format: 'currency' },
+					{ type: 'form', title: 'Order', submit: 'Order seats', children: [{ type: 'select', name: 'plan', label: 'Plan', options: [{ label: 'Team', value: 'team' }, { label: 'Business', value: 'biz' }] }] },
+				],
+			},
+			'The user sees this card.',
+		);
+		const flue = agent([user('u1', 'Seats?'), assistant('a1', [card])]);
+		show(flue);
+		expect(screen.getByRole('heading', { name: 'Plan the seats' })).toBeTruthy();
+		expect(screen.getByText('$1,200.00')).toBeTruthy();
+		expect(screen.getByText('$20.00')).toBeTruthy();
+		fireEvent.change(screen.getByRole('slider'), { target: { value: '7' } });
+		expect(screen.getByText('$70.00')).toBeTruthy();
+
+		const names = () => screen.getAllByRole('row').slice(1).map((row) => row.textContent);
+		const sortBySeats = () => fireEvent.click(within(screen.getAllByRole('columnheader')[1]).getByRole('button'));
+		sortBySeats();
+		expect(names()).toEqual(['Cy1', 'Ada3', 'Bo9']);
+		sortBySeats();
+		expect(names()).toEqual(['Bo9', 'Ada3', 'Cy1']);
+
+		fireEvent.change(screen.getByRole('combobox'), { target: { value: 'biz' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Order seats' }));
+		expect(flue.sendMessage).toHaveBeenCalledWith('Submitted "Order":\n- Plan: Business');
+	});
+
+	it('keeps a failed card as a step with its error, and shows a page from render_html in its frame', () => {
+		const failed = { ...tool('show', { children: [{ type: 'stat' }] }), state: 'output-error', errorText: 'The card is not valid' };
+		const page = tool('render_html', { title: 'Explainer', html: '<div>x</div>' }, { output: { path: 'renders/explainer-abc123.html', title: 'Explainer', height: 300 } });
+		show(agent([user('u1', 'Explain'), assistant('a1', [failed, page])]));
+		expect(screen.getByText('1 STEP')).toBeTruthy();
+		const frame = screen.getByTitle('Explainer') as HTMLIFrameElement;
+		expect(frame.getAttribute('src')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
+		expect(frame.style.height).toBe('300px');
 	});
 });

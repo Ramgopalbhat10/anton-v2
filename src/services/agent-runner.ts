@@ -4,7 +4,7 @@ import type { McpServer } from '../core/types.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
-import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent } from './general.ts';
+import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent, type VisualReplies } from './general.ts';
 import { warmServerTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
@@ -75,9 +75,9 @@ export function isPlanning(id: string): boolean {
 }
 
 /** The General settings the agents read while they render: whether the coder gets run_script, and each helper agent's model (null for the task's own). */
-export type AgentSettings = { codeMode: boolean; models: Record<HelperAgent, ModelChoice | null> };
+export type AgentSettings = { codeMode: boolean; visualReplies: VisualReplies; models: Record<HelperAgent, ModelChoice | null> };
 
-let agentSettings: AgentSettings = { codeMode: true, models: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } };
+let agentSettings: AgentSettings = { codeMode: true, visualReplies: 'some', models: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } };
 
 export const agentSettingsNow = (): AgentSettings => agentSettings;
 
@@ -88,9 +88,9 @@ async function choiceFor(setting: AgentModel | null): Promise<ModelChoice | null
 }
 
 async function primeAgentSettings(): Promise<void> {
-	const { codeMode, agentModels } = await generalSettings();
+	const { codeMode, visualReplies, agentModels } = await generalSettings();
 	const models = Object.fromEntries(await Promise.all(HELPER_AGENTS.map(async (agent) => [agent, await choiceFor(agentModels[agent])] as const)));
-	agentSettings = { codeMode, models: models as AgentSettings['models'] };
+	agentSettings = { codeMode, visualReplies, models: models as AgentSettings['models'] };
 }
 
 /** How long a message waits for its repo's MCP servers to list their tools, so run_script can describe them. */

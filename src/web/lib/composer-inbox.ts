@@ -4,10 +4,11 @@ import type { PickedElement } from '@/lib/api';
 
 /**
  * Things other panels hand to a task's composer: an element picked in the
- * Browser panel, or a drawing on its page. The composer takes them into its
- * draft as they arrive, where they can be removed before sending.
+ * Browser panel, a drawing on its page, or text a page in the thread hands
+ * over. The composer takes them into its draft as they arrive, where they can
+ * be edited or removed before sending.
  */
-export type InboxItem = { kind: 'element'; id: string; element: PickedElement } | { kind: 'image'; image: ImageAttachment };
+export type InboxItem = { kind: 'element'; id: string; element: PickedElement } | { kind: 'image'; image: ImageAttachment } | { kind: 'text'; text: string };
 
 const inboxes = new Map<string, InboxItem[]>();
 const listeners = new Set<() => void>();
