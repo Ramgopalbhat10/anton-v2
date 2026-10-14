@@ -179,7 +179,8 @@ export const Composer = memo(function Composer({
 				setElements([]);
 				setNotice(null);
 				try {
-					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
+					// Only a /command waits to read the saved commands, so any other message goes at once.
+					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = expandCommand(text.trim(), saved.commands, true) || (picked.length ? ELEMENT_ONLY : IMAGE_ONLY);
 					// Each element goes as text the agent can search the code with, and as its picture when the model can see.
 					const pictures: ImageAttachment[] =

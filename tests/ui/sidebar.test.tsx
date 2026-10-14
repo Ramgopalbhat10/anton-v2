@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ChatSidebar } = await import('@/components/chat-sidebar');
+const { showWorking } = await import('@/lib/working');
 
 const tasks = [
 	session({ id: 'busy', title: 'Busy task', status: 'running', working: true }),
@@ -45,7 +46,7 @@ const tasks = [
 	}),
 ];
 
-function open() {
+function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
 	const root = createRootRoute({ component: () => <ChatSidebar open onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
@@ -54,7 +55,7 @@ function open() {
 	]);
 	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
 	render(
-		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+		<QueryClientProvider client={queryClient}>
 			<RouterProvider router={router} />
 		</QueryClientProvider>,
 	);
@@ -74,6 +75,22 @@ describe('sidebar', () => {
 		vi.clearAllMocks();
 		localStorage.clear();
 		api.sessions.mockResolvedValue({ sessions: tasks });
+	});
+
+	it('moves a task waiting on you to Running the moment you answer it', async () => {
+		const waiting = session({ id: 'asking', title: 'Asks a color', asking: 'Red or blue?' });
+		api.sessions.mockResolvedValue({ sessions: [...tasks, waiting] });
+		const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		open(queryClient);
+		const listed = (section: string) => within(screen.getByRole('region', { name: section })).queryByRole('link', { name: 'Asks a color' });
+		await screen.findByText('Asks a color');
+		expect(listed('Recent')).toBeTruthy();
+		expect(within(row('Asks a color')).getByText('Your turn')).toBeTruthy();
+
+		await showWorking(queryClient, 'asking');
+		await waitFor(() => expect(listed('Running')).toBeTruthy());
+		expect(listed('Recent')).toBeNull();
+		expect(within(row('Asks a color')).queryByText('Your turn')).toBeNull();
 	});
 
 	it('keeps pinned tasks in a section of their own, with Unpin on hover and no pin mark', async () => {
