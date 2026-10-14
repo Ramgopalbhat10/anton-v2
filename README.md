@@ -46,12 +46,17 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models`, cached for an hour) | |
 | `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
+| `PushSender` | `webpush` (Web Push with VAPID, no library) | |
 
 ### Subscriptions
 
 Instead of paying per token, tasks can run on a ChatGPT Plus or Pro plan. In **Settings › Subscriptions**, sign in with ChatGPT; OpenAI only sends the browser back to `http://127.0.0.1:1455/auth/callback`, which Anton catches itself when it runs on your computer, and which you paste into the page when Anton is hosted. You can also bring a sign-in made elsewhere: run `npx @earendil-works/pi-ai@latest login openai` on a computer with a browser and paste the `auth.json` it writes. Anton keeps the sign-in in its database and renews the token as it expires.
 
 The plan's models (`openai/<model>`) come first in the model picker, marked PLAN. Their calls go to the OpenAI Responses API with your plan's token and count toward its limits; Anton records them at $0, or at API prices toward the spending caps if you switch that on. Claude Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on the server with its built-in tools off: Claude does the thinking and Anton runs every tool. Sign Claude Code in once with the command the Claude card shows (`CLAUDE_CONFIG_DIR=<data>/claude-code <claude> auth login`, over ssh when hosted), then press Check again. Claude Code keeps the sign-in and Anton never sees the token. The plan's models (`claude-code/<model>`) then show as PLAN like ChatGPT's. This is for your own use only, as Anthropic's terms allow; turn extra usage off at claude.ai/settings/usage so tasks stop at the plan's limit instead of billing more. Design and limits: [docs/claude-code-subscription.md](docs/claude-code-subscription.md).
+
+### On your phone
+
+Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add to Home Screen; on Android or in Chrome and Edge, use Install from the browser's menu or **Settings › Notifications**. Turn notifications on there, on each device, and Anton tells it when a task asks you something, has a plan waiting for approval, or fails (and when one finishes, if you switch that on), with what it asks. Tapping one opens the task on its conversation, ready to answer or approve. Nothing is sent while an Anton window is in front of you. iPhones and iPads get notifications only from the app on the home screen (iOS 16.4 or later). Notifications go through the browser's own push service (Google's, Apple's or Mozilla's), encrypted so it cannot read them.
 
 ## Environment
 
@@ -73,6 +78,7 @@ The plan's models (`openai/<model>`) come first in the model picker, marked PLAN
 | `ANTON_DECISION_MODEL` | Decision model on OpenRouter that keeps thanks-only comments from waking the agent, skips automatic reviews of documentation-only changes, and is `decide()` in code mode (default `~typesafe/jev-latest`; `off` to turn off) |
 | `ANTON_CLAUDE_CODE_PATH` | A `claude` executable to run instead of the one the Claude Agent SDK bundles (optional) |
 | `ANTON_CLAUDE_CODE_MAX_OPEN` | Claude Code conversations kept open at once; the longest idle closes first (default 3) |
+| `ANTON_PUSH_CONTACT` | A `mailto:` or `https:` address push services can reach you at about Anton's notifications (default `mailto:anton@example.com`) |
 | `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
 
 ## Backups

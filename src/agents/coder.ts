@@ -59,6 +59,7 @@ import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { checkReply } from '../services/reply-check.ts';
+import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
 
@@ -973,6 +974,8 @@ export function Coder({ id }: AgentProps) {
 		const [, reply] = await Promise.all([checkpoint, checkReply(id)]);
 		// A project's thread frees its slot and tells its coordinator what changed.
 		await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
+		// Your phone hears of a task that waits on you, so it is answered without a tab open.
+		await replyNotice(id, reply);
 	});
 	// These response hooks run at the true start/end, across all model and tool calls.
 	// The persisted start survives resumed responses; usage totals are still counted per model call.

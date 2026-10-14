@@ -1,16 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({
+const { api, iPhone } = vi.hoisted(() => {
+	const iPhone = { id: 'd1', name: 'iPhone', addedAt: '2026-10-14T08:00:00Z', lastSentAt: null, lastError: 'No answer timed out' };
+	return { iPhone, api: {
 	budget: vi.fn(async () => ({ limits: { dailyUsd: 10, taskUsd: null }, today: 1.25, task: null, blocked: null })),
 	sessions: vi.fn(async () => ({ sessions: [] })),
 	usage: vi.fn(async () => ({ since: '2026-10-01T00:00:00Z', today: 1.25, month: 3, byRepo: [], byModel: [], daily: [] })),
 	storage: vi.fn(async () => ({ objects: 0, bytes: 0, lastCleanup: null })),
 	projects: vi.fn(async () => ({ projects: [] })),
 	secrets: vi.fn(async () => ({ shared: ['NPM_TOKEN'], repos: [{ projectId: 'p1', repo: 'acme/web', names: ['API_KEY', 'DB_URL'] }] })),
-}));
+	push: vi.fn(async () => ({ publicKey: 'BKey', finished: false, devices: [iPhone] })),
+	savePushOptions: vi.fn(async (options: { finished: boolean }) => ({ publicKey: 'BKey', finished: options.finished, devices: [iPhone] })),
+	removePushDevice: vi.fn(async () => ({ publicKey: 'BKey', finished: false, devices: [] })),
+	} };
+});
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { SectionPage, SettingsLayout } = await import('@/components/settings/layout');
@@ -60,5 +66,19 @@ describe('Settings', () => {
 		expect(screen.getByPlaceholderText('Saved. Type to replace')).toBeTruthy();
 		expect(screen.getByText('acme/web').closest('a')?.getAttribute('href')).toBe('/settings/repos/p1');
 		expect(screen.getByText('API_KEY · DB_URL')).toBeTruthy();
+	});
+
+	it('lists the devices that get notifications, removes one, and saves what they hear about', async () => {
+		open('/settings/notifications');
+		expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeTruthy();
+		expect(await screen.findByText('iPhone')).toBeTruthy();
+		expect(screen.getByText('Last send failed: No answer timed out')).toBeTruthy();
+		// A browser with no push support says so rather than offering a button that cannot work.
+		expect(screen.getByText('This browser cannot get notifications from Anton.')).toBeTruthy();
+		fireEvent.click(screen.getByRole('switch', { name: 'Notify when a task finishes' }));
+		await waitFor(() => expect(api.savePushOptions.mock.calls[0]?.[0]).toEqual({ finished: true }));
+		fireEvent.click(screen.getByRole('button', { name: 'Remove iPhone' }));
+		await waitFor(() => expect((api.removePushDevice.mock.calls[0] as unknown[] | undefined)?.[0]).toBe('d1'));
+		expect(await screen.findByText(/None yet/)).toBeTruthy();
 	});
 });

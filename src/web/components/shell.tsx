@@ -13,7 +13,9 @@ import { Thread } from '@/components/thread';
 import { type PanelName, VmPanel } from '@/components/vm-panel';
 import { api, isChat, type Session } from '@/lib/api';
 import { useLiveUpdates } from '@/lib/live-updates';
+import { useOnePane } from '@/lib/one-pane';
 import { useTaskNotifications } from '@/lib/notifications';
+import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence } from '@/lib/push';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
 import { cn } from '@/lib/utils';
@@ -26,9 +28,18 @@ function readCollapsed() {
 	}
 }
 
-/** Watches the task list for notifications on its own, so a change to the list does not re-render the whole shell. */
+/**
+ * Watches the task list for notifications on its own, so a change to the list does not re-render the whole shell.
+ * Also starts the service worker that shows pushed notifications, opens their tasks when tapped, and tells the
+ * server while this page is in front of you, so your phone stays quiet then.
+ */
 function TaskNotifications() {
 	useTaskNotifications();
+	useOpenFromNotifications();
+	usePresence();
+	useEffect(() => {
+		void serviceWorker().then(() => turnOnIfAllowed());
+	}, []);
 	return null;
 }
 
@@ -66,7 +77,8 @@ export function AppShell() {
 
 	return (
 		<NavContext.Provider value={() => setNavOpen(true)}>
-			<div className="flex h-dvh overflow-hidden bg-(--bg-canvas) text-[13px] leading-[18px] text-(--text-primary)">
+			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
+			<div className="flex h-dvh overflow-hidden bg-(--bg-canvas) pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-[13px] leading-[18px] text-(--text-primary)">
 				{navOpen ? (
 					<button
 						type="button"
@@ -238,22 +250,29 @@ export function TaskWorkspace({
 	});
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const status = statusFor(agent);
-	const { open, tabs, active } = panels;
+	const { tabs, active } = panels;
 	const change = usePanelChange(panels, onPanelsChange);
+	// On a phone the workspace covers the conversation, so it shows only once you open it here; the saved choice is the wide screen's.
+	const onePane = useOnePane();
+	const [paneOpen, setPaneOpen] = useState(false);
+	const open = onePane ? paneOpen : panels.open;
 
 	const setOpen = useCallback(
 		(next: boolean) => {
 			if (!next) setExpanded(false);
-			change({ open: next });
+			if (onePane) setPaneOpen(next);
+			else change({ open: next });
 		},
-		[change],
+		[change, onePane],
 	);
 
+	/** Opens a panel; `quietly` only picks it, without covering the conversation on a phone. */
 	const showPanel = useCallback(
-		(name: PanelName) => {
-			change(({ tabs }) => ({ tabs: tabs.includes(name) ? tabs : [...tabs, name], active: name, open: true }));
+		(name: PanelName, quietly = false) => {
+			if (onePane && !quietly) setPaneOpen(true);
+			change(({ tabs }) => ({ tabs: tabs.includes(name) ? tabs : [...tabs, name], active: name, ...(onePane ? {} : { open: true }) }));
 		},
-		[change],
+		[change, onePane],
 	);
 	const openWorkspace = useCallback(() => setOpen(true), [setOpen]);
 	const closeWorkspace = useCallback(() => setOpen(false), [setOpen]);
@@ -266,9 +285,10 @@ export function TaskWorkspace({
 	}, [panelRequest]);
 
 	// When the agent hands work to its browser or computer subagent, show that panel so its work can be watched.
+	// On a phone it is only picked, so the conversation you are reading stays in view.
 	const watching = handingTo(agent.messages[agent.messages.length - 1]);
 	useEffect(() => {
-		if (watching) showPanel(watching);
+		if (watching) showPanel(watching, true);
 	}, [watching]);
 
 	const centerVisible = !(open && expanded);

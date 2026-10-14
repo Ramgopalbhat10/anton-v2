@@ -431,3 +431,30 @@ export type BrowserHost = {
 	get(id: string): Promise<HostedBrowser | null>;
 	remove(id: string): Promise<void>;
 };
+
+/** Where a browser takes push messages, and its keys for encrypting them, as `PushSubscription.toJSON()` gives them. */
+export type PushTarget = { endpoint: string; keys: { p256dh: string; auth: string } };
+
+/** The application server's key pair that push services know Anton by (VAPID), base64url: the raw public point and the private scalar. */
+export type PushKeys = { publicKey: string; privateKey: string };
+
+export type PushMessage = {
+	/** Delivered to the device's service worker as is; encrypted on the way, so the push service never reads it. */
+	payload: string;
+	/** How long the push service keeps it for a device that is offline. */
+	ttlSeconds: number;
+	/** `high` wakes a sleeping phone at once. */
+	urgency: 'high' | 'normal';
+	/** A message waiting with the same topic is replaced by this one. */
+	topic?: string;
+};
+
+/**
+ * Delivers messages to browsers' push services (Web Push), so a phone or a
+ * closed browser hears of a task without an Anton tab open.
+ */
+export type PushSender = {
+	generateKeys(): PushKeys;
+	/** `gone` when the push service says the subscription no longer exists, so it can be forgotten. */
+	send(target: PushTarget, message: PushMessage, auth: { keys: PushKeys; subject: string }): Promise<{ ok: boolean; gone: boolean; status: number; detail: string }>;
+};
