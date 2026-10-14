@@ -15,7 +15,7 @@ import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
-import { recordAgentEvent, setAgentAbort } from './services/activity.ts';
+import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
 import { PAGE_CSP, renderFrame, renderPage } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
@@ -168,15 +168,23 @@ app.onError((error, c) => {
 
 // A prompt needs a task, waits while its files are being restored, and is checked against
 // the spending caps; then the agent loads the task's model and MCP servers before it renders.
-// A person writing also lets the agent follow up on its pull request again.
+// A person writing also lets the agent follow up on its pull request again. The task counts as
+// working from the moment the message arrives, so the task list moves it to Running at once.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
-	if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
-	await assertWithinBudget(id);
-	await resetFollowUps(id);
-	await primeAgent(id);
-	await next();
+	const turnedAway = noteSending(id);
+	try {
+		if (isRestoring(id)) throw new ConflictError('Files are being restored; send the message once that finishes');
+		await assertWithinBudget(id);
+		await resetFollowUps(id);
+		await primeAgent(id);
+		await next();
+	} catch (error) {
+		turnedAway();
+		throw error;
+	}
+	if (c.error || c.res.status >= 400) turnedAway();
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);

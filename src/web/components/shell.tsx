@@ -1,8 +1,8 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
-import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
@@ -18,6 +18,7 @@ import { useTaskNotifications } from '@/lib/notifications';
 import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence } from '@/lib/push';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
+import { forgetWorking, showWorking } from '@/lib/working';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -222,6 +223,26 @@ export function usePanelChange(
 	}, []);
 }
 
+/** The task's coding agent; sending it a message shows the task working at once, everywhere it is listed. */
+function useTaskAgent(sessionId: string): UseFlueAgentResult {
+	const queryClient = useQueryClient();
+	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
+	const flueSend = agent.sendMessage;
+	const sendMessage = useCallback<UseFlueAgentResult['sendMessage']>(
+		async (...args) => {
+			void showWorking(queryClient, sessionId);
+			try {
+				await flueSend(...args);
+			} catch (error) {
+				forgetWorking(queryClient, sessionId);
+				throw error;
+			}
+		},
+		[flueSend, queryClient, sessionId],
+	);
+	return useMemo(() => ({ ...agent, sendMessage }), [agent, sendMessage]);
+}
+
 /**
  * A task's conversation beside its workspace: the page for a task, and for a
  * project's thread. Where the panels' state lives (the address and the page,
@@ -248,7 +269,7 @@ export function TaskWorkspace({
 		queryKey: ['session', sessionId],
 		queryFn: () => api.session(sessionId),
 	});
-	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
+	const agent = useTaskAgent(sessionId);
 	const status = statusFor(agent);
 	const { tabs, active } = panels;
 	const change = usePanelChange(panels, onPanelsChange);

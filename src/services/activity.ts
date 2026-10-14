@@ -9,12 +9,49 @@ import { logProblem } from './log.ts';
  */
 const inFlight = new Map<string, Set<string>>();
 
+/**
+ * Tasks a message was just sent to, counted as working from the moment it
+ * arrives: before it is checked and the agent is primed (which can take
+ * seconds) and before the runtime picks it up. Cleared when the runtime
+ * starts or settles a response for the task, when the message is turned
+ * away, or after a minute in case neither ever comes.
+ */
+const sending = new Map<string, ReturnType<typeof setTimeout>>();
+const SENDING_MS = 60_000;
+
+function stopSending(id: string): boolean {
+	const timer = sending.get(id);
+	if (!timer) return false;
+	clearTimeout(timer);
+	sending.delete(id);
+	return true;
+}
+
+/**
+ * Marks a task working as soon as a message for it arrives, so the task list moves it to Running at once.
+ * Returns what to call if the message is turned away.
+ */
+export function noteSending(id: string): () => void {
+	if (inFlight.has(id)) return () => undefined;
+	const already = stopSending(id);
+	const timer = setTimeout(() => {
+		if (sending.get(id) === timer && stopSending(id)) announce({ kind: 'task', id, what: 'state' });
+	}, SENDING_MS);
+	timer.unref?.();
+	sending.set(id, timer);
+	if (!already) announce({ kind: 'task', id, what: 'state' });
+	return () => {
+		if (sending.get(id) === timer && stopSending(id) && !inFlight.has(id)) announce({ kind: 'task', id, what: 'state' });
+	};
+}
+
 export type AgentEvent = { type: string; instanceId?: string; submissionId?: string };
 
 export function recordAgentEvent({ type, instanceId, submissionId }: AgentEvent): void {
 	// A finished tool call may have changed the task's files; open pages refetch them.
 	if (type === 'tool' && instanceId) announce({ kind: 'task', id: instanceId, what: 'files' });
 	if (!instanceId || !submissionId) return;
+	if (type === 'submission_running' || type === 'submission_settled') stopSending(instanceId);
 	if (type === 'submission_running') {
 		inFlight.set(instanceId, (inFlight.get(instanceId) ?? new Set()).add(submissionId));
 	} else if (type === 'submission_settled') {
@@ -39,7 +76,7 @@ export async function stopAgent(id: string): Promise<void> {
 
 /** True while the task's agent is working on a message. */
 export function isWorking(id: string): boolean {
-	return inFlight.has(id);
+	return inFlight.has(id) || sending.has(id);
 }
 
 /**
