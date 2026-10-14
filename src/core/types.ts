@@ -13,7 +13,8 @@ export type Project = {
 } & ProjectSettings;
 
 /** A remote MCP server whose tools the agent gets; `auth` is sent as a Bearer token. */
-export type McpServer = { name: string; url: string; auth: string | null; tools: string[] };
+/** A remote MCP server; `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script programs. */
+export type McpServer = { name: string; url: string; auth: string | null; tools: string[]; codeMode?: boolean };
 
 /** How a repo's tasks are set up. Changing the base image retires the warm image. */
 export type ProjectSettings = {

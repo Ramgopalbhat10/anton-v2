@@ -100,7 +100,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 			<Block title="Agent" icon={Braces}>
 				<SettingRow
 					title="Code mode"
-					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. It runs on Anton, not in the sandbox, and can reach nothing else."
+					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. A repository's MCP servers are reached only this way, listed in a line per tool, unless a server opts out in its settings. Programs run on Anton, not in the sandbox, and can reach nothing else."
 				>
 					<Switch
 						checked={settings.codeMode}

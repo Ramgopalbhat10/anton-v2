@@ -13,7 +13,7 @@ export type GeneralSettings = {
 	planMode: boolean;
 	/** A reviewer agent reads each pull request the agent opens or updates and comments on it. */
 	reviewPullRequests: boolean;
-	/** The agent gets run_script, to do many reads, searches or lookups in one short program. */
+	/** The agent gets run_script, to do many reads, searches or lookups in one short program, and reaches the repo's MCP servers through it. */
 	codeMode: boolean;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
@@ -30,7 +30,7 @@ const KEY = 'general';
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
 	const agentModels = { explorer: null, tester: null, browser: null, computer: null, reviewer: null, ...stored.agentModels };
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: false, ...stored, agentModels };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, ...stored, agentModels };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {

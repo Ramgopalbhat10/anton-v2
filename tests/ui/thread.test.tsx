@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 	commands: vi.fn(async () => ({ commands: [] })),
 	sessionSkills: vi.fn(async () => ({ skills: [] })),
 	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
+	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -184,6 +185,23 @@ describe('response details', () => {
 			</QueryClientProvider>,
 		);
 		await waitFor(() => expect(screen.getByRole('button', { name: /Worked/ }).getAttribute('aria-expanded')).toBe('false'));
+	});
+	it('lists the calls a running script makes, and how many it made', async () => {
+		api.scripts.mockResolvedValue({
+			scripts: {
+				'run_script-1': [
+					{ tool: 'mcp__linear__search_issues', input: '{"query":"crash"}', state: 'done', durationMs: 240 },
+					{ tool: 'decide', input: '[{"issue":7}]', state: 'running', durationMs: null },
+				],
+			},
+		});
+		show(agent([assistant('a1', [tool('run_script', { code: 'await tools.mcp__linear__search_issues({ query: "crash" })' })])], { status: 'streaming' }));
+		expect(await screen.findByText('linear · search_issues')).toBeTruthy();
+		expect(screen.getByText('{"query":"crash"}')).toBeTruthy();
+		expect(screen.getByText('240ms')).toBeTruthy();
+		expect(screen.getByText('decide')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /Ran a script 2 calls/ })).toBeTruthy();
+		expect(api.scripts).toHaveBeenCalledWith('s1');
 	});
 	it('opens and closes completed command output through its trace row', () => {
 		show(agent([assistant('a1', [tool('bash', { command: 'npm test' }, { output: 'All tests passed' })])]));

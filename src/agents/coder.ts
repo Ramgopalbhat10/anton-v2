@@ -32,7 +32,8 @@ import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import { agentSettingsNow, hasWorkspace, isChat, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
-import { hasScriptTools, runScript, scriptToolDescription } from '../services/code-mode.ts';
+import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDescription } from '../services/code-mode.ts';
+import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, writeTodos } from '../services/todos.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
@@ -145,11 +146,12 @@ function useRepoSnapshot(id: string) {
 	);
 }
 
-function SnapshotExplorer() {
+function SnapshotExplorer(scripts: boolean) {
 	return [
 		'You are the explorer specialist.',
 		'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from; you change nothing.',
 		'Read as much as the brief needs, searching before reading whole files.',
+		...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
 		'Finish with a concise findings report: what you found, with files and lines, and anything you could not tell.',
 	].join(' ');
 }
@@ -166,7 +168,10 @@ function useSnapshotExplorer(id: string) {
 		description: 'Read-only investigation of the repository as the task started, reporting its findings with files and lines. Use it for questions that need many files read.',
 		agent: () => {
 			useRepoSnapshot(id);
-			return SnapshotExplorer();
+			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
+			const scripts = agentSettingsNow().codeMode;
+			if (scripts) useRunScript(id, { repo: true, mcp: false });
+			return SnapshotExplorer(scripts);
 		},
 	});
 	useSubagent(withSettingsModel(subagent, 'explorer'));
@@ -569,14 +574,25 @@ function useOpenPullRequest(id: string) {
 	);
 }
 
-/** Code mode: one program that calls many tools, with only its result coming back; on in Settings > General. */
-function useRunScript(id: string, workspace: boolean) {
+/**
+ * Code mode: one program that calls many tools, with only its result coming back; on in Settings > General.
+ * Each call the program makes is kept for the thread and, in a subagent, shown on its step in the Agents panel.
+ */
+function useRunScript(id: string, scope: ScriptScope) {
 	useTool(
 		defineTool({
 			name: 'run_script',
-			description: scriptToolDescription(id, workspace),
+			description: scriptToolDescription(id, scope),
 			input: v.object({ code: v.pipe(v.string(), v.minLength(1), v.description('The body of an async JavaScript function')) }),
-			run: async ({ data, signal }) => ({ output: await runScript(id, data.code, { workspace, signal }) }),
+			run: async ({ data, signal, toolCallId }) => {
+				const onCalls = (calls: ScriptCall[]) => {
+					void noteScriptCalls(id, toolCallId, calls).catch(() => undefined);
+					const decisions = calls.filter((call) => call.tool === 'decide').length;
+					const actions = calls.map((call) => ({ what: `${call.tool} ${shortInput(call.input)}`.trim(), p: null, failed: call.state === 'failed' }));
+					void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost: 0, script: true }).catch(() => undefined);
+				};
+				return { output: await runScript(id, data.code, { ...scope, signal, onCalls }) };
+			},
 		}),
 	);
 }
@@ -697,7 +713,9 @@ const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf sk
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
 
 const SCRIPT_HINT =
-	'When a job needs several reads, searches or web lookups, or results you only need part of, write one run_script program instead of many separate tool calls.';
+	'When a job needs several lookups you can name now (reading every match of a search, calling an MCP tool for each item, a few web searches), or results you only need part of, write one run_script program instead of many separate tool calls.';
+
+const SCRIPTED_MCP_HINT = "The repository's MCP servers are reached only through run_script; its description lists their tools.";
 
 const BROWSER_HINT =
 	'For anything done on web pages (browsing and reading sites, clicking through flows, filling forms), delegate to the browser subagent with a complete brief, so the pages stay out of your context. ' +
@@ -716,7 +734,7 @@ const READ_ONLY_PROMPT = [
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
 	'When the task needs more (editing files, running commands or tests, installing anything, or opening a pull request), call start_workspace first, then carry on.',
 	'Do not start a workspace for questions you can answer by reading.',
-	'When a question needs many files read, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small.',
+	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small.',
 	WEB_HINT,
 	'Be concise, and point to files and lines.',
 ].join(' ');
@@ -796,9 +814,11 @@ export function Coder({ id }: AgentProps) {
 		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
 	if (planning) useTool(proposePlan);
-	// Code mode's repo tools read the snapshot, which a chat does not have; it still gets MCP servers and decide().
-	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, workspace || chat);
-	if (scripts) useRunScript(id, workspace || chat);
+	// Code mode's repo tools read the snapshot, which a chat or a workspace does not use; both still get MCP servers and decide().
+	const scope: ScriptScope = { repo: !workspace && !chat, mcp: true };
+	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);
+	if (scripts) useRunScript(id, scope);
+	const scriptHint = scripts ? `${SCRIPT_HINT} ${mcpServersFor(id).some((server) => !directServer(server, true)) ? `${SCRIPTED_MCP_HINT} ` : ''}` : '';
 	const project = threadProjectFor(id);
 	if (!chat) useRemember(id, project);
 	useTodos(id);
@@ -810,7 +830,9 @@ export function Coder({ id }: AgentProps) {
 	if (places.length) useBrowserSubagent(id, places);
 	if (workspace) useComputerSubagent(id);
 	// Web search and the repo's MCP servers; one that cannot be reached leaves its tools out rather than failing the reply.
+	// With code mode on, the repo's servers are reached through run_script instead, unless one opted out.
 	for (const server of mcpServersFor(id)) {
+		if (!directServer(server, scripts)) continue;
 		useMcpConnection({
 			name: server.name,
 			url: server.url,
@@ -855,9 +877,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${TODO_HINT} ${SKILL_HINT}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${SKILL_HINT}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scripts ? `${SCRIPT_HINT} ` : ''}${MENTION_HINT} ${TODO_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

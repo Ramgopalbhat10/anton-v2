@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' }
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
@@ -25,6 +25,8 @@ function staleFor(change: Change): QueryKey[] {
 	// The Computer panel's desktop started, or who drives it changed.
 	if (change.kind === 'task' && change.what === 'computer') return [['computer', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
+	// A run_script program called a tool: only its row in the thread reads it.
+	if (change.kind === 'task' && change.what === 'scripts') return [['scripts', change.id]];
 	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
 	// A tool call can change files, and can start or stop a dev server.

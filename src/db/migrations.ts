@@ -110,6 +110,8 @@ const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN todos_json TEXT`],
 	// 22: a repository's sandboxes can run as full VMs (Docker, FUSE) instead of containers.
 	[`ALTER TABLE projects ADD COLUMN full_vm INTEGER NOT NULL DEFAULT 0`],
+	// 23: code mode is on by default now; settings saved while it was off by default are turned on once.
+	[`UPDATE settings SET value = json_set(value, '$.codeMode', json('true')) WHERE key = 'general' AND json_valid(value)`],
 ];
 
 export async function migrate(db: Client): Promise<void> {
