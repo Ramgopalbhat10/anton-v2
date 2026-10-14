@@ -85,8 +85,10 @@ const FALLBACK_THEME: Record<string, string> = {
     "'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
+// Both documents are dark like the frames that hold them: a browser paints a frame whose document's
+// color scheme differs from its <iframe>'s on an opaque canvas, white for a light one, under the page.
 const BASE_CSS =
-  `:root{color-scheme:dark;${Object.entries(FALLBACK_THEME)
+  `:root{color-scheme:dark!important;${Object.entries(FALLBACK_THEME)
     .map(([key, value]) => `${key}:${value}`)
     .join(
       ";",
@@ -178,6 +180,6 @@ export function renderFrame(
   const nonce = randomBytes(16).toString("base64");
   const src = `/api/sessions/${encodeURIComponent(id)}/render?path=${encodeURIComponent(path)}`;
   const relay = `(function(){window.addEventListener("message",function(e){var f=document.getElementById("page");if(!f)return;if(e.source===f.contentWindow){if(window.parent!==window)window.parent.postMessage(e.data,"*");else if(e.data&&e.data.method==="ui/open-link"&&e.data.params&&/^https?:/.test(e.data.params.url))window.open(e.data.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){f.contentWindow.postMessage(e.data,"*")}})})();`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${path.slice(RENDER_DIR.length + 1)}</title><style>html,body{margin:0;height:100%;background:transparent}body{background:#0b0b0b}html.framed body{background:transparent}iframe{display:block;border:0;width:100%;height:100%;color-scheme:dark}</style></head><body><script nonce="${nonce}">if(window.parent!==window)document.documentElement.className="framed";${relay}</script><iframe id="page" title="Page" sandbox="allow-scripts allow-forms" src="${src}"></iframe></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${path.slice(RENDER_DIR.length + 1)}</title><style>:root{color-scheme:dark}html,body{margin:0;height:100%;background:transparent}body{background:#0b0b0b}html.framed body{background:transparent}iframe{display:block;border:0;width:100%;height:100%;color-scheme:dark}</style></head><body><script nonce="${nonce}">if(window.parent!==window)document.documentElement.className="framed";${relay}</script><iframe id="page" title="Page" sandbox="allow-scripts allow-forms" src="${src}"></iframe></body></html>`;
   return { html, csp: frameCsp(nonce) };
 }
