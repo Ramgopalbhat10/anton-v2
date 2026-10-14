@@ -1,5 +1,5 @@
 import { updateSession } from '../db/sessions.ts';
-import { takeAsk } from './asks.ts';
+import { takeAsk, takePlan } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { logProblem } from './log.ts';
 
@@ -90,20 +90,24 @@ export function closingOf(texts: string[]): string | null {
 	return kept.length ? kept.join('\n\n') : null;
 }
 
-/** At the end of a reply: notes what it asks the user, or that it asks nothing. Returns what the reply comes to (`closingOf`), when it had any text. */
+/**
+ * At the end of a reply: notes what it asks the user, or that it asks nothing, and the plan it proposed for
+ * approval, or that none waits. Returns what the reply comes to (`closingOf`), when it had any text.
+ */
 export async function checkReply(id: string): Promise<string | null> {
 	const reply = lastReply.get(id);
 	const whole = closingOf(replyTexts.get(id) ?? []);
 	const ask = takeAsk(id);
+	const plan = takePlan(id);
 	lastReply.delete(id);
 	replyTexts.delete(id);
 	try {
 		// A question asked with the ask tool waits on the user by its nature.
 		const asking = ask ? ask.slice(0, MAX_QUESTION) : reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
-		await updateSession(id, { asking });
+		await updateSession(id, { asking, plan });
 	} catch (error) {
 		logProblem('warn', 'Could not check whether the reply waits on you', error, id);
 	}
-	// The coordinator and the thread's card read the question too, when it was asked with the tool.
-	return [whole ?? reply, ask].filter(Boolean).join('\n\n') || null;
+	// The coordinator and the thread's card read the question too, when it was asked with the tool, and the plan waiting on approval.
+	return [whole ?? reply, ask, plan ? `Plan waiting for approval:\n${plan}` : null].filter(Boolean).join('\n\n') || null;
 }

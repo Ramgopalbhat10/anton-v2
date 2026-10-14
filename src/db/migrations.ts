@@ -112,6 +112,8 @@ const migrations: string[][] = [
 	[`ALTER TABLE projects ADD COLUMN full_vm INTEGER NOT NULL DEFAULT 0`],
 	// 23: code mode is on by default now; settings saved while it was off by default are turned on once.
 	[`UPDATE settings SET value = json_set(value, '$.codeMode', json('true')) WHERE key = 'general' AND json_valid(value)`],
+	// 24: the plan the latest reply proposed in plan mode, waiting for approval; null when none waits.
+	[`ALTER TABLE sessions ADD COLUMN plan TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

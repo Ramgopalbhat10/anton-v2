@@ -18,10 +18,10 @@ export const THREAD_STATE_LABELS: Record<ThreadState, string> = {
 	resolved: 'Resolved',
 };
 
-type Facts = Pick<Session, 'working' | 'status' | 'asking' | 'planMode' | 'usage' | 'pullRequest' | 'prUrl' | 'resolvedAt' | 'brief'>;
+type Facts = Pick<Session, 'working' | 'status' | 'asking' | 'planMode' | 'plan' | 'pullRequest' | 'prUrl' | 'resolvedAt' | 'brief'>;
 
-/** The agent proposed a plan and changes nothing until it is approved. */
-const planReady = (thread: Facts) => thread.planMode && !thread.working && thread.usage.outputTokens > 0;
+/** The agent's last reply proposed a plan, and it changes nothing until the plan is approved. */
+const planReady = (thread: Facts) => thread.planMode && !thread.working && Boolean(thread.plan);
 
 /**
  * One thread's state from the task's own fields; the first rule that holds

@@ -91,3 +91,15 @@ test('a question asked with the ask tool marks the task waiting on you, whatever
 	await checkReply('a');
 	assert.equal((await getSessionRecord('a'))?.asking, null);
 });
+
+test('a plan proposed in the reply waits on your approval, until a reply proposes none', async () => {
+	const { notePlan } = await import('../src/services/asks.ts');
+	providers(null);
+	reply('c', 'The plan is above.');
+	notePlan('c', '1. Change `app.ts`');
+	assert.equal(await checkReply('c'), 'The plan is above.\n\nPlan waiting for approval:\n1. Change `app.ts`');
+	assert.equal((await getSessionRecord('c'))?.plan, '1. Change `app.ts`');
+	reply('c', 'Built it. Tests pass.');
+	await checkReply('c');
+	assert.equal((await getSessionRecord('c'))?.plan, null);
+});

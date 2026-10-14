@@ -47,6 +47,14 @@ function pageOf(part: ToolPart): { path: string; title: string; height: number }
 	return path ? { path, title: field(output, 'title') || 'Page', height: Number(field(output, 'height')) || 360 } : null;
 }
 
+/** Whether a reply ends waiting on approval of a plan it proposed. */
+function proposesPlan(message: FlueConversationMessage | undefined): boolean {
+	return Boolean(
+		message?.role === 'assistant' &&
+			message.parts.some((part) => part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL && part.state === 'output-available' && field(part.input, 'plan')),
+	);
+}
+
 /** Files a reply wrote or edited, in the order it first touched them. */
 function changedPaths(parts: FlueConversationPart[]): string[] {
 	const paths: string[] = [];
@@ -336,8 +344,8 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 /** Its steps list is rebuilt each render; the card re-renders only when a step in it changed. */
 const StepsCard = memo(StepsCardView, (prev, next) => prev.live === next.live && prev.duration === next.duration && sameItems(prev.steps, next.steps));
 
-/** A proposed plan, shown in full. */
-const PlanCard = memo(function PlanCard({ part }: { part: ToolPart }) {
+/** A proposed plan, shown in full, and whether you approved it. */
+const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answer: string | null }) {
 	const plan = field(part.input, 'plan');
 	return (
 		<div className="in-card overflow-hidden">
@@ -346,7 +354,7 @@ const PlanCard = memo(function PlanCard({ part }: { part: ToolPart }) {
 					<Icon icon={ListChecks} size={12} />
 				</span>
 				<span className="text-[13px] font-medium">Plan</span>
-				<span className="in-caption ml-auto">{plan ? 'Proposed' : 'Writing'}</span>
+				<span className="in-caption ml-auto">{!plan ? 'Writing' : answer === APPROVED ? 'Approved' : 'Proposed'}</span>
 			</div>
 			<div className="px-4 pt-3 pb-3.5">{plan ? <Markdown text={plan} /> : <Spinner size={12} />}</div>
 		</div>
@@ -354,8 +362,10 @@ const PlanCard = memo(function PlanCard({ part }: { part: ToolPart }) {
 });
 
 /**
- * While plan mode is on and the agent has answered, approving turns plan
- * mode off first, so the agent has its full tools for the message that follows.
+ * While plan mode is on and the agent's last reply proposed a plan, approving
+ * turns plan mode off first, so the agent has its full tools for the message
+ * that follows. A reply with no plan (a question, plan mode just turned on)
+ * has nothing to approve.
  */
 function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: string) => Promise<void> }) {
 	const queryClient = useQueryClient();
@@ -374,7 +384,7 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--card-border) bg-(--card-bg) py-1 pr-1 pl-3.5 shadow-(--card-highlight)">
 			<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
 			<span className="min-w-0 flex-1 text-[12px] text-(--text-secondary)">
-				Plan mode is on. Approve the plan to let Anton build it, or reply to change it.
+				The plan is ready. Approve it to let Anton build it, or reply to change it.
 			</span>
 			<Btn size="sm" variant="primary" disabled={approving} onClick={() => void approve()}>
 				{approving ? 'Approving…' : 'Approve and build'}
@@ -506,7 +516,7 @@ const AssistantMessage = memo(function AssistantMessage({
 				block.kind === 'text' ? (
 					<Markdown key={index} text={block.text} />
 				) : block.kind === 'plan' ? (
-					<PlanCard key={block.part.toolCallId} part={block.part} />
+					<PlanCard key={block.part.toolCallId} part={block.part} answer={answer} />
 				) : block.kind === 'agents' ? (
 					<AgentsBlock key={block.calls[0].toolCallId} sessionId={sessionId} calls={block.calls} />
 				) : block.kind === 'ask' ? (
@@ -636,7 +646,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(() => ({ send: (text: string) => void send(text), busy }), [send, busy]);
 	const fileLinks = useThreadFileLinks(sessionId);
-	const planned = Boolean(session.data?.planMode) && !busy && messages[messages.length - 1]?.role === 'assistant';
+	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
 	useEffect(() => {
 		if (!agent.historyReady) return;

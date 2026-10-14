@@ -23,8 +23,8 @@ export type TaskNote = { text: string; tone: Tone; attention: boolean; pullReque
 
 export const prNumber = (session: Session) => (session.prUrl ? (/\/pull\/(\d+)/.exec(session.prUrl)?.[1] ?? null) : null);
 
-/** The agent proposed a plan and changes nothing until it is approved. */
-export const planReady = (session: Session) => session.planMode && !session.working && session.usage.outputTokens > 0;
+/** The agent's last reply proposed a plan, and it changes nothing until the plan is approved. */
+export const planReady = (session: Session) => session.planMode && !session.working && Boolean(session.plan);
 
 function prNote(session: Session): TaskNote | null {
 	if (!session.prUrl) return null;

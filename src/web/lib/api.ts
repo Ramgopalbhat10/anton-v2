@@ -63,6 +63,8 @@ export type Session = {
 	lastInputAt?: string | null;
 	/** What the agent's last reply asks you, until you send a message. */
 	asking?: string | null;
+	/** The plan the agent's last reply proposed in plan mode, waiting for your approval. */
+	plan?: string | null;
 	/** The project the task is a thread of; null for a task of its own. */
 	spaceId?: string | null;
 	/** Where a project's thread stands; null outside a project. */

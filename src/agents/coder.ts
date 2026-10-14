@@ -36,7 +36,7 @@ import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDe
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, writeTodos } from '../services/todos.ts';
-import { noteAsk } from '../services/asks.ts';
+import { noteAsk, notePlan } from '../services/asks.ts';
 import { checkSpec, shownNote } from '../services/show.ts';
 import { PAGE_GUIDE, saveRender } from '../services/renders.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
@@ -782,15 +782,25 @@ function memoryPrompt(memory: string): string {
 	return memory ? `\n\nNotes about this repository from earlier tasks and the user (they may be out of date; trust the code):\n${memory}` : '';
 }
 
-/** Plan mode's way out: the plan is shown with an Approve button, and approving it turns plan mode off. */
-const proposePlan = defineTool({
-	name: 'propose_plan',
-	description: 'Show the user your plan for approval. Call it once the plan is ready, then stop and wait.',
-	input: v.object({
-		plan: v.pipe(v.string(), v.minLength(1), v.description('The plan in markdown: what will change, where, and how it will be checked')),
-	}),
-	run: async () => ({ output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' }),
-});
+/**
+ * Plan mode's way out: the plan is shown with an Approve button, and the task waits on your approval
+ * (`checkReply` keeps the plan with it). Approving turns plan mode off and tells the agent to build it.
+ */
+function useProposePlan(id: string) {
+	useTool(
+		defineTool({
+			name: 'propose_plan',
+			description: 'Show the user your plan for approval. Call it once the plan is ready, then stop and wait.',
+			input: v.object({
+				plan: v.pipe(v.string(), v.minLength(1), v.description('The plan in markdown: what will change, where, and how it will be checked')),
+			}),
+			async run({ data }) {
+				notePlan(id, data.plan);
+				return { output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' };
+			},
+		}),
+	);
+}
 
 const TODO_HINT =
 	'For work of three or more steps, write a todo list with update_todos before you start, and update it as each step starts and finishes, so the user can follow along. Skip it for quick questions and one-step changes.';
@@ -875,6 +885,7 @@ const PLAN_PROMPT = [
 	'File writes are refused, and you must not run commands that change files, install packages, commit or push.',
 	'When you understand the work, call the propose_plan tool with a concrete plan: the files you will change and how, and how you will check the result.',
 	'Always present the plan through propose_plan, not as a reply, so the user can approve it; keep any reply after it to a line or two.',
+	'If only the user can settle something the plan depends on, ask it with ask first, then propose the plan once they answer.',
 	'Then stop. Once the user approves, plan mode turns off and you carry out the plan.',
 	'If they ask for changes, revise the plan and propose it again.',
 ].join(' ');
@@ -913,7 +924,7 @@ export function Coder({ id }: AgentProps) {
 		}
 		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
-	if (planning) useTool(proposePlan);
+	if (planning) useProposePlan(id);
 	// Code mode's repo tools read the snapshot, which a chat or a workspace does not use; both still get MCP servers and decide().
 	const scope: ScriptScope = { repo: !workspace && !chat, mcp: true };
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);

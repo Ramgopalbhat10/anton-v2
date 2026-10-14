@@ -180,7 +180,8 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(title ? { title } : {}),
 		...(model ? { model } : {}),
 		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
-		...(change.planMode !== undefined ? { planMode: change.planMode } : {}),
+		// Turning plan mode on or off (approving the plan turns it off) leaves no plan waiting.
+		...(change.planMode !== undefined ? { planMode: change.planMode, plan: null } : {}),
 		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
 		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
 	});

@@ -110,11 +110,40 @@ describe('Thread', () => {
 	});
 
 	it('offers no approval outside plan mode or while the agent works', () => {
-		const messages = [user('u1', 'Plan it'), assistant('a1', [{ type: 'text', text: 'A plan' }])];
+		const messages = [user('u1', 'Plan it'), assistant('a1', [tool('propose_plan', { plan: '1. Change app.ts' }, { output: 'shown' })])];
 		show(agent(messages));
 		expect(screen.queryByRole('button', { name: 'Approve and build' })).toBeNull();
 		show(agent(messages, { status: 'streaming' }), { planMode: true });
 		expect(screen.queryByRole('button', { name: 'Approve and build' })).toBeNull();
+	});
+
+	it('offers no approval in plan mode until the last reply proposes a plan', () => {
+		// Plan mode turned on in a task that has already answered: there is no plan yet.
+		show(agent([user('u1', 'Fix the bug'), assistant('a1', [{ type: 'text', text: 'Fixed it.' }])]), { planMode: true });
+		expect(screen.queryByRole('button', { name: 'Approve and build' })).toBeNull();
+		// A reply that asks something before planning has nothing to approve either.
+		show(
+			agent([
+				user('u1', 'Plan it'),
+				assistant('a1', [tool('propose_plan', { plan: '1. Change app.ts' }, { output: 'shown' })]),
+				user('u2', 'Use a queue instead'),
+				assistant('a2', [{ type: 'text', text: 'Which queue should it use?' }]),
+			]),
+			{ planMode: true },
+		);
+		expect(screen.queryByRole('button', { name: 'Approve and build' })).toBeNull();
+	});
+
+	it('marks a plan approved once you approved it', () => {
+		show(
+			agent([
+				user('u1', 'Plan it'),
+				assistant('a1', [tool('propose_plan', { plan: '1. Change app.ts' }, { output: 'shown' })]),
+				user('u2', 'Your plan is approved. Go ahead and build it.'),
+				assistant('a2', [{ type: 'text', text: 'Built it.' }]),
+			]),
+		);
+		expect(screen.getByText('Approved')).toBeTruthy();
 	});
 
 	it('says when a turn was stopped', () => {
