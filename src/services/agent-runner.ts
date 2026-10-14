@@ -74,6 +74,14 @@ export function isPlanning(id: string): boolean {
 	return planning.has(id);
 }
 
+/** Someone else's pull request a task reviews: the coder gets post_review instead of pushing. */
+export type ReviewTask = { url: string; number: number; author: string };
+const reviewTasks = new Map<string, ReviewTask>();
+
+export function reviewTaskFor(id: string): ReviewTask | null {
+	return reviewTasks.get(id) ?? null;
+}
+
 /** The General settings the agents read while they render: whether the coder gets run_script, and each helper agent's model (null for the task's own). */
 export type AgentSettings = { codeMode: boolean; visualReplies: VisualReplies; models: Record<HelperAgent, ModelChoice | null> };
 
@@ -116,6 +124,8 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 	else chats.delete(id);
 	if (session?.planMode) planning.add(id);
 	else planning.delete(id);
+	if (session?.review && session.prUrl) reviewTasks.set(id, { url: session.prUrl, number: session.review.number, author: session.review.author });
+	else reviewTasks.delete(id);
 	await primeSkills(id);
 }
 

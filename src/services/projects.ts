@@ -72,11 +72,12 @@ export async function branches(projectId: string): Promise<string[]> {
 /**
  * A settings change from the browser. A variable set to null keeps its stored
  * value and one left out is removed; a server sent without a token keeps its
- * stored one and an empty token removes it. Leaving out `followUps`, `fullVm` or `mcpServers` keeps them as they are.
+ * stored one and an empty token removes it. Leaving out `followUps`, `reviewOthers`, `fullVm` or `mcpServers` keeps them as they are.
  */
-export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'fullVm' | 'mcpServers'> & {
+export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm' | 'mcpServers'> & {
 	env: Record<string, string | null>;
 	followUps?: boolean;
+	reviewOthers?: boolean;
 	fullVm?: boolean;
 	mcpServers?: Array<Omit<McpServer, 'auth'> & { auth?: string | null }>;
 };
@@ -103,6 +104,7 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 		...change,
 		env,
 		followUps: change.followUps ?? project.followUps,
+		reviewOthers: change.reviewOthers ?? project.reviewOthers,
 		fullVm: change.fullVm ?? project.fullVm,
 		mcpServers,
 		baseImage: change.baseImage?.trim() || null,

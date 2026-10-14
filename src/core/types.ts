@@ -28,8 +28,10 @@ export type ProjectSettings = {
 	baseImage: string | null;
 	/** Sandboxes run as full VMs with their own kernel, for Docker, FUSE and the like, where the provider has them. */
 	fullVm: boolean;
-	/** The agent fixes failed checks and answers review comments on its pull requests by itself. */
+	/** The agent fixes failed checks, merge conflicts and review comments on its pull requests by itself. */
 	followUps: boolean;
+	/** Anton reviews the pull requests people open on the repo, and again after their pushes. */
+	reviewOthers: boolean;
 	mcpServers: McpServer[];
 };
 
@@ -84,7 +86,15 @@ export type Session = {
 	brief: string | null;
 	/** The start of the thread's latest reply, for its card and the coordinator. */
 	lastReply: string | null;
+	/** Someone else's pull request (`prUrl`) this task reviews; null for a task that does its own work. */
+	review: ReviewOf | null;
 };
+
+/**
+ * A pull request a task reviews. `trusted`: its author can push to the repo. `reviewedHead`: the head
+ * its last review read; `automatic`: Anton started it for the repo's Review every pull request setting.
+ */
+export type ReviewOf = { number: number; author: string; trusted: boolean; reviewedHead: string | null; automatic: boolean };
 
 /**
  * A pull request's state and its checks on the head commit: in a word (null when it has none or is
@@ -95,6 +105,8 @@ export type PullRequestStatus = {
 	checks: 'passed' | 'failed' | 'pending' | null;
 	/** A reviewer approved it and none asks for changes; missing on statuses read before this was kept. */
 	approved?: boolean;
+	/** It cannot merge into its base until its conflicts are resolved. */
+	conflicts?: boolean;
 	runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
 };
 

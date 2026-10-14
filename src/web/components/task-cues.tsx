@@ -133,6 +133,13 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 				<span className="tabular-nums">{number}</span>
 			</a>,
 		);
+		if (pullRequest?.conflicts) {
+			cues.push(
+				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={cn(CUE, 'text-(--danger-text)')}>
+					Conflicts
+				</a>,
+			);
+		}
 		if (pullRequest?.checks && pullRequest.checks !== 'passed') cues.push(<CiCue key="ci" number={number} pullRequest={{ ...pullRequest, checks: pullRequest.checks }} prUrl={session.prUrl} onCardChange={onCardChange} />);
 	}
 	return cues.length ? <span className="flex shrink-0 items-center gap-1.5">{cues}</span> : null;

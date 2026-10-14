@@ -1,6 +1,7 @@
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
+import { conflictedFiles, settleMergedBase } from './base-merge.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { reviewAfterPush } from './code-review.ts';
 import { commitAndPush } from './git.ts';
@@ -20,8 +21,11 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to open a pull request on.');
 	const project = session && (await getProject(session.projectId));
 	if (!session || !project) throw new NotFoundError('Session not found');
+	if (session.review) throw new InvalidInputError("This task reviews someone else's pull request; Anton does not push to it. Describe fixes in the review instead.");
 	const { git } = getProviders();
 	const machine = await machineFor(id);
+	const conflicted = await conflictedFiles(machine);
+	if (conflicted.length) throw new InvalidInputError(`Resolve the merge conflicts first, then git add the files: ${conflicted.join(', ')}`);
 	const pushed = await commitAndPush(machine, git, {
 		repo: project.repoFullName,
 		branch: session.branch,
@@ -29,6 +33,7 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 		message: input.title,
 	});
 	if (!pushed) throw new InvalidInputError('There are no changes to open a pull request with.');
+	await settleMergedBase(id, machine);
 	const url = await git.openPullRequest({
 		repo: project.repoFullName,
 		head: session.branch,

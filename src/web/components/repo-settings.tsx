@@ -35,7 +35,7 @@ function parsePorts(text: string): number[] {
 	return [...new Set(text.split(/[\s,]+/).filter(Boolean).map(Number))];
 }
 
-type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; servers: Server[] };
+type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean; servers: Server[] };
 
 export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
 
@@ -47,7 +47,7 @@ export function toEnv(variables: Variable[]): Record<string, string | null> {
 	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
 }
 
-function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, servers }: Draft): SettingsChange {
+function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers, servers }: Draft): SettingsChange {
 	const env = toEnv(variables);
 	const mcpServers = servers
 		.filter((row) => row.name.trim() || row.url.trim())
@@ -59,7 +59,7 @@ function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps,
 			tools: row.tools.split(/[\s,]+/).filter(Boolean),
 			...(row.codeMode ? {} : { codeMode: false }),
 		}));
-	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, mcpServers };
+	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers, mcpServers };
 }
 
 export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
@@ -169,9 +169,10 @@ function SettingsForm({ project }: { project: Project }) {
 	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
 	const [fullVm, setFullVm] = useState(project.fullVm);
 	const [followUps, setFollowUps] = useState(project.followUps);
+	const [reviewOthers, setReviewOthers] = useState(project.reviewOthers);
 	const [servers, setServers] = useState(() => toServers(project));
 	const save = useMutation({
-		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, servers })),
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers, servers })),
 		onSuccess: (saved) => {
 			setVariables(storedVariables(saved.envKeys));
 			setServers(toServers(saved));
@@ -240,9 +241,15 @@ function SettingsForm({ project }: { project: Project }) {
 				</Section>
 				<Section
 					title="Pull request follow-ups"
-					help="Every five minutes Anton checks the pull requests its agents opened. Failed checks on the latest commit and new review comments go to that task's agent, up to five times per task."
+					help="Every five minutes Anton checks the pull requests its agents opened. Merge conflicts, failed checks on the latest commit and new review comments go to that task's agent, up to five times per task."
 				>
-					<Switch checked={followUps} onChange={setFollowUps} label="Follow up on CI and reviews" className="self-start" />
+					<Switch checked={followUps} onChange={setFollowUps} label="Follow up on conflicts, CI and reviews" className="self-start" />
+				</Section>
+				<Section
+					title="Review every pull request"
+					help="Anton also reviews the pull requests people open on this repository, each in a task of its own: a correctness pass and a security pass, posted on GitHub, and again after each push, up to three times. Only pull requests opened or updated after you turn this on, and not drafts or ones from people who can't push to the repository; paste any pull request on the Reviews page to review it by hand."
+				>
+					<Switch checked={reviewOthers} onChange={setReviewOthers} label="Review others' pull requests" className="self-start" />
 				</Section>
 				<Section
 					title="MCP servers"

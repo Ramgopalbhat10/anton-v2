@@ -12,6 +12,9 @@ export type ReviewItem = {
 	url: string;
 	group: ReviewGroup;
 	draft: boolean;
+	/** Someone else's pull request, which the task reviews; its author's login. */
+	reviewing: string | null;
+	conflicts: boolean;
 	checks: { passed: number; failed: number; pending: number };
 	comments: number;
 	createdAt: string;
@@ -22,7 +25,7 @@ const ORDER: ReviewGroup[] = ['ready', 'failing', 'checking', 'unknown', 'merged
 function groupOf(activity: PullRequestActivity | null): ReviewGroup {
 	if (!activity) return 'unknown';
 	if (activity.state === 'merged' || activity.state === 'closed') return activity.state;
-	if (activity.checks.some((check) => check.status === 'failed')) return 'failing';
+	if (activity.conflicts || activity.checks.some((check) => check.status === 'failed')) return 'failing';
 	return activity.checks.some((check) => check.status === 'pending') ? 'checking' : 'ready';
 }
 
@@ -49,7 +52,7 @@ async function activityOf(url: string): Promise<PullRequestActivity | null> {
 	}
 }
 
-/** Every pull request the agent opened, the ones waiting on you first. */
+/** Every pull request the agent opened or reviews, the ones waiting on you first. */
 export async function reviewQueue(): Promise<ReviewItem[]> {
 	const sessions = (await listSessionRecords()).filter((session) => session.prUrl);
 	const items = await Promise.all(
@@ -63,6 +66,8 @@ export async function reviewQueue(): Promise<ReviewItem[]> {
 				url,
 				group: groupOf(activity),
 				draft: activity?.state === 'draft',
+				reviewing: session.review?.author ?? null,
+				conflicts: activity?.conflicts ?? false,
 				checks: { passed: count(activity, 'passed'), failed: count(activity, 'failed'), pending: count(activity, 'pending') },
 				comments: activity?.comments.length ?? 0,
 				createdAt: session.createdAt,

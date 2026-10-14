@@ -1,16 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { ExternalLink, GitMerge, GitPullRequest, MessageSquare } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { ExternalLink, GitMerge, GitPullRequest, MessageSquare, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { FIELD } from '@/components/settings/parts';
 import { BranchArt } from '@/components/illustrations';
 import { Card, CardSection, Figure, Pips, SplitBar, StatRow, Status, type Tone } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
-import { Badge, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Badge, Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type ReviewGroup, type ReviewItem } from '@/lib/api';
 import { age } from '@/lib/format';
 
 const GROUPS: Record<ReviewGroup, { label: string; help: string }> = {
 	ready: { label: 'Waiting on you', help: 'Checks passed or there are none. Review and merge on GitHub.' },
-	failing: { label: 'Failing checks', help: 'Anton sends failed checks to the agent, unless follow-ups are off for the repository.' },
+	failing: { label: 'Failing or conflicting', help: "Anton sends failed checks and merge conflicts on its own pull requests to the agent, unless follow-ups are off for the repository." },
 	checking: { label: 'Checks running', help: 'Waiting on CI.' },
 	unknown: { label: 'Could not check', help: 'GitHub did not answer for these.' },
 	merged: { label: 'Merged', help: '' },
@@ -64,7 +66,9 @@ function Row({ item }: { item: ReviewItem }) {
 			>
 				<div className="flex min-w-0 items-center gap-2">
 					<span className="truncate text-[13px] font-medium">{item.title}</span>
+					{item.reviewing ? <Badge tone="accent">Reviewing @{item.reviewing}</Badge> : null}
 					{item.draft ? <Badge>Draft</Badge> : null}
+					{open && item.conflicts ? <Badge tone="danger">Conflicts</Badge> : null}
 				</div>
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
 					{item.repo} #{number(item.url)} · {age(item.createdAt)}
@@ -83,6 +87,50 @@ function Row({ item }: { item: ReviewItem }) {
 	);
 }
 
+/**
+ * Any pull request, by its link: Anton reviews it in a task of its own (its own pull requests in the
+ * task that opened them), with a security pass, posts the review on GitHub and opens the task.
+ */
+function ReviewAny() {
+	const [url, setUrl] = useState('');
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
+	const review = useMutation({
+		mutationFn: () => api.reviewAnyPullRequest(url),
+		onSuccess: (session) => {
+			setUrl('');
+			void queryClient.invalidateQueries({ queryKey: ['reviews'] });
+			void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code' } });
+		},
+	});
+	return (
+		<Card icon={ShieldCheck} title="Review a pull request" sub="Anyone's, on GitHub: a correctness and a security pass, posted on the pull request">
+			<form
+				className="flex flex-wrap items-center gap-2 px-4 pb-3"
+				onSubmit={(event) => {
+					event.preventDefault();
+					if (url.trim()) review.mutate();
+				}}
+			>
+				<input
+					value={url}
+					onChange={(event) => {
+						setUrl(event.target.value);
+						review.reset();
+					}}
+					placeholder="https://github.com/owner/repo/pull/12"
+					aria-label="Pull request link"
+					className={`${FIELD} min-w-0 flex-1 font-mono`}
+				/>
+				<Btn type="submit" variant="primary" disabled={!url.trim() || review.isPending}>
+					{review.isPending ? 'Starting…' : 'Review'}
+				</Btn>
+				{review.isError ? <p className="m-0 w-full text-[12px] text-(--danger-text)">{review.error.message}</p> : null}
+			</form>
+		</Card>
+	);
+}
+
 /** How many pull requests wait on what, and the checks behind the open ones. */
 function Summary({ items }: { items: ReviewItem[] }) {
 	const openItems = items.filter((item) => item.group !== 'merged' && item.group !== 'closed');
@@ -92,7 +140,7 @@ function Summary({ items }: { items: ReviewItem[] }) {
 		<Card
 			icon={GitPullRequest}
 			title="Pull requests"
-			sub="opened by the agent"
+			sub="opened or reviewed by the agent"
 			status={failing ? <Status tone="danger">{failing} failing</Status> : <Status tone="success">No failures</Status>}
 		>
 			<CardSection ruled={false} className="pt-1">
@@ -113,7 +161,7 @@ function Summary({ items }: { items: ReviewItem[] }) {
 	);
 }
 
-/** Pull requests the agent opened, grouped by what each waits on. */
+/** Pull requests the agent opened or reviews, grouped by what each waits on, under a box to review any pull request. */
 export function ReviewsPage() {
 	// Pull request state lives on GitHub, which tells Anton nothing, so this asks again every few minutes.
 	const reviews = useQuery({ queryKey: ['reviews'], queryFn: api.reviews, refetchInterval: 5 * 60_000 });
@@ -123,6 +171,7 @@ export function ReviewsPage() {
 		.filter((entry) => entry.items.length > 0);
 	return (
 		<PageFrame title="Reviews">
+			<ReviewAny />
 			{reviews.isPending ? (
 				<Spinner size={12} />
 			) : reviews.isError ? (
@@ -130,7 +179,7 @@ export function ReviewsPage() {
 			) : groups.length === 0 ? (
 				<Card as="div">
 					<div className="p-1.5">
-						<EmptyState art={<BranchArt className="w-full max-w-[400px]" />} title="No pull requests yet" body="Pull requests the agent opens show up here, with their checks and comments." />
+						<EmptyState art={<BranchArt className="w-full max-w-[400px]" />} title="No pull requests yet" body="Pull requests the agent opens or reviews show up here, with their checks and comments." />
 					</div>
 				</Card>
 			) : (

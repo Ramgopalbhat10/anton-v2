@@ -1,5 +1,5 @@
 import type { Reasoning } from '../core/ports.ts';
-import type { PullRequestStatus, SessionRecord, Usage } from '../core/types.ts';
+import type { PullRequestStatus, ReviewOf, SessionRecord, Usage } from '../core/types.ts';
 import { announce } from '../core/changes.ts';
 import { appDb } from './client.ts';
 
@@ -39,6 +39,7 @@ function toRecord(row: Row): SessionRecord {
 		brief: optional(row.brief),
 		lastReply: optional(row.last_reply),
 		reportedState: optional(row.reported_state),
+		review: row.review_json == null ? null : (JSON.parse(String(row.review_json)) as ReviewOf),
 	};
 }
 
@@ -142,7 +143,7 @@ export async function spendByMinute(since: Date): Promise<Array<{ minute: string
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'> &
-	Partial<Pick<SessionRecord, 'spaceId' | 'brief'>>;
+	Partial<Pick<SessionRecord, 'spaceId' | 'brief' | 'review'>> & { prUrl?: string };
 
 /** A task's repository joined in; a chat has none, and a task whose repository is gone is left out as before. */
 const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN projects p ON p.id = s.project_id WHERE (s.project_id = '' OR p.id IS NOT NULL)";
@@ -150,8 +151,8 @@ const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN p
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief, review_json, pr_url)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId ?? '',
@@ -166,6 +167,8 @@ export async function insertSession(session: NewSession): Promise<void> {
 			new Date().toISOString(),
 			session.spaceId ?? null,
 			session.brief ?? null,
+			session.review ? JSON.stringify(session.review) : null,
+			session.prUrl ?? null,
 		],
 	});
 	announce({ kind: 'sessions' });
@@ -211,6 +214,8 @@ const columns = {
 	reportedState: 'reported_state',
 	brief: 'brief',
 	lastReply: 'last_reply',
+	baseSha: 'base_sha',
+	reviewJson: 'review_json',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };

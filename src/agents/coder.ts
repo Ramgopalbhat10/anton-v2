@@ -31,7 +31,21 @@ import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } 
 import { openPullRequest } from '../services/pull-requests.ts';
 import { modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
-import { agentSettingsNow, hasWorkspace, isChat, isPlanning, mcpServersFor, memoryFor, type ThreadProject, threadProjectFor } from '../services/agent-runner.ts';
+import {
+	agentSettingsNow,
+	hasWorkspace,
+	isChat,
+	isPlanning,
+	mcpServersFor,
+	memoryFor,
+	type ReviewTask,
+	reviewTaskFor,
+	type ThreadProject,
+	threadProjectFor,
+} from '../services/agent-runner.ts';
+import { mergeBaseBranch } from '../services/base-merge.ts';
+import { REVIEW_GUIDE } from '../services/code-review.ts';
+import { postReviewTool } from './review-tool.ts';
 import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
@@ -209,7 +223,7 @@ function useStartWorkspace(id: string, chat: boolean, startWorkspace: () => void
  * there is no pull request. A chat's sandbox is a scratch folder: no repository to investigate,
  * test or open a pull request on.
  */
-function useWorkspace(id: string, planning: boolean, chat: boolean) {
+function useWorkspace(id: string, planning: boolean, chat: boolean, review: ReviewTask | null) {
 	useSandbox({
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
@@ -219,7 +233,12 @@ function useWorkspace(id: string, planning: boolean, chat: boolean) {
 	if (!chat) {
 		useSubagent(withSettingsModel(explorer, 'explorer'));
 		useSubagent(withSettingsModel(tester, 'tester'));
-		if (!planning) useOpenPullRequest(id);
+		// Someone else's pull request is reviewed, never pushed to.
+		if (review) useTool(postReviewTool(id));
+		else if (!planning) {
+			useOpenPullRequest(id);
+			useMergeBaseBranch(id);
+		}
 	}
 	useTool(
 		defineTool({
@@ -579,6 +598,21 @@ function useOpenPullRequest(id: string) {
 	);
 }
 
+function useMergeBaseBranch(id: string) {
+	useTool(
+		defineTool({
+			name: 'merge_base_branch',
+			description:
+				"Merge the latest base branch from GitHub into this task branch, for when the pull request has merge conflicts or falls behind. " +
+				'Commit your own changes first. Conflicts are left in the files for you to resolve, git add and commit; then call open_pull_request.',
+			input: v.object({}),
+			async run() {
+				return { output: await mergeBaseBranch(id) };
+			},
+		}),
+	);
+}
+
 /**
  * Code mode: one program that calls many tools, with only its result coming back; on in Settings > General.
  * Each call the program makes is kept for the thread and, in a subagent, shown on its step in the Agents panel.
@@ -881,6 +915,17 @@ const CHAT_WORKSPACE_PROMPT = [
 	'Be concise.',
 ].join(' ');
 
+/** A task reviewing someone else's pull request: it reads and runs their change, and posts what it finds. */
+function reviewPrompt(review: ReviewTask): string {
+	return [
+		`This task reviews pull request #${review.number} by @${review.author} (${review.url}), someone else's change: the sandbox has its head checked out on the task branch.`,
+		'You cannot push to it or open a pull request. Change files only to try something the user asks for; the next review puts the author\'s branch back.',
+		'When asked to review it:',
+		REVIEW_GUIDE,
+		'After posting, the user may ask about the change or your findings: answer from the code, and post again only when they ask.',
+	].join(' ');
+}
+
 const PLAN_PROMPT = [
 	'Plan mode is on: investigate as much as you need, but change nothing.',
 	'File writes are refused, and you must not run commands that change files, install packages, commit or push.',
@@ -917,7 +962,8 @@ export function Coder({ id }: AgentProps) {
 	// A chat has no repository: no snapshot to read, notes to keep or pull request to open.
 	const chat = isChat(id);
 	const planning = isPlanning(id);
-	if (workspace) useWorkspace(id, planning, chat);
+	const review = reviewTaskFor(id);
+	if (workspace) useWorkspace(id, planning, chat, review);
 	else {
 		if (!chat) {
 			useRepoSnapshot(id);
@@ -1001,5 +1047,5 @@ export function Coder({ id }: AgentProps) {
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
