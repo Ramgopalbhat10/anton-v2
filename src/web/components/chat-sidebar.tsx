@@ -565,7 +565,7 @@ export function ChatSidebar({
 		<aside
 			className={cn(
 				'w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-[linear-gradient(180deg,var(--bg-surface),color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-canvas)))]',
-				open ? 'fixed inset-y-0 left-0 z-30 flex shadow-(--shadow-modal) md:static md:shadow-none' : 'hidden md:flex',
+				open ? 'fixed inset-y-0 left-0 z-30 flex pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-(--shadow-modal) md:static md:p-0 md:shadow-none' : 'hidden md:flex',
 			)}
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-3.5">

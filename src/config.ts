@@ -68,6 +68,8 @@ export const config = {
 		maxOpen: Number(read('ANTON_CLAUDE_CODE_MAX_OPEN', '3')),
 	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
+	/** Who push services can reach about Anton's notifications (the VAPID subject): a `mailto:` or `https:` address. */
+	pushContact: read('ANTON_PUSH_CONTACT', 'mailto:anton@example.com'),
 	/**
 	 * The OpenRouter model the computer tool sees the screen with when neither the computer subagent's own model
 	 * (Settings › General) nor the task's is an OpenRouter model that reads images: it finds what to click and

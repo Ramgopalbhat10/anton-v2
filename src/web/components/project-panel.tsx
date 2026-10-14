@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Play, Plus, Trash2, Upload } from 'lucide-react';
 import { memo, useRef, useState } from 'react';
 import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -366,6 +366,8 @@ export const ProjectPanel = memo(function ProjectPanel({
 	return (
 		<WorkspacePane expanded={expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
+				{/* On a phone the panel covers the coordinator; this goes back to it. */}
+				<IconBtn icon={ArrowLeft} size="sm" label="Back to the coordinator" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
 				<div data-noscrollbar role="tablist" aria-label="Project panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
 					{PROJECT_TABS.map((item) => (
 						<Tab
@@ -384,7 +386,7 @@ export const ProjectPanel = memo(function ProjectPanel({
 					onClick={onToggleExpanded}
 					className="hidden @min-[700px]/workspace:inline-flex"
 				/>
-				<IconBtn icon={PanelRight} size="sm" label="Hide the panel" onClick={onClose} />
+				<IconBtn icon={PanelRight} size="sm" label="Hide the panel" onClick={onClose} className="hidden @min-[700px]/workspace:inline-flex" />
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
 				{tab === 'Overview' ? <Overview space={space} threads={threads} /> : null}

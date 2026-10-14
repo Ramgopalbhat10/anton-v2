@@ -470,6 +470,12 @@ export type SubagentRun = {
 	result: string | null;
 };
 
+/** A device that gets notifications with no Anton tab open (src/services/push.ts). */
+export type PushDevice = { id: string; name: string; addedAt: string; lastSentAt: string | null; lastError: string | null };
+/** `publicKey` is empty when the server cannot send notifications. */
+export type PushView = { publicKey: string; devices: PushDevice[]; finished: boolean };
+export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
+
 export type Output = { path: string; size: number; mtimeMs: number };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
 
@@ -511,6 +517,11 @@ export const api = {
 	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
 	saveGeneralSettings: (settings: GeneralSettings) =>
 		json<GeneralSettings>('/api/settings/general', { method: 'PUT', body: JSON.stringify(settings) }),
+	push: () => json<PushView>('/api/push'),
+	addPushDevice: (subscription: PushSubscriptionJson & { name: string }) => post<PushView>('/api/push/devices', subscription),
+	removePushDevice: (id: string) => json<PushView>(`/api/push/devices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+	testPush: (device?: string) => post<{ sent: number }>('/api/push/test', device ? { device } : {}),
+	savePushOptions: (options: { finished: boolean }) => json<PushView>('/api/push/options', { method: 'PUT', body: JSON.stringify(options) }),
 	guardrails: () => json<Guardrails>('/api/settings/guardrails'),
 	saveGuardrails: (guardrails: Guardrails) => json<Guardrails>('/api/settings/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
 	secrets: () => json<SecretsView>('/api/secrets'),

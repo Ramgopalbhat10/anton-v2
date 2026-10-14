@@ -9,6 +9,7 @@ import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/projec
 import { SpaceMark } from '@/components/project-sidebar';
 import { DEFAULT_PANELS, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
+import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +47,11 @@ export function ProjectPage() {
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
 	const agent = useFlueAgent({ url: `/api/agents/coordinator/${spaceId}` });
-	const [panel, setPanel] = useState(() => readProjectPanel(spaceId));
+	const [saved, setPanel] = useState(() => readProjectPanel(spaceId));
+	// On a phone the panel covers the coordinator, so it shows only once you open it here; the saved choice is the wide screen's.
+	const onePane = useOnePane();
+	const [paneOpen, setPaneOpen] = useState(false);
+	const panel = { ...saved, open: onePane ? paneOpen : saved.open };
 	const [expanded, setExpanded] = useState(false);
 	const [starting, setStarting] = useState(Boolean(search.new));
 	const asked = useRef(false);
@@ -54,14 +59,21 @@ export function ProjectPage() {
 
 	// Kept to one identity each, so the memoized panel skips the renders the coordinator's stream causes.
 	const changePanel = useCallback(
-		(next: Partial<ProjectPanelState>) =>
+		(next: Partial<ProjectPanelState>) => {
+			if (onePane && next.open !== undefined) {
+				setPaneOpen(next.open);
+				if (!next.open) setExpanded(false);
+				const { open: _open, ...rest } = next;
+				next = rest;
+			}
 			setPanel((current) => {
 				const updated = { ...current, ...next };
 				saveProjectPanel(spaceId, updated);
 				if (!updated.open) setExpanded(false);
 				return updated;
-			}),
-		[spaceId],
+			});
+		},
+		[spaceId, onePane],
 	);
 	const changeTab = useCallback((tab: ProjectTab) => changePanel({ tab }), [changePanel]);
 	const closePanel = useCallback(() => changePanel({ open: false }), [changePanel]);
