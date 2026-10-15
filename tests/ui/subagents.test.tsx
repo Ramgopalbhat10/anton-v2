@@ -42,7 +42,7 @@ const finished = run({
 });
 
 describe('Agents card in the thread', () => {
-	it('says who is working, shows each one live, and opens the Agents panel on the run', () => {
+	it('shows each subagent on one line, says what a working one does, and opens the Agents panel on the run', () => {
 		const showPanel = vi.fn();
 		renderWithQueries(
 			<ShowPanel.Provider value={showPanel}>
@@ -56,14 +56,34 @@ describe('Agents card in the thread', () => {
 			</ShowPanel.Provider>,
 			[[['subagents', 's1'], { runs: [run({}), finished] }]],
 		);
-		expect(screen.getByText('1 of 2 working')).toBeTruthy();
-		expect(screen.getByText('1 failed')).toBeTruthy();
-		// The footer sums the reply's agents up.
-		expect(screen.getByText(/^\d+s · 3 steps · 17K tok$/)).toBeTruthy();
-		expect(screen.getByText('Went back')).toBeTruthy();
-		// A finished run's answer reads as plain words.
-		expect(screen.getByText('npm test exited 1')).toBeTruthy();
+		const card = screen.getByRole('region', { name: '2 agents on this reply' });
+		// Its kind, steps and time as chips; no totals, lanes or footer: those are the Agents panel's.
+		expect(within(card).getByText('Browser')).toBeTruthy();
+		expect(within(card).getByText('2 steps')).toBeTruthy();
+		expect(within(card).getByText('Went back')).toBeTruthy();
+		expect(within(card).getByText('Failed')).toBeTruthy();
+		expect(within(card).queryByText(/tok/)).toBeNull();
+		expect(within(card).queryByRole('button', { name: 'Open agents' })).toBeNull();
+		// A finished run's answer waits for the peek.
+		expect(within(card).queryByText('npm test exited 1')).toBeNull();
 		fireEvent.click(screen.getByText('Check top Hacker News stories'));
+		expect(showPanel).toHaveBeenCalledWith('Agents');
+	});
+
+	it('shows the rest of a subagent on hover: its answer, numbers and a way into the Agents panel', async () => {
+		const showPanel = vi.fn();
+		renderWithQueries(
+			<ShowPanel.Provider value={showPanel}>
+				<AgentsCard sessionId="s8" calls={[{ toolCallId: 'call-0', agent: 'tester', prompt: 'Run the tests', description: '', running: false, failed: true, output: '' }]} />
+			</ShowPanel.Provider>,
+			[[['subagents', 's8'], { runs: [finished] }]],
+		);
+		fireEvent.pointerEnter(screen.getByText('Run the tests').closest('button') as HTMLElement, { pointerType: 'mouse' });
+		const open = await screen.findByRole('button', { name: 'Open in Agents' });
+		const peek = open.closest('.in-pop') as HTMLElement;
+		expect(within(peek).getByText('npm test exited 1')).toBeTruthy();
+		expect(within(peek).getByText('1 step · 9s · 2.0K tok · gpt-6-luna')).toBeTruthy();
+		fireEvent.click(open);
 		expect(showPanel).toHaveBeenCalledWith('Agents');
 	});
 
@@ -74,16 +94,17 @@ describe('Agents card in the thread', () => {
 });
 
 describe('Agents panel', () => {
-	it('lists runs by whether they work, and opens one into its live transcript', () => {
+	it('lists the runs once, a line and a lane each, and opens one into its live transcript', () => {
 		focusRun('s2', null);
 		renderWithQueries(<AgentsTab sessionId="s2" />, [[['subagents', 's2'], { runs: [run({}), finished] }]]);
-		const working = screen.getByRole('region', { name: 'Working' });
-		const done = screen.getByRole('region', { name: 'Finished' });
-		expect(within(working).getByText('Check top Hacker News stories')).toBeTruthy();
-		expect(within(done).getByText('Run the tests')).toBeTruthy();
-		expect(within(done).getByText('Failed')).toBeTruthy();
+		const latest = screen.getByRole('region', { name: 'Latest' });
+		expect(within(latest).getByText('Check top Hacker News stories')).toBeTruthy();
+		expect(within(latest).getByText('Run the tests')).toBeTruthy();
+		expect(within(latest).getByText('npm test exited 1')).toBeTruthy();
+		// Each run is listed once: no separate timeline repeats its title.
+		expect(screen.getAllByText('Check top Hacker News stories')).toHaveLength(1);
 
-		fireEvent.click(within(working).getByRole('button'));
+		fireEvent.click(within(latest).getAllByRole('button', { name: /Check top Hacker News stories/ })[0]);
 		expect(screen.getByText('Brief from the agent')).toBeTruthy();
 		expect(screen.getByText(/Use the comments pages/)).toBeTruthy();
 		const steps = screen.getByRole('region', { name: 'Steps' });
@@ -92,10 +113,10 @@ describe('Agents panel', () => {
 		expect(screen.getByText('gpt-6-luna')).toBeTruthy();
 
 		fireEvent.click(screen.getByRole('button', { name: 'All agents' }));
-		expect(screen.getByRole('region', { name: 'Working' })).toBeTruthy();
+		expect(screen.getByRole('region', { name: 'Latest' })).toBeTruthy();
 	});
 
-	it('sums the task up in a sentence over a timeline of its runs, and opens a step the decision model drove into its actions', () => {
+	it('sums the task up in a sentence with its totals, and opens a step the decision model drove into its actions', () => {
 		const driven = run({
 			id: 'run-2',
 			toolCallId: 'call-2',
@@ -114,12 +135,11 @@ describe('Agents panel', () => {
 		focusRun('s5', null);
 		renderWithQueries(<AgentsTab sessionId="s5" />, [[['subagents', 's5'], { runs: [driven, finished] }]]);
 		const overview = screen.getByLabelText('Agents overview');
-		expect(within(overview).getByText('1 working')).toBeTruthy();
-		expect(within(overview).getByText('$0.0004')).toBeTruthy();
+		expect(within(overview).getByText('2 runs · 2 steps · 17K tok · Jev $0.0004')).toBeTruthy();
 		expect(within(overview).getByText('1 agent working, 1 finished')).toBeTruthy();
 		expect(within(overview).getByText('1 failed. A mix of running commands and browsing over 2 steps.')).toBeTruthy();
 
-		fireEvent.click(within(overview).getByTitle('Check top Hacker News stories'));
+		fireEvent.click(screen.getAllByRole('button', { name: /Check top Hacker News stories/ })[0]);
 		const steps = screen.getByRole('region', { name: 'Steps' });
 		expect(within(steps).getByText('Fill in the newsletter form')).toBeTruthy();
 		expect(within(steps).getByText('Typed email into textbox "Email"')).toBeTruthy();
@@ -162,7 +182,7 @@ describe('Agents panel', () => {
 		renderWithQueries(<AgentsTab sessionId="s6" />, [[['subagents', 's6'], { runs: [started('c', 1000, 'Batch 3'), started('b', 2000, 'Batch 2'), started('a', 3000, 'Batch 1')] }]]);
 		expect(screen.getByText('3 browsers ran side by side for 6s')).toBeTruthy();
 		expect(screen.getByText('All reading: 3 steps.')).toBeTruthy();
-		const done = screen.getByRole('region', { name: 'Finished' });
+		const done = screen.getByRole('region', { name: 'Latest' });
 		expect(within(done).getAllByText(/^Batch/).map((item) => item.textContent)).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
 		fireEvent.click(within(done).getAllByRole('button')[0]);
 		expect(within(screen.getByRole('region', { name: 'Steps' })).getByText('44ms')).toBeTruthy();

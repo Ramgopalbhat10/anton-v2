@@ -391,6 +391,55 @@ export function Facts({ items, className }: { items: ReactNode[]; className?: st
 	);
 }
 
+const CHIP: Record<Tone, string> = {
+	neutral: 'text-(--text-secondary)',
+	accent: 'text-(--accent-text) border-(--accent-border)',
+	success: 'text-(--success-text) border-(--success-border)',
+	warning: 'text-(--warning-text) border-(--warning-border)',
+	danger: 'text-(--danger-text) border-(--danger-border)',
+};
+
+/**
+ * A fact on a one-line row, as a small chip: a pull request, a kind, a count,
+ * a time. Rows say what a thing is in a few of these; the rest waits on hover.
+ */
+export function Chip({
+	icon,
+	iconColor,
+	tone = 'neutral',
+	color,
+	mono,
+	title,
+	children,
+	className,
+}: {
+	icon?: LucideIcon;
+	/** Colours only the icon, for a chip that names a kind without shouting it. */
+	iconColor?: string;
+	tone?: Tone;
+	color?: string;
+	mono?: boolean;
+	title?: string;
+	children: ReactNode;
+	className?: string;
+}) {
+	return (
+		<span
+			title={title}
+			className={cn(
+				'inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-[11px] leading-none whitespace-nowrap',
+				mono && 'in-num text-[10.5px]',
+				CHIP[tone],
+				className,
+			)}
+			style={color ? { color, borderColor: `color-mix(in oklab, ${color} 32%, transparent)`, background: `color-mix(in oklab, ${color} 10%, transparent)` } : undefined}
+		>
+			{icon ? <Icon icon={icon} size={11} className="shrink-0" style={iconColor ? { color: iconColor } : undefined} /> : null}
+			{children}
+		</span>
+	);
+}
+
 /** A small mono count in a pill: beside a tab, a section heading or a nav item. */
 export function Count({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'accent'; className?: string }) {
 	return (

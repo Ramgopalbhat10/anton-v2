@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUpRight, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
-import { Caption, Status } from '@/components/instrument';
+import type { ReactNode } from 'react';
+import { HoverPeek } from '@/components/hover-peek';
+import { Caption, Chip, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { ThreadGlyph } from '@/components/thread-glyph';
@@ -113,83 +115,192 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 	);
 }
 
+/** A pull request's state as a chip colour: merged violet, failing red, conflicted amber, open green. */
+function prTone(thread: Session): { tone?: 'success' | 'danger' | 'warning'; color?: string; title: string } {
+	const pr = thread.pullRequest;
+	const title = prSummary(thread) ?? '';
+	if (!pr) return { title };
+	if (pr.state === 'merged') return { color: 'var(--data-2)', title };
+	if (pr.state === 'closed') return { title };
+	if (pr.checks === 'failed') return { tone: 'danger', title };
+	if (pr.conflicts) return { tone: 'warning', title };
+	return { tone: pr.state === 'draft' ? undefined : 'success', title };
+}
+
 /**
- * A thread as a live card, under the message that started it and in
- * Overview: its glyph, title and state; a mono phase line (repository and
- * for how long) with a sweeping hairline while it works; what
- * it last said with a caret while it types, or its question as an amber
- * quote; and, when it has either, a footer with its pull request and next
- * steps. The whole card opens the thread.
+ * What a row says beyond its glyph and title, as chips: its pull request,
+ * and its state only where the glyph alone would not do (it needs you, it
+ * failed, it waits for a slot). Everything else is in the peek.
  */
-export function ThreadCard({ thread, className }: { thread: Session; className?: string }) {
+export function ThreadChips({ thread }: { thread: Session }) {
+	const state = stateOf(thread);
+	const number = prNumber(thread.prUrl);
+	const pr = prTone(thread);
+	const checksFailing = thread.pullRequest?.checks === 'failed';
+	return (
+		<>
+			{thread.prUrl ? (
+				<Chip icon={GitPullRequest} mono tone={pr.tone} color={pr.color} title={pr.title}>
+					#{number ?? '?'}
+				</Chip>
+			) : null}
+			{thread.status === 'error' ? (
+				<Chip tone="danger">Failed</Chip>
+			) : state === 'waiting' && !checksFailing ? (
+				<Chip tone="warning">Needs you</Chip>
+			) : state === 'queued' ? (
+				<Chip>Queued</Chip>
+			) : null}
+		</>
+	);
+}
+
+/** How long it has worked, or how long since it last did anything. */
+function phaseOf(thread: Session, now: number): string {
+	const state = stateOf(thread);
+	if (state === 'working') return elapsed(now - new Date(thread.lastInputAt ?? thread.createdAt).getTime());
+	if (state === 'queued') return 'starts when a slot frees';
+	const ago = age(threadActiveAt(thread), now);
+	return ago === 'now' ? 'just now' : `${ago} ago`;
+}
+
+/**
+ * Everything a row leaves out, on hover: its state, where it works and for
+ * how long, what it last said or asks, its pull request, and its next steps.
+ */
+export function ThreadPeek({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const state = stateOf(thread);
-	const working = state === 'working';
-	const now = useNow(working);
-	const since = thread.lastInputAt ?? thread.createdAt;
+	const now = useNow(state === 'working');
 	const line = threadLine(thread);
-	const pr = prSummary(thread);
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
-	// The pill says the state, so the phase line says only for how long, or when a queued thread starts.
-	const ago = age(threadActiveAt(thread));
-	const phase = working ? elapsed(now - new Date(since).getTime()) : state === 'queued' ? 'starts when a slot frees' : ago === 'now' ? 'just now' : `${ago} ago`;
-	const steps = nextSteps(thread);
+	const pr = prSummary(thread);
 	return (
-		<article
-			aria-label={thread.title}
-			onClick={() => open(thread)}
-			className={cn(
-				'in-card group/thread cursor-pointer overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-strong)',
-				waiting && !broken && 'border-(--warning-border)',
-				broken && 'border-(--danger-border)',
-				className,
-			)}
-		>
-			{working ? <div aria-hidden className="in-sweep absolute inset-x-0 top-0 h-px bg-(--accent-border)" /> : null}
-			<div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-				<div className="flex items-center gap-2.5">
-					<ThreadGlyph thread={thread} size={16} />
-					<div className="min-w-0 flex-1 truncate text-[13.5px] leading-[19px] font-medium text-(--text-primary)">{thread.title}</div>
-					<ThreadStatePill thread={thread} />
+		<>
+			<div className="flex items-start gap-2">
+				<span className="mt-[2px] inline-flex shrink-0">
+					<ThreadGlyph thread={thread} size={14} />
+				</span>
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{thread.title}</span>
+					<span className="flex min-w-0 items-center gap-2">
+						<ThreadStatePill thread={thread} />
+						<Caption className="truncate">
+							{repoShort(thread)} · {phaseOf(thread, now)}
+						</Caption>
+					</span>
 				</div>
-				<div className="flex items-center gap-2 pl-[26px]">
-					<Caption className="shrink-0">{repoShort(thread)}</Caption>
-					<span aria-hidden className={cn('relative h-px min-w-6 flex-1 overflow-hidden', working ? 'in-sweep bg-(--accent-border)' : 'bg-(--border-subtle)')} />
-					<Caption tone={working ? 'accent' : waiting ? (broken ? 'danger' : 'warning') : undefined} className="shrink-0">
-						{phase}
-					</Caption>
-				</div>
-				{line ? (
-					waiting ? (
-						<div
-							className={cn(
-								'ml-[26px] line-clamp-3 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty',
-								broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--warning-base) bg-(--warning-bg) text-(--warning-text)',
-							)}
-						>
-							{line}
-						</div>
-					) : (
-						<div className={cn('line-clamp-2 pl-[26px] text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', working && 'agent-live-line')}>
-							<span className={working ? 'viz-caret' : undefined}>{line}</span>
-						</div>
-					)
-				) : null}
 			</div>
-			{pr || steps.length ? (
-				<footer className="flex min-h-11 items-center gap-2 border-t border-(--border-subtle) bg-(--well-bg)/40 px-3.5 py-2">
-					<div className="flex min-w-0 flex-1 items-center gap-2.5">
-						{pr ? (
-							<span className="flex min-w-0 items-center gap-1 truncate text-[11.5px] text-(--text-secondary)">
-								<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : thread.pullRequest ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
-								<span className="truncate">{pr}</span>
-							</span>
-						) : null}
+			{line ? (
+				waiting ? (
+					<div
+						className={cn(
+							'line-clamp-4 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty',
+							broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--warning-base) bg-(--warning-bg) text-(--warning-text)',
+						)}
+					>
+						{line}
 					</div>
-					<NextSteps thread={thread} size="xs" />
-				</footer>
+				) : (
+					<p className={cn('m-0 line-clamp-3 text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', state === 'working' && 'agent-live-line')}>{line}</p>
+				)
 			) : null}
-		</article>
+			{pr && thread.prUrl ? (
+				<a
+					href={thread.prUrl}
+					target="_blank"
+					rel="noreferrer"
+					className="flex min-w-0 items-center gap-1.5 self-start text-[12px] text-(--text-secondary) outline-none hover:text-(--text-primary) hover:underline focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : 'text-(--icon-tertiary)'} />
+					<span className="truncate">{pr}</span>
+					<Icon icon={ArrowUpRight} size={11} className="text-(--icon-tertiary)" />
+				</a>
+			) : null}
+			<div className="flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+				<NextSteps thread={thread} size="xs" />
+				<span className="flex-1" />
+				<Btn size="xs" variant="ghost" icon={Play} onClick={() => open(thread)}>
+					Open thread
+				</Btn>
+			</div>
+		</>
+	);
+}
+
+/**
+ * A thread in a reply, on one line: its glyph, title and chips, and how long
+ * ago or for how long; a thread that needs you adds what it asks underneath
+ * and its next step. Resting on it shows the rest; clicking opens it.
+ * `ThreadRows` stacks them in one card.
+ */
+export function ThreadRow({ thread }: { thread: Session }) {
+	const open = useOpenThread();
+	const state = stateOf(thread);
+	const now = useNow(state === 'working');
+	const waiting = state === 'waiting';
+	const broken = waiting && failed(thread);
+	const line = waiting ? threadLine(thread) : '';
+	return (
+		<HoverPeek content={<ThreadPeek thread={thread} />}>
+			<article
+				aria-label={thread.title}
+				onClick={() => open(thread)}
+				className="group/thread flex min-w-0 cursor-pointer flex-col justify-center gap-0.5 px-3 py-2 transition-colors duration-(--duration-micro) hover:bg-(--bg-hover)"
+			>
+				<div className="flex min-h-6 min-w-0 items-center gap-2.5">
+					<ThreadGlyph thread={thread} size={14} />
+					<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{thread.title}</span>
+					<span className="flex shrink-0 items-center gap-1">
+						<ThreadChips thread={thread} />
+					</span>
+					<span className="flex-1" />
+					<span className={cn('in-num shrink-0 text-[11px]', state === 'working' ? 'text-(--accent-text)' : 'text-(--text-disabled)', !waiting && nextSteps(thread).length && 'sm:group-focus-within/thread:hidden sm:group-hover/thread:hidden')}>
+						{state === 'queued' ? '' : phaseOf(thread, now)}
+					</span>
+					{waiting ? (
+						<NextSteps thread={thread} size="xs" />
+					) : (
+						// Its next steps take the place of its age on hover, so a row at rest says only what it is.
+						<span className="hidden sm:group-focus-within/thread:flex sm:group-hover/thread:flex">
+							<NextSteps thread={thread} size="xs" />
+						</span>
+					)}
+				</div>
+				{line ? <span className={cn('truncate pl-[24px] text-[12px] leading-[17px]', broken ? 'text-(--danger-text)' : 'text-(--warning-text)')}>{line}</span> : null}
+			</article>
+		</HoverPeek>
+	);
+}
+
+/** Threads in a reply: one card, a line each. */
+export function ThreadRows({ children, label }: { children: ReactNode; label?: string }) {
+	return (
+		<section aria-label={label} className="in-card flex flex-col divide-y divide-(--border-subtle) overflow-hidden">
+			{children}
+		</section>
+	);
+}
+
+/**
+ * A thread named in the middle of a sentence: its glyph and title as a chip,
+ * the same peek on hover, and a click opens it.
+ */
+export function ThreadChip({ thread, children }: { thread: Session; children?: ReactNode }) {
+	const open = useOpenThread();
+	return (
+		<HoverPeek content={<ThreadPeek thread={thread} />}>
+			<button
+				type="button"
+				onClick={() => open(thread)}
+				className="mx-px inline-flex max-w-full items-center gap-1 rounded-[6px] bg-(--alpha-white-6) px-1.5 align-baseline text-[0.95em] leading-[1.5] text-(--accent-text) outline-none hover:bg-(--alpha-white-9) focus-visible:shadow-(--focus-ring)"
+			>
+				<span className="inline-flex shrink-0 self-center">
+					<ThreadGlyph thread={thread} size={11} />
+				</span>
+				<span className="truncate">{children ?? thread.title}</span>
+			</button>
+		</HoverPeek>
 	);
 }

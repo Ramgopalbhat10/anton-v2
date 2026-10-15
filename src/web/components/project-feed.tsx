@@ -2,23 +2,21 @@ import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAg
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from 'lucide-react';
-import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Caption } from '@/components/instrument';
-import { Markdown } from '@/components/markdown';
+import { InlineLinks, Markdown } from '@/components/markdown';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/signal';
-import { countKinds, ProjectRoute } from '@/components/project-viz';
-import { useNow } from '@/components/subagents';
-import { NextSteps, ThreadCard, useOpenThread } from '@/components/thread-card';
-import { Glyph, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
+import { ProjectRoute } from '@/components/project-viz';
+import { ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/thread-card';
+import { Glyph, ThreadGlyph } from '@/components/thread-glyph';
 import { field } from '@/components/tool-describe';
 import { api, type ModelChoice, SAFETY_NET_MS, type Session, type Space } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { askToNotify } from '@/lib/notifications';
-import { age, elapsed } from '@/lib/format';
-import { parseReports, type Report, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
+import { parseReports, type Report } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
@@ -190,97 +188,31 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 	);
 }
 
-const ROW_H = 60;
+/** A thread the coordinator is starting, until the server has it: its title, or why it could not start. */
+function Starting({ part }: { part: ToolPart }) {
+	const failed = part.state === 'output-error';
+	return (
+		<div className="flex min-h-10 min-w-0 items-center gap-2.5 px-3 py-2">
+			{failed ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
+			<span className={cn('min-w-0 truncate text-[13px]', failed ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>
+				{failed ? `Could not start “${field(part.input, 'title')}”` : field(part.input, 'title') || 'New thread'}
+			</span>
+		</div>
+	);
+}
 
 /**
- * Several threads started at once, drawn as a fan-out: one card, the
- * coordinator's line branching to a row per thread, the branch flowing
- * while its thread works and amber while it waits on you. Each row is the
- * thread's glyph, title, repository and phase, its latest line, and its
- * next steps.
+ * The threads a reply started, one line each in a single card, in the order
+ * they were started: several at once read as one batch.
  */
 function Dispatch({ parts, threads }: { parts: ToolPart[]; threads: Session[] }) {
-	const openThread = useOpenThread();
-	const rows = parts.map((part) => ({ part, thread: threads.find((item) => item.id === threadIdIn(part)) }));
-	const live = rows.some((row) => row.thread && stateOf(row.thread) === 'working');
-	const now = useNow(live);
-	const counts = countKinds(rows.flatMap((row) => (row.thread ? [row.thread] : [])));
-	const summary = [
-		counts.working ? `${counts.working} working` : null,
-		counts.queued ? `${counts.queued} queued` : null,
-		counts.waiting + counts.failed ? `${counts.waiting + counts.failed} need you` : null,
-		counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null,
-		counts.idle + counts.resolved ? `${counts.idle + counts.resolved} done` : null,
-	].filter(Boolean);
-	const height = rows.length * ROW_H;
 	return (
-		<section aria-label={`Started ${rows.length} threads`} className="in-card overflow-hidden">
-			<header className="flex items-center gap-2.5 px-3.5 pt-3 pb-2">
-				<span className="relative z-10 inline-flex size-[22px] items-center justify-center rounded-[7px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)">
-					<Icon icon={Waypoints} size={12} />
-				</span>
-				<span className="text-[13px] font-medium">Started {rows.length} threads</span>
-				<span className="flex-1" />
-				<Caption tone={counts.waiting + counts.failed ? 'warning' : live ? 'accent' : undefined}>{summary.join(' · ') || 'starting'}</Caption>
-			</header>
-			<div className="relative">
-				<svg aria-hidden width={44} height={height} className="pointer-events-none absolute top-0 left-0">
-					<path d={`M25 -10 V ${height - ROW_H / 2 - 12}`} stroke="var(--border-strong)" strokeWidth={1.25} fill="none" />
-					{rows.map((row, index) => {
-						const y = index * ROW_H + ROW_H / 2;
-						const kind = row.thread ? glyphKind(row.thread) : 'queued';
-						const color = kind === 'working' ? 'var(--accent-base)' : kind === 'waiting' ? 'var(--warning-base)' : kind === 'failed' ? 'var(--danger-base)' : 'var(--border-strong)';
-						return (
-							<g key={index}>
-								<path d={`M25 ${y - 12} Q25 ${y} 37 ${y} H42`} stroke={color} strokeWidth={1.25} fill="none" className={kind === 'working' ? 'viz-flow' : undefined} />
-							</g>
-						);
-					})}
-				</svg>
-				{rows.map(({ part, thread }, index) => {
-					if (!thread) {
-						return (
-							<div key={part.toolCallId} className="flex items-center gap-2.5 pr-3.5 pl-[46px]" style={{ height: ROW_H }}>
-								{part.state === 'output-error' ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
-								<span className={cn('min-w-0 truncate text-[13px]', part.state === 'output-error' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>
-									{part.state === 'output-error' ? `Could not start “${field(part.input, 'title')}”` : field(part.input, 'title') || 'New thread'}
-								</span>
-							</div>
-						);
-					}
-					const state = stateOf(thread);
-					const kind = glyphKind(thread);
-					const phase = state === 'working' ? elapsed(now - new Date(thread.lastInputAt ?? thread.createdAt).getTime()) : age(threadActiveAt(thread), now);
-					return (
-						<article
-							key={part.toolCallId}
-							aria-label={thread.title}
-							onClick={() => openThread(thread)}
-							className="viz-in group/row flex cursor-pointer items-center gap-2.5 pr-3 pl-[46px] hover:bg-(--bg-hover)"
-							style={{ height: ROW_H, '--i': index } as CSSProperties}
-						>
-							<ThreadGlyph thread={thread} size={15} />
-							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-								<div className="flex min-w-0 items-center gap-2">
-									<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{thread.title}</span>
-									<Caption className="shrink-0">{phase}</Caption>
-								</div>
-								<span
-									className={cn(
-										'truncate text-[12px] leading-[17px]',
-										kind === 'failed' ? 'text-(--danger-text)' : kind === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-tertiary)',
-										state === 'working' && 'agent-live-line',
-									)}
-								>
-									<span>{threadLine(thread) || STATE_LOOK[state].label}</span>
-								</span>
-							</div>
-							<NextSteps thread={thread} size="xs" />
-						</article>
-					);
-				})}
-			</div>
-		</section>
+		<ThreadRows label={parts.length === 1 ? 'Started a thread' : `Started ${parts.length} threads`}>
+			{parts.map((part) => {
+				const thread = threads.find((item) => item.id === threadIdIn(part));
+				return thread ? <ThreadRow key={part.toolCallId} thread={thread} /> : <Starting key={part.toolCallId} part={part} />;
+			})}
+		</ThreadRows>
 	);
 }
 
@@ -289,20 +221,8 @@ function ToolBlock({ part, space, threads }: { part: ToolPart; space: Space; thr
 	const failed = part.state === 'output-error';
 	const target = byPrefix(threads, field(part.input, 'thread').replace(/^\[|\]$|^id:/g, ''));
 	switch (part.toolName) {
-		case 'start_thread': {
-			const thread = threads.find((item) => item.id === threadIdIn(part));
-			if (thread) return <ThreadCard thread={thread} />;
-			if (failed) return <ActionRow icon={Plus} failed>Could not start “{field(part.input, 'title')}”</ActionRow>;
-			return (
-				<div className="in-card flex flex-col gap-1.5 px-3.5 py-3">
-					<Caption>Starting thread</Caption>
-					<div className="flex items-center gap-2 text-[13.5px] font-medium">
-						<Spinner size={12} />
-						<span className="truncate">{field(part.input, 'title') || 'New thread'}</span>
-					</div>
-				</div>
-			);
-		}
+		case 'start_thread':
+			return <Dispatch parts={[part]} threads={threads} />;
 		case 'suggest_threads': {
 			const list = (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
 			return list.length ? <SuggestedThreads space={space} suggestions={list} /> : null;
@@ -332,30 +252,43 @@ function ToolBlock({ part, space, threads }: { part: ToolPart; space: Space; thr
 
 type Block = { kind: 'text'; text: string; key: string } | { kind: 'tool'; part: ToolPart } | { kind: 'dispatch'; parts: ToolPart[] };
 
-/** The message's parts as blocks: two or more threads started in a row become one dispatch. */
+/** The message's parts as blocks: threads started in a row become one dispatch. */
 function blocks(parts: FlueConversationPart[]): Block[] {
 	const out: Block[] = [];
 	parts.forEach((part, index) => {
 		if (part.type === 'text') return void out.push({ kind: 'text', text: part.text, key: String(index) });
 		if (part.type !== 'dynamic-tool') return;
 		const last = out[out.length - 1];
-		if (part.toolName === 'start_thread' && last?.kind === 'tool' && last.part.toolName === 'start_thread') out[out.length - 1] = { kind: 'dispatch', parts: [last.part, part] };
-		else if (part.toolName === 'start_thread' && last?.kind === 'dispatch') last.parts.push(part);
+		if (part.toolName === 'start_thread' && last?.kind === 'dispatch') last.parts.push(part);
+		else if (part.toolName === 'start_thread') out.push({ kind: 'dispatch', parts: [part] });
 		else out.push({ kind: 'tool', part });
 	});
 	return out;
 }
 
 /** Memoized: the coordinator's stream re-renders the feed with every chunk, and only the reply being written changes. */
+/** A thread named in a reply as `[title](#thread-<id>)` draws as its chip; one the project no longer has, as its words. */
+function threadChips(threads: Session[]): InlineLinks {
+	return (href, children) => {
+		const id = /^#thread-([\w-]+)$/.exec(href)?.[1];
+		if (!id) return null;
+		const thread = byPrefix(threads, id);
+		return thread ? <ThreadChip thread={thread}>{children}</ThreadChip> : <span>{children}</span>;
+	};
+}
+
 const CoordinatorMessage = memo(function CoordinatorMessage({ message, live, space, threads }: { message: FlueConversationMessage; live: boolean; space: Space; threads: Session[] }) {
 	const parts = message.parts.filter((part) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool');
+	const chips = useMemo(() => threadChips(threads), [threads]);
 	if (parts.length === 0 && !live) return null;
 	return (
 		<div className="flex flex-col gap-2.5">
 			{blocks(parts).map((block) =>
 				block.kind === 'text' ? (
 					<div key={block.key} className="text-[13.5px] leading-[21px]">
-						<Markdown text={block.text} />
+						<InlineLinks.Provider value={chips}>
+							<Markdown text={block.text} />
+						</InlineLinks.Provider>
 					</div>
 				) : block.kind === 'dispatch' ? (
 					<Dispatch key={block.parts[0].toolCallId} parts={block.parts} threads={threads} />

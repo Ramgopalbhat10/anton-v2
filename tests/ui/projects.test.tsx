@@ -16,7 +16,8 @@ const api = vi.hoisted(() => ({
 	startThread: vi.fn(async () => ({ id: 'new' })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { ThreadCard, nextSteps } = await import('@/components/thread-card');
+const { ThreadChip, ThreadRow, nextSteps } = await import('@/components/thread-card');
+const { InlineLinks, Markdown } = await import('@/components/markdown');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/components/project-viz');
@@ -100,25 +101,55 @@ describe('threads', () => {
 		expect(nextSteps(thread({ threadState: 'queued', brief: 'Later' }))).toEqual([]);
 	});
 
-	it('shows a waiting thread in amber with its question, and sends a step to the thread', async () => {
+	it('shows a thread on one line with its chips, a waiting one with its question, and sends a step to the thread', async () => {
 		const router = withRouter(() => (
 			<div>
-				<ThreadCard thread={threads[0]} />
-				<ThreadCard thread={thread({ id: 'fail', title: 'Flaky', threadState: 'waiting', prUrl: 'https://github.com/acme/demo/pull/3', pullRequest: { state: 'open', checks: 'failed', runs: [] } })} />
+				<ThreadRow thread={threads[0]} />
+				<ThreadRow thread={threads[2]} />
+				<ThreadRow thread={thread({ id: 'fail', title: 'Flaky', threadState: 'waiting', prUrl: 'https://github.com/acme/demo/pull/3', pullRequest: { state: 'open', checks: 'failed', runs: [] } })} />
 			</div>
 		));
-		const card = await screen.findByRole('article', { name: 'Pick a name' });
-		expect(card.className).toContain('--warning-border');
-		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
-		expect(within(card).getByText('Waiting on you')).toBeTruthy();
+		const row = await screen.findByRole('article', { name: 'Pick a name' });
+		expect(within(row).getByText('Billing or invoices?')).toBeTruthy();
+		expect(within(row).getByText('Needs you')).toBeTruthy();
 
+		// A pull request is a chip; its checks say themselves in its colour, not as another word.
+		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
+		expect(within(ready).getByTitle('#12 · checks pass').textContent).toBe('#12');
 		const failing = screen.getByRole('article', { name: 'Flaky' });
-		expect(within(failing).getByText('Checks failing')).toBeTruthy();
+		expect(within(failing).getByTitle('#3 · checks failing').className).toContain('--danger-text');
+		expect(within(failing).queryByText('Needs you')).toBeNull();
 		await userEvent.click(within(failing).getByRole('button', { name: 'Fix CI' }));
 		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'fail', expect.stringContaining('Checks are failing'));
 		expect(router.state.location.pathname).toBe('/projects/space_1');
 
-		await userEvent.click(card);
+		await userEvent.click(row);
+		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks'));
+	});
+
+	it('shows the rest of a thread on hover: its state, where it works, what it asks and its next steps', async () => {
+		withRouter(() => <ThreadRow thread={{ ...threads[0], prUrl: 'https://github.com/acme/demo/pull/9', pullRequest: { state: 'open', checks: 'pending', runs: [] } }} />);
+		const row = await screen.findByRole('article', { name: 'Pick a name' });
+		fireEvent.pointerEnter(row, { pointerType: 'mouse' });
+		const peek = await screen.findByRole('button', { name: 'Open thread' });
+		const card = peek.closest('.in-pop') as HTMLElement;
+		expect(within(card).getByText('Waiting on you')).toBeTruthy();
+		expect(within(card).getByText(/demo ·/)).toBeTruthy();
+		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
+		expect(within(card).getByRole('link', { name: /#9 · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
+		expect(within(card).getByRole('button', { name: 'Answer' })).toBeTruthy();
+	});
+
+	it('draws a thread named in a reply as a chip that opens it', async () => {
+		const router = withRouter(() => (
+			<InlineLinks.Provider value={(href, children) => (href === '#thread-asks' ? <ThreadChip thread={threads[0]}>{children}</ThreadChip> : null)}>
+				<Markdown text="Waiting on [Pick a name](#thread-asks) before the rest; see [docs](https://example.com)." />
+			</InlineLinks.Provider>
+		));
+		const chip = await screen.findByRole('button', { name: 'Pick a name' });
+		expect(chip.querySelector('[data-glyph="waiting"]')).toBeTruthy();
+		expect(screen.getByRole('link', { name: 'docs' }).getAttribute('href')).toBe('https://example.com');
+		await userEvent.click(chip);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks'));
 	});
 
@@ -126,12 +157,11 @@ describe('threads', () => {
 		const bare: Space = { ...space, repoIds: [], repos: [] };
 		const router = withRouter(() => (
 			<div>
-				<ThreadCard thread={thread({ id: 'chat', title: 'Compare vendors', projectId: null, repo: '' })} />
+				<ThreadRow thread={thread({ id: 'chat', title: 'Compare vendors', projectId: null, repo: '' })} />
 				<NewThreadForm space={bare} onDone={() => {}} />
 			</div>
 		));
-		const card = await screen.findByRole('article', { name: 'Compare vendors' });
-		expect(within(card).getByText('Chat')).toBeTruthy();
+		expect(await screen.findByRole('article', { name: 'Compare vendors' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: /No repository/ })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: /Plan/ })).toBeNull();
 		await userEvent.type(screen.getByRole('textbox', { name: /works without a repository/ }), 'Compare the pricing pages');
@@ -156,8 +186,8 @@ describe('threads', () => {
 		expect(countKinds([...threads, failing])).toMatchObject({ waiting: 1, failed: 1, working: 1, review: 1, resolved: 1, queued: 0 });
 		withRouter(() => (
 			<div>
-				<ThreadCard thread={threads[1]} />
-				<ThreadCard thread={failing} />
+				<ThreadRow thread={threads[1]} />
+				<ThreadRow thread={failing} />
 				<StateSplit threads={[...threads, failing]} />
 			</div>
 		));
@@ -167,17 +197,17 @@ describe('threads', () => {
 		expect(screen.getByRole('img', { name: '1 failed, 1 needs you, 1 working, 1 review, 1 done' })).toBeTruthy();
 	});
 
-	it('says an idle thread’s state once and drops an empty footer; the Pulse says what the project comes to', async () => {
+	it('leaves an idle thread’s state to its glyph; the Pulse says what the project comes to', async () => {
 		const idle = thread({ id: 'idle', title: 'Explore the repo', lastReply: 'I have a thorough picture now.' });
 		withRouter(() => (
 			<div>
-				<ThreadCard thread={idle} />
+				<ThreadRow thread={idle} />
 				<ProjectPulse space={space} threads={[idle, ...threads]} />
 			</div>
 		));
-		const card = await screen.findByRole('article', { name: 'Explore the repo' });
-		expect(within(card).getAllByText(/idle/i)).toHaveLength(1);
-		expect(card.querySelector('footer')).toBeNull();
+		const row = await screen.findByRole('article', { name: 'Explore the repo' });
+		expect(within(row).queryByText(/idle/i)).toBeNull();
+		expect(row.querySelector('[data-glyph="idle"]')).toBeTruthy();
 		expect(screen.getByText('1 thread needs you')).toBeTruthy();
 	});
 
