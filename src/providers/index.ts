@@ -1,8 +1,9 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, ModelCatalog, ObjectStore, PushSender, SandboxProvider, SubscriptionProvider, VisionModel } from '../core/ports.ts';
+import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, KeyPlan, ModelCatalog, ObjectStore, PushSender, SandboxProvider, SubscriptionProvider, VisionModel } from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
+import { cursorPlan } from './cursor/plan.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
@@ -11,6 +12,7 @@ import { modalSandboxProvider } from './modal/sandbox.ts';
 import { openRouterCatalog } from './openrouter/catalog.ts';
 import { openRouterDecisions } from './openrouter/decisions.ts';
 import { openRouterVision } from './openrouter/vision.ts';
+import { openCodeGoPlan } from './opencode-go/plan.ts';
 import { s3Store } from './s3/store.ts';
 import { webPushSender } from './webpush/sender.ts';
 
@@ -35,6 +37,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
  * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
  * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
+ * `keyPlans` are plans used with a key from the vendor's dashboard (OpenCode Go, Cursor), pasted in Settings › Subscriptions.
  * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
  * `vision` is null without an OpenRouter key; the computer tool then says it cannot see the screen.
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
@@ -47,6 +50,7 @@ export type Providers = {
 	decisions?: DecisionModel | null;
 	subscriptions?: SubscriptionProvider[];
 	runtimes?: AgentRuntime[];
+	keyPlans?: KeyPlan[];
 	browsers?: BrowserHost | null;
 	vision?: VisionModel | null;
 	push?: PushSender | null;
@@ -68,6 +72,7 @@ export function getProviders(): Providers {
 		decisions: decisionModel(),
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
+		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 		vision: config.openrouter.apiKey ? openRouterVision(config.openrouter) : null,
 		push: webPushSender(),

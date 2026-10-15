@@ -46,6 +46,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models`, cached for an hour) | |
 | `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
+| `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
 | `PushSender` | `webpush` (Web Push with VAPID, no library) | |
 
 ### Subscriptions
@@ -53,6 +54,8 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 Instead of paying per token, tasks can run on a ChatGPT Plus or Pro plan. In **Settings › Subscriptions**, sign in with ChatGPT; OpenAI only sends the browser back to `http://127.0.0.1:1455/auth/callback`, which Anton catches itself when it runs on your computer, and which you paste into the page when Anton is hosted. You can also bring a sign-in made elsewhere: run `npx @earendil-works/pi-ai@latest login openai` on a computer with a browser and paste the `auth.json` it writes. Anton keeps the sign-in in its database and renews the token as it expires.
 
 The plan's models (`openai/<model>`) come first in the model picker, marked PLAN. Their calls go to the OpenAI Responses API with your plan's token and count toward its limits; Anton records them at $0, or at API prices toward the spending caps if you switch that on. Claude Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on the server with its built-in tools off: Claude does the thinking and Anton runs every tool. Sign Claude Code in once with the command the Claude card shows (`CLAUDE_CONFIG_DIR=<data>/claude-code <claude> auth login`, over ssh when hosted), then press Check again. Claude Code keeps the sign-in and Anton never sees the token. The plan's models (`claude-code/<model>`) then show as PLAN like ChatGPT's. This is for your own use only, as Anthropic's terms allow; turn extra usage off at claude.ai/settings/usage so tasks stop at the plan's limit instead of billing more. Design and limits: [docs/claude-code-subscription.md](docs/claude-code-subscription.md).
+
+OpenCode Go and Cursor plans take a key instead of a sign-in: paste one made in the OpenCode Console or Cursor's dashboard into their card, and Anton checks it with the vendor before keeping it on the server (never in a sandbox). OpenCode Go's models (`opencode-go/<model>`) are called directly on OpenCode's OpenAI- and Anthropic-shaped endpoints, and the card shows the plan's five-hour, weekly and monthly limits. Cursor has no plain model endpoint, so its models (`cursor/<model>`) run through Cursor's official SDK on the server the way Claude Code does: its own tools off, Anton's tools its only ones. Cursor publishes no per-token prices for those calls, so they are recorded at $0 and only the plan's own limits apply.
 
 ### On your phone
 
@@ -98,7 +101,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | Path | What it is |
 | --- | --- |
 | `src/core/` | Ports, shared types, shell helpers, errors |
-| `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter, ChatGPT-plan and Claude Code implementations |
+| `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter, ChatGPT-plan, Claude Code, OpenCode Go and Cursor implementations |
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |

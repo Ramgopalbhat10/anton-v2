@@ -17,13 +17,15 @@ import {
 import { type AgentRuntime, type ModelInfo, REASONING_LEVELS, type RuntimeContent, type RuntimeConversation, type RuntimeEvent, type RuntimeToolOutput } from '../core/ports.ts';
 
 /**
- * Models on a Claude plan, run by Claude Code (docs/claude-code-subscription.md).
- * Flue calls the model once per step and runs the tools itself; Claude Code runs
- * a whole loop and calls tools as it goes. The bridge meets them at tool calls:
- * a step ends when Claude asks for tools, Claude Code waits on Anton's MCP tool
- * server meanwhile, and the next step hands it Flue's results and streams on.
+ * Models on a plan that only runs inside the vendor's own agent: Claude Code for
+ * a Claude plan (docs/claude-code-subscription.md), and Cursor's SDK for a Cursor
+ * plan. Flue calls the model once per step and runs the tools itself; the
+ * vendor's agent runs a whole loop and calls tools as it goes. The bridge meets
+ * them at tool calls: a step ends when the model asks for tools, the agent waits
+ * on Anton's tools meanwhile, and the next step hands it Flue's results and
+ * streams on.
  *
- * Each Flue conversation keeps one Claude Code conversation open while the
+ * Each Flue conversation keeps one of the agent's conversations open while the
  * context Flue sends only grows. When it does not (compaction, an edit, a new
  * system prompt or tool list, a restart), the bridge starts a new one and
  * replays the conversation so far as text.
@@ -37,26 +39,52 @@ export type ClaudeCodeHooks = {
 	maxOpen?: number;
 };
 
-const GATEWAY = 'claude-code';
-const API = 'claude-code';
+/** Which plan and agent a bridge serves, for its model ids and what it says when something goes wrong. */
+export type RuntimePlan = {
+	/** The `<gateway>` its models are named under, and pi's provider and API id. */
+	gateway: string;
+	/** The provider as pi lists it: "Claude (Claude Code)". */
+	name: string;
+	/** The agent, as errors name it: "Claude Code". */
+	program: string;
+	/** The plan, as errors name it: "Claude". */
+	plan: string;
+	/** Anton's reasoning levels as the agent's own; a level left out is passed as it is. */
+	efforts?: Record<string, string>;
+};
+
+/** The part of an agent the bridge uses: opening conversations. */
+export type RuntimeOpener = Pick<AgentRuntime, 'open'>;
+
 const IDLE_MS = 10 * 60_000;
 const MAX_OPEN = 3;
 
-type ClaudeModel = Model<typeof API>;
+type RuntimeModel = Model<string>;
 
-/** Anton's reasoning levels as Claude Code's efforts; `minimal` has no counterpart, so it runs at `low`. */
-const EFFORTS: Record<string, string> = { minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' };
+const CLAUDE_CODE: RuntimePlan = {
+	gateway: 'claude-code',
+	name: 'Claude (Claude Code)',
+	program: 'Claude Code',
+	plan: 'Claude',
+	// `minimal` has no counterpart in Claude Code, so it runs at `low`.
+	efforts: { minimal: 'low' },
+};
 
-function toPiModel(info: ModelInfo): ClaudeModel {
+/** Cursor takes Anton's levels as they are and maps them to each model's own values (`src/providers/cursor/plan.ts`). */
+const CURSOR: RuntimePlan = { gateway: 'cursor', name: 'Cursor (Cursor SDK)', program: 'Cursor', plan: 'Cursor' };
+
+function toPiModel(info: ModelInfo, plan: RuntimePlan): RuntimeModel {
 	return {
-		id: info.id.slice(`${GATEWAY}/`.length),
+		id: info.id.slice(`${plan.gateway}/`.length),
 		name: info.name,
-		api: API,
-		provider: GATEWAY,
-		baseUrl: 'claude-code:',
+		api: plan.gateway,
+		provider: plan.gateway,
+		baseUrl: `${plan.gateway}:`,
 		reasoning: info.reasoning.length > 0,
 		// Levels the plan does not offer are null, so Flue moves a task's level to the nearest one it does.
-		thinkingLevelMap: Object.fromEntries(REASONING_LEVELS.map((level) => [level, info.reasoning.includes(level) ? (level === 'off' ? 'off' : EFFORTS[level]) : null])),
+		thinkingLevelMap: Object.fromEntries(
+			REASONING_LEVELS.map((level) => [level, info.reasoning.includes(level) ? (level === 'off' ? 'off' : (plan.efforts?.[level] ?? level)) : null]),
+		),
 		input: info.vision ? ['text', 'image'] : ['text'],
 		cost: info.price,
 		contextWindow: info.contextLength,
@@ -120,7 +148,7 @@ const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, to
 
 type Settings = { model: string; instructions: string; tools: string; effort: string };
 
-/** One Claude Code conversation behind one Flue conversation. */
+/** One of the agent's conversations behind one Flue conversation. */
 class Bridged {
 	readonly conversation: RuntimeConversation;
 	readonly events: AsyncIterator<RuntimeEvent>;
@@ -138,7 +166,7 @@ class Bridged {
 
 	readonly settings: Settings;
 
-	constructor(runtime: AgentRuntime, settings: Settings, tools: Context['tools']) {
+	constructor(runtime: RuntimeOpener, settings: Settings, tools: Context['tools']) {
 		this.settings = settings;
 		this.conversation = runtime.open({
 			model: settings.model,
@@ -157,7 +185,7 @@ class Bridged {
 		this.events = this.conversation.events[Symbol.asyncIterator]();
 	}
 
-	/** Hands Claude Code a tool's result, now if it is waiting for it, or when it asks. */
+	/** Hands the agent a tool's result, now if it is waiting for it, or when it asks. */
 	deliver(toolCallId: string, output: RuntimeToolOutput): void {
 		this.awaiting.delete(toolCallId);
 		const waiting = this.parked.get(toolCallId);
@@ -196,22 +224,30 @@ export function continuation(
 	return { results, user: users.flatMap((message) => asContent(message.content)) };
 }
 
-/** Every open Claude Code conversation in this process, by Flue session, shared by all agents so the cap counts them all. */
-const open = new Map<string, Bridged>();
+/** Every open conversation in this process, by gateway and then Flue session, shared by all agents so each plan's cap counts them all. */
+const conversations = new Map<string, Map<string, Bridged>>();
 let sweeping: ReturnType<typeof setInterval> | undefined;
+
+const openFor = (gateway: string): Map<string, Bridged> => {
+	let open = conversations.get(gateway);
+	if (!open) conversations.set(gateway, (open = new Map()));
+	return open;
+};
 
 /** Closes the conversations idle for ten minutes; a later step starts a new one with the conversation so far. */
 function sweepIdle(): void {
-	for (const [key, bridged] of open) {
-		if (!bridged.busy && Date.now() - bridged.usedAt > IDLE_MS) {
-			bridged.close();
-			open.delete(key);
+	for (const open of conversations.values()) {
+		for (const [key, bridged] of open) {
+			if (!bridged.busy && Date.now() - bridged.usedAt > IDLE_MS) {
+				bridged.close();
+				open.delete(key);
+			}
 		}
 	}
 }
 
 /** Makes room for one more conversation by closing the longest idle ones; busy ones are never closed. */
-function makeRoom(maxOpen: number): void {
+function makeRoom(open: Map<string, Bridged>, maxOpen: number): void {
 	const idle = [...open].filter(([, bridged]) => !bridged.busy).sort(([, a], [, b]) => a.usedAt - b.usedAt);
 	while (open.size >= maxOpen && idle.length) {
 		const [key, bridged] = idle.shift()!;
@@ -222,23 +258,44 @@ function makeRoom(maxOpen: number): void {
 
 /** Closes every conversation; for tests and shutdown. */
 export function closeClaudeCodeConversations(): void {
-	for (const bridged of open.values()) bridged.close();
-	open.clear();
+	for (const open of conversations.values()) {
+		for (const bridged of open.values()) bridged.close();
+		open.clear();
+	}
 }
 
 export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: () => AgentRuntime | undefined, hooks: ClaudeCodeHooks = {}): Provider {
+	return runtimeProvider(CLAUDE_CODE, live, runtime, hooks);
+}
+
+/** Models on a Cursor plan, run by Cursor's SDK with the plan's key. */
+export function cursorProvider(live: () => readonly ModelInfo[], runtime: () => Promise<RuntimeOpener | undefined>, hooks: ClaudeCodeHooks = {}): Provider {
+	return runtimeProvider(CURSOR, live, runtime, hooks);
+}
+
+/**
+ * The bridge for any agent behind the `AgentRuntime` conversation shape.
+ * `runtime` may look the agent up as it is needed, such as with a key from Settings.
+ */
+export function runtimeProvider(
+	plan: RuntimePlan,
+	live: () => readonly ModelInfo[],
+	runtime: () => RuntimeOpener | undefined | Promise<RuntimeOpener | undefined>,
+	hooks: ClaudeCodeHooks = {},
+): Provider {
 	const maxOpen = Math.max(1, hooks.maxOpen ?? MAX_OPEN);
+	const open = openFor(plan.gateway);
 	if (!sweeping) {
 		sweeping = setInterval(sweepIdle, 60_000);
 		sweeping.unref();
 	}
 
-	async function run(model: ClaudeModel, context: Context, options: SimpleStreamOptions | undefined, stream: AssistantMessageEventStream): Promise<void> {
+	async function run(model: RuntimeModel, context: Context, options: SimpleStreamOptions | undefined, stream: AssistantMessageEventStream): Promise<void> {
 		const output: AssistantMessage = {
 			role: 'assistant',
 			content: [],
-			api: API,
-			provider: GATEWAY,
+			api: plan.gateway,
+			provider: plan.gateway,
 			model: model.id,
 			usage: emptyUsage(),
 			stopReason: 'pending',
@@ -250,8 +307,13 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 			stream.push({ type: 'error', reason, error: output });
 			stream.end();
 		};
-		const agent = runtime();
-		if (!agent) return fail('error', 'Claude Code is not set up on this server.');
+		let agent: RuntimeOpener | undefined;
+		try {
+			agent = await runtime();
+		} catch (error) {
+			return fail('error', error instanceof Error ? error.message : String(error));
+		}
+		if (!agent) return fail('error', `${plan.program} is not set up on this server.`);
 
 		const key = options?.sessionId ?? `once-${randomUUID()}`;
 		const mapped = options?.reasoning ? model.thinkingLevelMap?.[clampThinkingLevel(model, options.reasoning)] : undefined;
@@ -277,7 +339,7 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 		} else {
 			if (bridged && !bridged.busy) bridged.close();
 			open.delete(key);
-			makeRoom(maxOpen);
+			makeRoom(open, maxOpen);
 			bridged = new Bridged(agent, settings, context.tools);
 			open.set(key, bridged);
 			bridged.conversation.send(transcript(context.messages));
@@ -305,7 +367,7 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 				if (options?.signal?.aborted) return fail('aborted', 'Request was aborted');
 				if (done) {
 					abandon();
-					return fail('error', 'Claude Code stopped unexpectedly.');
+					return fail('error', `${plan.program} stopped unexpectedly.`);
 				}
 				switch (event.type) {
 					case 'message_start':
@@ -370,7 +432,7 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 						output.usage.totalTokens = output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 						calculateCost(model, output.usage);
 						if (calls.length) {
-							// Claude Code now calls each tool on Anton's MCP server and waits; Flue runs them and the next step delivers the results.
+							// The agent now calls each of Anton's tools and waits; Flue runs them and the next step delivers the results.
 							current.awaiting = new Set(calls.map((call) => call.id));
 							output.stopReason = 'toolUse';
 						} else {
@@ -389,7 +451,7 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 					case 'error':
 						if (event.limit) hooks.onLimit?.();
 						abandon();
-						return fail('error', event.limit ? `Claude plan limit reached: ${event.message}` : event.message);
+						return fail('error', event.limit ? `${plan.plan} plan limit reached: ${event.message}` : event.message);
 					case 'turn_end':
 						if (current.turnsToDrain > 0) {
 							current.turnsToDrain -= 1;
@@ -397,7 +459,7 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 						}
 						// The turn ended without a model call this step could report.
 						abandon();
-						return fail('error', 'Claude Code ended the turn without answering.');
+						return fail('error', `${plan.program} ended the turn without answering.`);
 				}
 			}
 		} catch (error) {
@@ -414,27 +476,27 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 
 	const streamSimple = (model: Model<never>, context: Context, options?: SimpleStreamOptions) => {
 		const stream = createAssistantMessageEventStream();
-		void run(model as unknown as ClaudeModel, context, options, stream);
+		void run(model as unknown as RuntimeModel, context, options, stream);
 		return stream;
 	};
 
-	const base = createProvider<typeof API>({
-		id: GATEWAY,
-		name: 'Claude (Claude Code)',
+	const base = createProvider<string>({
+		id: plan.gateway,
+		name: plan.name,
 		auth: {
 			apiKey: {
-				name: 'Claude Code sign-in',
-				// Claude Code signs in on its own; Anton holds no key for it.
-				resolve: async () => ({ auth: { apiKey: 'claude-code' }, source: 'Claude Code' }),
+				name: `${plan.program} sign-in`,
+				// The agent signs in on its own, or `runtime` hands it its key; pi passes none.
+				resolve: async () => ({ auth: { apiKey: plan.gateway }, source: plan.program }),
 			},
 		},
 		models: [],
 		api: { stream: streamSimple, streamSimple },
 	});
-	let memo: { from: readonly ModelInfo[]; models: ClaudeModel[] } | undefined;
-	function getModels(): ClaudeModel[] {
+	let memo: { from: readonly ModelInfo[]; models: RuntimeModel[] } | undefined;
+	function getModels(): RuntimeModel[] {
 		const current = live();
-		if (memo?.from !== current) memo = { from: current, models: current.filter((info) => info.id.startsWith(`${GATEWAY}/`)).map(toPiModel) };
+		if (memo?.from !== current) memo = { from: current, models: current.filter((info) => info.id.startsWith(`${plan.gateway}/`)).map((info) => toPiModel(info, plan)) };
 		return memo.models;
 	}
 	return { ...base, getModels } as Provider;

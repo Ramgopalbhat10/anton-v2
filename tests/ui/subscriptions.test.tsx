@@ -60,6 +60,7 @@ const api = vi.hoisted(() => ({
 	setSubscriptionOptions: vi.fn(),
 	refreshSubscriptionModels: vi.fn(),
 	disconnectSubscription: vi.fn(),
+	connectSubscriptionKey: vi.fn(),
 	generalSettings: vi.fn(),
 	saveGeneralSettings: vi.fn(),
 	models: vi.fn(),
@@ -385,5 +386,58 @@ describe('Model picker', () => {
 		await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
 		expect(within(effort).getByRole('radio', { checked: true }).textContent).toBe('High');
 		expect(screen.getByRole('listbox', { name: 'Models' })).toBeTruthy();
+	});
+});
+
+describe('Plans used with a key', () => {
+	const go = plan({ id: 'opencode-go', name: 'OpenCode Go', kind: 'key', gateway: 'opencode-go', keyPage: 'https://opencode.ai/auth', keyHint: null, windows: null });
+	const cursor = plan({ id: 'cursor', name: 'Cursor', kind: 'key', gateway: 'cursor', keyPage: 'https://cursor.com/dashboard/api', keyHint: null, windows: null });
+	const goConnected = {
+		...go,
+		state: 'connected' as const,
+		connectedAt: '2026-10-08T22:37:44Z',
+		keyHint: 'a1b2',
+		models: [planModel('opencode-go/glm-5.1', 'GLM-5.1', 800_000)],
+		monthTokens: 800_000,
+		windows: [
+			{ label: '5 hours', usedPercent: 12.5, resetsAt: null, limited: false },
+			{ label: 'Week', usedPercent: 100, resetsAt: null, limited: true },
+		],
+	};
+
+	it('takes a key, checks it on the server, and shows the plan’s models', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [go, cursor] });
+		api.connectSubscriptionKey.mockResolvedValue(goConnected);
+		page();
+		const tabs = within(await screen.findByRole('tablist', { name: 'Plans' })).getAllByRole('tab');
+		expect(tabs.map((tab) => [tab.getAttribute('aria-selected'), tab.textContent?.endsWith(tab.id === 'plan-tab-cursor' ? 'Cursor' : 'OpenCode Go'), Boolean(tab.querySelector('svg'))])).toEqual([
+			['true', true, true],
+			['false', true, true],
+		]);
+		expect(screen.getByRole('link', { name: /Open the key page/ }).getAttribute('href')).toBe('https://opencode.ai/auth');
+		const key = screen.getByLabelText('OpenCode Go key') as HTMLInputElement;
+		expect(key.type).toBe('password');
+		fireEvent.change(key, { target: { value: 'sk-go-a1b2' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		await waitFor(() => expect(api.connectSubscriptionKey).toHaveBeenCalledWith('opencode-go', 'sk-go-a1b2'));
+		expect(await screen.findByText('1 model on your plan')).toBeTruthy();
+		expect(screen.getByText('…a1b2', { selector: 'dd' })).toBeTruthy();
+		const limits = within(screen.getByRole('list', { name: 'Plan limits' })).getAllByRole('listitem');
+		expect(limits.map((row) => row.textContent)).toEqual(['5 hours13% used', 'WeekLimit reached']);
+		expect(screen.getByRole('switch', { name: 'Count toward the spending caps' })).toBeTruthy();
+	});
+
+	it('leaves the spending-caps switch out for Cursor, which has no prices to count at', async () => {
+		api.subscriptions.mockResolvedValue({
+			subscriptions: [{ ...cursor, state: 'connected' as const, email: 'ada@example.com', keyHint: 'zz99', models: [planModel('cursor/gpt-5.5', 'GPT-5.5')] }],
+		});
+		page();
+		expect(await screen.findByText('1 model on your plan')).toBeTruthy();
+		expect(screen.getByText('ada@example.com', { selector: 'dd' })).toBeTruthy();
+		expect(screen.getByRole('switch', { name: 'Use Cursor models' })).toBeTruthy();
+		expect(screen.queryByRole('switch', { name: 'Count toward the spending caps' })).toBeNull();
+		expect(screen.getByText(/under Cursor's terms/)).toBeTruthy();
+		expect(logoFor({ id: 'cursor/gpt-5.5' })).toBeTruthy();
+		expect(logoFor({ id: 'opencode-go/glm-5.1' })).toBeTruthy();
 	});
 });

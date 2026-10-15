@@ -11,6 +11,7 @@ import arcee from '@lobehub/icons-static-svg/icons/arcee-color.svg?raw';
 import aws from '@lobehub/icons-static-svg/icons/aws-color.svg?raw';
 import baidu from '@lobehub/icons-static-svg/icons/baidu-color.svg?raw';
 import bytedance from '@lobehub/icons-static-svg/icons/bytedance-color.svg?raw';
+import cursor from '@lobehub/icons-static-svg/icons/cursor.svg?raw';
 import cohere from '@lobehub/icons-static-svg/icons/cohere-color.svg?raw';
 import deepseek from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
 import dotsstudio from '@lobehub/icons-static-svg/icons/dotsstudio.svg?raw';
@@ -26,6 +27,7 @@ import minimax from '@lobehub/icons-static-svg/icons/minimax-color.svg?raw';
 import mistral from '@lobehub/icons-static-svg/icons/mistral-color.svg?raw';
 import moonshot from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
 import nvidia from '@lobehub/icons-static-svg/icons/nvidia-color.svg?raw';
+import opencode from '@lobehub/icons-static-svg/icons/opencode.svg?raw';
 import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import openrouter from '@lobehub/icons-static-svg/icons/openrouter-color.svg?raw';
 import perceptron from '@lobehub/icons-static-svg/icons/perceptron.svg?raw';
@@ -54,6 +56,7 @@ const LOGOS: Record<string, string> = {
 	'bytedance-seed': bytedance,
 	bytedance,
 	cohere,
+	cursor,
 	deepseek,
 	'dots-studio': dotsstudio,
 	fireworks,
@@ -70,6 +73,7 @@ const LOGOS: Record<string, string> = {
 	moonshotai: moonshot,
 	nvidia,
 	openai,
+	'opencode-go': opencode,
 	openrouter,
 	perceptron,
 	perplexity,
@@ -88,7 +92,7 @@ const LOGOS: Record<string, string> = {
 
 /**
  * The vendor a model id names: `openrouter/anthropic/…` is Anthropic's, `openai/…` (a ChatGPT plan's) is OpenAI's,
- * and `claude-code/…` (a Claude plan's) is Anthropic's.
+ * and `claude-code/…` (a Claude plan's) is Anthropic's. `opencode-go/…` and `cursor/…` (key plans' models) take the plan's own logo.
  */
 export function vendorSlug(model: Pick<ModelInfo, 'id'>): string {
 	const [gateway, vendor] = model.id.split('/');

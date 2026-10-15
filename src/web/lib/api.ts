@@ -324,8 +324,11 @@ export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean 
 export type Subscription = {
 	id: string;
 	name: string;
-	/** `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`). */
-	kind: 'oauth' | 'runtime';
+	/**
+	 * `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`).
+	 * `key`: a key made on the vendor's dashboard (`keyPage`), kept on the server.
+	 */
+	kind: 'oauth' | 'runtime' | 'key';
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
 	email: string | null;
@@ -347,7 +350,13 @@ export type Subscription = {
 	limitHitAt: string | null;
 	/** When the vendor last said the plan's limit ran out and calls now bill paid extra usage. */
 	extraUsageAt: string | null;
+	/** A key plan's dashboard, the key's last four characters, and what the vendor says is used of the plan's own limits. */
+	keyPage?: string | null;
+	keyHint?: string | null;
+	windows?: PlanWindow[] | null;
 };
+/** One of a plan's own limits as the vendor reports it: five hours, a week, a month. */
+export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
 /** What every new sandbox gets; see Settings › Sandboxes and Images. */
@@ -549,6 +558,7 @@ export const api = {
 	cancelSubscriptionLogin: (id: string) => json<Subscription>(`/api/subscriptions/${id}/login`, { method: 'DELETE' }),
 	finishSubscriptionLogin: (id: string, callbackUrl: string) => post<Subscription>(`/api/subscriptions/${id}/login/complete`, { callbackUrl }),
 	importSubscriptionLogin: (id: string, credential: string) => post<Subscription>(`/api/subscriptions/${id}/import`, { credential }),
+	connectSubscriptionKey: (id: string, key: string) => json<Subscription>(`/api/subscriptions/${id}/key`, { method: 'PUT', body: JSON.stringify({ key }) }),
 	refreshSubscriptionModels: (id: string) => post<Subscription>(`/api/subscriptions/${id}/models/refresh`),
 	disconnectSubscription: (id: string) => json<Subscription>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
 	profile: () => json<{ name: string | null }>('/api/profile'),

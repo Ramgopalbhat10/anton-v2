@@ -429,6 +429,32 @@ export type AgentRuntime = {
 	open(options: RuntimeConversationOptions): RuntimeConversation;
 };
 
+/** One of a plan's own limits as the vendor reports it, such as OpenCode Go's five-hour window. */
+export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
+
+/**
+ * A plan used with a key made on the vendor's own dashboard (OpenCode Go,
+ * Cursor), the way the vendor documents for coding agents other than its own.
+ * Anton keeps the key and hands it to each call.
+ */
+export type KeyPlan = {
+	/** `opencode-go`: how settings and routes name it. */
+	readonly id: string;
+	/** The plan, as the model picker shows it: "OpenCode Go". */
+	readonly name: string;
+	/** The Flue provider id its models resolve under. */
+	readonly gateway: string;
+	/** Where you make a key. */
+	readonly keyPage: string;
+	/** Asks the vendor whether the key works on the plan, and whose it is; throws why when it does not. */
+	check(key: string): Promise<{ email: string | null }>;
+	listModels(key: string): Promise<SubscriptionModel[]>;
+	/** What is left of the plan's own limits, for a vendor that tells apps. */
+	windows?(key: string): Promise<PlanWindow[]>;
+	/** For a plan whose models run inside the vendor's own agent (Cursor): one conversation, as `AgentRuntime.open`. */
+	open?(key: string, options: RuntimeConversationOptions): RuntimeConversation;
+};
+
 /** A question with a bounded answer: yes or no, or one of a few named options, each with what it means. */
 export type Question = { type: 'yes-no'; instructions: string } | { type: 'choice'; instructions: string; options: Record<string, string> };
 
