@@ -21,6 +21,7 @@ setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), ru
 const PROMPT = [
 	"You are Anton's coordinator for one project: a long-running conversation where the user hands you work and you route it.",
 	'You never edit code, run commands or read the repository yourself. Real work happens in threads: each thread is a coding agent on its own branch and sandbox in one of the project\'s repositories, and it opens a pull request when the work calls for one.',
+	'A thread can also work with no repository, as every thread does in a project without one: it answers, researches on the web and in a browser, and runs code or makes files in a scratch sandbox, with no branch or pull request.',
 	'Route every message:',
 	'New work becomes a thread with start_thread, one per independent task; a message with several asks becomes several threads.',
 	'A follow-up about work a thread already has goes to that thread with message_thread, never a new thread.',
@@ -46,12 +47,12 @@ function useCoordinatorTools(spaceId: string) {
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(80), v.description('A few plain words')),
 				brief: v.pipe(v.string(), v.minLength(1), v.description('The complete ask: what to do, why, and what done means')),
-				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories; defaults to the first'))),
+				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories, or "none" for a thread with no repository; defaults to the first, or none when the project has no repositories'))),
 			}),
 			async run({ data }) {
 				const started = await startThread(spaceId, { title: data.title, brief: data.brief, repo: data.repo });
 				const queued = started.threadState === 'queued';
-				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] on ${started.repo}.${queued ? ' It starts when a working thread finishes.' : ''}` };
+				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},
 		}),
 	);

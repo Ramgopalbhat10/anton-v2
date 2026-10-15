@@ -8,7 +8,7 @@ import { ProjectBay } from '@/components/project-rack';
 import { useNow } from '@/components/subagents';
 import { NextSteps, prNumber, useOpenThread } from '@/components/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
-import { api, type Session, type Space } from '@/lib/api';
+import { api, repoShort, type Session, type Space } from '@/lib/api';
 import { age, dollars, elapsed, tokens } from '@/lib/format';
 import { stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -266,7 +266,7 @@ export function WaitTracks({ threads }: { threads: Session[] }) {
 								<button type="button" onClick={() => open(thread)} className="min-w-0 truncate text-left text-[13px] text-(--text-primary) outline-none hover:underline">
 									{thread.title}
 								</button>
-								<Caption className="hidden shrink-0 @min-[420px]/workspace:inline">{thread.repo.split('/').pop()}</Caption>
+								<Caption className="hidden shrink-0 @min-[420px]/workspace:inline">{repoShort(thread)}</Caption>
 								<span className="flex-1" />
 								<span className={cn('in-num shrink-0 text-[12px]', index === 0 ? 'text-(--warning-text)' : 'text-(--text-tertiary)')}>{age(threadActiveAt(thread), now)}</span>
 								<NextSteps thread={thread} size="xs" />

@@ -7,7 +7,7 @@ import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
 import { WorkspacePane } from '@/components/workspace-pane';
-import { api, type Automation, type ModelChoice, outputUrl, type Session, type Space, spaceFileUrl } from '@/lib/api';
+import { api, type Automation, type ModelChoice, outputUrl, repoShort, type Session, type Space, spaceFileUrl } from '@/lib/api';
 import { age } from '@/lib/format';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -115,7 +115,7 @@ function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }
 				title="Project files"
 				sub="every thread can read them"
 				footer={
-					<CardFooter caption={upload.isError ? <span className="text-(--danger-text)">{upload.error.message}</span> : 'In ../project-files beside each repo'}>
+					<CardFooter caption={upload.isError ? <span className="text-(--danger-text)">{upload.error.message}</span> : space.repos.length ? 'In ../project-files beside each repo' : "In ../project-files beside each thread's folder"}>
 						<input ref={picker} type="file" multiple hidden onChange={(event) => (upload.mutate([...(event.target.files ?? [])]), (event.target.value = ''))} />
 						<Btn size="sm" variant="secondary" icon={Plus} disabled={upload.isPending} onClick={() => picker.current?.click()}>
 							{upload.isPending ? 'Adding…' : 'Add files'}
@@ -182,7 +182,7 @@ function PullRequests({ threads }: { threads: Session[] }) {
 								<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
 								<span className="flex items-center gap-2">
 									<Caption>
-										{thread.repo.split('/').pop()} #{prNumber(thread.prUrl)}
+										{repoShort(thread)} #{prNumber(thread.prUrl)}
 									</Caption>
 									{runs.length ? (
 										<Pips
@@ -239,7 +239,9 @@ function Routines({ space }: { space: Space }) {
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);
 	const [kind, setKind] = useState<Automation['kind']>('schedule');
-	const [repoId, setRepoId] = useState(space.repos[0]?.id ?? '');
+	const [picked, setRepoId] = useState('');
+	// Routines run on a repository; the first until one is picked, so one added later is picked up too.
+	const repoId = space.repos.some((repo) => repo.id === picked) ? picked : (space.repos[0]?.id ?? '');
 	const [hours, setHours] = useState(24);
 	const [label, setLabel] = useState('anton');
 	const [prompt, setPrompt] = useState('');
@@ -271,8 +273,8 @@ function Routines({ space }: { space: Space }) {
 			sub="start threads on their own"
 			footer={
 				adding ? null : (
-					<CardFooter caption={`${list.length} routine${list.length === 1 ? '' : 's'} · threads respect the limit of ${space.maxParallel}`}>
-						<Btn size="sm" variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
+					<CardFooter caption={space.repos.length ? `${list.length} routine${list.length === 1 ? '' : 's'} · threads respect the limit of ${space.maxParallel}` : 'Routines run on a repository; add one in Settings'}>
+						<Btn size="sm" variant="secondary" icon={Plus} disabled={space.repos.length === 0} onClick={() => setAdding(true)}>
 							Add routine
 						</Btn>
 					</CardFooter>

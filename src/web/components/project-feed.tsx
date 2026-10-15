@@ -414,25 +414,26 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 	);
 }
 
-/** Starts a thread yourself, without the coordinator: a repository, a brief, and its model. */
+/** Starts a thread yourself, without the coordinator: a repository (or none, for a chat), a brief, and its model. */
 export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => void }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const models = useModels();
 	const [brief, setBrief] = useState('');
-	const [repoId, setRepoId] = useState(space.repos[0]?.id ?? '');
+	// null is no repository: the thread works as a chat, as every thread does in a project without repositories.
+	const [repoId, setRepoId] = useState<string | null>(space.repos[0]?.id ?? null);
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [planMode, setPlanMode] = useState(false);
-	const repo = space.repos.find((item) => item.id === repoId) ?? space.repos[0];
+	const repo = repoId === null ? undefined : (space.repos.find((item) => item.id === repoId) ?? space.repos[0]);
 	const model = choice.model ?? space.threadModel ?? models.data?.default ?? '';
 	const start = useMutation({
 		mutationFn: () =>
 			api.startThread(space.id, {
 				brief,
-				projectId: repo?.id,
+				projectId: repo?.id ?? null,
 				model: choice.model ?? undefined,
 				reasoning: choice.reasoning ?? undefined,
-				planMode,
+				planMode: repo ? planMode : false,
 			}),
 		onSuccess: (thread) => {
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
@@ -445,7 +446,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--border-strong)"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (brief.trim() && repo) start.mutate();
+				if (brief.trim()) start.mutate();
 			}}
 		>
 			<div className="flex items-center gap-2 px-3.5 pt-3">
@@ -460,15 +461,22 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				onChange={setBrief}
 				projectId={repo?.id}
 				submitOn="mod-enter"
-				placeholder="What should this thread do? It works on its own branch and reports back to the coordinator."
+				placeholder={
+					repo
+						? 'What should this thread do? It works on its own branch and reports back to the coordinator.'
+						: 'What should this thread do? It works without a repository, in a scratch sandbox when it needs one, and reports back to the coordinator.'
+				}
 				className="min-h-[72px] px-3.5 pt-2 text-[13.5px] leading-[20px]"
 			/>
 			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2">
 				<Menu>
 					<MenuTrigger asChild>
-						<PickerChip icon={FolderGit2} label={repo ? repo.repoFullName.split('/').pop()! : 'Repository'} height={26} />
+						<PickerChip icon={FolderGit2} label={repo ? repo.repoFullName.split('/').pop()! : 'No repository'} height={26} />
 					</MenuTrigger>
 					<MenuContent align="start" className="min-w-[220px]">
+						<MenuItem checked={!repo} onSelect={() => setRepoId(null)}>
+							No repository
+						</MenuItem>
 						{space.repos.map((item) => (
 							<MenuItem key={item.id} checked={item.id === repo?.id} onSelect={() => setRepoId(item.id)}>
 								{item.repoFullName}
@@ -477,10 +485,11 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 					</MenuContent>
 				</Menu>
 				<ModelPicker value={{ model, reasoning: choice.reasoning ?? null }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} side="bottom" />
-				<PlanToggle on={planMode} onChange={setPlanMode} />
+				{/* Plan mode plans changes to code; a thread with no repository has none to plan. */}
+				{repo ? <PlanToggle on={planMode} onChange={setPlanMode} /> : null}
 				<div className="min-w-0 flex-1" />
 				{start.isError ? <span className="text-[12px] text-(--danger-text)">{start.error.message}</span> : null}
-				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!brief.trim() || !repo || start.isPending}>
+				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!brief.trim() || start.isPending}>
 					{start.isPending ? 'Starting…' : 'Start thread'}
 				</Btn>
 			</div>
