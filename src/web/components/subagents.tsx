@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { AppWindow, Bot, Check, ChevronRight, CircleAlert, CircleStop, FlaskConical, Monitor, Square, Telescope } from 'lucide-react';
-import { type CSSProperties, useContext, useEffect, useState } from 'react';
-import { Caption, Card, CardFooter, Status } from '@/components/instrument';
+import { type CSSProperties, type ReactNode, useContext, useEffect, useState } from 'react';
+import { HoverPeek } from '@/components/hover-peek';
+import { Chip } from '@/components/instrument';
 import { Btn, Icon, IconBtn, Spinner } from '@/components/signal';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { api, type SubagentRun, type SubagentStep } from '@/lib/api';
-import { elapsed, fineDollars, tokens } from '@/lib/format';
+import { elapsed, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { focusRun, ShowPanel } from '@/lib/workspace';
 
@@ -113,12 +114,6 @@ export function workKind(tool: string): WorkKind {
 /** A step's colour: its kind of work, or red when it failed. */
 export const stepTone = (step: SubagentStep) => (step.state === 'failed' ? toolTone(step.tool, true) : WORK[workKind(step.tool)].tone);
 
-/** Steps, time and tokens, in the instrument's mono. */
-export function RunMeta({ run, now, className }: { run: SubagentRun; now: number; className?: string }) {
-	const items = [`${run.steps.length} ${run.steps.length === 1 ? 'step' : 'steps'}`, elapsed(runElapsed(run, now)), ...(run.tokens ? [`${tokens(run.tokens)} tok`] : [])];
-	return <span className={cn('in-num text-[11px] whitespace-nowrap text-(--text-tertiary)', className)}>{items.join(' · ')}</span>;
-}
-
 /** Running, finished, stopped or failed, as a small glyph. */
 export function StatusGlyph({ status }: { status: SubagentRun['status'] | 'starting' }) {
 	if (status === 'running' || status === 'starting') return <Spinner size={11} />;
@@ -204,150 +199,150 @@ export function spanOf(runs: SubagentRun[], now: number): { from: number; to: nu
 	return { from, to: Math.max(to, from + 1000) };
 }
 
-const share = (at: number, from: number, to: number) => `${Math.min(100, Math.max(0, ((at - from) / (to - from)) * 100))}%`;
+/** What a run is doing now, or came back with, in one plain line. */
+export function runLine(run: SubagentRun | undefined, call?: Delegation): ReactNode {
+	const status = run?.status ?? (call?.running ? 'running' : call?.failed ? 'failed' : 'done');
+	if (status === 'running') {
+		if (run?.writing) return plainLine(run.writing.split('\n').pop());
+		const latest = run?.steps[run.steps.length - 1];
+		return latest ? stepBody(latest).body : 'Starting…';
+	}
+	if (status === 'stopped') return 'Stopped by you';
+	return plainLine(run?.result ?? call?.output) || (status === 'failed' ? 'Failed' : null);
+}
+
+/** What a run came back with, as plain words for a few lines of a peek. */
+function answerText(text: string): string {
+	return text
+		.split('\n')
+		.map((line) => plainLine(line))
+		.filter(Boolean)
+		.join(' ');
+}
+
+const STATUS_WORD: Record<SubagentRun['status'] | 'starting', string> = { running: 'Working', starting: 'Starting', done: 'Finished', failed: 'Failed', stopped: 'Stopped' };
 
 /**
- * A run as a bar on a shared time axis: where it started and how long it ran,
- * a notch where each step began, sweeping while it works. Runs side by side
- * read as parallel lanes.
+ * A subagent on hover: what kind it is and how it stands, what it is doing
+ * now or what it answered, and its numbers. The brief and every step stay
+ * in the Agents panel, one click away.
  */
-export function Lane({ run, from, to, now, className }: { run: SubagentRun; from: number; to: number; now: number; className?: string }) {
-	const start = Date.parse(run.startedAt);
-	const end = runEnd(run, now);
-	const tone = run.status === 'failed' ? 'var(--danger-base)' : run.status === 'stopped' ? 'var(--neutral-500)' : lookOf(run.agent).tone;
+function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number; onOpen: () => void }) {
+	const status = run?.status ?? (call.running ? 'starting' : call.failed ? 'failed' : 'done');
+	const live = status === 'running' || status === 'starting';
+	const look = lookOf(call.agent);
+	const latest = run?.steps[run.steps.length - 1];
+	const answer = live ? null : status === 'stopped' ? null : answerText(run?.result ?? call.output);
+	const facts = run ? [`${run.steps.length} ${run.steps.length === 1 ? 'step' : 'steps'}`, elapsed(runElapsed(run, now)), ...(run.tokens ? [`${tokens(run.tokens)} tok`] : []), ...(run.model ? [run.model.split('/').pop()] : [])] : [];
 	return (
-		<span aria-hidden className={cn('relative block h-[5px] w-full min-w-0 shrink-0 rounded-full bg-(--segment-off)', className)}>
-			<span
-				className={cn('absolute inset-y-0 overflow-hidden rounded-full', run.status === 'running' && 'in-sweep')}
-				style={{ left: share(start, from, to), width: `max(${share(from + (end - start), from, to)}, 4px)`, background: tone, opacity: run.status === 'done' ? 0.75 : 1 }}
-			>
-				{run.steps.slice(1).map((step) => (
-					<span key={step.id} className="absolute inset-y-0 w-px bg-(--card-bg)" style={{ left: share(Date.parse(step.at), start, Math.max(end, start + 1000)) }} />
-				))}
-			</span>
-		</span>
+		<>
+			<div className="flex items-center gap-2">
+				<AgentTile agent={call.agent} running={live} size={18} />
+				<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
+					{look.label}
+				</span>
+				<span className={cn('ml-auto flex items-center gap-1.5 text-[11px]', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+					<StatusGlyph status={status} />
+					{STATUS_WORD[status]}
+				</span>
+			</div>
+			<span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+			{live ? (
+				<span className="agent-live-line flex min-w-0 items-start gap-1.5 text-[12px] leading-[17px]">
+					{latest && !run?.writing ? <Icon icon={stepBody(latest).icon} size={12} className="mt-[2px] shrink-0" /> : null}
+					<span className="line-clamp-2 min-w-0">{runLine(run, call)}</span>
+				</span>
+			) : answer ? (
+				<p className={cn('m-0 line-clamp-4 text-[12px] leading-[17px] text-pretty', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{answer}</p>
+			) : status === 'stopped' ? (
+				<p className="m-0 text-[12px] text-(--text-tertiary)">Stopped by you</p>
+			) : null}
+			{facts.length ? <span className="in-num truncate text-[11px] text-(--text-tertiary)">{facts.join(' · ')}</span> : null}
+			<div className="flex items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+				<Btn size="xs" variant="secondary" icon={ChevronRight} onClick={onOpen}>
+					Open in Agents
+				</Btn>
+				<span className="flex-1" />
+				{run?.status === 'running' ? <StopRunButton sessionId={sessionId} run={run} /> : null}
+			</div>
+		</>
 	);
 }
 
-/** One subagent in the thread: who, what for, its lane, and what it is doing now; opens it in the Agents panel. */
-function DelegationRow({ sessionId, call, run, now, span }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number; span: { from: number; to: number } }) {
+/**
+ * One subagent in the thread, on one line: how it stands, what it was asked
+ * to do, its kind, and its steps and time as chips; while it works a second
+ * line says what it is doing. Resting on it shows the rest; clicking opens
+ * it in the Agents panel.
+ */
+function AgentRow({ sessionId, call, run, now }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number }) {
 	const showPanel = useContext(ShowPanel);
 	// Without a run (one from before Anton kept them, or a call that never reached a subagent) the call's own state and answer tell it.
 	const status = run?.status ?? (call.running ? 'starting' : call.failed ? 'failed' : 'done');
 	const live = status === 'running' || status === 'starting';
-	const latest = run?.steps[run.steps.length - 1];
-	const detail = live
-		? run?.writing
-			? plainLine(run.writing.split('\n').pop())
-			: latest
-				? stepBody(latest).body
-				: 'Starting…'
-		: status === 'stopped'
-			? 'Stopped by you'
-			: plainLine(run?.result ?? call.output) || (status === 'failed' ? 'Failed' : null);
 	const look = lookOf(call.agent);
+	const latest = run?.steps[run.steps.length - 1];
 	const stoppable = run?.status === 'running';
+	const open = () => {
+		focusRun(sessionId, run?.id ?? null);
+		showPanel('Agents');
+	};
 	return (
-		<div className="group/agent flex w-full min-w-0 items-start border-t border-(--border-subtle) hover:bg-(--bg-hover)">
-			<button
-				type="button"
-				onClick={() => {
-					focusRun(sessionId, run?.id ?? null);
-					showPanel('Agents');
-				}}
-				className={cn('flex min-w-0 flex-1 items-start gap-2.5 py-2.5 pl-4 text-left outline-none focus-visible:shadow-(--focus-ring-inset)', stoppable ? 'pr-1' : 'pr-4')}
-			>
-				<AgentTile agent={call.agent} running={live} />
-				<span className="flex min-w-0 flex-1 flex-col gap-1.5">
-					<span className="flex min-w-0 items-center gap-2">
-						<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
-							{look.label}
+		<div className="group/agent flex w-full min-w-0 items-center hover:bg-(--bg-hover)">
+			<HoverPeek content={<RunPeek sessionId={sessionId} call={call} run={run} now={now} onOpen={open} />}>
+				<button
+					type="button"
+					onClick={open}
+					className={cn('flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2 pl-3 text-left outline-none focus-visible:shadow-(--focus-ring-inset)', stoppable ? 'pr-1' : 'pr-3')}
+				>
+					<span className="flex min-h-5 min-w-0 items-center gap-2">
+						<span className="inline-flex w-3.5 shrink-0 justify-center">
+							<StatusGlyph status={status} />
 						</span>
-						<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
-						{run ? <RunMeta run={run} now={now} className="hidden sm:inline" /> : null}
-						<StatusGlyph status={status} />
+						<span className="min-w-0 truncate text-[12.5px] text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+						<Chip icon={look.icon} iconColor={look.tone}>
+							{look.label}
+						</Chip>
+						{status === 'failed' ? <Chip tone="danger">Failed</Chip> : status === 'stopped' ? <Chip>Stopped</Chip> : null}
+						<span className="flex-1" />
+						{run ? (
+							<span className="in-num hidden shrink-0 text-[11px] text-(--text-tertiary) sm:inline">
+								{run.steps.length} {run.steps.length === 1 ? 'step' : 'steps'}
+							</span>
+						) : null}
+						{run ? <span className={cn('in-num w-12 shrink-0 text-right text-[11px]', live ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{elapsed(runElapsed(run, now))}</span> : null}
 					</span>
-					{run ? <Lane run={run} now={now} {...span} /> : null}
-					{detail ? (
-						<span className={cn('flex min-w-0 items-center gap-1.5 truncate text-[11.5px]', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}>
-							{live && latest ? <Icon icon={stepBody(latest).icon} size={11} className="shrink-0" /> : null}
-							<span className="min-w-0 truncate">{detail}</span>
+					{live ? (
+						<span className="agent-live-line flex min-w-0 items-center gap-1.5 pl-[22px] text-[11.5px]">
+							{latest && !run?.writing ? <Icon icon={stepBody(latest).icon} size={11} className="shrink-0" /> : null}
+							<span className="min-w-0 truncate">{runLine(run, call)}</span>
 						</span>
 					) : null}
-				</span>
-				<Icon icon={ChevronRight} size={12} className="mt-1 shrink-0 text-(--icon-disabled) group-hover/agent:text-(--icon-secondary)" />
-			</button>
-			{stoppable ? <StopRunButton sessionId={sessionId} run={run} className="mt-2 mr-3 shrink-0" /> : null}
+				</button>
+			</HoverPeek>
+			{stoppable ? <StopRunButton sessionId={sessionId} run={run} className="mr-2 shrink-0" /> : null}
 		</div>
 	);
 }
 
 /**
- * The subagents a turn handed work to, in place of plain "Delegated to" steps:
- * a card with one live lane each on a shared time axis, so work done side by
- * side reads that way, and a footer that sums it up and opens the Agents panel.
+ * The subagents a turn handed work to, in place of plain "Delegated to"
+ * steps: one card, a line each. How they ran together, their lanes and
+ * every step live in the Agents panel; this says only who did what.
  */
 export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Delegation[] }) {
 	const runs = useSubagentRuns(sessionId).data?.runs ?? [];
 	const matched = calls.map((call) => ({ call, run: runFor(runs, call) }));
-	const working = matched.filter(({ call, run }) => (run ? run.status === 'running' : call.running)).length;
-	const failed = matched.filter(({ call, run }) => (run ? run.status === 'failed' : call.failed)).length;
-	const stopped = matched.filter(({ run }) => run?.status === 'stopped').length;
-	const now = useNow(working > 0);
-	const showPanel = useContext(ShowPanel);
-	const found = matched.flatMap(({ run }) => (run ? [run] : []));
-	const span = spanOf(found, now);
-	const steps = found.reduce((sum, run) => sum + run.steps.length, 0);
-	const used = found.reduce((sum, run) => sum + run.tokens, 0);
-	const jev = found.map(decisionsOf).reduce((sum, item) => ({ decisions: sum.decisions + item.decisions, cost: sum.cost + item.cost }), { decisions: 0, cost: 0 });
-	const count = `${calls.length} ${calls.length === 1 ? 'agent' : 'agents'}`;
-	const status = (
-		<span className="flex shrink-0 items-center gap-3">
-			{failed ? <Status tone="danger">{failed} failed</Status> : null}
-			{stopped && (working || failed || stopped < calls.length) ? <Status>{stopped} stopped</Status> : null}
-			{working ? (
-				<Status tone="accent" pulse>
-					{working === calls.length ? (calls.length === 1 ? 'Working' : 'All working') : `${working} of ${calls.length} working`}
-				</Status>
-			) : failed ? null : stopped === calls.length ? (
-				<Status>Stopped</Status>
-			) : (
-				<Status tone="success">Done</Status>
-			)}
-		</span>
-	);
-	const caption = [
-		found.length ? elapsed(span.to - span.from) : null,
-		`${steps} ${steps === 1 ? 'step' : 'steps'}`,
-		used ? `${tokens(used)} tok` : null,
-		jev.decisions ? `Jev ${jev.decisions} · ${fineDollars(jev.cost)}` : null,
-	].filter(Boolean);
+	const working = matched.some(({ call, run }) => (run ? run.status === 'running' : call.running));
+	const now = useNow(working);
 	return (
-		<Card
-			as="div"
-			label="Agents"
-			title={working ? 'Agents' : `Ran ${count}`}
-			sub={working ? `${count} on this reply` : 'this reply'}
-			status={status}
-			footer={
-				<CardFooter caption={<Caption className="in-num">{caption.join(' · ')}</Caption>}>
-					<Btn
-						size="sm"
-						onClick={() => {
-							focusRun(sessionId, null);
-							showPanel('Agents');
-						}}
-					>
-						Open agents
-					</Btn>
-				</CardFooter>
-			}
+		<section
+			aria-label={calls.length === 1 ? '1 agent on this reply' : `${calls.length} agents on this reply`}
+			className="flex flex-col divide-y divide-(--border-subtle) overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)"
 		>
-			<div className="flex flex-col">
-				{matched.map(({ call, run }) => (
-					<DelegationRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} span={span} />
-				))}
-			</div>
-		</Card>
+			{matched.map(({ call, run }) => (
+				<AgentRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} />
+			))}
+		</section>
 	);
 }

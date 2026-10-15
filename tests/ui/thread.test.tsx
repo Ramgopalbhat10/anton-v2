@@ -93,12 +93,12 @@ describe('Thread', () => {
 			],
 		});
 		show(agent([user('u1', 'Count the posts'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Count the posts', description: 'Count blog posts' }), tool('read', { path: 'README.md' }, { output: 'x' })])]));
-		expect(await screen.findByText('1 agent on this reply')).toBeTruthy();
+		expect(await screen.findByRole('region', { name: '1 agent on this reply' })).toBeTruthy();
 		expect(screen.getByText('Count blog posts')).toBeTruthy();
 		expect(screen.queryByText(/Delegated to/)).toBeNull();
-		// The latest step, as the thread would describe it, and the run's numbers.
+		// The latest step, as the thread would describe it, and the run's steps.
 		expect(await screen.findByText(/Clicked/)).toBeTruthy();
-		expect(screen.getByText(/1 step · \d+s · 6\.3K tok/)).toBeTruthy();
+		expect(screen.getByText('1 step')).toBeTruthy();
 		// Other tools stay in the steps card.
 		expect(screen.getByText('1 STEP')).toBeTruthy();
 	});

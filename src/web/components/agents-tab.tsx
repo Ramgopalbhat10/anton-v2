@@ -3,10 +3,10 @@ import { HoverCard } from 'radix-ui';
 import { useEffect, useRef, useState } from 'react';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { Card, Caption, StatRow, Status, type Tone } from '@/components/instrument';
-import { AgentTile, decisionsOf, lookOf, plainLine, RunMeta, runElapsed, runEnd, spanOf, StatusGlyph, stepBody, StopRunButton, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
+import { Caption, Status, type Tone } from '@/components/instrument';
+import { AgentTile, decisionsOf, lookOf, runElapsed, runEnd, runLine, spanOf, StatusGlyph, stepBody, StopRunButton, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
 import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
-import { elapsed, fineDollars, tokens } from '@/lib/format';
+import { age, elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { focusRun, useFocusedRun } from '@/lib/workspace';
 
@@ -21,62 +21,6 @@ const STATUS_LABEL: Record<SubagentRun['status'], string> = { running: 'Working'
 /** What a finished run's result is, by how it ended. */
 const RESULT_LABEL: Record<SubagentRun['status'], string> = { running: 'Answer', done: 'Answer', failed: 'Why it failed', stopped: 'Stopped' };
 const RESULT_HEADING: Record<SubagentRun['status'], string> = { running: 'Answer to the agent', done: 'Answer to the agent', failed: 'Why it failed', stopped: 'Stopped' };
-
-/** Steps as ticks in their colours, newest at the right, the last one lit while the run works. */
-function StepTicks({ steps, live }: { steps: SubagentStep[]; live: boolean }) {
-	const shown = steps.slice(-40);
-	return (
-		<span aria-hidden className="flex h-3 min-w-0 items-end gap-[2px] overflow-hidden">
-			{shown.map((step, index) => {
-				const current = live && index === shown.length - 1;
-				return (
-					<span
-						key={step.id}
-						className={cn('w-[3px] shrink-0 rounded-[1px]', current && 'in-pulse')}
-						style={{ height: 12, background: current ? 'var(--accent-base)' : stepTone(step), opacity: current ? 1 : 0.85 }}
-					/>
-				);
-			})}
-		</span>
-	);
-}
-
-function RunCard({ run, now, onOpen }: { run: SubagentRun; now: number; onOpen: () => void }) {
-	const live = run.status === 'running';
-	const latest = run.steps[run.steps.length - 1];
-	// What it is doing now, or what it came back with, in one line.
-	const headline = live ? (run.writing ? plainLine(run.writing.split('\n').pop()) : latest ? stepBody(latest).body : null) : run.status === 'stopped' ? 'Stopped by you' : plainLine(run.result);
-	return (
-		<button
-			type="button"
-			onClick={onOpen}
-			className="in-card flex w-full min-w-0 flex-col gap-2 px-3 py-2.5 text-left outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
-		>
-			<span className="flex min-w-0 items-center gap-2.5">
-				<AgentTile agent={run.agent} running={live} />
-				<span className="flex min-w-0 flex-1 flex-col">
-					<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
-						{lookOf(run.agent).label}
-					</span>
-					<span className="truncate text-[12.5px] text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>
-				</span>
-				<span className={cn('flex shrink-0 items-center gap-1.5 text-[11px]', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-					<StatusGlyph status={run.status} />
-					{STATUS_LABEL[run.status]}
-				</span>
-			</span>
-			{headline ? (
-				<span className={cn('truncate pl-[32px] text-[11.5px]', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}>
-					<span>{headline}</span>
-				</span>
-			) : null}
-			<span className="flex min-w-0 items-center gap-3 pl-[32px]">
-				<StepTicks steps={run.steps} live={live} />
-				<RunMeta run={run} now={now} className="ml-auto" />
-			</span>
-		</button>
-	);
-}
 
 /** Runs started within this long of the newest one are drawn together, as one burst of work. */
 const BATCH_MS = 10 * 60_000;
@@ -133,20 +77,6 @@ export function burstLine(runs: SubagentRun[], now: number): { headline: string;
 	return { headline, why: failed ? `${failed} failed. ${work}` : work };
 }
 
-/** How wide a second of the timeline draws; a longer burst scrolls sideways rather than squeezing its steps. */
-const PX_PER_SECOND = 8;
-/** The lanes' label column, kept in view while the timeline scrolls. */
-const LABEL_PX = 156;
-/** The label column covers the scroll's edge and fades the lanes passing under it. */
-const LABEL_EDGE = '-2px 0 0 var(--card-bg), 10px 0 10px -6px var(--card-bg)';
-
-/** A round step for a time axis about one tick per 90 pixels. */
-function tickStep(totalMs: number, widthPx: number): number {
-	const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600].map((seconds) => seconds * 1000);
-	const wanted = Math.max(2, Math.floor(widthPx / 90));
-	return steps.find((step) => totalMs / step <= wanted) ?? steps[steps.length - 1];
-}
-
 /** A duration, in milliseconds under a second so a quick step does not read "0s". */
 const took = (ms: number) => (ms < 1000 ? `${Math.round(ms)}ms` : elapsed(ms));
 
@@ -194,138 +124,123 @@ function Phase({ step, run, next, from, span, now }: { step: SubagentStep; run: 
 }
 
 /**
- * The panel's summary: what the latest burst came to in a sentence, then its
- * runs as lanes on one time axis, each step a phase in its kind's colour to
- * rest on, scrolling sideways when the burst is long; then runs, steps,
- * tokens and what the decision model spent across the task.
+ * The panel's summary, said once: what the latest burst came to in a
+ * sentence, what its steps mostly were, and what the task's subagents
+ * spent together. The runs themselves are listed below it.
  */
-function Overview({ sessionId, runs, now }: { sessionId: string; runs: SubagentRun[]; now: number }) {
-	const working = runs.filter((run) => run.status === 'running').length;
-	const failed = runs.filter((run) => run.status === 'failed').length;
-	const newest = Math.max(...runs.map((run) => Date.parse(run.startedAt)));
-	const batch = runs.filter((run) => Date.parse(run.startedAt) >= newest - BATCH_MS).slice(0, 8).reverse();
-	const line = burstLine(batch, now);
-	const mix = workMix(batch);
-	const { from, to } = spanOf(batch, now);
-	const span = to - from;
-	const trackPx = (span / 1000) * PX_PER_SECOND;
-	const step = tickStep(span, Math.max(trackPx, 320));
-	const ticks = Array.from({ length: Math.floor(span / step) + 1 }, (_, index) => index * step);
+function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: SubagentRun[]; now: number }) {
+	const line = burstLine(latest, now);
+	const mix = workMix(latest);
 	const jev = runs.map(decisionsOf).reduce((sum, item) => ({ decisions: sum.decisions + item.decisions, cost: sum.cost + item.cost }), { decisions: 0, cost: 0 });
-	const stats: Array<{ label: string; value: string; tone?: Tone; title?: string }> = [
-		{ label: working ? 'working' : 'runs', value: String(working || runs.length), tone: working ? 'accent' : undefined },
-		{ label: 'steps', value: String(runs.reduce((sum, run) => sum + run.steps.length, 0)) },
-		{ label: 'tokens', value: tokens(runs.reduce((sum, run) => sum + run.tokens, 0)) },
-		...(jev.decisions ? [{ label: 'Jev', value: fineDollars(jev.cost), title: `${jev.decisions} decisions by Jev, the decision model that drives the browser` }] : []),
-	];
+	const totals = [
+		plural(runs.length, 'run'),
+		plural(runs.reduce((sum, run) => sum + run.steps.length, 0), 'step'),
+		`${tokens(runs.reduce((sum, run) => sum + run.tokens, 0))} tok`,
+		jev.decisions ? `Jev ${fineDollars(jev.cost)}` : null,
+	].filter(Boolean);
 	return (
-		<Card
-			as="div"
-			label="Agents overview"
-			title="Agents"
-			sub="this task"
-			status={working ? <Status tone="accent" pulse>{working} working</Status> : failed ? <Status tone="danger">{failed} failed</Status> : <Status tone="success">All done</Status>}
-		>
-			<div className="flex flex-col gap-0.5 px-4 pb-3">
+		<section aria-label="Agents overview" className="flex flex-col gap-2 px-0.5">
+			<div className="flex flex-col gap-0.5">
 				<span className="text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
 				<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{line.why}</span>
 			</div>
-			<div className="flex flex-col gap-2 border-t border-(--border-subtle) pt-3 pb-3">
-				<div className="flex items-center gap-3 px-4">
-					<Caption className="flex-1">{batch.length === runs.length ? 'Timeline' : 'Latest runs'}</Caption>
-					<Caption className="in-num">{elapsed(span)}</Caption>
-				</div>
-				<div className="overflow-x-auto overflow-y-hidden pb-1">
-					<div className="flex flex-col" style={{ width: `max(100%, ${LABEL_PX + trackPx + 32}px)` }}>
-						{batch.map((run) => (
-							<div key={run.id} className="group/lane flex h-11 min-w-0 items-center pr-4">
-								<button
-									type="button"
-									title={titleOf(run.prompt, run.description ?? undefined)}
-									onClick={() => focusRun(sessionId, run.id)}
-									className="sticky left-0 z-10 flex h-full shrink-0 items-center gap-2 bg-(--card-bg) pr-3 pl-4 text-left outline-none focus-visible:shadow-(--focus-ring)"
-									style={{ width: LABEL_PX, boxShadow: LABEL_EDGE }}
-								>
-									<AgentTile agent={run.agent} running={run.status === 'running'} size={20} />
-									<span className="flex min-w-0 flex-col">
-										<span className="truncate text-[12px] leading-[16px] text-(--text-primary) group-hover/lane:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
-										<span className="in-num truncate text-[10.5px] leading-[14px] text-(--text-tertiary)">
-											{run.steps.length} steps · {elapsed(runElapsed(run, now))}
-										</span>
-									</span>
-								</button>
-								<span className="relative h-3 min-w-0 flex-1 rounded-[3px] bg-(--segment-off)/60">
-									<span
-										aria-hidden
-										className="absolute inset-y-[5px] rounded-full bg-(--border-default)"
-										style={{ left: `${((Date.parse(run.startedAt) - from) / span) * 100}%`, width: `${((runEnd(run, now) - Date.parse(run.startedAt)) / span) * 100}%` }}
-									/>
-									{run.steps.map((entry, index) => (
-										<Phase key={entry.id} step={entry} run={run} next={run.steps[index + 1]} from={from} span={span} now={now} />
-									))}
-								</span>
-							</div>
-						))}
-						<div aria-hidden className="flex pr-4">
-							<span className="sticky left-0 z-10 shrink-0 bg-(--card-bg)" style={{ width: LABEL_PX, boxShadow: LABEL_EDGE }} />
-							<span className="relative h-4 flex-1">
-								{ticks.map((at) => (
-									<span key={at} className="in-num absolute top-0.5 -translate-x-1/2 text-[9.5px] whitespace-nowrap text-(--text-disabled) first:translate-x-0" style={{ left: `${(at / span) * 100}%` }}>
-										{mark(at)}
-									</span>
-								))}
-							</span>
-						</div>
-					</div>
-				</div>
-				{mix.length ? (
-					<span className="flex flex-wrap gap-x-3.5 gap-y-1 px-4">
-						{mix.map((item) => (
-							<span key={item.kind} className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
-								<span className="size-[7px] rounded-[2px]" style={{ background: WORK[item.kind].tone }} />
-								{WORK[item.kind].label}
-								<span className="in-num text-(--text-secondary)">{item.count}</span>
-							</span>
-						))}
+			<div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+				{mix.map((item) => (
+					<span key={item.kind} className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+						<span className="size-[7px] rounded-[2px]" style={{ background: WORK[item.kind].tone }} />
+						{WORK[item.kind].label}
+						<span className="in-num text-(--text-secondary)">{item.count}</span>
 					</span>
-				) : null}
+				))}
+				<span className="in-num ml-auto text-[11px] text-(--text-tertiary)" title={jev.decisions ? `${jev.decisions} decisions by Jev, the decision model that drives the browser` : undefined}>
+					{totals.join(' · ')}
+				</span>
 			</div>
-			<StatRow stats={stats} />
-		</Card>
+		</section>
 	);
 }
 
-/** Runs come newest first; each burst keeps that place but lists in the order it started, as the timeline and the thread's card draw it. */
-function inBursts(runs: SubagentRun[]): SubagentRun[] {
-	const bursts: SubagentRun[][] = [];
+/**
+ * A run in the panel: its kind, title, how it stands and for how long; its
+ * lane on the burst's shared time axis, each step a phase in its kind's
+ * colour to rest on; and what it is doing now or what it answered. Opens
+ * into its transcript.
+ */
+function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: number; span: number; now: number; onOpen: () => void }) {
+	const live = run.status === 'running';
+	const line = runLine(run);
+	return (
+		<div className="group/run flex min-w-0 flex-col gap-2 px-3 py-2.5 hover:bg-(--bg-hover)">
+			<button type="button" onClick={onOpen} className="flex min-w-0 items-center gap-2 text-left outline-none focus-visible:shadow-(--focus-ring)">
+				<AgentTile agent={run.agent} running={live} size={18} />
+				<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary) group-hover/run:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
+				<span className={cn('flex shrink-0 items-center gap-1.5 text-[11px]', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+					<StatusGlyph status={run.status} />
+					<span className="in-num">{elapsed(runElapsed(run, now))}</span>
+				</span>
+			</button>
+			<span className="relative ml-[26px] h-2.5 min-w-0 rounded-[3px] bg-(--segment-off)/60">
+				<span
+					aria-hidden
+					className="absolute inset-y-[4px] rounded-full bg-(--border-default)"
+					style={{ left: `${((Date.parse(run.startedAt) - from) / span) * 100}%`, width: `${((runEnd(run, now) - Date.parse(run.startedAt)) / span) * 100}%` }}
+				/>
+				{run.steps.map((entry, index) => (
+					<Phase key={entry.id} step={entry} run={run} next={run.steps[index + 1]} from={from} span={span} now={now} />
+				))}
+			</span>
+			{line ? (
+				<button
+					type="button"
+					tabIndex={-1}
+					onClick={onOpen}
+					className={cn('ml-[26px] truncate text-left text-[11.5px] outline-none', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}
+				>
+					{line}
+				</button>
+			) : null}
+		</div>
+	);
+}
+
+/** Runs come newest first; split into bursts, newest burst first, each listed in the order it started, as the thread draws it. */
+function bursts(runs: SubagentRun[]): SubagentRun[][] {
+	const out: SubagentRun[][] = [];
 	for (const run of runs) {
-		const burst = bursts.at(-1);
+		const burst = out.at(-1);
 		if (burst && Date.parse(burst[0].startedAt) - Date.parse(run.startedAt) <= BATCH_MS) burst.push(run);
-		else bursts.push([run]);
+		else out.push([run]);
 	}
-	return bursts.flatMap((burst) => burst.reverse());
+	return out.map((burst) => burst.reverse());
+}
+
+/** One burst of runs: a line each, on one time axis. */
+function Burst({ sessionId, runs, label, now }: { sessionId: string; runs: SubagentRun[]; label: string; now: number }) {
+	const { from, to } = spanOf(runs, now);
+	return (
+		<section aria-label={label} className="flex flex-col gap-1.5">
+			<h3 className="in-caption m-0 flex items-center gap-2 px-0.5">
+				<span className="flex-1">{label}</span>
+				<span className="in-num">{elapsed(to - from)}</span>
+			</h3>
+			<div className="in-card flex flex-col divide-y divide-(--border-subtle) overflow-hidden">
+				{runs.map((run) => (
+					<RunRow key={run.id} run={run} from={from} span={to - from} now={now} onOpen={() => focusRun(sessionId, run.id)} />
+				))}
+			</div>
+		</section>
+	);
 }
 
 function RunList({ sessionId, runs, now }: { sessionId: string; runs: SubagentRun[]; now: number }) {
-	const working = inBursts(runs.filter((run) => run.status === 'running'));
-	const finished = inBursts(runs.filter((run) => run.status !== 'running'));
-	const section = (title: string, list: SubagentRun[]) =>
-		list.length ? (
-			<section aria-label={title} className="flex flex-col gap-1.5">
-				<h3 className="in-caption m-0 flex items-center gap-2 px-0.5">
-					{title}
-					<span className="in-num text-(--text-disabled)">{list.length}</span>
-				</h3>
-				{list.map((run) => (
-					<RunCard key={run.id} run={run} now={now} onOpen={() => focusRun(sessionId, run.id)} />
-				))}
-			</section>
-		) : null;
+	const groups = bursts(runs);
 	return (
 		<div className="flex flex-col gap-4 pt-1">
-			<Overview sessionId={sessionId} runs={runs} now={now} />
-			{section('Working', working)}
-			{section('Finished', finished)}
+			<Overview runs={runs} latest={groups[0] ?? []} now={now} />
+			{groups.map((burst, index) => {
+				const ago = age(burst[0].startedAt, now);
+				return <Burst key={burst[0].id} sessionId={sessionId} runs={burst} label={index === 0 ? 'Latest' : ago === 'now' ? 'Earlier' : `${ago} ago`} now={now} />;
+			})}
 		</div>
 	);
 }

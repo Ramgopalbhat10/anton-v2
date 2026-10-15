@@ -54,6 +54,14 @@ function fenced(children: ReactNode): { code: string; language?: string } | null
  */
 const InLink = createContext(false);
 
+/**
+ * Links a reply's surroundings draw themselves: given a link's href and its
+ * words, a chip in their place, or null to leave it a link. The project feed
+ * draws `#thread-…` links as thread chips this way.
+ */
+export type InlineLinks = (href: string, children: ReactNode) => ReactNode | null;
+export const InlineLinks = createContext<InlineLinks | null>(null);
+
 /** How each Markdown element draws; exported so tests can parse a reply whole with the same. */
 export const components: Components = {
 	pre: ({ children }) => {
@@ -64,11 +72,16 @@ export const components: Components = {
 	},
 	// Fenced code is drawn by pre above, so this is inline code.
 	code: ({ children }) => <InlineCode>{children}</InlineCode>,
-	a: ({ node: _node, ...props }) => (
-		<InLink.Provider value={true}>
-			<a {...props} target="_blank" rel="noreferrer" />
-		</InLink.Provider>
-	),
+	a: function Link({ node: _node, ...props }) {
+		const inline = useContext(InlineLinks);
+		const drawn = inline && props.href ? inline(props.href, props.children) : null;
+		if (drawn) return drawn;
+		return (
+			<InLink.Provider value={true}>
+				<a {...props} target="_blank" rel="noreferrer" />
+			</InLink.Provider>
+		);
+	},
 	// Inside a link (a README's badges) the image's text joins that link, since links can't nest.
 	img: function Img({ src, alt }) {
 		const inLink = useContext(InLink);
