@@ -7,7 +7,7 @@ import { getProviders } from '../providers/index.ts';
 import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, saveOutput, savedOutputs } from './checkpoints.ts';
 import { announce } from '../core/changes.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
-import { quote } from '../core/shell.ts';
+import { quote, run } from '../core/shell.ts';
 import { type FileChange, type LogEntry, changes, listFiles, repoDir } from './git.ts';
 import type { Machine } from '../core/ports.ts';
 import { liveMachine } from './workspace.ts';
@@ -145,6 +145,8 @@ export async function storedOutputs(id: string): Promise<OutputsView['outputs']>
 
 /** The largest file the Library takes as an upload. */
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+/** The largest output read from a running sandbox before it is saved. */
+const MAX_LIVE_OUTPUT_BYTES = 50 * 1024 * 1024;
 
 /**
  * Adds a file you upload to the task's Library, under `uploads/`. With a
@@ -176,6 +178,20 @@ export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	announce({ kind: 'task', id, what: 'files' });
 }
 
+/**
+ * A file in the task's Library. Outputs the agent writes in its sandbox reach
+ * storage at the end of its reply (a checkpoint), so one it made this reply,
+ * such as a screenshot it just took, is read from the running sandbox until
+ * then; a stopped one is never started for it.
+ */
 export async function readOutputFile(id: string, rawPath: string): Promise<Uint8Array | null> {
-	return readOutput(id, safeRelativePath(rawPath));
+	const path = safeRelativePath(rawPath);
+	const saved = await readOutput(id, path);
+	if (saved) return saved;
+	const machine = await liveMachine(id).catch(() => null);
+	if (!machine) return null;
+	const file = `${machine.root}/outputs/${path}`;
+	const size = (await run(machine, `stat -c %s -- ${quote(file)}`).catch(() => '')).trim();
+	if (!/^\d+$/.test(size) || Number(size) > MAX_LIVE_OUTPUT_BYTES) return null;
+	return readMachineFile(machine, file).catch(() => null);
 }

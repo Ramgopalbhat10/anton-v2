@@ -26,10 +26,22 @@ export const SCRATCH_BRANCH = 'scratch';
 export const SCRATCH_BASE = '5dbaf08032448172a03f0a1292bf74bcd21a8898';
 const SCRATCH_DATE = '1970-01-01T00:00:00Z';
 
+/**
+ * What a chat's tools leave in its folder that is never its work: installed
+ * dependencies, virtual environments and caches. A repository's .gitignore
+ * says this for it; a scratch folder has none, so without these an `npm
+ * install` puts hundreds of files in Changes and its checkpoints.
+ */
+const SCRATCH_IGNORES = ['node_modules/', '.venv/', 'venv/', '__pycache__/', '*.pyc', '.pytest_cache/', '.mypy_cache/', '.next/', '.turbo/', '.parcel-cache/', '.cache/', '.npm/', '.DS_Store'];
+
+/** Writes SCRATCH_IGNORES to the folder's own exclude file once; chats begun before it get it at their next look at Changes. */
+const IGNORE_IN_SCRATCH = `mkdir -p .git/info && { grep -qxF 'node_modules/' .git/info/exclude 2>/dev/null || printf '%s\\n' ${SCRATCH_IGNORES.map(quote).join(' ')} >> .git/info/exclude; }`;
+
 /** Makes the empty scratch folder a chat's sandbox works in, at `SCRATCH_BASE`. */
 export async function initScratch(machine: Machine): Promise<void> {
 	await run(machine, `rm -rf repo && mkdir repo && git -C repo init -q -b ${SCRATCH_BRANCH}`, { cwd: machine.root });
 	await run(machine, AUTHOR.map((setting) => `git config ${setting}`).join(' && '), { cwd: repoDir(machine) });
+	await run(machine, IGNORE_IN_SCRATCH, { cwd: repoDir(machine) });
 	await run(machine, "git -c commit.gpgsign=false commit -q --allow-empty -m 'Scratch folder'", {
 		cwd: repoDir(machine),
 		env: { GIT_AUTHOR_DATE: SCRATCH_DATE, GIT_COMMITTER_DATE: SCRATCH_DATE },
@@ -50,6 +62,7 @@ export async function checkoutTaskBranch(machine: Machine, branch: string, sha: 
 
 export async function changes(machine: Machine, baseSha: string): Promise<Changes> {
 	const cwd = repoDir(machine);
+	if (baseSha === SCRATCH_BASE) await run(machine, IGNORE_IN_SCRATCH, { cwd });
 	const [names, patch, log] = await Promise.all([
 		run(machine, withScratchIndex(`git diff --cached --no-renames --raw -z ${baseSha}`), { cwd }),
 		run(machine, withScratchIndex(`git diff --cached --no-renames --binary ${baseSha}`), { cwd }),

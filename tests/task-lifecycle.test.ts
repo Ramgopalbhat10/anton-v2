@@ -688,8 +688,9 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	assert.equal(before.codeMode, true, 'code mode is on unless turned off');
+	assert.equal(before.pageNetwork, true, 'pages reach the web unless turned off');
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', pageNetwork: true, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);
@@ -1548,6 +1549,15 @@ test('a chat has no repository: a scratch sandbox when it needs one, its files a
 	sessions.invalidateRunning();
 	assert.deepEqual((await files.fileTree(chat.id)).paths, ['hello.py']);
 	assert.match((await files.changesView(chat.id)).patch, /\+print\(1\)/);
+	// Installed dependencies and caches are not the chat's work, even in a folder begun before they were ignored.
+	await machine.exec(`cd ${machine.root}/repo && rm .git/info/exclude && mkdir -p node_modules/left-pad .venv/bin __pycache__ && echo x > node_modules/left-pad/index.js && echo x > .venv/bin/python && echo x > __pycache__/a.pyc`);
+	sessions.invalidateRunning();
+	assert.doesNotMatch((await files.changesView(chat.id)).patch, /node_modules|\.venv|__pycache__/);
+	assert.deepEqual((await files.fileTree(chat.id)).paths, ['hello.py']);
+	// A screenshot taken this reply shows from the sandbox before the reply's checkpoint saves it.
+	await machine.exec(`mkdir -p ${machine.root}/outputs/screenshots && printf png > ${machine.root}/outputs/screenshots/shot.png`);
+	assert.equal(text((await files.readOutputFile(chat.id, 'screenshots/shot.png'))!), 'png');
+	assert.equal(await files.readOutputFile(chat.id, 'screenshots/missing.png'), null);
 	await saveCheckpoint(chat.id, machine);
 	await sessions.stopSession(chat.id);
 	assert.equal(text(await files.readFile(chat.id, 'hello.py')), 'print(1)\n', 'readable after its sandbox stops');
