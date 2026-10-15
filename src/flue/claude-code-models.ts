@@ -146,6 +146,34 @@ export function transcript(messages: Message[]): RuntimeContent[] {
 
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 
+/** An image, in characters, as the runtime counts one when it estimates. */
+const IMAGE_CHARS = 4800;
+
+function charsOf(content: Message['content']): number {
+	if (typeof content === 'string') return content.length;
+	let chars = 0;
+	for (const part of content as Array<Exclude<Message['content'], string>[number]>) {
+		if (part.type === 'text') chars += part.text.length;
+		else if (part.type === 'thinking') chars += part.thinking.length;
+		else if (part.type === 'toolCall') chars += part.name.length + JSON.stringify(part.arguments).length;
+		else if (part.type === 'image') chars += IMAGE_CHARS;
+	}
+	return chars;
+}
+
+/**
+ * The tokens of a model call the agent did not count, by the runtime's rule of
+ * thumb (four characters a token): the context it was sent, and what it wrote.
+ * Cursor counts a whole run at its end, every call in it together, so its sum
+ * would read as a context far past the window: the runtime would compact (or
+ * find nothing to cut) after every long reply, and the context meter would
+ * show the run's total.
+ */
+export function estimatedUsage(context: Context, written: AssistantMessage['content']): { input: number; output: number } {
+	const sent = (context.systemPrompt ?? '').length + JSON.stringify(context.tools ?? []).length + context.messages.reduce((sum, message) => sum + charsOf(message.content), 0);
+	return { input: Math.ceil(sent / 4), output: Math.ceil(charsOf(written) / 4) };
+}
+
 type Settings = { model: string; instructions: string; tools: string; effort: string };
 
 /** One of the agent's conversations behind one Flue conversation. */
@@ -429,6 +457,8 @@ export function runtimeProvider(
 					case 'message_stop': {
 						if (!started) break;
 						const calls = output.content.filter((block): block is ToolCall => block.type === 'toolCall');
+						const { input, output: written, cacheRead, cacheWrite } = output.usage;
+						if (!input && !written && !cacheRead && !cacheWrite) Object.assign(output.usage, estimatedUsage(context, output.content));
 						output.usage.totalTokens = output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 						calculateCost(model, output.usage);
 						if (calls.length) {
@@ -471,6 +501,8 @@ export function runtimeProvider(
 			options?.signal?.removeEventListener('abort', onAbort);
 			// A step for the same conversation that started meanwhile replaced this one; nothing will continue it.
 			if (open.get(key) !== current) current.close();
+			// Nor a call made outside any conversation, such as compaction's summary: its agent would sit open, taking a place.
+			else if (!options?.sessionId) abandon();
 		}
 	}
 
