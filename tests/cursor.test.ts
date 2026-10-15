@@ -10,7 +10,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-cursor-'));
 process.env.ANTON_DATA_DIR = dir;
 
 const { cursorPlan, levelsOf, selectionFor, toSubscriptionModel } = await import('../src/providers/cursor/plan.ts');
-const { cursorProvider, closeClaudeCodeConversations } = await import('../src/flue/claude-code-models.ts');
+const { cursorProvider, closeClaudeCodeConversations, estimatedUsage } = await import('../src/flue/claude-code-models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
 after(() => {
@@ -178,9 +178,65 @@ test('a Cursor run is cut into steps at its tool calls, and each call waits for 
 	const step2 = await models.completeSimple(model, { ...context, messages }, { sessionId: 'c1', reasoning: 'xhigh' });
 	assert.equal(step2.stopReason, 'stop', step2.errorMessage);
 	assert.deepEqual(step2.content, [{ type: 'text', text: 'It says A.' }]);
-	assert.deepEqual([step2.usage.input, step2.usage.output], [1200, 40]);
+	// Cursor's count is the whole run's; each step is counted by the context it was sent and what it wrote.
+	assert.deepEqual([step2.usage.input, step2.usage.output], [estimatedUsage({ ...context, messages }, step2.content).input, 3]);
+	assert.ok(step1.usage.input > 0 && step1.usage.input < step2.usage.input, 'each step holds the context it was sent');
 	assert.deepEqual(read, { content: [{ type: 'text', text: 'A' }], isError: false });
 	assert.equal(fake.created.length, 1, 'one Cursor agent for the conversation');
+});
+
+test('a long run’s count, every model call in it summed, is not read as the last step’s context', async () => {
+	const fake = fakeSdk([
+		async ({ onDelta, tools }) => {
+			for (let i = 0; i < 6; i++) await tools.read.execute({ path: `${i}.ts` }, { toolCallId: `tc_${i}` });
+			onDelta({ type: 'text-delta', text: 'Done.' });
+			// Six calls that each re-read a growing context: far past a 272K window together.
+			onDelta(turnEnded(600_000, 3_000));
+			return { status: 'finished' };
+		},
+	]);
+	const { models, model } = bridge(fake);
+	const context = { systemPrompt: 'Be Anton.', messages: [user('Read them all.')], tools: [readTool] };
+	let messages: Message[] = [...context.messages];
+	let step = await models.completeSimple(model, context, { sessionId: 'c3' });
+	for (let i = 0; step.stopReason === 'toolUse'; i++) {
+		const call = step.content.find((block) => block.type === 'toolCall')!;
+		messages = [...messages, step, { role: 'toolResult', toolCallId: call.id, toolName: 'read', content: [{ type: 'text', text: 'x'.repeat(4000) }], isError: false, timestamp: 0 } as Message];
+		step = await models.completeSimple(model, { ...context, messages }, { sessionId: 'c3' });
+		assert.ok(i < 10);
+	}
+	assert.equal(step.stopReason, 'stop', step.errorMessage);
+	assert.equal(step.usage.input, estimatedUsage({ ...context, messages }, step.content).input);
+	assert.ok(step.usage.input + step.usage.cacheRead < info.contextLength, 'the runtime sees no overflow, so it does not compact after the reply');
+});
+
+test('a call outside any conversation, such as compaction’s summary, closes its Cursor agent when it answers', async () => {
+	let closed = 0;
+	const fake = fakeSdk([
+		async ({ onDelta }) => {
+			onDelta({ type: 'text-delta', text: 'The summary.' });
+			return { status: 'finished' };
+		},
+		async ({ onDelta }) => {
+			onDelta({ type: 'text-delta', text: 'Hello.' });
+			return { status: 'finished' };
+		},
+	]);
+	const create = (await fake.sdk()) as unknown as { Agent: { create: (options: object) => Promise<{ close: () => void }> } };
+	const made = create.Agent.create;
+	create.Agent.create = async (options) => {
+		const agent = await made(options);
+		return { ...agent, close: () => void (closed += 1) };
+	};
+	const { models, model } = bridge(fake);
+	const summary = await models.completeSimple(model, { systemPrompt: 'Summarise.', messages: [user('The conversation.')] });
+	assert.equal(summary.stopReason, 'stop', summary.errorMessage);
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(closed, 1, 'nothing will continue it, so it does not hold one of the plan’s open places');
+	const reply = await models.completeSimple(model, { systemPrompt: '', messages: [user('Hi.')] }, { sessionId: 'c4' });
+	assert.equal(reply.stopReason, 'stop', reply.errorMessage);
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(closed, 1, 'a conversation’s agent stays open for its next step');
 });
 
 test('a run Cursor stops at the plan’s limit fails the step and is reported as the limit', async () => {
