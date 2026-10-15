@@ -67,6 +67,27 @@ test('a file growing is said on a slower beat than a change of step', async () =
 	stop();
 });
 
+test('a compaction after the reply reads as compacting until it is done, though its summaries end one by one', () => {
+	const task = { instanceId: 'task-3' };
+	recordAgentNow({ type: 'turn_request', ...task, purpose: 'agent' });
+	recordAgentNow({ type: 'turn', ...task, purpose: 'agent' });
+	assert.equal(agentNow('task-3')?.what, 'finishing');
+
+	// A long turn is summarised in two calls at once: its history and the turn's start.
+	recordAgentNow({ type: 'compaction_start', ...task });
+	recordAgentNow({ type: 'turn_request', ...task, purpose: 'compaction' });
+	recordAgentNow({ type: 'turn_request', ...task, purpose: 'compaction_prefix' });
+	recordAgentNow({ type: 'turn', ...task, purpose: 'compaction' });
+	assert.equal(agentNow('task-3')?.what, 'compacting', 'one summary done is not the compaction done');
+	recordAgentNow({ type: 'turn', ...task, purpose: 'compaction_prefix' });
+	assert.equal(agentNow('task-3')?.what, 'compacting');
+
+	recordAgentNow({ type: 'compaction', ...task });
+	assert.equal(agentNow('task-3')?.what, 'finishing');
+	recordAgentNow({ type: 'submission_settled', ...task });
+	assert.equal(agentNow('task-3'), null);
+});
+
 test('a tool call is named by its file, the first line of its command, or its subagent', () => {
 	assert.equal(detailOf('read', { path: './src/app.ts' }), 'src/app.ts');
 	assert.equal(detailOf('bash', { command: 'npm test\necho done' }), 'npm test');

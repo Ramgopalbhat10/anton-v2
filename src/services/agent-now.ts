@@ -172,6 +172,11 @@ export function recordAgentNow(event: NowEvent): void {
 			break;
 		case 'turn':
 			live.writing.clear();
+			// Compaction's summaries are model calls too, one or two at once: the conversation is still being compacted until it says it is done.
+			if (event.purpose && event.purpose !== 'agent') return;
+			if (!live.running.size) set(live, { what: 'finishing', tool: null, detail: null, chars: 0 }, at);
+			break;
+		case 'compaction':
 			if (!live.running.size) set(live, { what: 'finishing', tool: null, detail: null, chars: 0 }, at);
 			break;
 		case 'submission_settled':

@@ -208,22 +208,20 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 	const queued: SDKUserMessage[] = [];
 	const steering: Array<Promise<unknown>> = [];
 
-	// The model call being streamed out: whether one is open, its blocks, and its usage so far.
+	// The model call being streamed out: whether one is open, and its blocks.
 	let open = false;
 	let nextIndex = 0;
 	let block: { index: number; kind: 'text' | 'thinking' } | null = null;
-	let usage = zero();
-	let carried = zero();
 	let flush: ReturnType<typeof setTimeout> | null = null;
 
+	// Cursor counts tokens once per run, at its end, for every model call in it together: no one call's count,
+	// and far more than any one call holds. Each call goes out uncounted, and the bridge counts it by its context.
 	const begin = () => {
 		if (open) return;
 		open = true;
 		nextIndex = 0;
 		block = null;
-		usage = carried;
-		carried = zero();
-		events.push({ type: 'message_start', id: `cursor-${randomUUID()}`, usage: { ...usage } });
+		events.push({ type: 'message_start', id: `cursor-${randomUUID()}`, usage: zero() });
 	};
 	const closeBlock = () => {
 		if (block) events.push({ type: 'block_stop', index: block.index });
@@ -234,7 +232,7 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 		flush = null;
 		if (!open) return;
 		closeBlock();
-		events.push({ type: 'message_delta', stopReason, usage: { ...usage } });
+		events.push({ type: 'message_delta', stopReason, usage: {} });
 		events.push({ type: 'message_stop' });
 		open = false;
 	};
@@ -261,16 +259,6 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 	function onDelta(update: InteractionUpdate): void {
 		if (update.type === 'text-delta') write('text', update.text);
 		else if (update.type === 'thinking-delta') write('thinking', update.text);
-		else if (update.type === 'turn-ended' && update.usage) {
-			const add = { input: update.usage.inputTokens, output: update.usage.outputTokens, cacheRead: update.usage.cacheReadTokens, cacheWrite: update.usage.cacheWriteTokens };
-			// Usage that lands after its model call ended counts toward the next one.
-			const into = open && !flush ? usage : carried;
-			into.input += add.input;
-			into.output += add.output;
-			into.cacheRead += add.cacheRead;
-			into.cacheWrite += add.cacheWrite;
-			if (into === usage) events.push({ type: 'message_delta', stopReason: null, usage: { ...usage } });
-		}
 	}
 
 	const tools: Record<string, SDKCustomTool> = Object.fromEntries(
