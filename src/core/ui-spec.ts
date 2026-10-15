@@ -70,6 +70,17 @@ export function childrenOf(node: UiNode): UiNode[] {
 	return 'children' in node ? node.children : [];
 }
 
+/**
+ * An image's path in the Library. The agent knows the Library as the sandbox's outputs folder,
+ * so a path through it (`/workspace/outputs/shot.png`, `../outputs/shot.png`, `outputs/shot.png`)
+ * names the Library path after it.
+ */
+export function libraryPath(path: string): string {
+	const trimmed = path.trim();
+	const inside = /(?:^|\/)outputs\/(.+)$/.exec(trimmed);
+	return inside && (trimmed.startsWith('/') || trimmed.startsWith('../') || trimmed.startsWith('outputs/')) ? inside[1] : trimmed;
+}
+
 /** Every node in the tree, parents before their children. */
 export function walk(nodes: UiNode[], visit: (node: UiNode, depth: number) => void, depth = 1): void {
 	for (const node of nodes) {

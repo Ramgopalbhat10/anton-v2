@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { InvalidInputError } from '../core/errors.ts';
-import { formulaNames, INPUT_TYPES, isInteractive, parseFormula, specText, UI_LIMITS, type UiNode, type UiSpec, walk } from '../core/ui-spec.ts';
+import { formulaNames, INPUT_TYPES, isInteractive, libraryPath, parseFormula, specText, UI_LIMITS, type UiNode, type UiSpec, walk } from '../core/ui-spec.ts';
 
 /*
  * The `show` tool's check: a tree of components from the catalog in
@@ -20,6 +20,14 @@ const option = v.object({ label, value: v.optional(text(200)), detail: v.optiona
 const options = v.pipe(v.array(option), v.minLength(1), v.maxLength(UI_LIMITS.options));
 /** Paths inside the repo or the Library: no way out of either. */
 const path = v.pipe(v.string(), v.minLength(1), v.maxLength(500), v.check((value) => !value.split('/').includes('..') && !value.startsWith('/'), 'Use a path relative to the repository or the Library'));
+/** An image's path in the Library, read through the outputs folder the agent knows it as. */
+const imagePath = v.pipe(
+	v.string(),
+	v.transform(libraryPath),
+	v.minLength(1),
+	v.maxLength(500),
+	v.check((value) => !value.split('/').includes('..') && !value.startsWith('/'), "Use the image's path in the Library, such as screenshots/home.png"),
+);
 
 const node: v.GenericSchema<UiNode> = v.lazy(() =>
 	v.variant('type', [
@@ -34,7 +42,7 @@ const node: v.GenericSchema<UiNode> = v.lazy(() =>
 		v.object({ type: v.literal('code'), code: text(), language: v.optional(text(30)) }),
 		v.object({ type: v.literal('diff'), patch: text(), path: v.optional(path) }),
 		v.object({ type: v.literal('file'), path, line: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))), label: v.optional(label) }),
-		v.object({ type: v.literal('image'), path, alt: v.optional(text(300)) }),
+		v.object({ type: v.literal('image'), path: imagePath, alt: v.optional(text(300)) }),
 		v.object({
 			type: v.literal('table'),
 			columns: v.pipe(v.array(v.object({ key: label, label: v.optional(label), format, align: v.optional(v.picklist(['left', 'right'])) })), v.minLength(1), v.maxLength(12)),
@@ -146,6 +154,22 @@ export function checkSpec(input: unknown): UiSpec {
 	const found = problems(parsed.output);
 	if (found.length) throw new InvalidInputError(`The card is not valid, so the user does not see it. Fix these and call show again:\n${found.slice(0, 8).join('\n')}`);
 	return parsed.output;
+}
+
+/** A card whose image is not in the Library would show a broken picture; the agent hears which, and fixes the path or saves the image first. */
+export async function checkImages(spec: UiSpec, inLibrary: (path: string) => Promise<boolean>): Promise<void> {
+	const images: string[] = [];
+	walk(spec.children, (item) => {
+		if (item.type === 'image') images.push(item.path);
+	});
+	const missing: string[] = [];
+	for (const path of images) if (!(await inLibrary(path).catch(() => false))) missing.push(path);
+	if (missing.length) {
+		throw new InvalidInputError(
+			`The card is not valid, so the user does not see it. ${missing.map((path) => `"${path}"`).join(', ')} ${missing.length === 1 ? 'is' : 'are'} not in the Library. ` +
+				'Save the image in the outputs folder first (../outputs/ from your working folder), then name it by its path there, such as screenshots/home.png.',
+		);
+	}
 }
 
 /** What the tool tells the agent: what the user now sees, so it neither repeats it nor needs to see it. */

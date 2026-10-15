@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { evaluate, formMessage, parseFormula, specText, type UiNode } from '../src/core/ui-spec.ts';
-import { checkSpec, shownNote } from '../src/services/show.ts';
+import { evaluate, formMessage, libraryPath, parseFormula, specText, type UiNode } from '../src/core/ui-spec.ts';
+import { checkImages, checkSpec, shownNote } from '../src/services/show.ts';
 
 const card = {
 	title: 'Spend this week',
@@ -33,7 +33,8 @@ test('a card that does not fit the catalog comes back to the agent with what to 
 	);
 	assert.throws(() => checkSpec({ children: [{ type: 'value', label: 'Total', formula: 'alert(1)' }] }), /Unknown function alert/);
 	assert.throws(() => checkSpec({ children: [{ type: 'toggle', name: 'a', label: 'A' }, { type: 'toggle', name: 'a', label: 'B' }] }), /Two inputs are named "a"/);
-	assert.throws(() => checkSpec({ children: [{ type: 'image', path: '../../etc/passwd' }] }), /relative to the repository or the Library/);
+	assert.throws(() => checkSpec({ children: [{ type: 'image', path: '../../etc/passwd' }] }), /path in the Library/);
+	assert.throws(() => checkSpec({ children: [{ type: 'image', path: '/etc/passwd' }] }), /path in the Library/);
 	assert.throws(() => checkSpec({ children: [{ type: 'text', text: 'x'.repeat(70_000) }] }), /too big/);
 });
 
@@ -65,4 +66,16 @@ test('a form sends its title and each input as words', () => {
 	const spec = checkSpec({ children: [form] });
 	assert.match(shownNote(spec), /arrives as their next message/);
 	assert.match(specText(spec), /Form "Deploy settings":/);
+});
+
+test('an image named through the outputs folder is the Library path it names, and one not in the Library is refused', async () => {
+	assert.equal(libraryPath('/workspace/outputs/nourish/desktop.png'), 'nourish/desktop.png');
+	assert.equal(libraryPath('../outputs/screenshots/home.png'), 'screenshots/home.png');
+	assert.equal(libraryPath('outputs/home.png'), 'home.png');
+	assert.equal(libraryPath('screenshots/home.png'), 'screenshots/home.png');
+	assert.equal(libraryPath('src/outputs/x.png'), 'src/outputs/x.png', 'only a path through the outputs folder itself');
+	const spec = checkSpec({ children: [{ type: 'image', path: '/workspace/outputs/nourish/desktop.png', alt: 'Nourish' }] });
+	assert.deepEqual(spec.children[0], { type: 'image', path: 'nourish/desktop.png', alt: 'Nourish' });
+	await checkImages(spec, async (path) => path === 'nourish/desktop.png');
+	await assert.rejects(checkImages(spec, async () => false), /"nourish\/desktop.png" is not in the Library/);
 });

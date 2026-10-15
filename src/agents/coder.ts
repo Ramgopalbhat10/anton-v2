@@ -49,9 +49,10 @@ import { postReviewTool } from './review-tool.ts';
 import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
-import { MAX_TODOS, writeTodos } from '../services/todos.ts';
+import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
-import { checkSpec, shownNote } from '../services/show.ts';
+import { checkImages, checkSpec, shownNote } from '../services/show.ts';
+import { readOutputFile } from '../services/files.ts';
 import { PAGE_GUIDE, saveRender } from '../services/renders.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
@@ -771,7 +772,7 @@ const SHOW_DESCRIPTION = [
 	'Put related things in one card rather than many. The result says what the user sees; do not repeat it in your reply.',
 ].join('\n');
 
-function useShow() {
+function useShow(id: string) {
 	useTool(
 		defineTool({
 			name: 'show',
@@ -780,7 +781,11 @@ function useShow() {
 				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
 				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
 			}),
-			run: async ({ data }) => ({ output: shownNote(checkSpec(data)) }),
+			run: async ({ data }) => {
+				const spec = checkSpec(data);
+				await checkImages(spec, async (path) => (await readOutputFile(id, path)) !== null);
+				return { output: shownNote(spec) };
+			},
 		}),
 	);
 }
@@ -872,7 +877,15 @@ function useProposePlan(id: string) {
 }
 
 const TODO_HINT =
-	'For work of three or more steps, write a todo list with update_todos before you start, and update it as each step starts and finishes, so the user can follow along. Skip it for quick questions and one-step changes.';
+	'For work of three or more steps, write a todo list with update_todos before you start. The user follows it as your progress, so call update_todos again the moment a step finishes, ' +
+	'marking it completed and the next one in_progress, before you go on; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.';
+
+const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
+
+/** In a chat, a small app is best as a page: it works in the thread and on the Artifacts page, with no server to keep running. */
+const APP_HINT =
+	'When asked for a small app that needs no server of its own (a tracker, a calculator, a game, a dashboard over data the user enters), build it as one page with render_html, keeping its data with window.anton.setState: ' +
+	'it works right in the thread and on the Artifacts page, and keeps what the user enters. Build files and run a server only for an app that needs a backend, packages or a build step, or when the user asks for source files.';
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
@@ -1018,7 +1031,7 @@ export function Coder({ id }: AgentProps) {
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
 	if (visual !== 'off') {
-		useShow();
+		useShow(id);
 		useRenderHtml(id);
 	}
 	if (project && !workspace) useProjectFiles(id);
@@ -1043,7 +1056,13 @@ export function Coder({ id }: AgentProps) {
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	// The reply is also checked for whether it waits on the user, so the task can say so.
-	useAgentFinish(async () => {
+	useAgentFinish(async ({ response, append, signal }) => {
+		// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
+		const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
+		if (reminder) {
+			append({ kind: 'signal', type: 'reminder', body: reminder });
+			return;
+		}
 		const checkpoint = (async () => {
 			try {
 				const machine = await liveMachine(id);
@@ -1062,6 +1081,7 @@ export function Coder({ id }: AgentProps) {
 	// The persisted start survives resumed responses; usage totals are still counted per model call.
 	useResponseStart(() => {
 		startReply(id);
+		startTodoReply(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
@@ -1078,9 +1098,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${visualHint(visual)} ${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

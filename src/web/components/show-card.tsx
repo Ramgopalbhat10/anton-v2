@@ -21,6 +21,7 @@ import {
   evaluate,
   formatValue,
   formMessage,
+  libraryPath,
   numberOf,
   optionValue,
   parseFormula,
@@ -701,13 +702,13 @@ function NodeView({ node }: { node: UiNode }) {
     case "image":
       return state ? (
         <a
-          href={outputUrl(state.sessionId, node.path)}
+          href={outputUrl(state.sessionId, libraryPath(node.path))}
           target="_blank"
           rel="noreferrer"
           className="block w-fit"
         >
           <img
-            src={outputUrl(state.sessionId, node.path)}
+            src={outputUrl(state.sessionId, libraryPath(node.path))}
             alt={node.alt ?? node.path}
             className="block max-h-80 max-w-full rounded-[10px] border border-(--card-border)"
           />
