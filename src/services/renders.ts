@@ -71,7 +71,7 @@ export const frameCsp = (nonce: string) =>
   ].join("; ");
 
 const NETWORK_GUIDE = {
-  on: "It loads nothing from the web: no CDN scripts, fonts or images. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL. It can call web APIs with fetch(): Anton makes each request for it, so any public http(s) API answers whatever its CORS rules, but not localhost or private networks, and without cookies. Prefer APIs that need no key, poll with fetch for live data (no XMLHttpRequest, WebSocket or EventSource), and show what failed when a request does.",
+  on: "It loads nothing from the web: no CDN scripts, fonts or images. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL. It can call web APIs with fetch(): Anton makes each request for it, so any public http(s) API answers whatever its CORS rules, but not localhost or private networks, and without cookies. So a page that calls an API needs no proxy or server of yours, and no sandbox. Prefer APIs that need no key, poll with fetch for live data (no XMLHttpRequest, WebSocket or EventSource), and show what failed when a request does.",
   off: "It has no network: no CDN scripts, fonts, images or fetch calls. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL.",
 };
 
