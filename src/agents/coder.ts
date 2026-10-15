@@ -21,7 +21,8 @@ import {
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
-import { claudeCodeProvider } from '../flue/claude-code-models.ts';
+import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
+import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
@@ -60,7 +61,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { loadedModels } from '../services/models.ts';
-import { gatewayToken, onPlan, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
@@ -84,6 +85,9 @@ setProvider(liveOpenRouterProvider(loadedModels));
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
+// Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
+setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));
+setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
 const OUTPUTS = '../outputs';

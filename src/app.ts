@@ -85,6 +85,7 @@ import {
 	recordPlanLimit,
 	beginLogin,
 	cancelLogin,
+	connectKey,
 	disconnect,
 	finishLogin,
 	importLogin,
@@ -404,6 +405,11 @@ app.post('/api/subscriptions/:id/login/complete', async (c) => {
 app.post('/api/subscriptions/:id/import', async (c) => {
 	const { credential } = await body(c, v.object({ credential: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(50_000)) }));
 	return c.json(await importLogin(c.req.param('id'), credential));
+});
+// Plans used with a key from the vendor's dashboard (OpenCode Go, Cursor): the key is checked with the vendor before it is kept.
+app.put('/api/subscriptions/:id/key', async (c) => {
+	const { key } = await body(c, v.object({ key: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)) }));
+	return c.json(await connectKey(c.req.param('id'), key));
 });
 app.post('/api/subscriptions/:id/models/refresh', async (c) => c.json(await refreshSubscriptionModels(c.req.param('id'))));
 

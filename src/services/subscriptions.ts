@@ -3,7 +3,16 @@ import { createServer } from 'node:http';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
-import type { AgentRuntime, ModelInfo, SubscriptionCredential, SubscriptionLogin, SubscriptionModel, SubscriptionProvider } from '../core/ports.ts';
+import type {
+	AgentRuntime,
+	KeyPlan,
+	ModelInfo,
+	PlanWindow,
+	SubscriptionCredential,
+	SubscriptionLogin,
+	SubscriptionModel,
+	SubscriptionProvider,
+} from '../core/ports.ts';
 import { spendBy, tokensByMinute } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
@@ -17,6 +26,8 @@ import { logProblem } from './log.ts';
  * token, and the agents ask for a fresh one on every call. A Claude plan runs
  * through Claude Code (an `AgentRuntime`), which signs in through its own flow
  * on the server and keeps its token to itself; Anton only reads its status.
+ * OpenCode Go and Cursor plans (`KeyPlan`) take a key from the vendor's own
+ * dashboard, which Anton keeps and hands to each call.
  */
 
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the spending caps as if billed per token. */
@@ -24,6 +35,9 @@ export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean 
 
 type Stored = SubscriptionOptions & {
 	credential: SubscriptionCredential | null;
+	/** A key plan's key, and the account the vendor said it belongs to. */
+	key: string | null;
+	account: string | null;
 	connectedAt: string | null;
 	/** The account's models as last listed, kept when the vendor does not answer. */
 	models: SubscriptionModel[];
@@ -39,8 +53,11 @@ type Stored = SubscriptionOptions & {
 export type SubscriptionView = {
 	id: string;
 	name: string;
-	/** `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`). */
-	kind: 'oauth' | 'runtime';
+	/**
+	 * `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`).
+	 * `key`: a key made on the vendor's dashboard (`keyPage`), kept by Anton.
+	 */
+	kind: 'oauth' | 'runtime' | 'key';
 	/** The `<gateway>` its models are named under. */
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
@@ -63,12 +80,18 @@ export type SubscriptionView = {
 	signIn: string | null;
 	limitHitAt: string | null;
 	extraUsageAt: string | null;
+	/** A key plan's dashboard, the key's last four characters, and what the vendor says is left of the plan's own limits. */
+	keyPage: string | null;
+	keyHint: string | null;
+	windows: PlanWindow[] | null;
 };
 
 const DEFAULTS: Stored = {
 	enabled: true,
 	countAtApiPrices: false,
 	credential: null,
+	key: null,
+	account: null,
 	connectedAt: null,
 	models: [],
 	modelsAt: null,
@@ -86,9 +109,11 @@ const settingKey = (id: string) => `subscription.${id}`;
 
 export const subscriptionProviders = (): SubscriptionProvider[] => getProviders().subscriptions ?? [];
 export const agentRuntimes = (): AgentRuntime[] => getProviders().runtimes ?? [];
+export const keyPlans = (): KeyPlan[] => getProviders().keyPlans ?? [];
 
 /** Whether a model (`<gateway>/<model>`) runs on a plan, where calls cost nothing per token. */
-export const onPlan = (model: string): boolean => [...subscriptionProviders(), ...agentRuntimes()].some((plan) => model.startsWith(`${plan.gateway}/`));
+export const onPlan = (model: string): boolean =>
+	[...subscriptionProviders(), ...agentRuntimes(), ...keyPlans()].some((plan) => model.startsWith(`${plan.gateway}/`));
 
 /** The program that runs the models named under `gateway`, for the agents. */
 export const runtimeFor = (gateway: string): AgentRuntime | undefined => agentRuntimes().find((runtime) => runtime.gateway === gateway);
@@ -98,9 +123,15 @@ function providerById(id: string): SubscriptionProvider {
 	if (!provider) {
 		const runtime = agentRuntimes().find((candidate) => candidate.id === id);
 		if (runtime) throw new ConflictError(`${runtime.name} signs in through Claude Code on the server: ${runtime.signInCommand}`);
+		const keyed = keyPlanById(id);
+		if (keyed) throw new ConflictError(`${keyed.name} takes a key from ${keyed.keyPage} rather than a sign-in.`);
 		throw new NotFoundError(`No subscription named "${id}"`);
 	}
 	return provider;
+}
+
+function keyPlanById(id: string): KeyPlan | undefined {
+	return keyPlans().find((candidate) => candidate.id === id);
 }
 
 function runtimeById(id: string): AgentRuntime | undefined {
@@ -199,6 +230,8 @@ const oauthPlan = (provider: SubscriptionProvider): Plan => ({
 
 const runtimePlan = (runtime: AgentRuntime): Plan => ({ id: runtime.id, name: runtime.name, list: () => runtime.listModels(), local: true });
 
+const keyedPlan = (plan: KeyPlan): Plan => ({ id: plan.id, name: plan.name, list: async () => plan.listModels(await planKeyFor(plan)) });
+
 async function listNow(plan: Plan): Promise<SubscriptionModel[]> {
 	const models = await plan.list();
 	await save(plan.id, { models, modelsAt: Date.now() });
@@ -238,8 +271,57 @@ export async function subscriptionModels(): Promise<ModelInfo[]> {
 			if (!current.enabled || !(await runtime.status()).signedIn) return [];
 			return (await freshModels(runtimePlan(runtime), current)).map((model) => priced(model, runtime.name, current));
 		}),
+		...keyPlans().map(async (plan) => {
+			const current = await stored(plan.id);
+			if (!current.enabled || !current.key) return [];
+			return (await freshModels(keyedPlan(plan), current)).map((model) => priced(model, plan.name, current));
+		}),
 	]);
 	return lists.flat();
+}
+
+async function planKeyFor(plan: KeyPlan): Promise<string> {
+	const { key, problem } = await stored(plan.id);
+	if (!key) throw new Error(`${plan.name} is not connected. Add its key under Settings › Subscriptions to use its models.`);
+	if (problem) throw new Error(problem);
+	return key;
+}
+
+/** The key for the plan whose models are named under `gateway`, for the agents' model calls. */
+export function planKey(gateway: string): Promise<string> {
+	const plan = keyPlans().find((candidate) => candidate.gateway === gateway);
+	if (!plan) return Promise.reject(new Error(`No subscription serves "${gateway}" models`));
+	return planKeyFor(plan);
+}
+
+/** The agent that runs the models named under `gateway`: Claude Code, or a key plan's agent with its key. */
+export async function planRuntime(gateway: string): Promise<Pick<AgentRuntime, 'open'> | undefined> {
+	const runtime = runtimeFor(gateway);
+	if (runtime) return runtime;
+	const plan = keyPlans().find((candidate) => candidate.gateway === gateway);
+	const open = plan?.open?.bind(plan);
+	if (!plan || !open) return undefined;
+	const key = await planKeyFor(plan);
+	return { open: (options) => open(key, options) };
+}
+
+/**
+ * Saves a key plan's key once the vendor has accepted it, and lists the plan's
+ * models with it. A key the vendor refuses is not kept.
+ */
+export async function connectKey(id: string, input: string): Promise<SubscriptionView> {
+	const plan = keyPlanById(id);
+	if (!plan) throw new NotFoundError(`No subscription named "${id}" takes a key`);
+	const key = input.trim();
+	if (!key || /\s/.test(key)) throw new InvalidInputError(`Paste the key from ${plan.keyPage} on its own.`);
+	const { email } = await plan.check(key).catch((error: unknown) => {
+		throw new InvalidInputError(`${plan.name} did not accept that key: ${error instanceof Error ? error.message : String(error)}`);
+	});
+	await save(plan.id, { key, account: email, connectedAt: new Date().toISOString(), problem: null, models: [], modelsAt: null, limitHitAt: null });
+	windowsCache.delete(plan.id);
+	retryAt.delete(plan.id);
+	await listNow(keyedPlan(plan)).catch((error: unknown) => logProblem('warn', `Could not list ${plan.name} models`, error));
+	return keyView(plan);
 }
 
 type Attempt = { login: SubscriptionLogin; startedAt: number; listening: boolean; close: () => void; finishing?: Promise<void> };
@@ -388,6 +470,13 @@ export async function importLogin(id: string, input: string): Promise<Subscripti
 export async function disconnect(id: string): Promise<SubscriptionView> {
 	const runtime = runtimeById(id);
 	if (runtime) throw new ConflictError(`Claude Code keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
+	const keyed = keyPlanById(id);
+	if (keyed) {
+		// The key itself stays valid until you delete it on the vendor's dashboard.
+		await save(id, { key: null, account: null, connectedAt: null, models: [], modelsAt: null, problem: null });
+		windowsCache.delete(id);
+		return keyView(keyed);
+	}
 	const provider = providerById(id);
 	endAttempt(id);
 	await save(id, { credential: null, connectedAt: null, models: [], modelsAt: null, problem: null });
@@ -399,6 +488,11 @@ export async function setSubscriptionOptions(id: string, options: SubscriptionOp
 	if (runtime) {
 		await save(id, options);
 		return runtimeView(runtime);
+	}
+	const keyed = keyPlanById(id);
+	if (keyed) {
+		await save(id, options);
+		return keyView(keyed);
 	}
 	const provider = providerById(id);
 	await save(id, options);
@@ -416,6 +510,13 @@ export async function refreshSubscriptionModels(id: string): Promise<Subscriptio
 		}
 		await listNow(runtimePlan(runtime));
 		return runtimeView(runtime);
+	}
+	const keyed = keyPlanById(id);
+	if (keyed) {
+		if (!(await stored(id)).key) throw new ConflictError(`${keyed.name} is not connected.`);
+		windowsCache.delete(id);
+		await listNow(keyedPlan(keyed));
+		return keyView(keyed);
 	}
 	const provider = providerById(id);
 	if (!(await stored(id)).credential) throw new ConflictError(`${provider.name} is not signed in.`);
@@ -437,9 +538,9 @@ export async function noteExtraUsage(id: string): Promise<void> {
 	await save(id, { extraUsageAt: new Date().toISOString() });
 }
 
-/** What the agents tell the Claude Code bridge: what to report for the plan whose models are named under `gateway`, and how many conversations it keeps open. */
+/** What the agents tell the runtime bridge: what to report for the plan whose models are named under `gateway`, and how many conversations it keeps open. */
 export function runtimeHooks(gateway: string): { onLimit(): void; onExtraUsage(): void; maxOpen: number } {
-	const id = () => runtimeFor(gateway)?.id;
+	const id = () => runtimeFor(gateway)?.id ?? keyPlans().find((plan) => plan.gateway === gateway)?.id;
 	const report = (note: (id: string) => Promise<void>) => () => {
 		const plan = id();
 		if (plan) note(plan).catch((error: unknown) => logProblem('warn', 'Could not note the plan usage', error));
@@ -477,6 +578,9 @@ export async function subscriptionView(provider: SubscriptionProvider): Promise<
 		signIn: null,
 		limitHitAt: current.limitHitAt,
 		extraUsageAt: current.extraUsageAt,
+		keyPage: null,
+		keyHint: null,
+		windows: null,
 	};
 }
 
@@ -519,12 +623,67 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		signIn: runtime.signInCommand,
 		limitHitAt: current.limitHitAt,
 		extraUsageAt: current.extraUsageAt,
+		keyPage: null,
+		keyHint: null,
+		windows: null,
+	};
+}
+
+const WINDOWS_TTL_MS = 60_000;
+/** What each key plan last said about its own limits, asked again after a minute; null when it would not say. */
+const windowsCache = new Map<string, { at: number; windows: Promise<PlanWindow[] | null> }>();
+
+function planWindows(plan: KeyPlan, key: string): Promise<PlanWindow[] | null> {
+	const read = plan.windows?.bind(plan);
+	if (!read) return Promise.resolve(null);
+	const cached = windowsCache.get(plan.id);
+	if (cached && Date.now() - cached.at < WINDOWS_TTL_MS) return cached.windows;
+	const windows = read(key).catch((error: unknown) => {
+		logProblem('warn', `Could not read the ${plan.name} plan's limits`, error);
+		return null;
+	});
+	windowsCache.set(plan.id, { at: Date.now(), windows });
+	return windows;
+}
+
+/** A plan used with a key: whose key it is, its models, and what is left of its own limits. */
+export async function keyView(plan: KeyPlan): Promise<SubscriptionView> {
+	const current = await stored(plan.id);
+	const connected = Boolean(current.key);
+	const [models, windows] = await Promise.all([
+		connected && current.enabled ? withTokens(await freshModels(keyedPlan(plan), current)) : withTokens(current.models),
+		connected && !current.problem ? planWindows(plan, current.key!) : Promise.resolve(null),
+	]);
+	return {
+		id: plan.id,
+		name: plan.name,
+		kind: 'key',
+		gateway: plan.gateway,
+		state: !connected ? 'signed-out' : current.problem ? 'expired' : 'connected',
+		email: current.account,
+		connectedAt: current.connectedAt,
+		problem: current.problem,
+		expiresAt: null,
+		options: { enabled: current.enabled, countAtApiPrices: current.countAtApiPrices },
+		models,
+		monthTokens: models.reduce((sum, model) => sum + model.tokens, 0),
+		modelsAt: current.modelsAt === null ? null : new Date(current.modelsAt).toISOString(),
+		login: null,
+		plan: null,
+		version: null,
+		signIn: null,
+		limitHitAt: current.limitHitAt,
+		extraUsageAt: current.extraUsageAt,
+		keyPage: plan.keyPage,
+		keyHint: current.key ? current.key.slice(-4) : null,
+		windows,
 	};
 }
 
 export const subscriptionsView = async (): Promise<SubscriptionView[]> => [
 	...(await Promise.all(subscriptionProviders().map(subscriptionView))),
 	...(await Promise.all(agentRuntimes().map(runtimeView))),
+	...(await Promise.all(keyPlans().map(keyView))),
 ];
 
 /** What the vendor calls a plan whose usage limit is reached (OpenAI's Sign in with ChatGPT). */
@@ -543,7 +702,12 @@ export async function recordPlanLimit(event: TurnEvent): Promise<void> {
 }
 
 /** Where each vendor shows the plan's own limits and what is left of them. */
-const USAGE_PAGES: Record<string, string> = { chatgpt: 'https://chatgpt.com/settings/usage', claude: 'https://claude.ai/settings/usage' };
+const USAGE_PAGES: Record<string, string> = {
+	chatgpt: 'https://chatgpt.com/settings/usage',
+	claude: 'https://claude.ai/settings/usage',
+	'opencode-go': 'https://opencode.ai/auth',
+	cursor: 'https://cursor.com/dashboard/usage',
+};
 
 /**
  * A plan's use as Anton saw it: tokens and calls on its models, and what the
@@ -581,6 +745,7 @@ export async function planUsage(now = new Date()): Promise<PlanUsage[]> {
 	const plans = [
 		...subscriptionProviders().map((provider) => ({ ...provider, connected: async (current: Stored) => current.credential !== null && !current.problem })),
 		...agentRuntimes().map((runtime) => ({ ...runtime, connected: async () => (await runtime.status()).signedIn })),
+		...keyPlans().map((plan) => ({ ...plan, connected: async (current: Stored) => current.key !== null && !current.problem })),
 	];
 	return Promise.all(
 		plans.map(async (provider) => {
@@ -642,4 +807,5 @@ export function resetSubscriptionsForTests(): void {
 	cache.clear();
 	retryAt.clear();
 	listedHere.clear();
+	windowsCache.clear();
 }
