@@ -17,6 +17,8 @@ export type GeneralSettings = {
 	codeMode: boolean;
 	/** How much the agent draws its replies (cards, charts, pages) rather than writing them: off, when it helps, or freely. */
 	visualReplies: VisualReplies;
+	/** Pages the agent writes can call web APIs, through Anton (src/services/page-fetch.ts). */
+	pageNetwork: boolean;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
 };
@@ -35,7 +37,7 @@ const KEY = 'general';
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
 	const agentModels = { explorer: null, tester: null, browser: null, computer: null, reviewer: null, ...stored.agentModels };
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', ...stored, agentModels };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', pageNetwork: true, ...stored, agentModels };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {

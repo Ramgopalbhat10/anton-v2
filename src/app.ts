@@ -18,6 +18,7 @@ import { getProviders } from './providers/index.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
+import { pageFetch } from './services/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
 import { profileName } from './services/profile.ts';
@@ -306,6 +307,7 @@ app.put('/api/settings/general', async (c) => {
 			reviewPullRequests: v.boolean(),
 			codeMode: v.boolean(),
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
+			pageNetwork: v.optional(v.boolean(), true),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
@@ -717,6 +719,8 @@ app.get('/api/sessions/:id/render', async (c) => {
 // The state every open copy of a page shares: its frame page reads it after a change elsewhere, and saves the page's own changes.
 app.get('/api/sessions/:id/page-state', async (c) => c.json(await pageState(c.req.param('id'), c.req.query('path') ?? ''), 200, { 'Cache-Control': 'no-store' }));
 app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null))));
+// A request the page makes, which its frame page hands to Anton to make for it (src/services/page-fetch.ts).
+app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
 // Adding a file to the Library: the body is the file, its name in the query.

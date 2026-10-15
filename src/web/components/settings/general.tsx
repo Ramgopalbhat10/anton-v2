@@ -120,7 +120,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 			<Block title="Replies" icon={LayoutPanelTop}>
 				<SettingRow
 					title="Visual replies"
-					help="The agent can answer with cards in the thread: figures, tables, charts, timelines, buttons and forms you press, and small pages it draws in a sandbox with no network. Some uses them when they say it better than text; More reaches for them whenever a reply has numbers or choices; Off keeps replies to text. Questions it needs you to decide still come with options to tap."
+					help="The agent can answer with cards in the thread: figures, tables, charts, timelines, buttons and forms you press, and small pages it draws in a sandbox. Some uses them when they say it better than text; More reaches for them whenever a reply has numbers or choices; Off keeps replies to text. Questions it needs you to decide still come with options to tap."
 				>
 					<Segmented label="Visual replies" role="radiogroup">
 						{VISUAL_LEVELS.map((level) => (
@@ -129,6 +129,17 @@ function Form({ settings }: { settings: GeneralSettings }) {
 							</SegmentedItem>
 						))}
 					</Segmented>
+				</SettingRow>
+				<SettingRow
+					title="Pages reach the web"
+					help="Pages the agent draws can call web APIs, such as a dashboard fetching live prices. Anton makes each request for the page, so it works whatever the API's CORS rules, reaches only the public internet (never this machine or its network) and carries no cookies. Off, pages have no network at all."
+				>
+					<Switch
+						checked={settings.pageNetwork}
+						disabled={save.isPending}
+						onChange={(pageNetwork) => save.mutate({ pageNetwork })}
+						label={<span className="sr-only">Pages reach the web</span>}
+					/>
 				</SettingRow>
 			</Block>
 			<Block

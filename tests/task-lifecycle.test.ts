@@ -688,8 +688,9 @@ test('General settings decide how a new task starts when the launcher does not s
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	assert.equal(before.codeMode, true, 'code mode is on unless turned off');
+	assert.equal(before.pageNetwork, true, 'pages reach the web unless turned off');
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', pageNetwork: true, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);

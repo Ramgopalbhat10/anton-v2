@@ -10,8 +10,7 @@ import { inlineAssets } from "./page-assets.ts";
 /*
  * Pages the agent writes with `render_html`: one self-contained HTML document,
  * shown in the thread and kept in the Library under renders/. A page never
- * reaches the network, since anything the agent read could otherwise leave in
- * a request it makes:
+ * reaches the network itself:
  *
  * - The page is served with a CSP that sandboxes it (a unique origin, no
  *   cookies, no popups) and allows no requests: inline script and style, and
@@ -23,6 +22,13 @@ import { inlineAssets } from "./page-assets.ts";
  * The frame page passes messages between the page and the thread, in the MCP
  * Apps protocol's terms (JSON-RPC over postMessage): the page's height, links
  * to open (the thread asks first), and text for the composer.
+ *
+ * A page that calls a web API (a dashboard polling prices, say) gets a fetch()
+ * that hands the request to its frame page, which has Anton make it
+ * (src/services/page-fetch.ts): public addresses only, without anyone's
+ * cookies, and not at all with Settings › General › Pages reach the web off.
+ * Going through Anton, a request works whether or not the API allows other
+ * origins, which most don't for a sandboxed page's.
  *
  * A page keeps its state on Anton's side, so every copy of it shows the same
  * thing: the one in the thread, one opened in a tab of its own, and the one in
@@ -64,10 +70,15 @@ export const frameCsp = (nonce: string) =>
     "frame-ancestors 'self'",
   ].join("; ");
 
-/** What a page can rely on from the thread: the theme as CSS variables, and the rules of its frame. */
-export const PAGE_GUIDE = [
+const NETWORK_GUIDE = {
+  on: "It loads nothing from the web: no CDN scripts, fonts or images. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL. It can call web APIs with fetch(): Anton makes each request for it, so any public http(s) API answers whatever its CORS rules, but not localhost or private networks, and without cookies. Prefer APIs that need no key, poll with fetch for live data (no XMLHttpRequest, WebSocket or EventSource), and show what failed when a request does.",
+  off: "It has no network: no CDN scripts, fonts, images or fetch calls. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL.",
+};
+
+/** What a page can rely on from the thread: the theme as CSS variables, and the rules of its frame; `network` with Pages reach the web on. */
+export const pageGuide = (network: boolean) => [
   "Write one complete, self-contained HTML document with inline <style> and <script>.",
-  "It has no network: no CDN scripts, fonts, images or fetch calls. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL.",
+  network ? NETWORK_GUIDE.on : NETWORK_GUIDE.off,
   "The page sits in the thread on its background, as wide as the reply (about 700px, 360px on phones): leave html and body without a background, use a fluid width with no outer padding, and no outer card or banner title.",
   "Give charts fixed pixel heights, and let content set the height: no 100vh or height:100% on html or body. The frame grows to fit the page.",
   "Anton sets these CSS variables on :root: --text-primary, --text-secondary, --text-tertiary, --accent, --accent-text, --border, --surface (a card), --surface-inset, --success, --warning, --danger, --data-1 … --data-5 (series colours), --radius, --font-sans, --font-mono. Use them rather than your own colours.",
@@ -162,6 +173,21 @@ window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.dat
 window.addEventListener("load",function(){setTimeout(function(){if(!own&&Object.keys(fields).length)apply(fields);post("anton/state/ready",{version:Number(seed.version)||0})},0)});
 })();`.replace(/\n/g, "");
 
+/**
+ * Runs last: the page's fetch() for http and https addresses hands the request
+ * to the frame page, which has Anton make it (src/services/page-fetch.ts), and
+ * resolves with a Response built from what comes back, so code written for a
+ * browser's fetch works unchanged. Other addresses (data:, blob:) still go to
+ * the browser's own fetch, which the page's CSP refuses.
+ */
+const NET_BOOTSTRAP = `(function(){
+var p=window.parent,own=window.fetch,Native=window.Response,n=0,waiting={};
+function post(m,q){p.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
+function aborted(s){return s&&s.reason!==undefined?s.reason:new DOMException("The operation was aborted.","AbortError")}
+window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(!d||d.jsonrpc!=="2.0"||d.method!=="anton/fetch/result"||!d.params)return;var q=d.params,w=waiting[q.id];if(!w)return;delete waiting[q.id];w.off();if(q.error){w.reject(new TypeError("Failed to fetch "+w.url+": "+q.error));return}var s=Number(q.status)||0,st=s>=200&&s<=599?s:502,body=w.head||st===204||st===205||st===304?null:q.body,r;try{r=new Native(body,{status:st,statusText:String(q.statusText||""),headers:Array.isArray(q.headers)?q.headers:[]})}catch(x){try{r=new Native(body,{status:st})}catch(y){w.reject(new TypeError("Failed to fetch "+w.url));return}}try{Object.defineProperty(r,"url",{value:String(q.url||w.url)});Object.defineProperty(r,"redirected",{value:!!q.url&&q.url!==w.url})}catch(x){}w.resolve(r)});
+window.fetch=function(input,init){return new Promise(function(resolve,reject){var req;try{req=new Request(input,init)}catch(x){reject(x);return}if(!/^https?:/i.test(req.url)){resolve(own.call(window,req));return}var sig=req.signal;if(sig&&sig.aborted){reject(aborted(sig));return}var hs=[];req.headers.forEach(function(v,k){hs.push([k,v])});var m=req.method;(m==="GET"||m==="HEAD"?Promise.resolve(null):req.arrayBuffer()).then(function(b){if(sig&&sig.aborted){reject(aborted(sig));return}var id=++n,off=function(){};if(sig){var stop=function(){if(waiting[id]){delete waiting[id];reject(aborted(sig))}};sig.addEventListener("abort",stop);off=function(){sig.removeEventListener("abort",stop)}}waiting[id]={resolve:resolve,reject:reject,off:off,url:req.url,head:m==="HEAD"};post("anton/fetch",{id:id,url:req.url,method:m,headers:hs,body:b&&b.byteLength?b:null})},reject)})};
+})();`.replace(/\n/g, "");
+
 /** What a page starts from: its saved state, as a script that can't end early or be read as markup. */
 type Seed = { state: unknown; fields: Record<string, unknown>; storage?: Record<string, string>; version: number };
 
@@ -172,7 +198,7 @@ function seedScript(seed: Seed): string {
 
 /** Puts the theme and the bootstrap first in the document, ahead of anything the page has, so its own styles still win. */
 export function injectBootstrap(html: string, seed: Seed = { state: null, fields: {}, storage: {}, version: 0 }): string {
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style>${seedScript(seed)}<script>${BOOTSTRAP}</script><script>${STATE_BOOTSTRAP}</script>`;
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style>${seedScript(seed)}<script>${BOOTSTRAP}</script><script>${STATE_BOOTSTRAP}</script><script>${NET_BOOTSTRAP}</script>`;
   const opening = /<head(\s[^>]*)?>/i.exec(html);
   if (opening)
     return (
@@ -308,16 +334,20 @@ export async function savePageState(id: string, path: string, body: unknown): Pr
  * handed to the page, except while a save of this copy's is waiting or on its
  * way: that save is newer, and the copy fetches again once it lands. Inside
  * Anton the thread says when the state changed; in a tab of its own the frame
- * page listens to the server's events itself.
+ * page listens to the server's events itself. It also makes the page's web
+ * requests, through Anton, and hands back what they answered.
  */
-const FRAME_SCRIPT = `var f=document.getElementById("page"),url="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-state?path="+encodeURIComponent(PAGE.path),me=Math.random().toString(36).slice(2),known=-1,pending=null,flying=false,stale=false,timer=0,alone=window.parent===window;
+const FRAME_SCRIPT = `var f=document.getElementById("page"),url="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-state?path="+encodeURIComponent(PAGE.path),furl="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-fetch?path="+encodeURIComponent(PAGE.path),me=Math.random().toString(36).slice(2),known=-1,pending=null,flying=false,stale=false,timer=0,alone=window.parent===window;
 function toPage(m,q){if(f.contentWindow)f.contentWindow.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
 function pull(){if(pending||flying){stale=true;return}fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(s){if(!s||!(s.version>known))return;if(pending||flying){stale=true;return}known=s.version;toPage("anton/state/changed",{state:s.state,fields:s.fields,storage:s.storage})}).catch(function(){})}
 function flush(keep){clearTimeout(timer);timer=0;if(!pending||flying)return;var body=pending;pending=null;flying=true;body.from=me;fetch(url,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(body),keepalive:keep===true}).then(function(r){return r.ok?r.json():null}).then(function(s){if(s&&s.version>known)known=s.version}).catch(function(){}).then(function(){flying=false;if(pending)flush();else if(stale){stale=false;pull()}})}
 function queue(q){pending=pending||{};if(Object.prototype.hasOwnProperty.call(q,"state"))pending.state=q.state;if(q.fields&&typeof q.fields==="object")pending.fields=q.fields;if(q.storage&&typeof q.storage==="object")pending.storage=q.storage;clearTimeout(timer);timer=setTimeout(flush,150)}
 function changed(q){if(q&&q.from!==me&&q.version>known)pull()}
+function b64(b){var a=new Uint8Array(b),s="";for(var i=0;i<a.length;i+=32768)s+=String.fromCharCode.apply(null,a.subarray(i,i+32768));return btoa(s)}
+function bytes(t){var s=atob(t||""),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer}
+function relay(q){var id=q.id;function done(r){r.id=id;toPage("anton/fetch/result",r)}var u;try{u=new URL(String(q.url))}catch(x){done({error:"not a URL"});return}if(u.origin===location.origin){done({error:"a page can't call Anton itself"});return}fetch(furl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:u.href,method:q.method,headers:q.headers,body:q.body instanceof ArrayBuffer?b64(q.body):null})}).then(function(r){return r.json().catch(function(){return{}}).then(function(j){if(!r.ok)throw new Error(j.error||"Anton answered "+r.status);done({status:j.status,statusText:j.statusText,url:j.url,headers:j.headers,body:bytes(j.body)})})}).catch(function(e){done({error:String(e&&e.message||e)})})}
 window.addEventListener("pagehide",function(){flush(true)});
-window.addEventListener("message",function(e){var d=e.data;if(e.source===f.contentWindow){if(d&&d.jsonrpc==="2.0"&&typeof d.method==="string"&&d.method.indexOf("anton/state/")===0){var q=d.params||{};if(d.method==="anton/state/set")queue(q);else if(d.method==="anton/state/ready"){if(known<0)known=Number(q.version)||0;pull()}return}if(!alone)window.parent.postMessage(d,"*");else if(d&&d.method==="ui/open-link"&&d.params&&/^https?:/.test(d.params.url))window.open(d.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){if(d&&d.method==="anton/page-changed"){changed(d.params);return}if(f.contentWindow)f.contentWindow.postMessage(d,"*")}});
+window.addEventListener("message",function(e){var d=e.data;if(e.source===f.contentWindow){if(d&&d.jsonrpc==="2.0"&&typeof d.method==="string"&&d.method.indexOf("anton/state/")===0){var q=d.params||{};if(d.method==="anton/state/set")queue(q);else if(d.method==="anton/state/ready"){if(known<0)known=Number(q.version)||0;pull()}return}if(d&&d.jsonrpc==="2.0"&&d.method==="anton/fetch"&&d.params){relay(d.params);return}if(!alone)window.parent.postMessage(d,"*");else if(d&&d.method==="ui/open-link"&&d.params&&/^https?:/.test(d.params.url))window.open(d.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){if(d&&d.method==="anton/page-changed"){changed(d.params);return}if(f.contentWindow)f.contentWindow.postMessage(d,"*")}});
 if(alone&&window.EventSource){var events=new EventSource("/api/events"),dropped=false;events.onmessage=function(e){var c;try{c=JSON.parse(e.data)}catch(x){return}if(c&&c.kind==="page"&&c.id===PAGE.id&&c.path===PAGE.path)changed(c)};events.onerror=function(){dropped=true};events.onopen=function(){if(dropped){dropped=false;pull()}}}`;
 
 const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);

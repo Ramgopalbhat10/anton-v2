@@ -380,6 +380,8 @@ export type GeneralSettings = {
 	codeMode: boolean;
 	/** How much the agent draws its replies (cards, charts, pages) rather than writing them. */
 	visualReplies: 'off' | 'some' | 'more';
+	/** Pages the agent writes can call web APIs, through Anton. */
+	pageNetwork: boolean;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };

@@ -54,7 +54,7 @@ import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services
 import { noteAsk, notePlan } from '../services/asks.ts';
 import { checkImages, checkSpec, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
-import { PAGE_GUIDE, saveRender } from '../services/renders.ts';
+import { pageGuide, saveRender } from '../services/renders.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
@@ -795,14 +795,14 @@ function useShow(id: string) {
 	);
 }
 
-/** An open-ended page, for what the catalog can't draw: shown in the thread, in a sandbox with no network, and kept in the Library. */
+/** An open-ended page, for what the catalog can't draw: shown in the thread, in a sandbox that reaches the web only through Anton, and kept in the Library. */
 function useRenderHtml(id: string) {
 	useTool(
 		defineTool({
 			name: 'render_html',
 			description:
 				'Show a page you write in HTML in the thread, above your reply: an interactive explainer, a diagram, a UI mockup, a small tool or game. ' +
-				`Prefer show for figures, tables, charts and forms; use this only for what its components can't express. ${PAGE_GUIDE} ` +
+				`Prefer show for figures, tables, charts and forms; use this only for what its components can't express. ${pageGuide(agentSettingsNow().pageNetwork)} ` +
 				'The page is also saved in the Library. Your reply should not announce it or restate it.',
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(120), v.description('A short name for the page')),
