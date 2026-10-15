@@ -6,12 +6,15 @@ import { appDb } from './client.ts';
  * a tab of its own, in the Library), with a version that goes up on each save.
  */
 
-/** What a page keeps: its own value, set through `window.anton.setState`, and its form fields' values when it keeps none. */
-export type PageState = { state: unknown; fields: Record<string, string | boolean>; version: number };
+/**
+ * What a page keeps: its own value, set through `window.anton.setState`, its
+ * form fields' values when it keeps none, and what it put in localStorage.
+ */
+export type PageState = { state: unknown; fields: Record<string, string | boolean>; storage: Record<string, string>; version: number };
 
 export type PageRow = { sessionId: string; path: string; title: string; updatedAt: string };
 
-const EMPTY = { state: null, fields: {} };
+const EMPTY = { state: null, fields: {}, storage: {} };
 
 export async function getPageState(sessionId: string, path: string): Promise<PageState> {
 	const db = await appDb();
@@ -19,7 +22,7 @@ export async function getPageState(sessionId: string, path: string): Promise<Pag
 	const row = result.rows[0];
 	if (!row) return { ...EMPTY, version: 0 };
 	const saved = row.state_json ? (JSON.parse(String(row.state_json)) as Omit<PageState, 'version'>) : EMPTY;
-	return { state: saved.state ?? null, fields: saved.fields ?? {}, version: Number(row.version) };
+	return { state: saved.state ?? null, fields: saved.fields ?? {}, storage: saved.storage ?? {}, version: Number(row.version) };
 }
 
 export async function getPageTitle(sessionId: string, path: string): Promise<string | null> {
@@ -39,14 +42,19 @@ export async function notePage(sessionId: string, path: string, title: string): 
 	});
 }
 
-/** Saves what changed (the page's value, its fields, or both) and returns the new version. */
-export async function putPageState(sessionId: string, path: string, change: { state?: unknown; fields?: Record<string, string | boolean> }, title: string): Promise<number> {
+/** Saves what changed (the page's value, its fields, its storage) and returns the new version. */
+export async function putPageState(
+	sessionId: string,
+	path: string,
+	change: { state?: unknown; fields?: Record<string, string | boolean>; storage?: Record<string, string> },
+	title: string,
+): Promise<number> {
 	const db = await appDb();
 	const tx = await db.transaction('write');
 	try {
 		const current = await tx.execute({ sql: 'SELECT state_json FROM pages WHERE session_id = ? AND path = ?', args: [sessionId, path] });
 		const saved = current.rows[0]?.state_json ? (JSON.parse(String(current.rows[0].state_json)) as Omit<PageState, 'version'>) : EMPTY;
-		const next = { state: change.state === undefined ? (saved.state ?? null) : change.state, fields: change.fields ?? saved.fields ?? {} };
+		const next = { state: change.state === undefined ? (saved.state ?? null) : change.state, fields: change.fields ?? saved.fields ?? {}, storage: change.storage ?? saved.storage ?? {} };
 		const now = new Date().toISOString();
 		const result = await tx.execute({
 			sql: `INSERT INTO pages (session_id, path, title, state_json, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)

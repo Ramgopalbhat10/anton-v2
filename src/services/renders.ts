@@ -5,6 +5,7 @@ import { safeRelativePath } from "../core/shell.ts";
 import { getPageState, getPageTitle, notePage, putPageState } from "../db/pages.ts";
 import { getSessionRecord } from "../db/sessions.ts";
 import { readOutput, saveOutput } from "./checkpoints.ts";
+import { inlineAssets } from "./page-assets.ts";
 
 /*
  * Pages the agent writes with `render_html`: one self-contained HTML document,
@@ -71,7 +72,7 @@ export const PAGE_GUIDE = [
   "Give charts fixed pixel heights, and let content set the height: no 100vh or height:100% on html or body. The frame grows to fit the page.",
   "Anton sets these CSS variables on :root: --text-primary, --text-secondary, --text-tertiary, --accent, --accent-text, --border, --surface (a card), --surface-inset, --success, --warning, --danger, --data-1 … --data-5 (series colours), --radius, --font-sans, --font-mono. Use them rather than your own colours.",
   'Links open in a new tab after the user agrees. To hand the user text to send you, call window.anton.send("text"): it goes into their message box, and they send it.',
-  "The page is a small app the user comes back to, and every copy of it (in the thread, in a tab of its own, in the Library) shows the same state. Keep whatever the user does that should last (entries, choices, progress, a game's score) with window.anton.setState(value), any JSON value; start from window.anton.state (null at first), and redraw from window.anton.onStateChange(function (state) { … }) when another copy changes it. localStorage and cookies are not available. A page that keeps no state this way has its form fields' values kept for it.",
+  "The page is a small app the user comes back to, and every copy of it (in the thread, in a tab of its own, in the Library) shows the same state. Keep whatever the user does that should last (entries, choices, progress, a game's score) with window.anton.setState(value), any JSON value; start from window.anton.state (null at first), and redraw from window.anton.onStateChange(function (state) { … }) when another copy changes it. localStorage is kept with the page the same way, so a page written for it works too; cookies are not available. A page that keeps no state either way has its form fields' values kept for it.",
 ].join(" ");
 
 /** Variables the page gets before the thread sends its own, so its first paint is already right. */
@@ -128,6 +129,12 @@ const BOOTSTRAP = `(function(){var p=window.parent,s=document.getElementById("an
  * set (with input and change events, so the page redraws) when it opens or
  * another copy changes them. Changes from elsewhere wait while one of yours is
  * on its way, so typing is never overwritten.
+ *
+ * A sandboxed page has no localStorage of its own (reading it throws), and an
+ * app written for a browser often keeps everything there. So the page gets one
+ * that is kept with its state: it starts from what was saved, saves each
+ * change, and takes other copies' changes with a storage event, as a browser
+ * tells other tabs. sessionStorage lasts as long as the page is open.
  */
 const STATE_BOOTSTRAP = `(function(){
 var p=window.parent,a=window.anton,seed=window.__antonPage||{},state=seed.state===undefined?null:seed.state,fields=seed.fields||{},own=false,applying=false,listeners=[],timer=0;
@@ -145,18 +152,26 @@ function noteFields(){if(own||applying)return;clearTimeout(timer);timer=setTimeo
 Object.defineProperty(a,"state",{get:function(){return state},enumerable:true});
 a.setState=function(v){own=true;var c=JSON.parse(JSON.stringify(v===undefined?null:v));state=c;if(!applying)post("anton/state/set",{state:c})};
 a.onStateChange=function(f){own=true;if(typeof f==="function")listeners.push(f);return function(){listeners=listeners.filter(function(g){return g!==f})}};
-window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(!d||d.jsonrpc!=="2.0"||d.method!=="anton/state/changed"||!d.params)return;var q=d.params;if(Object.prototype.hasOwnProperty.call(q,"state")&&!same(q.state,state)){state=q.state;applying=true;try{for(var i=0;i<listeners.length;i++){try{listeners[i](state)}catch(x){setTimeout(function(){throw x})}}}finally{applying=false}}if(q.fields&&!own&&!timer&&!same(q.fields,fields)){fields=q.fields;apply(fields)}});
+var store=seed.storage&&typeof seed.storage==="object"?seed.storage:{},stimer=0,LIMIT=200000,has=function(o,k){return Object.prototype.hasOwnProperty.call(o,k)};
+function saveStore(){clearTimeout(stimer);stimer=setTimeout(function(){stimer=0;post("anton/state/set",{storage:JSON.parse(JSON.stringify(store))})},50)}
+function storage(data,save){function use(){if(save)own=true}var api={getItem:function(k){use();k=String(k);return has(data,k)?data[k]:null},setItem:function(k,v){use();k=String(k);v=String(v);var old=has(data,k)?data[k]:null;data[k]=v;if(save&&JSON.stringify(data).length>LIMIT){if(old===null)delete data[k];else data[k]=old;throw new DOMException("This page keeps up to 200 KB in localStorage.","QuotaExceededError")}if(save&&old!==v)save()},removeItem:function(k){use();k=String(k);if(has(data,k)){delete data[k];if(save)save()}},clear:function(){use();var any=false;for(var k in data)if(has(data,k)){delete data[k];any=true}if(any&&save)save()},key:function(i){use();var l=Object.keys(data);return i>=0&&i<l.length?l[i]:null}};Object.defineProperty(api,"length",{get:function(){use();return Object.keys(data).length},configurable:true});if(!window.Proxy)return api;return new Proxy(api,{get:function(t,k){if(typeof k==="symbol"||k in t)return t[k];use();return has(data,k)?data[k]:undefined},set:function(t,k,v){if(typeof k!=="symbol"&&!(k in t))api.setItem(k,v);return true},deleteProperty:function(t,k){if(typeof k!=="symbol"&&!(k in t))api.removeItem(k);return true},has:function(t,k){return k in t||(typeof k!=="symbol"&&has(data,k))},ownKeys:function(){return Object.keys(data)},getOwnPropertyDescriptor:function(t,k){if(typeof k!=="symbol"&&has(data,k))return{value:data[k],writable:true,enumerable:true,configurable:true}}})}
+function install(name,value){try{Object.defineProperty(window,name,{value:value,configurable:true,enumerable:true})}catch(x){}}
+install("localStorage",storage(store,saveStore));install("sessionStorage",storage({},null));
+function takeStore(next){var before={},seen={},k;for(k in store)if(has(store,k)){before[k]=store[k];delete store[k]}for(k in next)if(has(next,k)&&typeof next[k]==="string")store[k]=next[k];var all=Object.keys(before).concat(Object.keys(store));for(var i=0;i<all.length;i++){k=all[i];if(seen[k])continue;seen[k]=1;var o=has(before,k)?before[k]:null,n=has(store,k)?store[k]:null;if(o!==n)try{window.dispatchEvent(new StorageEvent("storage",{key:k,oldValue:o,newValue:n,url:location.href}))}catch(x){}}}
+window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(!d||d.jsonrpc!=="2.0"||d.method!=="anton/state/changed"||!d.params)return;var q=d.params;if(q.storage&&typeof q.storage==="object"&&!stimer&&!same(q.storage,store))takeStore(q.storage);if(Object.prototype.hasOwnProperty.call(q,"state")&&!same(q.state,state)){state=q.state;applying=true;try{for(var i=0;i<listeners.length;i++){try{listeners[i](state)}catch(x){setTimeout(function(){throw x})}}}finally{applying=false}}if(q.fields&&!own&&!timer&&!same(q.fields,fields)){fields=q.fields;apply(fields)}});
 window.addEventListener("load",function(){setTimeout(function(){if(!own&&Object.keys(fields).length)apply(fields);post("anton/state/ready",{version:Number(seed.version)||0})},0)});
 })();`.replace(/\n/g, "");
 
 /** What a page starts from: its saved state, as a script that can't end early or be read as markup. */
-function seedScript(seed: { state: unknown; fields: Record<string, unknown>; version: number }): string {
+type Seed = { state: unknown; fields: Record<string, unknown>; storage?: Record<string, string>; version: number };
+
+function seedScript(seed: Seed): string {
   const json = JSON.stringify(seed).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
   return `<script>window.__antonPage=${json}</script>`;
 }
 
 /** Puts the theme and the bootstrap first in the document, ahead of anything the page has, so its own styles still win. */
-export function injectBootstrap(html: string, seed: { state: unknown; fields: Record<string, unknown>; version: number } = { state: null, fields: {}, version: 0 }): string {
+export function injectBootstrap(html: string, seed: Seed = { state: null, fields: {}, storage: {}, version: 0 }): string {
   const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style>${seedScript(seed)}<script>${BOOTSTRAP}</script><script>${STATE_BOOTSTRAP}</script>`;
   const opening = /<head(\s[^>]*)?>/i.exec(html);
   if (opening)
@@ -229,12 +244,13 @@ export function pageTitle(path: string): string {
   return name ? name[0].toUpperCase() + name.slice(1) : "Page";
 }
 
-/** The page, ready to serve: its bootstrap added, and its state as it stands. */
+/** The page, ready to serve: the files it names from its Library put into it, its bootstrap added, and its state as it stands. */
 export async function renderPage(id: string, path: string): Promise<string> {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   const [bytes, saved] = await Promise.all([readOutput(id, path), getPageState(id, path)]);
   if (!bytes) throw new NotFoundError("Page not found");
-  return injectBootstrap(new TextDecoder().decode(bytes), saved);
+  const html = await inlineAssets(new TextDecoder().decode(bytes), path, (file) => readOutput(id, file));
+  return injectBootstrap(html, saved);
 }
 
 /** A page's state, for a copy that heard it changed. */
@@ -254,6 +270,17 @@ function checkFields(value: unknown): Record<string, string | boolean> {
   return value as Record<string, string | boolean>;
 }
 
+/** What a page put in its localStorage: string values by key. */
+function checkStorage(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new InvalidInputError("Storage is an object.");
+  const entries = Object.entries(value);
+  if (entries.length > 5000) throw new InvalidInputError("Too many storage keys.");
+  for (const [key, item] of entries) {
+    if (key.length > 1000 || typeof item !== "string") throw new InvalidInputError("Each stored value is a string.");
+  }
+  return value as Record<string, string>;
+}
+
 /**
  * Saves a copy's change to the page's state and tells every other copy, by
  * `from`, the id the saving copy gave itself, so it can skip its own echo.
@@ -262,9 +289,10 @@ export async function savePageState(id: string, path: string, body: unknown): Pr
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   if (!(await getSessionRecord(id))) throw new NotFoundError("Session not found");
   const input = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  const change: { state?: unknown; fields?: Record<string, string | boolean> } = {};
+  const change: { state?: unknown; fields?: Record<string, string | boolean>; storage?: Record<string, string> } = {};
   if ("state" in input) change.state = input.state ?? null;
   if ("fields" in input) change.fields = checkFields(input.fields);
+  if ("storage" in input) change.storage = checkStorage(input.storage);
   if (new TextEncoder().encode(JSON.stringify(change)).length > MAX_STATE_BYTES)
     throw new InvalidInputError(`A page keeps up to ${MAX_STATE_BYTES / 1024} KB of state.`);
   const from = typeof input.from === "string" ? input.from.slice(0, 40) : "";
@@ -284,9 +312,9 @@ export async function savePageState(id: string, path: string, body: unknown): Pr
  */
 const FRAME_SCRIPT = `var f=document.getElementById("page"),url="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-state?path="+encodeURIComponent(PAGE.path),me=Math.random().toString(36).slice(2),known=-1,pending=null,flying=false,stale=false,timer=0,alone=window.parent===window;
 function toPage(m,q){if(f.contentWindow)f.contentWindow.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
-function pull(){if(pending||flying){stale=true;return}fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(s){if(!s||!(s.version>known))return;if(pending||flying){stale=true;return}known=s.version;toPage("anton/state/changed",{state:s.state,fields:s.fields})}).catch(function(){})}
+function pull(){if(pending||flying){stale=true;return}fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(s){if(!s||!(s.version>known))return;if(pending||flying){stale=true;return}known=s.version;toPage("anton/state/changed",{state:s.state,fields:s.fields,storage:s.storage})}).catch(function(){})}
 function flush(keep){clearTimeout(timer);timer=0;if(!pending||flying)return;var body=pending;pending=null;flying=true;body.from=me;fetch(url,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(body),keepalive:keep===true}).then(function(r){return r.ok?r.json():null}).then(function(s){if(s&&s.version>known)known=s.version}).catch(function(){}).then(function(){flying=false;if(pending)flush();else if(stale){stale=false;pull()}})}
-function queue(q){pending=pending||{};if(Object.prototype.hasOwnProperty.call(q,"state"))pending.state=q.state;if(q.fields&&typeof q.fields==="object")pending.fields=q.fields;clearTimeout(timer);timer=setTimeout(flush,150)}
+function queue(q){pending=pending||{};if(Object.prototype.hasOwnProperty.call(q,"state"))pending.state=q.state;if(q.fields&&typeof q.fields==="object")pending.fields=q.fields;if(q.storage&&typeof q.storage==="object")pending.storage=q.storage;clearTimeout(timer);timer=setTimeout(flush,150)}
 function changed(q){if(q&&q.from!==me&&q.version>known)pull()}
 window.addEventListener("pagehide",function(){flush(true)});
 window.addEventListener("message",function(e){var d=e.data;if(e.source===f.contentWindow){if(d&&d.jsonrpc==="2.0"&&typeof d.method==="string"&&d.method.indexOf("anton/state/")===0){var q=d.params||{};if(d.method==="anton/state/set")queue(q);else if(d.method==="anton/state/ready"){if(known<0)known=Number(q.version)||0;pull()}return}if(!alone)window.parent.postMessage(d,"*");else if(d&&d.method==="ui/open-link"&&d.params&&/^https?:/.test(d.params.url))window.open(d.params.url,"_blank","noopener")}else if(e.source===window.parent&&e.origin===location.origin){if(d&&d.method==="anton/page-changed"){changed(d.params);return}if(f.contentWindow)f.contentWindow.postMessage(d,"*")}});

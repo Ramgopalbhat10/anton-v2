@@ -885,7 +885,8 @@ const WHILE_WORKING_HINT = 'The user can write to you while you work; their mess
 /** In a chat, a small app is best as a page: it works in the thread and on the Artifacts page, with no server to keep running. */
 const APP_HINT =
 	'When asked for a small app that needs no server of its own (a tracker, a calculator, a game, a dashboard over data the user enters), build it as one page with render_html, keeping its data with window.anton.setState: ' +
-	'it works right in the thread and on the Artifacts page, and keeps what the user enters. Build files and run a server only for an app that needs a backend, packages or a build step, or when the user asks for source files.';
+	'it works right in the thread and on the Artifacts page, and keeps what the user enters. Build files and run a server only for an app that needs a backend, packages or a build step, or when the user asks for source files. ' +
+	'An app saved as files in the Library (index.html beside its CSS, scripts and images, linked by relative paths) also opens as a page there, with those files put into it and its localStorage kept; keep its scripts plain or one module each, since a module that imports another file does not load.';
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
