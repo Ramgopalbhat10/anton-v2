@@ -13,14 +13,16 @@ const { loadFlueNodeApplication } = (await import(new URL('../dist/app.mjs', imp
 };
 const application = await loadFlueNodeApplication();
 const port = Number(process.env.PORT ?? 3000);
+/** Every interface unless set; `127.0.0.1` keeps Anton off the local network when a tunnel on this machine is its only way in. */
+const hostname = process.env.HOST?.trim() || undefined;
 
 const site = new Hono();
 site.all('/api/*', (c) => application.fetch(c.req.raw));
 site.use('/*', serveStatic({ root: './dist/client' }));
 site.get('/*', serveStatic({ path: './dist/client/index.html' }));
 
-const server = serve({ fetch: site.fetch, port, serverOptions: { requestTimeout: 0 } }, () =>
-	console.log(`[anton] listening on http://localhost:${port}`),
+const server = serve({ fetch: site.fetch, port, hostname, serverOptions: { requestTimeout: 0 } }, () =>
+	console.log(`[anton] listening on http://${hostname ?? 'localhost'}:${port}`),
 );
 routeUpgrades(server as Server, '/vm/');
 
