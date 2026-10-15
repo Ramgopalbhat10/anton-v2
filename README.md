@@ -91,7 +91,7 @@ npm run build && npm run start:backup
 
 This needs [Litestream](https://litestream.io) 0.5 or later on the server and the Tigris variables above. On start it restores both files from `db/` in the Tigris bucket when the server has none, then runs Anton under Litestream, which streams every write to the bucket about once a second. A new server with the same variables starts where the old one stopped. If the restore fails, Anton does not start, because an empty database next to your storage would lose every task. Only one server may run against a bucket at a time. Settings in `litestream.yml`.
 
-Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token.
+Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token. When the proxy's tunnel runs on the same machine, start Anton with `HOST=127.0.0.1` so it listens only there and the tunnel is the only way in; otherwise it listens on every interface, and anyone on the same network can reach it without the proxy.
 
 ## Layout
 
