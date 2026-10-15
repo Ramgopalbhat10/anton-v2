@@ -135,7 +135,7 @@ function TextBlock({ space, field, title, icon, help, placeholder }: { space: Sp
 	);
 }
 
-/** The repositories threads can work on: one at least. */
+/** The repositories threads can work on; with none, threads work as chats. */
 function Repositories({ space }: { space: Space }) {
 	const save = useSave(space);
 	const projects = useProjects();
@@ -144,7 +144,7 @@ function Repositories({ space }: { space: Space }) {
 		<Block
 			title="Repositories"
 			icon={FolderGit2}
-			help="Threads work on one of these each, on their own branch. Removing one keeps its threads."
+			help="Threads work on one of these each, on their own branch; without any, threads work as chats with a scratch sandbox. Removing one keeps its threads."
 			aside={
 				<Menu>
 					<MenuTrigger asChild>
@@ -172,11 +172,26 @@ function Repositories({ space }: { space: Space }) {
 							icon={X}
 							size="xs"
 							label={`Remove ${repo.repoFullName}`}
-							disabled={space.repos.length === 1 || save.isPending}
+							disabled={save.isPending}
 							onClick={() => save.mutate({ repoIds: space.repoIds.filter((id) => id !== repo.id) })}
 						/>
 					</div>
 				))}
+				{space.repos.length === 0 ? (
+					<div className="flex h-10 items-center text-[12.5px] text-(--text-tertiary)">
+						{others.length || projects.isPending ? (
+							'None. Threads work as chats until you add one.'
+						) : (
+							<span>
+								None. Threads work as chats until you{' '}
+								<Link to="/settings/$section" params={{ section: 'repos' }} className="text-(--accent-text) hover:underline">
+									add a repository in Settings
+								</Link>
+								.
+							</span>
+						)}
+					</div>
+				) : null}
 			</div>
 			{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
 		</Block>

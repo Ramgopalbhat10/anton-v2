@@ -5,7 +5,7 @@ import { Caption, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { ThreadGlyph } from '@/components/thread-glyph';
-import { api, type Session, type ThreadState } from '@/lib/api';
+import { api, repoShort, type Session, type ThreadState } from '@/lib/api';
 import { age, elapsed } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -154,7 +154,7 @@ export function ThreadCard({ thread, className }: { thread: Session; className?:
 					<ThreadStatePill thread={thread} />
 				</div>
 				<div className="flex items-center gap-2 pl-[26px]">
-					<Caption className="shrink-0">{thread.repo.split('/').pop()}</Caption>
+					<Caption className="shrink-0">{repoShort(thread)}</Caption>
 					<span aria-hidden className={cn('relative h-px min-w-6 flex-1 overflow-hidden', working ? 'in-sweep bg-(--accent-border)' : 'bg-(--border-subtle)')} />
 					<Caption tone={working ? 'accent' : waiting ? (broken ? 'danger' : 'warning') : undefined} className="shrink-0">
 						{phase}

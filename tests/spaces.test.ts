@@ -70,7 +70,7 @@ beforeEach(() => {
 const api = await addProject('acme/api');
 const web = await addProject('acme/web');
 
-test('a project needs a name and a known repository', async () => {
+test('a project needs a name, and only known repositories', async () => {
 	await assert.rejects(() => spaces.createSpace({ name: ' ', repoIds: [api.id] }), /Name the project/);
 	await assert.rejects(() => spaces.createSpace({ name: 'Nothing', repoIds: ['proj_missing'] }), /repository/);
 	const space = await spaces.createSpace({ name: 'Billing', goal: 'Ship billing v2', repoIds: [api.id] });
@@ -83,7 +83,36 @@ test('a project needs a name and a known repository', async () => {
 	const edited = await spaces.editSpace(space.id, { repoIds: [api.id, web.id], coordinatorModel: 'openrouter/test/cheap' });
 	assert.equal(edited.repos.length, 2);
 	await assert.rejects(() => spaces.editSpace(space.id, { coordinatorModel: 'openrouter/none/such' }), /Unknown model/);
-	await assert.rejects(() => spaces.editSpace(space.id, { repoIds: [] }), /repository/);
+	await assert.rejects(() => spaces.editSpace(space.id, { repoIds: ['proj_missing'] }), /repository/);
+	assert.deepEqual((await spaces.editSpace(space.id, { repoIds: [] })).repos, [], 'the last repository can be removed');
+});
+
+test('a project without repositories starts its threads as chats', async () => {
+	const space = await spaces.createSpace({ name: 'Research', goal: 'Compare vendors' });
+	assert.deepEqual(space.repos, []);
+	const thread = await spaces.startThread(space.id, { title: 'Pricing', brief: 'Compare the pricing pages', planMode: true });
+	assert.equal(thread.projectId, null);
+	assert.equal(thread.repo, '');
+	assert.equal(thread.spaceId, space.id);
+	assert.equal(thread.planMode, false, 'a chat has no code to plan');
+	assert.deepEqual(toThreads, [{ id: thread.id, text: 'Compare the pricing pages' }]);
+	await assert.rejects(() => spaces.startThread(space.id, { title: 'No', brief: 'Fix the API', repo: 'acme/api' }), /not one of this project's repositories/);
+	const block = await stateBlock(space.id);
+	assert.match(block, /Repositories: none/);
+	assert.match(block, /"Pricing" · no repository · /);
+
+	// A repository added later is where new threads start; a thread can still ask for none.
+	await spaces.editSpace(space.id, { repoIds: [api.id] });
+	assert.equal((await spaces.startThread(space.id, { title: 'Fix', brief: 'Fix the API' })).repo, 'acme/api');
+	assert.equal((await spaces.startThread(space.id, { title: 'Read', brief: 'Read the docs', repo: 'none' })).projectId, null);
+	assert.equal((await spaces.startThread(space.id, { title: 'Ask', brief: 'Ask around', projectId: null })).projectId, null);
+
+	// A chat can join a project as a thread, and stays a chat.
+	const chat = await sessions.createSession({ title: 'Loose chat' });
+	const moved = await spaces.moveToSpace(chat.id, space.id);
+	assert.equal(moved.spaceId, space.id);
+	assert.equal(moved.projectId, null);
+	assert.deepEqual((await spaces.spaceView(space.id)).repoIds, [api.id]);
 });
 
 test('threads beyond the limit queue, and start as others finish', async () => {

@@ -165,8 +165,8 @@ function ProjectItems({ session }: { session: Session }) {
 					{session.resolvedAt ? 'Reopen thread' : 'Mark done'}
 				</MenuItem>
 			) : null}
-			{/* A project's threads each work on one of its repositories, so a chat stays out. */}
-			{others.length && !isChat(session) ? (
+			{/* A task's repository joins the project's; a chat stays a chat, as threads of a project without repositories are. */}
+			{others.length ? (
 				<MenuSub>
 					<MenuSubTrigger icon={FolderKanban}>{session.spaceId ? 'Move to another project' : 'Move to project'}</MenuSubTrigger>
 					<MenuSubContent>

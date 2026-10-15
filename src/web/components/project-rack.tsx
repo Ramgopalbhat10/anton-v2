@@ -9,7 +9,7 @@ import { Btn, Icon } from '@/components/signal';
 import { FollowUp, PER_BAY, RackArrows, type RackBay, type RackLook, RackStats, RackWell, type RackWellHandle } from '@/components/task-rack';
 import { NextSteps, useOpenThread } from '@/components/thread-card';
 import { Glyph, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
-import { api, type Session, type Space } from '@/lib/api';
+import { api, branchLabel, repoShort, type Session, type Space } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -92,7 +92,7 @@ function ThreadDetails({ thread }: { thread: Session }) {
 					</div>
 				) : null}
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
-					{thread.repo.split('/').pop()} · {thread.workspace ? thread.branch : `${thread.baseBranch} (read-only)`}
+					{repoShort(thread)} · {branchLabel(thread)}
 				</div>
 			</div>
 			<RackStats stats={stats} />

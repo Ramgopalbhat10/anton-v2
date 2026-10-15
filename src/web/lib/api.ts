@@ -112,11 +112,12 @@ export type Space = {
 	updatedAt: string;
 };
 
-export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
+export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds?: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
 export type SpaceChange = Partial<
 	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
 >;
-export type ThreadInput = { title?: string; brief: string; projectId?: string; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
+/** `projectId` null starts a thread with no repository, a chat. */
+export type ThreadInput = { title?: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
 export type SpaceFile = { path: string; size: number; modifiedAt: string };
 export type SpaceUsage = {
 	today: number;

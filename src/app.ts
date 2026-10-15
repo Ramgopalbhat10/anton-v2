@@ -484,7 +484,7 @@ app.delete('/api/automations/:id', async (c) => {
 app.get('/api/projects/:id/branches', async (c) => c.json({ branches: await branches(c.req.param('id')) }));
 app.get('/api/projects/:id/files', async (c) => c.json({ paths: await projectFiles(c.req.param('id'), c.req.query('branch')) }));
 
-// Projects: a coordinator conversation over parallel threads, each a task on one of the project's repositories.
+// Projects: a coordinator conversation over parallel threads, each a task on one of the project's repositories, or a chat when it has none.
 const SPACE_FIELDS = {
 	name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))),
 	// A drawn icon and optional tint, like "rocket" or "rocket:violet"; never an emoji.
@@ -498,7 +498,7 @@ app.get('/api/spaces', async (c) => c.json({ spaces: await spacesView() }));
 app.post('/api/spaces', async (c) => {
 	const input = await body(
 		c,
-		v.object({ ...SPACE_FIELDS, name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)), repoIds: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(20)) }),
+		v.object({ ...SPACE_FIELDS, name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)), repoIds: v.optional(v.pipe(v.array(v.string()), v.maxLength(20)), []) }),
 	);
 	return c.json(await createSpace(input));
 });
@@ -533,7 +533,8 @@ app.post('/api/spaces/:id/threads', async (c) => {
 		v.object({
 			title: v.optional(v.pipe(v.string(), v.maxLength(200)), ''),
 			brief: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40_000)),
-			projectId: v.optional(v.string()),
+			// null starts a thread with no repository, a chat.
+			projectId: v.optional(v.nullable(v.string())),
 			repo: v.optional(v.string()),
 			model: v.optional(v.string()),
 			reasoning: v.optional(REASONING),

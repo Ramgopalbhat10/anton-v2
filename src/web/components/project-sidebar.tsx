@@ -5,7 +5,7 @@ import { ProjectIcon } from '@/components/project-icon';
 import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
 import { ThreadStateIcon } from '@/components/thread-card';
 import { Glyph } from '@/components/thread-glyph';
-import type { Session, Space, ThreadState } from '@/lib/api';
+import { repoShort, type Session, type Space, type ThreadState } from '@/lib/api';
 import { age } from '@/lib/format';
 import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -78,7 +78,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 					))}
 					{list.length === 0 ? (
 						<Link to="/projects" search={{ create: true }} onClick={onNavigate} className="mx-0 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled) hover:text-(--text-tertiary)">
-							Group repositories and run threads in parallel.
+							Group work and run threads in parallel.
 						</Link>
 					) : null}
 				</div>
@@ -105,7 +105,7 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 			<span className="relative flex min-w-0 flex-1 flex-col gap-px">
 				<span className="truncate text-[13px]">{thread.title}</span>
 				<span className={cn('truncate text-[11px]', state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-tertiary)')}>
-					{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && thread.repo.split('/').pop(), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+					{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
 				</span>
 			</span>
 		</Link>

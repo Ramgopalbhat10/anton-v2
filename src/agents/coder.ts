@@ -637,8 +637,21 @@ function useRunScript(id: string, scope: ScriptScope) {
 }
 
 /** Adds a note to the repo's memory, which every later task reads; a project's thread can save to the project's memory instead. */
-function useRemember(id: string, project: ThreadProject | null) {
+function useRemember(id: string, project: ThreadProject | null, chat: boolean) {
 	const note = v.pipe(v.string(), v.minLength(1), v.description('One line'));
+	// A project's chat thread has no repository to keep notes for, only the project's memory.
+	if (chat) {
+		if (!project) return;
+		useTool(
+			defineTool({
+				name: 'remember',
+				description: 'Save one short, lasting note to the project memory, which its coordinator and every thread read: a decision, a preference, a pitfall. Nothing secret.',
+				input: v.object({ note }),
+				run: async ({ data }) => ({ output: await remember(id, data.note, 'project') }),
+			}),
+		);
+		return;
+	}
 	if (!project) {
 		useTool(
 			defineTool({
@@ -807,14 +820,14 @@ function useProjectFiles(id: string) {
 }
 
 /** What a project's thread knows of its project, after the repo notes. */
-function projectPrompt(project: ThreadProject | null, workspace: boolean): string {
+function projectPrompt(project: ThreadProject | null, workspace: boolean, chat = false): string {
 	if (!project) return '';
 	return [
 		`\n\nThis task is a thread of the project "${project.name}". The project's coordinator or the user gave you its brief; do that work, then report what you did in a few lines, since your last reply is what the coordinator reads.`,
 		'When you need a decision only the user can make, ask it with the ask tool, or end your reply with the question.',
 		project.goal ? `The project's goal: ${project.goal}` : '',
 		workspace
-			? `Files the user added to the project are in ../${PROJECT_FILES} (beside the repo).`
+			? `Files the user added to the project are in ../${PROJECT_FILES} (beside ${chat ? 'your working folder' : 'the repo'}).`
 			: 'Files the user added to the project can be read with read_project_file.',
 		project.instructions ? `\nThe project's instructions from the user:\n${project.instructions}` : '',
 		project.memory ? `\nThe project's memory (decisions and preferences saved earlier; they may be out of date):\n${project.memory}` : '',
@@ -999,7 +1012,7 @@ export function Coder({ id }: AgentProps) {
 	if (scripts) useRunScript(id, scope);
 	const scriptHint = scripts ? `${SCRIPT_HINT} ${mcpServersFor(id).some((server) => !directServer(server, true)) ? `${SCRIPTED_MCP_HINT} ` : ''}` : '';
 	const project = threadProjectFor(id);
-	if (!chat) useRemember(id, project);
+	useRemember(id, project, chat);
 	useTodos(id);
 	useAgentRuns(id);
 	const visual = agentSettingsNow().visualReplies;
@@ -1065,7 +1078,7 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${visualHint(visual)} ${SKILL_HINT}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${visualHint(visual)} ${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));

@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
 	spaces: vi.fn(),
 	nudgeThread: vi.fn(async () => ({})),
 	stopAgent: vi.fn(async () => undefined),
+	models: vi.fn(async () => ({ models: [], default: 'openrouter/test/cheap' })),
+	startThread: vi.fn(async () => ({ id: 'new' })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadCard, nextSteps } = await import('@/components/thread-card');
@@ -20,6 +22,7 @@ const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/components/project-viz');
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
+const { NewThreadForm } = await import('@/components/project-feed');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -117,6 +120,24 @@ describe('threads', () => {
 
 		await userEvent.click(card);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks'));
+	});
+
+	it('starts a project without repositories on threads with none, named as chats', async () => {
+		const bare: Space = { ...space, repoIds: [], repos: [] };
+		const router = withRouter(() => (
+			<div>
+				<ThreadCard thread={thread({ id: 'chat', title: 'Compare vendors', projectId: null, repo: '' })} />
+				<NewThreadForm space={bare} onDone={() => {}} />
+			</div>
+		));
+		const card = await screen.findByRole('article', { name: 'Compare vendors' });
+		expect(within(card).getByText('Chat')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /No repository/ })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: /Plan/ })).toBeNull();
+		await userEvent.type(screen.getByRole('textbox', { name: /works without a repository/ }), 'Compare the pricing pages');
+		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+		await waitFor(() => expect(api.startThread).toHaveBeenCalledWith('space_1', expect.objectContaining({ brief: 'Compare the pricing pages', projectId: null, planMode: false })));
+		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/new'));
 	});
 
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {

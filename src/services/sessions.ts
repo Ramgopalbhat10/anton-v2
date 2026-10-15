@@ -111,7 +111,6 @@ export async function createSession(input: {
 	prUrl?: string;
 	baseSha?: string;
 }): Promise<Session> {
-	if (!input.projectId && input.spaceId) throw new InvalidInputError("A project's thread works on one of its repositories.");
 	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch, input.baseSha);
 	const id = randomUUID();
 	const title = input.title?.trim() || 'New task';

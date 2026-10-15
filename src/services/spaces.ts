@@ -60,7 +60,7 @@ export async function spaceView(id: string): Promise<SpaceView> {
 	return present(await existing(id));
 }
 
-/** Only repositories Anton already knows, so every thread can start on one. */
+/** Only repositories Anton already knows, so every thread can start on one. A project may have none: its threads are then chats. */
 async function knownRepos(ids: string[]): Promise<string[]> {
 	const known = new Set((await listProjects()).map((project) => project.id));
 	const unknown = ids.filter((id) => !known.has(id));
@@ -68,13 +68,12 @@ async function knownRepos(ids: string[]): Promise<string[]> {
 	return [...new Set(ids)];
 }
 
-export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
+export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds?: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
 
 export async function createSpace(input: SpaceInput): Promise<SpaceView> {
 	const name = input.name.trim();
 	if (!name) throw new InvalidInputError('Name the project');
-	const repoIds = await knownRepos(input.repoIds);
-	if (repoIds.length === 0) throw new InvalidInputError('Pick at least one repository; every thread works on one');
+	const repoIds = await knownRepos(input.repoIds ?? []);
 	const id = await insertSpace({ name, icon: input.icon?.trim() || null, goal: input.goal?.trim() ?? '', instructions: input.instructions, autonomy: input.autonomy, maxParallel: input.maxParallel });
 	await setSpaceRepos(id, repoIds);
 	return spaceView(id);
@@ -107,11 +106,8 @@ export async function editSpace(id: string, change: SpaceChange): Promise<SpaceV
 	if (fields.name !== undefined && !fields.name.trim()) throw new InvalidInputError('Name the project');
 	if ((fields.instructions?.length ?? 0) > MAX_INSTRUCTIONS) throw new InvalidInputError(`Keep the instructions under ${MAX_INSTRUCTIONS.toLocaleString()} characters`);
 	if ((fields.memory?.length ?? 0) > MAX_SPACE_MEMORY) throw new InvalidInputError(`Keep the memory under ${MAX_SPACE_MEMORY.toLocaleString()} characters`);
-	if (repoIds) {
-		const known = await knownRepos(repoIds);
-		if (known.length === 0) throw new InvalidInputError('Keep at least one repository');
-		await setSpaceRepos(id, known);
-	}
+	// Removing the last repository is allowed: the project's new threads then start as chats; its threads stay.
+	if (repoIds) await setSpaceRepos(id, await knownRepos(repoIds));
 	await updateSpace(id, {
 		...fields,
 		...(fields.name !== undefined ? { name: fields.name.trim() } : {}),
@@ -143,29 +139,32 @@ export async function findThread(spaceId: string, ref: string): Promise<Session>
 	throw new NotFoundError(`No thread ${ref} in this project`);
 }
 
-export type ThreadInput = { title: string; brief: string; projectId?: string; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
+/** `projectId` null, or `repo` "none", starts a thread with no repository: a chat, as every thread of a project without repositories is. */
+export type ThreadInput = { title: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
 
-/** The repository a new thread works on: the one named, or the project's first. */
-async function repoFor(space: Space, input: ThreadInput): Promise<string> {
+const NO_REPO = new Set(['none', 'no repository', 'chat']);
+
+/** The repository a new thread works on: the one named, or the project's first; none for a chat. */
+async function repoFor(space: Space, input: ThreadInput): Promise<string | undefined> {
+	if (input.projectId === null) return undefined;
 	if (input.projectId) {
 		if (!space.repoIds.includes(input.projectId)) throw new InvalidInputError('That repository is not in this project');
 		return input.projectId;
 	}
-	if (input.repo) {
+	if (input.repo?.trim()) {
 		const wanted = input.repo.trim().toLowerCase();
+		if (NO_REPO.has(wanted)) return undefined;
 		const projects = await Promise.all(space.repoIds.map((id) => getProject(id)));
 		const match = projects.find((project) => project && (project.repoFullName.toLowerCase() === wanted || project.repoFullName.split('/').pop()?.toLowerCase() === wanted));
 		if (!match) throw new InvalidInputError(`${input.repo} is not one of this project's repositories`);
 		return match.id;
 	}
-	const first = space.repoIds[0];
-	if (!first) throw new InvalidInputError('Add a repository to the project first');
-	return first;
+	return space.repoIds[0];
 }
 
 /**
- * Starts a thread: a task on one of the project's repositories, given its
- * brief as its first message. When the project already has as many threads
+ * Starts a thread: a task on one of the project's repositories, or a chat
+ * when it has none, given its brief as its first message. When the project already has as many threads
  * working as it allows, or is paused, the thread waits as queued and starts
  * when a slot frees.
  */
@@ -258,14 +257,13 @@ export async function nudgeThread(spaceId: string, threadId: string, text: strin
 	return getSession(threadId);
 }
 
-/** Moves a task into a project as a thread, or out of one; the repository must be one of the project's. */
+/** Moves a task into a project as a thread, or out of one; a task's repository joins the project's, and a chat stays a chat. */
 export async function moveToSpace(threadId: string, spaceId: string | null): Promise<Session> {
 	const record = await getSessionRecord(threadId);
 	if (!record) throw new NotFoundError('Session not found');
 	if (spaceId) {
-		if (!record.projectId) throw new InvalidInputError('A chat has no repository, so it cannot be a thread of a project.');
 		const space = await existing(spaceId);
-		if (!space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
+		if (record.projectId && !space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
 	}
 	await updateSession(threadId, { spaceId, brief: null, reportedState: null });
 	announce({ kind: 'sessions' });

@@ -51,6 +51,9 @@ function ProjectCard({ space }: { space: Space }) {
 						{repo.repoFullName.split('/').pop()}
 					</span>
 				))}
+				{space.repos.length === 0 ? (
+					<span className="flex h-5 items-center rounded-[6px] border border-dashed border-(--border-subtle) px-1.5 font-mono text-[10.5px] text-(--text-tertiary)">no repository</span>
+				) : null}
 			</div>
 			{/* The split and the list below say what needs you and what runs; no figures to repeat them. */}
 			<div className="flex items-end gap-3 px-4 pt-3">
@@ -78,7 +81,7 @@ function ProjectCard({ space }: { space: Space }) {
 	);
 }
 
-/** Name, goal and repositories for a new project, and optionally a first message for its coordinator. */
+/** Name, goal and, optionally, repositories for a new project, and a first message for its coordinator. */
 function NewProjectDialog({ onClose }: { onClose: () => void }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -126,7 +129,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 					</div>
 					<textarea aria-label="Goal" value={goal} onChange={(event) => setGoal(event.target.value)} rows={2} placeholder="Goal: what this project is for" className={`${AREA} text-[13px] leading-[19px]`} />
 					<div className="flex flex-col gap-1.5">
-						<Caption>Repositories · threads work on one each</Caption>
+						<Caption>Repositories · optional · {repoIds.length ? 'threads work on one each' : 'without one, threads work as chats'}</Caption>
 						<div className="flex flex-col gap-1">
 							{projects.isPending ? <Spinner size={12} /> : null}
 							{(projects.data?.projects ?? []).map((project) => {
@@ -149,9 +152,13 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 								);
 							})}
 							{projects.data && projects.data.projects.length === 0 ? (
-								<Link to="/settings/$section" params={{ section: 'repos' }} className="text-[12px] text-(--accent-text) hover:underline">
-									Add a repository in Settings first
-								</Link>
+								<span className="text-[12px] text-(--text-tertiary)">
+									No repositories yet. You can{' '}
+									<Link to="/settings/$section" params={{ section: 'repos' }} className="text-(--accent-text) hover:underline">
+										add one in Settings
+									</Link>{' '}
+									and to the project later.
+								</span>
 							) : null}
 						</div>
 					</div>
@@ -165,7 +172,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 					<Btn size="sm" variant="ghost" onClick={onClose}>
 						Cancel
 					</Btn>
-					<Btn type="submit" size="sm" variant="primary" icon={Plus} disabled={!name.trim() || repoIds.length === 0 || create.isPending}>
+					<Btn type="submit" size="sm" variant="primary" icon={Plus} disabled={!name.trim() || create.isPending}>
 						{create.isPending ? 'Creating…' : 'Create project'}
 					</Btn>
 				</footer>
@@ -203,7 +210,7 @@ export function ProjectsPage() {
 					<EmptyState
 						art={<ProjectArt className="w-full max-w-[360px]" />}
 						title="Run several threads at once"
-						body="A project groups repositories under one goal. Its coordinator splits the work into threads that run in parallel, each on its own branch, and tells you which need you."
+						body="A project groups work under one goal, with or without repositories. Its coordinator splits the work into threads that run in parallel, each in its own sandbox, and tells you which need you."
 					>
 						<Btn size="sm" variant="primary" icon={Plus} onClick={() => setCreating(true)}>
 							New project

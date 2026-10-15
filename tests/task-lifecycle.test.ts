@@ -1554,8 +1554,7 @@ test('a chat has no repository: a scratch sandbox when it needs one, its files a
 	await assert.rejects(() => files.readFile(chat.id, 'missing.py'));
 
 	await assert.rejects(() => openPullRequest(chat.id, { title: 'No', body: '' }), /no repository/);
-	await assert.rejects(() => moveToSpace(chat.id, 'any'), /no repository/);
-	await assert.rejects(() => sessions.createSession({ spaceId: 'any' }), /repositories/);
+	await assert.rejects(() => moveToSpace(chat.id, 'any'), /Project not found/);
 	await addSessionUsage(chat.id, { inputTokens: 7, outputTokens: 3, cost: 0.01 });
 	await sessions.deleteSession(chat.id);
 	assert.equal((await usageView()).byRepo.find((row) => row.key === '')?.tokens, 10, "chats' spend is kept under Chats, even once deleted");
