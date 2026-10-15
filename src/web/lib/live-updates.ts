@@ -1,5 +1,6 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
@@ -8,7 +9,9 @@ type Change =
 	| { kind: 'models' }
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
-	| PageChange;
+	| PageChange
+	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
+	| { kind: 'now'; id: string; now: AgentNow | null };
 
 /** A copy of a page saved its state (src/services/renders.ts). */
 export type PageChange = { kind: 'page'; id: string; path: string; version: number; from: string };
@@ -22,7 +25,7 @@ export function onPageChange(listener: (change: PageChange) => void): () => void
 }
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
-function staleFor(change: Change): QueryKey[] {
+function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// The pages themselves fetch their state; only the Artifacts page's edited times move.
 	if (change.kind === 'page') return [['artifacts']];
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
@@ -92,6 +95,10 @@ export function useLiveUpdates() {
 		let dropped = false;
 		events.onmessage = (event) => {
 			const change = JSON.parse(event.data) as Change;
+			if (change.kind === 'now') {
+				queryClient.setQueryData(['now', change.id], { now: change.now });
+				return;
+			}
 			if (change.kind === 'page') for (const listener of pageListeners) listener(change);
 			refetch(staleFor(change));
 		};

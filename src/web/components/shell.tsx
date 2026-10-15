@@ -18,7 +18,7 @@ import { useTaskNotifications } from '@/lib/notifications';
 import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence } from '@/lib/push';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
-import { forgetWorking, showWorking } from '@/lib/working';
+import { forgetWorking, showWorking, taskStatus } from '@/lib/working';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -223,10 +223,12 @@ export function usePanelChange(
 	}, []);
 }
 
-/** The task's coding agent; sending it a message shows the task working at once, everywhere it is listed. */
+/** The task's coding agent; sending it a message shows the task working at once, everywhere it is listed, and a reply started anywhere shows as working. */
 function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const queryClient = useQueryClient();
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
+	const working = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data?.working ?? false;
+	const status = taskStatus(agent.status, working);
 	const flueSend = agent.sendMessage;
 	const sendMessage = useCallback<UseFlueAgentResult['sendMessage']>(
 		async (...args) => {
@@ -240,7 +242,7 @@ function useTaskAgent(sessionId: string): UseFlueAgentResult {
 		},
 		[flueSend, queryClient, sessionId],
 	);
-	return useMemo(() => ({ ...agent, sendMessage }), [agent, sendMessage]);
+	return useMemo(() => ({ ...agent, status, sendMessage }), [agent, status, sendMessage]);
 }
 
 /**

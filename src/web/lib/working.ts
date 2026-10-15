@@ -27,3 +27,15 @@ export function forgetWorking(queryClient: QueryClient, id: string): void {
 	void queryClient.invalidateQueries({ queryKey: ['sessions'], exact: true });
 	void queryClient.invalidateQueries({ queryKey: ['session', id], exact: true });
 }
+
+type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error';
+
+/**
+ * The agent's status as a task's page shows it. The client counts the agent busy only for a
+ * message this page sent, or while text streams; a reply started elsewhere (a project's
+ * coordinator, an automation, another tab) or before the page opened would read as idle between
+ * its steps, so the server's word that the task is working counts too.
+ */
+export function taskStatus<T extends AgentStatus>(local: T, working: boolean): T | 'streaming' {
+	return working && (local === 'idle' || local === 'connecting') ? 'streaming' : local;
+}

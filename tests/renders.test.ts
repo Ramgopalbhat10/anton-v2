@@ -50,21 +50,23 @@ test('a page without a kept title is named for its file', () => {
 
 test('every copy of a page shares its state: saved, announced to the others, and served with the page', async () => {
 	const page = await saveRender('r1', { title: 'Habit tracker', html: '<html><body><div id="app"></div></body></html>' });
-	assert.deepEqual(await pageState('r1', page.path), { state: null, fields: {}, version: 0 });
+	assert.deepEqual(await pageState('r1', page.path), { state: null, fields: {}, storage: {}, version: 0 });
 	const heard: unknown[] = [];
 	const stop = onChange((change) => heard.push(change));
 	const first = await savePageState('r1', page.path, { state: { done: ['read'] }, from: 'tab-a' });
 	const second = await savePageState('r1', page.path, { fields: { '#name': 'Ada', '#late': true }, from: 'tab-b' });
+	const third = await savePageState('r1', page.path, { storage: { meals: '[{"kcal":420}]' }, from: 'tab-a' });
 	stop();
-	assert.deepEqual([first.version, second.version], [1, 2]);
+	assert.deepEqual([first.version, second.version, third.version], [1, 2, 3]);
 	assert.deepEqual(heard, [
 		{ kind: 'page', id: 'r1', path: page.path, version: 1, from: 'tab-a' },
 		{ kind: 'page', id: 'r1', path: page.path, version: 2, from: 'tab-b' },
+		{ kind: 'page', id: 'r1', path: page.path, version: 3, from: 'tab-a' },
 	]);
-	// Fields and the page's own value are kept apart, so saving one keeps the other.
-	assert.deepEqual(await pageState('r1', page.path), { state: { done: ['read'] }, fields: { '#name': 'Ada', '#late': true }, version: 2 });
+	// The page's own value, its fields and its localStorage are kept apart, so saving one keeps the others.
+	assert.deepEqual(await pageState('r1', page.path), { state: { done: ['read'] }, fields: { '#name': 'Ada', '#late': true }, storage: { meals: '[{"kcal":420}]' }, version: 3 });
 	const html = await renderPage('r1', page.path);
-	assert.match(html, /window\.__antonPage=\{"state":\{"done":\["read"\]\},"fields":\{"#name":"Ada","#late":true\},"version":2\}/);
+	assert.match(html, /window\.__antonPage=\{"state":\{"done":\["read"\]\},"fields":\{"#name":"Ada","#late":true\},"storage":\{"meals":"\[\{\\"kcal\\":420\}\]"\},"version":3\}/);
 	// The new tab is named for the page.
 	assert.match((await pageFrame('r1', page.path)).html, /<title>Habit tracker<\/title>/);
 });
@@ -75,6 +77,7 @@ test("a page's state can't end its script, grow without bound, or hold anything 
 	assert.doesNotMatch(await renderPage('r1', page.path), /<\/script><script>alert/);
 	await assert.rejects(savePageState('r1', page.path, { state: 'x'.repeat(300 * 1024) }), /256 KB/);
 	await assert.rejects(savePageState('r1', page.path, { fields: { a: { nested: 1 } } }), /string or a checked state/);
+	await assert.rejects(savePageState('r1', page.path, { storage: { a: 1 } }), /stored value is a string/);
 	await assert.rejects(savePageState('r1', 'notes.md', { state: 1 }), /Not a page/);
 	await assert.rejects(savePageState('nope', page.path, { state: 1 }), /Session not found/);
 });
@@ -92,6 +95,21 @@ test('the Artifacts page lists what the agent made in every task, with pages by 
 	// Kept until the Library changes, then read again.
 	await removeOutput('r2', 'reports/summary.md');
 	assert.deepEqual((await listArtifacts()).filter((artifact) => artifact.sessionId === 'r2').map((artifact) => artifact.path), [page.path]);
+});
+
+test('a page in a folder of its own files is served with them in it: its stylesheet, script and images', async () => {
+	await saveOutput('r1', 'nourish/index.html', new TextEncoder().encode('<!doctype html><html><head><link rel="stylesheet" href="styles.css"><script src="https://cdn.example.com/x.js"></script></head><body><img src="./img/logo.png"><script src="app.js" defer></script></body></html>'));
+	await saveOutput('r1', 'nourish/styles.css', new TextEncoder().encode('body{background:url(img/logo.png)}'));
+	await saveOutput('r1', 'nourish/app.js', new TextEncoder().encode('localStorage.setItem("x","1");'));
+	await saveOutput('r1', 'nourish/img/logo.png', new Uint8Array([137, 80, 78, 71]));
+	const html = await renderPage('r1', 'nourish/index.html');
+	assert.match(html, /<style>body\{background:url\("data:image\/png;base64,iVBORw=="\)\}<\/style>/);
+	assert.match(html, /<script>localStorage\.setItem\("x","1"\);<\/script>/);
+	assert.match(html, /<img src="data:image\/png;base64,iVBORw==">/);
+	// The web stays out: the page has no network.
+	assert.match(html, /<script src="https:\/\/cdn\.example\.com\/x\.js"><\/script>/);
+	// The page gets a localStorage of its own, since a sandboxed page has none.
+	assert.match(html, /install\("localStorage"/);
 });
 
 test('the page has no network, and its frame page lets it go nowhere but this origin', () => {

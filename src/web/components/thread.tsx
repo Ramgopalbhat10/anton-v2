@@ -12,7 +12,7 @@ import { ShowCard } from '@/components/show-card';
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { type AgentNow, api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
 import type { ImageAttachment } from '@/lib/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
@@ -397,9 +397,17 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
 
 /** Your message gets a new object each chunk (the client gives it back its local id), so it compares by its parts. */
-const UserMessage = memo(UserMessageView, (prev, next) => prev.message.parts === next.message.parts && sameItems(prev.meta, next.meta));
+const UserMessage = memo(UserMessageView, (prev, next) => prev.message.parts === next.message.parts && prev.note === next.note && sameItems(prev.meta, next.meta));
 
-function UserMessageView({ message, meta }: { message: FlueConversationMessage; meta: string[] }) {
+/**
+ * A message sent while the agent works joins the reply in hand: the agent reads it between two
+ * steps and answers within that reply. The runtime lists it after the whole reply, so it says so,
+ * rather than reading as a message nobody answered.
+ */
+const JOINING = 'Anton reads this between its steps';
+const JOINED = 'Read while Anton worked on the reply above';
+
+function UserMessageView({ message, meta, note }: { message: FlueConversationMessage; meta: string[]; note?: string }) {
 	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
@@ -417,6 +425,12 @@ function UserMessageView({ message, meta }: { message: FlueConversationMessage; 
 			<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
 				{text}
 			</div>
+			{note ? (
+				<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
+					{note}
+				</div>
+			) : null}
 			{/* The same for every message, so it waits for the pointer. */}
 			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em] opacity-0 transition-opacity duration-(--duration-micro) group-hover/user:opacity-100">
 				{meta.map((item, index) => (
@@ -614,22 +628,96 @@ const SettlementNotice = memo(function SettlementNotice({ message }: { message: 
 	return <Notice>{text || 'The agent turn failed. Send the message again to retry.'}</Notice>;
 });
 
+/** The last part of a path, for a line that names a file. */
+const baseName = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
+
+/** Size of what the model has written so far, as a file would be measured. */
+function written(chars: number): string {
+	return chars < 1024 ? `${chars} B` : `${(chars / 1024).toFixed(chars < 10 * 1024 ? 1 : 0)} KB`;
+}
+
+/** Where the reply stands, for the line when Anton has not heard what the agent does: not begun, being written, or written and wrapping up. */
+type ReplyPhase = 'starting' | 'replying' | 'finishing';
+
+/** What the agent is doing this moment, in a few words. */
+export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
+	if (!now) return phase === 'replying' ? 'Working' : phase === 'finishing' ? 'Wrapping up' : 'Starting the agent';
+	const file = now.detail ? baseName(now.detail) : null;
+	const agent = now.detail ? `the ${now.detail} agent` : 'a subagent';
+	switch (now.what) {
+		case 'thinking':
+			return 'Thinking';
+		case 'replying':
+			return 'Writing the reply';
+		case 'compacting':
+			return 'Compacting the conversation';
+		case 'finishing':
+			return 'Wrapping up';
+		case 'writing': {
+			const size = now.chars >= 200 ? ` · ${written(now.chars)}` : '';
+			if (now.tool === 'write' && file) return `Writing ${file}${size}`;
+			if (now.tool === 'edit' && file) return `Editing ${file}${size}`;
+			if (now.tool === 'bash') return 'Writing a command';
+			if (now.tool === 'run_script') return `Writing a script${size}`;
+			if (now.tool === 'task') return `Briefing ${agent}`;
+			if (now.tool === 'update_todos') return 'Updating the todo list';
+			if (now.tool === 'render_html') return `Drawing a page${size}`;
+			if (now.tool === 'show') return 'Drawing a card';
+			return `Preparing ${now.tool ?? 'a step'}`;
+		}
+		case 'running':
+			if (now.tool === 'task') return `Waiting on ${agent}`;
+			if ((now.tool === 'write' || now.tool === 'edit') && file) return `Saving ${file}`;
+			if (now.tool === 'read' && file) return `Reading ${file}`;
+			if (now.tool === 'bash') return 'Running a command';
+			if (now.tool === 'start_workspace') return 'Starting the sandbox';
+			return `Running ${now.tool ?? 'a step'}`;
+	}
+}
+
+/** Milliseconds since a moment, ticking each second while shown. */
+function useSince(since: string | null): number {
+	const [clock, setClock] = useState(() => Date.now());
+	useEffect(() => {
+		if (!since) return;
+		setClock(Date.now());
+		const timer = setInterval(() => setClock(Date.now()), 1000);
+		return () => clearInterval(timer);
+	}, [since]);
+	return since ? Math.max(0, clock - new Date(since).getTime()) : 0;
+}
+
 /**
- * A message sent while the agent works waits for its next step. While a
- * subagent runs, that step comes only when the subagent finishes, so this says
- * so and lets you stop it to have the message read now.
+ * The line at the foot of a working thread: what the agent is doing this
+ * moment and for how long. The thread shows a step only once it is whole, so
+ * without it a file being written or a long think reads as nothing happening.
  */
-function Waiting({ sessionId }: { sessionId: string }) {
+function NowLine({ sessionId, phase }: { sessionId: string; phase: ReplyPhase }) {
+	const now = useQuery({ queryKey: ['now', sessionId], queryFn: () => api.now(sessionId) }).data?.now ?? null;
+	const took = useSince(now?.since ?? null);
+	return (
+		<div className="flex min-w-0 items-center gap-2 text-[12px] text-(--text-secondary)">
+			<Spinner size={12} />
+			<span className="min-w-0 truncate">{nowText(now, phase)}</span>
+			{now && took >= 1000 ? (
+				<span className="in-num shrink-0 text-(--text-disabled)" aria-hidden>
+					{elapsed(took)}
+				</span>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * The foot of a working thread. A message sent while the agent works waits for
+ * its next step; while a subagent runs, that step comes only when the subagent
+ * finishes, so this says so and lets you stop it to have the message read now.
+ * Otherwise it says what the agent is doing.
+ */
+function Waiting({ sessionId, queued, phase }: { sessionId: string; queued: boolean; phase: ReplyPhase }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
-	if (!running.length) {
-		return (
-			<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
-				<Spinner size={12} />
-				<span>Starting the agent</span>
-			</div>
-		);
-	}
+	if (!queued || !running.length) return <NowLine sessionId={sessionId} phase={phase} />;
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
@@ -694,6 +782,21 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const branch = session.data ? branchLabel(session.data) : undefined;
 	const meta = useMemo(() => (repo && branch ? [repo, branch] : []), [repo, branch]);
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
+	// A finished reply carries its usage; the latest one without it is the one being written.
+	const liveReply = busy && lastAssistant && !lastAssistant.metadata?.usage ? lastAssistant : undefined;
+	const settlements = agent.settlements;
+	const notes = useMemo(() => {
+		const answeredBy = new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId]));
+		const live = liveReply ? messages.indexOf(liveReply) : -1;
+		const map = new Map<string, string>();
+		messages.forEach((message, index) => {
+			if (message.role !== 'user') return;
+			const by = message.submissionId ? answeredBy.get(message.submissionId) : undefined;
+			if (by && by !== message.submissionId) map.set(message.id, JOINED);
+			else if (live !== -1 && index > live && !(message.submissionId && answeredBy.has(message.submissionId))) map.set(message.id, JOINING);
+		});
+		return map;
+	}, [messages, settlements, liveReply]);
 	// The message after each reply, for the cards in it: an option tapped, a form sent or anything typed.
 	const answers = useMemo(() => {
 		const map = new Map<string, string>();
@@ -779,18 +882,18 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							message.settlement ? (
 								<SettlementNotice key={message.id} message={message} />
 							) : message.role === 'user' ? (
-								<UserMessage key={message.id} message={message} meta={meta} />
+								<UserMessage key={message.id} message={message} meta={meta} note={notes.get(message.id)} />
 							) : (
 								<AssistantMessage
 									key={message.id}
 									message={message}
-									live={busy && message === lastAssistant}
+									live={message === liveReply}
 									last={message === lastAssistant}
 									answer={answers.get(message.id) ?? null}
 								/>
 							),
 						)}
-						{busy && messages[messages.length - 1]?.role !== 'assistant' ? <Waiting sessionId={sessionId} /> : null}
+						{busy ? <Waiting sessionId={sessionId} queued={messages[messages.length - 1]?.role === 'user'} phase={liveReply ? 'replying' : messages[messages.length - 1]?.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
 								{agent.error?.message

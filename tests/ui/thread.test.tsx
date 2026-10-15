@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
 	sessionSkills: vi.fn(async () => ({ skills: [] })),
 	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
+	now: vi.fn(async (): Promise<{ now: unknown }> => ({ now: null })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -29,6 +30,7 @@ vi.mock('@tanstack/react-router', async (original) => ({
 
 const { Thread } = await import('@/components/thread');
 const { setPendingPrompt } = await import('@/lib/pending-prompt');
+const { taskStatus } = await import('@/lib/working');
 
 const user = (id: string, text: string) => ({ id, role: 'user', purpose: 'user', display: 'visible', parts: [{ type: 'text', text }] });
 const assistant = (id: string, parts: unknown[]) => ({ id, role: 'assistant', purpose: 'assistant', display: 'visible', parts });
@@ -46,6 +48,7 @@ function agent(messages: unknown[], patch: Partial<UseFlueAgentResult> = {}): Us
 		messages: messages as FlueConversationMessage[],
 		status: 'idle',
 		historyReady: true,
+		settlements: [],
 		sendMessage: vi.fn(async () => undefined),
 		...patch,
 	} as unknown as UseFlueAgentResult;
@@ -172,6 +175,50 @@ describe('Thread', () => {
 		await waitFor(() => expect(api.stopSubagent).toHaveBeenCalledWith('s1', 'run-1'));
 		// The agents card stops it too.
 		expect(screen.getByRole('button', { name: 'Stop the browser agent' })).toBeTruthy();
+	});
+
+	it('says at its foot what the agent is doing between whole steps, and for how long', async () => {
+		const since = new Date(Date.now() - 42_000).toISOString();
+		api.now.mockResolvedValue({ now: { what: 'writing', tool: 'write', detail: 'outputs/nourish/app.js', chars: 6200, since } });
+		show(agent([user('u1', 'Build it'), assistant('a1', [tool('write', { path: 'outputs/nourish/styles.css' }, { output: 'ok' })])], { status: 'streaming' }));
+		expect(await screen.findByText('Writing app.js · 6.1 KB')).toBeTruthy();
+		expect(screen.getByText('42s')).toBeTruthy();
+		// The reply being written is live: its steps read as working.
+		expect(screen.getByRole('button', { name: /Working/ })).toBeTruthy();
+	});
+
+	it('says the agent is starting before its reply begins, and keeps a finished reply finished', async () => {
+		api.now.mockResolvedValue({ now: null });
+		const done = { ...assistant('a1', [tool('bash', { command: 'ls' }, { output: 'x' })]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		show(agent([user('u1', 'Go'), done, user('u2', 'Now the tests')], { status: 'streaming' }));
+		expect(await screen.findByText('Starting the agent')).toBeTruthy();
+		expect(screen.queryByText('Live')).toBeNull();
+		expect(screen.getByRole('button', { name: /Worked/ })).toBeTruthy();
+	});
+
+	it('counts a task working on the server as busy, though this page sent nothing', () => {
+		expect(taskStatus('idle', true)).toBe('streaming');
+		expect(taskStatus('connecting', true)).toBe('streaming');
+		expect(taskStatus('idle', false)).toBe('idle');
+		expect(taskStatus('error', true)).toBe('error');
+	});
+
+	it('says a message sent mid-reply joins that reply, rather than reading as unanswered', () => {
+		const sent = (id: string, text: string, submissionId: string) => ({ ...user(id, text), submissionId });
+		const done = { ...assistant('a1', [{ type: 'text', text: "I'm still working on it." }]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		const view = show(
+			agent([sent('u1', 'Build it', 'sub-1'), done, sent('u2', 'Why did you stop?', 'sub-2')], {
+				settlements: [
+					{ submissionId: 'sub-1', outcome: 'completed' },
+					{ submissionId: 'sub-2', outcome: 'completed', answeredBySubmissionId: 'sub-1' },
+				],
+			} as Partial<UseFlueAgentResult>),
+		);
+		expect(screen.getByText('Read while Anton worked on the reply above')).toBeTruthy();
+		view.unmount();
+		// While the reply is still being written, it says when it will be read.
+		show(agent([sent('u1', 'Build it', 'sub-1'), assistant('a1', [tool('bash', { command: 'ls' })]), sent('u2', 'Why did you stop?', 'sub-2')], { status: 'streaming' }));
+		expect(screen.getByText('Anton reads this between its steps')).toBeTruthy();
 	});
 
 	it('sends the prompt typed on the launcher once the history has loaded', async () => {

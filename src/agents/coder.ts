@@ -49,9 +49,10 @@ import { postReviewTool } from './review-tool.ts';
 import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
-import { MAX_TODOS, writeTodos } from '../services/todos.ts';
+import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
-import { checkSpec, shownNote } from '../services/show.ts';
+import { checkImages, checkSpec, shownNote } from '../services/show.ts';
+import { readOutputFile } from '../services/files.ts';
 import { PAGE_GUIDE, saveRender } from '../services/renders.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
@@ -103,6 +104,7 @@ function Tester() {
 		'Detect how this repo runs tests (package.json, Makefile, pytest, go test, cargo test).',
 		'Run the test suite. Capture failures.',
 		`Write a summary to ${OUTPUTS}/test-report.md.`,
+		'Put any script, log or screenshot you make to run the tests in /tmp, not in the repository.',
 		'Do not commit, push, or open a pull request.',
 	].join(' ');
 }
@@ -771,7 +773,7 @@ const SHOW_DESCRIPTION = [
 	'Put related things in one card rather than many. The result says what the user sees; do not repeat it in your reply.',
 ].join('\n');
 
-function useShow() {
+function useShow(id: string) {
 	useTool(
 		defineTool({
 			name: 'show',
@@ -780,7 +782,11 @@ function useShow() {
 				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
 				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
 			}),
-			run: async ({ data }) => ({ output: shownNote(checkSpec(data)) }),
+			run: async ({ data }) => {
+				const spec = checkSpec(data);
+				await checkImages(spec, async (path) => (await readOutputFile(id, path)) !== null);
+				return { output: shownNote(spec) };
+			},
 		}),
 	);
 }
@@ -872,7 +878,16 @@ function useProposePlan(id: string) {
 }
 
 const TODO_HINT =
-	'For work of three or more steps, write a todo list with update_todos before you start, and update it as each step starts and finishes, so the user can follow along. Skip it for quick questions and one-step changes.';
+	'For work of three or more steps, write a todo list with update_todos before you start. The user follows it as your progress, so call update_todos again the moment a step finishes, ' +
+	'marking it completed and the next one in_progress, before you go on; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.';
+
+const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
+
+/** In a chat, a small app is best as a page: it works in the thread and on the Artifacts page, with no server to keep running. */
+const APP_HINT =
+	'When asked for a small app that needs no server of its own (a tracker, a calculator, a game, a dashboard over data the user enters), build it as one page with render_html, keeping its data with window.anton.setState: ' +
+	'it works right in the thread and on the Artifacts page, and keeps what the user enters. Build files and run a server only for an app that needs a backend, packages or a build step, or when the user asks for source files. ' +
+	'An app saved as files in the Library (index.html beside its CSS, scripts and images, linked by relative paths) also opens as a page there, with those files put into it and its localStorage kept; keep its scripts plain or one module each, since a module that imports another file does not load.';
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
@@ -908,6 +923,11 @@ const WEB_HINT = 'When you need documentation, an error message explained or any
 
 const CHAT_WEB_HINT = 'For current facts, documentation or anything you are unsure of, use the web_search and web_fetch tools if you have them.';
 
+/** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
+const SCRATCH_HINT =
+	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
+	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
@@ -922,6 +942,7 @@ const WORKSPACE_PROMPT = [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	SCRATCH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
@@ -943,8 +964,9 @@ const CHAT_WORKSPACE_PROMPT = [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
-	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file; the user can open it from the Preview panel.',
+	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
 	CHAT_WEB_HINT,
 	'Be concise.',
 ].join(' ');
@@ -1018,7 +1040,7 @@ export function Coder({ id }: AgentProps) {
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
 	if (visual !== 'off') {
-		useShow();
+		useShow(id);
 		useRenderHtml(id);
 	}
 	if (project && !workspace) useProjectFiles(id);
@@ -1043,7 +1065,13 @@ export function Coder({ id }: AgentProps) {
 	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 	// The reply is also checked for whether it waits on the user, so the task can say so.
-	useAgentFinish(async () => {
+	useAgentFinish(async ({ response, append, signal }) => {
+		// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
+		const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
+		if (reminder) {
+			append({ kind: 'signal', type: 'reminder', body: reminder });
+			return;
+		}
 		const checkpoint = (async () => {
 			try {
 				const machine = await liveMachine(id);
@@ -1062,6 +1090,7 @@ export function Coder({ id }: AgentProps) {
 	// The persisted start survives resumed responses; usage totals are still counted per model call.
 	useResponseStart(() => {
 		startReply(id);
+		startTodoReply(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
@@ -1078,9 +1107,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${visualHint(visual)} ${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
