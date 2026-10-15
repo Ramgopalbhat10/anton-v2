@@ -104,6 +104,7 @@ function Tester() {
 		'Detect how this repo runs tests (package.json, Makefile, pytest, go test, cargo test).',
 		'Run the test suite. Capture failures.',
 		`Write a summary to ${OUTPUTS}/test-report.md.`,
+		'Put any script, log or screenshot you make to run the tests in /tmp, not in the repository.',
 		'Do not commit, push, or open a pull request.',
 	].join(' ');
 }
@@ -922,6 +923,11 @@ const WEB_HINT = 'When you need documentation, an error message explained or any
 
 const CHAT_WEB_HINT = 'For current facts, documentation or anything you are unsure of, use the web_search and web_fetch tools if you have them.';
 
+/** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
+const SCRATCH_HINT =
+	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
+	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
@@ -936,6 +942,7 @@ const WORKSPACE_PROMPT = [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	SCRATCH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
@@ -957,8 +964,9 @@ const CHAT_WORKSPACE_PROMPT = [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
-	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file; the user can open it from the Preview panel.',
+	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
 	CHAT_WEB_HINT,
 	'Be concise.',
 ].join(' ');
