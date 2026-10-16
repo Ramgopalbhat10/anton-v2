@@ -322,3 +322,31 @@ test("a thread gets the files its brief names, or else the ones attached to the 
 	assert.deepEqual(await filesForThread(space.id, 'Write the spec', ['spec.md'], asked), ['spec.md'], 'files the coordinator lists are the ones that go');
 	assert.deepEqual(await filesForThread(space.id, 'Recreate the diagram'), []);
 });
+
+test('a thread whose reply delivers what was asked is done, an answer stays open, and its next message reopens it', async () => {
+	const { recordLatestInput } = await import('../src/services/latest-input.ts');
+	const finished = (state: Record<string, unknown>) => /Saved diagram\.svg/.test(String(state.reply));
+	setProviders({
+		sandbox: localSandboxProvider(path.join(dir, 'data')),
+		store: diskStore(path.join(dir, 'data', 'objects')),
+		git: fakeHost,
+		models: fakeCatalog,
+		decisions: {
+			name: 'fake',
+			decide: async (state, questions) => ({ answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { yes: finished(state) ? 0.9 : 0.1 }])), inputTokens: 1, cost: 0 }),
+		},
+	});
+	try {
+		const space = await spaces.createSpace({ name: 'Finishing', repoIds: [] });
+		const made = await spaces.startThread(space.id, { title: 'Diagram', brief: 'Draw the diagram' });
+		const answered = await spaces.startThread(space.id, { title: 'Question', brief: 'Which queue do we use?' });
+		await reports.threadFinished(made.id, 'Saved diagram.svg and a PNG preview.');
+		await reports.threadFinished(answered.id, 'We use SQS for the order queue.');
+		assert.equal((await sessions.getSession(made.id)).threadState, 'resolved');
+		assert.equal((await sessions.getSession(answered.id)).threadState, 'idle', 'an answer leaves the thread open');
+		await recordLatestInput(made.id, 'Make the arrows vertical');
+		assert.equal((await sessions.getSession(made.id)).resolvedAt, null);
+	} finally {
+		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
+	}
+});

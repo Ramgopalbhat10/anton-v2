@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
@@ -14,6 +14,7 @@ import { useResume } from '@/components/source-bar';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
 import { api } from '@/lib/api';
+import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
@@ -134,6 +135,7 @@ export const VmPanel = memo(function VmPanel({
 }) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const changed = useChanges(sessionId).files.length;
+	const pinned = usePinnedPanels();
 
 	function show(name: PanelName) {
 		if (!tabs.includes(name)) onTabsChange([...tabs, name]);
@@ -175,28 +177,47 @@ export const VmPanel = memo(function VmPanel({
 						<MenuTrigger asChild>
 							<IconBtn icon={Plus} size="sm" label="Add a panel" />
 						</MenuTrigger>
-						<MenuContent align="end" className="w-[272px]">
+						<MenuContent align="end" className="w-[224px]">
 							<MenuLabel>Add a panel</MenuLabel>
-							{panels.map((panel) => (
-								<MenuPrimitive.Item
-									key={panel.name}
-									onSelect={() => show(panel.name)}
-									className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 outline-none data-highlighted:bg-(--bg-hover)"
-								>
-									<span className="mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary)">
-										<Icon icon={panel.icon} size={13} />
-									</span>
-									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-										<div className="text-[13px] text-(--text-primary)">{panel.name}</div>
-										<div className="text-[12px] text-pretty text-(--text-tertiary)">{panel.desc}</div>
+							{panels.map((panel) => {
+								const isPinned = pinned.includes(panel.name);
+								return (
+									<div key={panel.name} className="group/row flex items-center gap-0.5">
+										<MenuPrimitive.Item
+											onSelect={() => show(panel.name)}
+											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[8px] px-2 outline-none data-highlighted:bg-(--bg-hover)"
+										>
+											<span className="inline-flex shrink-0 text-(--icon-secondary)">
+												<Icon icon={panel.icon} size={13} />
+											</span>
+											<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary)">{panel.name}</span>
+											{tabs.includes(panel.name) ? (
+												<span className="inline-flex shrink-0 text-(--accent-text)">
+													<Icon icon={Check} size={12} />
+												</span>
+											) : null}
+										</MenuPrimitive.Item>
+										{/* Its own item, so the keyboard reaches it; pinning keeps the menu open. */}
+										<MenuPrimitive.Item
+											aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${panel.name}`}
+											aria-pressed={isPinned}
+											onSelect={(event) => {
+												event.preventDefault();
+												togglePinnedPanel(panel.name);
+											}}
+											className={cn(
+												'inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] outline-none data-highlighted:bg-(--bg-hover)',
+												isPinned ? 'text-(--accent-text)' : 'text-(--icon-tertiary) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
+											)}
+										>
+											<Icon icon={Pin} size={12} className={cn(isPinned && '[&_path]:fill-current')} />
+										</MenuPrimitive.Item>
 									</div>
-									{tabs.includes(panel.name) ? (
-										<span className="inline-flex shrink-0 pt-0.5 text-(--accent-text)">
-											<Icon icon={Check} size={12} />
-										</span>
-									) : null}
-								</MenuPrimitive.Item>
-							))}
+								);
+							})}
+							<div className="px-2 pt-1.5 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+								{pinned.length ? 'Tasks open with the pinned panels.' : 'Pin panels to open them with every task.'}
+							</div>
 						</MenuContent>
 					</Menu>
 					<IconBtn

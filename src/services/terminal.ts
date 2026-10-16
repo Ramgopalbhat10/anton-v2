@@ -4,6 +4,7 @@ import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import type { Pty } from '../core/ports.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { repoDir } from './git.ts';
+import { holdTerminal } from './idle-stop.ts';
 import { invalidateRunning } from './sessions.ts';
 import { machineFor } from './workspace.ts';
 import { logProblem } from './log.ts';
@@ -67,10 +68,12 @@ async function bridge(socket: WebSocket, id: string, size: Size): Promise<void> 
 	early.stop();
 	if (early.state.closed) return pty.close();
 	connect(socket, pty);
+	const release = holdTerminal(id);
 	const { size: latest, input } = early.state;
 	if (latest !== opened) void pty.resize(latest.cols, latest.rows).catch(() => undefined);
 	for (const chunk of input) pty.write(chunk);
 	socket.on('close', () => {
+		release();
 		pty.close();
 		void saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint after terminal failed', error, id));
 	});

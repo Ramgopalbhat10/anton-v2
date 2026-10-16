@@ -72,7 +72,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
 | `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
-| `ANTON_IDLE_MINUTES` | Stop a sandbox after this many idle minutes (default 15) |
+| `ANTON_IDLE_MINUTES` | Stop a sandbox this many minutes after its agent finishes (default 5) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
 | `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |

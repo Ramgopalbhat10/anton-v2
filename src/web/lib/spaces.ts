@@ -46,7 +46,7 @@ export const STATE_LOOK: Record<ThreadState, StateLook> = {
 	review: { label: 'Ready for review', short: 'Review', tone: 'success', icon: GitPullRequest },
 	landing: { label: 'Landing', short: 'Landing', tone: 'success', icon: GitMerge },
 	idle: { label: 'Idle', short: 'Idle', tone: 'neutral', icon: Moon },
-	resolved: { label: 'Resolved', short: 'Done', tone: 'neutral', icon: CircleCheck },
+	resolved: { label: 'Done', short: 'Done', tone: 'neutral', icon: CircleCheck },
 };
 
 /** A failed thread waits on you too, but says so in red. */

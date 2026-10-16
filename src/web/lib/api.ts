@@ -469,6 +469,9 @@ export type SubagentStep = { id: string; tool: string; input: unknown; state: 'r
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export type Todo = { content: string; status: TodoStatus };
 export type TodoList = { todos: Todo[]; updatedAt: string };
+
+/** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/joins.ts). */
+export type Join = { text: string; afterTool: string; final: boolean; at: string };
 /** What the agent is doing this moment (src/services/agent-now.ts). */
 export type { AgentNow };
 
@@ -627,6 +630,7 @@ export const api = {
 	stopSubagent: async (id: string, runId: string) => void (await post(`/api/sessions/${id}/subagents/${encodeURIComponent(runId)}/stop`)),
 	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),
 	todos: (id: string) => json<{ list: TodoList | null }>(`/api/sessions/${id}/todos`),
+	joins: (id: string) => json<{ joins: Join[] }>(`/api/sessions/${id}/joins`),
 	now: (id: string) => json<{ now: AgentNow | null }>(`/api/sessions/${id}/now`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
 	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),

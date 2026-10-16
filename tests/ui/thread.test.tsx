@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 	now: vi.fn(async (): Promise<{ now: unknown }> => ({ now: null })),
+	joins: vi.fn(async (): Promise<{ joins: unknown[] }> => ({ joins: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -225,6 +226,34 @@ describe('Thread', () => {
 		expect(screen.getByText('Anton reads this between its steps')).toBeTruthy();
 	});
 
+	it('puts a message read mid-reply where Anton read it: the steps before it, the message, then the answer', async () => {
+		const sent = (id: string, text: string, submissionId: string) => ({ ...user(id, text), submissionId });
+		const reply = {
+			...assistant('a1', [
+				{ ...tool('task', { agent: 'browser', prompt: 'Check the engine', description: 'Inspect the engine' }), toolCallId: 'task-1', state: 'output-available', output: 'stopped' },
+				{ type: 'text', text: 'The review is stopped; packaging the engine now.' },
+			]),
+			submissionId: 'sub-1',
+			metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } },
+		};
+		api.joins.mockResolvedValue({ joins: [{ text: 'Why is it taking so long?', afterTool: 'task-1', final: false, at: new Date().toISOString() }] });
+		show(
+			agent([sent('u1', 'Build it', 'sub-1'), reply, sent('u2', 'Why is it taking so long?', 'sub-2')], {
+				settlements: [
+					{ submissionId: 'sub-1', outcome: 'completed' },
+					{ submissionId: 'sub-2', outcome: 'completed', answeredBySubmissionId: 'sub-1' },
+				],
+			} as Partial<UseFlueAgentResult>),
+		);
+		const note = await screen.findByText('Sent while Anton worked, read here');
+		const question = screen.getByText('Why is it taking so long?');
+		const answer = screen.getByText('The review is stopped; packaging the engine now.');
+		expect(question.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(note).toBeTruthy();
+		expect(screen.queryByText('Read while Anton worked on the reply above')).toBeNull();
+		api.joins.mockResolvedValue({ joins: [] });
+	});
+
 	it('sends the prompt typed on the launcher once the history has loaded', async () => {
 		setPendingPrompt('s1', 'Start here');
 		const flue = agent([]);
@@ -366,7 +395,7 @@ describe('response details', () => {
 		expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
 	});
 
-	it('shows a question from the ask tool as options to tap, and the pick once answered', () => {
+	it('shows a question from the ask tool as options to tap, and once answered only the question and the pick', () => {
 		const ask = tool('ask', { question: 'Which database?', options: [{ label: 'Postgres', detail: 'Managed, on Neon' }, { label: 'SQLite' }], recommended: 0 }, 'Stop here.');
 		const flue = agent([user('u1', 'Set up storage'), assistant('a1', [ask])]);
 		const { unmount } = show(flue);
@@ -376,9 +405,17 @@ describe('response details', () => {
 		expect(flue.sendMessage).toHaveBeenCalledWith('SQLite');
 		unmount();
 
-		show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Postgres'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
-		expect(screen.getByRole('button', { name: /Postgres/ }).getAttribute('aria-pressed')).toBe('true');
-		expect((screen.getByRole('button', { name: /SQLite/ }) as HTMLButtonElement).disabled).toBe(true);
+		const { unmount: done } = show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Postgres'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
+		const answered = screen.getByRole('region', { name: 'Answered question' });
+		expect(within(answered).getByRole('heading', { name: 'Which database?' })).toBeTruthy();
+		expect(within(answered).getByText('Postgres')).toBeTruthy();
+		expect(within(answered).getByText('You chose')).toBeTruthy();
+		expect(within(answered).queryByText('SQLite')).toBeNull();
+		expect(screen.queryByRole('button', { name: /SQLite/ })).toBeNull();
+		done();
+
+		show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Use MySQL instead'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
+		expect(within(screen.getByRole('region', { name: 'Answered question' })).getByText('You answered')).toBeTruthy();
 	});
 
 	it('draws a show card: stats, a sortable table, a live formula, and a form that sends its values', () => {

@@ -15,13 +15,13 @@ const MAX_LENGTH = 2000;
  * automation's prompt. The coding agent calls this for every message it is
  * given (`useLatestInput` in `coder.ts`).
  */
-export async function recordLatestInput(id: string, text: string, at = new Date()): Promise<void> {
+export async function recordLatestInput(id: string, text: string, at = new Date(), delivered = true): Promise<void> {
 	// Attached files show by name, not by the text they carry.
 	const message = splitAttachments(text);
 	const input = [message.text.trim(), ...message.files.map((file) => `[${file.name}]`)].filter(Boolean).join(' ');
 	if (!input) return;
-	// A message answers whatever the agent was waiting on.
-	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString(), asking: null }).catch((error: unknown) =>
+	// A message answers whatever the agent was waiting on, and one given now reopens a thread that was done.
+	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString(), asking: null, ...(delivered ? { resolvedAt: null } : {}) }).catch((error: unknown) =>
 		logProblem('warn', 'Could not keep the latest input', error, id),
 	);
 }
@@ -56,7 +56,7 @@ export async function backfillLatestInputs(file = path.join(config.dataDir, 'flu
 			const text = bodyOf(String(row.payload));
 			if (text?.trim()) latest.set(id, { text, at: new Date(Number(row.accepted_at)) });
 		}
-		for (const [id, entry] of latest) await recordLatestInput(id, entry.text, entry.at);
+		for (const [id, entry] of latest) await recordLatestInput(id, entry.text, entry.at, false);
 		return latest.size;
 	} catch (error) {
 		logProblem('warn', 'Could not fill in older tasks’ latest inputs', error);

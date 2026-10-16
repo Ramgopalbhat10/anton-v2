@@ -655,6 +655,29 @@ test('connections are checked through the ports, and Compute lists and stops run
 	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
 });
 
+test('a sandbox stops the idle minutes after its agent finishes, not while its agent works or a terminal is open', async () => {
+	const { holdTerminal, stopIdleSandboxes } = await import('../src/services/idle-stop.ts');
+	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Idle' });
+	await sessions.resumeSession(session.id);
+	const minutes = (await sandboxSettings()).idleMinutes * 60_000;
+	const start = Date.now();
+	// Reading its files is not use: the first look only notes it went quiet.
+	assert.ok(!(await stopIdleSandboxes(start)).includes(session.id));
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'idle-1' });
+	assert.ok(!(await stopIdleSandboxes(start + minutes)).includes(session.id), 'a working agent keeps it');
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'idle-1' });
+	await stopIdleSandboxes(start + minutes);
+	const close = holdTerminal(session.id);
+	assert.ok(!(await stopIdleSandboxes(start + 3 * minutes)).includes(session.id), 'an open terminal keeps it');
+	close();
+	await stopIdleSandboxes(start + 3 * minutes);
+	assert.ok(!(await stopIdleSandboxes(start + 4 * minutes - 1)).includes(session.id), 'not before its minutes are up');
+	assert.ok((await stopIdleSandboxes(start + 4 * minutes)).includes(session.id));
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
 test('sandbox settings reach new machines, and a new default base image retires prepared images', async () => {
 	const project = await addProject('acme/demo');
 	const before = await sandboxSettings();
@@ -797,7 +820,11 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 	await saveCheckpoint(session.id, machine);
 	const kept = (await readCheckpoint(session.id))!.files[0].blob!;
 
-	await store.put('sessions/gone-task/checkpoint.json', '{}');
+	// What a checkpoint finishing after its task was deleted leaves behind, and a task another database keeps in the same storage.
+	const gone = await sessions.createSession({ projectId: project.id, title: 'Gone' });
+	await sessions.deleteSession(gone.id);
+	await store.put(`sessions/${gone.id}/checkpoint.json`, '{}');
+	await store.put('sessions/other-database-task/outputs/report.png', 'theirs');
 	await store.put('blobs/unused', 'nobody points here');
 	// An output the agent wrote is not a manifest, whatever its name.
 	await store.put(`sessions/${session.id}/outputs/report.json`, 'not a checkpoint');
@@ -807,7 +834,8 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 	// Too new to remove: it may belong to a checkpoint still being written.
 	const early = await cleanUpStorage(Date.now());
 	assert.ok(await store.has('blobs/unused'));
-	assert.ok(!(await store.has('sessions/gone-task/checkpoint.json')));
+	assert.ok(!(await store.has(`sessions/${gone.id}/checkpoint.json`)));
+	assert.ok(await store.has('sessions/other-database-task/outputs/report.png'), "another database's task is not this one's to remove");
 	assert.ok(early.removed >= 3);
 
 	const later = await cleanUpStorage(Date.now() + 2 * 60 * 60_000);

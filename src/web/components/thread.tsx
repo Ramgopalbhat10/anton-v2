@@ -13,7 +13,7 @@ import { ShowCard } from '@/components/show-card';
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { type AgentNow, api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
 import { splitAttachments } from '../../core/attachments';
@@ -23,6 +23,7 @@ import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
+import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { outputLinkPath, outputLinksIn } from '../../core/outputs';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
@@ -441,6 +442,8 @@ const UserMessage = memo(UserMessageView, (prev, next) => prev.message.parts ===
  */
 const JOINING = 'Anton reads this between its steps';
 const JOINED = 'Read while Anton worked on the reply above';
+/** Once Anton has noted where it read the message, the message shows there, inside the reply. */
+const JOINED_HERE = 'Sent while Anton worked, read here';
 
 function UserMessageView({ message, meta, note }: { message: FlueConversationMessage; meta: string[]; note?: string }) {
 	// Attached files show as chips; the text they carry is the agent's to read.
@@ -542,14 +545,19 @@ const AssistantMessage = memo(function AssistantMessage({
 	live,
 	last,
 	answer,
+	segment,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
 	last: boolean;
 	/** The user's message that followed this reply, for its cards to show what was picked. */
 	answer: string | null;
+	/** The stretch shown, when a message sent while it worked cut the reply: the header goes on its first, the cards and usage on its last. */
+	segment?: ThreadRow['segment'];
 }) {
-	const blocks = useMemo(() => toBlocks(message.parts), [message.parts]);
+	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
+	const head = !segment || segment.first;
+	const foot = !segment || segment.last;
 	const place = useMemo<ReplyPlace>(() => ({ latest: last, answer }), [last, answer]);
 	const changed = useMemo(() => (live ? [] : changedPaths(message.parts)), [live, message.parts]);
 	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
@@ -572,16 +580,19 @@ const AssistantMessage = memo(function AssistantMessage({
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
 	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
-	const copyText = blocks.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
-	if (blocks.length === 0 && !live) return null;
+	const whole = useMemo(() => (segment ? toBlocks(message.parts) : blocks), [segment, message.parts, blocks]);
+	const copyText = whole.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
+	if (blocks.length === 0 && !(live && foot)) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
 		<div className="group/reply flex flex-col gap-3">
-			<div className="flex items-center gap-2">
-				<Logo size={18} />
-				<div className="text-[12px] font-medium text-(--text-secondary)">Anton</div>
-				{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
-			</div>
+			{head ? (
+				<div className="flex items-center gap-2">
+					<Logo size={18} />
+					<div className="text-[12px] font-medium text-(--text-secondary)">Anton</div>
+					{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
+				</div>
+			) : null}
 			{blocks.map((block, index) =>
 				block.kind === 'text' ? (
 					<Markdown key={index} text={block.text} />
@@ -600,13 +611,13 @@ const AssistantMessage = memo(function AssistantMessage({
 				) : block.kind === 'page' ? (
 					<PageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />
 				) : (
-					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
+					<StepsCard key={index} steps={block.steps} live={live && foot && index === blocks.length - 1} duration={head && index === firstTrace ? duration : undefined} />
 				),
 			)}
-			<OutputCards items={made} composer={sessionId} />
-			{pull ? <PullRequestCard sessionId={sessionId} url={pull.url} title={pull.title} /> : null}
-			{changed.length && !pull ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
-			{!live ? (
+			{foot ? <OutputCards items={made} composer={sessionId} /> : null}
+			{foot && pull ? <PullRequestCard sessionId={sessionId} url={pull.url} title={pull.title} /> : null}
+			{foot && changed.length && !pull ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
+			{foot && !live ? (
 				// Copy and usage stay on the latest reply; earlier ones show them on hover.
 				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
 					<CopyResponse text={copyText} />
@@ -795,11 +806,9 @@ function Waiting({ sessionId, queued, phase }: { sessionId: string; queued: bool
 	);
 }
 
-const textOf = (message: FlueConversationMessage) =>
-	message.parts
-		.map((part) => (part.type === 'text' ? part.text : ''))
-		.join('')
-		.trim();
+const textOf = (message: FlueConversationMessage) => messageText(message).trim();
+const NO_JOINS: Join[] = [];
+const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
 
 /** File references in replies link to the task's files, and open in the Files panel at their line. */
 function useThreadFileLinks(sessionId: string): FileLinks {
@@ -841,27 +850,36 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	// A finished reply carries its usage; the latest one without it is the one being written.
 	const liveReply = busy && lastAssistant && !lastAssistant.metadata?.usage ? lastAssistant : undefined;
 	const settlements = agent.settlements;
+	const joins = useQuery({ queryKey: ['joins', sessionId], queryFn: () => api.joins(sessionId) }).data?.joins ?? NO_JOINS;
+	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
+	// Messages sent while Anton worked, moved into the reply where it read them.
+	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, liveReply), [messages, joins, answeredBy, liveReply]);
 	const notes = useMemo(() => {
-		const answeredBy = new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId]));
 		const live = liveReply ? messages.indexOf(liveReply) : -1;
 		const map = new Map<string, string>();
-		messages.forEach((message, index) => {
-			if (message.role !== 'user') return;
+		for (const row of rows) {
+			const message = row.message;
+			if (message.role !== 'user') continue;
+			if (row.joined) {
+				map.set(message.id, JOINED_HERE);
+				continue;
+			}
+			const index = messages.indexOf(message);
 			const by = message.submissionId ? answeredBy.get(message.submissionId) : undefined;
 			if (by && by !== message.submissionId) map.set(message.id, JOINED);
 			else if (live !== -1 && index > live && !(message.submissionId && answeredBy.has(message.submissionId))) map.set(message.id, JOINING);
-		});
+		}
 		return map;
-	}, [messages, settlements, liveReply]);
-	// The message after each reply, for the cards in it: an option tapped, a form sent or anything typed.
+	}, [rows, messages, answeredBy, liveReply]);
+	// The message after each reply, for the cards in it: an option tapped, a form sent or anything typed. A reply cut by a message read mid-way keeps its cards for its last part.
 	const answers = useMemo(() => {
 		const map = new Map<string, string>();
-		messages.forEach((message, index) => {
-			const next = messages[index + 1];
-			if (message.role === 'assistant' && next?.role === 'user') map.set(message.id, next.parts.map((part) => (part.type === 'text' ? part.text : '')).join(''));
+		rows.forEach((row, index) => {
+			const next = rows[index + 1];
+			if (row.message.role === 'assistant' && (!row.segment || row.segment.last) && next?.message.role === 'user' && !next.joined) map.set(rowKey(row), messageText(next.message));
 		});
 		return map;
-	}, [messages]);
+	}, [rows]);
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(() => ({ send: (text: string) => void send(text), busy }), [send, busy]);
 	const fileLinks = useThreadFileLinks(sessionId);
@@ -937,22 +955,23 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								className="mt-[10vh]"
 							/>
 						) : null}
-						{messages.map((message) =>
-							message.settlement ? (
-								<SettlementNotice key={message.id} message={message} />
-							) : message.role === 'user' ? (
-								<UserMessage key={message.id} message={message} meta={meta} note={notes.get(message.id)} />
+						{rows.map((row) =>
+							row.message.settlement ? (
+								<SettlementNotice key={row.message.id} message={row.message} />
+							) : row.message.role === 'user' ? (
+								<UserMessage key={row.message.id} message={row.message} meta={meta} note={notes.get(row.message.id)} />
 							) : (
 								<AssistantMessage
-									key={message.id}
-									message={message}
-									live={message === liveReply}
-									last={message === lastAssistant}
-									answer={answers.get(message.id) ?? null}
+									key={rowKey(row)}
+									message={row.message}
+									segment={row.segment}
+									live={row.message === liveReply && (!row.segment || row.segment.last)}
+									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
+									answer={answers.get(rowKey(row)) ?? null}
 								/>
 							),
 						)}
-						{busy ? <Waiting sessionId={sessionId} queued={messages[messages.length - 1]?.role === 'user'} phase={liveReply ? 'replying' : messages[messages.length - 1]?.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
+						{busy ? <Waiting sessionId={sessionId} queued={rows[rows.length - 1]?.message.role === 'user' && !rows[rows.length - 1]?.joined} phase={liveReply ? 'replying' : rows[rows.length - 1]?.message.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
 								{agent.error?.message

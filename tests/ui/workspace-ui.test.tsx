@@ -1,5 +1,6 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TaskPanels } from '@/components/shell';
@@ -278,5 +279,22 @@ describe('Workspace panel header', () => {
 		fireEvent.click(screen.getByRole('button', { name: /^Library/ }));
 		expect(tabs().map((tab) => tab.textContent)).toEqual(['Library']);
 		expect(shown()).toBe('Library');
+	});
+
+	it('pins panels from its menu, and a task then opens on the pinned ones, or on the list with none', async () => {
+		const { startingPanels } = await import('@/components/shell');
+		localStorage.removeItem('anton.pinned-panels');
+		expect(startingPanels()).toEqual({ tabs: [], active: null, open: true });
+		panel('running');
+		await userEvent.click(screen.getByRole('button', { name: 'Add a panel' }));
+		const menu = await screen.findByRole('menu');
+		expect(within(menu).queryByText(/Every file the agent edited/)).toBeNull();
+		await userEvent.click(within(menu).getByRole('menuitem', { name: 'Pin Library' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Pin Changes' }));
+		expect(screen.getByRole('menuitem', { name: 'Unpin Library' }).getAttribute('aria-pressed')).toBe('true');
+		expect(startingPanels()).toEqual({ tabs: ['Changes', 'Library'], active: 'Changes', open: true });
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Unpin Library' }));
+		expect(startingPanels().tabs).toEqual(['Changes']);
+		localStorage.removeItem('anton.pinned-panels');
 	});
 });

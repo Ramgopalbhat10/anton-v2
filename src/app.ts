@@ -64,6 +64,7 @@ import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } 
 import { installSubagentStop } from './flue/subagent-stop.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
+import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { agentNow, recordAgentNow } from './services/agent-now.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
@@ -71,6 +72,7 @@ import { contextView, recordContext } from './services/context-usage.ts';
 import { type DeliveredImage, primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
+import { scheduleIdleStops } from './services/idle-stop.ts';
 import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
 import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
 import { primeCoordinator } from './services/coordinator.ts';
@@ -117,6 +119,7 @@ observeRuntime((event) => {
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
+	recordJoinEvent(event as Parameters<typeof recordJoinEvent>[0]);
 	recordAgentNow(event as Parameters<typeof recordAgentNow>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
@@ -139,6 +142,7 @@ setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, {
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
+scheduleIdleStops();
 
 function valid<T extends v.GenericSchema>(schema: T, value: unknown): v.InferOutput<T> {
 	const result = v.safeParse(schema, value);
@@ -737,6 +741,11 @@ app.get('/api/sessions/:id/scripts', async (c) => {
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ list: await todosFor(id) });
+});
+// Where the agent read each message sent while it worked, for the thread to show it there.
+app.get('/api/sessions/:id/joins', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ joins: await joinsFor(id) });
 });
 // What the agent is doing this moment; later changes come whole over /api/events.
 app.get('/api/sessions/:id/now', async (c) => {

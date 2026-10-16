@@ -121,6 +121,10 @@ const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS pages (session_id TEXT NOT NULL, path TEXT NOT NULL, title TEXT NOT NULL, state_json TEXT, version INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`,
 		`CREATE TABLE IF NOT EXISTS output_index (session_id TEXT PRIMARY KEY, outputs_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 	],
+	// 27: tasks this database deleted, the only ones whose stored files cleanup may remove: storage can be shared with another database.
+	[`CREATE TABLE IF NOT EXISTS deleted_sessions (session_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)`],
+	// 28: where in a reply the agent read each message sent while it worked, so the thread shows it there.
+	[`ALTER TABLE sessions ADD COLUMN joins_json TEXT`],
 ];
 
 export async function migrate(db: Client): Promise<void> {

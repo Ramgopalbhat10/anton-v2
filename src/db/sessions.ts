@@ -252,11 +252,34 @@ export async function setSessionTodos(id: string, json: string | null): Promise<
 	announce({ kind: 'task', id, what: 'todos' });
 }
 
+/** Where the task's agent read the messages sent while it worked, as saved; null before any. Kept apart from the record, like the todo list. */
+export async function getSessionJoins(id: string): Promise<string | null> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT joins_json FROM sessions WHERE id = ?', args: [id] });
+	return optional(result.rows[0]?.joins_json);
+}
+
+export async function setSessionJoins(id: string, json: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE sessions SET joins_json = ? WHERE id = ?', args: [json, id] });
+	announce({ kind: 'task', id, what: 'joins' });
+}
+
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
-		['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+		[
+			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+			{ sql: 'INSERT OR REPLACE INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)', args: [id, new Date().toISOString()] },
+		],
 		'write',
 	);
 	announce({ kind: 'sessions' });
+}
+
+/** Tasks this database deleted. Storage cleanup removes what is left of these and of no others. */
+export async function deletedSessionIds(): Promise<Set<string>> {
+	const db = await appDb();
+	const result = await db.execute('SELECT session_id FROM deleted_sessions');
+	return new Set(result.rows.map((row) => String(row.session_id)));
 }

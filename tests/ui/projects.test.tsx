@@ -260,9 +260,9 @@ describe('threads', () => {
 		withRouter(() => <ProjectSidebarBody spaceId="space_1" onNavigate={() => {}} />);
 		await screen.findByText('Pick a name');
 		const sections = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'));
-		expect(sections).toEqual(['Waiting on you', 'Working', 'Ready for review', 'Resolved']);
+		expect(sections).toEqual(['Waiting on you', 'Working', 'Ready for review', 'Done']);
 		expect(screen.queryByText('Old cleanup')).toBeNull();
-		await userEvent.click(within(screen.getByRole('region', { name: 'Resolved' })).getByRole('button'));
+		await userEvent.click(within(screen.getByRole('region', { name: 'Done' })).getByRole('button'));
 		expect(screen.getByText('Old cleanup')).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Coordinator/ }).getAttribute('aria-current')).toBe('page');
 	});

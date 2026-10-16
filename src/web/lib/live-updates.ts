@@ -4,7 +4,7 @@ import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' }
 	| { kind: 'subscriptions' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
@@ -46,6 +46,7 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'scripts') return [['scripts', change.id]];
 	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
+	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;
