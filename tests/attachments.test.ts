@@ -10,7 +10,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { attachmentBlock, splitAttachments, withAttachments } = await import('../src/core/attachments.ts');
 const { documentText } = await import('../src/services/documents.ts');
-const { attachToProject, attachToTask, INLINE_CHARS, readAttachment } = await import('../src/services/attachments.ts');
+const { attachToProject, attachToTask, INLINE_CHARS, projectAttachment, projectPictures, readAttachment } = await import('../src/services/attachments.ts');
 const { copyUploads } = await import('../src/services/checkpoints.ts');
 const { readSpaceFileForAgent } = await import('../src/services/space-files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
@@ -20,7 +20,21 @@ const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { insertSpace } = await import('../src/db/spaces.ts');
 
-setProviders({ sandbox: { name: 'none', find: async () => null } as never, store: diskStore(path.join(dir, 'objects')), git: {} as never, models: { name: 'x', list: async () => [] } });
+const model = (id: string, vision: boolean) => ({ id, name: id, vendor: 'Test', description: '', createdAt: 0, contextLength: 1000, maxOutput: null, price: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, vision, reasoning: [], defaultReasoning: 'off' as const });
+const looked: string[] = [];
+setProviders({
+	sandbox: { name: 'none', find: async () => null } as never,
+	store: diskStore(path.join(dir, 'objects')),
+	git: {} as never,
+	models: { name: 'x', list: async () => [model('x', false), model('sees', true)] },
+	vision: {
+		runs: () => true,
+		look: async ({ mimeType }) => {
+			looked.push(mimeType);
+			return { text: 'A cyan logo reading “Anton”.', inputTokens: 1, outputTokens: 1, cost: 0 };
+		},
+	},
+});
 const project = await upsertProject('acme/demo', 'main');
 await insertSession({ id: 't1', projectId: project.id, title: 'Task', model: 'x', reasoning: null, branch: 'main', baseBranch: 'main', baseSha: 'abc', planMode: false });
 
@@ -119,4 +133,27 @@ test('a file attached to the project goes to its Library, where the coordinator 
 	assert.match(slides.text ?? '', /Roadmap/);
 	assert.match(await readSpaceFileForAgent(spaceId), /roadmap\.pptx/);
 	assert.match(await readSpaceFileForAgent(spaceId, '../project-files/roadmap.pptx'), /Ship attachments/);
+});
+
+test('images attached to the project go with a thread\'s message as pictures, or described for a model that cannot see', async () => {
+	const spaceId = await insertSpace({ name: 'Brand', icon: null, goal: '' });
+	const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+	const logo = await attachToProject(spaceId, 'logo.png', png, 'image/png');
+	const notes = await attachToProject(spaceId, 'notes.md', encode('# Brand'));
+	// The coordinator hands a thread files by name, as its sandbox sees them too.
+	assert.deepEqual(await projectAttachment(spaceId, '../project-files/logo.png'), logo);
+	await assert.rejects(() => projectAttachment(spaceId, 'missing.png'), /No project file/);
+	const brief = withAttachments('Use this logo', [logo, notes], 'project');
+
+	const seen = await projectPictures(spaceId, 't1', brief, 'sees');
+	assert.deepEqual(seen, { images: [{ type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png', filename: 'logo.png' }], note: '' });
+
+	const told = await projectPictures(spaceId, 't1', brief, 'x');
+	assert.deepEqual(told.images, []);
+	assert.match(told.note, /cannot see images[\s\S]*logo\.png:\nA cyan logo reading “Anton”\./);
+	assert.deepEqual(looked, ['image/png'], 'only the image is described');
+
+	// A task's own uploads, and messages with no images, carry nothing more.
+	assert.deepEqual(await projectPictures(spaceId, 't1', withAttachments('x', [logo], 'task'), 'sees'), { images: [], note: '' });
+	assert.deepEqual(await projectPictures(spaceId, 't1', 'Just words', 'sees'), { images: [], note: '' });
 });

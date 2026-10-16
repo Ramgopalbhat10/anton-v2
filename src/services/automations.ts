@@ -10,6 +10,7 @@ import {
 	issueTasks,
 	listAutomations,
 	listSpaceAutomations,
+	type NewAutomation,
 	releaseIssue,
 	setIssueTask,
 	updateAutomation,
@@ -22,6 +23,7 @@ import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
+import { routineStarted } from './thread-reports.ts';
 
 /** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
 const ISSUES_AT_ONCE = 3;
@@ -40,10 +42,11 @@ export type AutomationInput = {
 };
 
 /**
- * Adds an automation on a repository, or with `projectId` null a project's routine whose threads start as
- * chats: those need the project, and can only run on a schedule, since labeled issues belong to a repository.
+ * An automation's settings once checked: on a repository, or with `projectId` null a project's routine whose
+ * threads start as chats. Those need the project, and can only run on a schedule, since labeled issues belong
+ * to a repository.
  */
-export async function addAutomation(projectId: string | null, input: AutomationInput): Promise<Automation> {
+async function checked(projectId: string | null, input: AutomationInput): Promise<NewAutomation> {
 	if (projectId && !(await getProject(projectId))) throw new NotFoundError('Project not found');
 	if (!projectId && !input.spaceId) throw new InvalidInputError('Pick a repository');
 	if (!projectId && input.kind === 'issues') throw new InvalidInputError('Labeled issues need a repository');
@@ -55,7 +58,7 @@ export async function addAutomation(projectId: string | null, input: AutomationI
 	const label = input.label?.trim() || null;
 	if (input.kind === 'issues' && !label) throw new InvalidInputError('Name the label that marks issues for Anton');
 	if (input.kind === 'schedule' && !(input.everyHours && input.prompt.trim())) throw new InvalidInputError('A schedule needs hours and instructions');
-	return insertAutomation({
+	return {
 		projectId: projectId ?? '',
 		kind: input.kind,
 		label: input.kind === 'issues' ? label : null,
@@ -65,7 +68,29 @@ export async function addAutomation(projectId: string | null, input: AutomationI
 		reasoning: input.model ? (input.reasoning ?? null) : null,
 		planFirst: input.planFirst ?? false,
 		spaceId: input.spaceId ?? null,
+	};
+}
+
+/** Adds an automation on a repository, or with `projectId` null a project's routine whose threads start as chats. */
+export async function addAutomation(projectId: string | null, input: AutomationInput): Promise<Automation> {
+	return insertAutomation(await checked(projectId, input));
+}
+
+/**
+ * Changes what an automation does, checked as when it was added. It stays where it is: a repository's on that
+ * repository, a project's routine in its project, where `projectId` picks its repository (null for chats) and
+ * leaving it out keeps the one it has. Its runs, and the issues it picked up, are kept.
+ */
+export async function editAutomation(id: string, input: Omit<AutomationInput, 'spaceId'> & { projectId?: string | null }): Promise<Automation> {
+	const automation = await existing(id);
+	const projectId = automation.spaceId && input.projectId !== undefined ? input.projectId || null : automation.projectId || null;
+	const { spaceId: _space, ...change } = await checked(projectId, {
+		...input,
+		planFirst: input.planFirst ?? automation.planFirst,
+		spaceId: automation.spaceId,
 	});
+	await updateAutomation(id, change);
+	return existing(id);
 }
 
 export const automations = (projectId: string) => listAutomations(projectId);
@@ -114,6 +139,8 @@ async function startTask(automation: Automation, title: string, prompt: string):
 			reasoning: automation.reasoning ?? undefined,
 			planMode: automation.planFirst,
 		});
+		// The coordinator did not start it, so it hears of it, and its feed shows it as it starts.
+		await routineStarted(thread.id, automation.kind === 'issues' ? `on issues labeled “${automation.label}”` : `every ${automation.everyHours} hours`);
 		return thread.id;
 	}
 	if (!automation.projectId) throw new NotFoundError('Project not found');

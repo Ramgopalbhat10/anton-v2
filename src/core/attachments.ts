@@ -25,7 +25,9 @@ export function attachmentBlock(file: AttachedFile, place: AttachmentPlace): str
 	const read = place === 'project' ? 'read_project_file' : 'read_attachment';
 	const body =
 		file.text === null
-			? 'Not read as text (an image, an archive or a format Anton does not convert): open the original at its path.'
+			? / image$/.test(file.kind)
+				? 'An image: given with this message as a picture, or described after it for a model that cannot see.'
+				: 'Not read as text (an archive or a format Anton does not convert): open the original at its path.'
 			: `${file.text.replaceAll(CLOSE, '<\\/attachment>')}${file.cut ? `\n[Cut at ${file.text.length.toLocaleString('en-US')} of ${file.cut.toLocaleString('en-US')} characters: read the rest with ${read} from offset ${file.text.length}.]` : ''}`;
 	return `${head}\n${body}\n${CLOSE}`;
 }

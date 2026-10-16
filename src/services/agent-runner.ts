@@ -139,7 +139,9 @@ export async function primeAllAgents(): Promise<void> {
 	await primeAllCoordinators().catch(() => undefined);
 }
 
-type Deliver = (id: string, text: string) => Promise<void>;
+/** An image handed to the agent with a message, as the runtime takes it: a thread's brief carries the pictures attached to it. */
+export type DeliveredImage = { type: 'image'; data: string; mimeType: string; filename?: string };
+type Deliver = (id: string, text: string, images?: DeliveredImage[]) => Promise<void>;
 /**
  * The agents a task has: the coder it talks to, and the reviewer that reads its pull requests, both on the
  * task's machine and caps; and a project's coordinator, addressed by the project's id, which has no machine.
@@ -153,12 +155,12 @@ export function setAgentDelivery(next: Deliver, agent: AgentName = 'coder'): voi
 }
 
 /** Sends a message nobody typed (an issue, a schedule, a failed check, a review request) to one of a task's agents, within the caps. */
-export async function sendToAgent(id: string, text: string, agent: AgentName = 'coder'): Promise<void> {
+export async function sendToAgent(id: string, text: string, agent: AgentName = 'coder', images: DeliveredImage[] = []): Promise<void> {
 	const deliver = deliveries.get(agent);
 	if (!deliver) throw new Error('Agent delivery is not set up');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored');
 	await assertWithinBudget(id);
 	if (agent === 'coordinator') await primeCoordinator(id);
 	else await primeAgent(id);
-	await deliver(id, text);
+	await deliver(id, text, images);
 }

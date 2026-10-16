@@ -218,6 +218,29 @@ test('a project without repositories runs routines on a schedule, starting chats
 	const thread = await sessions.getSession(toThreads[0].id);
 	assert.equal(thread.spaceId, space.id);
 	assert.equal(thread.projectId, null, 'the thread is a chat');
+	// The coordinator did not start it, so it hears of it as it starts.
+	await reports.flushReports();
+	const told = toCoordinator.filter((sent) => sent.id === space.id);
+	assert.equal(told.length, 1);
+	assert.match(told[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="Summarize the news\\." state="\\w+" started="routine">Started by the routine that runs every 24 hours\\.</thread>`));
+	// Its first reply is reported too, whatever state it leaves the thread in.
+	await reports.threadFinished(thread.id, 'Here is the digest.');
+	await reports.flushReports();
+	assert.match(toCoordinator.filter((sent) => sent.id === space.id)[1]?.text ?? '', /title="Summarize the news\." state="idle">Here is the digest\.<\/thread>/);
+
+	// A routine is changed in place, checked as when it was added, and keeps its runs.
+	const edited = await automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: ' Summarize the headlines. ', model: 'openrouter/test/cheap', reasoning: 'low' });
+	assert.equal(edited.id, routine.id);
+	assert.equal(edited.everyHours, 6);
+	assert.equal(edited.prompt, 'Summarize the headlines.');
+	assert.equal(edited.model, 'openrouter/test/cheap');
+	assert.equal(edited.reasoning, 'low');
+	assert.equal(edited.lastRunAt, ran.lastRunAt);
+	assert.equal(edited.spaceId, space.id);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'issues', label: 'anton', prompt: '' }), /need a repository/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: ' ' }), /hours and instructions/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: 'x', projectId: api.id }), /not in this project/);
+	assert.equal((await automations.spaceAutomations(space.id))[0].everyHours, 6, 'a rejected change leaves it as it was');
 
 	// It only ever starts this project's threads, so it goes when the project does.
 	await spaces.removeSpace(space.id);
