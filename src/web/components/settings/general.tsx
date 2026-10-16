@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Bot, Braces, Cpu, GitPullRequest, LayoutPanelTop, ListChecks } from 'lucide-react';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { Spinner, Switch } from '@/components/signal';
+import { Btn, Spinner, Switch } from '@/components/signal';
 import { api, type GeneralSettings, type HelperAgent, type Reasoning } from '@/lib/api';
 import { Block, PageHeading, SaveState, SettingRow } from './parts';
 
@@ -66,17 +67,32 @@ function HelperModel({
 
 export const useGeneralSettings = () => useQuery({ queryKey: ['general-settings'], queryFn: api.generalSettings });
 
-/** Each change saves at once; the launcher picks it up for the next task. */
-function Form({ settings }: { settings: GeneralSettings }) {
+/**
+ * Changes gather in a draft until Save sends them all, and Cancel puts the
+ * page back as it was saved; the launcher picks them up for the next task.
+ */
+function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 	const queryClient = useQueryClient();
 	const models = useModels();
+	const [draft, setDraft] = useState<GeneralSettings | null>(null);
+	const settings = draft ?? savedSettings;
+	const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(savedSettings);
+	const edit = (patch: Partial<GeneralSettings>) => setDraft({ ...settings, ...patch });
 	const save = useMutation({
-		mutationFn: (patch: Partial<GeneralSettings>) => api.saveGeneralSettings({ ...settings, ...patch }),
+		mutationFn: (next: GeneralSettings) => api.saveGeneralSettings(next),
 		onSuccess: (saved) => {
 			queryClient.setQueryData(['general-settings'], saved);
 			void queryClient.invalidateQueries({ queryKey: ['models'] });
+			setDraft(null);
 		},
 	});
+	// Leaving the page with changes not saved asks first.
+	useEffect(() => {
+		if (!dirty) return;
+		const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+		window.addEventListener('beforeunload', warn);
+		return () => window.removeEventListener('beforeunload', warn);
+	}, [dirty]);
 	const model = settings.model ?? models.data?.default ?? '';
 	return (
 		<div className="flex flex-col gap-6">
@@ -88,7 +104,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 				<div className="self-start">
 					<ModelPicker
 						value={{ model, reasoning: settings.reasoning }}
-						onChange={(change) => save.mutate({ model: change.model ?? model, reasoning: change.reasoning ?? null })}
+						onChange={(change) => edit({ model: change.model ?? model, reasoning: change.reasoning ?? null })}
 						height={28}
 						side="bottom"
 					/>
@@ -99,7 +115,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					<Switch
 						checked={settings.planMode}
 						disabled={save.isPending}
-						onChange={(planMode) => save.mutate({ planMode })}
+						onChange={(planMode) => edit({ planMode })}
 						label={<span className="sr-only">Start in plan mode</span>}
 					/>
 				</SettingRow>
@@ -112,7 +128,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					<Switch
 						checked={settings.codeMode}
 						disabled={save.isPending}
-						onChange={(codeMode) => save.mutate({ codeMode })}
+						onChange={(codeMode) => edit({ codeMode })}
 						label={<span className="sr-only">Code mode</span>}
 					/>
 				</SettingRow>
@@ -124,7 +140,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 				>
 					<Segmented label="Visual replies" role="radiogroup">
 						{VISUAL_LEVELS.map((level) => (
-							<SegmentedItem key={level.value} role="radio" on={settings.visualReplies === level.value} onClick={() => save.mutate({ visualReplies: level.value })}>
+							<SegmentedItem key={level.value} role="radio" on={settings.visualReplies === level.value} onClick={() => edit({ visualReplies: level.value })}>
 								{level.label}
 							</SegmentedItem>
 						))}
@@ -137,7 +153,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					<Switch
 						checked={settings.pageNetwork}
 						disabled={save.isPending}
-						onChange={(pageNetwork) => save.mutate({ pageNetwork })}
+						onChange={(pageNetwork) => edit({ pageNetwork })}
 						label={<span className="sr-only">Pages reach the web</span>}
 					/>
 				</SettingRow>
@@ -155,7 +171,7 @@ function Form({ settings }: { settings: GeneralSettings }) {
 						value={settings.agentModels[helper.agent]}
 						fallback={model}
 						disabled={save.isPending}
-						onChange={(choice) => save.mutate({ agentModels: { ...settings.agentModels, [helper.agent]: choice } })}
+						onChange={(choice) => edit({ agentModels: { ...settings.agentModels, [helper.agent]: choice } })}
 					/>
 				))}
 			</Block>
@@ -167,12 +183,42 @@ function Form({ settings }: { settings: GeneralSettings }) {
 					<Switch
 						checked={settings.reviewPullRequests}
 						disabled={save.isPending}
-						onChange={(reviewPullRequests) => save.mutate({ reviewPullRequests })}
+						onChange={(reviewPullRequests) => edit({ reviewPullRequests })}
 						label={<span className="sr-only">Review pull requests</span>}
 					/>
 				</SettingRow>
 			</Block>
-			<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
+			<div
+				role="group"
+				aria-label="Save changes"
+				className="sticky bottom-4 z-[2] flex items-center gap-3 self-stretch rounded-[10px] border border-(--border-subtle) bg-(--bg-overlay) py-2 pr-2 pl-4 shadow-[0_8px_24px_rgb(0_0_0/0.35)]"
+			>
+				<span className="min-w-0 flex-1 text-[12px]">
+					{dirty ? (
+						<span className="inline-flex items-center gap-1.5 text-(--text-secondary)">
+							<span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+							Unsaved changes
+						</span>
+					) : (
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
+					)}
+				</span>
+				{dirty && save.error ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+				<Btn
+					size="sm"
+					variant="ghost"
+					disabled={!dirty || save.isPending}
+					onClick={() => {
+						setDraft(null);
+						save.reset();
+					}}
+				>
+					Cancel
+				</Btn>
+				<Btn size="sm" variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate(settings)}>
+					{save.isPending ? 'Saving…' : 'Save'}
+				</Btn>
+			</div>
 		</div>
 	);
 }
