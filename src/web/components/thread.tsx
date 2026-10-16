@@ -6,7 +6,8 @@ import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
-import { FileLinks, Markdown } from '@/components/markdown';
+import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
+import { OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
 import { HtmlFrame } from '@/components/html-frame';
@@ -21,6 +22,8 @@ import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
+import { openViewer, type ViewerItem } from '@/lib/viewer';
+import { outputLinkPath, outputLinksIn } from '../../core/outputs';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
@@ -89,6 +92,31 @@ function screenshotPath(part: ToolPart): string {
 	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
 	const key = part.toolName === 'browser' ? 'screenshot' : 'path';
 	return (field(record, key) || field(record.output, key)).replace(/^\.\.\/outputs\//, '');
+}
+
+/**
+ * The files a reply made for you, in the order it first names them: those
+ * its words link to in the outputs folder, its screenshots, and files it
+ * wrote there. Files you attached (uploads/) are yours, not its. A file
+ * it saved along the way but did not link is shown only while the Library
+ * still has it (`kept`, once known): a check screenshot it later deleted is
+ * not one it made for you.
+ */
+function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null): string[] {
+	const named: { path: string; linked: boolean }[] = [];
+	for (const part of parts) {
+		if (part.type === 'text') for (const path of outputLinksIn(part.text)) named.push({ path, linked: true });
+		if (part.type !== 'dynamic-tool' || part.state !== 'output-available') continue;
+		if (part.toolName === 'screenshot' || part.toolName === 'browser') named.push({ path: screenshotPath(part), linked: false });
+		if (part.toolName === 'write') named.push({ path: outputLinkPath(field(part.input, 'path')) ?? '', linked: false });
+	}
+	const linked = new Set(named.filter((entry) => entry.linked).map((entry) => entry.path));
+	const paths: string[] = [];
+	for (const { path } of named) {
+		if (!path || path.startsWith('uploads/') || paths.includes(path)) continue;
+		if (linked.has(path) || !kept || kept.has(path)) paths.push(path);
+	}
+	return paths;
 }
 
 /** Plain text from a tool result, whichever shape the tool returned. */
@@ -237,9 +265,14 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 			{script && calls.length ? <ScriptCalls calls={calls} /> : null}
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
 			{image ? (
-				<a href={outputUrl(sessionId, image)} target="_blank" rel="noreferrer" className="mx-1 mb-1 ml-6 block w-fit">
+				<button
+					type="button"
+					title={`Open ${image}`}
+					onClick={() => openViewer({ sessionId, path: image }, [], sessionId)}
+					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+				>
 					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-[10px] border border-(--card-border)" />
-				</a>
+				</button>
 			) : null}
 			{output || (expandable && command) ? (
 				<div className="pt-1 pr-1 pb-0.5 pl-6">
@@ -521,6 +554,20 @@ const AssistantMessage = memo(function AssistantMessage({
 	const changed = useMemo(() => (live ? [] : changedPaths(message.parts)), [live, message.parts]);
 	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
 	const sessionId = useContext(SessionId);
+	// The files it made show as cards once it is whole, so a half-written link never loads.
+	const library = useQuery({ queryKey: ['outputs', sessionId], queryFn: () => api.outputs(sessionId), staleTime: 30_000, enabled: !live });
+	const kept = useMemo(() => (library.data ? new Set(library.data.outputs.map((output) => output.path)) : null), [library.data]);
+	const made = useMemo<ViewerItem[]>(() => (live ? [] : replyOutputs(message.parts, kept).map((path) => ({ sessionId, path }))), [live, message.parts, sessionId, kept]);
+	const outputLinks = useMemo<OutputLinks>(
+		() => ({
+			resolve: (href) => {
+				const path = outputLinkPath(href);
+				return path ? { sessionId, path } : null;
+			},
+			open: (item) => openViewer(item, made, sessionId),
+		}),
+		[made, sessionId],
+	);
 	const usage = usageOf(message);
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
@@ -528,6 +575,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	const copyText = blocks.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
 	if (blocks.length === 0 && !live) return null;
 	return (
+		<OutputLinks.Provider value={outputLinks}>
 		<div className="group/reply flex flex-col gap-3">
 			<div className="flex items-center gap-2">
 				<Logo size={18} />
@@ -555,6 +603,7 @@ const AssistantMessage = memo(function AssistantMessage({
 					<StepsCard key={index} steps={block.steps} live={live && index === blocks.length - 1} duration={index === firstTrace ? duration : undefined} />
 				),
 			)}
+			<OutputCards items={made} composer={sessionId} />
 			{pull ? <PullRequestCard sessionId={sessionId} url={pull.url} title={pull.title} /> : null}
 			{changed.length && !pull ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
 			{!live ? (
@@ -565,6 +614,7 @@ const AssistantMessage = memo(function AssistantMessage({
 				</div>
 			) : null}
 		</div>
+		</OutputLinks.Provider>
 	);
 });
 

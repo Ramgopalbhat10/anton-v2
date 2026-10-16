@@ -1,11 +1,12 @@
 import { HoverCard } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
  * The rest of what a one-line row or chip stands for, in a card once the
  * pointer rests on it. Clicks inside stay inside: the card is portalled, but
  * React still bubbles its events to the row that opens on click.
+ * `quiet` keeps it shut, while a chip inside the row shows a peek of its own.
  */
 export function HoverPeek({
 	content,
@@ -14,6 +15,7 @@ export function HoverPeek({
 	align = 'start',
 	width = 320,
 	openDelay = 350,
+	quiet = false,
 }: {
 	content: ReactNode;
 	children: ReactNode;
@@ -21,9 +23,11 @@ export function HoverPeek({
 	align?: 'start' | 'center' | 'end';
 	width?: number;
 	openDelay?: number;
+	quiet?: boolean;
 }) {
+	const [open, setOpen] = useState(false);
 	return (
-		<HoverCard.Root openDelay={openDelay} closeDelay={90}>
+		<HoverCard.Root open={open && !quiet} onOpenChange={setOpen} openDelay={openDelay} closeDelay={90}>
 			<HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
 			<HoverCard.Portal>
 				<HoverCard.Content

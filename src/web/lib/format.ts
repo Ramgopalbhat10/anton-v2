@@ -43,3 +43,10 @@ export function fineDollars(amount: number): string {
 	if (amount < 0.0001) return '<$0.0001';
 	return amount < 0.01 ? `$${amount.toFixed(4)}` : dollars(amount);
 }
+
+/** A file's size in the unit that reads best. */
+export function fileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

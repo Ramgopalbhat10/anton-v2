@@ -161,13 +161,25 @@ const INLINE_TYPES: Record<string, string> = {
 	jpeg: 'image/jpeg',
 	gif: 'image/gif',
 	webp: 'image/webp',
+	avif: 'image/avif',
+	svg: 'image/svg+xml',
 	pdf: 'application/pdf',
 };
 const contentType = (path: string) => INLINE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
+/**
+ * An SVG is a document that can run script: opened on its own, it would run on Anton's origin.
+ * Served sandboxed, it draws (as an <img> it never runs script anyway) and does nothing else.
+ */
+const SVG_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+
 function bytes(c: Context, data: Uint8Array | null, type = 'application/octet-stream') {
 	if (!data) return c.json({ error: 'Not found' }, 404);
-	return c.body(data as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff' });
+	return c.body(data as Uint8Array<ArrayBuffer>, 200, {
+		'Content-Type': type,
+		'X-Content-Type-Options': 'nosniff',
+		...(type === 'image/svg+xml' ? { 'Content-Security-Policy': SVG_CSP } : {}),
+	});
 }
 
 app.onError((error, c) => {

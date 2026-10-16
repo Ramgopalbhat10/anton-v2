@@ -396,7 +396,7 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 						// The picture is the page alone; a scrollbar takes the rest of the window, so it covers that much of the view.
 						<div className="absolute top-0 left-0 z-20" style={{ width: `${(sketch.width / viewport.width) * 100}%`, height: `${(sketch.height / viewport.height) * 100}%` }}>
 							<Sketch
-								image={sketch.data}
+								src={`data:image/png;base64,${sketch.data}`}
 								width={sketch.width}
 								height={sketch.height}
 								onClose={() => setSketch(null)}

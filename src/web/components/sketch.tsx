@@ -114,21 +114,25 @@ async function flatten(svg: SVGSVGElement, width: number, height: number): Promi
 }
 
 /**
- * Draws over `image` (a PNG, base64) shown at the size of the area it covers.
+ * Draws over `src` (a picture as a data URL, so the flattened PNG holds it)
+ * shown at the size of the area it covers, which has the picture's shape.
  * `onAttach` gets the result as a PNG data URL.
  */
 export function Sketch({
-	image,
+	src,
 	width,
 	height,
 	onClose,
 	onAttach,
+	toolbarBelow = false,
 }: {
-	image: string;
+	src: string;
 	width: number;
 	height: number;
 	onClose: () => void;
 	onAttach: (png: string) => void;
+	/** The tools under the picture rather than over its foot, where there is room for them. */
+	toolbarBelow?: boolean;
 }) {
 	const svg = useRef<SVGSVGElement>(null);
 	const [tool, setTool] = useState<Tool>('pen');
@@ -246,7 +250,7 @@ export function Sketch({
 					onPointerUp={onPointerUp}
 					onPointerCancel={onPointerUp}
 				>
-					<image href={`data:image/png;base64,${image}`} x={0} y={0} width={width} height={height} />
+					<image href={src} x={0} y={0} width={width} height={height} />
 					{marks.map((mark, index) => (
 						<MarkShape key={index} mark={mark} />
 					))}
@@ -268,7 +272,7 @@ export function Sketch({
 					/>
 				) : null}
 			</div>
-			<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+			<div className={cn('pointer-events-none absolute inset-x-0 flex justify-center', toolbarBelow ? 'top-full mt-3' : 'bottom-3')}>
 				<div className="in-pop pointer-events-auto flex items-center gap-0.5 p-1" role="toolbar" aria-label="Drawing tools">
 					{TOOLS.map((entry) => (
 						<IconBtn

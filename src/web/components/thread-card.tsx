@@ -1,16 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUpRight, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
+import { FileFace, OutputThumb } from '@/components/output-viewer';
 import { Caption, Chip, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { ThreadGlyph } from '@/components/thread-glyph';
-import { api, repoShort, type Session, type ThreadState } from '@/lib/api';
-import { age, elapsed } from '@/lib/format';
+import { api, type Output, outputUrl, repoShort, type Session, type ThreadState } from '@/lib/api';
+import { categoryInfo, categoryOf, extensionOf, nameOf } from '@/lib/artifacts';
+import { age, elapsed, fileSize } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
+import { useThreadOutputs } from '@/lib/thread-outputs';
 import { cn } from '@/lib/utils';
+import { openViewer, type ViewerItem } from '@/lib/viewer';
+import { isImagePath } from '../../core/outputs';
 
 /** The state in a word with its dot, as on a card or a row: amber needs you, cyan works, emerald is ready. */
 export function ThreadStatePill({ thread, compact }: { thread: Session; compact?: boolean }) {
@@ -155,6 +160,127 @@ export function ThreadChips({ thread }: { thread: Session }) {
 	);
 }
 
+/** A chip that does something: the look of a Chip, with a hover and a click of its own. */
+const CHIP_BUTTON =
+	'inline-flex h-5 max-w-[168px] shrink-0 items-center gap-1 rounded-[6px] border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-[11px] leading-none whitespace-nowrap text-(--text-secondary) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) hover:bg-(--alpha-white-7) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+
+/** A file's look on a chip: a speck of the picture, or its kind's icon. */
+function FileMark({ item }: { item: ViewerItem }) {
+	const [broken, setBroken] = useState(false);
+	if (isImagePath(item.path) && !broken) {
+		return (
+			<img
+				src={outputUrl(item.sessionId, item.path)}
+				alt=""
+				loading="lazy"
+				onError={() => setBroken(true)}
+				className="size-3.5 shrink-0 rounded-[3px] object-cover object-top shadow-[0_0_0_1px_var(--border-subtle)]"
+			/>
+		);
+	}
+	const info = categoryInfo(categoryOf(item.path));
+	return <Icon icon={info.icon} size={11} className={cn('shrink-0', info.tone)} />;
+}
+
+/** The file larger, with its name, size and when it was saved: what a file chip shows on hover. */
+function FilePeek({ item, output }: { item: ViewerItem; output: Output }) {
+	return (
+		<>
+			<div className="relative h-[148px] overflow-hidden rounded-[8px] border border-(--border-subtle) bg-(--bg-inset)">
+				{isImagePath(item.path) ? <OutputThumb item={item} fit="contain" /> : <FileFace path={item.path} size={24} />}
+			</div>
+			<div className="flex min-w-0 items-baseline gap-2">
+				<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)" title={item.path}>
+					{nameOf(item.path)}
+				</span>
+				<Caption className="shrink-0">
+					{extensionOf(item.path)} · {fileSize(output.size)}
+				</Caption>
+			</div>
+			<Caption>Saved {age(new Date(output.mtimeMs).toISOString())} ago · click to open</Caption>
+		</>
+	);
+}
+
+/** How many files the +N chip's list shows before it points to the Library. */
+const LISTED_FILES = 8;
+
+/**
+ * What a thread made, as chips after its pull request: its newest file, a
+ * peek of it on hover, and +N for the rest, listed on hover. A click opens
+ * the file in the viewer beside the conversation, the thread's others a step
+ * away. `onPeek` says when one of them shows a peek, so the row's own stays shut.
+ */
+export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?: (peeking: boolean) => void }) {
+	const outputs = useThreadOutputs(thread.id);
+	if (outputs.length === 0) return null;
+	const items: ViewerItem[] = outputs.map((output) => ({ sessionId: thread.id, path: output.path }));
+	const open = (item: ViewerItem) => openViewer(item, items, thread.spaceId ?? null);
+	const [first, ...rest] = items;
+	return (
+		<span className="flex shrink-0 items-center gap-1" onPointerEnter={() => onPeek?.(true)} onPointerLeave={() => onPeek?.(false)}>
+			<HoverPeek content={<FilePeek item={first} output={outputs[0]} />} width={268} openDelay={200}>
+				<button
+					type="button"
+					aria-label={`Open ${nameOf(first.path)}`}
+					onClick={(event) => {
+						event.stopPropagation();
+						open(first);
+					}}
+					className={CHIP_BUTTON}
+				>
+					<FileMark item={first} />
+					<span className="min-w-0 truncate">{nameOf(first.path)}</span>
+				</button>
+			</HoverPeek>
+			{rest.length ? (
+				<HoverPeek
+					width={268}
+					openDelay={200}
+					content={
+						<>
+							<Caption>
+								{rest.length} more {rest.length === 1 ? 'file' : 'files'} from this thread
+							</Caption>
+							<div className="-mx-1.5 flex flex-col">
+								{rest.slice(0, LISTED_FILES).map((item, index) => (
+									<button
+										key={item.path}
+										type="button"
+										onClick={() => open(item)}
+										className="flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+									>
+										<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-(--border-subtle) bg-(--bg-inset)">
+											{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
+										</span>
+										<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>
+											{nameOf(item.path)}
+										</span>
+										<span className="in-num shrink-0 text-[10.5px] text-(--text-disabled)">{fileSize(outputs[index + 1].size)}</span>
+									</button>
+								))}
+							</div>
+							{rest.length > LISTED_FILES ? <Caption>and {rest.length - LISTED_FILES} more in the thread's Library</Caption> : null}
+						</>
+					}
+				>
+					<button
+						type="button"
+						aria-label={`${rest.length} more files`}
+						onClick={(event) => {
+							event.stopPropagation();
+							open(rest[0]);
+						}}
+						className={cn(CHIP_BUTTON, 'in-num px-1.5 text-[10.5px] text-(--text-tertiary)')}
+					>
+						+{rest.length}
+					</button>
+				</HoverPeek>
+			) : null}
+		</span>
+	);
+}
+
 /** How long it has worked, or how long since it last did anything. */
 function phaseOf(thread: Session, now: number): string {
 	const state = stateOf(thread);
@@ -242,8 +368,9 @@ export function ThreadRow({ thread }: { thread: Session }) {
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
 	const line = waiting ? threadLine(thread) : '';
+	const [peeking, setPeeking] = useState(false);
 	return (
-		<HoverPeek content={<ThreadPeek thread={thread} />}>
+		<HoverPeek content={<ThreadPeek thread={thread} />} quiet={peeking}>
 			<article
 				aria-label={thread.title}
 				onClick={() => open(thread)}
@@ -252,8 +379,9 @@ export function ThreadRow({ thread }: { thread: Session }) {
 				<div className="flex min-h-6 min-w-0 items-center gap-2.5">
 					<ThreadGlyph thread={thread} size={14} />
 					<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{thread.title}</span>
-					<span className="flex shrink-0 items-center gap-1">
+					<span className="flex min-w-0 shrink items-center gap-1">
 						<ThreadChips thread={thread} />
+						<ThreadOutputChips thread={thread} onPeek={setPeeking} />
 					</span>
 					<span className="flex-1" />
 					<span className={cn('in-num shrink-0 text-[11px]', state === 'working' ? 'text-(--accent-text)' : 'text-(--text-disabled)', !waiting && nextSteps(thread).length && 'sm:group-focus-within/thread:hidden sm:group-hover/thread:hidden')}>

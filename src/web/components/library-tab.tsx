@@ -11,7 +11,7 @@ import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigge
 import { useStoredState } from '@/components/split-pane';
 import { api, type Output, outputUrl, refreshFor } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
-import { age } from '@/lib/format';
+import { age, fileSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 type Kind = 'page' | 'image' | 'pdf' | 'table' | 'text' | 'other';
@@ -19,7 +19,7 @@ type Kind = 'page' | 'image' | 'pdf' | 'table' | 'text' | 'other';
 const KINDS: Array<[RegExp, Kind]> = [
 	// HTML shows as the page it is, live, with its source a click away.
 	[/\.html?$/i, 'page'],
-	[/\.(png|jpe?g|gif|webp)$/i, 'image'],
+	[/\.(png|jpe?g|gif|webp|avif|svg)$/i, 'image'],
 	[/\.pdf$/i, 'pdf'],
 	[/\.(csv|tsv)$/i, 'table'],
 	[/\.(md|txt|log|json|ya?ml|xml|html?|diff|patch|sh|[cm]?[jt]sx?|py|go|rs|sql)$/i, 'text'],
@@ -27,11 +27,7 @@ const KINDS: Array<[RegExp, Kind]> = [
 
 export const kindOf = (path: string): Kind => KINDS.find(([pattern]) => pattern.test(path))?.[1] ?? 'other';
 
-function size(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+const size = fileSize;
 
 /** Where one Library file is read: its address and text, and the task whose Library holds it, which a live page needs. */
 export type Place = { path: string; url: string; textKey: QueryKey; text: () => Promise<string>; sessionId?: string };

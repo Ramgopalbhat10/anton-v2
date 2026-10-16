@@ -11,7 +11,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const { attachmentBlock, splitAttachments, withAttachments } = await import('../src/core/attachments.ts');
 const { documentText } = await import('../src/services/documents.ts');
 const { attachToProject, attachToTask, INLINE_CHARS, projectAttachment, projectPictures, readAttachment } = await import('../src/services/attachments.ts');
-const { copyUploads } = await import('../src/services/checkpoints.ts');
+const { copyLibrary } = await import('../src/services/checkpoints.ts');
 const { readSpaceFileForAgent } = await import('../src/services/space-files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
@@ -120,10 +120,29 @@ test('files attached before the sandbox started are put into its outputs folder 
 		ports: [],
 		resources: { runtime: 'container', cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] },
 	});
-	await copyUploads(machine, 't1');
+	await copyLibrary(machine, 't1');
 	const listed = new TextDecoder().decode((await machine.exec(`ls ${machine.root}/outputs/uploads`)).stdout).trim().split('\n').sort();
 	assert.deepEqual(listed, ['big log.txt', 'report.docx', 'sales.xlsx']);
 	assert.deepEqual(new Uint8Array(readFileSync(path.join(machine.root, 'outputs/uploads/sales.xlsx'))), fixture('sales.xlsx'));
+});
+
+test('what the agent saved comes back to a machine that starts fresh, so the next checkpoint keeps it in the Library', async () => {
+	const { getProviders } = await import('../src/providers/index.ts');
+	const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+	await insertSession({ id: 't3', projectId: project.id, title: 'Lost sandbox', model: 'x', reasoning: null, branch: 'main', baseBranch: 'main', baseSha: 'abc', planMode: false });
+	await getProviders().store.put('sessions/t3/outputs/diagrams/flow.png', png);
+	const checkpoint = { at: new Date().toISOString(), baseSha: 'abc', branch: 'main', files: [], log: [], outputs: [{ path: 'diagrams/flow.png', size: png.length, mtimeMs: 1, key: 'sessions/t3/outputs/diagrams/flow.png' }] };
+	await getProviders().store.put('sessions/t3/checkpoint.json', JSON.stringify(checkpoint));
+	const { machine } = await localSandboxProvider(path.join(dir, 'machines')).acquire({
+		key: 't3',
+		state: null,
+		image: null,
+		baseImage: null,
+		ports: [],
+		resources: { runtime: 'container', cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] },
+	});
+	await copyLibrary(machine, 't3');
+	assert.deepEqual(new Uint8Array(readFileSync(path.join(machine.root, 'outputs/diagrams/flow.png'))), png);
 });
 
 test('a file attached to the project goes to its Library, where the coordinator reads it as text', async () => {
