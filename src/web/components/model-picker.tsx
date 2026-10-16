@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, memo, type PointerEvent, useMemo, useRef, useState } from 'react';
 import { Count } from '@/components/instrument';
@@ -10,6 +10,9 @@ import {
 	effectiveReasoning,
 	type Filter,
 	FILTERS,
+	listedModels,
+	type ModelOptions,
+	optionsOf,
 	REASONING_LABEL,
 	reasoningStrength,
 	recentModels,
@@ -116,15 +119,15 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
  */
 const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-2 px-2';
 
-/** What a million tokens cost, in and out, in their own columns; a plan's or a free model's fills both with one word. */
+/**
+ * What a million tokens cost, in and out, in their own columns; a free
+ * model's fills both with one word, and a plan's is left blank, since the dot
+ * on its mark already says it is on a plan.
+ */
 function PriceCells({ model }: { model: ModelInfo }) {
-	const word = model.subscription ? 'PLAN' : model.price.input === 0 && model.price.output === 0 ? 'FREE' : null;
-	if (word) {
-		return (
-			<span className={cn('col-span-2 text-right font-mono text-[9.5px] tracking-[0.06em]', word === 'PLAN' ? 'text-(--accent-text)' : 'text-(--success-text)')}>
-				{word}
-			</span>
-		);
+	if (model.subscription) return <span className="col-span-2" />;
+	if (model.price.input === 0 && model.price.output === 0) {
+		return <span className="col-span-2 text-right font-mono text-[9.5px] tracking-[0.06em] text-(--success-text)">FREE</span>;
 	}
 	return (
 		<>
@@ -288,6 +291,91 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 }
 
 /**
+ * The context sizes a model comes in, as a segmented ruler: each segment's
+ * ticks run as far as its share of the largest, so the standard window reads
+ * as a fraction of the 1M one at a glance. Click one, or use the arrow keys.
+ */
+export function ContextRuler({ options, onChange }: { options: ModelOptions; onChange: (context: string | null) => void }) {
+	const sizes = options.contexts;
+	const largest = Math.max(...sizes.map((size) => size.tokens));
+	const chosen = Math.max(
+		0,
+		sizes.findIndex((size) => size.tag === options.chosen.context),
+	);
+	const TICKS = 12;
+	function onKeyDown(event: KeyboardEvent) {
+		const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+		if (!step) return;
+		event.preventDefault();
+		event.stopPropagation();
+		onChange(sizes[Math.min(sizes.length - 1, Math.max(0, chosen + step))].tag);
+	}
+	return (
+		<div role="radiogroup" aria-label="Context window" onKeyDown={onKeyDown} className="inline-flex shrink-0 gap-0.5 rounded-[8px] bg-(--alpha-white-6) p-0.5">
+			{sizes.map((size, index) => {
+				const on = index === chosen;
+				const lit = Math.max(1, Math.round((size.tokens / largest) * TICKS));
+				return (
+					<button
+						type="button"
+						role="radio"
+						aria-checked={on}
+						tabIndex={on ? 0 : -1}
+						key={size.tag ?? 'standard'}
+						onClick={() => onChange(size.tag)}
+						title={size.tag ? `Up to ${tokens(size.tokens)} tokens of context` : `The standard ${tokens(size.tokens)} window`}
+						className={cn(
+							'group/size flex flex-col items-start gap-[3px] rounded-[6px] px-2 pt-[3px] pb-1 outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+							on ? 'bg-(--neutral-700) shadow-[inset_0_0_0_1px_var(--border-subtle)]' : 'hover:bg-(--alpha-white-6)',
+						)}
+					>
+						<span className={cn('in-num text-[10.5px] leading-none', on ? 'text-(--text-primary)' : 'text-(--text-tertiary) group-hover/size:text-(--text-secondary)')}>
+							{tokens(size.tokens)}
+						</span>
+						<span aria-hidden className="flex h-[5px] items-end gap-[2px]">
+							{Array.from({ length: TICKS }, (_, tick) => (
+								<span
+									key={tick}
+									className="w-px rounded-full"
+									style={{
+										height: tick === lit - 1 ? '100%' : '60%',
+										background: tick >= lit ? 'var(--segment-off)' : on ? 'var(--accent-base)' : 'var(--text-disabled)',
+									}}
+								/>
+							))}
+						</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+/** Fast mode as a bolt that lights up and a small switch; its title says what it costs. */
+export function FastToggle({ on, note, onChange }: { on: boolean; note?: string; onChange: (on: boolean) => void }) {
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={on}
+			aria-label="Fast mode"
+			title={note}
+			onClick={() => onChange(!on)}
+			className={cn(
+				'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[8px] pr-1.5 pl-2 text-[11.5px] outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				on ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'text-(--text-tertiary) hover:bg-(--alpha-white-6) hover:text-(--text-secondary)',
+			)}
+		>
+			<Icon icon={Zap} size={12} className={cn(on && 'drop-shadow-[0_0_4px_var(--accent-base)] [&_path]:fill-current')} />
+			Fast
+			<span className={cn('relative ml-0.5 inline-flex h-3 w-[22px] rounded-full transition-colors duration-(--duration-micro)', on ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
+				<span className={cn('absolute top-0.5 size-2 rounded-full bg-white transition-transform duration-(--duration-micro)', on ? 'translate-x-3' : 'translate-x-0.5')} />
+			</span>
+		</button>
+	);
+}
+
+/**
  * Which providers' models to list, any number at once. With none chosen it is
  * a quiet icon; with some, their logos side by side and a button to clear them.
  */
@@ -409,6 +497,22 @@ function sectionsFor(models: ModelInfo[], visible: ModelInfo[], browsing: boolea
 	].filter((section) => section.total > 0);
 }
 
+/** What a model comes in beside its standard self, above its effort: its context sizes and Fast. */
+function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; note?: string; onChange: (change: Partial<ModelOptions['chosen']>) => void }) {
+	return (
+		<div className="flex items-center gap-3 pt-1.5 pr-2 pl-3">
+			<span className="in-caption w-12 shrink-0">Context</span>
+			{options.contexts.length > 1 ? (
+				<ContextRuler options={options} onChange={(context) => onChange({ context })} />
+			) : (
+				<span className="in-num text-[11px] text-(--text-tertiary)">{tokens(options.contexts[0].tokens)}</span>
+			)}
+			<span className="flex-1" />
+			{options.fast ? <FastToggle on={options.chosen.fast} note={note} onChange={(fast) => onChange({ fast })} /> : null}
+		</div>
+	);
+}
+
 /**
  * Compact model chooser: a search, the models in one list with each source
  * (a plan you signed in to, or a gateway) as a section, and the chosen
@@ -439,8 +543,12 @@ export const ModelPicker = memo(function ModelPicker({
 	const [cursor, setCursor] = useState(0);
 	const list = useRef<HTMLDivElement>(null);
 
-	const all = models.data?.models ?? [];
-	const selected = all.find((model) => model.id === value.model);
+	const everything = models.data?.models ?? [];
+	// A plan model's larger context and fast mode are its controls along the bottom, not rows.
+	const all = useMemo(() => listedModels(everything), [everything]);
+	const selected = everything.find((model) => model.id === value.model);
+	const options = selected ? optionsOf(everything, selected) : undefined;
+	const shown = options?.base;
 	const reasoning = effectiveReasoning(selected, value.reasoning);
 	const sources = useMemo(
 		() => sourcesOf(all, (plans.data?.subscriptions ?? []).map((plan) => ({ name: plan.name, connected: plan.state === 'connected' }))),
@@ -486,8 +594,17 @@ export const ModelPicker = memo(function ModelPicker({
 
 	function pick(model: ModelInfo, close: boolean) {
 		rememberModel(model.id);
-		if (model.id !== value.model) onChange({ model: model.id, reasoning: null });
+		if (model.id !== shown?.id) {
+			// The context and Fast you chose carry over to a model that offers them.
+			const next = optionsOf(everything, model);
+			const context = options?.chosen.context && next.contexts.some((size) => size.tag === options.chosen.context) ? options.chosen.context : null;
+			onChange({ model: next.pick({ context, fast: Boolean(options?.chosen.fast && next.fast) }).id, reasoning: null });
+		}
 		if (close) setOpen(false);
+	}
+
+	function choose(change: Partial<ModelOptions['chosen']>) {
+		if (options) onChange({ model: options.pick({ ...options.chosen, ...change }).id });
 	}
 
 	function toggleVendor(vendor: string) {
@@ -516,8 +633,8 @@ export const ModelPicker = memo(function ModelPicker({
 
 	function onKeyDown(event: KeyboardEvent) {
 		const handler = keys[event.key];
-		// The menu, the effort row and a focused pin answer their own keys.
-		if (!handler || (event.target as HTMLElement).closest('[role=menu],[role=radiogroup],[aria-pressed]')) return;
+		// The menu, the effort and context rows, the Fast switch and a focused pin answer their own keys.
+		if (!handler || (event.target as HTMLElement).closest('[role=menu],[role=radiogroup],[role=switch],[aria-pressed]')) return;
 		event.preventDefault();
 		handler();
 		requestAnimationFrame(() => list.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }));
@@ -544,8 +661,13 @@ export const ModelPicker = memo(function ModelPicker({
 					)}
 				>
 					{selected ? <ModelMark model={selected} size={height - 10} /> : <Spinner size={12} tone="neutral" />}
-					<span className="min-w-0 truncate text-[12px]">{selected ? shortName(selected) : 'Model'}</span>
-					{selected?.subscription ? <span className="font-mono text-[9.5px] tracking-[0.06em] text-(--accent-text)">PLAN</span> : null}
+					<span className="min-w-0 truncate text-[12px]">{shown ? shortName(shown) : 'Model'}</span>
+					{options?.chosen.context ? (
+						<span className="in-num rounded-[4px] bg-(--alpha-white-6) px-1 py-px text-[10px] text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
+							{tokens(selected!.contextLength)}
+						</span>
+					) : null}
+					{options?.chosen.fast ? <Icon icon={Zap} size={11} className="text-(--accent-text) [&_path]:fill-current" /> : null}
 					{selected?.reasoning.length ? (
 						<span className="flex items-center gap-1 rounded-[4px] bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
@@ -702,7 +824,7 @@ export const ModelPicker = memo(function ModelPicker({
 											<ModelRow
 												key={`${section.title}-${model.id}`}
 												model={model}
-												selected={model.id === value.model}
+												selected={model.id === shown?.id}
 												active={start + index === cursor}
 												pinned={pinnedIds.includes(model.id)}
 												onPick={() => pick(model, false)}
@@ -716,9 +838,14 @@ export const ModelPicker = memo(function ModelPicker({
 						)}
 					</div>
 
-					<div className="flex shrink-0 items-center gap-3 border-t border-(--border-subtle) py-1.5 pr-2 pl-3">
-						<span className="in-caption shrink-0">Effort</span>
-						<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
+					<div className="flex shrink-0 flex-col border-t border-(--border-subtle)">
+						{options && (options.contexts.length > 1 || options.fast) ? (
+							<ModelOptionsRow options={options} note={selected !== options.base ? selected?.description : undefined} onChange={choose} />
+						) : null}
+						<div className="flex items-center gap-3 py-1.5 pr-2 pl-3">
+							<span className="in-caption w-12 shrink-0">Effort</span>
+							<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
+						</div>
 					</div>
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>

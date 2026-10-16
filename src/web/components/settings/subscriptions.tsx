@@ -222,7 +222,14 @@ function Models({ subscription }: { subscription: Subscription }) {
 						className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-lg px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_minmax(0,1fr)_auto]"
 					>
 						<div className="flex min-w-0 flex-col">
-							<span className="truncate text-[12.5px] text-(--text-primary)">{model.name}</span>
+							<span className="flex min-w-0 items-center gap-1.5">
+								<span className="truncate text-[12.5px] text-(--text-primary)">{model.name}</span>
+								{model.options?.map((option) => (
+									<span key={option} className="shrink-0 rounded-[4px] bg-(--alpha-white-6) px-1 py-px font-mono text-[9.5px] tracking-[0.04em] text-(--text-tertiary)">
+										{option}
+									</span>
+								))}
+							</span>
 							<span className="truncate font-mono text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 						</div>
 						<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
@@ -471,6 +478,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 							</p>
 						</CardSection>
 					) : null}
+					{subscription.windows?.length ? <Windows windows={subscription.windows} /> : null}
 					<Models subscription={subscription} />
 					<PlanSettings subscription={subscription} error={refresh.error} />
 					{signOut ? (
@@ -530,8 +538,10 @@ function Windows({ windows }: { windows: PlanWindow[] }) {
 		<CardSection label="Plan limits" hint="As the vendor reports them">
 			<ul aria-label="Plan limits" className="m-0 flex list-none flex-col gap-2 p-0">
 				{windows.map((window) => (
-					<li key={window.label} className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
-						<span className="text-(--text-secondary)">{window.label}</span>
+					<li key={window.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
+						<span className="truncate text-(--text-secondary)" title={window.label}>
+							{window.label}
+						</span>
 						<div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-(--segment-off)">
 							<div
 								className={cn('h-full rounded-full', window.limited || window.usedPercent >= 90 ? 'bg-(--danger-base)' : 'bg-(--accent-base)')}

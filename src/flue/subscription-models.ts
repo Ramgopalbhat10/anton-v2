@@ -1,6 +1,7 @@
 import { createProvider, type Model, type Provider, type ProviderStreams } from '@earendil-works/pi-ai';
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy';
 import { OPENAI_MODELS } from '@earendil-works/pi-ai/providers/openai.models';
+import { parseVariant } from '../core/model-variants.ts';
 import { type ModelInfo, REASONING_LEVELS } from '../core/ports.ts';
 
 type ResponsesModel = Model<'openai-responses'>;
@@ -33,11 +34,19 @@ const UNSUPPORTED = [
 	'user',
 ];
 
-/** Makes a Responses request one a ChatGPT plan token may send: streamed, unstored, and with no system-role items. */
+/**
+ * Makes a Responses request one a ChatGPT plan token may send: streamed, unstored, and with no system-role items.
+ * A variant's request names the model itself: a larger context needs nothing more, and fast mode is the priority tier.
+ */
 export function forChatGptPlan(payload: unknown): unknown {
 	if (!payload || typeof payload !== 'object') return payload;
 	const request = { ...(payload as Record<string, unknown>) };
 	for (const field of UNSUPPORTED) delete request[field];
+	if (typeof request.model === 'string') {
+		const variant = parseVariant(request.model);
+		request.model = variant.base;
+		if (variant.fast) request.service_tier = 'priority';
+	}
 	request.store = false;
 	request.stream = true;
 	if (Array.isArray(request.input)) {
@@ -65,7 +74,7 @@ const known = Object.values(OPENAI_MODELS) as ResponsesModel[];
 
 function toPiModel(info: ModelInfo): ResponsesModel {
 	const id = info.id.slice(`${GATEWAY}/`.length);
-	const pi = known.find((model) => model.id === id);
+	const pi = known.find((model) => model.id === parseVariant(id).base);
 	return {
 		id,
 		name: info.name,

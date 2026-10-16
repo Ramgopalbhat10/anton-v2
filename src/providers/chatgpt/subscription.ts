@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { OPENAI_MODELS } from '@earendil-works/pi-ai/providers/openai.models';
+import { linkVariants, sizeTag, withVariants } from '../../core/model-variants.ts';
 import { REASONING_LEVELS, type Reasoning, type SubscriptionCredential, type SubscriptionModel, type SubscriptionProvider } from '../../core/ports.ts';
 
 /**
@@ -71,7 +72,13 @@ type ListedModel = {
 	description?: string;
 	visibility?: string;
 	context_window?: number;
+	/** The largest context the model takes when a client asks for more than `context_window` (Codex's 1M). */
+	max_context_window?: number;
 	max_output_tokens?: number;
+	/** Faster tiers the plan serves the model at, such as `{ id: 'priority', name: 'Fast' }`. */
+	service_tiers?: Array<{ id?: unknown; name?: unknown }>;
+	/** The older spelling of `service_tiers`: `['fast']`. */
+	additional_speed_tiers?: unknown[];
 	input_modalities?: string[];
 	supported_reasoning_levels?: unknown[];
 	default_reasoning_level?: string;
@@ -102,6 +109,30 @@ export function toSubscriptionModel(listed: ListedModel, gateway: string): Subsc
 		defaultReasoning: reasoning.includes(preferred) ? preferred : (reasoning.find((level) => level !== 'off') ?? 'off'),
 		listPrice: pi ? { input: pi.cost.input, output: pi.cost.output, cacheRead: pi.cost.cacheRead, cacheWrite: pi.cost.cacheWrite } : null,
 	};
+}
+
+/** Whether the account's list offers the model at Codex's fast speed (`service_tier: "priority"`). */
+const offersFast = (listed: ListedModel) =>
+	(listed.service_tiers ?? []).some((tier) => /^(priority|fast)$/i.test(String(tier.id)) || /^fast$/i.test(String(tier.name))) ||
+	(listed.additional_speed_tiers ?? []).some((tier) => tier === 'fast');
+
+/**
+ * The model and the variants the account's list offers beside it: its largest
+ * context (`[1m]`), when that is more than its standard one, fast mode
+ * (`[fast]`, Codex's priority tier), and both.
+ */
+export function toSubscriptionModels(listed: ListedModel, gateway: string): SubscriptionModel[] {
+	const model = toSubscriptionModel(listed, gateway);
+	if (!model) return [];
+	const largest = listed.max_context_window;
+	const tag = typeof largest === 'number' ? sizeTag(largest) : null;
+	return withVariants(model, {
+		context: tag
+			? { tag, tokens: largest!, description: `Up to ${tag.toUpperCase()} of context; calls past the standard window use more of your plan's limits.` }
+			: null,
+		// pi counts a priority-tier answer at the tier's price itself, from the tier the response names.
+		fast: offersFast(listed) ? { description: "Fast mode answers sooner and uses more of your plan's limits." } : null,
+	});
 }
 
 export function chatGptSubscription(options: ChatGptOptions = CHATGPT_DEFAULTS): SubscriptionProvider {
@@ -197,7 +228,7 @@ export function chatGptSubscription(options: ChatGptOptions = CHATGPT_DEFAULTS):
 			});
 			if (!response.ok) throw new Error(`ChatGPT models: ${response.status} ${(await response.text().catch(() => '')).slice(0, 200)}`);
 			const body = (await response.json()) as { models?: ListedModel[]; data?: ListedModel[] };
-			return (body.models ?? body.data ?? []).map((listed) => toSubscriptionModel(listed, 'openai')).filter((model) => model !== null);
+			return linkVariants((body.models ?? body.data ?? []).flatMap((listed) => toSubscriptionModels(listed, 'openai')));
 		},
 	};
 }

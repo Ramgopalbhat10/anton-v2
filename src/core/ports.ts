@@ -5,6 +5,8 @@
  * `src/providers/index.ts`.
  */
 
+import type { VariantOf } from './model-variants.ts';
+
 export type ExecOptions = {
 	cwd?: string;
 	env?: Record<string, string>;
@@ -292,6 +294,8 @@ export type ModelInfo = {
 	defaultReasoning: Reasoning;
 	/** The plan its calls bill, such as "ChatGPT", when it runs on a subscription you signed in to rather than per token. */
 	subscription?: string;
+	/** Set on a plan model's larger context or fast mode (`<model>[1m]`, `<model>[fast]`): the model it is a variant of. */
+	variant?: VariantOf;
 };
 
 /** The models an LLM gateway offers for agent work (tool calling, text out). */
@@ -426,6 +430,8 @@ export type AgentRuntime = {
 	/** Read again with `fresh`; otherwise the last answer is reused for a few minutes. */
 	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
 	listModels(): Promise<SubscriptionModel[]>;
+	/** What the program says is used of the plan's own limits, read with its status; null when it will not say. */
+	windows?(): Promise<PlanWindow[] | null>;
 	open(options: RuntimeConversationOptions): RuntimeConversation;
 };
 

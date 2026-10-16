@@ -67,8 +67,11 @@ export type SubscriptionView = {
 	/** When the current access token lapses; Anton renews it a few minutes before. */
 	expiresAt: string | null;
 	options: SubscriptionOptions;
-	/** The account's models, each with the tokens it used on the plan this month. */
-	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number }>;
+	/**
+	 * The account's models, each with the tokens it used on the plan this month. A model's larger context and
+	 * fast mode are not rows of their own: their tokens count toward it, and `options` names them ("1M", "Fast").
+	 */
+	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options: string[] }>;
 	/** Tokens all of the plan's models used since the start of this month. */
 	monthTokens: number;
 	modelsAt: string | null;
@@ -80,7 +83,7 @@ export type SubscriptionView = {
 	signIn: string | null;
 	limitHitAt: string | null;
 	extraUsageAt: string | null;
-	/** A key plan's dashboard, the key's last four characters, and what the vendor says is left of the plan's own limits. */
+	/** A key plan's dashboard and the key's last four characters; and, for a key plan or Claude Code, what the vendor says is used of the plan's own limits. */
 	keyPage: string | null;
 	keyHint: string | null;
 	windows: PlanWindow[] | null;
@@ -588,21 +591,31 @@ export async function subscriptionView(provider: SubscriptionProvider): Promise<
 async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView['models']> {
 	// Usage is logged under `<gateway>/<model>`, the way tasks name the plan's models.
 	const spent = models.length ? await spendBy('model', startOfMonth()).catch(() => []) : [];
-	return models.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => ({
-		id,
-		name,
-		contextLength,
-		vision,
-		reasoning,
-		defaultReasoning,
-		tokens: spent.find((row) => row.key === id)?.tokens ?? 0,
-	}));
+	const tokensOf = (id: string) => spent.find((row) => row.key === id)?.tokens ?? 0;
+	return models
+		.filter((model) => !model.variant)
+		.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => {
+			const variants = models.filter((model) => model.variant?.of === id);
+			const contexts = [...new Set(variants.flatMap((model) => (model.variant?.context ? [model.variant.context.toUpperCase()] : [])))];
+			return {
+				id,
+				name,
+				contextLength,
+				vision,
+				reasoning,
+				defaultReasoning,
+				tokens: tokensOf(id) + variants.reduce((sum, model) => sum + tokensOf(model.id), 0),
+				options: [...contexts, ...(variants.some((model) => model.variant?.fast) ? ['Fast'] : [])],
+			};
+		});
 }
 
 /** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */
 export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionView> {
 	const [current, status] = await Promise.all([stored(runtime.id), runtime.status()]);
-	const models = status.signedIn ? await withTokens(await freshModels(runtimePlan(runtime), current)) : [];
+	const [models, windows] = status.signedIn
+		? await Promise.all([withTokens(await freshModels(runtimePlan(runtime), current)), runtime.windows?.() ?? Promise.resolve(null)])
+		: [[], null];
 	return {
 		id: runtime.id,
 		name: runtime.name,
@@ -625,7 +638,7 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		extraUsageAt: current.extraUsageAt,
 		keyPage: null,
 		keyHint: null,
-		windows: null,
+		windows,
 	};
 }
 
@@ -711,8 +724,8 @@ const USAGE_PAGES: Record<string, string> = {
 
 /**
  * A plan's use as Anton saw it: tokens and calls on its models, and what the
- * same calls would have cost at the vendor's API list prices. The vendor
- * does not tell apps how much of the plan is left, so that is not here.
+ * same calls would have cost at the vendor's API list prices. What is left of
+ * the plan's own limits is on its card (`windows`), where the vendor says.
  */
 export type PlanUsage = {
 	id: string;
