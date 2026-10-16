@@ -2,10 +2,11 @@ import { announce } from '../core/changes.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
-import { quote, safeRelativePath, text } from '../core/shell.ts';
+import { quote, safeRelativePath } from '../core/shell.ts';
 import { getSessionRecord, listThreadRecords } from '../db/sessions.ts';
 import { getSpace } from '../db/spaces.ts';
 import { getProviders } from '../providers/index.ts';
+import { documentSlice } from './documents.ts';
 import { MAX_UPLOAD_BYTES } from './files.ts';
 import { logProblem } from './log.ts';
 import { liveMachine } from './workspace.ts';
@@ -85,17 +86,19 @@ export async function copySpaceFiles(machine: Machine, sessionId: string): Promi
 	}
 }
 
-/** The longest text `read_project_file` returns at once. */
-const MAX_READ = 60_000;
+/** A project file as text from `offset`, PDFs and office documents converted: the list when no path is given. */
+export async function readSpaceFileForAgent(spaceId: string, rawPath?: string, offset = 0): Promise<string> {
+	const files = await listSpaceFiles(spaceId);
+	if (!rawPath) return files.length ? files.map((file) => `${file.path} (${file.size.toLocaleString()} bytes)`).join('\n') : 'The project has no files yet.';
+	const path = rawPath.trim().replace(new RegExp(`^(\\.\\./)?${PROJECT_FILES}/`), '');
+	const bytes = await readSpaceFile(spaceId, path);
+	if (!bytes) return `No project file ${rawPath}. The files are:\n${files.map((file) => file.path).join('\n')}`;
+	return documentSlice(path, bytes, offset, 'read the next part with read_project_file');
+}
 
-/** A project file as text, for a thread that has no machine yet: the list when no path is given. */
-export async function readProjectFileForAgent(sessionId: string, rawPath?: string): Promise<string> {
+/** The same for a project's thread, which may have no machine yet. */
+export async function readProjectFileForAgent(sessionId: string, rawPath?: string, offset = 0): Promise<string> {
 	const session = await getSessionRecord(sessionId);
 	if (!session?.spaceId) return 'This task is not part of a project, so it has no project files.';
-	const files = await listSpaceFiles(session.spaceId);
-	if (!rawPath) return files.length ? files.map((file) => `${file.path} (${file.size.toLocaleString()} bytes)`).join('\n') : 'The project has no files yet.';
-	const bytes = await readSpaceFile(session.spaceId, rawPath);
-	if (!bytes) return `No project file ${rawPath}. The files are:\n${files.map((file) => file.path).join('\n')}`;
-	const content = text(bytes);
-	return content.length > MAX_READ ? `${content.slice(0, MAX_READ)}\n… (cut at ${MAX_READ.toLocaleString()} characters)` : content;
+	return readSpaceFileForAgent(session.spaceId, rawPath, offset);
 }

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueries } from './render';
@@ -112,5 +112,21 @@ describe('new task composer', () => {
 		await userEvent.click(screen.getByRole('menuitem', { name: 'acme/demo' }));
 		expect(screen.getByRole('button', { name: 'Start task' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'main' })).toBeTruthy();
+	});
+	it('takes images and any other files, pasted, dropped or picked, and starts the task with them', async () => {
+		setup();
+		const box = screen.getByRole('textbox');
+		fireEvent.paste(box, { clipboardData: { files: [new File(['png'], 'image.png', { type: 'image/png' })], getData: () => '' } });
+		const form = box.closest('form')!;
+		fireEvent.drop(form, { dataTransfer: { files: [new File(['xlsx'], 'sales.xlsx')], types: ['Files'] } });
+		expect(await screen.findByText('sales.xlsx')).toBeTruthy();
+		await screen.findByRole('button', { name: /^Remove pasted-\d+\.png$/ });
+		await userEvent.type(box, 'Chart the sales');
+		await userEvent.click(screen.getByRole('button', { name: 'Start task' }));
+		await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
+		const input = mocks.mutate.mock.calls[0]![0];
+		expect(input.prompt).toBe('Chart the sales');
+		expect(input.images).toEqual([expect.objectContaining({ mimeType: 'image/png', data: btoa('png') })]);
+		expect(input.files).toEqual([expect.objectContaining({ name: 'sales.xlsx' })]);
 	});
 });

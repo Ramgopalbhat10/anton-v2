@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
 import { config } from '../config.ts';
+import { splitAttachments } from '../core/attachments.ts';
 import { appDb } from '../db/client.ts';
 import { updateSession } from '../db/sessions.ts';
 import { logProblem } from './log.ts';
@@ -15,7 +16,9 @@ const MAX_LENGTH = 2000;
  * given (`useLatestInput` in `coder.ts`).
  */
 export async function recordLatestInput(id: string, text: string, at = new Date()): Promise<void> {
-	const input = text.trim();
+	// Attached files show by name, not by the text they carry.
+	const message = splitAttachments(text);
+	const input = [message.text.trim(), ...message.files.map((file) => `[${file.name}]`)].filter(Boolean).join(' ');
 	if (!input) return;
 	// A message answers whatever the agent was waiting on.
 	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString(), asking: null }).catch((error: unknown) =>

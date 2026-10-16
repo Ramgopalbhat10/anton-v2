@@ -14,6 +14,9 @@ const api = vi.hoisted(() => ({
 	stopAgent: vi.fn(async () => undefined),
 	models: vi.fn(async () => ({ models: [], default: 'openrouter/test/cheap' })),
 	startThread: vi.fn(async () => ({ id: 'new' })),
+	attachToProject: vi.fn(),
+	budget: vi.fn(async () => ({ limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null })),
+	commands: vi.fn(async () => ({ commands: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadChip, ThreadRow, nextSteps } = await import('@/components/thread-card');
@@ -23,7 +26,7 @@ const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/components/project-viz');
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
-const { NewThreadForm } = await import('@/components/project-feed');
+const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -168,6 +171,33 @@ describe('threads', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
 		await waitFor(() => expect(api.startThread).toHaveBeenCalledWith('space_1', expect.objectContaining({ brief: 'Compare the pricing pages', projectId: null, planMode: false })));
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/new'));
+	});
+
+	it('attaches files to the coordinator: saved to the project Library and sent with what they say', async () => {
+		const sendMessage = vi.fn(async () => undefined);
+		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
+		fireEvent.paste(box, { clipboardData: { files: [new File(['%PDF'], 'brief.pdf', { type: 'application/pdf' })], getData: () => '' } });
+		expect(await screen.findByText('brief.pdf')).toBeTruthy();
+		api.attachToProject.mockResolvedValueOnce({ name: 'brief.pdf', path: 'brief.pdf', size: 4, kind: 'PDF', text: 'Ship in May.', cut: null });
+		await userEvent.type(box, 'Plan this{Enter}');
+		await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+		expect(api.attachToProject).toHaveBeenCalledWith('space_1', expect.any(File));
+		expect(sendMessage).toHaveBeenCalledWith('Plan this\n\n<attachment name="brief.pdf" path="brief.pdf" kind="PDF" size="4" library="project">\nShip in May.\n</attachment>');
+	});
+
+	it('saves a new thread’s attached files, images too, to the project Library and puts them in its brief', async () => {
+		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+		fireEvent.paste(box, { clipboardData: { files: [new File(['png'], 'mock.png', { type: 'image/png' })], getData: () => '' } });
+		expect(await screen.findByText('mock.png')).toBeTruthy();
+		api.attachToProject.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null });
+		await userEvent.type(box, 'Build this screen');
+		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+		await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+		const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
+		expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
 	});
 
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {

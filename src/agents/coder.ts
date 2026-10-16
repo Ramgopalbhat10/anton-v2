@@ -78,6 +78,7 @@ import { checkReply } from '../services/reply-check.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
+import { readAttachment } from '../services/attachments.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(liveOpenRouterProvider(loadedModels));
@@ -817,15 +818,46 @@ function useRenderHtml(id: string) {
 	);
 }
 
-/** A read-only thread reads the project's Library here; with a sandbox the files are in ../project-files. */
+/** A thread reads the project's Library here, as text; with a sandbox the originals are in ../project-files too. */
 function useProjectFiles(id: string) {
 	useTool(
 		defineTool({
 			name: 'read_project_file',
-			description: "Read a file from the project's Library, which the user added for every thread. Without a path, lists the files.",
-			input: v.object({ path: v.optional(v.pipe(v.string(), v.description('File name as listed'))) }),
-			run: async ({ data }) => ({ output: await readProjectFileForAgent(id, data.path) }),
+			description: "Read a file from the project's Library, which the user added for every thread, as text: PDFs, Word, PowerPoint, Excel and OpenDocument files are converted. Without a path, lists the files.",
+			input: v.object({
+				path: v.optional(v.pipe(v.string(), v.description('File name as listed'))),
+				offset: v.optional(v.pipe(v.number(), v.description('Character to start from, for the next part of a long file'))),
+			}),
+			run: async ({ data }) => ({ output: await readProjectFileForAgent(id, data.path, data.offset) }),
 		}),
+	);
+}
+
+/** Files the user attaches arrive as <attachment> blocks with their text, cut when long; this reads the rest, with or without a sandbox. */
+function useReadAttachment(id: string) {
+	useTool(
+		defineTool({
+			name: 'read_attachment',
+			description:
+				'Read a file the user attached to a message (the path in its <attachment> block, under uploads/) as text, from an offset: PDFs, Word, PowerPoint, Excel and OpenDocument files are converted. ' +
+				'Use it for the rest of an attachment whose text was cut.',
+			input: v.object({
+				path: v.pipe(v.string(), v.minLength(1), v.description('The path from the <attachment> block, such as uploads/report.pdf')),
+				offset: v.optional(v.pipe(v.number(), v.description('Character to start from'))),
+			}),
+			run: async ({ data }) => ({ output: await readAttachment(id, data.path, data.offset) }),
+		}),
+	);
+}
+
+/** Where attached files are, for the agent: with a sandbox it can run its own tools on the originals. */
+function attachmentHint(workspace: boolean, project: boolean): string {
+	return (
+		'Files the user attaches to a message arrive after it as <attachment> blocks holding their text (PDFs, office documents and spreadsheets converted); read the rest of a cut one with read_attachment. ' +
+		(workspace
+			? `The originals are in ${OUTPUTS}/uploads/; process them there with your own tools when the text is not enough (a spreadsheet to analyze, a PDF's images or layout). `
+			: 'The originals are in the Library under uploads/; to process one with code (analyze a spreadsheet, render a PDF\'s pages), start a workspace and find it in ../outputs/uploads/. ') +
+		(project ? `An attachment from the project Library (library="project") is a project file: read it with read_project_file${workspace ? `, or find the original in ../${PROJECT_FILES}` : ''}.` : '')
 	);
 }
 
@@ -1047,7 +1079,9 @@ export function Coder({ id }: AgentProps) {
 		useShow(id);
 		useRenderHtml(id);
 	}
-	if (project && !workspace) useProjectFiles(id);
+	// With a sandbox the files are in ../project-files too; the tool still reads PDFs and office documents as text.
+	if (project) useProjectFiles(id);
+	useReadAttachment(id);
 	useSkills(id, workspace);
 	useLatestInput(id);
 	const browsing = sharedBrowserAvailable();
@@ -1111,9 +1145,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT} ${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT} ${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

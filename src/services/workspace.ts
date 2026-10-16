@@ -6,7 +6,7 @@ import type { Project, SessionRecord } from '../core/types.ts';
 import { DEFAULT_PREVIEW_PORTS, getProject, setWarmImage } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { applyFiles, readCheckpoint } from './checkpoints.ts';
+import { applyFiles, copyUploads, readCheckpoint } from './checkpoints.ts';
 import { checkoutTaskBranch, cloneRepo, initScratch, repoDir } from './git.ts';
 import { logProblem } from './log.ts';
 import { copySpaceFiles } from './space-files.ts';
@@ -174,6 +174,8 @@ async function provision(id: string): Promise<Machine> {
 	}
 	// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
 	if (session.spaceId) await copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id));
+	// So do the files attached to its messages before it had a sandbox.
+	await copyUploads(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the attached files', error, id));
 	return machine;
 }
 

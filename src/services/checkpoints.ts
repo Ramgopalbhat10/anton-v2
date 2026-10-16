@@ -228,6 +228,25 @@ export async function savedOutputs(id: string): Promise<SavedOutput[]> {
 	return bytes ? (JSON.parse(text(bytes)) as SavedOutput[]) : [];
 }
 
+/**
+ * Puts the files you attached to the task (`uploads/`, kept in storage) into
+ * its machine's outputs folder, where the agent's tools reach them: those
+ * attached before the sandbox started are not there yet. Run each time the
+ * machine is set up or resumed; a file already there is left as it is.
+ */
+export async function copyUploads(machine: Machine, id: string): Promise<void> {
+	const uploads = (await savedOutputs(id)).filter((output) => output.path.startsWith('uploads/') && output.key);
+	if (!uploads.length) return;
+	const present = new Set((await listMachineFiles(machine, `${machine.root}/outputs`)).map((file) => file.path));
+	const missing = uploads.filter((output) => !present.has(output.path));
+	if (!missing.length) return;
+	await run(machine, `mkdir -p ${quote(`${machine.root}/outputs/uploads`)}`);
+	for (const output of missing) {
+		const bytes = await getProviders().store.get(output.key!);
+		if (bytes) await writeMachineFile(machine, `${machine.root}/outputs/${output.path}`, bytes);
+	}
+}
+
 /** One task's saves, one after another, so two at once never lose each other's entry. */
 const saving = new Map<string, Promise<unknown>>();
 

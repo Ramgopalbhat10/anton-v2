@@ -11,6 +11,7 @@ import { rememberForSpace } from '../services/memory.ts';
 import { loadedModels } from '../services/models.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/spaces.ts';
 import { editSession, stopSession } from '../services/sessions.ts';
+import { readSpaceFileForAgent } from '../services/space-files.ts';
 import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { toUsage } from '../services/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -33,6 +34,7 @@ const PROMPT = [
 	"Thread titles are a few plain words in the user's own vocabulary.",
 	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show.',
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
+	'Files the user attaches arrive after their message as <attachment> blocks holding the file\'s text; the file itself is saved in the project Library, where every thread can read it. When a thread\'s work needs one, name the file in its brief: the thread reads it with read_project_file or in ../project-files.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply.',
 ].join(' ');
@@ -132,6 +134,18 @@ function useCoordinatorTools(spaceId: string) {
 			description: 'Save one lasting line to the project memory, which you and every thread read: a decision, a preference, a pitfall. Nothing secret.',
 			input: v.object({ note: v.pipe(v.string(), v.minLength(1), v.description('One line')) }),
 			run: async ({ data }) => ({ output: await rememberForSpace(spaceId, data.note) }),
+		}),
+	);
+	useTool(
+		defineTool({
+			name: 'read_project_file',
+			description:
+				"Read a file from the project's Library as text, such as one the user attached: PDFs, Word, PowerPoint, Excel and OpenDocument files are converted. Without a path, lists the files.",
+			input: v.object({
+				path: v.optional(v.pipe(v.string(), v.description('File name as listed'))),
+				offset: v.optional(v.pipe(v.number(), v.description('Character to start from, for the next part of a long file'))),
+			}),
+			run: async ({ data }) => ({ output: await readSpaceFileForAgent(spaceId, data.path, data.offset) }),
 		}),
 	);
 	useTool(

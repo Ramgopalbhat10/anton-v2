@@ -76,6 +76,7 @@ import { addAutomation, automations, removeAutomation, runAutomation, setAutomat
 import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
+import { attachToProject, attachToTask } from './services/attachments.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -586,6 +587,13 @@ app.post('/api/spaces/:id/files', async (c) => {
 	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
 	return c.json(await uploadSpaceFile(c.req.param('id'), name, new Uint8Array(await c.req.arrayBuffer()), c.req.header('content-type') || undefined));
 });
+// A file attached to a message to the coordinator or a new thread's brief: saved to the project's Library, which every thread reads.
+app.post('/api/spaces/:id/attachments', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be attached.');
+	return c.json(await attachToProject(c.req.param('id'), name, new Uint8Array(await c.req.arrayBuffer()), c.req.header('content-type') || undefined));
+});
 app.delete('/api/spaces/:id/file', async (c) => {
 	await removeSpaceFile(c.req.param('id'), c.req.query('path') ?? '');
 	return c.json({ ok: true });
@@ -746,6 +754,13 @@ app.post('/api/sessions/:id/outputs', async (c) => {
 	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
 	const body = new Uint8Array(await c.req.arrayBuffer());
 	return c.json({ path: await uploadOutput(c.req.param('id'), name, body, c.req.header('content-type') || undefined) });
+});
+// A file attached to a message: saved to the task's Library and read as text for the message (src/services/attachments.ts).
+app.post('/api/sessions/:id/attachments', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be attached.');
+	return c.json(await attachToTask(c.req.param('id'), name, new Uint8Array(await c.req.arrayBuffer()), c.req.header('content-type') || undefined));
 });
 app.delete('/api/sessions/:id/output', async (c) => {
 	await removeOutput(c.req.param('id'), c.req.query('path') ?? '');

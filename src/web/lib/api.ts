@@ -1,4 +1,5 @@
 import type { AgentNow } from '../../core/agent-now';
+import type { AttachedFile } from '../../core/attachments';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -655,6 +656,13 @@ export const api = {
 			body: file,
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
+	/** A file attached to a message: saved to the task's Library and read as text for the message. */
+	attachToTask: (id: string, file: File) =>
+		json<AttachedFile>(`/api/sessions/${id}/attachments?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
 	deleteOutput: async (id: string, path: string) => void (await request(outputUrl(id, path), { method: 'DELETE' })),
 	spaces: () => json<{ spaces: Space[] }>('/api/spaces'),
 	space: (id: string) => json<Space>(`/api/spaces/${id}`),
@@ -670,6 +678,13 @@ export const api = {
 	spaceFiles: (id: string) => json<{ files: SpaceFile[] }>(`/api/spaces/${id}/files`),
 	uploadSpaceFile: (id: string, file: File) =>
 		json<SpaceFile>(`/api/spaces/${id}/files?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
+	/** A file attached to a message to the coordinator or a new thread's brief: saved to the project's Library. */
+	attachToProject: (id: string, file: File) =>
+		json<AttachedFile>(`/api/spaces/${id}/attachments?name=${encodeURIComponent(file.name)}`, {
 			method: 'POST',
 			body: file,
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },

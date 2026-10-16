@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
 	models: vi.fn(),
 	files: vi.fn(),
 	commands: vi.fn(),
+	attachToTask: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -114,6 +115,57 @@ describe('Composer', () => {
 		expect(onStop).toHaveBeenCalled();
 		expect(screen.getByText("Today's spending cap of $1 is reached.")).toBeTruthy();
 		expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true);
+	});
+});
+
+describe('attachments', () => {
+	beforeEach(() => vi.clearAllMocks());
+	const paste = (box: HTMLElement, files: File[], text = '') =>
+		fireEvent.paste(box, { clipboardData: { files, getData: (type: string) => (type === 'text/plain' ? text : '') } });
+
+	it('attaches any pasted file, uploads it on send and sends what it says after the message', async () => {
+		const { box, onSend } = setup();
+		paste(box, [new File(['%PDF-1.4'], 'spec.pdf', { type: 'application/pdf' })]);
+		expect(await screen.findByText('spec.pdf')).toBeTruthy();
+		api.attachToTask.mockResolvedValueOnce({ name: 'spec.pdf', path: 'uploads/spec.pdf', size: 8, kind: 'PDF', text: 'Invoices are monthly.', cut: null });
+		await userEvent.type(box, 'Summarize it{Enter}');
+		await waitFor(() => expect(onSend).toHaveBeenCalled());
+		expect(api.attachToTask).toHaveBeenCalledWith('s1', expect.any(File));
+		const [message, images] = onSend.mock.calls[0] as unknown as [string, unknown[]];
+		expect(message).toBe('Summarize it\n\n<attachment name="spec.pdf" path="uploads/spec.pdf" kind="PDF" size="8">\nInvoices are monthly.\n</attachment>');
+		expect(images).toEqual([]);
+		expect(screen.queryByText('spec.pdf')).toBeNull();
+	});
+
+	it('picks files with the paperclip, and sends one alone', async () => {
+		const { container, onSend } = setup();
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		expect(input.getAttribute('accept')).toBeNull();
+		api.attachToTask.mockResolvedValueOnce({ name: 'data.csv', path: 'uploads/data.csv', size: 4, kind: 'CSV', text: 'a,b', cut: null });
+		await userEvent.upload(input, new File(['a,b'], 'data.csv', { type: 'text/csv' }));
+		expect(await screen.findByText('data.csv')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+		await waitFor(() => expect(onSend).toHaveBeenCalled());
+		expect((onSend.mock.calls[0] as unknown as [string])[0]).toMatch(/^Look at the attached file\.\n\n<attachment name="data\.csv"/);
+	});
+
+	it('pastes text copied from an office app as text, though it brings a picture along', async () => {
+		const { box } = setup();
+		paste(box, [new File(['png'], 'image.png', { type: 'image/png' })], 'Q1 revenue');
+		expect(box.textContent).toBe('Q1 revenue');
+		expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+	});
+
+	it('keeps the files and says why when the upload fails', async () => {
+		const { box, onSend } = setup();
+		paste(box, [new File(['x'], 'notes.docx')]);
+		await screen.findByText('notes.docx');
+		api.attachToTask.mockRejectedValueOnce(new Error('Files up to 20 MB can be attached.'));
+		await userEvent.type(box, 'Read{Enter}');
+		await screen.findByText('Not sent: Files up to 20 MB can be attached.');
+		expect(screen.getByText('notes.docx')).toBeTruthy();
+		expect(box.textContent).toBe('Read');
+		expect(onSend).not.toHaveBeenCalled();
 	});
 });
 

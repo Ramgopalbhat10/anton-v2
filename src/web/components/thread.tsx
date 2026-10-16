@@ -13,7 +13,9 @@ import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { type AgentNow, api, branchLabel, isChat, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
-import type { ImageAttachment } from '@/lib/attachments';
+import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
+import { SentAttachments } from '@/components/attachments';
+import { splitAttachments } from '../../core/attachments';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
@@ -408,7 +410,8 @@ const JOINING = 'Anton reads this between its steps';
 const JOINED = 'Read while Anton worked on the reply above';
 
 function UserMessageView({ message, meta, note }: { message: FlueConversationMessage; meta: string[]; note?: string }) {
-	const text = message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+	// Attached files show as chips; the text they carry is the agent's to read.
+	const { text, files } = splitAttachments(message.parts.map((part) => (part.type === 'text' ? part.text : '')).join(''));
 	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
 		<div className="group/user flex flex-col items-end gap-1.5">
@@ -421,10 +424,13 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 					))}
 				</div>
 			) : null}
+			<SentAttachments files={files} />
 			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
-			<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
-				{text}
-			</div>
+			{text ? (
+				<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
+					{text}
+				</div>
+			) : null}
 			{note ? (
 				<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
 					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
@@ -813,8 +819,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 
 	useEffect(() => {
 		if (!agent.historyReady) return;
-		const prompt = takePendingPrompt(sessionId);
-		if (prompt) void agent.sendMessage(prompt);
+		const pending = takePendingPrompt(sessionId);
+		if (pending) void (pending.images.length ? agent.sendMessage(pending.prompt, { images: deliveredImages(pending.images) }) : agent.sendMessage(pending.prompt));
 	}, [agent.historyReady, agent.sendMessage, sessionId]);
 
 	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
@@ -827,8 +833,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	}, [conversation]);
 
 	const onSend = useCallback(
-		(text: string, images: ImageAttachment[]) =>
-			agent.sendMessage(text, { images: images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename })) }),
+		(text: string, images: ImageAttachment[]) => agent.sendMessage(text, { images: deliveredImages(images) }),
 		[agent.sendMessage],
 	);
 	// Stop also drops messages still waiting for the agent's next step, unread; they go back to the composer.
@@ -850,7 +855,11 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		const shown = new Set(messages.flatMap((message) => (message.role === 'user' ? [textOf(message)] : [])));
 		const lost = pending.texts.filter((text) => !shown.has(text));
 		pending.texts = pending.texts.filter((text) => shown.has(text));
-		for (const text of lost) addToComposer(sessionId, { kind: 'text', text });
+		// Files they carried stay in the Library; only the typed words go back.
+		for (const text of lost) {
+			const typed = splitAttachments(text).text;
+			if (typed) addToComposer(sessionId, { kind: 'text', text: typed });
+		}
 		if (!pending.texts.length || Date.now() > pending.until) waiting.current = null;
 	}, [busy, messages, sessionId]);
 
