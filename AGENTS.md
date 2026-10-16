@@ -36,6 +36,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - Git credentials stay out of machines the agent has used: `git.gitAuthEnv()` is only for setup, before the agent or terminal gets the machine, and pushes go through the git host's API (`pushCommits`), never `git push` in the sandbox.
 - New outside services go behind a port in `src/core/ports.ts`, not called directly from services.
 - Pages update from server events (`GET /api/events`), not polling: a change the UI shows is announced with `announce()` from `src/core/changes.ts`, and `src/web/lib/live-updates.ts` maps it to the queries to refetch. Polling is only a slow safety net.
+- Storage cleanup (`storage.ts`) removes only what is left of tasks this database deleted (`deleted_sessions`), never a task it does not know: a bucket can be shared with another server or a development copy, and a copy pointed at production storage once deleted every task's files.
 - Services never import the agents; messages Anton sends on its own go through `sendToAgent` in `agent-runner.ts` (to the coder or the reviewer), so the caps apply to them too.
 
 ## Commands

@@ -797,7 +797,11 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 	await saveCheckpoint(session.id, machine);
 	const kept = (await readCheckpoint(session.id))!.files[0].blob!;
 
-	await store.put('sessions/gone-task/checkpoint.json', '{}');
+	// What a checkpoint finishing after its task was deleted leaves behind, and a task another database keeps in the same storage.
+	const gone = await sessions.createSession({ projectId: project.id, title: 'Gone' });
+	await sessions.deleteSession(gone.id);
+	await store.put(`sessions/${gone.id}/checkpoint.json`, '{}');
+	await store.put('sessions/other-database-task/outputs/report.png', 'theirs');
 	await store.put('blobs/unused', 'nobody points here');
 	// An output the agent wrote is not a manifest, whatever its name.
 	await store.put(`sessions/${session.id}/outputs/report.json`, 'not a checkpoint');
@@ -807,7 +811,8 @@ test('storage cleanup removes deleted tasks, old history and unused file content
 	// Too new to remove: it may belong to a checkpoint still being written.
 	const early = await cleanUpStorage(Date.now());
 	assert.ok(await store.has('blobs/unused'));
-	assert.ok(!(await store.has('sessions/gone-task/checkpoint.json')));
+	assert.ok(!(await store.has(`sessions/${gone.id}/checkpoint.json`)));
+	assert.ok(await store.has('sessions/other-database-task/outputs/report.png'), "another database's task is not this one's to remove");
 	assert.ok(early.removed >= 3);
 
 	const later = await cleanUpStorage(Date.now() + 2 * 60 * 60_000);

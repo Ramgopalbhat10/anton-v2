@@ -16,11 +16,13 @@ const { getProviders } = await import('../src/providers/index.ts');
 const { cleanUpStorage } = await import('../src/services/storage.ts');
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 
-test('a database with no tasks never empties storage that has some', async () => {
+test('cleanup never removes tasks this database does not know: storage shared with another server, or a database not restored yet', async () => {
 	const { store } = getProviders();
 	await store.put('sessions/older-task/checkpoint.json', '{"files":[{"path":"a","blob":"blobs/a"}],"log":[]}');
+	await store.put('sessions/older-task/outputs/diagram.png', 'png');
 	await store.put('blobs/a', 'kept');
-	await assert.rejects(() => cleanUpStorage(Date.now() + 2 * 60 * 60_000), /Restore the database/);
+	await cleanUpStorage(Date.now() + 2 * 60 * 60_000);
 	assert.ok(await store.has('sessions/older-task/checkpoint.json'));
-	assert.ok(await store.has('blobs/a'));
+	assert.ok(await store.has('sessions/older-task/outputs/diagram.png'));
+	assert.ok(await store.has('blobs/a'), 'what its checkpoint uses stays too');
 });

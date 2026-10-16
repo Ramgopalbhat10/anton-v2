@@ -1,7 +1,6 @@
-import { ConflictError } from '../core/errors.ts';
 import type { ObjectStore, StoredObject } from '../core/ports.ts';
 import { text } from '../core/shell.ts';
-import { listSessionRecords } from '../db/sessions.ts';
+import { deletedSessionIds, listSessionRecords } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { type Checkpoint, whileNoCheckpointIsWritten } from './checkpoints.ts';
@@ -12,7 +11,6 @@ const KEEP_CHECKPOINTS = 50;
 /** A blob this new may belong to a checkpoint still being written. */
 const BLOB_GRACE_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
-const EMPTY_DATABASE = 'Storage cleanup skipped: the database has no tasks but storage holds task files. Restore the database, or point it at storage of its own.';
 
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
@@ -62,16 +60,19 @@ async function unusedBlobs(store: ObjectStore, dropped: Set<string>, now: number
 }
 
 /**
- * Removes what nothing can show any more: objects of deleted tasks, history
- * beyond the newest entries, and file contents no remaining checkpoint uses.
+ * Removes what nothing can show any more: what is left of tasks this database
+ * deleted, history beyond the newest entries, and file contents no checkpoint
+ * uses. A task this database does not know is never removed: the storage may
+ * be shared with another database (a second server, a development copy
+ * pointed at the same bucket, one not restored yet), and its tasks are not
+ * this one's to judge.
  */
 export async function cleanUpStorage(now = Date.now()): Promise<CleanupResult> {
 	const { store } = getProviders();
-	const live = new Set((await listSessionRecords()).map((session) => session.id));
+	const [records, deleted] = await Promise.all([listSessionRecords(), deletedSessionIds()]);
+	const live = new Set(records.map((session) => session.id));
 	const sessionObjects = await store.list('sessions/');
-	const orphaned = sessionObjects.filter((object) => !live.has(sessionOf(object.key)));
-	// A database with no tasks next to storage that has some is more likely new or not restored yet than emptied by hand.
-	if (live.size === 0 && orphaned.length > 0) throw new ConflictError(EMPTY_DATABASE);
+	const orphaned = sessionObjects.filter((object) => deleted.has(sessionOf(object.key)) && !live.has(sessionOf(object.key)));
 	const bySession = Map.groupBy(
 		sessionObjects.filter((object) => live.has(sessionOf(object.key))),
 		(object) => sessionOf(object.key),

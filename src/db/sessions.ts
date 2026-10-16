@@ -255,8 +255,18 @@ export async function setSessionTodos(id: string, json: string | null): Promise<
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
-		['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+		[
+			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+			{ sql: 'INSERT OR REPLACE INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)', args: [id, new Date().toISOString()] },
+		],
 		'write',
 	);
 	announce({ kind: 'sessions' });
+}
+
+/** Tasks this database deleted. Storage cleanup removes what is left of these and of no others. */
+export async function deletedSessionIds(): Promise<Set<string>> {
+	const db = await appDb();
+	const result = await db.execute('SELECT session_id FROM deleted_sessions');
+	return new Set(result.rows.map((row) => String(row.session_id)));
 }
