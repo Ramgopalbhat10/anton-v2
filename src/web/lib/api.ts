@@ -693,6 +693,7 @@ export const api = {
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
 	deleteSpaceFile: async (id: string, path: string) => void (await request(spaceFileUrl(id, path), { method: 'DELETE' })),
+	spaceFileText: async (id: string, path: string) => (await request(spaceFileUrl(id, path))).text(),
 	/** Stops the coordinator's current turn. */
 	stopCoordinator: async (id: string) => void (await request(`/api/agents/coordinator/${id}/abort`, { method: 'POST' })),
 };

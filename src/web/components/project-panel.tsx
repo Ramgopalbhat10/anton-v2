@@ -1,13 +1,14 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CalendarClock, Clock, FileText, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Pencil, Play, Plus, Trash2, Upload } from 'lucide-react';
-import { memo, useRef, useState } from 'react';
+import { ArrowLeft, CalendarClock, Clock, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { memo, useState } from 'react';
 import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
+import { Library as LibraryView, type LibrarySource, type Place, taskPlace } from '@/components/library-tab';
 import { WorkspacePane } from '@/components/workspace-pane';
-import { api, type Automation, type ModelChoice, outputUrl, repoShort, type Session, type Space, spaceFileUrl } from '@/lib/api';
+import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space, spaceFileUrl } from '@/lib/api';
 import { age } from '@/lib/format';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -90,80 +91,59 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 	);
 }
 
-/** Files you add for every thread, then what each thread saved. */
+/** The folder of the project's Library that holds what its threads saved, a folder each. */
+const FROM_THREADS = 'From threads';
+/** The threads whose files the Library lists, newest first. */
+const LISTED_THREADS = 24;
+
+type Entry = { place: Place; agentPath: string; remove: () => Promise<unknown> };
+
+/**
+ * The project's Library, shown as a task's is: the files you add for every
+ * thread, and under From threads a folder for each thread with what it saved.
+ */
 function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }) {
 	const queryClient = useQueryClient();
-	const picker = useRef<HTMLInputElement>(null);
 	const files = useQuery({ queryKey: ['space-files', space.id], queryFn: () => api.spaceFiles(space.id) });
-	const upload = useMutation({
-		mutationFn: async (list: File[]) => {
-			for (const file of list) await api.uploadSpaceFile(space.id, file);
-		},
-		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['space-files', space.id] }),
-	});
-	const remove = useMutation({
-		mutationFn: (path: string) => api.deleteSpaceFile(space.id, path),
-		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['space-files', space.id] }),
-	});
-	const recent = threads.slice(0, 12);
+	const recent = threads.slice(0, LISTED_THREADS);
 	const outputs = useQueries({ queries: recent.map((thread) => ({ queryKey: ['outputs', thread.id], queryFn: () => api.outputs(thread.id), staleTime: 30_000 })) });
-	const produced = recent.flatMap((thread, index) => (outputs[index]?.data?.outputs ?? []).map((output) => ({ thread, output })));
-	return (
-		<div className="flex flex-col gap-3">
-			<Card
-				icon={Upload}
-				title="Project files"
-				sub="every thread can read them"
-				footer={
-					<CardFooter caption={upload.isError ? <span className="text-(--danger-text)">{upload.error.message}</span> : space.repos.length ? 'In ../project-files beside each repo' : "In ../project-files beside each thread's folder"}>
-						<input ref={picker} type="file" multiple hidden onChange={(event) => (upload.mutate([...(event.target.files ?? [])]), (event.target.value = ''))} />
-						<Btn size="sm" variant="secondary" icon={Plus} disabled={upload.isPending} onClick={() => picker.current?.click()}>
-							{upload.isPending ? 'Adding…' : 'Add files'}
-						</Btn>
-					</CardFooter>
-				}
-			>
-				<div
-					className="flex flex-col"
-					onDragOver={(event) => event.preventDefault()}
-					onDrop={(event) => {
-						event.preventDefault();
-						upload.mutate([...event.dataTransfer.files]);
-					}}
-				>
-					{(files.data?.files ?? []).map((file) => (
-						<div key={file.path} className="group/file flex h-9 items-center gap-2.5 border-t border-(--border-subtle) px-4">
-							<Icon icon={FileText} size={13} className="text-(--icon-tertiary)" />
-							<a href={spaceFileUrl(space.id, file.path)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13px] hover:underline">
-								{file.path}
-							</a>
-							<Caption>{Math.max(1, Math.round(file.size / 1024))} KB</Caption>
-							<IconBtn icon={Trash2} size="xs" label={`Remove ${file.path}`} className="opacity-0 group-hover/file:opacity-100" onClick={() => remove.mutate(file.path)} />
-						</div>
-					))}
-					{files.data && files.data.files.length === 0 ? <div className="border-t border-(--border-subtle) px-4 py-3 text-[12px] text-(--text-disabled)">Drop files here: specs, designs, data the threads should use.</div> : null}
-				</div>
-			</Card>
-			<Card icon={Library} title="From threads" sub={`${produced.length} saved`}>
-				<div className="flex flex-col">
-					{produced.map(({ thread, output }) => (
-						<a
-							key={`${thread.id}/${output.path}`}
-							href={outputUrl(thread.id, output.path)}
-							target="_blank"
-							rel="noreferrer"
-							className="flex h-9 items-center gap-2.5 border-t border-(--border-subtle) px-4 hover:bg-(--bg-hover)"
-						>
-							<Icon icon={FileText} size={13} className="text-(--icon-tertiary)" />
-							<span className="min-w-0 flex-1 truncate text-[13px]">{output.path}</span>
-							<Caption className="max-w-[40%] truncate">{thread.title}</Caption>
-						</a>
-					))}
-					{produced.length === 0 ? <div className="border-t border-(--border-subtle) px-4 py-3 text-[12px] text-(--text-disabled)">Reports, screenshots and exports the threads save show here.</div> : null}
-				</div>
-			</Card>
-		</div>
-	);
+	const listed: Output[] = [];
+	const entries = new Map<string, Entry>();
+	for (const file of files.data?.files ?? []) {
+		listed.push({ path: file.path, size: file.size, mtimeMs: Date.parse(file.modifiedAt) });
+		entries.set(file.path, {
+			place: { path: file.path, url: spaceFileUrl(space.id, file.path), textKey: ['space-file', space.id, file.path], text: () => api.spaceFileText(space.id, file.path) },
+			agentPath: `../project-files/${file.path}`,
+			remove: () => api.deleteSpaceFile(space.id, file.path),
+		});
+	}
+	const names = new Set<string>();
+	recent.forEach((thread, index) => {
+		// A folder per thread, named for it; a slash in a title would make a folder of its own.
+		let name = thread.title.replaceAll('/', '∕').trim() || 'Untitled';
+		if (names.has(name)) name = `${name} · ${thread.id.slice(0, 6)}`;
+		names.add(name);
+		for (const output of outputs[index]?.data?.outputs ?? []) {
+			const path = `${FROM_THREADS}/${name}/${output.path}`;
+			listed.push({ ...output, path });
+			entries.set(path, { place: taskPlace(thread.id, output.path), agentPath: `outputs/${output.path}`, remove: () => api.deleteOutput(thread.id, output.path) });
+		}
+	});
+	const library: LibrarySource = {
+		files: files.data ? listed : undefined,
+		error: files.error,
+		place: (path) => entries.get(path)?.place ?? { path, url: spaceFileUrl(space.id, path), textKey: ['space-file', space.id, path], text: () => api.spaceFileText(space.id, path) },
+		agentPath: (path) => entries.get(path)?.agentPath ?? `../project-files/${path}`,
+		upload: (file) => api.uploadSpaceFile(space.id, file),
+		remove: (path) => entries.get(path)?.remove() ?? Promise.resolve(),
+		refresh: () => {
+			void queryClient.invalidateQueries({ queryKey: ['space-files', space.id] });
+			for (const thread of recent) void queryClient.invalidateQueries({ queryKey: ['outputs', thread.id] });
+		},
+		addedTo: 'the project files',
+		empty: `Files you add here are for every thread, which finds them in ../project-files. What the threads save shows under ${FROM_THREADS}.`,
+	};
+	return <LibraryView library={library} />;
 }
 
 function PullRequests({ threads }: { threads: Session[] }) {
