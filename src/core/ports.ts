@@ -426,6 +426,8 @@ export type AgentRuntime = {
 	/** Read again with `fresh`; otherwise the last answer is reused for a few minutes. */
 	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
 	listModels(): Promise<SubscriptionModel[]>;
+	/** What the program says is used of the plan's own limits, read with its status; null when it will not say. */
+	windows?(): Promise<PlanWindow[] | null>;
 	open(options: RuntimeConversationOptions): RuntimeConversation;
 };
 

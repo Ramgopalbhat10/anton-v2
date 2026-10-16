@@ -9,7 +9,7 @@ import type { ModelInfo } from '../src/core/ports.ts';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-cursor-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { cursorPlan, levelsOf, selectionFor, toSubscriptionModel } = await import('../src/providers/cursor/plan.ts');
+const { cursorPlan, levelsOf, selectionFor, toSubscriptionModel, toSubscriptionModels } = await import('../src/providers/cursor/plan.ts');
 const { cursorProvider, closeClaudeCodeConversations, estimatedUsage } = await import('../src/flue/claude-code-models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
@@ -55,6 +55,33 @@ test('Cursor’s models are listed with the efforts their parameters name, at th
 	});
 	assert.deepEqual(selectionFor('claude-sonnet-5', sonnet as never, 'off'), { id: 'claude-sonnet-5', params: [{ id: 'thinking', value: 'false' }] });
 	assert.deepEqual(selectionFor('composer-2', undefined, 'high'), { id: 'composer-2' });
+});
+
+test('Cursor’s larger context and fast mode are listed as variants, and each picks its parameter', () => {
+	assert.deepEqual(
+		toSubscriptionModels(gpt as never).map((model) => [model.id, model.name, model.contextLength]),
+		[
+			['cursor/gpt-5.5', 'GPT-5.5', 272_000],
+			['cursor/gpt-5.5[1m]', 'GPT-5.5 · 1M', 1_000_000],
+			['cursor/gpt-5.5[fast]', 'GPT-5.5 · Fast', 272_000],
+		],
+	);
+	assert.deepEqual(toSubscriptionModels(sonnet as never).map((model) => model.id), ['cursor/claude-sonnet-5']);
+	assert.deepEqual(selectionFor('gpt-5.5[1m]', gpt as never, 'high'), {
+		id: 'gpt-5.5',
+		params: [
+			{ id: 'reasoning', value: 'high' },
+			{ id: 'context', value: '1m' },
+		],
+	});
+	assert.deepEqual(selectionFor('gpt-5.5[fast]', gpt as never, null), {
+		id: 'gpt-5.5',
+		params: [
+			{ id: 'context', value: '272k' },
+			{ id: 'fast', value: 'true' },
+		],
+	});
+	assert.deepEqual(selectionFor('claude-sonnet-5[fast]', sonnet as never, null), { id: 'claude-sonnet-5' }, 'a model without fast mode runs at its own speed');
 });
 
 type Script = (agent: { onDelta: (update: object) => void; tools: Record<string, { execute: (args: unknown, context: { toolCallId: string }) => Promise<unknown> }> }) => Promise<{ status: string; error?: { message: string } }>;
@@ -132,7 +159,7 @@ test('the plan checks a key with Cursor and lists the account’s models', async
 	await assert.rejects(plan.check('key_bad'), /Invalid API key/);
 	assert.deepEqual(
 		(await plan.listModels('key_good')).map((model) => model.id),
-		['cursor/gpt-5.5', 'cursor/claude-sonnet-5', 'cursor/composer-2'],
+		['cursor/gpt-5.5', 'cursor/gpt-5.5[1m]', 'cursor/gpt-5.5[fast]', 'cursor/claude-sonnet-5', 'cursor/composer-2'],
 	);
 });
 

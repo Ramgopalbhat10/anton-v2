@@ -80,7 +80,7 @@ export type SubscriptionView = {
 	signIn: string | null;
 	limitHitAt: string | null;
 	extraUsageAt: string | null;
-	/** A key plan's dashboard, the key's last four characters, and what the vendor says is left of the plan's own limits. */
+	/** A key plan's dashboard and the key's last four characters; and, for a key plan or Claude Code, what the vendor says is used of the plan's own limits. */
 	keyPage: string | null;
 	keyHint: string | null;
 	windows: PlanWindow[] | null;
@@ -602,7 +602,9 @@ async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView
 /** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */
 export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionView> {
 	const [current, status] = await Promise.all([stored(runtime.id), runtime.status()]);
-	const models = status.signedIn ? await withTokens(await freshModels(runtimePlan(runtime), current)) : [];
+	const [models, windows] = status.signedIn
+		? await Promise.all([withTokens(await freshModels(runtimePlan(runtime), current)), runtime.windows?.() ?? Promise.resolve(null)])
+		: [[], null];
 	return {
 		id: runtime.id,
 		name: runtime.name,
@@ -625,7 +627,7 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		extraUsageAt: current.extraUsageAt,
 		keyPage: null,
 		keyHint: null,
-		windows: null,
+		windows,
 	};
 }
 
@@ -711,8 +713,8 @@ const USAGE_PAGES: Record<string, string> = {
 
 /**
  * A plan's use as Anton saw it: tokens and calls on its models, and what the
- * same calls would have cost at the vendor's API list prices. The vendor
- * does not tell apps how much of the plan is left, so that is not here.
+ * same calls would have cost at the vendor's API list prices. What is left of
+ * the plan's own limits is on its card (`windows`), where the vendor says.
  */
 export type PlanUsage = {
 	id: string;

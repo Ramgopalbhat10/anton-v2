@@ -471,6 +471,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 							</p>
 						</CardSection>
 					) : null}
+					{subscription.windows?.length ? <Windows windows={subscription.windows} /> : null}
 					<Models subscription={subscription} />
 					<PlanSettings subscription={subscription} error={refresh.error} />
 					{signOut ? (
@@ -530,8 +531,10 @@ function Windows({ windows }: { windows: PlanWindow[] }) {
 		<CardSection label="Plan limits" hint="As the vendor reports them">
 			<ul aria-label="Plan limits" className="m-0 flex list-none flex-col gap-2 p-0">
 				{windows.map((window) => (
-					<li key={window.label} className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
-						<span className="text-(--text-secondary)">{window.label}</span>
+					<li key={window.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
+						<span className="truncate text-(--text-secondary)" title={window.label}>
+							{window.label}
+						</span>
 						<div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-(--segment-off)">
 							<div
 								className={cn('h-full rounded-full', window.limited || window.usedPercent >= 90 ? 'bg-(--danger-base)' : 'bg-(--accent-base)')}

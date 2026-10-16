@@ -12,6 +12,7 @@ import type {
 	SDKCustomToolResult,
 	SDKUserMessage,
 } from '@cursor/sdk';
+import { parseVariant, sizeOf, variantId, variantName } from '../../core/model-variants.ts';
 import {
 	type KeyPlan,
 	REASONING_LEVELS,
@@ -63,20 +64,21 @@ const VENDORS: Array<[RegExp, string]> = [
 	[/^muse-/, 'Meta'],
 ];
 
-/** "300k" as 300000 and "1m" as 1000000. */
-function sizeOf(value: string): number | null {
-	const match = value.match(/^(\d+(?:\.\d+)?)([km])$/i);
-	return match ? Math.round(Number(match[1]) * (match[2].toLowerCase() === 'm' ? 1_000_000 : 1_000)) : null;
+/** The model's context sizes, smallest first: any larger than the first bills as Max Mode. */
+function contextSizes(item: ModelListItem): Array<{ value: string; size: number }> {
+	return (item.parameters?.find((param) => param.id === 'context')?.values ?? [])
+		.map((option) => ({ value: option.value, size: sizeOf(option.value) }))
+		.filter((option): option is { value: string; size: number } => option.size !== null)
+		.sort((a, b) => a.size - b.size);
 }
 
 /** The smallest context a model offers: larger ones bill as Max Mode. */
 function contextParam(item: ModelListItem): { value: string; size: number } | null {
-	const sizes = (item.parameters?.find((param) => param.id === 'context')?.values ?? [])
-		.map((option) => ({ value: option.value, size: sizeOf(option.value) }))
-		.filter((option): option is { value: string; size: number } => option.size !== null)
-		.sort((a, b) => a.size - b.size);
-	return sizes[0] ?? null;
+	return contextSizes(item)[0] ?? null;
 }
+
+const offersFast = (item: ModelListItem | undefined) =>
+	Boolean(item?.parameters?.find((param) => param.id === 'fast')?.values.some((option) => option.value === 'true'));
 
 /** The levels a model takes, from its effort parameter and its thinking switch. */
 export function levelsOf(item: ModelListItem): Reasoning[] {
@@ -114,11 +116,43 @@ export function toSubscriptionModel(item: ModelListItem): SubscriptionModel | nu
 }
 
 /**
- * The model and its parameters for a conversation at `effort`: the effort value
- * that names it, thinking on unless it is `off`, and the smallest context.
- * Parameters left out take the model's first value, as the SDK does.
+ * The model and the variants Cursor offers beside it: its largest context
+ * (`[1m]`, Max Mode, billed by the token from the plan's usage) and fast mode
+ * (`[fast]`), each a model of its own in the picker.
  */
-export function selectionFor(id: string, item: ModelListItem | undefined, effort: string | null): ModelSelection {
+export function toSubscriptionModels(item: ModelListItem): SubscriptionModel[] {
+	const model = toSubscriptionModel(item);
+	if (!model) return [];
+	const models = [model];
+	const largest = contextSizes(item).at(-1);
+	if (largest && largest.size > model.contextLength) {
+		models.push({
+			...model,
+			id: variantId(model.id, { context: largest.value }),
+			name: variantName(model.name, { context: largest.value }),
+			description: `Max Mode with up to ${largest.value.toUpperCase()} of context, billed by the token from your plan's usage.`,
+			contextLength: largest.size,
+		});
+	}
+	if (offersFast(item)) {
+		models.push({
+			...model,
+			id: variantId(model.id, { fast: true }),
+			name: variantName(model.name, { fast: true }),
+			description: "Fast mode: answers sooner and uses more of your plan's usage.",
+		});
+	}
+	return models;
+}
+
+/**
+ * The model and its parameters for a conversation at `effort`: the effort value
+ * that names it, thinking on unless it is `off`, the variant's context or else
+ * the smallest, and fast mode for a `[fast]` variant. Parameters left out take
+ * the model's first value, as the SDK does.
+ */
+export function selectionFor(model: string, item: ModelListItem | undefined, effort: string | null): ModelSelection {
+	const { base: id, context, fast } = parseVariant(model);
 	const params: Array<{ id: string; value: string }> = [];
 	const level = effort ?? null;
 	for (const param of item?.parameters ?? []) {
@@ -129,8 +163,10 @@ export function selectionFor(id: string, item: ModelListItem | undefined, effort
 			const value = level === 'off' ? 'false' : 'true';
 			if (param.values.some((option) => option.value === value)) params.push({ id: param.id, value });
 		} else if (param.id === 'context') {
-			const context = contextParam(item!);
-			if (context) params.push({ id: param.id, value: context.value });
+			const chosen = (context && param.values.find((option) => option.value === context)?.value) || contextParam(item!)?.value;
+			if (chosen) params.push({ id: param.id, value: chosen });
+		} else if (param.id === 'fast' && fast && offersFast(item)) {
+			params.push({ id: param.id, value: 'true' });
 		}
 	}
 	return params.length ? { id, params } : { id };
@@ -394,12 +430,12 @@ export function cursorPlan(options: CursorOptions): KeyPlan {
 		},
 		listModels: async (key) => {
 			listed = null;
-			return (await list(key)).flatMap((item) => toSubscriptionModel(item) ?? []);
+			return (await list(key)).flatMap(toSubscriptionModels);
 		},
 		open(key, conversation) {
 			const ready = load().then((sdk) => {
 				store ??= new sdk.JsonlLocalAgentStore(path.join(options.dir, 'agents'));
-				return { sdk, key, store, workDir, model: async (id: string) => (await list(key).catch(() => [])).find((item) => item.id === id) };
+				return { sdk, key, store, workDir, model: async (id: string) => (await list(key).catch(() => [])).find((item) => item.id === parseVariant(id).base) };
 			});
 			// The SDK loads on first use; until then messages wait in order.
 			let opened: RuntimeConversation | null = null;

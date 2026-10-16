@@ -1,13 +1,15 @@
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { type ModelInfo as ClaudeModel, type Options, type SDKMessage, type SDKUserMessage, query } from '@anthropic-ai/claude-agent-sdk';
+import { type ModelInfo as ClaudeModel, type Options, type Query, type SDKMessage, type SDKUserMessage, query } from '@anthropic-ai/claude-agent-sdk';
 import { ANTHROPIC_MODELS } from '@earendil-works/pi-ai/providers/anthropic.models';
+import { parseVariant, sizeOf, variantId, variantName } from '../../core/model-variants.ts';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import {
 	type AgentRuntime,
 	type AgentRuntimeStatus,
+	type PlanWindow,
 	REASONING_LEVELS,
 	type Reasoning,
 	type RuntimeContent,
@@ -40,6 +42,8 @@ const TOOL_PREFIX = `mcp__${SERVER}__`;
 /** Claude Code stamps each tools/call with the tool_use block it came from, which pairs the call with its result. */
 const TOOL_USE_ID_META = 'claudecode/toolUseId';
 const STATUS_TTL_MS = 5 * 60_000;
+/** How long the status probe waits for the plan's limits before going on without them. */
+const USAGE_TIMEOUT_MS = 10_000;
 
 /** Usage-limit wording from the SDK's USAGE_LIMIT_ERROR_PREFIXES, and the notices it gives when a plan spills into paid extra usage. */
 const LIMIT_PREFIXES = ["You've hit your", "You've reached your", "You're out of usage credits", "You're out of extra usage", 'Fable 5 requires usage credits'];
@@ -232,8 +236,9 @@ function piEntry(id: string): PiAnthropic | undefined {
 }
 
 /**
- * Plan models are given a 200K context: Claude Code serves 1M only on some plans and only when asked
- * by a `[1m]` name, and a conversation that outgrows what the plan serves fails. Flue compacts at this size.
+ * Plan models are given a 200K context: Claude Code serves 1M only on some plans, and lists a model under
+ * its `[1m]` name when the plan serves it. A conversation that outgrows what the plan serves fails, so only
+ * those models get 1M. Flue compacts at this size.
  */
 const PLAN_CONTEXT = 200_000;
 
@@ -243,40 +248,87 @@ export function nameOf(id: string): string {
 	return `Claude ${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`.trim();
 }
 
-/** One of the models Claude Code offers the account, as Anton lists it. Aliases such as `default` are left out. */
-export function toSubscriptionModel(listed: ClaudeModel, gateway = GATEWAY): SubscriptionModel | null {
+/**
+ * One of the models Claude Code offers the account, as Anton lists it, and its fast mode when Claude Code
+ * offers one for it (`[fast]`, which bills paid extra usage rather than the plan). Aliases such as `default` are left out.
+ */
+export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): SubscriptionModel[] {
 	const id = listed.resolvedModel ?? listed.value;
-	if (!id.startsWith('claude-')) return null;
-	const pi = piEntry(id);
+	if (!id.startsWith('claude-')) return [];
+	const { base, context } = parseVariant(id);
+	const pi = piEntry(base);
 	// Claude Code describes a model as "Opus 4.7 · Best for everyday tasks", or with the second part only.
 	const parts = listed.description.split(' · ');
 	const description = parts.length > 1 ? parts.slice(1).join(' · ') : listed.description;
 	const efforts = (listed.supportedEffortLevels ?? []) as Reasoning[];
 	const levels: Reasoning[] = listed.supportsAdaptiveThinking || efforts.length ? ['off', ...efforts] : [];
 	const reasoning = REASONING_LEVELS.filter((level) => levels.includes(level));
-	return {
+	const model: SubscriptionModel = {
 		id: `${gateway}/${id}`,
-		name: nameOf(id),
+		name: variantName(nameOf(base), { context }),
 		vendor: 'Anthropic',
 		description: description || 'Runs on your Claude plan through Claude Code.',
 		createdAt: 0,
-		contextLength: Math.min(PLAN_CONTEXT, pi?.contextWindow ?? PLAN_CONTEXT),
+		contextLength: (context && sizeOf(context)) || Math.min(PLAN_CONTEXT, pi?.contextWindow ?? PLAN_CONTEXT),
 		maxOutput: pi?.maxTokens ?? null,
 		vision: pi?.input.includes('image') ?? true,
 		reasoning,
 		defaultReasoning: reasoning.includes('high') ? 'high' : (reasoning.findLast((level) => level !== 'off') ?? 'off'),
 		listPrice: pi ? { input: pi.cost.input, output: pi.cost.output, cacheRead: pi.cost.cacheRead, cacheWrite: pi.cost.cacheWrite } : null,
 	};
+	if (!listed.supportsFastMode) return [model];
+	return [
+		model,
+		{
+			...model,
+			id: `${gateway}/${variantId(id, { fast: true })}`,
+			name: variantName(nameOf(base), { context, fast: true }),
+			description: 'Fast mode: answers sooner, billed as paid extra usage rather than your plan’s limits.',
+			// Anthropic prices fast mode at six times the standard rate.
+			listPrice: model.listPrice && {
+				input: model.listPrice.input * 6,
+				output: model.listPrice.output * 6,
+				cacheRead: model.listPrice.cacheRead * 6,
+				cacheWrite: model.listPrice.cacheWrite * 6,
+			},
+		},
+	];
 }
 
 export function toModels(listed: ClaudeModel[], gateway = GATEWAY): SubscriptionModel[] {
 	const models = new Map<string, SubscriptionModel>();
 	for (const entry of listed) {
-		const model = toSubscriptionModel(entry, gateway);
-		if (model && !models.has(model.id)) models.set(model.id, model);
+		for (const model of toSubscriptionModels(entry, gateway)) if (!models.has(model.id)) models.set(model.id, model);
 	}
 	// A dated snapshot listed beside its undated name is the same model twice.
-	return [...models.values()].filter((model) => !/-\d{8}$/.test(model.id) || !models.has(model.id.replace(/-\d{8}$/, '')));
+	const undated = (id: string) => id.replace(/-\d{8}(?=\[|$)/, '');
+	return [...models.values()].filter((model) => undated(model.id) === model.id || !models.has(undated(model.id)));
+}
+
+type Usage = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>;
+type UsageWindow = { utilization: number | null; resets_at: string | null } | null | undefined;
+
+const WINDOWS: Array<[keyof NonNullable<Usage['rate_limits']>, string]> = [
+	['five_hour', '5 hours'],
+	['seven_day', 'Week'],
+	['seven_day_opus', 'Week · Opus'],
+	['seven_day_sonnet', 'Week · Sonnet'],
+	['seven_day_oauth_apps', 'Week · apps'],
+];
+
+/** The plan's limits from Claude Code's `/usage` answer, in the order its usage page shows them; null when the plan has none. */
+export function toWindows(usage: Pick<Usage, 'rate_limits_available' | 'rate_limits'>): PlanWindow[] | null {
+	const limits = usage.rate_limits;
+	if (!usage.rate_limits_available || !limits) return null;
+	const window = (label: string, entry: UsageWindow): PlanWindow[] =>
+		typeof entry?.utilization === 'number'
+			? [{ label, usedPercent: Math.max(0, Math.min(100, entry.utilization)), resetsAt: entry.resets_at ?? null, limited: entry.utilization >= 100 }]
+			: [];
+	return [
+		...WINDOWS.flatMap(([key, label]) => window(label, limits[key] as UsageWindow)),
+		...(limits.model_scoped ?? []).flatMap((entry) => window(`Week · ${entry.display_name}`, entry)),
+		...(limits.extra_usage?.is_enabled ? window('Extra usage', { utilization: limits.extra_usage.utilization, resets_at: null }) : []),
+	];
 }
 
 type Account = { email?: string; subscriptionType?: string; tokenSource?: string; apiKeySource?: string; apiProvider?: string };
@@ -351,16 +403,27 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		};
 	}
 
-	let probed: { at: number; result: Promise<{ status: AgentRuntimeStatus; models: SubscriptionModel[] }> } | null = null;
+	type Probe = { status: AgentRuntimeStatus; models: SubscriptionModel[]; windows: PlanWindow[] | null };
+	let probed: { at: number; result: Promise<Probe> } | null = null;
 
-	/** Starts Claude Code without sending anything, to read its sign-in and models; no model call is made. */
-	async function probe(): Promise<{ status: AgentRuntimeStatus; models: SubscriptionModel[] }> {
+	/** The plan's limits as `/usage` shows them, through a call the SDK marks experimental; null when it will not say. */
+	async function usageOf(session: Query): Promise<PlanWindow[] | null> {
+		const read = session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.bind(session);
+		if (!read) return null;
+		const late = new Promise<null>((resolve) => setTimeout(resolve, USAGE_TIMEOUT_MS, null).unref());
+		return Promise.race([read({ skipBehaviors: true }).then(toWindows, () => null), late]);
+	}
+
+	/** Starts Claude Code without sending anything, to read its sign-in, models and limits; no model call is made. */
+	async function probe(): Promise<Probe> {
 		const idle = channel<SDKUserMessage>();
 		const session = query({ prompt: idle, options: baseOptions() });
 		try {
 			const [account, init] = await Promise.all([session.accountInfo(), session.initializationResult()]);
 			const status = statusFrom(account, init.claude_code_version ?? null);
-			return { status, models: status.signedIn ? toModels(await session.supportedModels()) : [] };
+			if (!status.signedIn) return { status, models: [], windows: null };
+			const [models, windows] = await Promise.all([session.supportedModels(), usageOf(session)]);
+			return { status, models: toModels(models), windows };
 		} finally {
 			idle.close();
 			session.close();
@@ -390,14 +453,19 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 			}
 		},
 		listModels: async () => (await probeCached(true)).models,
+		windows: async () => (await probeCached().catch(() => null))?.windows ?? null,
 		open(conversation: RuntimeConversationOptions): RuntimeConversation {
 			const input = channel<SDKUserMessage>();
 			const effort = conversation.effort && conversation.effort !== 'off' ? (conversation.effort as Options['effort']) : undefined;
+			// Claude Code takes a 1M model by its `[1m]` name; fast mode is a setting of its own.
+			const { base, context, fast } = parseVariant(conversation.model);
+			const defaults = baseOptions();
 			const session = query({
 				prompt: input,
 				options: {
-					...baseOptions(),
-					model: conversation.model,
+					...defaults,
+					model: variantId(base, { context }),
+					...(fast ? { settings: { ...(defaults.settings as object), fastMode: true } } : {}),
 					// Claude Code's own prompt stays; Anton's instructions follow it.
 					systemPrompt: { type: 'preset', preset: 'claude_code', append: conversation.instructions },
 					mcpServers: { [SERVER]: toolServer(conversation) },

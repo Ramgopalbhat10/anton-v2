@@ -8,7 +8,8 @@ import type { ModelInfo, SubscriptionCredential, SubscriptionModel, Subscription
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-subscriptions-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { chatGptSubscription, CHATGPT_REDIRECT_URI, toSubscriptionModel } = await import('../src/providers/chatgpt/subscription.ts');
+const { chatGptSubscription, CHATGPT_REDIRECT_URI, toSubscriptionModel, toSubscriptionModels } = await import('../src/providers/chatgpt/subscription.ts');
+const { parseVariant, sizeTag, variantId } = await import('../src/core/model-variants.ts');
 const { chatGptPlanProvider, forChatGptPlan } = await import('../src/flue/subscription-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/subscriptions.ts');
@@ -122,6 +123,36 @@ test('the account lists its models; pi fills in what the list leaves out, and hi
 	const models = await chatGptSubscription().listModels('access-1');
 	assert.deepEqual(models.map((model) => model.id), ['openai/gpt-5.5']);
 	assert.equal(seen[0].headers.get('authorization'), 'Bearer access-1');
+});
+
+test('a model id names its variant: a larger context by its size, and fast mode', () => {
+	assert.deepEqual(parseVariant('gpt-5.5'), { base: 'gpt-5.5', context: null, fast: false });
+	assert.deepEqual(parseVariant('claude-opus-5-5[1m][fast]'), { base: 'claude-opus-5-5', context: '1m', fast: true });
+	assert.deepEqual(parseVariant('odd[beta]'), { base: 'odd[beta]', context: null, fast: false }, 'a bracket that names no variant stays in the id');
+	assert.equal(variantId('gpt-5.5', { context: '1m', fast: true }), 'gpt-5.5[1m][fast]');
+	assert.deepEqual([sizeTag(1_048_576), sizeTag(1_050_000), sizeTag(400_000)], ['1m', '1m', '400k']);
+});
+
+test('the account’s larger context and fast tier are listed as variants, and their requests name the model and tier', () => {
+	const models = toSubscriptionModels(
+		{ slug: 'gpt-5.5', visibility: 'list', context_window: 272_000, max_context_window: 1_000_000, service_tiers: [{ id: 'priority', name: 'Fast' }] },
+		'openai',
+	);
+	assert.deepEqual(
+		models.map((model) => [model.id, model.name, model.contextLength]),
+		[
+			['openai/gpt-5.5', 'GPT-5.5', 272_000],
+			['openai/gpt-5.5[1m]', 'GPT-5.5 · 1M', 1_000_000],
+			['openai/gpt-5.5[fast]', 'GPT-5.5 · Fast', 272_000],
+		],
+	);
+	assert.deepEqual(toSubscriptionModels({ slug: 'gpt-5.5', visibility: 'list', context_window: 272_000, max_context_window: 272_000 }, 'openai').length, 1);
+	assert.equal(toSubscriptionModels({ slug: 'gpt-5.5', additional_speed_tiers: ['fast'] }, 'openai').length, 2, 'the older field names fast mode too');
+
+	const fast = forChatGptPlan({ model: 'gpt-5.5[fast]', input: [] }) as Record<string, unknown>;
+	assert.deepEqual([fast.model, fast.service_tier], ['gpt-5.5', 'priority']);
+	const long = forChatGptPlan({ model: 'gpt-5.5[1m]', input: [] }) as Record<string, unknown>;
+	assert.deepEqual([long.model, 'service_tier' in long], ['gpt-5.5', false]);
 });
 
 test('a plan request drops the fields OpenAI rejects for plan tokens, and sends system text as developer', () => {

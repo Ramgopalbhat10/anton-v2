@@ -10,7 +10,7 @@ import type { AgentRuntime, AgentRuntimeStatus, ModelInfo, RuntimeContent, Runti
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-claude-code-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { childEnv, isExtraUsageNotice, statusFrom, toModels, toRuntimeEvents } = await import('../src/providers/claude-code/runtime.ts');
+const { childEnv, isExtraUsageNotice, statusFrom, toModels, toRuntimeEvents, toWindows } = await import('../src/providers/claude-code/runtime.ts');
 const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, transcript } = await import('../src/flue/claude-code-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/subscriptions.ts');
@@ -358,6 +358,64 @@ test('a sign-in counts only when it bills a plan, and the models Claude Code off
 			['claude-code/claude-fable-5-1', 'Claude Fable 5.1', 'For your toughest challenges', 200_000, [], 'off', 10],
 		],
 	);
+});
+
+test('a model Claude Code lists under its 1M name gets 1M of context, and one with fast mode gets a fast variant', () => {
+	const models = toModels([
+		{
+			value: 'opus[1m]',
+			resolvedModel: 'claude-opus-5-5[1m]',
+			displayName: 'Opus (1M context)',
+			description: 'Opus 5.5 with 1M context · Long sessions',
+			supportsAdaptiveThinking: true,
+			supportedEffortLevels: ['low', 'high'],
+			supportsFastMode: true,
+		},
+		{ value: 'claude-opus-5-5-20260101[1m]', displayName: 'Opus', description: 'Opus 5.5' },
+		{ value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Sonnet 5 · Everyday' },
+	]);
+	assert.deepEqual(
+		models.map((model) => [model.id, model.name, model.contextLength, model.listPrice?.input]),
+		[
+			['claude-code/claude-opus-5-5[1m]', 'Claude Opus 5.5 · 1M', 1_000_000, 5],
+			['claude-code/claude-opus-5-5[1m][fast]', 'Claude Opus 5.5 · 1M · Fast', 1_000_000, 30],
+			['claude-code/claude-sonnet-5', 'Claude Sonnet 5', 200_000, 2],
+		],
+	);
+	assert.match(models[1].description, /extra usage/);
+});
+
+test('the Claude plan’s limits are read from Claude Code’s usage answer', () => {
+	assert.equal(toWindows({ rate_limits_available: false, rate_limits: null }), null, 'an API key has no plan limits');
+	assert.deepEqual(
+		toWindows({
+			rate_limits_available: true,
+			rate_limits: {
+				five_hour: { utilization: 42.5, resets_at: '2026-10-16T09:00:00Z' },
+				seven_day: { utilization: 100, resets_at: '2026-10-20T00:00:00Z' },
+				seven_day_opus: { utilization: null, resets_at: null },
+				seven_day_sonnet: null,
+				model_scoped: [{ display_name: 'Fable', utilization: 7, resets_at: null }],
+				extra_usage: { is_enabled: false, monthly_limit: null, used_credits: null, utilization: 50 },
+			},
+		}),
+		[
+			{ label: '5 hours', usedPercent: 42.5, resetsAt: '2026-10-16T09:00:00Z', limited: false },
+			{ label: 'Week', usedPercent: 100, resetsAt: '2026-10-20T00:00:00Z', limited: true },
+			{ label: 'Week · Fable', usedPercent: 7, resetsAt: null, limited: false },
+		],
+	);
+});
+
+test('the Claude plan’s card shows the limits Claude Code reports, once signed in', async () => {
+	const fake = fakeRuntime({}, []);
+	const windows = [{ label: '5 hours', usedPercent: 12, resetsAt: null, limited: false }];
+	fake.runtime.windows = async () => windows;
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, subscriptions: [], runtimes: [fake.runtime] });
+	assert.deepEqual((await subscriptions.subscriptionsView())[0].windows, windows);
+	fake.runtime.status = async () => ({ signedIn: false, email: null, plan: null, version: null, problem: null });
+	assert.equal((await subscriptions.subscriptionsView())[0].windows, null);
+	subscriptions.resetSubscriptionsForTests();
 });
 
 test('Claude Code gets no keys or tokens from Anton’s environment, and its own config folder', () => {
