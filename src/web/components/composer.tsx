@@ -1,16 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { AttachButton, AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
 import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
-import { type ImageAttachment, imageFromBase64, MAX_IMAGES, readImages } from '@/lib/attachments';
+import { type ImageAttachment, imageFromBase64, MAX_IMAGES } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { askToNotify } from '@/lib/notifications';
+import { withAttachments } from '../../core/attachments';
 
 /** Sent when a message is only images, since the agent always gets text. */
 const IMAGE_ONLY = 'Look at the attached image.';
@@ -44,26 +46,6 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 						aria-label={`Remove ${elementLabel(element)}`}
 						onClick={() => onRemove(id)}
 						className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-					>
-						<Icon icon={X} size={10} />
-					</button>
-				</div>
-			))}
-		</div>
-	);
-}
-
-function Thumbnails({ images, onRemove }: { images: ImageAttachment[]; onRemove: (id: string) => void }) {
-	return (
-		<div className="flex flex-wrap gap-1.5">
-			{images.map((image) => (
-				<div key={image.id} className="relative size-14 overflow-hidden rounded-md border border-(--border-subtle)">
-					<img src={image.preview} alt={image.filename} className="size-full object-cover" />
-					<button
-						type="button"
-						aria-label={`Remove ${image.filename}`}
-						onClick={() => onRemove(image.id)}
-						className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-sm bg-(--bg-scrim) text-(--text-primary)"
 					>
 						<Icon icon={X} size={10} />
 					</button>
@@ -107,9 +89,11 @@ export const Composer = memo(function Composer({
 	onStop: () => Promise<void>;
 }) {
 	const [text, setText] = useState('');
-	const [images, setImages] = useState<ImageAttachment[]>([]);
+	const attachments = useAttachments();
+	const { images, addImages } = attachments;
 	const [elements, setElements] = useState<Element[]>([]);
-	const [notice, setNotice] = useState<string | null>(null);
+	/** What is being attached while a message with files is on its way. */
+	const [sending, setSending] = useState<string | null>(null);
 	// What the Browser panel hands over (a picked element, a drawing) joins the draft.
 	const inbox = useInbox(sessionId);
 	useEffect(() => {
@@ -120,20 +104,9 @@ export const Composer = memo(function Composer({
 		if (picked.length) setElements((current) => [...current, ...picked]);
 		const handed = items.flatMap((item) => (item.kind === 'text' ? [item.text] : []));
 		if (handed.length) setText((current) => [current.trimEnd(), ...handed].filter(Boolean).join('\n\n'));
-		if (drawn.length) {
-			setImages([...images, ...drawn].slice(0, MAX_IMAGES));
-			setNotice(images.length + drawn.length > MAX_IMAGES ? `Up to ${MAX_IMAGES} images per message.` : null);
-		}
-	}, [inbox, sessionId, images]);
+		if (drawn.length) addImages(drawn);
+	}, [inbox, sessionId, addImages]);
 	const [stopping, setStopping] = useState(false);
-	const picker = useRef<HTMLInputElement>(null);
-	const attach = async (files: File[]) => {
-		if (files.length === 0) return;
-		const read = await readImages(files, MAX_IMAGES - images.length);
-		// Clamped here too: two quick pastes both read the count from before either landed.
-		setImages((current) => [...current, ...read.images].slice(0, MAX_IMAGES));
-		setNotice(read.rejected);
-	};
 	const stop = async () => {
 		setStopping(true);
 		await onStop().finally(() => setStopping(false));
@@ -162,7 +135,7 @@ export const Composer = memo(function Composer({
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
-	const ready = (text.trim() || images.length > 0 || elements.length > 0) && !blind && !blocked;
+	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending;
 
 	return (
 		<form
@@ -170,31 +143,35 @@ export const Composer = memo(function Composer({
 			onSubmit={async (event) => {
 				event.preventDefault();
 				if (!ready) return;
-				const sent = images;
+				const taken = attachments.take();
 				const picked = elements;
 				const typed = text;
 				askToNotify();
 				setText('');
-				setImages([]);
 				setElements([]);
-				setNotice(null);
+				setSending(taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`);
 				try {
+					// Files go to the task's Library first, and the message carries what they say.
+					const attached = await Promise.all(taken.files.map((file) => api.attachToTask(sessionId, file.file)));
 					// Only a /command waits to read the saved commands, so any other message goes at once.
 					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
-					const message = expandCommand(text.trim(), saved.commands, true) || (picked.length ? ELEMENT_ONLY : IMAGE_ONLY);
+					const typedMessage = expandCommand(text.trim(), saved.commands, true);
+					const message = typedMessage || (picked.length ? ELEMENT_ONLY : taken.images.length && !attached.length ? IMAGE_ONLY : '');
 					// Each element goes as text the agent can search the code with, and as its picture when the model can see.
 					const pictures: ImageAttachment[] =
 						model?.vision === false
 							? []
 							: picked.flatMap(({ id, element }) => (element.image ? [imageFromBase64(element.image, `${element.tag}.png`, 'image/png', id)] : []));
 					const context = picked.map(({ element }) => elementContext(element)).join('\n\n');
-					await onSend(context ? `${message}\n\n${context}` : message, [...sent, ...pictures].slice(0, MAX_IMAGES + picked.length));
+					await onSend(withAttachments(context ? `${message}\n\n${context}` : message, attached, 'task'), [...taken.images, ...pictures].slice(0, MAX_IMAGES + picked.length));
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
 					setText((current) => current || typed);
-					setImages((current) => (current.length ? current : sent));
+					attachments.restore(taken);
 					setElements((current) => (current.length ? current : picked));
-					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+					attachments.setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+				} finally {
+					setSending(null);
 				}
 			}}
 		>
@@ -204,44 +181,24 @@ export const Composer = memo(function Composer({
 			</div>
 			<div
 				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)"
-				onDragOver={(event) => event.preventDefault()}
-				onDrop={(event) => {
-					event.preventDefault();
-					void attach([...event.dataTransfer.files]);
-				}}
+				{...attachments.dropZone}
 			>
 				{elements.length > 0 ? <ElementChips elements={elements} onRemove={(id) => setElements((current) => current.filter((item) => item.id !== id))} /> : null}
-				{images.length > 0 ? <Thumbnails images={images} onRemove={(id) => setImages((current) => current.filter((image) => image.id !== id))} /> : null}
+				<AttachmentTray attachments={attachments} />
 				<ComposerInput
 					value={text}
 					onChange={setText}
 					sessionId={sessionId}
-					onPaste={(event) => {
-						const files = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
-						if (files.length === 0) return;
-						event.preventDefault();
-						void attach(files);
-					}}
+					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Ask Anton to change the workspace'}
 				/>
-				{blocked || blind || notice ? (
-					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
-						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : notice)}
+				{blocked || blind || attachments.notice || sending ? (
+					<div className={blocked ? 'text-[12px] text-(--danger-text)' : sending && !blind ? 'text-[12px] text-(--text-tertiary)' : 'text-[12px] text-(--warning-text)'}>
+						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : sending ? `Attaching ${sending}…` : attachments.notice)}
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
-					<input
-						ref={picker}
-						type="file"
-						accept="image/png,image/jpeg,image/gif,image/webp"
-						multiple
-						hidden
-						onChange={(event) => {
-							void attach([...(event.target.files ?? [])]);
-							event.target.value = '';
-						}}
-					/>
-					<IconBtn icon={ImagePlus} size="sm" label="Attach images" onClick={() => picker.current?.click()} disabled={images.length >= MAX_IMAGES} />
+					<AttachButton attachments={attachments} />
 					<ModelPicker value={choice} onChange={edit} />
 					{/* A chat has no code to plan changes to. */}
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}

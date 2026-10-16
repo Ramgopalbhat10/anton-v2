@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Caption } from '@/components/instrument';
@@ -18,6 +19,8 @@ import { expandCommand } from '@/lib/completion';
 import { askToNotify } from '@/lib/notifications';
 import { parseReports, type Report } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
+import { deliveredImages } from '@/lib/attachments';
+import { splitAttachments, withAttachments } from '../../core/attachments';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 
@@ -39,12 +42,29 @@ const threadIdIn = (part: ToolPart) => (part.state === 'output-available' ? (/\[
 /** A thread named by the start of its id, as reports and the coordinator name them. */
 const byPrefix = (threads: Session[], id: string) => threads.find((thread) => thread.id === id || (id.length >= 6 && thread.id.startsWith(id)));
 
-function Bubble({ text }: { text: string }) {
+type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
+
+/** What you sent: its images, its files as chips (the text they carry is the coordinator's to read), and what you typed. */
+function Bubble({ message }: { message: FlueConversationMessage }) {
+	const { text, files } = splitAttachments(textOf(message));
+	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
 	return (
-		<div className="flex justify-end">
-			<div className="max-w-[560px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
-				{text}
-			</div>
+		<div className="flex flex-col items-end gap-1.5">
+			{images.length > 0 ? (
+				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
+					{images.map((image, index) => (
+						<a key={image.url ?? index} href={image.url} target="_blank" rel="noreferrer">
+							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-lg border border-(--border-subtle)" />
+						</a>
+					))}
+				</div>
+			) : null}
+			<SentAttachments files={files} />
+			{text ? (
+				<div className="max-w-[560px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
+					{text}
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -311,7 +331,7 @@ const UserEntry = memo(
 	function UserEntry({ message, threads }: { message: FlueConversationMessage; threads: Session[] }) {
 		const text = textOf(message);
 		const reports = useMemo(() => parseReports(text), [text]);
-		return reports ? <ReportRow reports={reports} threads={threads} /> : <Bubble text={text} />;
+		return reports ? <ReportRow reports={reports} threads={threads} /> : <Bubble message={message} />;
 	},
 	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads,
 );
@@ -357,12 +377,15 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	const [repoId, setRepoId] = useState<string | null>(space.repos[0]?.id ?? null);
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [planMode, setPlanMode] = useState(false);
+	// A brief carries no pictures, so images go to the project Library as files, like any other.
+	const attachments = useAttachments({ imagesAsFiles: true });
 	const repo = repoId === null ? undefined : (space.repos.find((item) => item.id === repoId) ?? space.repos[0]);
 	const model = choice.model ?? space.threadModel ?? models.data?.default ?? '';
 	const start = useMutation({
-		mutationFn: () =>
+		mutationFn: async () =>
 			api.startThread(space.id, {
-				brief,
+				// Files go to the project's Library, where the thread reads them, and the brief carries what they say.
+				brief: withAttachments(brief, await Promise.all(attachments.files.map((file) => api.attachToProject(space.id, file.file))), 'project'),
 				projectId: repo?.id ?? null,
 				model: choice.model ?? undefined,
 				reasoning: choice.reasoning ?? undefined,
@@ -379,8 +402,9 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--border-strong)"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (brief.trim()) start.mutate();
+				if (brief.trim() || attachments.count) start.mutate();
 			}}
+			{...attachments.dropZone}
 		>
 			<div className="flex items-center gap-2 px-3.5 pt-3">
 				<Caption className="flex-1">New thread in {space.name}</Caption>
@@ -394,6 +418,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				onChange={setBrief}
 				projectId={repo?.id}
 				submitOn="mod-enter"
+				onPaste={attachments.onPaste}
 				placeholder={
 					repo
 						? 'What should this thread do? It works on its own branch and reports back to the coordinator.'
@@ -401,7 +426,10 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				}
 				className="min-h-[72px] px-3.5 pt-2 text-[13.5px] leading-[20px]"
 			/>
+			<AttachmentTray attachments={attachments} className="px-3.5 pt-2" />
+			{attachments.notice ? <div className="px-3.5 pt-2 text-[12px] text-(--warning-text)">{attachments.notice}</div> : null}
 			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2">
+				<AttachButton attachments={attachments} label="Attach files to the brief" />
 				<Menu>
 					<MenuTrigger asChild>
 						<PickerChip icon={FolderGit2} label={repo ? repo.repoFullName.split('/').pop()! : 'No repository'} height={26} />
@@ -422,8 +450,8 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				{repo ? <PlanToggle on={planMode} onChange={setPlanMode} /> : null}
 				<div className="min-w-0 flex-1" />
 				{start.isError ? <span className="text-[12px] text-(--danger-text)">{start.error.message}</span> : null}
-				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!brief.trim() || start.isPending}>
-					{start.isPending ? 'Starting…' : 'Start thread'}
+				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={(!brief.trim() && !attachments.count) || start.isPending}>
+					{start.isPending ? (attachments.count ? 'Attaching…' : 'Starting…') : 'Start thread'}
 				</Btn>
 			</div>
 		</form>
@@ -451,7 +479,13 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const [notice, setNotice] = useState<string | null>(null);
+	const attachments = useAttachments();
+	/** What is being attached while a message with files is on its way. */
+	const [sending, setSending] = useState<string | null>(null);
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
+	const model = models.data?.models.find((item) => item.id === choice.model);
+	const blind = attachments.images.length > 0 && model !== undefined && !model.vision;
+	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending;
 	const edit = useMutation({
 		mutationFn: (change: Partial<ModelChoice>) =>
 			api.editSpace(space.id, {
@@ -467,32 +501,47 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 			onSubmit={async (event) => {
 				event.preventDefault();
 				const text = draft.trim();
-				if (!text || blocked) return;
+				if (!ready) return;
+				const taken = attachments.take();
 				askToNotify();
 				onDraft('');
 				setNotice(null);
+				setSending(taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`);
 				try {
+					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
+					const attached = await Promise.all(taken.files.map((file) => api.attachToProject(space.id, file.file)));
 					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
-					await send(expandCommand(text, saved.commands, true));
+					const message = withAttachments(expandCommand(text, saved.commands, true) || (taken.images.length && !attached.length ? 'Look at the attached image.' : ''), attached, 'project');
+					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
 				} catch (error) {
 					onDraft(text);
+					attachments.restore(taken);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+				} finally {
+					setSending(null);
 				}
 			}}
 		>
-			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)">
+			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)" {...attachments.dropZone}>
+				<AttachmentTray attachments={attachments} />
 				<ComposerInput
 					value={draft}
 					onChange={onDraft}
+					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>
-				{blocked || notice || paused ? (
-					<div className={cn('text-[12px]', blocked || notice ? 'text-(--danger-text)' : 'text-(--warning-text)')}>
-						{blocked ?? notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}
-					</div>
+				{blocked || notice ? (
+					<div className="text-[12px] text-(--danger-text)">{blocked ?? notice}</div>
+				) : blind ? (
+					<div className="text-[12px] text-(--warning-text)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
+				) : sending ? (
+					<div className="text-[12px] text-(--text-tertiary)">{`Attaching ${sending}…`}</div>
+				) : attachments.notice || paused ? (
+					<div className="text-[12px] text-(--warning-text)">{attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
+					<AttachButton attachments={attachments} />
 					<ModelPicker value={choice} onChange={(change) => edit.mutate(change)} />
 					{/* Enter sends, as everywhere; the hint speaks up only while the coordinator is busy. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-[11px] whitespace-nowrap text-(--text-disabled) max-sm:invisible">
@@ -504,7 +553,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 						) : null}
 					</div>
 					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the coordinator" onClick={() => void api.stopCoordinator(space.id)} /> : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!draft.trim() || Boolean(blocked)} />
+					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
 				</div>
 			</div>
 		</form>

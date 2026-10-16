@@ -5,6 +5,7 @@ import { type CSSProperties, type ReactNode, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { ChatRouteArt, TaskRouteArt } from '@/components/illustrations';
 import { Caption, Card } from '@/components/instrument';
+import { AttachButton, AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
@@ -194,6 +195,7 @@ export function Launcher() {
 	const [branch, setBranch] = useState('');
 	const [planChoice, setPlanMode] = useState<boolean | null>(null);
 	const [adding, setAdding] = useState(false);
+	const attachments = useAttachments();
 	const queryClient = useQueryClient();
 	const create = useCreateChat();
 	const models = useModels();
@@ -209,6 +211,8 @@ export function Launcher() {
 	const planMode = !chat && (planChoice ?? general.data?.planMode ?? false);
 	const chosenBranch = branch || project?.defaultBranch || '';
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
+	const chosenModel = models.data?.models.find((item) => item.id === model);
+	const blind = attachments.images.length > 0 && chosenModel !== undefined && !chosenModel.vision;
 
 	function pick(id: string) {
 		setProjectId(id);
@@ -218,8 +222,11 @@ export function Launcher() {
 	async function start() {
 		if (create.isPending || !projects.isSuccess) return;
 		const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] }));
+		const { images, files } = attachments;
 		create.mutate({
 			prompt: expandCommand(prompt, saved.commands, true),
+			images,
+			files,
 			projectId: project?.id,
 			branch: project ? chosenBranch || undefined : undefined,
 			model: model || undefined,
@@ -252,7 +259,9 @@ export function Launcher() {
 							event.preventDefault();
 							void start();
 						}}
+						{...attachments.dropZone}
 					>
+						<AttachmentTray attachments={attachments} className="px-4 pt-3.5" />
 						<ComposerInput
 							autoFocus
 							value={prompt}
@@ -261,6 +270,7 @@ export function Launcher() {
 							branch={chosenBranch}
 							submitOn="mod-enter"
 							suggestionsPosition="below"
+							onPaste={attachments.onPaste}
 							placeholder={
 								chat
 									? 'Compare the free tiers on the Vercel, Netlify and Fly.io pricing pages, and tell me which suits a hobby app.'
@@ -268,14 +278,20 @@ export function Launcher() {
 							}
 							className="min-h-[96px] px-4 pt-4 text-[14px] leading-[21px]"
 						/>
+						{attachments.notice || blind ? (
+							<div className="px-4 pt-2 text-[12px] text-(--warning-text)">
+								{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
+							</div>
+						) : null}
 						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
+							<AttachButton attachments={attachments} />
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
 							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />
 							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 							<div className="min-w-0 flex-[1_1_8px]" />
-							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={create.isPending || !projects.isSuccess}>
-								{create.isPending ? 'Starting…' : chat ? 'Start chat' : 'Start task'}
+							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={create.isPending || !projects.isSuccess || blind}>
+								{create.isPending ? (attachments.files.length ? 'Attaching…' : 'Starting…') : chat ? 'Start chat' : 'Start task'}
 							</Btn>
 						</div>
 					</form>
