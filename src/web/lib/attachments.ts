@@ -68,3 +68,9 @@ export async function readAttachments(
 
 /** Images as the agent runtime takes them with a message. */
 export const deliveredImages = (images: ImageAttachment[]) => images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename }));
+
+/** An image back as a file, to save it where a message carries no pictures of its own (the project Library). */
+export function imageFile(image: ImageAttachment): File {
+	const bytes = Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0));
+	return new File([bytes], image.filename, { type: image.mimeType });
+}

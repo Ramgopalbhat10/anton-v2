@@ -1,10 +1,13 @@
-import type { AttachedFile } from '../core/attachments.ts';
+import { type AttachedFile, splitAttachments } from '../core/attachments.ts';
 import { NotFoundError } from '../core/errors.ts';
 import { safeRelativePath } from '../core/shell.ts';
 import { cachedDocumentText, documentKind, documentSlice } from './documents.ts';
 import { readOutputFile, storedOutputs, uploadOutput } from './files.ts';
 import { logProblem } from './log.ts';
-import { uploadSpaceFile } from './space-files.ts';
+import type { DeliveredImage } from './agent-runner.ts';
+import { findModel } from './models.ts';
+import { describeImage } from './vision.ts';
+import { readSpaceFile, uploadSpaceFile } from './space-files.ts';
 
 /**
  * Files attached to a message from a composer. A task's go into its Library
@@ -46,4 +49,50 @@ export async function readAttachment(id: string, rawPath: string, offset = 0): P
 		return `No attached file ${rawPath}.${uploads.length ? ` The attached files are:\n${uploads.join('\n')}` : ' No files are attached to this task.'}`;
 	}
 	return documentSlice(path.slice(path.lastIndexOf('/') + 1), bytes, offset, 'read the next part with read_attachment');
+}
+
+/** A file already in the project's Library, described as an attachment: for the coordinator handing a thread the files its work needs. */
+export async function projectAttachment(spaceId: string, rawName: string): Promise<AttachedFile> {
+	const name = safeRelativePath(rawName.trim().replace(/^(\.\.\/)?project-files\//, ''));
+	const bytes = await readSpaceFile(spaceId, name);
+	if (!bytes) throw new NotFoundError(`No project file ${rawName}`);
+	return described(name, name, bytes);
+}
+
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+/** As the composer sends images. */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGES = 4;
+
+/**
+ * The pictures a message to a project's thread carries as project files (a
+ * brief with images attached), read from the project's Library: they go with
+ * the message as images when the thread's model can see. A model that cannot
+ * gets each one described by the vision model instead, as a note to add to
+ * the message.
+ */
+export async function projectPictures(spaceId: string, threadId: string, message: string, model: string): Promise<{ images: DeliveredImage[]; note: string }> {
+	const typeOf = (name: string) => IMAGE_TYPES[/\.(\w+)$/.exec(name)?.[1]?.toLowerCase() ?? ''];
+	const wanted = splitAttachments(message)
+		.files.filter((file) => file.place === 'project' && typeOf(file.name))
+		.slice(0, MAX_IMAGES);
+	if (!wanted.length) return { images: [], note: '' };
+	const sees = (await findModel(model).catch(() => undefined))?.vision === true;
+	const images: DeliveredImage[] = [];
+	const described: string[] = [];
+	for (const file of wanted) {
+		const bytes = await readSpaceFile(spaceId, file.path).catch(() => null);
+		if (!bytes || bytes.length > MAX_IMAGE_BYTES) continue;
+		const mimeType = typeOf(file.name)!;
+		if (sees) images.push({ type: 'image', data: Buffer.from(bytes).toString('base64'), mimeType, filename: file.name });
+		else {
+			const words = await describeImage(threadId, bytes, mimeType).catch((error: unknown) => {
+				logProblem('warn', `Could not describe ${file.name}`, error, threadId);
+				return null;
+			});
+			if (words) described.push(`${file.name}:\n${words}`);
+		}
+	}
+	const note = described.length ? `Your model cannot see images, so a vision model described the attached ones:\n\n${described.join('\n\n')}` : '';
+	return { images, note };
 }

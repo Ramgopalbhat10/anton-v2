@@ -594,6 +594,9 @@ export const api = {
 	addAutomation: (projectId: string, input: AutomationInput) => post<Automation>(`/api/projects/${projectId}/automations`, input),
 	setAutomationEnabled: (id: string, enabled: boolean) =>
 		json<Automation>(`/api/automations/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+	/** Changes what an automation does; `projectId` picks a project routine's repository (null for chats). */
+	editAutomation: (id: string, input: Omit<AutomationInput, 'spaceId'> & { projectId?: string | null }) =>
+		json<Automation>(`/api/automations/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
 	runAutomation: (id: string) => post<Automation>(`/api/automations/${id}/run`),
 	deleteAutomation: async (id: string) => void (await request(`/api/automations/${id}`, { method: 'DELETE' })),
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
@@ -690,6 +693,7 @@ export const api = {
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
 	deleteSpaceFile: async (id: string, path: string) => void (await request(spaceFileUrl(id, path), { method: 'DELETE' })),
+	spaceFileText: async (id: string, path: string) => (await request(spaceFileUrl(id, path))).text(),
 	/** Stops the coordinator's current turn. */
 	stopCoordinator: async (id: string) => void (await request(`/api/agents/coordinator/${id}/abort`, { method: 'POST' })),
 };

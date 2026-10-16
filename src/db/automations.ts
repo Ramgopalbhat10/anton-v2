@@ -89,10 +89,23 @@ export async function getAutomation(id: string): Promise<Automation | null> {
 	return result.rows[0] ? toAutomation(result.rows[0] as Row) : null;
 }
 
-const columns = { enabled: 'enabled', lastRunAt: 'last_run_at', lastError: 'last_error' } as const;
+const columns = {
+	enabled: 'enabled',
+	lastRunAt: 'last_run_at',
+	lastError: 'last_error',
+	projectId: 'project_id',
+	kind: 'kind',
+	label: 'label',
+	everyHours: 'every_hours',
+	prompt: 'prompt',
+	model: 'model',
+	reasoning: 'reasoning',
+	planFirst: 'plan_first',
+} as const;
 export type AutomationUpdate = Partial<Pick<Automation, keyof typeof columns>>;
 
-const stored = (key: keyof typeof columns, value: unknown) => (key === 'enabled' ? (value ? 1 : 0) : ((value as string | null) ?? null));
+const stored = (key: keyof typeof columns, value: unknown) =>
+	key === 'enabled' || key === 'planFirst' ? (value ? 1 : 0) : ((value as string | number | null) ?? null);
 
 export async function updateAutomation(id: string, update: AutomationUpdate): Promise<void> {
 	const entries = (Object.keys(columns) as Array<keyof typeof columns>).filter((key) => key in update);

@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { LibraryTab } = await import('@/components/library-tab');
+const { Library, LibraryTab, taskPlace } = await import('@/components/library-tab');
 
 const at = Date.parse('2026-10-09T12:00:00Z');
 const listing = {
@@ -93,5 +93,44 @@ describe('LibraryTab', () => {
 		fireEvent.click(screen.getByRole('radio', { name: 'Code' }));
 		expect(await screen.findByText(/<p>Hello<\/p>/)).toBeTruthy();
 		expect(screen.queryByTitle('budget-a1b2c3.html')).toBeNull();
+	});
+
+	it('shows any Library the same way: a project file, and a thread\'s page live in its folder', async () => {
+		localStorage.removeItem('anton.library.view');
+		const text = vi.fn(async () => '<h1>Plan</h1>');
+		const source = {
+			files: [
+				{ path: 'plan.html', size: 120, mtimeMs: at },
+				{ path: 'From threads/Fix CI/renders/report.html', size: 900, mtimeMs: at },
+			],
+			error: null,
+			place: (path: string) =>
+				path.startsWith('From threads/') ? taskPlace('t9', 'renders/report.html') : { path, url: `/api/spaces/p1/file?path=${path}`, textKey: ['space-file', 'p1', path], text },
+			agentPath: (path: string) => `../project-files/${path}`,
+			upload: vi.fn(async () => undefined),
+			remove: vi.fn(async () => undefined),
+			refresh: vi.fn(),
+			addedTo: 'the project files',
+			empty: 'Nothing here',
+		};
+		renderWithQueries(<Library library={source} />, []);
+		expect(screen.getByRole('button', { name: /From threads\s*1 item/ })).toBeTruthy();
+		// A project's own page has no task to run it, so it opens as its source.
+		fireEvent.click(screen.getByRole('button', { name: 'plan.html' }));
+		expect(await screen.findByText(/<h1>Plan<\/h1>/)).toBeTruthy();
+		expect(screen.queryByRole('radio', { name: 'Code' })).toBeNull();
+		fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+
+		fireEvent.click(screen.getByRole('button', { name: /From threads\s*1 item/ }));
+		fireEvent.click(screen.getByRole('button', { name: /Fix CI\s*1 item/ }));
+		fireEvent.click(screen.getByRole('button', { name: /renders\s*1 item/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'report.html' }));
+		expect((screen.getByTitle('report.html') as HTMLIFrameElement).getAttribute('src')).toBe('/api/sessions/t9/render-frame?path=renders%2Freport.html');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+		const file = new File(['x'], 'brief.md', { type: 'text/markdown' });
+		fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+		await waitFor(() => expect(source.upload).toHaveBeenCalledWith(file));
+		expect(await screen.findByText('Added brief.md to the project files')).toBeTruthy();
 	});
 });

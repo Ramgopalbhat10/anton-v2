@@ -19,7 +19,11 @@ export const REPORT_DELAY_MS = 20_000;
 const MAX_REPLY = 4_000;
 
 const pending = new Map<string, Set<string>>();
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const timers = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> }>();
+/** Threads a routine started, by what the routine is: news to the coordinator, which did not start them. */
+const routineStarts = new Map<string, string>();
+/** A routine's thread is reported soon after it starts, so the feed shows it as it begins. */
+export const ROUTINE_REPORT_DELAY_MS = 2_000;
 
 const QUIET: ThreadState[] = ['working', 'queued'];
 
@@ -27,14 +31,15 @@ const attr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quo
 const body = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const prNumber = (url: string) => /\/pull\/(\d+)/.exec(url)?.[1];
 
-/** One thread's line in a report, as the coordinator reads it and the feed shows it. */
-export function reportLine(thread: Session, state: ThreadState): string {
+/** One thread's line in a report, as the coordinator reads it and the feed shows it; `routine` names the routine that just started it. */
+export function reportLine(thread: Session, state: ThreadState, routine?: string): string {
 	const pr = thread.prUrl && thread.pullRequest ? ` pr="#${prNumber(thread.prUrl) ?? '?'} ${thread.pullRequest.state}${thread.pullRequest.checks ? `, checks ${thread.pullRequest.checks}` : ''}"` : '';
 	const asks = state === 'waiting' && thread.asking ? ` asks="${attr(thread.asking)}"` : '';
 	const said = (thread.lastReply ?? '').slice(0, 600).trim();
 	const failed = thread.status === 'error' && thread.errorMessage ? `Failed: ${thread.errorMessage}` : '';
-	const text = failed || said;
-	const open = `  <thread id="${thread.id.slice(0, 8)}" title="${attr(thread.title)}" state="${state}"${pr}${asks}`;
+	const text = failed || said || (routine ? `Started by the routine that runs ${routine}.` : '');
+	const started = routine ? ' started="routine"' : '';
+	const open = `  <thread id="${thread.id.slice(0, 8)}" title="${attr(thread.title)}" state="${state}"${started}${pr}${asks}`;
 	return text ? `${open}>${body(text)}</thread>` : `${open}/>`;
 }
 
@@ -49,10 +54,17 @@ async function flush(spaceId: string): Promise<void> {
 	pending.delete(spaceId);
 	const lines: string[] = [];
 	for (const id of ids) {
+		const routine = routineStarts.get(id);
+		routineStarts.delete(id);
 		const record = await getSessionRecord(id);
 		if (!record || record.spaceId !== spaceId) continue;
 		const thread = await getSession(id);
 		const state = thread.threadState;
+		if (routine) {
+			// Its state is not kept: it has not replied yet, and its first reply is news whatever state it leaves.
+			lines.push(reportLine(thread, state ?? 'queued', routine));
+			continue;
+		}
 		if (!state || state === record.reportedState) continue;
 		await updateSession(id, { reportedState: state });
 		if (!QUIET.includes(state)) lines.push(reportLine(thread, state));
@@ -70,18 +82,25 @@ export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Prom
 	const pr = record.prUrl ? record.pullRequest : null;
 	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) await updateSession(id, { resolvedAt: new Date().toISOString() });
 	pending.set(spaceId, (pending.get(spaceId) ?? new Set()).add(id));
-	if (!timers.has(spaceId)) {
-		timers.set(
-			spaceId,
-			setTimeout(() => void flush(spaceId).catch((error: unknown) => logProblem('warn', 'Thread report failed', error)), delayMs),
-		);
-		timers.get(spaceId)?.unref?.();
-	}
+	// A batch already waiting goes out with this note, sooner when this one is due first.
+	const at = Date.now() + delayMs;
+	const waiting = timers.get(spaceId);
+	if (waiting && waiting.at <= at) return;
+	if (waiting) clearTimeout(waiting.timer);
+	const timer = setTimeout(() => void flush(spaceId).catch((error: unknown) => logProblem('warn', 'Thread report failed', error)), delayMs);
+	timer.unref?.();
+	timers.set(spaceId, { at, timer });
+}
+
+/** A routine started the thread: the coordinator hears of it in a moment, with what the routine is, and the feed shows it. */
+export async function routineStarted(id: string, routine: string): Promise<void> {
+	routineStarts.set(id, routine);
+	await threadChanged(id, ROUTINE_REPORT_DELAY_MS);
 }
 
 /** Sends every waiting report now (tests, and shutting down). */
 export async function flushReports(): Promise<void> {
-	for (const [spaceId, timer] of [...timers]) {
+	for (const [spaceId, { timer }] of [...timers]) {
 		clearTimeout(timer);
 		await flush(spaceId);
 	}

@@ -69,10 +69,10 @@ import { agentNow, recordAgentNow } from './services/agent-now.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
-import { primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
+import { type DeliveredImage, primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
-import { addAutomation, automations, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
+import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
 import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
@@ -132,9 +132,11 @@ appDb()
 	.then(() => backfillLatestInputs())
 	.catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
-setAgentDelivery(async (id, text) => void (await dispatch(Coder, { id, message: text })));
-setAgentDelivery(async (id, text) => void (await dispatch(Reviewer, { id, message: text })), 'reviewer');
-setAgentDelivery(async (id, text) => void (await dispatch(Coordinator, { id, message: text })), 'coordinator');
+// A message with pictures (a thread's brief with images attached) goes as a user message carrying them.
+const delivered = (text: string, images?: DeliveredImage[]) => (images?.length ? { kind: 'user' as const, body: text, attachments: images } : text);
+setAgentDelivery(async (id, text, images) => void (await dispatch(Coder, { id, message: delivered(text, images) })));
+setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id, message: delivered(text, images) })), 'reviewer');
+setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -486,6 +488,22 @@ app.post('/api/projects/:id/automations', async (c) => {
 app.patch('/api/automations/:id', async (c) => {
 	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
 	return c.json(await setAutomationEnabled(c.req.param('id'), enabled));
+});
+app.put('/api/automations/:id', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			projectId: v.optional(v.nullable(v.string())),
+			kind: v.picklist(['issues', 'schedule']),
+			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
+			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			prompt: v.pipe(v.string(), v.maxLength(20_000)),
+			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
+			reasoning: v.optional(v.nullable(REASONING)),
+			planFirst: v.optional(v.boolean()),
+		}),
+	);
+	return c.json(await editAutomation(c.req.param('id'), input));
 });
 app.post('/api/automations/:id/run', async (c) => c.json(await runAutomation(c.req.param('id'), { force: true })));
 app.delete('/api/automations/:id', async (c) => {

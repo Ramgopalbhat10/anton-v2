@@ -12,6 +12,8 @@ import { loadedModels } from '../services/models.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/spaces.ts';
 import { editSession, stopSession } from '../services/sessions.ts';
 import { readSpaceFileForAgent } from '../services/space-files.ts';
+import { projectAttachment } from '../services/attachments.ts';
+import { withAttachments } from '../core/attachments.ts';
 import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { toUsage } from '../services/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -32,9 +34,9 @@ const PROMPT = [
 	'A quick question about the project (what is running, what a thread is waiting on, which pull requests are open) you answer yourself from the project state below, starting no thread.',
 	'A brief is the whole ask for the thread, which sees nothing of this conversation: say what to do and why, what "done" means, which repository, and any decision already made. Keep it short and specific; do not add work the user did not ask for.',
 	"Thread titles are a few plain words in the user's own vocabulary.",
-	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show.',
+	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show. A line with started="routine" is a thread one of the project\'s routines started on its own, not you: note it in a few words; it reports again when its state changes.',
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
-	'Files the user attaches arrive after their message as <attachment> blocks holding the file\'s text; the file itself is saved in the project Library, where every thread can read it. When a thread\'s work needs one, name the file in its brief: the thread reads it with read_project_file or in ../project-files.',
+	'Files and images the user attaches are saved in the project Library and arrive after their message as <attachment> blocks (an image is also shown to you, a document comes with its text). A thread sees nothing of this conversation, so whenever its work involves an attached file (a reference image, a spec, a spreadsheet), pass the file names in files with start_thread or message_thread: the thread then gets each one with its brief, an image as a picture.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply.',
 ].join(' ');
@@ -42,6 +44,19 @@ const PROMPT = [
 const PROPOSE = 'This project is set to propose first: for new work, call suggest_threads with the threads you would start, and let the user start them. Only call start_thread when the user asks you to start one.';
 
 const thread = v.pipe(v.string(), v.minLength(1), v.description('The thread, by the id shown in brackets in the project state'));
+const files = v.optional(
+	v.pipe(
+		v.array(v.string()),
+		v.maxLength(10),
+		v.description('Project Library files the thread needs, by name, such as images or documents the user attached: they go with the message, an image as a picture the thread sees'),
+	),
+);
+
+/** The message with the project files it names attached, as the composer attaches them. */
+async function withFiles(spaceId: string, message: string, names: string[] = []): Promise<string> {
+	if (!names.length) return message;
+	return withAttachments(message, await Promise.all(names.map((name) => projectAttachment(spaceId, name))), 'project');
+}
 
 function useCoordinatorTools(spaceId: string) {
 	useTool(
@@ -53,9 +68,10 @@ function useCoordinatorTools(spaceId: string) {
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(80), v.description('A few plain words')),
 				brief: v.pipe(v.string(), v.minLength(1), v.description('The complete ask: what to do, why, and what done means')),
 				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories, or "none" for a thread with no repository; defaults to the first, or none when the project has no repositories'))),
+				files,
 			}),
 			async run({ data }) {
-				const started = await startThread(spaceId, { title: data.title, brief: data.brief, repo: data.repo });
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files), repo: data.repo });
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},
@@ -85,10 +101,10 @@ function useCoordinatorTools(spaceId: string) {
 		defineTool({
 			name: 'message_thread',
 			description: 'Send a thread a message, such as a follow-up, an answer to its question, or a change of plan. It reads it after the step it is on.',
-			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)) }),
+			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)), files }),
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
-				await nudgeThread(spaceId, target.id, data.message);
+				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, data.files));
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
 			},
 		}),

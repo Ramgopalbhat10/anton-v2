@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { LucideIcon } from 'lucide-react';
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileText, Image, LayoutGrid, List as List_, MoreVertical, Plus, Sheet, Trash2 } from 'lucide-react';
-import { type CSSProperties, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CodeBlock } from '@/components/code-block';
 import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
@@ -33,9 +33,46 @@ function size(bytes: number): string {
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Where one Library file is read: its address and text, and the task whose Library holds it, which a live page needs. */
+export type Place = { path: string; url: string; textKey: QueryKey; text: () => Promise<string>; sessionId?: string };
+
+/** A file in a task's own Library. */
+export const taskPlace = (sessionId: string, path: string): Place => ({
+	path,
+	url: outputUrl(sessionId, path),
+	textKey: ['output', sessionId, path],
+	text: () => api.outputText(sessionId, path),
+	sessionId,
+});
+
+/**
+ * What a Library shows and how its files are reached: a task's own, or a
+ * project's files with what its threads saved. Each kind of Library brings
+ * its files, already fetched; the views below are the same for all.
+ */
+export type LibrarySource = {
+	files: Output[] | undefined;
+	error: Error | null;
+	place: (path: string) => Place;
+	/** Where the agent finds the file, for Copy path. */
+	agentPath: (path: string) => string;
+	upload: (file: File) => Promise<unknown>;
+	/** Null for a Library whose files cannot be deleted from here. */
+	remove: ((path: string) => Promise<unknown>) | null;
+	refresh: () => void;
+	/** Where an added file goes, for the notice that it was added. */
+	addedTo: string;
+	/** What the empty Library says. */
+	empty: string;
+};
+
 /** Reads the file as text, then shows it with `render`. */
 export function TextFile({ sessionId, path, render }: { sessionId: string; path: string; render: (text: string) => ReactNode }) {
-	const content = useQuery({ queryKey: ['output', sessionId, path], queryFn: () => api.outputText(sessionId, path) });
+	return <TextAt place={taskPlace(sessionId, path)} render={render} />;
+}
+
+function TextAt({ place, render }: { place: Place; render: (text: string) => ReactNode }) {
+	const content = useQuery({ queryKey: place.textKey, queryFn: place.text });
 	if (content.isPending) {
 		return (
 			<div className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-(--text-tertiary)">
@@ -107,14 +144,31 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 
 /** A file's source, highlighted, as the Code side of a page or document. */
 export function Source({ sessionId, path }: { sessionId: string; path: string }) {
-	const language = path.split('.').pop()?.toLowerCase() ?? 'txt';
-	return <TextFile sessionId={sessionId} path={path} render={(text) => <CodeBlock code={text} language={language} className="mb-0! rounded-none! border-0!" />} />;
+	return <SourceAt place={taskPlace(sessionId, path)} />;
 }
 
-function Preview({ sessionId, output, onBack }: { sessionId: string; output: Output; onBack: () => void }) {
+function SourceAt({ place }: { place: Place }) {
+	const language = place.path.split('.').pop()?.toLowerCase() ?? 'txt';
+	return <TextAt place={place} render={(text) => <CodeBlock code={text} language={language} className="mb-0! rounded-none! border-0!" />} />;
+}
+
+/** The file by its kind, wherever it is kept. A page runs live only from a task's Library, which serves it as one; elsewhere it shows as its source. */
+function PreviewAt({ place, code }: { place: Place; code: boolean }) {
+	const kind = kindOf(place.path);
+	if (code || (kind === 'page' && !place.sessionId)) return <SourceAt place={place} />;
+	if (kind === 'page') return PREVIEWS.page({ sessionId: place.sessionId!, path: place.path });
+	if (kind === 'image') return <img src={place.url} alt={place.path} className="block max-w-full" />;
+	if (kind === 'pdf') return <iframe src={place.url} title={place.path} className="block h-[70vh] w-full border-0 bg-white" />;
+	if (kind === 'table') return <TextAt place={place} render={(text) => <Table text={text} separator={/\.tsv$/i.test(place.path) ? '\t' : ','} />} />;
+	if (kind === 'text') return <TextAt place={place} render={plain} />;
+	return PREVIEWS.other({ sessionId: '', path: place.path });
+}
+
+function Preview({ library, output, onBack }: { library: LibrarySource; output: Output; onBack: () => void }) {
 	const kind = kindOf(output.path);
 	const [code, setCode] = useState(false);
-	const Body = code ? Source : PREVIEWS[kind];
+	const place = library.place(output.path);
+	const live = kind === 'page' && Boolean(place.sessionId);
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex h-8 items-center gap-2">
@@ -127,7 +181,7 @@ function Preview({ sessionId, output, onBack }: { sessionId: string; output: Out
 					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
 					<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-primary)">{output.path}</div>
 					<span className="in-num text-[11px] text-(--text-disabled)">{size(output.size)}</span>
-					{kind === 'page' ? (
+					{live ? (
 						<>
 							<Segmented label="Show" role="radiogroup" className="shrink-0">
 								<SegmentedItem role="radio" size="sm" on={!code} onClick={() => setCode(false)}>
@@ -137,13 +191,13 @@ function Preview({ sessionId, output, onBack }: { sessionId: string; output: Out
 									Code
 								</SegmentedItem>
 							</Segmented>
-							<a href={frameUrl(sessionId, output.path)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs">
+							<a href={frameUrl(place.sessionId!, place.path)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs">
 								<Icon icon={ExternalLink} size={12} />
 							</a>
 						</>
 					) : null}
 					<a
-						href={outputUrl(sessionId, output.path)}
+						href={place.url}
 						download={output.path.split('/').pop()}
 						aria-label="Download"
 						title="Download"
@@ -152,7 +206,7 @@ function Preview({ sessionId, output, onBack }: { sessionId: string; output: Out
 						<Icon icon={Download} size={12} />
 					</a>
 				</div>
-				<Body sessionId={sessionId} path={output.path} />
+				<PreviewAt place={place} code={code} />
 			</div>
 		</div>
 	);
@@ -214,26 +268,25 @@ function entriesIn(outputs: Output[], folder: string): { folders: Folder[]; file
 
 /** What can be done to one entry: open it, copy where it is, download it, or delete it (asking twice). */
 function ItemActions({
-	sessionId,
+	library,
 	path,
 	folder,
 	onOpen,
 	onDone,
 	variant,
 }: {
-	sessionId: string;
+	library: LibrarySource;
 	path: string;
 	folder: boolean;
 	onOpen: () => void;
 	onDone?: () => void;
 	variant: 'menu' | 'list' | 'list-above';
 }) {
-	const queryClient = useQueryClient();
 	const [confirming, setConfirming] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const remove = useMutation({
-		mutationFn: () => api.deleteOutput(sessionId, path),
-		onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] }),
+		mutationFn: () => library.remove!(path),
+		onSuccess: library.refresh,
 	});
 	const actions: Array<{ icon: LucideIcon; label: string; run: (event: Event | React.MouseEvent) => void; danger?: boolean; keep?: boolean } | null> = [
 		{ icon: ExternalLink, label: 'Open', run: onOpen },
@@ -241,7 +294,7 @@ function ItemActions({
 			icon: Copy,
 			label: copied ? 'Path copied' : 'Copy path',
 			keep: true,
-			run: () => void navigator.clipboard?.writeText(`outputs/${path}`).then(() => setCopied(true)),
+			run: () => void navigator.clipboard?.writeText(library.agentPath(path)).then(() => setCopied(true)),
 		},
 		folder
 			? null
@@ -250,12 +303,12 @@ function ItemActions({
 					label: 'Download',
 					run: () => {
 						const link = document.createElement('a');
-						link.href = outputUrl(sessionId, path);
+						link.href = library.place(path).url;
 						link.download = nameOf(path);
 						link.click();
 					},
 				},
-		folder
+		folder || !library.remove
 			? null
 			: {
 					icon: Trash2,
@@ -329,7 +382,7 @@ function ItemActions({
 }
 
 /** A folder as a card with a tab, like a paper folder: its name, how much is in it, and when it last changed. */
-function FolderCard({ sessionId, folder, onOpen }: { sessionId: string; folder: Folder; onOpen: () => void }) {
+function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folder: Folder; onOpen: () => void }) {
 	return (
 		<div className="group relative pt-2.5">
 			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-[7px] border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
@@ -343,7 +396,7 @@ function FolderCard({ sessionId, folder, onOpen }: { sessionId: string; folder: 
 				<span className="flex min-w-0 items-start gap-2">
 					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{folder.name}</span>
 					<span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-						<ItemActions sessionId={sessionId} path={folder.path} folder onOpen={onOpen} variant="menu" />
+						<ItemActions library={library} path={folder.path} folder onOpen={onOpen} variant="menu" />
 					</span>
 				</span>
 				<span className="in-num flex items-center justify-between text-[10.5px] text-(--text-disabled)">
@@ -358,8 +411,9 @@ function FolderCard({ sessionId, folder, onOpen }: { sessionId: string; folder: 
 }
 
 /** A file as a card: an image fills it, anything else shows its name; its type sits in the corner. */
-function FileCard({ sessionId, output, onOpen }: { sessionId: string; output: Output; onOpen: () => void }) {
+function FileCard({ library, output, onOpen }: { library: LibrarySource; output: Output; onOpen: () => void }) {
 	const kind = kindOf(output.path);
+	const place = library.place(output.path);
 	const name = nameOf(output.path);
 	return (
 		<div
@@ -372,9 +426,9 @@ function FileCard({ sessionId, output, onOpen }: { sessionId: string; output: Ou
 			className="in-card group relative mt-2.5 flex h-[104px] cursor-pointer flex-col overflow-hidden text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
 		>
 			{kind === 'image' ? (
-				<img src={outputUrl(sessionId, output.path)} alt="" loading="lazy" className="absolute inset-0 size-full object-cover object-top opacity-90 transition-opacity group-hover:opacity-100" />
-			) : kind === 'page' ? (
-				<PageThumbnail sessionId={sessionId} path={output.path} />
+				<img src={place.url} alt="" loading="lazy" className="absolute inset-0 size-full object-cover object-top opacity-90 transition-opacity group-hover:opacity-100" />
+			) : kind === 'page' && place.sessionId ? (
+				<PageThumbnail sessionId={place.sessionId} path={place.path} />
 			) : (
 				<span className="flex min-w-0 items-start gap-1.5 p-3 pr-1.5">
 					<Icon icon={ICONS[kind]} size={13} className={cn('mt-0.5 shrink-0', KIND_TONE[kind])} />
@@ -383,13 +437,13 @@ function FileCard({ sessionId, output, onOpen }: { sessionId: string; output: Ou
 			)}
 			<span className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 				<span className="inline-flex rounded-[7px] bg-(--bg-scrim)">
-					<ItemActions sessionId={sessionId} path={output.path} folder={false} onOpen={onOpen} variant="menu" />
+					<ItemActions library={library} path={output.path} folder={false} onOpen={onOpen} variant="menu" />
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
 				<span className="rounded-[5px] bg-(--bg-scrim) px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
-				{kind === 'page' ? (
+				{kind === 'page' && place.sessionId ? (
 					<span className="min-w-0 truncate rounded-[5px] bg-(--bg-scrim) px-1.5 py-0.5 text-[11px] text-(--text-primary) backdrop-blur-sm">{name}</span>
 				) : kind === 'image' ? null : (
 					<span className="in-num ml-auto text-[10.5px] text-(--text-disabled)">{size(output.size)}</span>
@@ -399,15 +453,15 @@ function FileCard({ sessionId, output, onOpen }: { sessionId: string; output: Ou
 	);
 }
 
-function Grid({ sessionId, outputs, folder, onFolder, onOpen }: { sessionId: string; outputs: Output[]; folder: string; onFolder: (path: string) => void; onOpen: (output: Output) => void }) {
+function Grid({ library, outputs, folder, onFolder, onOpen }: { library: LibrarySource; outputs: Output[]; folder: string; onFolder: (path: string) => void; onOpen: (output: Output) => void }) {
 	const { folders, files } = entriesIn(outputs, folder);
 	return (
 		<div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-2.5 gap-y-1.5">
 			{folders.map((entry) => (
-				<FolderCard key={entry.path} sessionId={sessionId} folder={entry} onOpen={() => onFolder(entry.path)} />
+				<FolderCard key={entry.path} library={library} folder={entry} onOpen={() => onFolder(entry.path)} />
 			))}
 			{files.map((output) => (
-				<FileCard key={output.path} sessionId={sessionId} output={output} onOpen={() => onOpen(output)} />
+				<FileCard key={output.path} library={library} output={output} onOpen={() => onOpen(output)} />
 			))}
 		</div>
 	);
@@ -466,7 +520,7 @@ function useScrollbarLane(box: RefObject<HTMLElement | null>) {
  * Every saved file in folders, as Pierre's file tree: when each file changed
  * and its size at the row's end, and its actions on the row's menu.
  */
-function List({ sessionId, outputs, onOpen }: { sessionId: string; outputs: Output[]; onOpen: (output: Output) => void }) {
+function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: Output[]; onOpen: (output: Output) => void }) {
 	const byPath = useMemo(() => new Map(outputs.map((output) => [output.path, output])), [outputs]);
 	const latest = useRef(byPath);
 	latest.current = byPath;
@@ -525,7 +579,7 @@ function List({ sessionId, outputs, onOpen }: { sessionId: string; outputs: Outp
 					style={{ ...TREE_STYLE, '--trees-context-menu-trigger-inline-offset': `calc(var(--trees-item-padding-x) - var(--trees-focus-ring-width) + ${lane}px)` } as CSSProperties}
 					renderContextMenu={(item, context) => (
 						<ItemActions
-							sessionId={sessionId}
+							library={library}
 							path={item.path.replace(/\/$/, '')}
 							folder={item.kind === 'directory'}
 							variant={context.anchorRect.bottom + 200 > window.innerHeight ? 'list-above' : 'list'}
@@ -579,24 +633,41 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
 /** Reports, screenshots and exports the agent saved, and files you added: as cards in folders, or as a tree. */
 export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
+	const outputs = useQuery({
+		queryKey: ['outputs', sessionId],
+		queryFn: () => api.outputs(sessionId),
+		refetchInterval: (query) => refreshFor(query.state.data?.source),
+	});
+	const refresh = useCallback(() => void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] }), [queryClient, sessionId]);
+	const library: LibrarySource = {
+		files: outputs.data?.outputs,
+		error: outputs.error,
+		place: (path) => taskPlace(sessionId, path),
+		agentPath: (path) => `outputs/${path}`,
+		upload: (file) => api.uploadOutput(sessionId, file),
+		remove: (path) => api.deleteOutput(sessionId, path),
+		refresh,
+		addedTo: 'uploads',
+		empty: 'Reports, screenshots and exports the agent saves show up here, and so do files you add.',
+	};
+	return <Library library={library} />;
+}
+
+/** A Library of any kind, the same everywhere: a type filter, folders as cards or a tree, previews, and adding files. */
+export function Library({ library }: { library: LibrarySource }) {
 	const [selected, setSelected] = useState<Output | null>(null);
 	const [view, setView] = useStoredState<'grid' | 'list'>('anton.library.view', 'grid');
 	const [type, setType] = useState<'all' | Kind>('all');
 	const [folder, setFolder] = useState('');
 	const [notice, setNotice] = useState<string | null>(null);
 	const picker = useRef<HTMLInputElement>(null);
-	const outputs = useQuery({
-		queryKey: ['outputs', sessionId],
-		queryFn: () => api.outputs(sessionId),
-		refetchInterval: (query) => refreshFor(query.state.data?.source),
-	});
 	const add = useMutation({
 		mutationFn: async (files: File[]) => {
-			for (const file of files) await api.uploadOutput(sessionId, file);
+			for (const file of files) await library.upload(file);
 		},
-		onSuccess: (_, files) => setNotice(`Added ${files.length === 1 ? files[0].name : `${files.length} files`} to uploads`),
+		onSuccess: (_, files) => setNotice(`Added ${files.length === 1 ? files[0].name : `${files.length} files`} to ${library.addedTo}`),
 		onError: (error) => setNotice(error.message),
-		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] }),
+		onSettled: library.refresh,
 	});
 	useEffect(() => {
 		if (!notice) return;
@@ -604,9 +675,9 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 		return () => clearTimeout(timer);
 	}, [notice]);
 
-	if (selected) return <Preview sessionId={sessionId} output={selected} onBack={() => setSelected(null)} />;
+	if (selected) return <Preview library={library} output={selected} onBack={() => setSelected(null)} />;
 
-	const all = outputs.data?.outputs ?? [];
+	const all = library.files ?? [];
 	const items = type === 'all' ? all : all.filter((output) => kindOf(output.path) === type);
 	// A folder that a filter or a delete emptied gives way to the top.
 	const inFolder = folder && !items.some((output) => output.path.startsWith(`${folder}/`)) ? '' : folder;
@@ -663,9 +734,9 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 			) : null}
 
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-				{outputs.isError ? (
-					<EmptyState title="Library unavailable" body={outputs.error.message} />
-				) : outputs.isPending ? (
+				{library.error ? (
+					<EmptyState title="Library unavailable" body={library.error.message} />
+				) : !library.files ? (
 					<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
 						<Spinner size={12} />
 						Loading the library
@@ -674,14 +745,14 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 					<EmptyState
 						art={<LibraryArt className="w-full max-w-[320px]" />}
 						title="Nothing saved yet"
-						body="Reports, screenshots and exports the agent saves show up here, and so do files you add."
+						body={library.empty}
 					/>
 				) : items.length === 0 ? (
 					<EmptyState title="Nothing of this type" body="Pick another type, or All types." />
 				) : view === 'grid' ? (
-					<Grid sessionId={sessionId} outputs={items} folder={inFolder} onFolder={setFolder} onOpen={setSelected} />
+					<Grid library={library} outputs={items} folder={inFolder} onFolder={setFolder} onOpen={setSelected} />
 				) : (
-					<List sessionId={sessionId} outputs={items} onOpen={setSelected} />
+					<List library={library} outputs={items} onOpen={setSelected} />
 				)}
 			</div>
 

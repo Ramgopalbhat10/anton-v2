@@ -30,11 +30,11 @@ export function visionModelFor(id: string): string {
 
 const ON_SCREEN = `This is a screenshot of a computer's screen, ${SCREEN.width}×${SCREEN.height} pixels. Answer from the image alone.`;
 
-async function look(id: string, prompt: string, png: Uint8Array, signal?: AbortSignal): Promise<{ text: string; cost: number }> {
+async function look(id: string, prompt: string, png: Uint8Array, signal?: AbortSignal, mimeType = 'image/png'): Promise<{ text: string; cost: number }> {
 	const vision = getProviders().vision;
 	if (!vision) throw new Error('Seeing the screen needs an OpenRouter key (OPENROUTER_API_KEY).');
 	const model = visionModelFor(id);
-	const answer = await vision.look({ model, prompt, image: png, mimeType: 'image/png' }, signal);
+	const answer = await vision.look({ model, prompt, image: png, mimeType }, signal);
 	await recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 	return { text: answer.text, cost: answer.cost };
 }
@@ -79,4 +79,19 @@ export async function describe(id: string, png: Uint8Array, focus: string | null
 		signal,
 	);
 	return { screen: text, cost };
+}
+
+/**
+ * An image put into words, for a task whose own model cannot see: a picture
+ * attached to a project thread's brief reaches it as this description.
+ */
+export async function describeImage(id: string, image: Uint8Array, mimeType: string, signal?: AbortSignal): Promise<string> {
+	const { text } = await look(
+		id,
+		'Describe this image for someone who will work from it without seeing it, in under 250 words: what it is, its layout from top to bottom, every piece of text in it word for word, the colours, and any detail that matters.',
+		image,
+		signal,
+		mimeType,
+	);
+	return text.trim();
 }

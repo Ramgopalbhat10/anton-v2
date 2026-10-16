@@ -8,6 +8,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { type Autonomy, deleteSpaceRecord, getSpace, insertSpace, listSpaces, type Space, type SpaceState, setSpaceRepos, spaceSpend, touchSpace, updateSpace } from '../db/spaces.ts';
 import { stopAgent } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
+import { projectPictures } from './attachments.ts';
 import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
 import { findModel } from './models.ts';
@@ -185,6 +186,8 @@ export async function startThread(spaceId: string, input: ThreadInput): Promise<
 		planMode: input.planMode,
 	});
 	await touchSpace(spaceId);
+	// Shown at once, even when it waits for a slot or cannot start yet.
+	announce({ kind: 'space', id: spaceId, what: 'threads' });
 	await drainQueue(spaceId);
 	return getSession(thread.id);
 }
@@ -200,6 +203,12 @@ const LAUNCH_MS = 60_000;
 /** The thread finished a reply, so it no longer holds a slot as launching. */
 export function launched(threadId: string): void {
 	launching.delete(threadId);
+}
+
+/** A message to a thread with the images attached to it as project files: as pictures, or described for a model that cannot see. */
+async function sendWithPictures(spaceId: string, threadId: string, message: string, model: string): Promise<void> {
+	const { images, note } = await projectPictures(spaceId, threadId, message, model);
+	await sendToAgent(threadId, note ? `${message}\n\n${note}` : message, 'coder', images);
 }
 
 const draining = new Map<string, Promise<void>>();
@@ -228,7 +237,7 @@ async function drain(spaceId: string): Promise<void> {
 		launching.set(thread.id, now);
 		await updateSession(thread.id, { brief: null });
 		try {
-			await sendToAgent(thread.id, brief);
+			await sendWithPictures(spaceId, thread.id, brief, thread.model);
 		} catch (error) {
 			// Put the brief back, so the thread starts once the reason (a spending cap, a restore) is gone.
 			launching.delete(thread.id);
@@ -253,7 +262,7 @@ export async function nudgeThread(spaceId: string, threadId: string, text: strin
 	}
 	if (record.resolvedAt) await updateSession(threadId, { resolvedAt: null });
 	await updateSession(threadId, { asking: null });
-	await sendToAgent(threadId, message);
+	await sendWithPictures(spaceId, threadId, message, record.model);
 	return getSession(threadId);
 }
 

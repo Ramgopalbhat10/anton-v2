@@ -19,7 +19,7 @@ import { expandCommand } from '@/lib/completion';
 import { askToNotify } from '@/lib/notifications';
 import { parseReports, type Report } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
-import { deliveredImages } from '@/lib/attachments';
+import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../core/attachments';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
@@ -59,7 +59,8 @@ function Bubble({ message }: { message: FlueConversationMessage }) {
 					))}
 				</div>
 			) : null}
-			<SentAttachments files={files} />
+			{/* Images sent with the message are saved to the Library too; their pictures above already show them. */}
+			<SentAttachments files={images.length ? files.filter((file) => !/ image$/.test(file.kind)) : files} />
 			{text ? (
 				<div className="max-w-[560px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
 					{text}
@@ -80,6 +81,8 @@ const REPORTED: Record<Report['state'], string> = {
 	idle: 'replied',
 	resolved: 'is done',
 };
+
+const said = (report: Report) => (report.routine ? 'was started by a routine' : REPORTED[report.state]);
 
 function ReportRow({ reports, threads }: { reports: Report[]; threads: Session[] }) {
 	const [open, setOpen] = useState(false);
@@ -105,7 +108,7 @@ function ReportRow({ reports, threads }: { reports: Report[]; threads: Session[]
 					})}
 				</span>
 				<span>
-					{reports.length === 1 ? `${reports[0].title} ${REPORTED[reports[0].state]}` : `${reports.length} threads reported`}
+					{reports.length === 1 ? `${reports[0].title} ${said(reports[0])}` : `${reports.length} threads reported`}
 					{needs && reports.length > 1 ? <span className="text-(--warning-text)"> · {needs} need you</span> : null}
 				</span>
 			</button>
@@ -506,12 +509,14 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				askToNotify();
 				onDraft('');
 				setNotice(null);
-				setSending(taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`);
+				const count = taken.images.length + taken.files.length;
+				setSending(count === 0 ? null : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`);
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
-					const attached = await Promise.all(taken.files.map((file) => api.attachToProject(space.id, file.file)));
+					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
+					const attached = await Promise.all([...taken.images.map(imageFile), ...taken.files.map((file) => file.file)].map((file) => api.attachToProject(space.id, file)));
 					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
-					const message = withAttachments(expandCommand(text, saved.commands, true) || (taken.images.length && !attached.length ? 'Look at the attached image.' : ''), attached, 'project');
+					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
 					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
 				} catch (error) {
 					onDraft(text);
