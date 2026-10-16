@@ -964,6 +964,9 @@ const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
 
+/** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
+const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
@@ -978,6 +981,7 @@ const WORKSPACE_PROMPT = [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
@@ -1000,6 +1004,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
+	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',

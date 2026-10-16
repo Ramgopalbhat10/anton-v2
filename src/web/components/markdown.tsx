@@ -3,6 +3,8 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/code-block';
 import { MermaidDiagram } from '@/components/mermaid-diagram';
+import { outputUrl } from '@/lib/api';
+import type { ViewerItem } from '@/lib/viewer';
 
 /**
  * Where a reply's file references lead: `src/app.ts:42` in inline code
@@ -50,7 +52,8 @@ function fenced(children: ReactNode): { code: string; language?: string } | null
 /**
  * Links leave the app; raw HTML in replies is never rendered (react-markdown's
  * default). Images become links, so a reply can't make the browser load a URL
- * on its own, which would let anything the agent read leak out in the URL.
+ * on its own, which would let anything the agent read leak out in the URL;
+ * only the task's own files, served by Anton, draw as pictures.
  */
 const InLink = createContext(false);
 
@@ -61,6 +64,24 @@ const InLink = createContext(false);
  */
 export type InlineLinks = (href: string, children: ReactNode) => ReactNode | null;
 export const InlineLinks = createContext<InlineLinks | null>(null);
+
+/**
+ * Files a reply names in a task's Library, as the agent knows them
+ * (`../outputs/shot.png`): a link to one opens it in the viewer, and an
+ * image of one draws in place. Without a provider such links stay as written.
+ */
+export type OutputLinks = { resolve: (href: string) => ViewerItem | null; open: (item: ViewerItem) => void };
+export const OutputLinks = createContext<OutputLinks | null>(null);
+
+/** A click that means "here": a modified or middle click still opens the link in a tab. */
+const plainClick = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
+/** A relative link to a file the task has, such as `src/app.ts`, which the Files panel opens. */
+function repoFile(href: string, links: FileLinks | null): string | null {
+	if (!links || /^[a-z][a-z\d+.-]*:|^[#/]/i.test(href)) return null;
+	const path = href.replace(/^\.\//, '').replace(/[?#].*$/, '');
+	return links.has(path) ? path : null;
+}
 
 /** How each Markdown element draws; exported so tests can parse a reply whole with the same. */
 export const components: Components = {
@@ -74,8 +95,47 @@ export const components: Components = {
 	code: ({ children }) => <InlineCode>{children}</InlineCode>,
 	a: function Link({ node: _node, ...props }) {
 		const inline = useContext(InlineLinks);
+		const outputs = useContext(OutputLinks);
+		const files = useContext(FileLinks);
 		const drawn = inline && props.href ? inline(props.href, props.children) : null;
 		if (drawn) return drawn;
+		const item = outputs && props.href ? outputs.resolve(props.href) : null;
+		if (item && outputs) {
+			return (
+				<InLink.Provider value={true}>
+					<a
+						href={outputUrl(item.sessionId, item.path)}
+						target="_blank"
+						rel="noreferrer"
+						title={`Open ${item.path}`}
+						onClick={(event) => {
+							if (!plainClick(event.nativeEvent)) return;
+							event.preventDefault();
+							outputs.open(item);
+						}}
+					>
+						{props.children}
+					</a>
+				</InLink.Provider>
+			);
+		}
+		const file = props.href ? repoFile(props.href, files) : null;
+		if (file && files) {
+			return (
+				<InLink.Provider value={true}>
+					<a
+						href={props.href}
+						title={`Open ${file} in Files`}
+						onClick={(event) => {
+							event.preventDefault();
+							files.open(file);
+						}}
+					>
+						{props.children}
+					</a>
+				</InLink.Provider>
+			);
+		}
 		return (
 			<InLink.Provider value={true}>
 				<a {...props} target="_blank" rel="noreferrer" />
@@ -85,8 +145,18 @@ export const components: Components = {
 	// Inside a link (a README's badges) the image's text joins that link, since links can't nest.
 	img: function Img({ src, alt }) {
 		const inLink = useContext(InLink);
+		const outputs = useContext(OutputLinks);
 		if (typeof src !== 'string' || !src) return null;
 		if (inLink) return <>{alt || src}</>;
+		// The task's own files are Anton's to show: the picture itself, opening full size.
+		const item = outputs?.resolve(src);
+		if (item && outputs) {
+			return (
+				<button type="button" className="sg-output-image" title={`Open ${item.path}`} onClick={() => outputs.open(item)}>
+					<img src={outputUrl(item.sessionId, item.path)} alt={alt || item.path} loading="lazy" />
+				</button>
+			);
+		}
 		return (
 			<a href={src} target="_blank" rel="noreferrer">
 				{alt || src}

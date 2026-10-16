@@ -22,6 +22,8 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
 vi.mock('@tanstack/react-router', async (original) => ({
 	...(await original<typeof import('@tanstack/react-router')>()),
+	// The file viewer closes when the page changes; here there is one page.
+	useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => unknown }) => select({ location: { pathname: '/agents/s1' } }),
 	Link: ({ to, params, search, ...rest }: { to: string; params?: Record<string, string>; search?: Record<string, string> } & Record<string, unknown>) => {
 		const href = `${Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}${search ? `?${new URLSearchParams(search)}` : ''}`;
 		return <a href={href} {...rest} />;
@@ -29,6 +31,8 @@ vi.mock('@tanstack/react-router', async (original) => ({
 }));
 
 const { Thread } = await import('@/components/thread');
+const { OutputViewerHost } = await import('@/components/output-viewer');
+const { closeViewer } = await import('@/lib/viewer');
 const { setPendingPrompt } = await import('@/lib/pending-prompt');
 const { taskStatus } = await import('@/lib/working');
 
@@ -423,5 +427,46 @@ describe('response details', () => {
 		// It opens full size in Artifacts, or in a tab of its own.
 		expect(screen.getByRole('link', { name: 'Open Explainer in Artifacts' }).getAttribute('href')).toBe('/artifacts/s1?path=renders%2Fexplainer-abc123.html');
 		expect(screen.getByRole('link', { name: 'Open Explainer in a new tab' }).getAttribute('href')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
+	});
+
+	it('shows the files a reply made as cards, and opens a linked one beside the chat, ready to mark up', async () => {
+		closeViewer();
+		const text = 'Both are in the Library:\n\n- [Editable SVG](../outputs/stream-architecture.svg)\n- [Browser-rendered PNG](../outputs/stream-architecture.png)\n\n![Preview](../outputs/stream-architecture.png)\n\nNotes in [the report](../outputs/reports/notes.md).';
+		const shot = tool('screenshot', { url: 'http://localhost:5173' }, { output: { path: '../outputs/screenshots/home-1.png', title: 'Home' } });
+		// A check screenshot it deleted before the reply ended is not one of its files.
+		const check = tool('screenshot', { url: 'http://localhost:5173' }, { output: { path: '../outputs/check-1.png', title: 'Check' } });
+		renderWithQueries(
+			<>
+				<Thread sessionId="s1" agent={agent([user('u1', 'Draw it'), assistant('a1', [shot, check, { type: 'text', text }])])} />
+				<OutputViewerHost />
+			</>,
+			[
+				[['session', 's1'], session()],
+				[['health'], { ok: true, openRouter: true }],
+				[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
+				[['models'], { models: [], default: '' }],
+				[['outputs', 's1'], { source: 'saved', at: null, outputs: ['screenshots/home-1.png', 'stream-architecture.svg', 'stream-architecture.png', 'reports/notes.md'].map((path) => ({ path, size: 1, mtimeMs: 1 })) }],
+			],
+		);
+		// Its screenshot first, then the files its words link, each once.
+		const cards = within(screen.getByRole('list', { name: 'Files from this reply' })).getAllByRole('listitem');
+		expect(cards.map((card) => card.getAttribute('title'))).toEqual([
+			'Open screenshots/home-1.png',
+			'Open stream-architecture.svg',
+			'Open stream-architecture.png',
+			'Open reports/notes.md',
+		]);
+		// An image it saved draws in place; links keep the file's own address for a new tab.
+		expect(screen.getByRole('img', { name: 'Preview' }).getAttribute('src')).toBe('/api/sessions/s1/output?path=stream-architecture.png');
+		const link = screen.getByRole('link', { name: 'Browser-rendered PNG' });
+		expect(link.getAttribute('href')).toBe('/api/sessions/s1/output?path=stream-architecture.png');
+		fireEvent.click(link);
+		const viewer = await screen.findByRole('complementary', { name: 'Viewing stream-architecture.png' });
+		expect(within(viewer).getByText('3 of 4')).toBeTruthy();
+		expect(within(viewer).getByRole('button', { name: /Mark up/ })).toBeTruthy();
+		fireEvent.click(within(viewer).getByRole('button', { name: 'Next file' }));
+		expect(await screen.findByRole('complementary', { name: 'Viewing notes.md' })).toBeTruthy();
+		fireEvent.keyDown(window, { key: 'Escape' });
+		await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
 	});
 });

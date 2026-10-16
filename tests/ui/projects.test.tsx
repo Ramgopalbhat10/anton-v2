@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 	attachToProject: vi.fn(),
 	budget: vi.fn(async () => ({ limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null })),
 	commands: vi.fn(async () => ({ commands: [] })),
+	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadChip, ThreadRow, nextSteps } = await import('@/components/thread-card');
@@ -27,6 +28,7 @@ const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/compo
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
+const { OutputViewerHost } = await import('@/components/output-viewer');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -141,6 +143,60 @@ describe('threads', () => {
 		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
 		expect(within(card).getByRole('link', { name: /#9 · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
 		expect(within(card).getByRole('button', { name: 'Answer' })).toBeTruthy();
+	});
+
+	it('shows what a thread made as chips: its newest file with a peek, and +N listing the rest, each opening beside the chat', async () => {
+		api.outputs.mockImplementation(async (id: string) => ({
+			source: 'saved',
+			at: null,
+			outputs:
+				id === 'pr'
+					? [
+							{ path: 'uploads/brief.pdf', size: 10, mtimeMs: 5 },
+							{ path: 'stream-architecture.svg', size: 1754, mtimeMs: 3 },
+							{ path: 'screenshots/home-1.png', size: 34843, mtimeMs: 4 },
+							{ path: 'reports/notes.md', size: 900, mtimeMs: 1 },
+						]
+					: [],
+		}));
+		const router = withRouter(() => (
+			<>
+				<ThreadRow thread={threads[2]} />
+				<OutputViewerHost />
+			</>
+		));
+		// The newest first; files you attached are not the thread's.
+		const chip = await screen.findByRole('button', { name: 'Open home-1.png' });
+		const more = screen.getByRole('button', { name: '2 more files' });
+		expect(more.textContent).toBe('+2');
+		expect(screen.getByText('#12')).toBeTruthy();
+		fireEvent.pointerEnter(more, { pointerType: 'mouse' });
+		expect(await screen.findByText('2 more files from this thread')).toBeTruthy();
+		expect(screen.getByText('stream-architecture.svg')).toBeTruthy();
+		expect(screen.getByText('notes.md')).toBeTruthy();
+		await userEvent.click(chip);
+		const viewer = await screen.findByRole('complementary', { name: 'Viewing home-1.png' });
+		expect(within(viewer).getByText('1 of 3')).toBeTruthy();
+		// The row stays where it is: the file opens beside the chat.
+		expect(router.state.location.pathname).toBe('/projects/space_1');
+	});
+
+	it('opens a file the coordinator passes on from a thread, by the thread or by the path the thread gave', async () => {
+		api.outputs.mockImplementation(async (id: string) => ({ source: 'saved', at: null, outputs: id === 'pr' ? [{ path: 'diagram.png', size: 10, mtimeMs: 1 }] : [] }));
+		const text = 'Ready: [the diagram](../outputs/diagram.png) and [its notes](#thread-runs/outputs/notes.md).';
+		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts: [{ type: 'text', text }] }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => (
+			<>
+				<ProjectFeed space={space} agent={agent as never} threads={threads} starting={false} onStartingChange={() => {}} />
+				<OutputViewerHost />
+			</>
+		));
+		await waitFor(() => expect(screen.getByRole('link', { name: 'the diagram' }).getAttribute('href')).toBe('/api/sessions/pr/output?path=diagram.png'));
+		expect(screen.getByRole('link', { name: 'its notes' }).getAttribute('href')).toBe('/api/sessions/runs/output?path=notes.md');
+		const cards = within(screen.getByRole('list', { name: 'Files from this reply' })).getAllByRole('listitem');
+		expect(cards).toHaveLength(2);
+		await userEvent.click(screen.getByRole('link', { name: 'the diagram' }));
+		expect(await screen.findByRole('complementary', { name: 'Viewing diagram.png' })).toBeTruthy();
 	});
 
 	it('draws a thread named in a reply as a chip that opens it', async () => {

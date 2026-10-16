@@ -14,6 +14,7 @@ import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
 import { SkillDetailPage } from '@/components/settings/skill-detail';
 import type { SkillsTab, ViewSearch } from '@/components/settings/skills';
+import { OutputViewerHost } from '@/components/output-viewer';
 import { ProjectPage, ThreadPage } from '@/components/project-page';
 import { ProjectSettingsPage } from '@/components/project-settings';
 import { ProjectsPage } from '@/components/projects-page';
@@ -32,6 +33,7 @@ const rootRoute = createRootRoute({
 		<QueryClientProvider client={queryClient}>
 			<TooltipProvider>
 				<AppShell />
+				<OutputViewerHost />
 			</TooltipProvider>
 		</QueryClientProvider>
 	),

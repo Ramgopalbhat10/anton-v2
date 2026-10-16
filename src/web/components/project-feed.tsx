@@ -7,7 +7,8 @@ import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Caption } from '@/components/instrument';
-import { InlineLinks, Markdown } from '@/components/markdown';
+import { InlineLinks, Markdown, OutputLinks } from '@/components/markdown';
+import { OutputCards } from '@/components/output-viewer';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/signal';
 import { ProjectRoute } from '@/components/project-viz';
@@ -17,6 +18,10 @@ import { field } from '@/components/tool-describe';
 import { api, type ModelChoice, SAFETY_NET_MS, type Session, type Space } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { askToNotify } from '@/lib/notifications';
+import { takeFromInbox, useInbox } from '@/lib/composer-inbox';
+import { useThreadFileResolver } from '@/lib/thread-outputs';
+import { openViewer, sameItem, type ViewerItem } from '@/lib/viewer';
+import { linkTargets } from '../../core/outputs';
 import { parseReports, type Report } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { deliveredImages, imageFile } from '@/lib/attachments';
@@ -300,11 +305,41 @@ function threadChips(threads: Session[]): InlineLinks {
 	};
 }
 
-const CoordinatorMessage = memo(function CoordinatorMessage({ message, live, space, threads }: { message: FlueConversationMessage; live: boolean; space: Space; threads: Session[] }) {
+/** The thread files a reply's words link to, each once, in the order it names them. */
+function linkedFiles(parts: FlueConversationPart[], resolve: (href: string) => ViewerItem | null): ViewerItem[] {
+	const items: ViewerItem[] = [];
+	for (const part of parts) {
+		if (part.type !== 'text') continue;
+		for (const target of linkTargets(part.text)) {
+			const item = resolve(target);
+			if (item && !items.some((other) => sameItem(other, item))) items.push(item);
+		}
+	}
+	return items;
+}
+
+const CoordinatorMessage = memo(function CoordinatorMessage({
+	message,
+	live,
+	space,
+	threads,
+	resolveFile,
+}: {
+	message: FlueConversationMessage;
+	live: boolean;
+	space: Space;
+	threads: Session[];
+	/** The thread file a link names, as the coordinator passes on what a thread made. */
+	resolveFile: (href: string) => ViewerItem | null;
+}) {
 	const parts = message.parts.filter((part) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool');
 	const chips = useMemo(() => threadChips(threads), [threads]);
+	const files = useMemo(() => (live ? [] : linkedFiles(message.parts, resolveFile)), [live, message.parts, resolveFile]);
+	// A drawing on one of them goes to the coordinator, which passes it on.
+	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
 	if (parts.length === 0 && !live) return null;
 	return (
+		<OutputLinks.Provider value={outputLinks}>
 		<div className="flex flex-col gap-2.5">
 			{blocks(parts).map((block) =>
 				block.kind === 'text' ? (
@@ -319,6 +354,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({ message, live, spa
 					<ToolBlock key={block.part.toolCallId} part={block.part} space={space} threads={threads} />
 				),
 			)}
+			<OutputCards items={files} composer={space.id} />
 			{live && parts.length === 0 ? (
 				<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
 					<Spinner size={12} />
@@ -326,6 +362,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({ message, live, spa
 				</div>
 			) : null}
 		</div>
+		</OutputLinks.Provider>
 	);
 });
 
@@ -483,6 +520,14 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const blocked = budget.data?.blocked ?? null;
 	const [notice, setNotice] = useState<string | null>(null);
 	const attachments = useAttachments();
+	const { addImages } = attachments;
+	// A drawing on a thread's image, from the viewer, joins the draft.
+	const inbox = useInbox(space.id);
+	useEffect(() => {
+		if (!inbox.length) return;
+		const drawn = takeFromInbox(space.id).flatMap((item) => (item.kind === 'image' ? [item.image] : []));
+		if (drawn.length) addImages(drawn);
+	}, [inbox, space.id, addImages]);
 	/** What is being attached while a message with files is on its way. */
 	const [sending, setSending] = useState<string | null>(null);
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
@@ -589,6 +634,7 @@ export function ProjectFeed({
 	const messages = useMemo(() => agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [agent.messages]);
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
+	const resolveFile = useThreadFileResolver(threads);
 
 	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
 	useEffect(() => {
@@ -613,7 +659,7 @@ export function ProjectFeed({
 							);
 						}
 						if (message.role === 'user') return <UserEntry key={message.id} message={message} threads={threads} />;
-						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} />;
+						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
 					})}
 					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
 						<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">

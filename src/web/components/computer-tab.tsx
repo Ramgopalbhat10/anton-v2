@@ -265,7 +265,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 					{sketch ? (
 						<div className="absolute inset-0 z-20">
 							<Sketch
-								image={sketch.data}
+								src={`data:image/png;base64,${sketch.data}`}
 								width={sketch.width}
 								height={sketch.height}
 								onClose={() => setSketch(null)}

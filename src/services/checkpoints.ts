@@ -229,21 +229,29 @@ export async function savedOutputs(id: string): Promise<SavedOutput[]> {
 }
 
 /**
- * Puts the files you attached to the task (`uploads/`, kept in storage) into
- * its machine's outputs folder, where the agent's tools reach them: those
- * attached before the sandbox started are not there yet. Run each time the
- * machine is set up or resumed; a file already there is left as it is.
+ * Puts the task's Library back into its machine's outputs folder, where the
+ * agent's tools reach it: the files you attached (`uploads/`, kept in
+ * storage), and what the agent saved there before. A machine that starts
+ * fresh, because its sandbox and its last state are gone, has neither, and
+ * the next checkpoint lists only what the machine holds, so without this
+ * the Library would empty. Run each time the machine is set up or resumed;
+ * a file already there is left as it is.
  */
-export async function copyUploads(machine: Machine, id: string): Promise<void> {
-	const uploads = (await savedOutputs(id)).filter((output) => output.path.startsWith('uploads/') && output.key);
-	if (!uploads.length) return;
+export async function copyLibrary(machine: Machine, id: string): Promise<void> {
+	const [saved, checkpoint] = await Promise.all([savedOutputs(id), readCheckpoint(id)]);
+	const wanted = new Map<string, string>();
+	for (const output of [...(checkpoint?.outputs ?? []), ...saved.filter((output) => output.path.startsWith('uploads/'))]) {
+		if (output.key) wanted.set(output.path, output.key);
+	}
+	if (!wanted.size) return;
 	const present = new Set((await listMachineFiles(machine, `${machine.root}/outputs`)).map((file) => file.path));
-	const missing = uploads.filter((output) => !present.has(output.path));
+	const missing = [...wanted].filter(([path]) => !present.has(path));
 	if (!missing.length) return;
-	await run(machine, `mkdir -p ${quote(`${machine.root}/outputs/uploads`)}`);
-	for (const output of missing) {
-		const bytes = await getProviders().store.get(output.key!);
-		if (bytes) await writeMachineFile(machine, `${machine.root}/outputs/${output.path}`, bytes);
+	const folders = new Set(missing.map(([path]) => `${machine.root}/outputs/${path}`.replace(/\/[^/]*$/, '')));
+	await run(machine, `mkdir -p ${[...folders].map(quote).join(' ')}`);
+	for (const [path, key] of missing) {
+		const bytes = await getProviders().store.get(key);
+		if (bytes) await writeMachineFile(machine, `${machine.root}/outputs/${path}`, bytes);
 	}
 }
 

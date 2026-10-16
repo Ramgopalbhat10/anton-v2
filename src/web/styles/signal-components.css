@@ -144,3 +144,8 @@
 .sg-markdown .sg-file-ref code{color:var(--accent-text);border-color:var(--accent-border)}
 .sg-markdown .sg-file-ref:hover code{background:var(--accent-bg-subtle)}
 .sg-markdown .sg-file-ref:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}
+/* An image the agent saved, drawn in its reply: a click opens it in the viewer. */
+.sg-markdown .sg-output-image{display:block;margin:8px 0;padding:0;border:0;background:none;cursor:zoom-in;max-width:100%;border-radius:10px;outline:none}
+.sg-markdown .sg-output-image img{display:block;max-width:100%;max-height:360px;border-radius:10px;border:1px solid var(--card-border);background:var(--bg-inset)}
+.sg-markdown .sg-output-image:hover img{border-color:var(--border-strong)}
+.sg-markdown .sg-output-image:focus-visible{box-shadow:var(--focus-ring)}

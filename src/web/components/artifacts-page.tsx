@@ -3,12 +3,12 @@ import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
-import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
+import { frameUrl, PageThumbnail } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
-import { kindOf, PREVIEWS, Source, TextFile } from '@/components/library-tab';
-import { Markdown } from '@/components/markdown';
+import { kindOf } from '@/components/library-tab';
 import { MenuButton } from '@/components/nav';
+import { OutputPreview, OutputThumb } from '@/components/output-viewer';
 import { PageFrame } from '@/components/page-frame';
 import { EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
@@ -82,7 +82,13 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	const info = categoryInfo(category);
 	let body: ReactNode = null;
 	if (seen && category === 'app') body = <PageThumbnail sessionId={artifact.sessionId} path={artifact.path} />;
-	else if (seen && kindOf(artifact.path) === 'image') body = <img src={outputUrl(artifact.sessionId, artifact.path)} alt="" className="absolute inset-0 size-full object-cover object-top" />;
+	// A picture that cannot be read shows its kind instead of a broken image.
+	else if (seen && kindOf(artifact.path) === 'image')
+		body = (
+			<span className="absolute inset-0">
+				<OutputThumb item={artifact} />
+			</span>
+		);
 	else if (seen && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
 	else if (seen) {
 		body = (
@@ -299,25 +305,7 @@ export function ArtifactView() {
 	const [code, setCode] = useState(false);
 	const text = isText(path);
 
-	let body: ReactNode;
-	// The page as wide as a roomy reply, with the margins a reply gives it.
-	if (app && !code)
-		body = (
-			<div className="mx-auto h-full max-w-[960px] px-4 pt-6 md:px-6">
-				<HtmlFrame sessionId={sessionId} path={path} title={artifact.title} fill />
-			</div>
-		);
-	else if (code || (text && !readable && kindOf(path) !== 'table')) body = <Source sessionId={sessionId} path={path} />;
-	else if (isMarkdown(path))
-		body = (
-			<div className="mx-auto max-w-[760px] px-5 py-6">
-				<TextFile sessionId={sessionId} path={path} render={(content) => <Markdown text={content} />} />
-			</div>
-		);
-	else {
-		const Preview = PREVIEWS[kindOf(path)];
-		body = <Preview sessionId={sessionId} path={path} />;
-	}
+	const body = <OutputPreview item={{ sessionId, path }} code={code} title={artifact.title} />;
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
