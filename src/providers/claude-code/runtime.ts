@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { type ModelInfo as ClaudeModel, type Options, type Query, type SDKMessage, type SDKUserMessage, query } from '@anthropic-ai/claude-agent-sdk';
 import { ANTHROPIC_MODELS } from '@earendil-works/pi-ai/providers/anthropic.models';
-import { parseVariant, sizeOf, variantId, variantName } from '../../core/model-variants.ts';
+import { linkVariants, parseVariant, sizeOf, variantId, variantName, withVariants } from '../../core/model-variants.ts';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import {
@@ -277,22 +277,14 @@ export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): Su
 		listPrice: pi ? { input: pi.cost.input, output: pi.cost.output, cacheRead: pi.cost.cacheRead, cacheWrite: pi.cost.cacheWrite } : null,
 	};
 	if (!listed.supportsFastMode) return [model];
-	return [
-		model,
-		{
-			...model,
-			id: `${gateway}/${variantId(id, { fast: true })}`,
-			name: variantName(nameOf(base), { context, fast: true }),
-			description: 'Fast mode: answers sooner, billed as paid extra usage rather than your plan’s limits.',
-			// Anthropic prices fast mode at six times the standard rate.
-			listPrice: model.listPrice && {
-				input: model.listPrice.input * 6,
-				output: model.listPrice.output * 6,
-				cacheRead: model.listPrice.cacheRead * 6,
-				cacheWrite: model.listPrice.cacheWrite * 6,
-			},
-		},
-	];
+	// Anthropic prices fast mode at six times the standard rate.
+	const listPrice = model.listPrice && {
+		input: model.listPrice.input * 6,
+		output: model.listPrice.output * 6,
+		cacheRead: model.listPrice.cacheRead * 6,
+		cacheWrite: model.listPrice.cacheWrite * 6,
+	};
+	return withVariants(model, { fast: { description: 'Fast mode answers sooner, billed as paid extra usage rather than your plan’s limits.', change: { listPrice } } });
 }
 
 export function toModels(listed: ClaudeModel[], gateway = GATEWAY): SubscriptionModel[] {
@@ -302,7 +294,7 @@ export function toModels(listed: ClaudeModel[], gateway = GATEWAY): Subscription
 	}
 	// A dated snapshot listed beside its undated name is the same model twice.
 	const undated = (id: string) => id.replace(/-\d{8}(?=\[|$)/, '');
-	return [...models.values()].filter((model) => undated(model.id) === model.id || !models.has(undated(model.id)));
+	return linkVariants([...models.values()].filter((model) => undated(model.id) === model.id || !models.has(undated(model.id))));
 }
 
 type Usage = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>;

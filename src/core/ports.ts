@@ -5,6 +5,8 @@
  * `src/providers/index.ts`.
  */
 
+import type { VariantOf } from './model-variants.ts';
+
 export type ExecOptions = {
 	cwd?: string;
 	env?: Record<string, string>;
@@ -292,6 +294,8 @@ export type ModelInfo = {
 	defaultReasoning: Reasoning;
 	/** The plan its calls bill, such as "ChatGPT", when it runs on a subscription you signed in to rather than per token. */
 	subscription?: string;
+	/** Set on a plan model's larger context or fast mode (`<model>[1m]`, `<model>[fast]`): the model it is a variant of. */
+	variant?: VariantOf;
 };
 
 /** The models an LLM gateway offers for agent work (tool calling, text out). */

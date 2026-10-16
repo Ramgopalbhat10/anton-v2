@@ -134,3 +134,40 @@ export function rememberModel(id: string): void {
 		// Recents are a convenience; the picker works without them.
 	}
 }
+
+/** The models the picker lists as rows: a plan model's larger context and fast mode are its controls, not rows. */
+export function listedModels(models: ModelInfo[]): ModelInfo[] {
+	return models.filter((model) => !model.variant);
+}
+
+/**
+ * A model and the variants the vendor offers of it: the model the picker
+ * lists, the contexts it comes in (null for its standard one), whether it has
+ * a fast mode, which of them `model` is, and the model for any choice of them.
+ */
+export type ModelOptions = {
+	base: ModelInfo;
+	contexts: Array<{ tag: string | null; tokens: number }>;
+	fast: boolean;
+	chosen: { context: string | null; fast: boolean };
+	pick: (choice: { context: string | null; fast: boolean }) => ModelInfo;
+};
+
+export function optionsOf(models: ModelInfo[], model: ModelInfo): ModelOptions {
+	const base = (model.variant && models.find((candidate) => candidate.id === model.variant!.of)) || model;
+	const family = [base, ...models.filter((candidate) => candidate.variant?.of === base.id)];
+	const of = (candidate: ModelInfo) => ({ context: candidate.variant?.context ?? null, fast: candidate.variant?.fast ?? false });
+	const contexts = new Map<string | null, number>([[null, base.contextLength]]);
+	for (const candidate of family) if (candidate.variant?.context) contexts.set(candidate.variant.context, candidate.contextLength);
+	return {
+		base,
+		contexts: [...contexts].map(([tag, tokens]) => ({ tag, tokens })).sort((a, b) => a.tokens - b.tokens),
+		fast: family.some((candidate) => of(candidate).fast),
+		chosen: base === model ? { context: null, fast: false } : of(model),
+		// A combination the vendor does not list falls back to the context alone, then to the model.
+		pick: (choice) =>
+			family.find((candidate) => of(candidate).context === choice.context && of(candidate).fast === choice.fast) ??
+			family.find((candidate) => of(candidate).context === choice.context && !of(candidate).fast) ??
+			base,
+	};
+}

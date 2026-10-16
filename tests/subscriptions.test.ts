@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-subscriptions-'));
 process.env.ANTON_DATA_DIR = dir;
 
 const { chatGptSubscription, CHATGPT_REDIRECT_URI, toSubscriptionModel, toSubscriptionModels } = await import('../src/providers/chatgpt/subscription.ts');
-const { parseVariant, sizeTag, variantId } = await import('../src/core/model-variants.ts');
+const { linkVariants, parseVariant, sizeTag, variantId } = await import('../src/core/model-variants.ts');
 const { chatGptPlanProvider, forChatGptPlan } = await import('../src/flue/subscription-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/subscriptions.ts');
@@ -144,7 +144,18 @@ test('the account’s larger context and fast tier are listed as variants, and t
 			['openai/gpt-5.5', 'GPT-5.5', 272_000],
 			['openai/gpt-5.5[1m]', 'GPT-5.5 · 1M', 1_000_000],
 			['openai/gpt-5.5[fast]', 'GPT-5.5 · Fast', 272_000],
+			['openai/gpt-5.5[1m][fast]', 'GPT-5.5 · 1M · Fast', 1_000_000],
 		],
+	);
+	assert.deepEqual(
+		linkVariants(models).map((model) => model.variant),
+		[
+			undefined,
+			{ of: 'openai/gpt-5.5', context: '1m', fast: false },
+			{ of: 'openai/gpt-5.5', context: null, fast: true },
+			{ of: 'openai/gpt-5.5', context: '1m', fast: true },
+		],
+		'each variant names the model the picker shows it under',
 	);
 	assert.deepEqual(toSubscriptionModels({ slug: 'gpt-5.5', visibility: 'list', context_window: 272_000, max_context_window: 272_000 }, 'openai').length, 1);
 	assert.equal(toSubscriptionModels({ slug: 'gpt-5.5', additional_speed_tiers: ['fast'] }, 'openai').length, 2, 'the older field names fast mode too');

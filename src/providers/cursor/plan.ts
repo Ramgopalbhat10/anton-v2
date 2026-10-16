@@ -12,7 +12,7 @@ import type {
 	SDKCustomToolResult,
 	SDKUserMessage,
 } from '@cursor/sdk';
-import { parseVariant, sizeOf, variantId, variantName } from '../../core/model-variants.ts';
+import { linkVariants, parseVariant, sizeOf, withVariants } from '../../core/model-variants.ts';
 import {
 	type KeyPlan,
 	REASONING_LEVELS,
@@ -117,32 +117,19 @@ export function toSubscriptionModel(item: ModelListItem): SubscriptionModel | nu
 
 /**
  * The model and the variants Cursor offers beside it: its largest context
- * (`[1m]`, Max Mode, billed by the token from the plan's usage) and fast mode
- * (`[fast]`), each a model of its own in the picker.
+ * (`[1m]`, Max Mode, billed by the token from the plan's usage), fast mode
+ * (`[fast]`), and both.
  */
 export function toSubscriptionModels(item: ModelListItem): SubscriptionModel[] {
 	const model = toSubscriptionModel(item);
 	if (!model) return [];
-	const models = [model];
 	const largest = contextSizes(item).at(-1);
-	if (largest && largest.size > model.contextLength) {
-		models.push({
-			...model,
-			id: variantId(model.id, { context: largest.value }),
-			name: variantName(model.name, { context: largest.value }),
-			description: `Max Mode with up to ${largest.value.toUpperCase()} of context, billed by the token from your plan's usage.`,
-			contextLength: largest.size,
-		});
-	}
-	if (offersFast(item)) {
-		models.push({
-			...model,
-			id: variantId(model.id, { fast: true }),
-			name: variantName(model.name, { fast: true }),
-			description: "Fast mode: answers sooner and uses more of your plan's usage.",
-		});
-	}
-	return models;
+	return withVariants(model, {
+		context: largest
+			? { tag: largest.value, tokens: largest.size, description: `Max Mode, up to ${largest.value.toUpperCase()} of context, billed by the token from your plan's usage.` }
+			: null,
+		fast: offersFast(item) ? { description: "Fast mode answers sooner and uses more of your plan's usage." } : null,
+	});
 }
 
 /**
@@ -430,7 +417,7 @@ export function cursorPlan(options: CursorOptions): KeyPlan {
 		},
 		listModels: async (key) => {
 			listed = null;
-			return (await list(key)).flatMap(toSubscriptionModels);
+			return linkVariants((await list(key)).flatMap(toSubscriptionModels));
 		},
 		open(key, conversation) {
 			const ready = load().then((sdk) => {

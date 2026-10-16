@@ -20,6 +20,8 @@ export type ModelInfo = {
 	defaultReasoning: Reasoning;
 	/** The plan its calls bill, such as "ChatGPT", when it runs on a subscription rather than per token. */
 	subscription?: string;
+	/** Set on a plan model's larger context or fast mode: the model it is a variant of, which the picker lists it under. */
+	variant?: { of: string; context: string | null; fast: boolean };
 };
 
 /** A task's model and reasoning level; null reasoning runs the model's default. */
@@ -339,7 +341,8 @@ export type Subscription = {
 	expiresAt: string | null;
 	options: SubscriptionOptions;
 	/** The account's models, each with the tokens it used on the plan this month. */
-	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number }>;
+	/** `options` names the model's larger context and fast mode ("1M", "Fast"), whose tokens count toward it. */
+	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options?: string[] }>;
 	monthTokens: number;
 	modelsAt: string | null;
 	/** A sign-in waiting for the address the browser is sent back to; `listening` when Anton catches it itself. */

@@ -67,8 +67,11 @@ export type SubscriptionView = {
 	/** When the current access token lapses; Anton renews it a few minutes before. */
 	expiresAt: string | null;
 	options: SubscriptionOptions;
-	/** The account's models, each with the tokens it used on the plan this month. */
-	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number }>;
+	/**
+	 * The account's models, each with the tokens it used on the plan this month. A model's larger context and
+	 * fast mode are not rows of their own: their tokens count toward it, and `options` names them ("1M", "Fast").
+	 */
+	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options: string[] }>;
 	/** Tokens all of the plan's models used since the start of this month. */
 	monthTokens: number;
 	modelsAt: string | null;
@@ -588,15 +591,23 @@ export async function subscriptionView(provider: SubscriptionProvider): Promise<
 async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView['models']> {
 	// Usage is logged under `<gateway>/<model>`, the way tasks name the plan's models.
 	const spent = models.length ? await spendBy('model', startOfMonth()).catch(() => []) : [];
-	return models.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => ({
-		id,
-		name,
-		contextLength,
-		vision,
-		reasoning,
-		defaultReasoning,
-		tokens: spent.find((row) => row.key === id)?.tokens ?? 0,
-	}));
+	const tokensOf = (id: string) => spent.find((row) => row.key === id)?.tokens ?? 0;
+	return models
+		.filter((model) => !model.variant)
+		.map(({ id, name, contextLength, vision, reasoning, defaultReasoning }) => {
+			const variants = models.filter((model) => model.variant?.of === id);
+			const contexts = [...new Set(variants.flatMap((model) => (model.variant?.context ? [model.variant.context.toUpperCase()] : [])))];
+			return {
+				id,
+				name,
+				contextLength,
+				vision,
+				reasoning,
+				defaultReasoning,
+				tokens: tokensOf(id) + variants.reduce((sum, model) => sum + tokensOf(model.id), 0),
+				options: [...contexts, ...(variants.some((model) => model.variant?.fast) ? ['Fast'] : [])],
+			};
+		});
 }
 
 /** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */

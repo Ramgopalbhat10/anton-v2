@@ -383,6 +383,11 @@ test('a model Claude Code lists under its 1M name gets 1M of context, and one wi
 		],
 	);
 	assert.match(models[1].description, /extra usage/);
+	assert.deepEqual(
+		models.map((model) => model.variant),
+		[undefined, { of: 'claude-code/claude-opus-5-5[1m]', context: null, fast: true }, undefined],
+		'a plan that serves Opus at 1M alone shows it as the model, with fast mode its variant',
+	);
 });
 
 test('the Claude plan’s limits are read from Claude Code’s usage answer', () => {

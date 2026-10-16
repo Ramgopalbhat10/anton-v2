@@ -387,6 +387,44 @@ describe('Model picker', () => {
 		expect(within(effort).getByRole('radio', { checked: true }).textContent).toBe('High');
 		expect(screen.getByRole('listbox', { name: 'Models' })).toBeTruthy();
 	});
+
+	it('shows a plan model once, with its larger context and fast mode as controls beside its effort', async () => {
+		const variant = (suffix: string, contextLength: number, context: string | null, fast: boolean, description: string) =>
+			model({ ...gpt, id: `${gpt.id}${suffix}`, name: `GPT-6.1-Sol${suffix}`, contextLength, description, variant: { of: gpt.id, context, fast } });
+		const family = [
+			{ ...gpt, contextLength: 272_000 },
+			variant('[1m]', 1_000_000, '1m', false, 'Up to 1M of context.'),
+			variant('[fast]', 272_000, null, true, 'Fast mode answers sooner.'),
+			variant('[1m][fast]', 1_000_000, '1m', true, 'Up to 1M of context. Fast mode answers sooner.'),
+		];
+		openPicker({ model: gpt.id, reasoning: 'high' }, [connected], [routed, ...family]);
+		const list = await screen.findByRole('listbox', { name: 'Models' });
+		expect(within(within(list).getByRole('group', { name: 'ChatGPT plan' })).getAllByRole('option')).toHaveLength(1);
+
+		const context = screen.getByRole('radiogroup', { name: 'Context window' });
+		expect(within(context).getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['272K', '1M']);
+		fireEvent.click(within(context).getByRole('radio', { name: /1M/ }));
+		const trigger = screen.getByRole('button', { name: 'Model and reasoning' });
+		expect(trigger.textContent).toContain('1M');
+		expect(screen.getByText('Up to 1M of context.')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('switch', { name: 'Fast mode' }));
+		expect(screen.getByRole('switch', { name: 'Fast mode' }).getAttribute('aria-checked')).toBe('true');
+		expect(screen.getByText('Up to 1M of context. Fast mode answers sooner.')).toBeTruthy();
+		// The variant is the same model: it stays the one row marked chosen, at the effort you set.
+		expect(within(list).getByRole('option', { selected: true }).textContent).toContain('GPT-6.1-Sol');
+		expect(within(screen.getByRole('radiogroup', { name: 'Reasoning effort' })).getByRole('radio', { checked: true }).textContent).toBe('High');
+
+		within(context).getByRole('radio', { checked: true }).focus();
+		await userEvent.keyboard('{ArrowLeft}');
+		expect(within(context).getByRole('radio', { checked: true }).textContent).toBe('272K');
+		expect(screen.getByRole('switch', { name: 'Fast mode' }).getAttribute('aria-checked')).toBe('true');
+
+		// A model without them has neither control.
+		fireEvent.click(within(list).getByRole('option', { name: /Fast/ }));
+		expect(screen.queryByRole('radiogroup', { name: 'Context window' })).toBeNull();
+		expect(screen.queryByRole('switch', { name: 'Fast mode' })).toBeNull();
+	});
 });
 
 describe('Plans used with a key', () => {

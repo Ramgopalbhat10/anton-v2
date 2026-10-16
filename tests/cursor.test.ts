@@ -64,6 +64,7 @@ test('Cursor’s larger context and fast mode are listed as variants, and each p
 			['cursor/gpt-5.5', 'GPT-5.5', 272_000],
 			['cursor/gpt-5.5[1m]', 'GPT-5.5 · 1M', 1_000_000],
 			['cursor/gpt-5.5[fast]', 'GPT-5.5 · Fast', 272_000],
+			['cursor/gpt-5.5[1m][fast]', 'GPT-5.5 · 1M · Fast', 1_000_000],
 		],
 	);
 	assert.deepEqual(toSubscriptionModels(sonnet as never).map((model) => model.id), ['cursor/claude-sonnet-5']);
@@ -78,6 +79,13 @@ test('Cursor’s larger context and fast mode are listed as variants, and each p
 		id: 'gpt-5.5',
 		params: [
 			{ id: 'context', value: '272k' },
+			{ id: 'fast', value: 'true' },
+		],
+	});
+	assert.deepEqual(selectionFor('gpt-5.5[1m][fast]', gpt as never, null), {
+		id: 'gpt-5.5',
+		params: [
+			{ id: 'context', value: '1m' },
 			{ id: 'fast', value: 'true' },
 		],
 	});
@@ -159,7 +167,7 @@ test('the plan checks a key with Cursor and lists the account’s models', async
 	await assert.rejects(plan.check('key_bad'), /Invalid API key/);
 	assert.deepEqual(
 		(await plan.listModels('key_good')).map((model) => model.id),
-		['cursor/gpt-5.5', 'cursor/gpt-5.5[1m]', 'cursor/gpt-5.5[fast]', 'cursor/claude-sonnet-5', 'cursor/composer-2'],
+		['cursor/gpt-5.5', 'cursor/gpt-5.5[1m]', 'cursor/gpt-5.5[fast]', 'cursor/gpt-5.5[1m][fast]', 'cursor/claude-sonnet-5', 'cursor/composer-2'],
 	);
 });
 
