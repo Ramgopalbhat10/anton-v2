@@ -48,7 +48,6 @@ import {
 	getSession,
 	listSessions,
 	listThreads,
-	deleteSession,
 	editSession,
 	forkSession,
 	resumeSession,
@@ -73,7 +72,7 @@ import { type DeliveredImage, primeAgent, primeAllAgents, setAgentDelivery } fro
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
 import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
-import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
+import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
 import { attachToProject, attachToTask } from './services/attachments.ts';
@@ -665,10 +664,8 @@ app.patch('/api/sessions/:id', async (c) => {
 	return c.json(await editSession(c.req.param('id'), rest));
 });
 app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
-app.delete('/api/sessions/:id', async (c) => {
-	await deleteSession(c.req.param('id'));
-	return c.body(null, 204);
-});
+// A project's thread keeps the files it saved, as project files; the answer says where.
+app.delete('/api/sessions/:id', async (c) => c.json(await deleteTask(c.req.param('id'))));
 app.post('/api/sessions/:id/review', async (c) => c.json({ started: await requestReview(c.req.param('id'), { automatic: false }) }));
 app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));

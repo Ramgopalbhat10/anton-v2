@@ -6,9 +6,9 @@ import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
-import { Library as LibraryView, type LibrarySource, type Place, taskPlace } from '@/components/library-tab';
+import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
 import { WorkspacePane } from '@/components/workspace-pane';
-import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space, spaceFileUrl } from '@/lib/api';
+import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
 import { age } from '@/lib/format';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -112,7 +112,7 @@ function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }
 	for (const file of files.data?.files ?? []) {
 		listed.push({ path: file.path, size: file.size, mtimeMs: Date.parse(file.modifiedAt) });
 		entries.set(file.path, {
-			place: { path: file.path, url: spaceFileUrl(space.id, file.path), textKey: ['space-file', space.id, file.path], text: () => api.spaceFileText(space.id, file.path) },
+			place: spacePlace(space.id, file.path),
 			agentPath: `../project-files/${file.path}`,
 			remove: () => api.deleteSpaceFile(space.id, file.path),
 		});
@@ -132,7 +132,7 @@ function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }
 	const library: LibrarySource = {
 		files: files.data ? listed : undefined,
 		error: files.error,
-		place: (path) => entries.get(path)?.place ?? { path, url: spaceFileUrl(space.id, path), textKey: ['space-file', space.id, path], text: () => api.spaceFileText(space.id, path) },
+		place: (path) => entries.get(path)?.place ?? spacePlace(space.id, path),
 		agentPath: (path) => entries.get(path)?.agentPath ?? `../project-files/${path}`,
 		upload: (file) => api.uploadSpaceFile(space.id, file),
 		remove: (path) => entries.get(path)?.remove() ?? Promise.resolve(),

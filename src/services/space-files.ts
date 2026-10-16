@@ -72,8 +72,36 @@ export async function readSpaceFile(spaceId: string, rawPath: string): Promise<U
 }
 
 async function writeInto(machine: Machine, path: string, bytes: Uint8Array): Promise<void> {
-	await machine.exec(`mkdir -p ${quote(`${machine.root}/${PROJECT_FILES}`)}`);
-	await writeMachineFile(machine, `${machine.root}/${PROJECT_FILES}/${path}`, bytes);
+	const target = `${machine.root}/${PROJECT_FILES}/${path}`;
+	// A file can sit in a folder, as a deleted thread's kept files do.
+	await machine.exec(`mkdir -p ${quote(target.slice(0, target.lastIndexOf('/')))}`);
+	await writeMachineFile(machine, target, bytes);
+}
+
+/** The folder a deleted thread's files are kept in, named for it as the Library names its folder under From threads. */
+export const keptFolder = (title: string) => `From threads/${title.replace(/[^\w.\- ]+/g, '_').trim() || 'Untitled'}`;
+
+/**
+ * Keeps the files a deleted thread saved in its Library, which go with it
+ * otherwise, as project files in a folder named for it: they stay where the
+ * project's Library showed them, and every thread can read them. Threads
+ * running now get them when their sandbox is next set up; until then
+ * `read_project_file` reads them.
+ */
+export async function keepThreadFiles(spaceId: string, title: string, files: Array<{ path: string; bytes: Uint8Array }>): Promise<string[]> {
+	if (!files.length) return [];
+	const existing = (await listSpaceFiles(spaceId)).map((file) => file.path);
+	// A thread deleted earlier under the same title kept its files there: these get a folder of their own.
+	let folder = keptFolder(title);
+	for (let n = 2; existing.some((path) => path.startsWith(`${folder}/`)); n += 1) folder = `${keptFolder(title)} ${n}`;
+	const kept: string[] = [];
+	for (const file of files) {
+		const path = safeRelativePath(`${folder}/${file.path}`);
+		await getProviders().store.put(`${prefix(spaceId)}${path}`, file.bytes);
+		kept.push(path);
+	}
+	announce({ kind: 'space', id: spaceId, what: 'files' });
+	return kept;
 }
 
 /** Puts a project's files into a thread's machine; run each time the machine is set up or resumed. */

@@ -279,3 +279,46 @@ test('idle threads resolve after a week, and project files reach every thread', 
 	await files.removeSpaceFile(space.id, 'spec.md');
 	assert.deepEqual(await files.listSpaceFiles(space.id), []);
 });
+
+test('a deleted thread leaves the project and keeps its files as project files; a resolved one is reopened first', async () => {
+	const space = await spaces.createSpace({ name: 'Deletes', repoIds: [api.id] });
+	const thread = await spaces.startThread(space.id, { title: 'Draw the diagram', brief: 'Draw it' });
+	const { uploadOutput } = await import('../src/services/files.ts');
+	await uploadOutput(thread.id, 'diagram.svg', new TextEncoder().encode('<svg/>'));
+	await updateSession(thread.id, { resolvedAt: new Date().toISOString() });
+	await assert.rejects(() => spaces.deleteTask(thread.id), /Reopen it to delete it/);
+	assert.ok(await getSessionRecord(thread.id), 'a resolved thread stays');
+
+	await updateSession(thread.id, { resolvedAt: null });
+	const { kept } = await spaces.deleteTask(thread.id);
+	assert.deepEqual(kept, ['From threads/Draw the diagram/uploads/diagram.svg']);
+	assert.equal(await getSessionRecord(thread.id), null);
+	assert.equal((await spaces.spaceView(space.id)).threads, 0);
+	assert.equal(new TextDecoder().decode((await files.readSpaceFile(space.id, kept[0]))!), '<svg/>');
+
+	// Another thread of the same name keeps its files beside the first's, not over them.
+	const again = await spaces.startThread(space.id, { title: 'Draw the diagram', brief: 'Draw it again' });
+	await uploadOutput(again.id, 'diagram.svg', new TextEncoder().encode('<svg id="2"/>'));
+	assert.deepEqual((await spaces.deleteTask(again.id)).kept, ['From threads/Draw the diagram 2/uploads/diagram.svg']);
+
+	// A task outside a project is deleted as before.
+	const loose = await sessions.createSession({ projectId: api.id, title: 'Loose' });
+	assert.deepEqual(await spaces.deleteTask(loose.id), { kept: [] });
+	assert.equal(await getSessionRecord(loose.id), null);
+});
+
+test("a thread gets the files its brief names, or else the ones attached to the user's message", async () => {
+	const space = await spaces.createSpace({ name: 'Pictures', repoIds: [api.id] });
+	const { filesForThread } = await import('../src/services/attachments.ts');
+	const { withAttachments } = await import('../src/core/attachments.ts');
+	await files.uploadSpaceFile(space.id, 'pasted-092117.png', new Uint8Array([1, 2, 3]));
+	await files.uploadSpaceFile(space.id, 'spec.md', new TextEncoder().encode('# Spec'));
+	const asked = withAttachments('Build this diagram', [{ name: 'pasted-092117.png', path: 'pasted-092117.png', size: 3, kind: 'PNG image', text: null, cut: null }], 'project');
+
+	assert.deepEqual(await filesForThread(space.id, 'Recreate the diagram in pasted-092117.png.'), ['pasted-092117.png']);
+	assert.deepEqual(await filesForThread(space.id, 'Follow ../project-files/spec.md'), ['spec.md']);
+	assert.deepEqual(await filesForThread(space.id, 'Read myspec.md'), [], 'a name inside another word is not the file');
+	assert.deepEqual(await filesForThread(space.id, 'Recreate the diagram from the screenshot', [], asked), ['pasted-092117.png'], "the user's attachment goes along");
+	assert.deepEqual(await filesForThread(space.id, 'Write the spec', ['spec.md'], asked), ['spec.md'], 'files the coordinator lists are the ones that go');
+	assert.deepEqual(await filesForThread(space.id, 'Recreate the diagram'), []);
+});

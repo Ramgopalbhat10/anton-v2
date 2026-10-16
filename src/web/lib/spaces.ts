@@ -21,6 +21,9 @@ export function useSpace(id: string) {
 
 const NO_THREADS: Session[] = [];
 
+/** Whether `useThreads` has its list yet, so a thread missing from it is gone (deleted, or moved out), not still loading. */
+export const threadsLoaded = (threads: Session[]) => threads !== NO_THREADS;
+
 /**
  * A project's threads, newest first, from the task list every page already
  * keeps current. The list keeps its identity until the tasks change, so the

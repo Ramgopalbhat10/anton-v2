@@ -7,7 +7,7 @@ import { logProblem } from './log.ts';
 import type { DeliveredImage } from './agent-runner.ts';
 import { findModel } from './models.ts';
 import { describeImage } from './vision.ts';
-import { readSpaceFile, uploadSpaceFile } from './space-files.ts';
+import { listSpaceFiles, readSpaceFile, uploadSpaceFile } from './space-files.ts';
 
 /**
  * Files attached to a message from a composer. A task's go into its Library
@@ -57,6 +57,27 @@ export async function projectAttachment(spaceId: string, rawName: string): Promi
 	const bytes = await readSpaceFile(spaceId, name);
 	if (!bytes) throw new NotFoundError(`No project file ${rawName}`);
 	return described(name, name, bytes);
+}
+
+/** At most this many files go with one message to a thread. */
+const MAX_THREAD_FILES = 10;
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The project files a message from the coordinator to a thread carries: the
+ * ones it lists, the ones its words name, and, when it names none, the files
+ * the user attached to the message it is answering. A thread sees nothing of
+ * the coordinator's conversation, so a reference image the coordinator only
+ * described in words would otherwise never reach it.
+ */
+export async function filesForThread(spaceId: string, message: string, listed: string[] = [], answering = ''): Promise<string[]> {
+	const clean = (name: string) => name.trim().replace(/^(\.\.\/)?project-files\//, '');
+	const names = new Set(listed.map(clean).filter(Boolean));
+	for (const file of await listSpaceFiles(spaceId)) {
+		if (new RegExp(`(^|[^\\w.-])${escaped(file.path)}($|[^\\w-])`).test(message)) names.add(file.path);
+	}
+	if (!names.size) for (const file of splitAttachments(answering).files) if (file.place === 'project') names.add(file.path);
+	return [...names].slice(0, MAX_THREAD_FILES);
 }
 
 const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
