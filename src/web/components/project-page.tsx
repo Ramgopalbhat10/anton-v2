@@ -7,7 +7,7 @@ import { MenuButton } from '@/components/nav';
 import { ProjectFeed } from '@/components/project-feed';
 import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/project-panel';
 import { SpaceMark } from '@/components/project-sidebar';
-import { DEFAULT_PANELS, TaskWorkspace, type TaskPanels } from '@/components/shell';
+import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
@@ -159,7 +159,11 @@ export function ThreadPage() {
 	const search = useSearch({ from: '/projects/$spaceId/threads/$threadId' });
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
-	const [panels, setPanels] = useState<TaskPanels>(() => readThreadPanels(threadId, DEFAULT_PANELS));
+	// Each time it opens, a thread shows the panels you pinned; whether its workspace was open is its own.
+	const [panels, setPanels] = useState<TaskPanels>(() => {
+		const start = startingPanels();
+		return { ...start, open: readThreadPanels(threadId, start).open };
+	});
 
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {

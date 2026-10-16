@@ -10,8 +10,9 @@ import { MenuButton, NavContext } from '@/components/nav';
 import { Btn, IconBtn } from '@/components/signal';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
-import { type PanelName, VmPanel } from '@/components/vm-panel';
+import { type PanelName, panels, VmPanel } from '@/components/vm-panel';
 import { api, isChat, type Session } from '@/lib/api';
+import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useOnePane } from '@/lib/one-pane';
 import { useTaskNotifications } from '@/lib/notifications';
@@ -198,10 +199,12 @@ const TaskHeader = memo(function TaskHeader({
 /** Which workspace panels a task has open, which one shows, and whether the workspace is open at all. */
 export type TaskPanels = { tabs: PanelName[]; active: PanelName | null; open: boolean };
 
-export const DEFAULT_PANELS: TaskPanels = { tabs: ['Changes', 'Terminal', 'Files'], active: 'Changes', open: true };
-
-/** A chat has no repository to review, so its workspace leads with the browser it works in and what it saves. */
-export const CHAT_PANELS: TaskPanels = { tabs: ['Browser', 'Library', 'Files', 'Terminal'], active: 'Browser', open: true };
+/** A task or thread opens with the panels you pinned, in the menu's order with the first one shown; with none pinned, on the list of panels to open. */
+export function startingPanels(): TaskPanels {
+	const pinned = readPinnedPanels();
+	const tabs = panels.map((panel) => panel.name).filter((name) => pinned.includes(name));
+	return { tabs, active: tabs[0] ?? null, open: true };
+}
 
 /**
  * A change to the workspace's panels that keeps one identity, so the memoized
@@ -362,14 +365,9 @@ export function SessionPage() {
 	const { sessionId } = useParams({ from: '/agents/$sessionId' });
 	const search = useSearch({ from: '/agents/$sessionId' });
 	const navigate = useNavigate();
-	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(DEFAULT_PANELS);
+	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(startingPanels);
 	const open = search.app !== 'closed';
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
-	// A chat starts on its own panels, unless some have been picked already.
-	const chat = session.data ? isChat(session.data) : false;
-	useEffect(() => {
-		if (chat) setPanels((current) => (current === DEFAULT_PANELS ? CHAT_PANELS : current));
-	}, [chat]);
 	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {
