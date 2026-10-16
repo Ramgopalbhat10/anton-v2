@@ -253,9 +253,12 @@ export function nameOf(id: string): string {
  * offers one for it (`[fast]`, which bills paid extra usage rather than the plan). Aliases such as `default` are left out.
  */
 export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): SubscriptionModel[] {
-	const id = listed.resolvedModel ?? listed.value;
-	if (!id.startsWith('claude-')) return [];
-	const { base, context } = parseVariant(id);
+	const resolved = parseVariant(listed.resolvedModel ?? listed.value);
+	// The wire id an alias resolves to can drop the 1M its name asks for (`sonnet[1m]` → `claude-sonnet-5`).
+	const context = resolved.context ?? parseVariant(listed.value).context;
+	const { base } = resolved;
+	if (!base.startsWith('claude-')) return [];
+	const id = variantId(base, { context });
 	const pi = piEntry(base);
 	// Claude Code describes a model as "Opus 4.7 · Best for everyday tasks", or with the second part only.
 	const parts = listed.description.split(' · ');

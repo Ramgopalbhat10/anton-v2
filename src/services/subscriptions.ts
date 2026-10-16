@@ -42,6 +42,8 @@ type Stored = SubscriptionOptions & {
 	/** The account's models as last listed, kept when the vendor does not answer. */
 	models: SubscriptionModel[];
 	modelsAt: number | null;
+	/** How Anton listed them (`MODELS_VERSION`), so a list kept from before a change to the listing is not served for its hour. */
+	modelsVersion?: number;
 	/** Why the plan cannot be used now, such as a sign-in that was revoked. */
 	problem: string | null;
 	/** When the vendor last said the plan's usage limit was reached. */
@@ -103,6 +105,8 @@ const DEFAULTS: Stored = {
 	extraUsageAt: null,
 };
 const MODELS_TTL_MS = 60 * 60_000;
+/** Raise when a provider's listing changes what it makes of the vendor's list (2: context and fast variants). */
+const MODELS_VERSION = 2;
 /** After a failed listing, how long the last list is served before asking again. */
 const MODELS_RETRY_MS = 5 * 60_000;
 const LOGIN_TTL_MS = 10 * 60_000;
@@ -237,15 +241,22 @@ const keyedPlan = (plan: KeyPlan): Plan => ({ id: plan.id, name: plan.name, list
 
 async function listNow(plan: Plan): Promise<SubscriptionModel[]> {
 	const models = await plan.list();
-	await save(plan.id, { models, modelsAt: Date.now() });
+	await save(plan.id, { models, modelsAt: Date.now(), modelsVersion: MODELS_VERSION });
 	retryAt.delete(plan.id);
 	listedHere.add(plan.id);
 	return models;
 }
 
-/** The account's models, listed again once the last list is an hour old; a failure serves the last list for a while. */
+/**
+ * The account's models, listed again once the last list is an hour old or
+ * was made by an older listing; a failure serves the last list for a while.
+ */
 async function freshModels(provider: Plan, current: Stored): Promise<SubscriptionModel[]> {
-	const fresh = current.modelsAt !== null && Date.now() - current.modelsAt < MODELS_TTL_MS && (!provider.local || listedHere.has(provider.id));
+	const fresh =
+		current.modelsAt !== null &&
+		Date.now() - current.modelsAt < MODELS_TTL_MS &&
+		current.modelsVersion === MODELS_VERSION &&
+		(!provider.local || listedHere.has(provider.id));
 	if (fresh || (retryAt.get(provider.id) ?? 0) > Date.now()) return current.models;
 	let pending = listing.get(provider.id);
 	if (!pending) {
