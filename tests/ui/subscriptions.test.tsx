@@ -263,8 +263,9 @@ describe('Model picker', () => {
 		openPicker({ model: gpt.id, reasoning: null });
 		const list = await screen.findByRole('listbox', { name: 'Models' });
 		expect(within(list).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['ChatGPT plan', 'OpenRouter']);
-		expect(within(within(list).getByRole('group', { name: 'ChatGPT plan' })).getByRole('option').textContent).toContain('PLAN');
-		expect(screen.getByRole('button', { name: 'Model and reasoning' }).textContent).toContain('PLAN');
+		// The dot on a plan model's mark says it is on a plan, so neither its row nor the trigger spells it out.
+		expect(within(within(list).getByRole('group', { name: 'ChatGPT plan' })).getByRole('option').textContent).not.toContain('PLAN');
+		expect(screen.getByRole('button', { name: 'Model and reasoning' }).textContent).not.toContain('PLAN');
 	});
 
 	it('narrows to one source, and filters, from one menu that stays open for filters', async () => {
@@ -298,12 +299,12 @@ describe('Model picker', () => {
 		expect(gateway.textContent).toContain('Ac');
 	});
 
-	it('shows what a million tokens cost in and out, FREE for free models and PLAN for a plan’s', async () => {
+	it('shows what a million tokens cost in and out, FREE for free models and nothing for a plan’s', async () => {
 		const priced = model({ id: 'openrouter/anthropic/haiku', name: 'Haiku', vendor: 'Anthropic', price: { input: 0.1, output: 0.5 } });
 		openPicker({ model: gpt.id, reasoning: null }, [connected], [gpt, priced, routed]);
 		const list = await screen.findByRole('listbox', { name: 'Models' });
 		const [plan, ...gateway] = within(list).getAllByRole('option');
-		expect(plan.textContent).toContain('PLAN');
+		expect([...plan.children].slice(2, 4).map((cell) => cell.textContent)).toEqual(['1K', '']);
 		// Input and output prices sit in their own cells, so they line up under the In and Out headers.
 		expect([...gateway[0].children].slice(2, 5).map((cell) => cell.textContent)).toEqual(['1K', '$0.1', '$0.5']);
 		expect(gateway[1].textContent).toContain('FREE');
@@ -406,11 +407,11 @@ describe('Model picker', () => {
 		fireEvent.click(within(context).getByRole('radio', { name: /1M/ }));
 		const trigger = screen.getByRole('button', { name: 'Model and reasoning' });
 		expect(trigger.textContent).toContain('1M');
-		expect(screen.getByText('Up to 1M of context.')).toBeTruthy();
+		// What the variant costs is not spelled out under the controls.
+		expect(screen.queryByText('Up to 1M of context.')).toBeNull();
 
 		fireEvent.click(screen.getByRole('switch', { name: 'Fast mode' }));
 		expect(screen.getByRole('switch', { name: 'Fast mode' }).getAttribute('aria-checked')).toBe('true');
-		expect(screen.getByText('Up to 1M of context. Fast mode answers sooner.')).toBeTruthy();
 		// The variant is the same model: it stays the one row marked chosen, at the effort you set.
 		expect(within(list).getByRole('option', { selected: true }).textContent).toContain('GPT-6.1-Sol');
 		expect(within(screen.getByRole('radiogroup', { name: 'Reasoning effort' })).getByRole('radio', { checked: true }).textContent).toBe('High');

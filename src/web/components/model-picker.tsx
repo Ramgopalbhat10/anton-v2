@@ -119,15 +119,15 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
  */
 const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-2 px-2';
 
-/** What a million tokens cost, in and out, in their own columns; a plan's or a free model's fills both with one word. */
+/**
+ * What a million tokens cost, in and out, in their own columns; a free
+ * model's fills both with one word, and a plan's is left blank, since the dot
+ * on its mark already says it is on a plan.
+ */
 function PriceCells({ model }: { model: ModelInfo }) {
-	const word = model.subscription ? 'PLAN' : model.price.input === 0 && model.price.output === 0 ? 'FREE' : null;
-	if (word) {
-		return (
-			<span className={cn('col-span-2 text-right font-mono text-[9.5px] tracking-[0.06em]', word === 'PLAN' ? 'text-(--accent-text)' : 'text-(--success-text)')}>
-				{word}
-			</span>
-		);
+	if (model.subscription) return <span className="col-span-2" />;
+	if (model.price.input === 0 && model.price.output === 0) {
+		return <span className="col-span-2 text-right font-mono text-[9.5px] tracking-[0.06em] text-(--success-text)">FREE</span>;
 	}
 	return (
 		<>
@@ -497,24 +497,18 @@ function sectionsFor(models: ModelInfo[], visible: ModelInfo[], browsing: boolea
 	].filter((section) => section.total > 0);
 }
 
-/**
- * What a model comes in beside its standard self, above its effort: its
- * context sizes and Fast, with a line saying what the chosen one costs.
- */
+/** What a model comes in beside its standard self, above its effort: its context sizes and Fast. */
 function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; note?: string; onChange: (change: Partial<ModelOptions['chosen']>) => void }) {
 	return (
-		<div className="flex flex-col gap-1 pt-1.5 pr-2 pl-3">
-			<div className="flex items-center gap-3">
-				<span className="in-caption w-12 shrink-0">Context</span>
-				{options.contexts.length > 1 ? (
-					<ContextRuler options={options} onChange={(context) => onChange({ context })} />
-				) : (
-					<span className="in-num text-[11px] text-(--text-tertiary)">{tokens(options.contexts[0].tokens)}</span>
-				)}
-				<span className="flex-1" />
-				{options.fast ? <FastToggle on={options.chosen.fast} note={note} onChange={(fast) => onChange({ fast })} /> : null}
-			</div>
-			{note ? <p className="m-0 pl-15 text-[10.5px] leading-[14px] text-pretty text-(--text-tertiary)">{note}</p> : null}
+		<div className="flex items-center gap-3 pt-1.5 pr-2 pl-3">
+			<span className="in-caption w-12 shrink-0">Context</span>
+			{options.contexts.length > 1 ? (
+				<ContextRuler options={options} onChange={(context) => onChange({ context })} />
+			) : (
+				<span className="in-num text-[11px] text-(--text-tertiary)">{tokens(options.contexts[0].tokens)}</span>
+			)}
+			<span className="flex-1" />
+			{options.fast ? <FastToggle on={options.chosen.fast} note={note} onChange={(fast) => onChange({ fast })} /> : null}
 		</div>
 	);
 }
@@ -668,7 +662,6 @@ export const ModelPicker = memo(function ModelPicker({
 				>
 					{selected ? <ModelMark model={selected} size={height - 10} /> : <Spinner size={12} tone="neutral" />}
 					<span className="min-w-0 truncate text-[12px]">{shown ? shortName(shown) : 'Model'}</span>
-					{selected?.subscription ? <span className="font-mono text-[9.5px] tracking-[0.06em] text-(--accent-text)">PLAN</span> : null}
 					{options?.chosen.context ? (
 						<span className="in-num rounded-[4px] bg-(--alpha-white-6) px-1 py-px text-[10px] text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
