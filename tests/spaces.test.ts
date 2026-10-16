@@ -52,6 +52,7 @@ const files = await import('../src/services/space-files.ts');
 const { stateBlock } = await import('../src/services/coordinator.ts');
 const sessions = await import('../src/services/sessions.ts');
 const { updateSession, getSessionRecord } = await import('../src/db/sessions.ts');
+const automations = await import('../src/services/automations.ts');
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
@@ -196,6 +197,31 @@ test('the coordinator reads the project, its threads and what they ask', async (
 	assert.equal((await spaces.findThread(space.id, thread.id.slice(0, 8))).id, thread.id);
 	assert.equal((await spaces.findThread(space.id, 'fix ci')).id, thread.id);
 	await assert.rejects(() => spaces.findThread(space.id, 'nope'), /No thread/);
+});
+
+test('a project without repositories runs routines on a schedule, starting chats', async () => {
+	const space = await spaces.createSpace({ name: 'Digest', goal: 'A weekly digest' });
+	await assert.rejects(() => automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the news.' }), /repository/);
+	await assert.rejects(() => automations.addAutomation(null, { kind: 'issues', label: 'anton', prompt: '', spaceId: space.id }), /need a repository/);
+	const routine = await automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the news.', spaceId: space.id });
+	assert.equal(routine.projectId, '');
+	assert.deepEqual(
+		(await automations.spaceAutomations(space.id)).map((item) => item.id),
+		[routine.id],
+	);
+	const ran = await automations.runAutomation(routine.id, { force: true });
+	assert.equal(ran.lastError, null);
+	assert.deepEqual(
+		toThreads.map((item) => item.text),
+		['Summarize the news.'],
+	);
+	const thread = await sessions.getSession(toThreads[0].id);
+	assert.equal(thread.spaceId, space.id);
+	assert.equal(thread.projectId, null, 'the thread is a chat');
+
+	// It only ever starts this project's threads, so it goes when the project does.
+	await spaces.removeSpace(space.id);
+	await assert.rejects(() => automations.runAutomation(routine.id), /not found/);
 });
 
 test('tasks move into and out of a project, and deleting it keeps its threads', async () => {

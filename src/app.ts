@@ -559,6 +559,22 @@ app.post('/api/spaces/:id/threads/:threadId/nudge', async (c) => {
 });
 app.get('/api/spaces/:id/usage', async (c) => c.json(await spaceUsage(c.req.param('id'))));
 app.get('/api/spaces/:id/automations', async (c) => c.json({ automations: await spaceAutomations(c.req.param('id')) }));
+app.post('/api/spaces/:id/automations', async (c) => {
+	const { projectId, ...input } = await body(
+		c,
+		v.object({
+			projectId: v.nullable(v.string()),
+			kind: v.picklist(['issues', 'schedule']),
+			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
+			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			prompt: v.pipe(v.string(), v.maxLength(20_000)),
+			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
+			reasoning: v.optional(v.nullable(REASONING)),
+			planFirst: v.optional(v.boolean()),
+		}),
+	);
+	return c.json(await addAutomation(projectId || null, { ...input, spaceId: c.req.param('id') }));
+});
 app.get('/api/spaces/:id/files', async (c) => c.json({ files: await listSpaceFiles(c.req.param('id')) }));
 app.get('/api/spaces/:id/file', async (c) => {
 	const path = c.req.query('path') ?? '';

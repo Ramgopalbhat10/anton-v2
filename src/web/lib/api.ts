@@ -665,6 +665,8 @@ export const api = {
 	nudgeThread: (id: string, threadId: string, text: string) => post<Session>(`/api/spaces/${id}/threads/${threadId}/nudge`, { text }),
 	spaceUsage: (id: string) => json<SpaceUsage>(`/api/spaces/${id}/usage`),
 	spaceAutomations: (id: string) => json<{ automations: Automation[] }>(`/api/spaces/${id}/automations`),
+	/** A routine of the project: on one of its repositories, or with `projectId` null on none, starting chats. */
+	addSpaceAutomation: (id: string, input: AutomationInput & { projectId: string | null }) => post<Automation>(`/api/spaces/${id}/automations`, input),
 	spaceFiles: (id: string) => json<{ files: SpaceFile[] }>(`/api/spaces/${id}/files`),
 	uploadSpaceFile: (id: string, file: File) =>
 		json<SpaceFile>(`/api/spaces/${id}/files?name=${encodeURIComponent(file.name)}`, {
