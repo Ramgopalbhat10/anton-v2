@@ -3,6 +3,7 @@ import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessi
 import { sendToAgent } from './agent-runner.ts';
 import type { ThreadState } from '../core/thread-state.ts';
 import { logProblem } from './log.ts';
+import { finishesWork } from './reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
 import { getSession } from './sessions.ts';
 
@@ -115,8 +116,22 @@ export async function threadFinished(id: string, reply: string | null): Promise<
 	if (!record?.spaceId) return;
 	launched(id);
 	if (reply) await updateSession(id, { lastReply: reply.slice(0, MAX_REPLY) });
+	if (reply) await closeIfFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not judge whether the thread is done', error, id));
 	await threadChanged(id);
 	await drainQueue(record.spaceId);
+}
+
+/**
+ * A thread whose reply delivered what it was asked is done: resolved, as a
+ * person would mark it, and reopened by the next message it is given. Only
+ * one that would otherwise sit idle: a thread that asks you something, waits
+ * in the queue or has a pull request open stays as it is (a pull request
+ * resolves its thread once merged or closed).
+ */
+async function closeIfFinished(id: string, reply: string): Promise<void> {
+	const thread = await getSession(id);
+	if (thread.threadState !== 'idle' || thread.prUrl) return;
+	if (await finishesWork(id, thread.lastInput, reply)) await updateSession(id, { resolvedAt: new Date().toISOString() });
 }
 
 /** How long an idle thread stays open before it resolves itself. */

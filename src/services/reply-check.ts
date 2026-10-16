@@ -72,6 +72,28 @@ async function waitsOnUser(id: string, reply: string): Promise<boolean> {
 	return yes === null ? /\?\s*$/.test(questionOf(reply)) : yes >= WAITS;
 }
 
+/** How sure the decision model must be that a thread's reply finished its work before the thread is marked done. */
+const FINISHED = 0.7;
+
+/**
+ * Whether a reply delivered what was asked, with nothing left for anyone to
+ * do: the file is made, the change is in, the document is written. A thread
+ * whose reply does is done, as Claude closes a thread once its result is
+ * delivered; an answer to a question, a report of progress or a reply that
+ * offers a next step leaves it open. Only the decision model judges this, so
+ * without one a thread stays open until you mark it done.
+ */
+export async function finishesWork(id: string, asked: string | null, reply: string): Promise<boolean> {
+	const answers = await decide(id, { asked: asked?.slice(-1500) ?? '', reply: reply.slice(-3000) }, {
+		finished: {
+			type: 'yes-no',
+			instructions:
+				'Did this reply deliver the finished result of what was asked (a file made, a change made, a document or diagram written), so nothing is left for anyone to do? An answer to a question, a report of progress, a plan, a partial result, or a reply that offers or waits on a next step is no.',
+		},
+	});
+	return (yesOf(answers?.finished) ?? 0) >= FINISHED;
+}
+
 /** How long a message must be to say something of substance, rather than narrate a step ("Let me read the entry point."). */
 const SUBSTANCE = 280;
 
