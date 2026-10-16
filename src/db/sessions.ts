@@ -252,6 +252,19 @@ export async function setSessionTodos(id: string, json: string | null): Promise<
 	announce({ kind: 'task', id, what: 'todos' });
 }
 
+/** Where the task's agent read the messages sent while it worked, as saved; null before any. Kept apart from the record, like the todo list. */
+export async function getSessionJoins(id: string): Promise<string | null> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT joins_json FROM sessions WHERE id = ?', args: [id] });
+	return optional(result.rows[0]?.joins_json);
+}
+
+export async function setSessionJoins(id: string, json: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE sessions SET joins_json = ? WHERE id = ?', args: [json, id] });
+	announce({ kind: 'task', id, what: 'joins' });
+}
+
 export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(

@@ -64,6 +64,7 @@ import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } 
 import { installSubagentStop } from './flue/subagent-stop.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
+import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { agentNow, recordAgentNow } from './services/agent-now.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
@@ -117,6 +118,7 @@ observeRuntime((event) => {
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
+	recordJoinEvent(event as Parameters<typeof recordJoinEvent>[0]);
 	recordAgentNow(event as Parameters<typeof recordAgentNow>[0]);
 	void recordContext(event as Parameters<typeof recordContext>[0]).catch((error: unknown) => logProblem('warn', 'Context usage not recorded', error));
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
@@ -737,6 +739,11 @@ app.get('/api/sessions/:id/scripts', async (c) => {
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ list: await todosFor(id) });
+});
+// Where the agent read each message sent while it worked, for the thread to show it there.
+app.get('/api/sessions/:id/joins', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ joins: await joinsFor(id) });
 });
 // What the agent is doing this moment; later changes come whole over /api/events.
 app.get('/api/sessions/:id/now', async (c) => {

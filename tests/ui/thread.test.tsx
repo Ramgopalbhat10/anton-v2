@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 	subagents: vi.fn(async (): Promise<{ runs: unknown[] }> => ({ runs: [] })),
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 	now: vi.fn(async (): Promise<{ now: unknown }> => ({ now: null })),
+	joins: vi.fn(async (): Promise<{ joins: unknown[] }> => ({ joins: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -223,6 +224,34 @@ describe('Thread', () => {
 		// While the reply is still being written, it says when it will be read.
 		show(agent([sent('u1', 'Build it', 'sub-1'), assistant('a1', [tool('bash', { command: 'ls' })]), sent('u2', 'Why did you stop?', 'sub-2')], { status: 'streaming' }));
 		expect(screen.getByText('Anton reads this between its steps')).toBeTruthy();
+	});
+
+	it('puts a message read mid-reply where Anton read it: the steps before it, the message, then the answer', async () => {
+		const sent = (id: string, text: string, submissionId: string) => ({ ...user(id, text), submissionId });
+		const reply = {
+			...assistant('a1', [
+				{ ...tool('task', { agent: 'browser', prompt: 'Check the engine', description: 'Inspect the engine' }), toolCallId: 'task-1', state: 'output-available', output: 'stopped' },
+				{ type: 'text', text: 'The review is stopped; packaging the engine now.' },
+			]),
+			submissionId: 'sub-1',
+			metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } },
+		};
+		api.joins.mockResolvedValue({ joins: [{ text: 'Why is it taking so long?', afterTool: 'task-1', final: false, at: new Date().toISOString() }] });
+		show(
+			agent([sent('u1', 'Build it', 'sub-1'), reply, sent('u2', 'Why is it taking so long?', 'sub-2')], {
+				settlements: [
+					{ submissionId: 'sub-1', outcome: 'completed' },
+					{ submissionId: 'sub-2', outcome: 'completed', answeredBySubmissionId: 'sub-1' },
+				],
+			} as Partial<UseFlueAgentResult>),
+		);
+		const note = await screen.findByText('Sent while Anton worked, read here');
+		const question = screen.getByText('Why is it taking so long?');
+		const answer = screen.getByText('The review is stopped; packaging the engine now.');
+		expect(question.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(note).toBeTruthy();
+		expect(screen.queryByText('Read while Anton worked on the reply above')).toBeNull();
+		api.joins.mockResolvedValue({ joins: [] });
 	});
 
 	it('sends the prompt typed on the launcher once the history has loaded', async () => {

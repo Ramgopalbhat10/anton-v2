@@ -75,6 +75,7 @@ import { isLocalAddress } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
+import { noteDelivery } from '../services/joins.ts';
 import { checkReply } from '../services/reply-check.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
@@ -1048,12 +1049,15 @@ const PLAN_PROMPT = [
  */
 /**
  * Keeps the task's latest input for its card: each message the agent is given, typed, a follow-up or an
- * automation's, as it starts a reply or joins one already running. The runtime emits no event for them.
+ * automation's, as it starts a reply or joins one already running, and where in that reply a joining one
+ * was read. The runtime emits no event for them.
  */
 function useLatestInput(id: string) {
 	const delivery = useDelivery();
 	useAgentStart(async () => {
-		if (delivery.kind === 'user') await recordLatestInput(id, delivery.body);
+		if (delivery.kind !== 'user') return;
+		await noteDelivery(id, delivery.body);
+		await recordLatestInput(id, delivery.body);
 	});
 }
 
