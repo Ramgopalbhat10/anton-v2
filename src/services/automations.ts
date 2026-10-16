@@ -39,18 +39,24 @@ export type AutomationInput = {
 	spaceId?: string | null;
 };
 
-export async function addAutomation(projectId: string, input: AutomationInput): Promise<Automation> {
-	if (!(await getProject(projectId))) throw new NotFoundError('Project not found');
+/**
+ * Adds an automation on a repository, or with `projectId` null a project's routine whose threads start as
+ * chats: those need the project, and can only run on a schedule, since labeled issues belong to a repository.
+ */
+export async function addAutomation(projectId: string | null, input: AutomationInput): Promise<Automation> {
+	if (projectId && !(await getProject(projectId))) throw new NotFoundError('Project not found');
+	if (!projectId && !input.spaceId) throw new InvalidInputError('Pick a repository');
+	if (!projectId && input.kind === 'issues') throw new InvalidInputError('Labeled issues need a repository');
 	if (input.spaceId) {
 		const space = await getSpace(input.spaceId);
 		if (!space) throw new NotFoundError('Project not found');
-		if (!space.repoIds.includes(projectId)) throw new InvalidInputError('That repository is not in this project');
+		if (projectId && !space.repoIds.includes(projectId)) throw new InvalidInputError('That repository is not in this project');
 	}
 	const label = input.label?.trim() || null;
 	if (input.kind === 'issues' && !label) throw new InvalidInputError('Name the label that marks issues for Anton');
 	if (input.kind === 'schedule' && !(input.everyHours && input.prompt.trim())) throw new InvalidInputError('A schedule needs hours and instructions');
 	return insertAutomation({
-		projectId,
+		projectId: projectId ?? '',
 		kind: input.kind,
 		label: input.kind === 'issues' ? label : null,
 		everyHours: input.kind === 'schedule' ? (input.everyHours ?? null) : null,
@@ -101,7 +107,7 @@ function issuePrompt(issue: Issue, extra: string): string {
 async function startTask(automation: Automation, title: string, prompt: string): Promise<string> {
 	if (automation.spaceId) {
 		const thread = await startThread(automation.spaceId, {
-			projectId: automation.projectId,
+			projectId: automation.projectId || null,
 			title,
 			brief: prompt,
 			model: automation.model ?? undefined,
@@ -110,6 +116,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 		});
 		return thread.id;
 	}
+	if (!automation.projectId) throw new NotFoundError('Project not found');
 	const session = await createSession({
 		projectId: automation.projectId,
 		title,
@@ -130,8 +137,9 @@ type Run = { now: number; force: boolean };
 const running = new Set<string>();
 
 /** Each kind starts what is due and returns what to remember about this run. */
-const runners: Record<Automation['kind'], (automation: Automation, project: Project, run: Run) => Promise<Partial<Automation>>> = {
+const runners: Record<Automation['kind'], (automation: Automation, project: Project | null, run: Run) => Promise<Partial<Automation>>> = {
 	async issues(automation, project, { now }) {
+		if (!project) throw new InvalidInputError('Labeled issues need a repository');
 		const issues = await getProviders().git.listIssues(project.repoFullName, automation.label ?? '');
 		const taken = await issueTasks(project.id);
 		const room = ISSUES_AT_ONCE - taken.sessions.filter(isWorking).length;
@@ -168,8 +176,9 @@ export async function runAutomation(id: string, { now = Date.now(), force = fals
 	running.add(id);
 	try {
 		const automation = await existing(id);
-		const project = await getProject(automation.projectId);
-		if (!project) throw new NotFoundError('Project not found');
+		// A project's routine without a repository starts its threads as chats.
+		const project = automation.projectId ? await getProject(automation.projectId) : null;
+		if (automation.projectId && !project) throw new NotFoundError('Project not found');
 		const update = await runners[automation.kind](automation, project, { now, force });
 		await updateAutomation(id, { lastError: null, ...update });
 	} catch (error) {

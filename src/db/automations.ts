@@ -5,6 +5,7 @@ import { appDb } from './client.ts';
 /** A way tasks start without anyone typing: from labeled issues, or every few hours. */
 export type Automation = {
 	id: string;
+	/** The repository its tasks work on; empty for a project's routine whose threads start as chats. */
 	projectId: string;
 	kind: 'issues' | 'schedule';
 	/** Issues with this label start tasks (kind `issues`). */

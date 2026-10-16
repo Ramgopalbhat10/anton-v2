@@ -226,7 +226,7 @@ function RoutineRow({ automation, space }: { automation: Automation; space: Spac
 			</div>
 			{automation.prompt ? <p className="m-0 line-clamp-2 text-[12px] leading-[17px] text-(--text-secondary)">{automation.prompt}</p> : null}
 			<Caption>
-				{repo?.repoFullName.split('/').pop()} · {automation.lastRunAt ? `ran ${age(automation.lastRunAt)} ago` : 'not run yet'}
+				{repo?.repoFullName.split('/').pop() ?? 'No repository'} · {automation.lastRunAt ? `ran ${age(automation.lastRunAt)} ago` : 'not run yet'}
 			</Caption>
 			{automation.lastError ? <div className="text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
 		</div>
@@ -238,10 +238,12 @@ function Routines({ space }: { space: Space }) {
 	const queryClient = useQueryClient();
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);
-	const [kind, setKind] = useState<Automation['kind']>('schedule');
-	const [picked, setRepoId] = useState('');
-	// Routines run on a repository; the first until one is picked, so one added later is picked up too.
-	const repoId = space.repos.some((repo) => repo.id === picked) ? picked : (space.repos[0]?.id ?? '');
+	const [pickedKind, setKind] = useState<Automation['kind']>('schedule');
+	const [picked, setRepoId] = useState<string | null>(null);
+	// The first repository until one is picked, so one added later is picked up too; '' starts threads as chats.
+	const repoId = picked === '' || space.repos.some((repo) => repo.id === picked) ? picked! : (space.repos[0]?.id ?? '');
+	// Labeled issues belong to a repository; without one a routine runs on a schedule.
+	const kind = repoId ? pickedKind : 'schedule';
 	const [hours, setHours] = useState(24);
 	const [label, setLabel] = useState('anton');
 	const [prompt, setPrompt] = useState('');
@@ -249,7 +251,8 @@ function Routines({ space }: { space: Space }) {
 	const [choice, setChoice] = useState<ModelChoice>({ model: space.threadModel ?? '', reasoning: null });
 	const add = useMutation({
 		mutationFn: () =>
-			api.addAutomation(repoId, {
+			api.addSpaceAutomation(space.id, {
+				projectId: repoId || null,
 				kind,
 				label: kind === 'issues' ? label : null,
 				everyHours: kind === 'schedule' ? hours : null,
@@ -257,7 +260,6 @@ function Routines({ space }: { space: Space }) {
 				model: choice.model || null,
 				reasoning: choice.reasoning,
 				planFirst: false,
-				spaceId: space.id,
 			}),
 		onSuccess: () => {
 			setAdding(false);
@@ -273,8 +275,8 @@ function Routines({ space }: { space: Space }) {
 			sub="start threads on their own"
 			footer={
 				adding ? null : (
-					<CardFooter caption={space.repos.length ? `${list.length} routine${list.length === 1 ? '' : 's'} · threads respect the limit of ${space.maxParallel}` : 'Routines run on a repository; add one in Settings'}>
-						<Btn size="sm" variant="secondary" icon={Plus} disabled={space.repos.length === 0} onClick={() => setAdding(true)}>
+					<CardFooter caption={`${list.length} routine${list.length === 1 ? '' : 's'} · threads respect the limit of ${space.maxParallel}`}>
+						<Btn size="sm" variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
 							Add routine
 						</Btn>
 					</CardFooter>
@@ -297,18 +299,21 @@ function Routines({ space }: { space: Space }) {
 						<Btn size="sm" variant={kind === 'schedule' ? 'secondary' : 'ghost'} onClick={() => setKind('schedule')}>
 							On a schedule
 						</Btn>
-						<Btn size="sm" variant={kind === 'issues' ? 'secondary' : 'ghost'} onClick={() => setKind('issues')}>
+						<Btn size="sm" variant={kind === 'issues' ? 'secondary' : 'ghost'} disabled={!repoId} onClick={() => setKind('issues')}>
 							From labeled issues
 						</Btn>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						<select aria-label="Repository" value={repoId} onChange={(event) => setRepoId(event.target.value)} className={FIELD}>
-							{space.repos.map((repo) => (
-								<option key={repo.id} value={repo.id}>
-									{repo.repoFullName}
-								</option>
-							))}
-						</select>
+						{space.repos.length ? (
+							<select aria-label="Repository" value={repoId} onChange={(event) => setRepoId(event.target.value)} className={FIELD}>
+								{space.repos.map((repo) => (
+									<option key={repo.id} value={repo.id}>
+										{repo.repoFullName}
+									</option>
+								))}
+								<option value="">No repository</option>
+							</select>
+						) : null}
 						{kind === 'schedule' ? (
 							<label className="flex items-center gap-1.5 text-[12px] text-(--text-tertiary)">
 								Every
