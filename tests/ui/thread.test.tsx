@@ -366,7 +366,7 @@ describe('response details', () => {
 		expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
 	});
 
-	it('shows a question from the ask tool as options to tap, and the pick once answered', () => {
+	it('shows a question from the ask tool as options to tap, and once answered only the question and the pick', () => {
 		const ask = tool('ask', { question: 'Which database?', options: [{ label: 'Postgres', detail: 'Managed, on Neon' }, { label: 'SQLite' }], recommended: 0 }, 'Stop here.');
 		const flue = agent([user('u1', 'Set up storage'), assistant('a1', [ask])]);
 		const { unmount } = show(flue);
@@ -376,9 +376,17 @@ describe('response details', () => {
 		expect(flue.sendMessage).toHaveBeenCalledWith('SQLite');
 		unmount();
 
-		show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Postgres'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
-		expect(screen.getByRole('button', { name: /Postgres/ }).getAttribute('aria-pressed')).toBe('true');
-		expect((screen.getByRole('button', { name: /SQLite/ }) as HTMLButtonElement).disabled).toBe(true);
+		const { unmount: done } = show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Postgres'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
+		const answered = screen.getByRole('region', { name: 'Answered question' });
+		expect(within(answered).getByRole('heading', { name: 'Which database?' })).toBeTruthy();
+		expect(within(answered).getByText('Postgres')).toBeTruthy();
+		expect(within(answered).getByText('You chose')).toBeTruthy();
+		expect(within(answered).queryByText('SQLite')).toBeNull();
+		expect(screen.queryByRole('button', { name: /SQLite/ })).toBeNull();
+		done();
+
+		show(agent([user('u1', 'Set up storage'), assistant('a1', [ask]), user('u2', 'Use MySQL instead'), assistant('a2', [{ type: 'text', text: 'On it.' }])]));
+		expect(within(screen.getByRole('region', { name: 'Answered question' })).getByText('You answered')).toBeTruthy();
 	});
 
 	it('draws a show card: stats, a sortable table, a live formula, and a form that sends its values', () => {

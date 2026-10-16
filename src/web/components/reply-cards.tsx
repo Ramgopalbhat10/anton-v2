@@ -83,6 +83,14 @@ export const AskCard = memo(function AskCard({
       ? -1
       : options.findIndex((option) => same(option.label, place.answer ?? ""));
   const open = place.latest && place.answer === null;
+  if (place.answer !== null)
+    return (
+      <AnsweredCard
+        question={question}
+        answer={picked === -1 ? place.answer : options[picked].label}
+        index={picked}
+      />
+    );
   return (
     <section className="in-card overflow-hidden" aria-label="Question">
       <header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5">
@@ -145,11 +153,7 @@ export const AskCard = memo(function AskCard({
           );
         })}
       </div>
-      {place.answer !== null && picked === -1 ? (
-        <div className="border-t border-(--border-subtle) px-3.5 py-2 text-[11.5px] text-(--text-tertiary)">
-          You answered in your own words.
-        </div>
-      ) : open ? (
+      {open ? (
         <div className="border-t border-(--border-subtle) px-3.5 py-2 text-[11.5px] text-(--text-tertiary)">
           Pick one, or type your own answer below.
         </div>
@@ -157,6 +161,51 @@ export const AskCard = memo(function AskCard({
     </section>
   );
 });
+
+/**
+ * A question once answered, as Claude shows a decided card: the question, and
+ * under it what was picked (its letter) or what you wrote instead. The
+ * options it did not take are no longer worth the room.
+ */
+function AnsweredCard({
+  question,
+  answer,
+  index,
+}: {
+  question: string;
+  answer: string;
+  index: number;
+}) {
+  return (
+    <section
+      className="in-card flex flex-col gap-1.5 px-3.5 py-2.5"
+      aria-label="Answered question"
+    >
+      <span className="text-[11.5px] leading-[16px] text-(--text-tertiary)">
+        Question
+      </span>
+      <h3 className="m-0 text-[13px] leading-[19px] font-normal text-(--text-primary)">
+        {question}
+      </h3>
+      <p className="m-0 flex min-w-0 items-center gap-2 text-[12.5px] leading-[18px]">
+        <span className="inline-flex shrink-0 items-center gap-1 text-(--success-text)">
+          <Icon icon={Check} size={12} />
+          {index >= 0 ? (
+            <span className="in-num text-[11.5px]">
+              {String.fromCharCode(65 + index)}
+            </span>
+          ) : null}
+        </span>
+        <span className="min-w-0 truncate font-medium text-(--text-primary)">
+          {answer}
+        </span>
+        <span className="shrink-0 text-[11.5px] text-(--text-tertiary)">
+          {index >= 0 ? "You chose" : "You answered"}
+        </span>
+      </p>
+    </section>
+  );
+}
 
 /** The files this turn changed, from the task's diff, each opening in the Changes panel. */
 export const ChangesCard = memo(function ChangesCard({
