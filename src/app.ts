@@ -72,6 +72,7 @@ import { contextView, recordContext } from './services/context-usage.ts';
 import { type DeliveredImage, primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
+import { scheduleIdleStops } from './services/idle-stop.ts';
 import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
 import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
 import { primeCoordinator } from './services/coordinator.ts';
@@ -141,6 +142,7 @@ setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, {
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
+scheduleIdleStops();
 
 function valid<T extends v.GenericSchema>(schema: T, value: unknown): v.InferOutput<T> {
 	const result = v.safeParse(schema, value);

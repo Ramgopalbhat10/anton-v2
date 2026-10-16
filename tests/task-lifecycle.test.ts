@@ -655,6 +655,29 @@ test('connections are checked through the ports, and Compute lists and stops run
 	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
 });
 
+test('a sandbox stops the idle minutes after its agent finishes, not while its agent works or a terminal is open', async () => {
+	const { holdTerminal, stopIdleSandboxes } = await import('../src/services/idle-stop.ts');
+	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Idle' });
+	await sessions.resumeSession(session.id);
+	const minutes = (await sandboxSettings()).idleMinutes * 60_000;
+	const start = Date.now();
+	// Reading its files is not use: the first look only notes it went quiet.
+	assert.ok(!(await stopIdleSandboxes(start)).includes(session.id));
+	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'idle-1' });
+	assert.ok(!(await stopIdleSandboxes(start + minutes)).includes(session.id), 'a working agent keeps it');
+	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'idle-1' });
+	await stopIdleSandboxes(start + minutes);
+	const close = holdTerminal(session.id);
+	assert.ok(!(await stopIdleSandboxes(start + 3 * minutes)).includes(session.id), 'an open terminal keeps it');
+	close();
+	await stopIdleSandboxes(start + 3 * minutes);
+	assert.ok(!(await stopIdleSandboxes(start + 4 * minutes - 1)).includes(session.id), 'not before its minutes are up');
+	assert.ok((await stopIdleSandboxes(start + 4 * minutes)).includes(session.id));
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
 test('sandbox settings reach new machines, and a new default base image retires prepared images', async () => {
 	const project = await addProject('acme/demo');
 	const before = await sandboxSettings();

@@ -20,7 +20,7 @@ export const config = {
 	},
 	/** Defaults for Settings › Sandboxes until it is saved. */
 	sandboxDefaults: {
-		idleMinutes: Number(read('ANTON_IDLE_MINUTES', '15')),
+		idleMinutes: Number(read('ANTON_IDLE_MINUTES', '5')),
 		cpu: Number(read('ANTON_SANDBOX_CPU', '1')),
 		memoryMiB: Number(read('ANTON_SANDBOX_MEMORY_MIB', '2048')),
 	},

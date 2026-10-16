@@ -86,7 +86,7 @@ function Form({ view }: { view: SandboxView }) {
 						options={IDLE}
 						fallback={`${draft.idleMinutes} minutes`}
 						onChange={(idleMinutes) => change({ idleMinutes })}
-						help="A sandbox with nothing running stops after this long. Its files are kept."
+						help="A sandbox stops this long after its agent finishes, unless a terminal is open on it or you have its computer. Its files are kept."
 					/>
 					<Select
 						label="Maximum lifetime"
