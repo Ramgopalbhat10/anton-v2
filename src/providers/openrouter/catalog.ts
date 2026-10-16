@@ -1,6 +1,7 @@
 import { type ModelCatalog, type ModelInfo, REASONING_LEVELS, type Reasoning } from '../../core/ports.ts';
 
-export type OpenRouterOptions = { apiUrl: string; ttlMs: number };
+/** `apiKey` is read on each listing; with one, the list is the models the key may use. */
+export type OpenRouterOptions = { apiUrl: string; ttlMs: number; apiKey?: () => string | null };
 
 /** The fields Anton reads from OpenRouter's `GET /models`. */
 export type OpenRouterModel = {
@@ -87,29 +88,38 @@ export function toModelInfo(model: OpenRouterModel): ModelInfo {
 }
 
 /**
- * OpenRouter's public model list, cached for `ttlMs`. A failed refresh keeps
- * serving the last good list, so a gateway hiccup never empties the picker.
+ * OpenRouter's model list, cached for `ttlMs`. With a key it is the models the
+ * key's account may use (`/models/user`, after its provider preferences and
+ * guardrails), else the public list, which also stands in when that call
+ * fails. A failed refresh keeps serving the last good list, so a gateway
+ * hiccup never empties the picker; a new key lists them again at once.
  */
-export function openRouterCatalog({ apiUrl, ttlMs }: OpenRouterOptions): ModelCatalog {
-	let cached: { at: number; models: Promise<ModelInfo[]> } | undefined;
+export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRouterOptions): ModelCatalog {
+	let cached: { at: number; key: string | null; models: Promise<ModelInfo[]> } | undefined;
 
-	async function fetchModels(): Promise<ModelInfo[]> {
+	async function fetchList(path: string, key: string | null): Promise<OpenRouterModel[]> {
 		// Bounded, as startup waits for it to load the tasks' models.
-		const response = await fetch(`${apiUrl}/models`, { signal: AbortSignal.timeout(15_000) });
-		if (!response.ok) throw new Error(`OpenRouter /models: ${response.status}`);
-		const { data } = (await response.json()) as { data: OpenRouterModel[] };
+		const response = await fetch(`${apiUrl}${path}`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(15_000) });
+		if (!response.ok) throw new Error(`OpenRouter ${path}: ${response.status}`);
+		return ((await response.json()) as { data: OpenRouterModel[] }).data;
+	}
+
+	async function fetchModels(key: string | null): Promise<ModelInfo[]> {
+		const data = key ? await fetchList('/models/user', key).catch(() => fetchList('/models', null)) : await fetchList('/models', null);
 		return data.filter(isAgentModel).map(toModelInfo);
 	}
 
 	return {
 		name: 'openrouter',
-		list() {
-			if (cached && Date.now() - cached.at < ttlMs) return cached.models;
+		list(fresh = false) {
+			const key = apiKey();
+			if (!fresh && cached && cached.key === key && Date.now() - cached.at < ttlMs) return cached.models;
 			const previous = cached?.models;
-			const models = fetchModels().catch((error: unknown) => (previous ? previous : Promise.reject(error)));
-			cached = { at: Date.now(), models };
+			const models = fetchModels(key).catch((error: unknown) => (previous ? previous : Promise.reject(error)));
+			const entry = { at: Date.now(), key, models };
+			cached = entry;
 			// A failure with nothing to fall back on is retried on the next call.
-			models.catch(() => (cached = undefined));
+			models.catch(() => cached === entry && (cached = undefined));
 			return models;
 		},
 	};

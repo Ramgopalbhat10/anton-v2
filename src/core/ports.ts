@@ -301,7 +301,29 @@ export type ModelInfo = {
 /** The models an LLM gateway offers for agent work (tool calling, text out). */
 export type ModelCatalog = {
 	readonly name: string;
-	list(): Promise<ModelInfo[]>;
+	/** `fresh` lists them again rather than serving the cached list. */
+	list(fresh?: boolean): Promise<ModelInfo[]>;
+};
+
+/**
+ * The account behind the gateway Anton pays per token through (OpenRouter),
+ * used with a key pasted in Settings › Subscriptions, or the server's own
+ * when none is pasted. Its models are the `models` catalog's.
+ */
+export type GatewayAccount = {
+	/** `openrouter`: how settings and routes name it. */
+	readonly id: string;
+	readonly name: string;
+	/** The `<gateway>` in its models' `<gateway>/<model>`. */
+	readonly gateway: string;
+	/** Where you make a key. */
+	readonly keyPage: string;
+	/** The variable a key set on the server comes from, used while none is pasted. */
+	readonly envVar: string;
+	/** Asks the vendor whether the key works; throws why when it does not. */
+	check(key: string): Promise<{ email: string | null }>;
+	/** The key's spending limits and the account's credits, as the vendor reports them. */
+	windows?(key: string): Promise<PlanWindow[]>;
 };
 
 /**

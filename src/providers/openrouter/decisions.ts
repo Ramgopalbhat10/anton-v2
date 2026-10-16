@@ -1,6 +1,7 @@
 import type { Answer, DecisionModel, Question } from '../../core/ports.ts';
 
-export type DecisionOptions = { apiUrl: string; apiKey: string; model: string };
+/** `apiKey` is read on each call, so a key pasted in Settings › Subscriptions needs no restart. */
+export type DecisionOptions = { apiUrl: string; apiKey: string | (() => string | null); model: string };
 
 /** A decision is meant to be quick; one that hangs must not hold up the work waiting on it. */
 const TIMEOUT_MS = 15_000;
@@ -25,11 +26,13 @@ export function openRouterDecisions({ apiUrl, apiKey, model }: DecisionOptions):
 	return {
 		name: `openrouter/${model}`,
 		async decide(state, questions, signal) {
+			const key = typeof apiKey === 'function' ? apiKey() : apiKey;
+			if (!key) throw new Error('The decision model needs an OpenRouter key. Add one under Settings › Subscriptions.');
 			const timeout = AbortSignal.timeout(TIMEOUT_MS);
 			const response = await fetch(`${apiUrl}/systemone`, {
 				method: 'POST',
 				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-				headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+				headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
 				body: JSON.stringify({ model, state, questions: Object.fromEntries(Object.entries(questions).map(([id, question]) => [id, wireQuestion(question)])) }),
 			});
 			if (!response.ok) throw new Error(`OpenRouter /systemone: ${response.status} ${(await response.text()).slice(0, 300)}`);

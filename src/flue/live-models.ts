@@ -32,10 +32,24 @@ function toPiModel(info: ModelInfo, catalog: readonly OpenRouterModel[]): OpenRo
  * pi's OpenRouter provider, with every model from Anton's live catalog
  * added. pi's own entries win where both exist, since they carry tuned
  * wire settings. `live` is read on every lookup, so newly listed models
- * resolve without a restart.
+ * resolve without a restart, and `key` on every call, so a key pasted in
+ * Settings › Subscriptions takes over from OPENROUTER_API_KEY at once.
  */
-export function liveOpenRouterProvider(live: () => readonly ModelInfo[]): Provider {
-	const base = openrouterProvider() as Provider<'openai-completions'>;
+export function liveOpenRouterProvider(live: () => readonly ModelInfo[], key: () => Promise<string | null>): Provider {
+	const piProvider = openrouterProvider() as Provider<'openai-completions'>;
+	const base: Provider<'openai-completions'> = {
+		...piProvider,
+		auth: {
+			...piProvider.auth,
+			apiKey: {
+				name: 'OpenRouter API key',
+				resolve: async () => {
+					const apiKey = await key();
+					return apiKey ? { auth: { apiKey }, source: 'Settings › Subscriptions' } : undefined;
+				},
+			},
+		},
+	};
 	const known = base.getModels();
 	const knownIds = new Set(known.map((model) => model.id));
 	let memo: { from: readonly ModelInfo[]; models: OpenRouterModel[] } | undefined;

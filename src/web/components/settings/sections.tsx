@@ -30,7 +30,7 @@ export type SettingsSection = { id: string; group: SectionGroup; label: string; 
 /** Every settings page, in nav order. A new page is one entry here. */
 export const SECTIONS: SettingsSection[] = [
 	{ id: 'general', group: 'anton', label: 'General', icon: Settings2, desc: 'The model and mode new tasks start with', Page: GeneralPage },
-	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Run tasks on a ChatGPT or Claude plan you already pay for', Page: SubscriptionsPage },
+	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Run tasks on a plan you already pay for, and connect your OpenRouter key', Page: SubscriptionsPage },
 	{ id: 'notifications', group: 'anton', label: 'Notifications', icon: BellRing, desc: 'Your phone, and browsers with no Anton tab, hear when a task needs you', Page: NotificationsPage },
 	{ id: 'connections', group: 'anton', label: 'Connections', icon: Link, desc: 'GitHub, Modal, storage, models, the decision model and web search, checked live', Page: ConnectionsPage },
 	{ id: 'usage', group: 'anton', label: 'Usage and limits', icon: Activity, desc: 'Model spend and the caps that stop it', Page: UsagePage },

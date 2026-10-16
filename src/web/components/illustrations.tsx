@@ -546,7 +546,8 @@ export function TasksArt({ className }: { className?: string }) {
 /** Anton's unit and a plan's unit side by side on the grid. Linked, a lit
     coupling joins them and the plan's lights are on; not yet, the plan's unit
     is only drawn in outline, waiting to be connected. */
-export function PlanLinkArt({ className, linked, plan }: { className?: string; linked: boolean; plan: string }) {
+/** `noun` is what the right-hand unit is: a `plan`, or an `account` for a gateway billed per token. */
+export function PlanLinkArt({ className, linked, plan, noun = 'plan' }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account' }) {
 	const vents = (
 		<>
 			{Array.from({ length: 6 }, (_, i) => (
@@ -564,7 +565,7 @@ export function PlanLinkArt({ className, linked, plan }: { className?: string; l
 		</>
 	);
 	return (
-		<Frame label={linked ? `Anton linked to your ${plan} plan` : `Anton, with your ${plan} plan not connected yet`} viewBox="-150 -6 300 96" className={className}>
+		<Frame label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} viewBox="-150 -6 300 96" className={className}>
 			<Block at={[0, 64, 0]} size={[44, 44, 18]} r={3} top={vents} left={front(true)} right={<Bar x={8} y={8} w={18} />} />
 			{linked ? (
 				<>
@@ -596,7 +597,7 @@ export function PlanLinkArt({ className, linked, plan }: { className?: string; l
 				anton
 			</Label>
 			<Label at={[86, 22, 18]} run={46} rise={-30} accent={linked}>
-				{`${plan.toLowerCase()} plan`}
+				{`${plan.toLowerCase()} ${noun}`}
 			</Label>
 			{linked ? (
 				<Label at={[65, 65, 3]} run={30} rise={14} accent>

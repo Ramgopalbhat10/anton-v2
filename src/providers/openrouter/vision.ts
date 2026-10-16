@@ -1,6 +1,7 @@
 import type { VisionModel } from '../../core/ports.ts';
 
-export type VisionOptions = { apiUrl: string; apiKey: string };
+/** `apiKey` is read on each call, so a key pasted in Settings › Subscriptions needs no restart. */
+export type VisionOptions = { apiUrl: string; apiKey: string | (() => string | null) };
 
 /** A look at a screen is one step of the agent's; one that hangs must not hold it up for long. */
 const TIMEOUT_MS = 60_000;
@@ -15,11 +16,13 @@ export function openRouterVision({ apiUrl, apiKey }: VisionOptions): VisionModel
 	return {
 		runs: (model) => model.startsWith('openrouter/'),
 		async look({ model, prompt, image, mimeType }, signal) {
+			const key = typeof apiKey === 'function' ? apiKey() : apiKey;
+			if (!key) throw new Error('Seeing the screen needs an OpenRouter key. Add one under Settings › Subscriptions.');
 			const timeout = AbortSignal.timeout(TIMEOUT_MS);
 			const response = await fetch(`${apiUrl}/chat/completions`, {
 				method: 'POST',
 				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-				headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+				headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					model: model.slice('openrouter/'.length),
 					messages: [

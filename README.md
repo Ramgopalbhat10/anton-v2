@@ -43,7 +43,8 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `SandboxProvider` | `modal`, `local` | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set) |
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
-| `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models`, cached for an hour) | |
+| `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models/user` with a key, else `/models`, cached for an hour) | |
+| `GatewayAccount` | `openrouter` (the key's limits and credits from `GET /key` and `/credits`) | Settings › Subscriptions, with a key from OpenRouter, else `OPENROUTER_API_KEY` |
 | `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
 | `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
@@ -57,6 +58,8 @@ The plan's models (`openai/<model>`) come first in the model picker, marked PLAN
 
 OpenCode Go and Cursor plans take a key instead of a sign-in: paste one made in the OpenCode Console or Cursor's dashboard into their card, and Anton checks it with the vendor before keeping it on the server (never in a sandbox). OpenCode Go's models (`opencode-go/<model>`) are called directly on OpenCode's OpenAI- and Anthropic-shaped endpoints, and the card shows the plan's five-hour, weekly and monthly limits. Cursor has no plain model endpoint, so its models (`cursor/<model>`) run through Cursor's official SDK on the server the way Claude Code does: its own tools off, Anton's tools its only ones. Cursor publishes no per-token prices for those calls, so they are recorded at $0 and only the plan's own limits apply.
 
+OpenRouter has a tab there too, though it is no plan: its models bill per token. Paste a key from openrouter.ai/settings/keys and Anton checks it with `GET /key` before keeping it on the server, then lists the models that key may use (`/models/user`, after your provider preferences and guardrails) a page at a time with a search, their prices and this month's tokens, beside the key's spending limits and the account's credits. The agents, the decision model and the computer's vision model all call OpenRouter with that key. `OPENROUTER_API_KEY` still works when no key is pasted; a pasted key wins, and disconnecting it hands back to the server's. Without either, OpenRouter models leave the model picker.
+
 ### On your phone
 
 Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add to Home Screen; on Android or in Chrome and Edge, use Install from the browser's menu or **Settings › Notifications**. Turn notifications on there, on each device, and Anton tells it when a task asks you something, has a plan waiting for approval, or fails (and when one finishes, if you switch that on), with what it asks. Tapping one opens the task on its conversation, ready to answer or approve. Nothing is sent while an Anton window is in front of you. iPhones and iPads get notifications only from the app on the home screen (iOS 16.4 or later). Notifications go through the browser's own push service (Google's, Apple's or Mozilla's), encrypted so it cannot read them.
@@ -65,7 +68,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | Model gateway |
+| `OPENROUTER_API_KEY` | Model gateway, used while no OpenRouter key is pasted in Settings › Subscriptions (optional) |
 | `ANTON_GITHUB_TOKEN` | Fine-grained token with Contents and Pull requests read/write on your repos |
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |

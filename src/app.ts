@@ -15,6 +15,7 @@ import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
+import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
@@ -92,6 +93,7 @@ import {
 	disconnect,
 	finishLogin,
 	importLogin,
+	loadGatewayKey,
 	refreshSubscriptionModels,
 	setSubscriptionOptions,
 	subscriptionsView,
@@ -139,6 +141,8 @@ const delivered = (text: string, images?: DeliveredImage[]) => (images?.length ?
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coder, { id, message: delivered(text, images) })));
 setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id, message: delivered(text, images) })), 'reviewer');
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
+// The OpenRouter key pasted in Settings › Subscriptions, before anything calls OpenRouter.
+await loadGatewayKey().catch((error: unknown) => logProblem('warn', 'Could not load the OpenRouter key', error));
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -268,7 +272,7 @@ app.get('/api/events', (c) =>
 app.get('/api/health', (c) =>
 	c.json({
 		ok: true,
-		openRouter: config.hasOpenRouter(),
+		openRouter: openRouterKey() !== null,
 		providers: { sandbox: getProviders().sandbox.name, store: getProviders().store.name, git: getProviders().git.name },
 	}),
 );
@@ -426,7 +430,7 @@ app.post('/api/subscriptions/:id/import', async (c) => {
 	const { credential } = await body(c, v.object({ credential: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(50_000)) }));
 	return c.json(await importLogin(c.req.param('id'), credential));
 });
-// Plans used with a key from the vendor's dashboard (OpenCode Go, Cursor): the key is checked with the vendor before it is kept.
+// Plans used with a key from the vendor's dashboard (OpenCode Go, Cursor), and OpenRouter's key: the key is checked with the vendor before it is kept.
 app.put('/api/subscriptions/:id/key', async (c) => {
 	const { key } = await body(c, v.object({ key: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)) }));
 	return c.json(await connectKey(c.req.param('id'), key));

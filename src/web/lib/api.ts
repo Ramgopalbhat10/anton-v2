@@ -330,8 +330,9 @@ export type Subscription = {
 	/**
 	 * `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`).
 	 * `key`: a key made on the vendor's dashboard (`keyPage`), kept on the server.
+	 * `gateway`: OpenRouter, billed per token, with a key pasted here or set on the server (`keySource`).
 	 */
-	kind: 'oauth' | 'runtime' | 'key';
+	kind: 'oauth' | 'runtime' | 'key' | 'gateway';
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
 	email: string | null;
@@ -342,7 +343,15 @@ export type Subscription = {
 	options: SubscriptionOptions;
 	/** The account's models, each with the tokens it used on the plan this month. */
 	/** `options` names the model's larger context and fast mode ("1M", "Fast"), whose tokens count toward it. */
-	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options?: string[] }>;
+	/** A gateway's models also carry their vendor and price per million tokens. */
+	models: Array<
+		Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & {
+			tokens: number;
+			options?: string[];
+			vendor?: string;
+			price?: Pick<ModelInfo['price'], 'input' | 'output'>;
+		}
+	>;
 	monthTokens: number;
 	modelsAt: string | null;
 	/** A sign-in waiting for the address the browser is sent back to; `listening` when Anton catches it itself. */
@@ -358,6 +367,9 @@ export type Subscription = {
 	keyPage?: string | null;
 	keyHint?: string | null;
 	windows?: PlanWindow[] | null;
+	/** Where the gateway's key comes from: pasted here, or the server's own (`envVar`). */
+	keySource?: 'settings' | 'environment' | null;
+	envVar?: string | null;
 };
 /** One of a plan's own limits as the vendor reports it: five hours, a week, a month. */
 export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };

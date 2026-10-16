@@ -29,7 +29,7 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// The pages themselves fetch their state; only the Artifacts page's edited times move.
 	if (change.kind === 'page') return [['artifacts']];
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
-	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections']];
+	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
 	// Projects count their threads by state, so a change to any task can move a count.
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts']];

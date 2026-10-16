@@ -940,7 +940,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
-								Set OPENROUTER_API_KEY to run the coding agent. Changes, Files, Library and Terminal still work.
+								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
 							</div>
 						) : null}
 						{messages.length === 0 && !busy ? (
@@ -976,7 +976,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							<Notice>
 								{agent.error?.message
 									? `The agent turn failed: ${agent.error.message}`
-									: 'The agent turn failed. Check OPENROUTER_API_KEY or send the message again.'}
+									: 'The agent turn failed. Check the OpenRouter key in Settings › Subscriptions or send the message again.'}
 							</Notice>
 						) : null}
 					</div>

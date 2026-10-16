@@ -1,7 +1,8 @@
 import { config } from '../config.ts';
 import { appDb } from '../db/client.ts';
 import { getProviders } from '../providers/index.ts';
-import { accessToken, agentRuntimes, subscriptionProviders, subscriptionView } from './subscriptions.ts';
+import { openRouterKeySource } from '../providers/openrouter/key.ts';
+import { accessToken, agentRuntimes, loadGatewayKey, subscriptionProviders, subscriptionView } from './subscriptions.ts';
 
 /** `set` when it is set up but not checked from here; `off` when it is not set up; `failing` when the check did not pass. */
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
@@ -58,8 +59,10 @@ async function subscriptionChecks(): Promise<Check[]> {
 }
 
 async function checks(): Promise<Check[]> {
+	await loadGatewayKey();
 	const { git, sandbox, store, models, decisions } = getProviders();
 	const plans = await subscriptionChecks();
+	const keySource = openRouterKeySource();
 	const web = config.web.mcpUrl === 'off' ? null : new URL(config.web.mcpUrl);
 	return [
 		{
@@ -92,8 +95,9 @@ async function checks(): Promise<Check[]> {
 			id: 'models',
 			name: 'Models',
 			provider: models.name,
-			off: config.hasOpenRouter() ? undefined : 'OPENROUTER_API_KEY is not set, so the agent cannot answer.',
-			run: async () => `${(await models.list()).length} models that can call tools.`,
+			off: keySource ? undefined : 'No OpenRouter key, so the agent cannot answer on OpenRouter models. Add one under Settings › Subscriptions.',
+			run: async () =>
+				`${(await models.list()).length} models that can call tools, with ${keySource === 'settings' ? 'the key from Settings › Subscriptions' : 'OPENROUTER_API_KEY'}.`,
 		},
 		...plans,
 		{
@@ -104,7 +108,7 @@ async function checks(): Promise<Check[]> {
 				? undefined
 				: config.decisionModel === 'off'
 					? 'ANTON_DECISION_MODEL is off, so every comment wakes the agent and every pull request is reviewed.'
-					: 'Needs OPENROUTER_API_KEY. Without it, every comment wakes the agent and every pull request is reviewed.',
+					: 'Needs an OpenRouter key (Settings › Subscriptions). Without it, every comment wakes the agent and every pull request is reviewed.',
 			run: async () => {
 				// One tiny question, a hundred-thousandth of a dollar.
 				await decisions!.decide({ check: 'connection' }, { ok: { type: 'yes-no', instructions: 'Is this a connection check?' } });

@@ -32,7 +32,7 @@ const ON_SCREEN = `This is a screenshot of a computer's screen, ${SCREEN.width}Ã
 
 async function look(id: string, prompt: string, png: Uint8Array, signal?: AbortSignal, mimeType = 'image/png'): Promise<{ text: string; cost: number }> {
 	const vision = getProviders().vision;
-	if (!vision) throw new Error('Seeing the screen needs an OpenRouter key (OPENROUTER_API_KEY).');
+	if (!vision) throw new Error('Seeing the screen needs an OpenRouter key. Add one under Settings â€º Subscriptions.');
 	const model = visionModelFor(id);
 	const answer = await vision.look({ model, prompt, image: png, mimeType }, signal);
 	await recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);

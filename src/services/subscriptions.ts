@@ -5,6 +5,7 @@ import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type {
 	AgentRuntime,
+	GatewayAccount,
 	KeyPlan,
 	ModelInfo,
 	PlanWindow,
@@ -16,6 +17,7 @@ import type {
 import { spendBy, tokensByMinute } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
+import { openRouterKey, openRouterKeySource, setSavedOpenRouterKey } from '../providers/openrouter/key.ts';
 import { logProblem } from './log.ts';
 
 /**
@@ -28,6 +30,10 @@ import { logProblem } from './log.ts';
  * on the server and keeps its token to itself; Anton only reads its status.
  * OpenCode Go and Cursor plans (`KeyPlan`) take a key from the vendor's own
  * dashboard, which Anton keeps and hands to each call.
+ *
+ * OpenRouter (the `GatewayAccount`) is no plan: its models bill per token. It
+ * takes a key here the same way, which the agents, the decision model and the
+ * vision model call it with, in place of OPENROUTER_API_KEY when both are set.
  */
 
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the spending caps as if billed per token. */
@@ -58,8 +64,9 @@ export type SubscriptionView = {
 	/**
 	 * `oauth`: Anton signs in and holds the token. `runtime`: the vendor's own program signs in on the server (`signIn`).
 	 * `key`: a key made on the vendor's dashboard (`keyPage`), kept by Anton.
+	 * `gateway`: OpenRouter, billed per token, with a key kept by Anton or set on the server (`keySource`).
 	 */
-	kind: 'oauth' | 'runtime' | 'key';
+	kind: 'oauth' | 'runtime' | 'key' | 'gateway';
 	/** The `<gateway>` its models are named under. */
 	gateway: string;
 	state: 'connected' | 'expired' | 'signed-out';
@@ -73,7 +80,7 @@ export type SubscriptionView = {
 	 * The account's models, each with the tokens it used on the plan this month. A model's larger context and
 	 * fast mode are not rows of their own: their tokens count toward it, and `options` names them ("1M", "Fast").
 	 */
-	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options: string[] }>;
+	models: Array<Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & { tokens: number; options: string[] } & GatewayFields>;
 	/** Tokens all of the plan's models used since the start of this month. */
 	monthTokens: number;
 	modelsAt: string | null;
@@ -89,7 +96,13 @@ export type SubscriptionView = {
 	keyPage: string | null;
 	keyHint: string | null;
 	windows: PlanWindow[] | null;
+	/** The gateway's key: pasted in Settings, or the server's own (`OPENROUTER_API_KEY`); null for a plan. */
+	keySource?: 'settings' | 'environment' | null;
+	envVar?: string | null;
 };
+
+/** A gateway model's vendor and price per million tokens, which a plan's models do not need. */
+type GatewayFields = { vendor?: string; price?: Pick<ModelInfo['price'], 'input' | 'output'> };
 
 const DEFAULTS: Stored = {
 	enabled: true,
@@ -117,6 +130,12 @@ const settingKey = (id: string) => `subscription.${id}`;
 export const subscriptionProviders = (): SubscriptionProvider[] => getProviders().subscriptions ?? [];
 export const agentRuntimes = (): AgentRuntime[] => getProviders().runtimes ?? [];
 export const keyPlans = (): KeyPlan[] => getProviders().keyPlans ?? [];
+export const gatewayAccount = (): GatewayAccount | null => getProviders().gatewayAccount ?? null;
+
+const isGateway = (id: string): GatewayAccount | undefined => {
+	const account = gatewayAccount();
+	return account?.id === id ? account : undefined;
+};
 
 /** Whether a model (`<gateway>/<model>`) runs on a plan, where calls cost nothing per token. */
 export const onPlan = (model: string): boolean =>
@@ -130,7 +149,7 @@ function providerById(id: string): SubscriptionProvider {
 	if (!provider) {
 		const runtime = agentRuntimes().find((candidate) => candidate.id === id);
 		if (runtime) throw new ConflictError(`${runtime.name} signs in through Claude Code on the server: ${runtime.signInCommand}`);
-		const keyed = keyPlanById(id);
+		const keyed = keyPlanById(id) ?? isGateway(id);
 		if (keyed) throw new ConflictError(`${keyed.name} takes a key from ${keyed.keyPage} rather than a sign-in.`);
 		throw new NotFoundError(`No subscription named "${id}"`);
 	}
@@ -324,6 +343,8 @@ export async function planRuntime(gateway: string): Promise<Pick<AgentRuntime, '
  * models with it. A key the vendor refuses is not kept.
  */
 export async function connectKey(id: string, input: string): Promise<SubscriptionView> {
+	const account = isGateway(id);
+	if (account) return connectGatewayKey(account, input);
 	const plan = keyPlanById(id);
 	if (!plan) throw new NotFoundError(`No subscription named "${id}" takes a key`);
 	const key = input.trim();
@@ -491,6 +512,14 @@ export async function disconnect(id: string): Promise<SubscriptionView> {
 		windowsCache.delete(id);
 		return keyView(keyed);
 	}
+	const account = isGateway(id);
+	if (account) {
+		// The server's own key, if it has one, takes over again.
+		await save(id, { key: null, account: null, connectedAt: null, problem: null });
+		setSavedOpenRouterKey(null);
+		windowsCache.delete(id);
+		return gatewayView(account);
+	}
 	const provider = providerById(id);
 	endAttempt(id);
 	await save(id, { credential: null, connectedAt: null, models: [], modelsAt: null, problem: null });
@@ -507,6 +536,11 @@ export async function setSubscriptionOptions(id: string, options: SubscriptionOp
 	if (keyed) {
 		await save(id, options);
 		return keyView(keyed);
+	}
+	const account = isGateway(id);
+	if (account) {
+		await save(id, options);
+		return gatewayView(account);
 	}
 	const provider = providerById(id);
 	await save(id, options);
@@ -531,6 +565,13 @@ export async function refreshSubscriptionModels(id: string): Promise<Subscriptio
 		windowsCache.delete(id);
 		await listNow(keyedPlan(keyed));
 		return keyView(keyed);
+	}
+	const account = isGateway(id);
+	if (account) {
+		windowsCache.delete(id);
+		await getProviders().models.list(true);
+		await save(id, { modelsAt: Date.now() });
+		return gatewayView(account);
 	}
 	const provider = providerById(id);
 	if (!(await stored(id)).credential) throw new ConflictError(`${provider.name} is not signed in.`);
@@ -657,7 +698,7 @@ const WINDOWS_TTL_MS = 60_000;
 /** What each key plan last said about its own limits, asked again after a minute; null when it would not say. */
 const windowsCache = new Map<string, { at: number; windows: Promise<PlanWindow[] | null> }>();
 
-function planWindows(plan: KeyPlan, key: string): Promise<PlanWindow[] | null> {
+function planWindows(plan: Pick<KeyPlan, 'id' | 'name' | 'windows'>, key: string): Promise<PlanWindow[] | null> {
 	const read = plan.windows?.bind(plan);
 	if (!read) return Promise.resolve(null);
 	const cached = windowsCache.get(plan.id);
@@ -704,10 +745,118 @@ export async function keyView(plan: KeyPlan): Promise<SubscriptionView> {
 	};
 }
 
+/** The gateway's stored state, with its pasted key handed to the providers, which call OpenRouter with it. */
+async function gatewayStored(account: GatewayAccount): Promise<Stored> {
+	const current = await stored(account.id);
+	setSavedOpenRouterKey(current.key);
+	return current;
+}
+
+/** Whether the gateway's models are offered: it has a key and is switched on. Without the port its catalog is offered as it is. */
+export async function gatewayOffered(): Promise<boolean> {
+	const account = gatewayAccount();
+	if (!account) return true;
+	const current = await gatewayStored(account);
+	return current.enabled && openRouterKeySource() !== null;
+}
+
+/** Reads the gateway's pasted key at startup, so the decision and vision models have it before any call. */
+export async function loadGatewayKey(): Promise<void> {
+	const account = gatewayAccount();
+	if (account) await gatewayStored(account);
+}
+
+/** The gateway's key for the agents' model calls: the pasted one, else the server's own; null when there is neither. */
+export async function gatewayKey(): Promise<string | null> {
+	await loadGatewayKey();
+	return openRouterKey();
+}
+
+/** Keeps the gateway's key once it has accepted it; the models then list with it. A key it refuses is not kept. */
+async function connectGatewayKey(account: GatewayAccount, input: string): Promise<SubscriptionView> {
+	const key = input.trim();
+	if (!key || /\s/.test(key)) throw new InvalidInputError(`Paste the key from ${account.keyPage} on its own.`);
+	const { email } = await account.check(key).catch((error: unknown) => {
+		throw new InvalidInputError(`${account.name} did not accept that key: ${error instanceof Error ? error.message : String(error)}`);
+	});
+	await save(account.id, { key, account: email, connectedAt: new Date().toISOString(), problem: null, limitHitAt: null });
+	setSavedOpenRouterKey(key);
+	windowsCache.delete(account.id);
+	await getProviders()
+		.models.list(true)
+		.then(() => save(account.id, { modelsAt: Date.now() }))
+		.catch((error: unknown) => logProblem('warn', `Could not list ${account.name} models`, error));
+	return gatewayView(account);
+}
+
+/** The gateway's models with this month's tokens and their price, as its tab lists them. */
+async function gatewayModels(models: ModelInfo[]): Promise<SubscriptionView['models']> {
+	const spent = models.length ? await spendBy('model', startOfMonth()).catch(() => []) : [];
+	const tokensOf = new Map(spent.map((row) => [row.key, row.tokens]));
+	return models.map(({ id, name, vendor, contextLength, vision, reasoning, defaultReasoning, price }) => ({
+		id,
+		name,
+		vendor,
+		contextLength,
+		vision,
+		reasoning,
+		defaultReasoning,
+		tokens: tokensOf.get(id) ?? 0,
+		options: [],
+		price: { input: price.input, output: price.output },
+	}));
+}
+
+/** The gateway: whose key it calls with, the models that key may use, and what the account says is spent of its limits. */
+export async function gatewayView(account: GatewayAccount): Promise<SubscriptionView> {
+	const current = await gatewayStored(account);
+	const source = openRouterKeySource();
+	const key = openRouterKey();
+	const [listed, windows] = key
+		? await Promise.all([
+				getProviders()
+					.models.list()
+					.catch((error: unknown) => {
+						logProblem('warn', `Could not list ${account.name} models`, error);
+						return [] as ModelInfo[];
+					}),
+				planWindows(account, key),
+			])
+		: [[], null];
+	const models = await gatewayModels(listed.filter((model) => model.id.startsWith(`${account.gateway}/`)));
+	return {
+		id: account.id,
+		name: account.name,
+		kind: 'gateway',
+		gateway: account.gateway,
+		state: source ? 'connected' : 'signed-out',
+		email: current.key ? current.account : null,
+		connectedAt: current.key ? current.connectedAt : null,
+		problem: null,
+		expiresAt: null,
+		options: { enabled: current.enabled, countAtApiPrices: true },
+		models,
+		monthTokens: models.reduce((sum, model) => sum + model.tokens, 0),
+		modelsAt: current.modelsAt === null ? null : new Date(current.modelsAt).toISOString(),
+		login: null,
+		plan: null,
+		version: null,
+		signIn: null,
+		limitHitAt: null,
+		extraUsageAt: null,
+		keyPage: account.keyPage,
+		keyHint: key ? key.slice(-4) : null,
+		windows,
+		keySource: source,
+		envVar: account.envVar,
+	};
+}
+
 export const subscriptionsView = async (): Promise<SubscriptionView[]> => [
 	...(await Promise.all(subscriptionProviders().map(subscriptionView))),
 	...(await Promise.all(agentRuntimes().map(runtimeView))),
 	...(await Promise.all(keyPlans().map(keyView))),
+	...(await Promise.all([gatewayAccount()].filter((account) => account !== null).map(gatewayView))),
 ];
 
 /** What the vendor calls a plan whose usage limit is reached (OpenAI's Sign in with ChatGPT). */
@@ -832,4 +981,5 @@ export function resetSubscriptionsForTests(): void {
 	retryAt.clear();
 	listedHere.clear();
 	windowsCache.clear();
+	setSavedOpenRouterKey(null);
 }
