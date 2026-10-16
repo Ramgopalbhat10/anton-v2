@@ -188,10 +188,11 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
+			{/* The page's own footer, after the last card, so it never covers one. */}
 			<div
 				role="group"
 				aria-label="Save changes"
-				className="sticky bottom-4 z-[2] flex items-center gap-3 self-stretch rounded-[10px] border border-(--border-subtle) bg-(--bg-overlay) py-2 pr-2 pl-4 shadow-[0_8px_24px_rgb(0_0_0/0.35)]"
+				className="flex items-center gap-3 self-stretch border-t border-(--border-subtle) pt-4"
 			>
 				<span className="min-w-0 flex-1 text-[12px]">
 					{dirty ? (
