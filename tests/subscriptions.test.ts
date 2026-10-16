@@ -347,6 +347,16 @@ test('signing in by pasting the return address connects the plan, offers its mod
 		assert.deepEqual(await listModels(), []);
 		assert.equal(plan.calls.list, 1, 'the list is reused within the hour');
 
+		// A list kept from before a change to how Anton lists models is listed again at once, not served for its hour.
+		const { getSetting, setSetting } = await import('../src/db/settings.ts');
+		const { modelsVersion: _, ...older } = await getSetting<Record<string, unknown>>('subscription.chatgpt', {});
+		await setSetting('subscription.chatgpt', { ...older, enabled: true });
+		subscriptions.resetSubscriptionsForTests();
+		assert.equal((await listModels())[0].id, 'openai/gpt-5.5');
+		assert.equal(plan.calls.list, 2);
+		await listModels();
+		assert.equal(plan.calls.list, 2, 'and then reused within the hour');
+
 		// Signing in again reuses the client the first sign-in registered.
 		assert.match((await subscriptions.beginLogin('chatgpt')).login!.url, /client=oaiapp_1/);
 		await subscriptions.cancelLogin('chatgpt');

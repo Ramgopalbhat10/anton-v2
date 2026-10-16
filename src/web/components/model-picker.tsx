@@ -146,13 +146,15 @@ function about(model: ModelInfo): string {
 /**
  * One line per model on the shared columns: its mark (the vendor shows on
  * hover), its name with a pin beside it, its context, and what it costs. The
- * pin shows on hover, and stays lit on a pinned model.
+ * pin shows on hover, and stays lit on a pinned model. In a section with no
+ * prices (a plan's), the context sits at the right edge, where the prices would.
  */
 function ModelRow({
 	model,
 	selected,
 	active,
 	pinned,
+	priced,
 	onPick,
 	onHover,
 	onPin,
@@ -161,6 +163,7 @@ function ModelRow({
 	selected: boolean;
 	active: boolean;
 	pinned: boolean;
+	priced: boolean;
 	onPick: () => void;
 	onHover: () => void;
 	onPin: () => void;
@@ -196,8 +199,9 @@ function ModelRow({
 					<Icon icon={Pin} size={11} className={cn('rotate-45', pinned && '[&_path]:fill-current')} />
 				</button>
 			</span>
+			{priced ? null : <span className="col-span-2" />}
 			<span className="in-num text-right text-[10.5px] text-(--text-disabled)">{tokens(model.contextLength)}</span>
-			<PriceCells model={model} />
+			{priced ? <PriceCells model={model} /> : null}
 			<span className="flex justify-end text-(--accent-text)">{selected ? <Icon icon={Check} size={12} /> : null}</span>
 		</div>
 	);
@@ -795,6 +799,7 @@ export const ModelPicker = memo(function ModelPicker({
 							sections.map((section) => {
 								const start = offset;
 								offset += section.models.length;
+								const priced = section.models.some((model) => !model.subscription);
 								return (
 									<div key={section.title} role="group" aria-label={section.title} className="flex flex-col">
 										<div className={cn(COLUMNS, 'sticky top-0 z-[1] bg-(--pop-bg) pt-2.5 pb-1')}>
@@ -803,10 +808,11 @@ export const ModelPicker = memo(function ModelPicker({
 												<span className={cn('in-caption truncate', section.plan && 'text-(--accent-text)')}>{section.title}</span>
 												<span className="in-num text-[10px] text-(--text-disabled)">{section.total}</span>
 											</span>
+											{priced ? null : <span className="col-span-2" />}
 											<span className="in-caption text-right" title="Context window, in tokens">
 												Ctx
 											</span>
-											{section.models.some((model) => !model.subscription) ? (
+											{priced ? (
 												<>
 													<span className="in-caption text-right" title="US dollars per million input tokens">
 														In
@@ -815,9 +821,7 @@ export const ModelPicker = memo(function ModelPicker({
 														Out
 													</span>
 												</>
-											) : (
-												<span className="col-span-2" />
-											)}
+											) : null}
 											<span />
 										</div>
 										{section.models.map((model, index) => (
@@ -827,6 +831,7 @@ export const ModelPicker = memo(function ModelPicker({
 												selected={model.id === shown?.id}
 												active={start + index === cursor}
 												pinned={pinnedIds.includes(model.id)}
+												priced={priced}
 												onPick={() => pick(model, false)}
 												onHover={() => setCursor(start + index)}
 												onPin={() => togglePin(model)}
