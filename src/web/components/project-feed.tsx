@@ -22,7 +22,7 @@ import { takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { useThreadFileResolver } from '@/lib/thread-outputs';
 import { openViewer, sameItem, type ViewerItem } from '@/lib/viewer';
 import { linkTargets } from '../../core/outputs';
-import { parseReports, type Report } from '@/lib/spaces';
+import { parseReports, type Report, threadsLoaded } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../core/attachments';
@@ -89,9 +89,12 @@ const REPORTED: Record<Report['state'], string> = {
 
 const said = (report: Report) => (report.routine ? 'was started by a routine' : REPORTED[report.state]);
 
-function ReportRow({ reports, threads }: { reports: Report[]; threads: Session[] }) {
+function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Session[] }) {
 	const [open, setOpen] = useState(false);
 	const openThread = useOpenThread();
+	// A deleted thread's reports leave the feed with it.
+	const reports = threadsLoaded(threads) ? all.filter((report) => byPrefix(threads, report.id)) : all;
+	if (!reports.length) return null;
 	const needs = reports.filter((report) => report.state === 'waiting').length;
 	return (
 		<div className="flex flex-col gap-1">
@@ -231,26 +234,29 @@ function Starting({ part }: { part: ToolPart }) {
 
 /**
  * The threads a reply started, one line each in a single card, in the order
- * they were started: several at once read as one batch.
+ * they were started: several at once read as one batch. A thread deleted since
+ * leaves the card, as it leaves the sidebar; one the reply being written just
+ * started may not be in the list yet, so it shows as starting until it is.
  */
-function Dispatch({ parts, threads }: { parts: ToolPart[]; threads: Session[] }) {
-	return (
-		<ThreadRows label={parts.length === 1 ? 'Started a thread' : `Started ${parts.length} threads`}>
-			{parts.map((part) => {
-				const thread = threads.find((item) => item.id === threadIdIn(part));
-				return thread ? <ThreadRow key={part.toolCallId} thread={thread} /> : <Starting key={part.toolCallId} part={part} />;
-			})}
-		</ThreadRows>
-	);
+function Dispatch({ parts, threads, live }: { parts: ToolPart[]; threads: Session[]; live: boolean }) {
+	const rows = parts.flatMap((part) => {
+		const id = threadIdIn(part);
+		const thread = id ? threads.find((item) => item.id === id) : undefined;
+		if (thread) return [<ThreadRow key={part.toolCallId} thread={thread} />];
+		const gone = id !== null && !live && threadsLoaded(threads);
+		return gone ? [] : [<Starting key={part.toolCallId} part={part} />];
+	});
+	if (!rows.length) return null;
+	return <ThreadRows label={rows.length === 1 ? 'Started a thread' : `Started ${rows.length} threads`}>{rows}</ThreadRows>;
 }
 
 /** One of the coordinator's tool calls, as what it did: a thread card, suggestions, or a quiet line. */
-function ToolBlock({ part, space, threads }: { part: ToolPart; space: Space; threads: Session[] }) {
+function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Space; threads: Session[]; live: boolean }) {
 	const failed = part.state === 'output-error';
 	const target = byPrefix(threads, field(part.input, 'thread').replace(/^\[|\]$|^id:/g, ''));
 	switch (part.toolName) {
 		case 'start_thread':
-			return <Dispatch parts={[part]} threads={threads} />;
+			return <Dispatch parts={[part]} threads={threads} live={live} />;
 		case 'suggest_threads': {
 			const list = (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
 			return list.length ? <SuggestedThreads space={space} suggestions={list} /> : null;
@@ -349,9 +355,9 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 						</InlineLinks.Provider>
 					</div>
 				) : block.kind === 'dispatch' ? (
-					<Dispatch key={block.parts[0].toolCallId} parts={block.parts} threads={threads} />
+					<Dispatch key={block.parts[0].toolCallId} parts={block.parts} threads={threads} live={live} />
 				) : (
-					<ToolBlock key={block.part.toolCallId} part={block.part} space={space} threads={threads} />
+					<ToolBlock key={block.part.toolCallId} part={block.part} space={space} threads={threads} live={live} />
 				),
 			)}
 			<OutputCards items={files} composer={space.id} />

@@ -238,7 +238,7 @@ export function TaskMenu({
 }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
-	const params = useParams({ strict: false }) as { sessionId?: string };
+	const params = useParams({ strict: false }) as { sessionId?: string; threadId?: string };
 	const [confirming, setConfirming] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const repoId = session.projectId;
@@ -255,9 +255,15 @@ export function TaskMenu({
 		},
 		onSuccess: () => {
 			refresh();
-			if (params.sessionId === session.id) void navigate({ to: '/' });
+			// A deleted thread leaves its project's feed too, and its files show in the project's Library.
+			if (session.spaceId) void queryClient.invalidateQueries({ queryKey: ['space-files', session.spaceId] });
+			if (params.threadId === session.id && session.spaceId) void navigate({ to: '/projects/$spaceId', params: { spaceId: session.spaceId } });
+			else if (params.sessionId === session.id) void navigate({ to: '/' });
 		},
 	});
+	const thread = Boolean(session.spaceId);
+	// As in Claude's projects, a resolved thread is the project's record: it is reopened before it can go.
+	const locked = thread && Boolean(session.resolvedAt);
 
 	return (
 		<Menu
@@ -332,7 +338,8 @@ export function TaskMenu({
 				<MenuItem
 					icon={Trash2}
 					className="sg-menu-item--destructive"
-					disabled={remove.isPending}
+					disabled={remove.isPending || locked}
+					hint={locked ? 'Reopen first' : undefined}
 					onSelect={(event) => {
 						if (!confirming) {
 							event.preventDefault();
@@ -342,8 +349,10 @@ export function TaskMenu({
 						remove.mutate();
 					}}
 				>
-					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete task'}
+					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : thread ? 'Delete thread' : 'Delete task'}
 				</MenuItem>
+				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">Its files stay in the project Library, in a folder named for it.</div> : null}
+				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
 				<MenuSeparator />
 				<TaskFacts session={session} />
 			</MenuContent>

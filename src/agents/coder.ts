@@ -20,6 +20,7 @@ import {
 } from '@flue/runtime';
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
+import { sandboxTools } from '../flue/sandbox-tools.ts';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
@@ -60,13 +61,13 @@ import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { loadedModels } from '../services/models.ts';
+import { findModel, loadedModels } from '../services/models.ts';
 import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
-import { describe, locate } from '../services/vision.ts';
+import { describe, describeImage, locate } from '../services/vision.ts';
 import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
@@ -236,6 +237,11 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
+		// `read` shows an image, as a picture or in the vision model's words.
+		tools: sandboxTools({
+			sees: async () => (await findModel(modelFor(id).model).catch(() => undefined))?.vision === true,
+			describe: (bytes, mimeType) => describeImage(id, bytes, mimeType),
+		}),
 	});
 	if (!chat) {
 		useSubagent(withSettingsModel(explorer, 'explorer'));
@@ -855,7 +861,7 @@ function attachmentHint(workspace: boolean, project: boolean): string {
 	return (
 		'Files the user attaches to a message arrive after it as <attachment> blocks holding their text (PDFs, office documents and spreadsheets converted); read the rest of a cut one with read_attachment. ' +
 		(workspace
-			? `The originals are in ${OUTPUTS}/uploads/; process them there with your own tools when the text is not enough (a spreadsheet to analyze, a PDF's images or layout). `
+			? `The originals are in ${OUTPUTS}/uploads/; process them there with your own tools when the text is not enough (a spreadsheet to analyze, a PDF's images or layout), and read an image file with read to see it. `
 			: 'The originals are in the Library under uploads/; to process one with code (analyze a spreadsheet, render a PDF\'s pages), start a workspace and find it in ../outputs/uploads/. ') +
 		(project ? `An attachment from the project Library (library="project") is a project file: read it with read_project_file${workspace ? `, or find the original in ../${PROJECT_FILES}` : ''}.` : '')
 	);

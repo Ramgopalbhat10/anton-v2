@@ -12,7 +12,9 @@ import { projectPictures } from './attachments.ts';
 import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
 import { findModel } from './models.ts';
-import { createSession, getSession, listThreads } from './sessions.ts';
+import { readOutputFile, storedOutputs } from './files.ts';
+import { createSession, deleteSession, getSession, listThreads, stopSession } from './sessions.ts';
+import { keepThreadFiles } from './space-files.ts';
 
 /** Instructions every thread and the coordinator read; long enough for a real brief, short enough to send each turn. */
 export const MAX_INSTRUCTIONS = 16_000;
@@ -279,6 +281,40 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 	if (record.spaceId) announce({ kind: 'space', id: record.spaceId, what: 'threads' });
 	if (spaceId) announce({ kind: 'space', id: spaceId, what: 'threads' });
 	return getSession(threadId);
+}
+
+/**
+ * Deletes a task. A project's thread goes as in Claude's projects: a resolved
+ * one is the project's record and is reopened before it can be deleted; any
+ * other leaves the project, its sidebar row and its cards in the
+ * coordinator's feed. The files it saved in its Library are kept, as project
+ * files in a folder named for it, since the coordinator may have passed them
+ * on and nothing else would bring them back; delete them from the Library.
+ * Returns where they were kept.
+ */
+export async function deleteTask(id: string): Promise<{ kept: string[] }> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	if (!record.spaceId) {
+		await deleteSession(id);
+		return { kept: [] };
+	}
+	if (record.resolvedAt) throw new ConflictError('This thread is resolved. Reopen it to delete it.');
+	// Stopping saves what its sandbox holds, so the Library read below is whole.
+	await stopSession(id);
+	const files = await Promise.all(
+		(await storedOutputs(id)).map(async (output) => ({ path: output.path, bytes: await readOutputFile(id, output.path).catch(() => null) })),
+	);
+	const kept = await keepThreadFiles(
+		record.spaceId,
+		record.title,
+		files.flatMap((file) => (file.bytes ? [{ path: file.path, bytes: file.bytes }] : [])),
+	);
+	await deleteSession(id);
+	announce({ kind: 'space', id: record.spaceId, what: 'threads' });
+	// Its slot is free for a queued thread.
+	await drainQueue(record.spaceId);
+	return { kept };
 }
 
 export type SpaceUsage = {

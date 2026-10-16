@@ -9,7 +9,7 @@ import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
 import { useStoredState } from '@/components/split-pane';
-import { api, type Output, outputUrl, refreshFor } from '@/lib/api';
+import { api, type Output, outputUrl, refreshFor, spaceFileUrl } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
 import { age, fileSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,17 @@ export const taskPlace = (sessionId: string, path: string): Place => ({
 	text: () => api.outputText(sessionId, path),
 	sessionId,
 });
+
+/** A file in a project's own Library, which every thread of it reads at ../project-files. */
+export const spacePlace = (spaceId: string, path: string): Place => ({
+	path,
+	url: spaceFileUrl(spaceId, path),
+	textKey: ['space-file', spaceId, path],
+	text: () => api.spaceFileText(spaceId, path),
+});
+
+/** The folder of a thread's Library that shows its project's files, the ones the coordinator and every thread share. */
+export const PROJECT_FOLDER = 'Project files';
 
 /**
  * What a Library shows and how its files are reached: a task's own, or a
@@ -626,7 +637,12 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
 	);
 }
 
-/** Reports, screenshots and exports the agent saved, and files you added: as cards in folders, or as a tree. */
+/**
+ * Reports, screenshots and exports the agent saved, and files you added: as
+ * cards in folders, or as a tree. A project's thread also shows the project's
+ * files, which the coordinator and every thread share, in a folder of their
+ * own, as the project's Library shows each thread's under From threads.
+ */
 export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
 	const outputs = useQuery({
@@ -634,14 +650,23 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 		queryFn: () => api.outputs(sessionId),
 		refetchInterval: (query) => refreshFor(query.state.data?.source),
 	});
-	const refresh = useCallback(() => void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] }), [queryClient, sessionId]);
+	const spaceId = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data?.spaceId ?? null;
+	const shared = useQuery({ queryKey: ['space-files', spaceId], queryFn: () => api.spaceFiles(spaceId!), enabled: Boolean(spaceId) });
+	const refresh = useCallback(() => {
+		void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] });
+		if (spaceId) void queryClient.invalidateQueries({ queryKey: ['space-files', spaceId] });
+	}, [queryClient, sessionId, spaceId]);
+	const own = outputs.data?.outputs;
+	const projectFiles = spaceId ? (shared.data?.files ?? []) : [];
+	const inProject = (path: string) => spaceId !== null && path.startsWith(`${PROJECT_FOLDER}/`);
+	const projectPath = (path: string) => path.slice(PROJECT_FOLDER.length + 1);
 	const library: LibrarySource = {
-		files: outputs.data?.outputs,
+		files: own && [...own, ...projectFiles.map((file) => ({ path: `${PROJECT_FOLDER}/${file.path}`, size: file.size, mtimeMs: Date.parse(file.modifiedAt) }))],
 		error: outputs.error,
-		place: (path) => taskPlace(sessionId, path),
-		agentPath: (path) => `outputs/${path}`,
+		place: (path) => (inProject(path) ? spacePlace(spaceId!, projectPath(path)) : taskPlace(sessionId, path)),
+		agentPath: (path) => (inProject(path) ? `../project-files/${projectPath(path)}` : `outputs/${path}`),
 		upload: (file) => api.uploadOutput(sessionId, file),
-		remove: (path) => api.deleteOutput(sessionId, path),
+		remove: (path) => (inProject(path) ? api.deleteSpaceFile(spaceId!, projectPath(path)) : api.deleteOutput(sessionId, path)),
 		refresh,
 		addedTo: 'uploads',
 		empty: 'Reports, screenshots and exports the agent saves show up here, and so do files you add.',

@@ -1,6 +1,6 @@
 'use agent';
 
-import { type AgentProps, defineTool, setProvider, useModel, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
+import { type AgentProps, defineTool, setProvider, useDelivery, useModel, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { liveOpenRouterProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
@@ -12,7 +12,7 @@ import { loadedModels } from '../services/models.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/spaces.ts';
 import { editSession, stopSession } from '../services/sessions.ts';
 import { readSpaceFileForAgent } from '../services/space-files.ts';
-import { projectAttachment } from '../services/attachments.ts';
+import { filesForThread, projectAttachment } from '../services/attachments.ts';
 import { withAttachments } from '../core/attachments.ts';
 import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { toUsage } from '../services/usage.ts';
@@ -52,13 +52,21 @@ const files = v.optional(
 	),
 );
 
-/** The message with the project files it names attached, as the composer attaches them. */
-async function withFiles(spaceId: string, message: string, names: string[] = []): Promise<string> {
+/**
+ * The message with the project files it needs attached, as the composer
+ * attaches them: those listed, those it names, or else what the user attached
+ * to the message being answered (`answering`).
+ */
+async function withFiles(spaceId: string, message: string, listed: string[] = [], answering = ''): Promise<string> {
+	const names = await filesForThread(spaceId, message, listed, answering);
 	if (!names.length) return message;
 	return withAttachments(message, await Promise.all(names.map((name) => projectAttachment(spaceId, name))), 'project');
 }
 
 function useCoordinatorTools(spaceId: string) {
+	// The message this reply answers: its attached files go to a thread the coordinator starts or messages without naming any.
+	const delivery = useDelivery();
+	const answering = delivery.kind === 'user' ? delivery.body : '';
 	useTool(
 		defineTool({
 			name: 'start_thread',
@@ -71,7 +79,7 @@ function useCoordinatorTools(spaceId: string) {
 				files,
 			}),
 			async run({ data }) {
-				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files), repo: data.repo });
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files, answering), repo: data.repo });
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},
@@ -104,7 +112,7 @@ function useCoordinatorTools(spaceId: string) {
 			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)), files }),
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
-				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, data.files));
+				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, data.files, answering));
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
 			},
 		}),
