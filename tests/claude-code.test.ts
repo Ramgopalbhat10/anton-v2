@@ -390,6 +390,20 @@ test('a model Claude Code lists under its 1M name gets 1M of context, and one wi
 	);
 });
 
+test('an alias that names 1M keeps it when its wire id does not', () => {
+	const models = toModels([
+		{ value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Sonnet 5 · Everyday' },
+		{ value: 'sonnet[1m]', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet (1M context)', description: 'Sonnet 5 with 1M context' },
+	]);
+	assert.deepEqual(
+		models.map((model) => [model.id, model.contextLength, model.variant]),
+		[
+			['claude-code/claude-sonnet-5', 200_000, undefined],
+			['claude-code/claude-sonnet-5[1m]', 1_000_000, { of: 'claude-code/claude-sonnet-5', context: '1m', fast: false }],
+		],
+	);
+});
+
 test('the Claude plan’s limits are read from Claude Code’s usage answer', () => {
 	assert.equal(toWindows({ rate_limits_available: false, rate_limits: null }), null, 'an API key has no plan limits');
 	assert.deepEqual(

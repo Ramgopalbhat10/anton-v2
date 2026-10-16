@@ -304,7 +304,8 @@ describe('Model picker', () => {
 		openPicker({ model: gpt.id, reasoning: null }, [connected], [gpt, priced, routed]);
 		const list = await screen.findByRole('listbox', { name: 'Models' });
 		const [plan, ...gateway] = within(list).getAllByRole('option');
-		expect([...plan.children].slice(2, 4).map((cell) => cell.textContent)).toEqual(['1K', '']);
+		// A plan's section has no prices, so its context sits at the right edge, where Out would.
+		expect([...plan.children].slice(2, 4).map((cell) => cell.textContent)).toEqual(['', '1K']);
 		// Input and output prices sit in their own cells, so they line up under the In and Out headers.
 		expect([...gateway[0].children].slice(2, 5).map((cell) => cell.textContent)).toEqual(['1K', '$0.1', '$0.5']);
 		expect(gateway[1].textContent).toContain('FREE');
