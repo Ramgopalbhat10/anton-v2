@@ -1,12 +1,14 @@
 import path from 'node:path';
 import { config } from '../config.ts';
 import type {
+	AccountSignIn,
 	AgentRuntime,
 	BrowserHost,
 	DecisionModel,
 	GatewayAccount,
 	GitHost,
 	KeyPlan,
+	Mailbox,
 	ModelCatalog,
 	ObjectStore,
 	PushSender,
@@ -19,6 +21,8 @@ import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { cursorPlan } from './cursor/plan.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
+import { gmailMailbox } from './google/gmail.ts';
+import { googleSignIn } from './google/sign-in.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
@@ -57,6 +61,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
  * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
  * `vision` is null without an OpenRouter key; the computer tool then says it cannot see the screen.
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
+ * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -71,6 +76,8 @@ export type Providers = {
 	browsers?: BrowserHost | null;
 	vision?: VisionModel | null;
 	push?: PushSender | null;
+	accounts?: AccountSignIn[];
+	mailboxes?: Mailbox[];
 };
 
 let providers: Providers | undefined;
@@ -97,6 +104,8 @@ function production(): Providers {
 			return openRouterKey() ? vision : null;
 		},
 		push: webPushSender(),
+		accounts: [googleSignIn()],
+		mailboxes: [gmailMailbox()],
 	};
 }
 

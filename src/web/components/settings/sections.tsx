@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, BellRing, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
+import { Activity, BellRing, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Plug, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { CommandsPage } from './commands';
 import { ComputePage } from './compute';
 import { ConnectionsPage } from './connections';
+import { ConnectorsPage } from './connectors';
 import { GeneralPage } from './general';
 import { GuardrailsPage } from './guardrails';
 import { ImagesPage } from './images';
@@ -42,6 +43,7 @@ export const SECTIONS: SettingsSection[] = [
 	{ id: 'repos', group: 'agent', label: 'Repositories', icon: Folder, desc: 'What tasks can work on, each with its own settings', Page: RepositoriesPage },
 	{ id: 'secrets', group: 'agent', label: 'Secrets', icon: KeyRound, desc: 'Variables for every repository’s sandboxes, and each one’s own', Page: SecretsPage },
 	{ id: 'guardrails', group: 'agent', label: 'Guardrails', icon: ShieldCheck, desc: 'What the agent cannot see or do', Page: GuardrailsPage },
+	{ id: 'connectors', group: 'agent', label: 'Connectors', icon: Plug, desc: 'Gmail and MCP servers every task can use, each on or off', Page: ConnectorsPage },
 	{ id: 'skills', group: 'agent', label: 'Skills', icon: Blocks, desc: 'Skills and plugins from GitHub and marketplaces', Page: SkillsPage },
 	{ id: 'commands', group: 'agent', label: 'Commands', icon: SquareTerminal, desc: 'Saved prompts you type as /name', Page: CommandsPage },
 ];

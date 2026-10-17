@@ -12,9 +12,11 @@ export type Project = {
 	memory: string;
 } & ProjectSettings;
 
-/** A remote MCP server whose tools the agent gets; `auth` is sent as a Bearer token. */
-/** A remote MCP server; `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script programs. */
+/** A remote MCP server; `auth` is sent as a Bearer token, and `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script programs. */
 export type McpServer = { name: string; url: string; auth: string | null; tools: string[]; codeMode?: boolean };
+
+/** An MCP server added in Settings › Connectors, which every task gets while it is on. */
+export type InstalledMcpServer = McpServer & { enabled: boolean; addedAt: string };
 
 /** How a repo's tasks are set up. Changing the base image retires the warm image. */
 export type ProjectSettings = {
@@ -32,7 +34,6 @@ export type ProjectSettings = {
 	followUps: boolean;
 	/** Anton reviews the pull requests people open on the repo, and again after their pushes. */
 	reviewOthers: boolean;
-	mcpServers: McpServer[];
 };
 
 /** What the machine is doing right now, from the sandbox provider. */

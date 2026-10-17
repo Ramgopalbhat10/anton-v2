@@ -80,6 +80,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
 | `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |
 | `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Your own Google OAuth client for Gmail in Settings › Connectors, where it can be pasted instead (optional) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
 | `ANTON_DECISION_MODEL` | Decision model on OpenRouter that keeps thanks-only comments from waking the agent, skips automatic reviews of documentation-only changes, and is `decide()` in code mode (default `~typesafe/jev-latest`; `off` to turn off) |
 | `ANTON_CLAUDE_CODE_PATH` | A `claude` executable to run instead of the one the Claude Agent SDK bundles (optional) |

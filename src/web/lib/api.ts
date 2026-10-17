@@ -199,11 +199,52 @@ export type SkillSummary = { name: string; description: string };
 /** One distinct state of the task's files, newest first in the timeline. */
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
-/** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
-/** An MCP server the agent can use; its token is never sent back, only whether it has one. */
-/** `codeMode: false` keeps the server's tools in the agent's tool list rather than only in run_script. */
-export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; codeMode?: boolean };
+/**
+ * An MCP server every task gets while it is on; its token is never sent back, only whether it has one.
+ * `codeMode: false` keeps the server's tools in the agent's tool list rather than only in run_script.
+ */
+export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; codeMode?: boolean; enabled: boolean; addedAt: string };
+/** A server as saved: a token left null keeps the stored one, and an empty one removes it. */
+export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null };
 
+/** An account the agent's tools reach (Google), signed in to on your own OAuth client; its secret and tokens never leave the server. */
+export type ConnectorAccount = {
+	id: string;
+	name: string;
+	client: { clientId: string; fromEnv: boolean } | null;
+	email: string | null;
+	connectedAt: string | null;
+	scopes: string[];
+	problem: string | null;
+	/** Where the vendor sends the browser back, on Anton's own address. */
+	callbackPath: string;
+};
+export type MailboxOptions = { enabled: boolean; draft: boolean; send: boolean };
+/** A mailbox on an account (Gmail); `access` is what the agent may do now, null when it is off or not connected. */
+export type ConnectorMailbox = {
+	id: string;
+	name: string;
+	account: string;
+	options: MailboxOptions;
+	canDraft: boolean;
+	access: { read: true; draft: boolean; send: boolean } | null;
+};
+export type ConnectorsView = { accounts: ConnectorAccount[]; mailboxes: ConnectorMailbox[]; mcpServers: McpServer[] };
+/** An email the agent asked to send, waiting for your Send in the thread or already decided. */
+export type MailApproval = {
+	id: string;
+	connector: string;
+	draftId: string;
+	to: string[];
+	cc: string[];
+	bcc: string[];
+	subject: string;
+	body: string;
+	state: 'pending' | 'sending' | 'sent' | 'declined' | 'changed';
+	decidedAt: string | null;
+};
+
+/** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
 export type ProjectSettings = {
 	envKeys: string[];
 	setupScript: string;
@@ -213,7 +254,6 @@ export type ProjectSettings = {
 	followUps: boolean;
 	/** Whether Anton reviews the pull requests people open on the repo, and again after their pushes. */
 	reviewOthers: boolean;
-	mcpServers: McpServer[];
 	/** Tasks run in a full virtual machine (Docker, FUSE, their own kernel) rather than a container. */
 	fullVm: boolean;
 };
@@ -228,14 +268,9 @@ export type Project = {
 	warmedAt: string | null;
 } & ProjectSettings;
 
-/**
- * A settings save: a variable set to null keeps its stored value and one left
- * out is removed; a server's token set to null keeps the stored one and an
- * empty one removes it.
- */
-export type SettingsChange = Omit<ProjectSettings, 'envKeys' | 'mcpServers'> & {
+/** A settings save: a variable set to null keeps its stored value and one left out is removed. */
+export type SettingsChange = Omit<ProjectSettings, 'envKeys'> & {
 	env: Record<string, string | null>;
-	mcpServers: Array<Omit<McpServer, 'hasAuth'> & { auth: string | null }>;
 };
 
 /** A way tasks start on their own: from issues with a label, or every few hours. */
@@ -582,6 +617,23 @@ export const api = {
 	connectSubscriptionKey: (id: string, key: string) => json<Subscription>(`/api/subscriptions/${id}/key`, { method: 'PUT', body: JSON.stringify({ key }) }),
 	refreshSubscriptionModels: (id: string) => post<Subscription>(`/api/subscriptions/${id}/models/refresh`),
 	disconnectSubscription: (id: string) => json<Subscription>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
+	connectors: () => json<ConnectorsView>('/api/connectors'),
+	setConnectorClient: (account: string, client: { clientId: string; clientSecret: string | null }) =>
+		json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/accounts/${account}/client`, { method: 'PUT', body: JSON.stringify(client) }),
+	disconnectAccount: (account: string) => json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/accounts/${account}`, { method: 'DELETE' }),
+	/** The vendor's consent page, which comes back to Anton and then to Settings › Connectors. */
+	connectMailbox: (id: string, access: 'read' | 'draft') => post<{ url: string }>(`/api/connectors/mailboxes/${id}/connect`, { origin: window.location.origin, access }),
+	setMailboxOptions: (id: string, options: MailboxOptions) =>
+		json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/mailboxes/${id}`, { method: 'PUT', body: JSON.stringify(options) }),
+	addMcpServer: (server: McpServerInput) => post<{ mcpServers: McpServer[] }>('/api/mcp-servers', server),
+	updateMcpServer: ({ name, ...server }: McpServerInput) =>
+		json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(server) }),
+	setMcpServerEnabled: (name: string, enabled: boolean) =>
+		json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+	removeMcpServer: (name: string) => json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+	mcpServerTools: (name: string) => json<{ tools: Array<{ name: string; description?: string }> }>(`/api/mcp-servers/${encodeURIComponent(name)}/tools`),
+	mailApprovals: (sessionId: string) => json<{ approvals: MailApproval[] }>(`/api/sessions/${sessionId}/mail`),
+	decideMail: (sessionId: string, approval: string, send: boolean) => post<MailApproval>(`/api/sessions/${sessionId}/mail/${approval}`, { send }),
 	profile: () => json<{ name: string | null }>('/api/profile'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addableRepos: () => json<{ repos: string[] }>('/api/repos'),
