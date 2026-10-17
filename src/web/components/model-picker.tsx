@@ -555,7 +555,12 @@ export const ModelPicker = memo(function ModelPicker({
 	const shown = options?.base;
 	const reasoning = effectiveReasoning(selected, value.reasoning);
 	const sources = useMemo(
-		() => sourcesOf(all, (plans.data?.subscriptions ?? []).map((plan) => ({ name: plan.name, connected: plan.state === 'connected' }))),
+		// OpenRouter has a tab in Subscriptions for its key, but bills per token: a gateway, not a plan.
+		() =>
+			sourcesOf(
+				all,
+				(plans.data?.subscriptions ?? []).filter((plan) => plan.kind !== 'gateway').map((plan) => ({ name: plan.name, connected: plan.state === 'connected' })),
+			),
 		[all, plans.data],
 	);
 	const unconnected = sources.filter((entry) => entry.plan && !entry.connected && (source === ALL || source === entry.name));

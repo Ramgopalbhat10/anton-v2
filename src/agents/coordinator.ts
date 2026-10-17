@@ -14,11 +14,11 @@ import { editSession, stopSession } from '../services/sessions.ts';
 import { readSpaceFileForAgent } from '../services/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/attachments.ts';
 import { withAttachments } from '../core/attachments.ts';
-import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { toUsage } from '../services/usage.ts';
 import { listProjects } from '../db/projects.ts';
 
-setProvider(liveOpenRouterProvider(loadedModels));
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));

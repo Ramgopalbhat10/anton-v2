@@ -1,6 +1,19 @@
 import path from 'node:path';
 import { config } from '../config.ts';
-import type { AgentRuntime, BrowserHost, DecisionModel, GitHost, KeyPlan, ModelCatalog, ObjectStore, PushSender, SandboxProvider, SubscriptionProvider, VisionModel } from '../core/ports.ts';
+import type {
+	AgentRuntime,
+	BrowserHost,
+	DecisionModel,
+	GatewayAccount,
+	GitHost,
+	KeyPlan,
+	ModelCatalog,
+	ObjectStore,
+	PushSender,
+	SandboxProvider,
+	SubscriptionProvider,
+	VisionModel,
+} from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { cursorPlan } from './cursor/plan.ts';
@@ -9,8 +22,10 @@ import { githubHost } from './github/host.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
+import { openRouterAccount } from './openrouter/account.ts';
 import { openRouterCatalog } from './openrouter/catalog.ts';
 import { openRouterDecisions } from './openrouter/decisions.ts';
+import { openRouterKey } from './openrouter/key.ts';
 import { openRouterVision } from './openrouter/vision.ts';
 import { openCodeGoPlan } from './opencode-go/plan.ts';
 import { s3Store } from './s3/store.ts';
@@ -34,6 +49,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 }
 
 /**
+ * `gatewayAccount` is OpenRouter's, whose key is pasted in Settings › Subscriptions (else OPENROUTER_API_KEY); without the port the catalog is offered as it is.
  * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
  * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
@@ -47,6 +63,7 @@ export type Providers = {
 	store: ObjectStore;
 	git: GitHost;
 	models: ModelCatalog;
+	gatewayAccount?: GatewayAccount | null;
 	decisions?: DecisionModel | null;
 	subscriptions?: SubscriptionProvider[];
 	runtimes?: AgentRuntime[];
@@ -56,27 +73,35 @@ export type Providers = {
 	push?: PushSender | null;
 };
 
-function decisionModel(): DecisionModel | null {
-	const { apiUrl, apiKey } = config.openrouter;
-	return apiKey && config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl, apiKey, model: config.decisionModel }) : null;
-}
-
 let providers: Providers | undefined;
 
-export function getProviders(): Providers {
-	providers ??= {
+/** The decision and vision models call OpenRouter with the key in use at the time, so they exist only while there is one. */
+function production(): Providers {
+	const { apiUrl, ttlMs } = config.openrouter;
+	const decisions = config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
+	const vision = openRouterVision({ apiUrl, apiKey: openRouterKey });
+	return {
 		sandbox: pick('sandbox', sandboxes, config.sandbox),
 		store: pick('store', stores, config.store),
 		git: githubHost(config.github),
-		models: openRouterCatalog(config.openrouter),
-		decisions: decisionModel(),
+		models: openRouterCatalog({ apiUrl, ttlMs, apiKey: openRouterKey }),
+		gatewayAccount: openRouterAccount({ apiUrl }),
+		get decisions() {
+			return openRouterKey() ? decisions : null;
+		},
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
 		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
-		vision: config.openrouter.apiKey ? openRouterVision(config.openrouter) : null,
+		get vision() {
+			return openRouterKey() ? vision : null;
+		},
 		push: webPushSender(),
 	};
+}
+
+export function getProviders(): Providers {
+	providers ??= production();
 	return providers;
 }
 

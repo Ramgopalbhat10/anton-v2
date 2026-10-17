@@ -62,7 +62,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
-import { gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
@@ -83,7 +83,7 @@ import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.
 import { readAttachment } from '../services/attachments.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
-setProvider(liveOpenRouterProvider(loadedModels));
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.

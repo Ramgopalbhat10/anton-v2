@@ -37,6 +37,7 @@ export const config = {
 	},
 	openrouter: {
 		apiUrl: read('ANTON_OPENROUTER_API_URL', 'https://openrouter.ai/api/v1'),
+		/** Used while no key is pasted in Settings › Subscriptions; see providers/openrouter/key.ts. */
 		apiKey: read('OPENROUTER_API_KEY'),
 		/** How long the model list is cached before it is fetched again. */
 		ttlMs: 60 * 60_000,
@@ -80,5 +81,4 @@ export const config = {
 	browserPackage: 'playwright@1.56.1',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */
 	warmImageDays: Number(read('ANTON_WARM_IMAGE_DAYS', '7')),
-	hasOpenRouter: () => Boolean(process.env.OPENROUTER_API_KEY),
 };

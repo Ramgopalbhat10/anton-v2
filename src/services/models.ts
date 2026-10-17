@@ -3,16 +3,20 @@ import type { ModelInfo, Reasoning } from '../core/ports.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
-import { subscriptionModels } from './subscriptions.ts';
+import { gatewayOffered, subscriptionModels } from './subscriptions.ts';
 
 let loaded: readonly ModelInfo[] = [];
 
 /**
- * Every model offered for agent work: the gateway's, then those of the plans
- * you signed in to. Either one failing leaves the other; both failing is an error.
+ * Every model offered for agent work: the gateway's while it has a key and is
+ * switched on, then those of the plans you signed in to. Either one failing
+ * leaves the other; both failing is an error.
  */
 export async function listModels(): Promise<ModelInfo[]> {
-	const [gateway, plans] = await Promise.allSettled([getProviders().models.list(), subscriptionModels()]);
+	const [gateway, plans] = await Promise.allSettled([
+		gatewayOffered().then((offered) => (offered ? getProviders().models.list() : [])),
+		subscriptionModels(),
+	]);
 	if (gateway.status === 'rejected' && (plans.status === 'rejected' || plans.value.length === 0)) throw gateway.reason;
 	const models = [...(gateway.status === 'fulfilled' ? gateway.value : []), ...(plans.status === 'fulfilled' ? plans.value : [])];
 	if (plans.status === 'rejected') logProblem('warn', 'Could not load subscription models', plans.reason);

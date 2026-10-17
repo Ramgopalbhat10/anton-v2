@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SpecGrid, Status, Well } from '@/components/instrument';
@@ -7,7 +7,7 @@ import { EffortRange, useModels } from '@/components/model-picker';
 import { AREA } from '@/components/repo-settings';
 import { Btn, Icon, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';
-import { age, tokens } from '@/lib/format';
+import { age, dollars, tokens } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
@@ -533,10 +533,10 @@ const KEY_PLANS: Record<string, { tagline: string; about: string; howTo: string;
 };
 
 /** The plan's own limits, as the vendor reports them: how much of each window is used and when it resets. */
-function Windows({ windows }: { windows: PlanWindow[] }) {
+function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; label?: string }) {
 	return (
-		<CardSection label="Plan limits" hint="As the vendor reports them">
-			<ul aria-label="Plan limits" className="m-0 flex list-none flex-col gap-2 p-0">
+		<CardSection label={label} hint="As the vendor reports them">
+			<ul aria-label={label} className="m-0 flex list-none flex-col gap-2 p-0">
 				{windows.map((window) => (
 					<li key={window.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
 						<span className="truncate text-(--text-secondary)" title={window.label}>
@@ -701,6 +701,228 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
+/** How many of a gateway's models one page of its list shows. */
+export const GATEWAY_PAGE_SIZE = 20;
+
+/**
+ * A gateway's models, which run to hundreds: a search over name, vendor and
+ * id, then a page at a time, the ones you used this month first. Each row has
+ * its price per million tokens in and out, beside what a plan's row shows.
+ */
+function GatewayModels({ subscription }: { subscription: Subscription }) {
+	const queryClient = useQueryClient();
+	const settings = useGeneralSettings();
+	const models = useModels();
+	const [query, setQuery] = useState('');
+	const [page, setPage] = useState(0);
+	const makeDefault = useMutation({
+		mutationFn: (model: string) => api.saveGeneralSettings({ ...settings.data!, model, reasoning: null }),
+		onSuccess: (saved) => {
+			queryClient.setQueryData(['general-settings'], saved);
+			void queryClient.invalidateQueries({ queryKey: ['models'] });
+		},
+	});
+	const current = settings.data?.model ?? models.data?.default;
+	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+	// Used ones first, by tokens; the rest keep the gateway's order, newest first.
+	const ranked = subscription.models
+		.map((model, index) => ({ model, index }))
+		.filter(({ model }) => words.every((word) => `${model.vendor ?? ''} ${model.name} ${model.id}`.toLowerCase().includes(word)))
+		.sort((a, b) => b.model.tokens - a.model.tokens || a.index - b.index)
+		.map(({ model }) => model);
+	const pages = Math.max(1, Math.ceil(ranked.length / GATEWAY_PAGE_SIZE));
+	const at = Math.min(page, pages - 1);
+	const shown = ranked.slice(at * GATEWAY_PAGE_SIZE, (at + 1) * GATEWAY_PAGE_SIZE);
+	if (!subscription.models.length) {
+		return (
+			<CardSection label="Models">
+				<p className="m-0 text-[12px] text-(--text-tertiary)">{subscription.name} has not listed any models for this key yet. Check again in a minute.</p>
+			</CardSection>
+		);
+	}
+	return (
+		<CardSection label={`Models · ${subscription.models.length}`} hint="Effort · context · $ per 1M in / out · tokens this month">
+			<input
+				type="search"
+				value={query}
+				onChange={(event) => {
+					setQuery(event.target.value);
+					setPage(0);
+				}}
+				placeholder="Search models"
+				aria-label={`Search ${subscription.name} models`}
+				className={`${FIELD} w-full max-w-[320px] text-[12px]`}
+			/>
+			{shown.length ? (
+				<ul aria-label={`${subscription.name} models`} className="m-0 -mx-2 flex list-none flex-col p-0">
+					{shown.map((model) => (
+						<li
+							key={model.id}
+							className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-lg px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_6.5rem_2.5rem_auto]"
+						>
+							<div className="flex min-w-0 flex-col">
+								<span className="truncate text-[12.5px] text-(--text-primary)">
+									{model.vendor ? <span className="text-(--text-tertiary)">{model.vendor}: </span> : null}
+									{model.name}
+								</span>
+								<span className="truncate font-mono text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+							</div>
+							<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
+							<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
+							<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline" title="US dollars per million tokens in and out">
+								{model.price ? `${dollars(model.price.input)} / ${dollars(model.price.output)}` : '—'}
+							</span>
+							<span className="in-num hidden text-right text-[11px] text-(--text-secondary) sm:inline">{tokens(model.tokens)}</span>
+							<div className="flex w-[124px] justify-end">
+								{model.id === current ? (
+									<Status tone="accent">Default</Status>
+								) : (
+									<Btn
+										size="xs"
+										variant="ghost"
+										disabled={!settings.data || makeDefault.isPending}
+										onClick={() => makeDefault.mutate(model.id)}
+										title="New tasks and automations start on this model"
+									>
+										Use for new tasks
+									</Btn>
+								)}
+							</div>
+						</li>
+					))}
+				</ul>
+			) : (
+				<p className="m-0 text-[12px] text-(--text-tertiary)">No models match “{query}”.</p>
+			)}
+			{ranked.length > GATEWAY_PAGE_SIZE ? (
+				<nav aria-label="Model pages" className="flex items-center justify-between gap-3">
+					<span className="in-num text-[11px] text-(--text-tertiary)">
+						{at * GATEWAY_PAGE_SIZE + 1}–{at * GATEWAY_PAGE_SIZE + shown.length} of {ranked.length}
+					</span>
+					<span className="flex items-center gap-2">
+						<Btn size="xs" variant="ghost" icon={ChevronLeft} disabled={at === 0} onClick={() => setPage(at - 1)}>
+							Previous
+						</Btn>
+						<span className="in-num text-[11px] text-(--text-secondary)">
+							Page {at + 1} of {pages}
+						</span>
+						<Btn size="xs" variant="ghost" disabled={at >= pages - 1} onClick={() => setPage(at + 1)}>
+							Next
+							<Icon icon={ChevronRight} size={12} />
+						</Btn>
+					</span>
+				</nav>
+			) : null}
+			<SaveState pending={makeDefault.isPending} success={false} error={makeDefault.error} />
+		</CardSection>
+	);
+}
+
+/**
+ * OpenRouter: no plan, but a key, pasted here or set on the server. Its
+ * models bill per token and count toward the spending caps at their price.
+ */
+function GatewayPlan({ subscription }: { subscription: Subscription }) {
+	const saved = useSaved();
+	const [confirming, setConfirming] = useState(false);
+	const [replacing, setReplacing] = useState(false);
+	const refresh = useMutation({ mutationFn: () => api.refreshSubscriptionModels(subscription.id), onSuccess: saved });
+	const disconnect = useMutation({ mutationFn: () => api.disconnectSubscription(subscription.id), onSuccess: saved });
+	const connected = subscription.state === 'connected';
+	const pasted = subscription.keySource === 'settings';
+	const fromServer = subscription.keySource === 'environment';
+	const envVar = subscription.envVar ?? 'OPENROUTER_API_KEY';
+	const { enabled } = subscription.options;
+	return (
+		<Card
+			icon={KeyRound}
+			title={subscription.name}
+			sub="models billed per token"
+			label={subscription.name}
+			status={
+				<Status tone={STATUS[subscription.state].tone} pulse={connected}>
+					{STATUS[subscription.state].label}
+				</Status>
+			}
+		>
+			<CardSection ruled={false} className="pt-0">
+				<Well grid className="flex items-center justify-center px-4 py-6">
+					<PlanLinkArt linked={connected} plan={subscription.name} noun="account" className="w-full max-w-[440px]" />
+				</Well>
+			</CardSection>
+			{connected ? (
+				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} for your key`}>
+					Hundreds of models from every major lab, billed to your OpenRouter account per token. Their names start with{' '}
+					<InlineCode>{subscription.gateway}/</InlineCode>, and their calls count toward the spending caps at OpenRouter's price.
+				</Lead>
+			) : (
+				<Lead title={`Connect ${subscription.name}`}>
+					OpenRouter serves hundreds of models from every major lab through one key, billed per token. Anton lists the models your key may use, and
+					the agents, the decision model and the computer's eyes call them with it.
+				</Lead>
+			)}
+			{connected ? (
+				<>
+					<SpecGrid
+						items={[
+							{
+								label: 'Key',
+								value: `${subscription.keyHint ? `…${subscription.keyHint}` : '—'}${fromServer ? ` · ${envVar}` : ''}`,
+								title: fromServer ? `From ${envVar} on the server` : 'Pasted in Settings',
+							},
+							{ label: 'Connected', value: pasted && subscription.connectedAt ? day(subscription.connectedAt) : fromServer ? 'From the server' : '—' },
+							{ label: 'Models', value: enabled ? `${subscription.models.length} in the picker` : 'Switched off', tone: enabled ? undefined : 'warning' },
+							{ label: 'This month', value: `${tokens(subscription.monthTokens)} tokens`, tone: 'accent' },
+							{ label: 'Counted as', value: 'OpenRouter prices' },
+						]}
+					/>
+					{subscription.windows?.length ? <Windows windows={subscription.windows} label="Limits and credits" /> : null}
+					{fromServer && !replacing ? (
+						<CardSection label="Key">
+							<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+								Using <InlineCode>{envVar}</InlineCode> from the server's environment. A key pasted here takes its place, and the server's key comes back
+								if you disconnect it.
+							</p>
+							<div>
+								<Btn size="sm" variant="ghost" icon={KeyRound} onClick={() => setReplacing(true)}>
+									Paste a key instead
+								</Btn>
+							</div>
+						</CardSection>
+					) : null}
+					{fromServer && replacing ? (
+						<KeyForm subscription={subscription} howTo="Make a key on OpenRouter's keys page and paste it here." placeholder="sk-or-v1-…" />
+					) : null}
+					<GatewayModels subscription={subscription} />
+					<PlanSettings subscription={subscription} error={refresh.error ?? disconnect.error} pricedAs={null} />
+				</>
+			) : (
+				<KeyForm subscription={subscription} howTo="Make a key on OpenRouter's keys page and paste it here." placeholder="sk-or-v1-…" />
+			)}
+			<CardFooter caption={subscription.modelsAt ? `Models checked ${age(subscription.modelsAt)} ago` : undefined}>
+				{connected ? (
+					<>
+						<Btn size="sm" variant="ghost" icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+							{refresh.isPending ? 'Checking…' : 'Check again'}
+						</Btn>
+						{pasted ? (
+							<Btn
+								size="sm"
+								variant={confirming ? 'danger' : 'dangerGhost'}
+								disabled={disconnect.isPending}
+								onClick={() => (confirming ? disconnect.mutate() : setConfirming(true))}
+								onBlur={() => setConfirming(false)}
+							>
+								{confirming ? 'Click again to disconnect' : 'Disconnect'}
+							</Btn>
+						) : null}
+					</>
+				) : null}
+			</CardFooter>
+		</Card>
+	);
+}
+
 /** The tab for one plan: its vendor's logo, its name and whether it is connected. */
 function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; on: boolean; onSelect: () => void }) {
 	const logo = logoFor({ id: `${subscription.gateway}/` });
@@ -740,7 +962,7 @@ export function SubscriptionsPage() {
 		<>
 			<PageHeading title="Subscriptions">
 				Run tasks on a plan you already pay for instead of paying per token. A connected plan gets its own tab in the model picker, its models are
-				marked PLAN, and their calls count against the plan's own limits.
+				marked PLAN, and their calls count against the plan's own limits. OpenRouter's tab takes your key for the models it bills per token.
 			</PageHeading>
 			{view.isPending ? (
 				<Spinner size={12} />
@@ -758,6 +980,8 @@ export function SubscriptionsPage() {
 								<ClaudePlan key={current.id} subscription={current} />
 							) : current.kind === 'key' ? (
 								<KeyPlan key={current.id} subscription={current} />
+							) : current.kind === 'gateway' ? (
+								<GatewayPlan key={current.id} subscription={current} />
 							) : (
 								<Plan key={current.id} subscription={current} />
 							)}

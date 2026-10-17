@@ -11,12 +11,12 @@ import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
-import { gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { modelFor } from '../services/sessions.ts';
 import { machineFor } from '../services/workspace.ts';
 
-setProvider(liveOpenRouterProvider(loadedModels));
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));

@@ -481,3 +481,90 @@ describe('Plans used with a key', () => {
 		expect(logoFor({ id: 'opencode-go/glm-5.1' })).toBeTruthy();
 	});
 });
+
+describe('OpenRouter', () => {
+	const routed = (index: number, tokens = 0) => ({
+		...planModel(`openrouter/lab/model-${index}`, `Model ${index}`, tokens),
+		vendor: 'Lab',
+		price: { input: 1, output: 4 },
+	});
+	const openrouter = plan({
+		id: 'openrouter',
+		name: 'OpenRouter',
+		kind: 'gateway',
+		gateway: 'openrouter',
+		keyPage: 'https://openrouter.ai/settings/keys',
+		options: { enabled: true, countAtApiPrices: true },
+		keyHint: null,
+		keySource: null,
+		envVar: 'OPENROUTER_API_KEY',
+		windows: null,
+	});
+	const connected = {
+		...openrouter,
+		state: 'connected' as const,
+		connectedAt: '2026-10-16T17:00:00Z',
+		keyHint: 'ab12',
+		keySource: 'settings' as const,
+		// 45 models, the 30th used most this month.
+		models: Array.from({ length: 45 }, (_, index) => routed(index + 1, index === 29 ? 5_000 : 0)),
+		windows: [{ label: 'Credits', usedPercent: 25, resetsAt: null, limited: false }],
+	};
+
+	it('takes a key, then lists its models a page at a time with a search', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [openrouter] });
+		api.connectSubscriptionKey.mockResolvedValue(connected);
+		page();
+		expect(await screen.findByText('Connect OpenRouter')).toBeTruthy();
+		expect(screen.getByRole('link', { name: /Open the key page/ }).getAttribute('href')).toBe('https://openrouter.ai/settings/keys');
+		fireEvent.change(screen.getByLabelText('OpenRouter key'), { target: { value: 'sk-or-v1-ab12' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		await waitFor(() => expect(api.connectSubscriptionKey).toHaveBeenCalledWith('openrouter', 'sk-or-v1-ab12'));
+		expect(await screen.findByText('45 models for your key')).toBeTruthy();
+		expect(screen.getByText('…ab12', { selector: 'dd' })).toBeTruthy();
+		expect(within(screen.getByRole('list', { name: 'Limits and credits' })).getAllByRole('listitem')[0].textContent).toBe('Credits25% used');
+		expect(screen.queryByRole('switch', { name: 'Count toward the spending caps' })).toBeNull();
+
+		const rows = () => within(screen.getByRole('list', { name: 'OpenRouter models' })).getAllByRole('listitem');
+		expect(rows()).toHaveLength(20);
+		expect(rows()[0].textContent).toContain('Model 30');
+		expect(rows()[0].textContent).toContain('$1.00 / $4.00');
+		expect(screen.getByText('Page 1 of 3')).toBeTruthy();
+		expect(screen.getByText('1–20 of 45')).toBeTruthy();
+		expect((screen.getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(true);
+		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+		expect(screen.getByText('41–45 of 45')).toBeTruthy();
+		expect(rows()).toHaveLength(5);
+		expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true);
+
+		fireEvent.change(screen.getByLabelText('Search OpenRouter models'), { target: { value: 'model-4' } });
+		expect(rows().map((row) => row.querySelector('.font-mono')?.textContent)).toEqual([
+			'lab/model-4',
+			'lab/model-40',
+			'lab/model-41',
+			'lab/model-42',
+			'lab/model-43',
+			'lab/model-44',
+			'lab/model-45',
+		]);
+		expect(screen.queryByRole('navigation', { name: 'Model pages' })).toBeNull();
+		expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+	});
+
+	it('says when the key is the server’s own, and offers to paste one instead', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [{ ...connected, keySource: 'environment', connectedAt: null, models: [routed(1)] }] });
+		page();
+		expect(await screen.findByText('1 model for your key')).toBeTruthy();
+		expect(screen.getByText('…ab12 · OPENROUTER_API_KEY', { selector: 'dd' })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+		expect(screen.queryByLabelText('OpenRouter key')).toBeNull();
+		fireEvent.click(screen.getByRole('button', { name: 'Paste a key instead' }));
+		expect(screen.getByLabelText('OpenRouter key')).toBeTruthy();
+	});
+
+	it('is not a plan in the model picker', () => {
+		const model = { ...planModel('openrouter/lab/model', 'Model'), vendor: 'Lab', description: '', createdAt: 0, maxOutput: null, price: { input: 1, output: 4, cacheRead: 1, cacheWrite: 1 } };
+		expect(sourcesOf([model]).map((source) => [source.name, source.plan])).toEqual([['OpenRouter', false]]);
+	});
+});
