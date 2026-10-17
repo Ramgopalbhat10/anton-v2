@@ -141,6 +141,8 @@ export const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS mail_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, connector TEXT NOT NULL, draft_id TEXT NOT NULL, draft_json TEXT NOT NULL, digest TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT, sent_id TEXT)`,
 		`CREATE INDEX IF NOT EXISTS mail_approvals_session ON mail_approvals (session_id)`,
 	],
+	// 31: an MCP server's sign-in (OAuth): its registered client, where it signs in, and its tokens, kept apart from the server's view.
+	[`ALTER TABLE mcp_servers ADD COLUMN oauth_json TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

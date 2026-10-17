@@ -82,6 +82,7 @@ import { attachToProject, attachToTask } from './services/attachments.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
 import { decideSend, mailApprovals } from './services/mail.ts';
 import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
+import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -488,6 +489,31 @@ app.patch('/api/mcp-servers/:name', async (c) => {
 });
 app.delete('/api/mcp-servers/:name', async (c) => c.json({ mcpServers: await removeMcpServer(c.req.param('name')) }));
 app.get('/api/mcp-servers/:name/tools', async (c) => c.json({ tools: await mcpServerTools(c.req.param('name')) }));
+app.post('/api/mcp-servers/:name/sign-in', async (c) => {
+	const { origin, client } = await body(
+		c,
+		v.object({
+			origin: v.pipe(v.string(), v.maxLength(300)),
+			client: v.optional(v.nullable(v.object({ clientId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), clientSecret: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2000)))) }))),
+		}),
+	);
+	const { url } = await beginMcpSignIn(c.req.param('name'), origin, client);
+	return c.json({ url, mcpServers: await mcpServersView() });
+});
+app.delete('/api/mcp-servers/:name/sign-in', async (c) => {
+	await signOutOfMcpServer(c.req.param('name'));
+	return c.json({ mcpServers: await mcpServersView() });
+});
+// A server's sign-in sends the browser back here; it goes on to Settings › Connectors, which says how it went.
+app.get('/api/mcp-servers/callback', async (c) => {
+	const back = new URLSearchParams();
+	try {
+		back.set('connected', await finishMcpSignIn(new URL(c.req.url).searchParams));
+	} catch (error) {
+		back.set('problem', error instanceof Error ? error.message : String(error));
+	}
+	return c.redirect(`/settings/connectors?${back}`);
+});
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));

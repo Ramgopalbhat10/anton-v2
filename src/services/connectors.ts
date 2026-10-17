@@ -107,7 +107,7 @@ function endAttempt(id: string) {
 }
 
 /** Anton's address as the browser reaches it, which is where Google must send it back; only its origin is kept. */
-function originOf(origin: string): string {
+export function appOrigin(origin: string): string {
 	if (!URL.canParse(origin)) throw new InvalidInputError('Send the page’s origin, such as https://anton.example.com');
 	const url = new URL(origin);
 	if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new InvalidInputError('Anton’s address must be http or https');
@@ -115,7 +115,7 @@ function originOf(origin: string): string {
 }
 
 /** The address to add to the OAuth client in Google Cloud, for Anton at `origin`. */
-export const redirectUriFor = (account: string, origin: string) => `${originOf(origin)}${CALLBACK_PATH(account)}`;
+export const redirectUriFor = (account: string, origin: string) => `${appOrigin(origin)}${CALLBACK_PATH(account)}`;
 
 /** Starts connecting a mailbox: the address of the vendor's consent page, which comes back to Anton's callback. */
 export async function beginConnect(mailboxId: string, origin: string, access: MailAccess): Promise<{ url: string }> {

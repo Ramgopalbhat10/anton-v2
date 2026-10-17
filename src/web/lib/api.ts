@@ -203,7 +203,9 @@ export type CheckpointSummary = { at: string; files: number; added: number | nul
  * An MCP server every task gets while it is on; its token is never sent back, only whether it has one.
  * `codeMode: false` keeps the server's tools in the agent's tool list rather than only in run_script.
  */
-export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; codeMode?: boolean; enabled: boolean; addedAt: string };
+/** How a server's OAuth sign-in stands; `clientId` is a client you pasted for a server that lets no app register itself. */
+export type McpSignIn = { state: 'signed-in' | 'needed' | 'none'; since: string | null; problem: string | null; clientId: string | null; pastedClient: boolean };
+export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; signIn: McpSignIn; codeMode?: boolean; enabled: boolean; addedAt: string };
 /** A server as saved: a token left null keeps the stored one, and an empty one removes it. */
 export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null };
 
@@ -632,6 +634,10 @@ export const api = {
 		json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 	removeMcpServer: (name: string) => json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 	mcpServerTools: (name: string) => json<{ tools: Array<{ name: string; description?: string }> }>(`/api/mcp-servers/${encodeURIComponent(name)}/tools`),
+	/** Starts a server's sign-in: the address to send the browser to, or null when it signed in without one. */
+	signInMcpServer: (name: string, client?: { clientId: string; clientSecret: string | null } | null) =>
+		post<{ url: string | null; mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}/sign-in`, { origin: window.location.origin, client: client ?? null }),
+	signOutMcpServer: (name: string) => json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}/sign-in`, { method: 'DELETE' }),
 	mailApprovals: (sessionId: string) => json<{ approvals: MailApproval[] }>(`/api/sessions/${sessionId}/mail`),
 	decideMail: (sessionId: string, approval: string, send: boolean) => post<MailApproval>(`/api/sessions/${sessionId}/mail/${approval}`, { send }),
 	profile: () => json<{ name: string | null }>('/api/profile'),

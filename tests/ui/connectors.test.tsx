@@ -17,6 +17,8 @@ const { api } = vi.hoisted(() => ({
 		setMcpServerEnabled: vi.fn(),
 		removeMcpServer: vi.fn(),
 		mcpServerTools: vi.fn(),
+		signInMcpServer: vi.fn(),
+		signOutMcpServer: vi.fn(),
 		mailApprovals: vi.fn(),
 		decideMail: vi.fn(),
 	},
@@ -49,7 +51,9 @@ const gmail = (patch: Partial<ConnectorsView['mailboxes'][number]> = {}): Connec
 	access: null,
 	...patch,
 });
-const tracker = { name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, enabled: true, addedAt: '2026-10-17T00:00:00Z' };
+const NO_SIGN_IN = { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } as const;
+const tracker = { name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, signIn: NO_SIGN_IN, enabled: true, addedAt: '2026-10-17T00:00:00Z' };
+const linear = { ...tracker, name: 'linear', url: 'https://mcp.linear.app/mcp', hasAuth: false };
 
 function open(view: ConnectorsView) {
 	api.connectors.mockResolvedValue(view);
@@ -133,10 +137,50 @@ describe('Settings › Connectors', () => {
 	});
 
 	it('draws each server as the product its address belongs to, else as an MCP server', async () => {
-		const linear = { ...tracker, name: 'linear', url: 'https://mcp.linear.app/mcp' };
 		open({ accounts: [], mailboxes: [], mcpServers: [linear, tracker] });
 		expect(await screen.findByRole('img', { name: 'Linear' })).toBeTruthy();
 		expect(screen.getByRole('img', { name: 'MCP server' })).toBeTruthy();
+	});
+});
+
+describe('Signing in to an MCP server', () => {
+	it("sends you to the server's sign-in from its row", async () => {
+		api.signInMcpServer.mockResolvedValue({ url: 'https://linear.app/oauth/authorize?x=1', mcpServers: [linear] });
+		const assign = vi.fn();
+		vi.stubGlobal('location', { ...window.location, assign, origin: window.location.origin });
+		open({ accounts: [], mailboxes: [], mcpServers: [linear] });
+		fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+		await waitFor(() => expect(api.signInMcpServer).toHaveBeenCalledWith('linear', undefined));
+		await waitFor(() => expect(assign).toHaveBeenCalledWith('https://linear.app/oauth/authorize?x=1'));
+		vi.unstubAllGlobals();
+	});
+
+	it('says when a sign-in needs you again, and shows a signed-in one as such', async () => {
+		const refused = { ...linear, signIn: { ...NO_SIGN_IN, state: 'needed' as const, problem: 'The server no longer accepts the sign-in. Sign in again.' } };
+		const notion = { ...linear, name: 'notion', url: 'https://mcp.notion.com/mcp', signIn: { ...NO_SIGN_IN, state: 'signed-in' as const, since: '2026-10-17T08:00:00Z' } };
+		open({ accounts: [], mailboxes: [], mcpServers: [refused, notion] });
+		expect(await screen.findByText('The server no longer accepts the sign-in. Sign in again.')).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Sign in again' })).toBeTruthy();
+		expect(screen.getByText('signed in · all tools · through code mode')).toBeTruthy();
+	});
+
+	it('takes an OAuth app of your own for a server that lets no app register itself', async () => {
+		api.signInMcpServer.mockRejectedValueOnce(new Error("This server doesn't let apps register themselves. Create an OAuth app in the service's settings with the redirect URI shown here, then paste its client id."));
+		api.signInMcpServer.mockResolvedValueOnce({ url: null, mcpServers: [linear] });
+		open({ accounts: [], mailboxes: [], mcpServers: [linear] });
+		fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+		expect(await screen.findByDisplayValue(`${window.location.origin}/api/mcp-servers/callback`)).toBeTruthy();
+		fireEvent.change(screen.getByLabelText('OAuth client id'), { target: { value: 'my-app' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Sign in with this app' }));
+		await waitFor(() => expect(api.signInMcpServer).toHaveBeenLastCalledWith('linear', { clientId: 'my-app', clientSecret: null }));
+	});
+
+	it('fills in a popular server with a click', async () => {
+		open({ accounts: [], mailboxes: [], mcpServers: [] });
+		fireEvent.click(await screen.findByRole('button', { name: 'Add a server' }));
+		fireEvent.click(await screen.findByRole('button', { name: /Notion/ }));
+		expect((screen.getByLabelText('Server name') as HTMLInputElement).value).toBe('notion');
+		expect((screen.getByLabelText('Server URL') as HTMLInputElement).value).toBe('https://mcp.notion.com/mcp');
 	});
 });
 

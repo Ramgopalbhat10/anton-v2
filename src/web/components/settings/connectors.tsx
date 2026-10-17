@@ -291,6 +291,31 @@ function toInput(draft: Draft, editing: McpServer | null): McpServerInput {
 	};
 }
 
+/** Remote MCP servers that sign in with OAuth, to add with a click; Sign in on the row does the rest. */
+const POPULAR = [
+	{ name: 'linear', url: 'https://mcp.linear.app/mcp' },
+	{ name: 'notion', url: 'https://mcp.notion.com/mcp' },
+	{ name: 'atlassian', url: 'https://mcp.atlassian.com/v1/mcp' },
+	{ name: 'sentry', url: 'https://mcp.sentry.dev/mcp' },
+	{ name: 'stripe', url: 'https://mcp.stripe.com' },
+	{ name: 'vercel', url: 'https://mcp.vercel.com' },
+	{ name: 'supabase', url: 'https://mcp.supabase.com/mcp' },
+];
+
+function PopularServer({ name, url, onPick }: { name: string; url: string; onPick: () => void }) {
+	const mark = useServerMark(url);
+	return (
+		<button
+			type="button"
+			onClick={onPick}
+			className="inline-flex h-7 items-center gap-1.5 rounded-full border border-(--border-subtle) pr-2.5 pl-1 text-[12px] text-(--text-secondary) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+		>
+			<MarkTile mark={mark} size={20} className="rounded-full" />
+			{mark === MCP ? name : mark.title}
+		</button>
+	);
+}
+
 function ServerForm({ editing, onDone }: { editing: McpServer | null; onDone: () => void }) {
 	const [draft, setDraft] = useState(() => toDraft(editing ?? undefined));
 	const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
@@ -303,6 +328,13 @@ function ServerForm({ editing, onDone }: { editing: McpServer | null; onDone: ()
 				save.mutate(undefined, { onSuccess: onDone });
 			}}
 		>
+			{editing ? null : (
+				<div className="flex flex-wrap items-center gap-1.5" aria-label="Popular servers">
+					{POPULAR.map((server) => (
+						<PopularServer key={server.name} {...server} onPick={() => update({ name: server.name, url: server.url })} />
+					))}
+				</div>
+			)}
 			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
 				<input value={draft.name} readOnly={Boolean(editing)} onChange={(event) => update({ name: event.target.value })} placeholder="name" aria-label="Server name" className={cn(FIELD, 'font-mono read-only:text-(--text-secondary)')} />
 				<input value={draft.url} onChange={(event) => update({ url: event.target.value })} placeholder="https://mcp.example.com/mcp" aria-label="Server URL" className={cn(FIELD, 'font-mono')} />
@@ -311,7 +343,7 @@ function ServerForm({ editing, onDone }: { editing: McpServer | null; onDone: ()
 					autoComplete="off"
 					value={draft.token}
 					onChange={(event) => update({ token: event.target.value })}
-					placeholder={editing?.hasAuth ? 'Token saved. Type to replace' : 'Bearer token (optional)'}
+					placeholder={editing?.hasAuth ? 'Token saved. Type to replace' : 'Token, if it takes one'}
 					aria-label="Token"
 					className={cn(FIELD, 'font-mono')}
 				/>
@@ -319,6 +351,7 @@ function ServerForm({ editing, onDone }: { editing: McpServer | null; onDone: ()
 			</div>
 			<div className="flex flex-wrap items-center gap-3">
 				<Switch checked={draft.codeMode} onChange={(codeMode) => update({ codeMode })} label={<span className="text-[12px] text-(--text-secondary)">Through code mode</span>} />
+				{editing && editing.signIn.state !== 'none' ? <SignOut name={editing.name} /> : null}
 				<span className="flex-1" />
 				<ErrorLine error={save.error} />
 				<Btn size="sm" variant="ghost" onClick={onDone}>
@@ -350,13 +383,79 @@ function ServerTools({ name }: { name: string }) {
 	);
 }
 
+function SignOut({ name }: { name: string }) {
+	const signOut = useConnectorMutation(() => api.signOutMcpServer(name));
+	return (
+		<Btn size="sm" variant="ghost" disabled={signOut.isPending} onClick={() => signOut.mutate(undefined)}>
+			{signOut.isPending ? 'Signing out…' : 'Sign out'}
+		</Btn>
+	);
+}
+
+/** Sends the browser to the server's sign-in; the server sends it back to Settings › Connectors. */
+function useSignIn(server: McpServer) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (client?: { clientId: string; clientSecret: string | null }) => api.signInMcpServer(server.name, client),
+		onSuccess: ({ url, mcpServers }) => {
+			if (url) window.location.assign(url);
+			else queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? { ...current, mcpServers } : current));
+		},
+	});
+}
+
+/** For a server that lets no app register itself: an OAuth app you made in the service's settings, with Anton's redirect URI. */
+function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<typeof useSignIn> }) {
+	const [clientId, setClientId] = useState(server.signIn.clientId ?? '');
+	const [secret, setSecret] = useState('');
+	return (
+		<form
+			className="flex flex-col gap-2 rounded-[10px] border border-(--border-subtle) px-3 py-2.5"
+			onSubmit={(event) => {
+				event.preventDefault();
+				signIn.mutate({ clientId: clientId.trim(), clientSecret: secret || null });
+			}}
+		>
+			<p className="m-0 text-[12px] leading-[18px] text-(--text-tertiary)">
+				In the service's developer settings, create an OAuth app with this redirect URI, then paste its client id, and its secret if it has one.
+			</p>
+			<CopyField value={`${window.location.origin}/api/mcp-servers/callback`} label="Redirect URI" />
+			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+				<input value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Client id" aria-label="OAuth client id" className={cn(FIELD, 'font-mono')} />
+				<input
+					type="password"
+					autoComplete="off"
+					value={secret}
+					onChange={(event) => setSecret(event.target.value)}
+					placeholder={server.signIn.pastedClient ? 'Secret kept. Type to replace' : 'Client secret (if it has one)'}
+					aria-label="OAuth client secret"
+					className={cn(FIELD, 'font-mono')}
+				/>
+			</div>
+			<Btn type="submit" size="sm" variant="primary" icon={ExternalLink} className="self-end" disabled={signIn.isPending || !clientId.trim()}>
+				{signIn.isPending ? 'Opening…' : 'Sign in with this app'}
+			</Btn>
+		</form>
+	);
+}
+
 function ServerRow({ server, onEdit }: { server: McpServer; onEdit: () => void }) {
 	const [checking, setChecking] = useState(false);
 	const [confirming, setConfirming] = useState(false);
 	const toggle = useConnectorMutation((enabled: boolean) => api.setMcpServerEnabled(server.name, enabled));
 	const remove = useConnectorMutation(() => api.removeMcpServer(server.name));
+	const signIn = useSignIn(server);
 	const mark = useServerMark(server.url);
-	const facts = [server.hasAuth ? 'token' : null, server.tools.length ? `${server.tools.length} tools allowed` : 'all tools', server.codeMode === false ? 'direct' : 'through code mode'].filter(Boolean);
+	const signedIn = server.signIn.state === 'signed-in';
+	const needsSignIn = server.signIn.state === 'needed';
+	// A server with a pasted token needs no sign-in; one without may, and saying so is cheap.
+	const offerSignIn = !signedIn && !server.hasAuth;
+	const noRegistration = /register themselves/.test(signIn.error?.message ?? '');
+	const facts = [
+		signedIn ? 'signed in' : server.hasAuth ? 'token' : null,
+		server.tools.length ? `${server.tools.length} tools allowed` : 'all tools',
+		server.codeMode === false ? 'direct' : 'through code mode',
+	].filter(Boolean);
 	return (
 		<div className="flex flex-col gap-2 border-t border-(--border-subtle) py-2.5 first:border-t-0 first:pt-1">
 			<div className="flex min-w-0 items-center gap-3">
@@ -366,6 +465,11 @@ function ServerRow({ server, onEdit }: { server: McpServer; onEdit: () => void }
 					<div className="truncate font-mono text-[11.5px] text-(--text-tertiary)">{server.url}</div>
 					<div className="text-[11px] text-(--text-disabled)">{facts.join(' · ')}</div>
 				</div>
+				{offerSignIn ? (
+					<Btn size="sm" variant={needsSignIn ? 'primary' : 'secondary'} icon={ExternalLink} disabled={signIn.isPending} onClick={() => signIn.mutate(undefined)}>
+						{signIn.isPending ? 'Opening…' : needsSignIn ? 'Sign in again' : 'Sign in'}
+					</Btn>
+				) : null}
 				<Btn size="sm" variant="ghost" onClick={() => setChecking((open) => !open)}>
 					{checking ? 'Hide tools' : 'Tools'}
 				</Btn>
@@ -382,12 +486,14 @@ function ServerRow({ server, onEdit }: { server: McpServer; onEdit: () => void }
 				/>
 				<Switch checked={server.enabled} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Use {server.name}</span>} />
 			</div>
+			{needsSignIn ? <span className="text-[12px] text-(--danger-text)">{server.signIn.problem}</span> : null}
 			{checking ? (
 				<div className="rounded-[10px] border border-(--border-subtle) bg-(--well-bg) px-3 py-2">
 					<ServerTools name={server.name} />
 				</div>
 			) : null}
-			<ErrorLine error={toggle.error ?? remove.error} />
+			<ErrorLine error={toggle.error ?? remove.error ?? signIn.error} />
+			{offerSignIn && (server.signIn.pastedClient || noRegistration) ? <OwnClient server={server} signIn={signIn} /> : null}
 		</div>
 	);
 }
@@ -400,7 +506,7 @@ function McpServers({ servers }: { servers: McpServer[] }) {
 			title="MCP servers"
 			mark={<MarkTile mark={MCP} />}
 			aside={servers.length ? <Status tone={servers.some((server) => server.enabled) ? 'accent' : 'neutral'}>{servers.filter((server) => server.enabled).length} on</Status> : undefined}
-			help="Remote MCP servers every task's agent can call, a repository's and a chat's alike, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
+			help="Remote MCP servers every task's agent can call, a repository's and a chat's alike, over HTTPS. Sign in connects one that uses OAuth, as Linear and Notion do; Anton keeps and renews the sign-in. A pasted token is sent as a bearer header instead. Neither is shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
 		>
 			{servers.length ? (
 				<div className="flex flex-col">

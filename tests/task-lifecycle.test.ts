@@ -1432,7 +1432,7 @@ test('MCP server tokens are kept on save and never shown', async () => {
 	const saved = await addMcpServer({ name: 'docs', url: 'https://mcp.example.test', auth: 'secret-token', tools: [] });
 	assert.deepEqual(
 		saved.map(({ addedAt: _, ...server }) => server),
-		[{ name: 'docs', url: 'https://mcp.example.test', tools: [], enabled: true, hasAuth: true }],
+		[{ name: 'docs', url: 'https://mcp.example.test', tools: [], enabled: true, hasAuth: true, signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } }],
 	);
 	assert.ok(!JSON.stringify(await mcpServersView()).includes('secret-token'));
 	await assert.rejects(addMcpServer({ name: 'docs', url: 'https://other.example.test', tools: [] }), /already named docs/);

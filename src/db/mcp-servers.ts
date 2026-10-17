@@ -45,3 +45,15 @@ export async function deleteMcpServer(name: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM mcp_servers WHERE name = ?', args: [name] });
 }
+
+/** A server's sign-in, as `mcp-sign-in.ts` keeps it; never part of the server's view. */
+export async function getMcpSignIn(name: string): Promise<unknown> {
+	const db = await appDb();
+	const row = (await db.execute({ sql: 'SELECT oauth_json FROM mcp_servers WHERE name = ?', args: [name] })).rows[0];
+	return row?.oauth_json == null ? null : JSON.parse(String(row.oauth_json));
+}
+
+export async function setMcpSignIn(name: string, signIn: unknown): Promise<void> {
+	const db = await appDb();
+	await db.execute({ sql: 'UPDATE mcp_servers SET oauth_json = ? WHERE name = ?', args: [signIn == null ? null : JSON.stringify(signIn), name] });
+}

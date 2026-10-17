@@ -2,31 +2,50 @@ import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { InstalledMcpServer, McpServer } from '../core/types.ts';
 import { deleteMcpServer, getMcpServer, listMcpServers, saveMcpServer, setMcpServerEnabled } from '../db/mcp-servers.ts';
+import { logProblem } from './log.ts';
+import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, signInView } from './mcp-sign-in.ts';
 import { type McpTool, serverTools } from './mcp-tools.ts';
 
 /**
  * MCP servers added once in Settings › Connectors, for every task and thread,
- * as skills are: each can be turned off without removing it. Tokens stay
- * here and in the agent's connections, never in a view.
+ * as skills are: each can be turned off without removing it. A server takes
+ * a pasted token or signs in with OAuth (`mcp-sign-in.ts`); either way its
+ * token stays here and in the agent's connections, never in a view.
  */
 
 const MAX_SERVERS = 30;
 
-/** An MCP server as the browser sees it: whether it has a token, never the token. */
-export type McpServerView = Omit<InstalledMcpServer, 'auth'> & { hasAuth: boolean };
+/** An MCP server as the browser sees it: whether it has a token and how its sign-in stands, never a token. */
+export type McpServerView = Omit<InstalledMcpServer, 'auth'> & { hasAuth: boolean; signIn: McpSignInView };
 
-const present = ({ auth, ...server }: InstalledMcpServer): McpServerView => ({ ...server, hasAuth: Boolean(auth) });
+const present = async ({ auth, ...server }: InstalledMcpServer): Promise<McpServerView> => ({ ...server, hasAuth: Boolean(auth), signIn: await signInView(server.name) });
 
 /** What the browser sends: a token left out (or null) keeps the stored one, and an empty one removes it. */
 export type McpServerInput = Omit<McpServer, 'auth'> & { auth?: string | null };
 
 export async function mcpServersView(): Promise<McpServerView[]> {
-	return (await listMcpServers()).map(present);
+	return Promise.all((await listMcpServers()).map(present));
 }
 
-/** The servers every task's agent connects to now: the ones that are on. */
+/** The server as the agent connects to it: a signed-in server's token, renewed if it must be, in place of a pasted one. */
+async function connectable({ enabled: _, addedAt: __, ...server }: InstalledMcpServer): Promise<McpServer> {
+	const token = await mcpAccessToken(server.name, server.url);
+	return token ? { ...server, auth: token } : server;
+}
+
+/** The servers every task's agent connects to now: the ones that are on, leaving out any whose sign-in needs you. */
 export async function enabledMcpServers(): Promise<McpServer[]> {
-	return (await listMcpServers()).filter((server) => server.enabled).map(({ enabled: _, addedAt: __, ...server }) => server);
+	const servers = await Promise.all(
+		(await listMcpServers())
+			.filter((server) => server.enabled)
+			.map((server) =>
+				connectable(server).catch((error: unknown) => {
+					if (!(error instanceof McpSignInNeeded)) logProblem('warn', `MCP server ${server.name} was left out`, error);
+					return null;
+				}),
+			),
+	);
+	return servers.filter((server) => server !== null);
 }
 
 async function existing(name: string): Promise<InstalledMcpServer> {
@@ -48,9 +67,11 @@ export async function addMcpServer(input: McpServerInput): Promise<McpServerView
 /** Changes a server; its token stays only with the host it was given for, so pointing it at a new host never sends it there. */
 export async function updateMcpServer(name: string, input: Omit<McpServerInput, 'name'>): Promise<McpServerView[]> {
 	const current = await existing(name);
-	const kept = originOf(current.url) === originOf(input.url) ? current.auth : null;
-	const auth = input.auth === '' ? null : (input.auth ?? kept);
+	const sameHost = originOf(current.url) === originOf(input.url);
+	const auth = input.auth === '' ? null : (input.auth ?? (sameHost ? current.auth : null));
 	await saveMcpServer({ name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth });
+	// A sign-in is for the server it was made with; another address signs in afresh.
+	if (current.url !== input.url) await forgetMcpSignIn(name);
 	announce({ kind: 'connectors' });
 	return mcpServersView();
 }
@@ -69,8 +90,8 @@ export async function removeMcpServer(name: string): Promise<McpServerView[]> {
 	return mcpServersView();
 }
 
-/** The server's tools as the agent would see them, read now: a check that its address and token work. */
+/** The server's tools as the agent would see them, read now: a check that its address and sign-in work. */
 export async function mcpServerTools(name: string): Promise<Array<Pick<McpTool, 'name' | 'description'>>> {
-	const { enabled: _, addedAt: __, ...server } = await existing(name);
+	const server = await connectable(await existing(name));
 	return (await serverTools(server)).map((tool) => ({ name: tool.name, description: tool.description }));
 }
