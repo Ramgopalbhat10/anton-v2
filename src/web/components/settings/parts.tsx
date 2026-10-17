@@ -24,10 +24,12 @@ export function PageHeading({ title, children, actions }: { title: string; child
 /**
  * One titled block within a settings page, as a card: an icon tile and title,
  * what it decides, then its rows, and a footer for the save that applies them.
+ * A product's block shows its own mark in place of the icon.
  */
 export function Block({
 	title,
 	icon,
+	mark,
 	help,
 	children,
 	className,
@@ -36,6 +38,7 @@ export function Block({
 }: {
 	title: string;
 	icon?: LucideIcon;
+	mark?: ReactNode;
 	help?: ReactNode;
 	children?: ReactNode;
 	className?: string;
@@ -45,11 +48,7 @@ export function Block({
 	return (
 		<section className={cn('in-card', className)} aria-label={title}>
 			<header className="flex items-start gap-3 px-4 pt-3.5 pb-1">
-				{icon ? (
-					<span className="mt-px">
-						<IconTile icon={icon} />
-					</span>
-				) : null}
+				{mark || icon ? <span className="mt-px">{mark ?? (icon ? <IconTile icon={icon} /> : null)}</span> : null}
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex min-h-[26px] items-center gap-3">
 						<h2 className="m-0 min-w-0 flex-1 truncate text-[13px] leading-[18px] font-medium tracking-[-0.005em]">{title}</h2>

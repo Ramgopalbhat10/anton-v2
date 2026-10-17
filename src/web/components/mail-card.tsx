@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Mail, Send, X } from 'lucide-react';
+import { Check, Send, X } from 'lucide-react';
 import { memo, useContext } from 'react';
+import { GMAIL, MarkTile } from '@/components/brand-marks';
 import { ReplyActions, type ReplyPlace } from '@/components/reply-cards';
 import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type MailApproval } from '@/lib/api';
@@ -73,9 +74,7 @@ export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, 
 	return (
 		<section className="in-card overflow-hidden" aria-label="Email to send">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
-				<span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center rounded-[7px] border border-dashed border-(--accent-border) text-(--accent-text)">
-					<Icon icon={Mail} size={12} />
-				</span>
+				<MarkTile mark={GMAIL} size={22} className="mt-px rounded-[7px]" />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<h3 className="m-0 truncate text-[13px] leading-[20px] font-medium text-(--text-primary)">{approval.subject || '(no subject)'}</h3>
 					<span className="text-[11.5px] text-(--text-tertiary)">{pending ? 'The agent asks to send this from Gmail' : 'Email from Gmail'}</span>

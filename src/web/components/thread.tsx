@@ -4,6 +4,7 @@ import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, Corner
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
+import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
@@ -198,13 +199,24 @@ function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean)
 	return data?.scripts[toolCallId] ?? [];
 }
 
-/** Each call of a program on its own line: the tool, its input, and how long it took or that it failed. */
+/** Each call of a program on its own line: the tool (an MCP server's with the server's mark), its input, and how long it took or that it failed. */
 function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
+	const mcp = calls.some((call) => call.tool.startsWith('mcp__'));
+	const servers = useMcpServers(mcp);
+	const brands = useBrands(mcp);
 	return (
 		<ul className="flex min-w-0 flex-col gap-0.5 pt-1 pr-1 pl-6">
 			{calls.map((call, index) => (
 				<li key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] leading-[18px] text-(--text-tertiary)">
-					{call.state === 'running' ? <Spinner size={10} /> : <Icon icon={call.state === 'failed' ? CircleAlert : CornerDownRight} size={10} className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'} />}
+					{call.state === 'running' ? (
+						<Spinner size={10} />
+					) : (
+						<Icon
+							icon={call.state === 'failed' ? CircleAlert : (toolServerMark(call.tool, servers, brands)?.icon ?? CornerDownRight)}
+							size={10}
+							className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'}
+						/>
+					)}
 					<span className={cn('shrink-0', call.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{call.tool.replace(/^mcp__/, '').replace('__', ' · ')}</span>
 					<span className="min-w-0 flex-1 truncate" title={call.input}>
 						{call.input}
@@ -219,7 +231,13 @@ function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
 }
 
 const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
-	const { icon, body } = describeTool(part);
+	const described = describeTool(part);
+	const { body } = described;
+	// A server's tool given to the agent directly shows the server's mark.
+	const mcp = part.toolName.startsWith('mcp__');
+	const servers = useMcpServers(mcp);
+	const brands = useBrands(mcp);
+	const icon = (mcp ? toolServerMark(part.toolName, servers, brands)?.icon : null) ?? described.icon;
 	const failed = part.state === 'output-error';
 	const script = part.toolName === 'run_script';
 	const expandable = script || part.toolName === 'bash';

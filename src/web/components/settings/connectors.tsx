@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Check, Copy, ExternalLink, Mail, Plug, Plus, X } from 'lucide-react';
+import { Check, Copy, ExternalLink, Plus, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { GMAIL, GOOGLE, MarkTile, MCP, useServerMark } from '@/components/brand-marks';
 import { Status } from '@/components/instrument';
 import { Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer, type McpServerInput } from '@/lib/api';
@@ -175,7 +176,7 @@ function MailboxBlock({ mailbox, account }: { mailbox: ConnectorMailbox; account
 	return (
 		<Block
 			title={mailbox.name}
-			icon={Mail}
+			mark={<MarkTile mark={GMAIL} />}
 			aside={state}
 			help={
 				connected
@@ -233,7 +234,10 @@ function MailboxBlock({ mailbox, account }: { mailbox: ConnectorMailbox; account
 						</div>
 					) : null}
 					<SettingRow title="Signed in" help={account.connectedAt ? `Since ${new Date(account.connectedAt).toLocaleDateString()}` : undefined}>
-						<span className="font-mono text-[12px] text-(--text-secondary)">{account.email ?? 'Google account'}</span>
+						<span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-(--text-secondary)">
+							<Icon icon={GOOGLE.icon} size={13} />
+							{account.email ?? 'Google account'}
+						</span>
 					</SettingRow>
 					<SettingRow title={`Use ${mailbox.name} in tasks`} help="Off leaves the sign-in in place, but no task's agent gets the tools.">
 						<Switch checked={mailbox.options.enabled} disabled={options.isPending} onChange={(enabled) => set({ enabled })} label={<span className="sr-only">Use {mailbox.name}</span>} />
@@ -351,10 +355,12 @@ function ServerRow({ server, onEdit }: { server: McpServer; onEdit: () => void }
 	const [confirming, setConfirming] = useState(false);
 	const toggle = useConnectorMutation((enabled: boolean) => api.setMcpServerEnabled(server.name, enabled));
 	const remove = useConnectorMutation(() => api.removeMcpServer(server.name));
+	const mark = useServerMark(server.url);
 	const facts = [server.hasAuth ? 'token' : null, server.tools.length ? `${server.tools.length} tools allowed` : 'all tools', server.codeMode === false ? 'direct' : 'through code mode'].filter(Boolean);
 	return (
 		<div className="flex flex-col gap-2 border-t border-(--border-subtle) py-2.5 first:border-t-0 first:pt-1">
 			<div className="flex min-w-0 items-center gap-3">
+				<MarkTile mark={mark} size={32} label={mark.title} className={server.enabled ? undefined : 'opacity-50 grayscale'} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<div className={cn('font-mono text-[13px]', server.enabled ? 'text-(--text-primary)' : 'text-(--text-disabled)')}>{server.name}</div>
 					<div className="truncate font-mono text-[11.5px] text-(--text-tertiary)">{server.url}</div>
@@ -392,7 +398,7 @@ function McpServers({ servers }: { servers: McpServer[] }) {
 	return (
 		<Block
 			title="MCP servers"
-			icon={Plug}
+			mark={<MarkTile mark={MCP} />}
 			aside={servers.length ? <Status tone={servers.some((server) => server.enabled) ? 'accent' : 'neutral'}>{servers.filter((server) => server.enabled).length} on</Status> : undefined}
 			help="Remote MCP servers every task's agent can call, a repository's and a chat's alike, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
 		>

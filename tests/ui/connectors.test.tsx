@@ -26,6 +26,8 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 const { ConnectorsPage } = await import('@/components/settings/connectors');
 const { MailSendCard } = await import('@/components/mail-card');
 const { ReplyActions } = await import('@/components/reply-cards');
+const { GOOGLE, MCP, serverMark } = await import('@/components/brand-marks');
+const brands = await import('@/lib/brand-icons');
 
 const google = (patch: Partial<ConnectorsView['accounts'][number]> = {}): ConnectorsView['accounts'][number] => ({
 	id: 'google',
@@ -128,6 +130,36 @@ describe('Settings › Connectors', () => {
 		await waitFor(() =>
 			expect(api.addMcpServer).toHaveBeenCalledWith({ name: 'docs', url: 'https://docs.example.test/mcp', auth: '', tools: ['search', 'fetch'], codeMode: false }),
 		);
+	});
+
+	it('draws each server as the product its address belongs to, else as an MCP server', async () => {
+		const linear = { ...tracker, name: 'linear', url: 'https://mcp.linear.app/mcp' };
+		open({ accounts: [], mailboxes: [], mcpServers: [linear, tracker] });
+		expect(await screen.findByRole('img', { name: 'Linear' })).toBeTruthy();
+		expect(screen.getByRole('img', { name: 'MCP server' })).toBeTruthy();
+	});
+});
+
+describe('Product marks', () => {
+	it('match a server by its domain or any subdomain of it, and nothing else', () => {
+		expect(serverMark('https://mcp.notion.com/mcp', brands).title).toBe('Notion');
+		expect(serverMark('https://api.githubcopilot.com/mcp/', brands).title).toBe('GitHub');
+		expect(serverMark('https://bindings.mcp.cloudflare.com/sse', brands).title).toBe('Cloudflare');
+		expect(serverMark('https://gmail.googleapis.com/mcp', brands)).toBe(GOOGLE);
+		expect(serverMark('https://notlinear.app/mcp', brands)).toBe(MCP);
+		expect(serverMark('https://linear.app.evil.test/mcp', brands)).toBe(MCP);
+		expect(serverMark('not a url', brands)).toBe(MCP);
+		expect(serverMark('https://mcp.linear.app/mcp', undefined)).toBe(MCP);
+	});
+
+	it('keep every mark a product of its own, with a colour and a path', () => {
+		for (const [domain, id] of Object.entries(brands.BRAND_DOMAINS)) {
+			if (id === 'google') continue;
+			const brand = brands.BRANDS[id];
+			expect(brand, domain).toBeTruthy();
+			expect(brand.hex).toMatch(/^#[0-9A-F]{6}$/i);
+			expect(brand.path.length).toBeGreaterThan(10);
+		}
 	});
 });
 
