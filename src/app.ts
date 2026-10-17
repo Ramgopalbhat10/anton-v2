@@ -79,6 +79,10 @@ import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY,
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
 import { attachToProject, attachToTask } from './services/attachments.ts';
+import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
+import { decideSend, mailApprovals } from './services/mail.ts';
+import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
+import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
@@ -437,6 +441,80 @@ app.put('/api/subscriptions/:id/key', async (c) => {
 });
 app.post('/api/subscriptions/:id/models/refresh', async (c) => c.json(await refreshSubscriptionModels(c.req.param('id'))));
 
+// Connectors: MCP servers every task gets, and accounts such as Gmail signed in to on your own OAuth client; see services/connectors.ts.
+app.get('/api/connectors', async (c) => c.json({ ...(await connectorsView()), mcpServers: await mcpServersView() }));
+app.put('/api/connectors/accounts/:id/client', async (c) => {
+	const input = await body(
+		c,
+		v.object({ clientId: v.pipe(v.string(), v.trim(), v.maxLength(300)), clientSecret: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300)))) }),
+	);
+	return c.json(await setAccountClient(c.req.param('id'), input));
+});
+app.delete('/api/connectors/accounts/:id', async (c) => c.json(await disconnectAccount(c.req.param('id'))));
+app.post('/api/connectors/mailboxes/:id/connect', async (c) => {
+	const { origin, access } = await body(c, v.object({ origin: v.pipe(v.string(), v.maxLength(300)), access: v.picklist(['read', 'draft']) }));
+	return c.json(await beginConnect(c.req.param('id'), origin, access));
+});
+app.put('/api/connectors/mailboxes/:id', async (c) => {
+	const options = await body(c, v.object({ enabled: v.boolean(), draft: v.boolean(), send: v.boolean() }));
+	return c.json(await setMailboxOptions(c.req.param('id'), options));
+});
+// Google sends the browser back here; it goes on to Settings › Connectors, which says how it went.
+app.get('/api/connectors/:account/callback', async (c) => {
+	const query = new URL(c.req.url).search;
+	const back = new URLSearchParams();
+	try {
+		const { mailbox } = await finishConnect(c.req.param('account'), query);
+		back.set('connected', mailbox);
+	} catch (error) {
+		back.set('problem', error instanceof Error ? error.message : String(error));
+	}
+	return c.redirect(`/settings/connectors?${back}`);
+});
+const MCP_SERVER = v.object({
+	url: v.pipe(v.string(), v.trim(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
+	auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
+	tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
+	codeMode: v.optional(v.boolean()),
+});
+const SERVER_NAME = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _'));
+app.post('/api/mcp-servers', async (c) => {
+	const input = await body(c, v.object({ ...MCP_SERVER.entries, name: SERVER_NAME }));
+	return c.json({ mcpServers: await addMcpServer(input) });
+});
+app.put('/api/mcp-servers/:name', async (c) => c.json({ mcpServers: await updateMcpServer(c.req.param('name'), await body(c, MCP_SERVER)) }));
+app.patch('/api/mcp-servers/:name', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	return c.json({ mcpServers: await toggleMcpServer(c.req.param('name'), enabled) });
+});
+app.delete('/api/mcp-servers/:name', async (c) => c.json({ mcpServers: await removeMcpServer(c.req.param('name')) }));
+app.get('/api/mcp-servers/:name/tools', async (c) => c.json({ tools: await mcpServerTools(c.req.param('name')) }));
+app.post('/api/mcp-servers/:name/sign-in', async (c) => {
+	const { origin, client } = await body(
+		c,
+		v.object({
+			origin: v.pipe(v.string(), v.maxLength(300)),
+			client: v.optional(v.nullable(v.object({ clientId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), clientSecret: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2000)))) }))),
+		}),
+	);
+	const { url } = await beginMcpSignIn(c.req.param('name'), origin, client);
+	return c.json({ url, mcpServers: await mcpServersView() });
+});
+app.delete('/api/mcp-servers/:name/sign-in', async (c) => {
+	await signOutOfMcpServer(c.req.param('name'));
+	return c.json({ mcpServers: await mcpServersView() });
+});
+// A server's sign-in sends the browser back here; it goes on to Settings › Connectors, which says how it went.
+app.get('/api/mcp-servers/callback', async (c) => {
+	const back = new URLSearchParams();
+	try {
+		back.set('connected', await finishMcpSignIn(new URL(c.req.url).searchParams));
+	} catch (error) {
+		back.set('problem', error instanceof Error ? error.message : String(error));
+	}
+	return c.redirect(`/settings/connectors?${back}`);
+});
+
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
 app.get('/api/repos', async (c) => c.json({ repos: await addableRepos() }));
@@ -468,21 +546,6 @@ app.put('/api/projects/:id/settings', async (c) => {
 			fullVm: v.optional(v.boolean()),
 			followUps: v.optional(v.boolean()),
 			reviewOthers: v.optional(v.boolean()),
-			mcpServers: v.optional(
-				v.pipe(
-					v.array(
-						v.object({
-							name: v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _')),
-							url: v.pipe(v.string(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
-							auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
-							tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
-							codeMode: v.optional(v.boolean()),
-						}),
-					),
-					v.maxLength(10),
-					v.check((servers) => new Set(servers.map((server) => server.name)).size === servers.length, 'Each server needs its own name'),
-				),
-			),
 		}),
 	);
 	return c.json(await updateSettings(c.req.param('id'), change));
@@ -741,6 +804,16 @@ app.post('/api/sessions/:id/subagents/:run/stop', async (c) => {
 app.get('/api/sessions/:id/scripts', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ scripts: await scriptCalls(id) });
+});
+// Emails the agent asked to send; only your Send here sends one (services/mail.ts).
+app.get('/api/sessions/:id/mail', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ approvals: await mailApprovals(id) });
+});
+app.post('/api/sessions/:id/mail/:approval', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const { send } = await body(c, v.object({ send: v.boolean() }));
+	return c.json(await decideSend(id, c.req.param('approval'), send));
 });
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));

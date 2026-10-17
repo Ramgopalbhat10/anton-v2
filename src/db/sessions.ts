@@ -269,7 +269,7 @@ export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
 		[
-			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?', 'DELETE FROM mail_approvals WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
 			{ sql: 'INSERT OR REPLACE INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)', args: [id, new Date().toISOString()] },
 		],
 		'write',

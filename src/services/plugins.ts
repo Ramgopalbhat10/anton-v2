@@ -134,7 +134,7 @@ export async function installPlugin(input: PluginPick | { plugin: string }): Pro
 	const { files, sha } = await filesAt(source.repo, source.ref);
 	const plugin = await readPlugin(files, source.path, named, fallback);
 	if (plugin.skills.length === 0) {
-		const servers = plugin.mcpServers.length ? ` It only adds MCP servers (${plugin.mcpServers.join(', ')}); add them in a repository's MCP servers.` : '';
+		const servers = plugin.mcpServers.length ? ` It only adds MCP servers (${plugin.mcpServers.join(', ')}); add them in Settings › Connectors.` : '';
 		throw new InvalidInputError(`${plugin.name} has no skills Anton can use.${servers}${plugin.skipped.length ? ` ${plugin.skipped.join('; ')}` : ''}`);
 	}
 	return savePlugin({ id: idFor({ ...source, ref: null }, named), ...plugin, source, sha, marketplace, pick });

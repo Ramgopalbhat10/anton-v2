@@ -145,6 +145,7 @@ const { recordAgentEvent } = await import('../src/services/activity.ts');
 const { handleTerminalUpgrade } = await import('../src/services/terminal.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { addProject, updateSettings } = await import('../src/services/projects.ts');
+const { addMcpServer, enabledMcpServers, mcpServersView, removeMcpServer, toggleMcpServer, updateMcpServer } = await import('../src/services/mcp-servers.ts');
 const { getProject, setWarmImage } = await import('../src/db/projects.ts');
 const { previewsView } = await import('../src/services/previews.ts');
 const { browse, closeBrowser, takeScreenshot } = await import('../src/services/browser.ts');
@@ -1316,7 +1317,7 @@ test('run_script runs a program over the read-only repo and the decision model, 
 	}
 });
 
-test('with code mode on, a repo MCP server is reached only through run_script: listed a line per tool, searched, called, and kept connected', async () => {
+test('with code mode on, an MCP server is reached only through run_script: listed a line per tool, searched, called, and kept connected', async () => {
 	const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
 	const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
 	const { z } = await import('zod');
@@ -1358,15 +1359,8 @@ test('with code mode on, a repo MCP server is reached only through run_script: l
 	let sessionId = '';
 	try {
 		const project = await addProject('acme/tracker');
-		const stored = (await getProject(project.id))!;
-		await updateSettings(project.id, {
-			...stored,
-			env: {},
-			mcpServers: [
-				{ name: 'tracker', url, auth: 'tracker-token', tools: [] },
-				{ name: 'docs', url: `${url}?direct`, auth: null, tools: [], codeMode: false },
-			],
-		});
+		await addMcpServer({ name: 'tracker', url, auth: 'tracker-token', tools: [] });
+		await addMcpServer({ name: 'docs', url: `${url}?direct`, auth: null, tools: [], codeMode: false });
 		const session = await sessions.createSession({ projectId: project.id, title: 'Tracker' });
 		sessionId = session.id;
 		await primeAgent(session.id);
@@ -1417,28 +1411,46 @@ test('with code mode on, a repo MCP server is reached only through run_script: l
 		const [kept] = (await scriptCalls(session.id))['call-1'];
 		assert.equal(kept.tool, 'mcp__tracker__find_issues');
 		assert.ok(kept.input.startsWith('{"query":"xxx') && kept.input.length <= 160);
+
+		// Every task gets them, a chat with no repository too, until one is turned off.
+		const chat = await sessions.createSession({ title: 'Chat' });
+		await primeAgent(chat.id, { warm: false });
+		assert.ok(scriptServers(chat.id).some((server) => server.name === 'tracker'), 'a chat reaches the tracker too');
+		await toggleMcpServer('tracker', false);
+		await primeAgent(chat.id, { warm: false });
+		assert.ok(!scriptServers(chat.id).some((server) => server.name === 'tracker'), 'a server turned off is left out');
 	} finally {
 		if (sessionId) await forgetScriptCalls(sessionId);
+		await removeMcpServer('tracker').catch(() => undefined);
+		await removeMcpServer('docs').catch(() => undefined);
 		await resetMcpToolsForTests();
 		await new Promise((resolve) => http.close(resolve));
 	}
 });
 
 test('MCP server tokens are kept on save and never shown', async () => {
-	const project = await addProject('acme/mcp');
-	const stored = (await getProject(project.id))!;
-	const base = { ...stored, env: {} };
-	const saved = await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test', auth: 'secret-token', tools: [] }] });
-	assert.deepEqual(saved.mcpServers, [{ name: 'docs', url: 'https://mcp.example.test', tools: [], hasAuth: true }]);
-	assert.ok(!JSON.stringify(saved).includes('secret-token'));
+	const saved = await addMcpServer({ name: 'docs', url: 'https://mcp.example.test', auth: 'secret-token', tools: [] });
+	assert.deepEqual(
+		saved.map(({ addedAt: _, ...server }) => server),
+		[{ name: 'docs', url: 'https://mcp.example.test', tools: [], enabled: true, hasAuth: true, signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } }],
+	);
+	assert.ok(!JSON.stringify(await mcpServersView()).includes('secret-token'));
+	await assert.rejects(addMcpServer({ name: 'docs', url: 'https://other.example.test', tools: [] }), /already named docs/);
 
-	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: null, tools: ['search'] }] });
-	assert.equal((await getProject(project.id))!.mcpServers[0].auth, 'secret-token', 'a server saved without a token keeps its own');
-	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://elsewhere.example.test/v2', auth: null, tools: ['search'] }] });
-	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'a token never follows a server to a new host');
-	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: 'secret-token', tools: ['search'] }] });
-	await updateSettings(project.id, { ...base, mcpServers: [{ name: 'docs', url: 'https://mcp.example.test/v2', auth: '', tools: ['search'] }] });
-	assert.equal((await getProject(project.id))!.mcpServers[0].auth, null, 'an empty token removes it');
+	const stored = async () => (await enabledMcpServers()).find((server) => server.name === 'docs')!;
+	await updateMcpServer('docs', { url: 'https://mcp.example.test/v2', auth: null, tools: ['search'] });
+	assert.equal((await stored()).auth, 'secret-token', 'a server saved without a token keeps its own');
+	await updateMcpServer('docs', { url: 'https://elsewhere.example.test/v2', tools: ['search'] });
+	assert.equal((await stored()).auth, null, 'a token never follows a server to a new host');
+	await updateMcpServer('docs', { url: 'https://mcp.example.test/v2', auth: 'secret-token', tools: ['search'] });
+	await updateMcpServer('docs', { url: 'https://mcp.example.test/v2', auth: '', tools: ['search'] });
+	assert.equal((await stored()).auth, null, 'an empty token removes it');
+
+	await toggleMcpServer('docs', false);
+	assert.ok(!(await enabledMcpServers()).some((server) => server.name === 'docs'), 'a server turned off is not used');
+	assert.equal((await mcpServersView()).find((server) => server.name === 'docs')?.enabled, false, 'but stays added');
+	await removeMcpServer('docs');
+	assert.deepEqual(await mcpServersView(), []);
 });
 
 test('stopping a task stops its working agent', async () => {

@@ -124,7 +124,7 @@ function Facts({ preview }: { preview: PluginPreview }) {
 			</Card>
 			{preview.mcpServers.length ? (
 				<p className="m-0 rounded-[12px] border border-dashed border-(--border-default) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
-					Also declares MCP servers ({preview.mcpServers.join(', ')}). Anton does not run them; add one under a repository’s MCP servers to use it.
+					Also declares MCP servers ({preview.mcpServers.join(', ')}). Anton does not run them; add one in Settings › Connectors to use it.
 				</p>
 			) : null}
 			{preview.skipped.length ? (

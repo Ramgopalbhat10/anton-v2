@@ -139,10 +139,13 @@ const settingsIndexRoute = createRoute({
 const settingsSectionRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: '$section',
-	// The Skills page keeps its tab and search here, so coming back from a plugin finds them again.
-	validateSearch: (search: Record<string, unknown>): { tab?: SkillsTab; q?: string } => ({
+	// The Skills page keeps its tab and search here, so coming back from a plugin finds them again;
+	// Connectors hears here how a Google sign-in went.
+	validateSearch: (search: Record<string, unknown>): { tab?: SkillsTab; q?: string; connected?: string; problem?: string } => ({
 		tab: search.tab === 'installed' || search.tab === 'discover' ? search.tab : undefined,
 		q: typeof search.q === 'string' && search.q ? search.q : undefined,
+		connected: typeof search.connected === 'string' && search.connected ? search.connected : undefined,
+		problem: typeof search.problem === 'string' && search.problem ? search.problem.slice(0, 500) : undefined,
 	}),
 	component: SectionPage,
 });

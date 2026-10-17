@@ -4,8 +4,9 @@ import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' }
 	| { kind: 'subscriptions' }
+	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
@@ -31,6 +32,7 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
+	if (change.kind === 'connectors') return [['connectors'], ['connections']];
 	// Projects count their threads by state, so a change to any task can move a count.
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts']];
 	if (change.kind === 'spaces') return [['spaces'], ['space']];
@@ -47,6 +49,8 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
 	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
+	// An email the agent asked to send was asked, sent or turned down: only its card reads it.
+	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;

@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { GMAIL, MCP } from '@/components/brand-marks';
 
 /*
  * Each tool call as a short sentence with an icon, the same in the thread and
@@ -277,7 +278,42 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					</>
 				),
 			};
+		case 'gmail_search':
+			return {
+				icon: GMAIL.icon,
+				body: field(input, 'query') ? (
+					<>
+						Searched Gmail for <Em>{field(input, 'query')}</Em>
+					</>
+				) : (
+					<>Listed the newest mail</>
+				),
+			};
+		case 'gmail_read_thread':
+			return { icon: GMAIL.icon, body: <>Read an email conversation</> };
+		case 'gmail_draft':
+			return {
+				icon: GMAIL.icon,
+				body: (
+					<>
+						{field(input, 'draft_id') ? 'Rewrote' : 'Drafted'} <Em>{field(input, 'subject') || 'a reply'}</Em>
+					</>
+				),
+			};
+		case 'gmail_send':
+			return { icon: GMAIL.icon, body: <>Asked to send an email</> };
 		default:
+			if (part.toolName.startsWith('mcp__')) {
+				// A server's tool given to the agent directly; the thread draws it with the server's own mark.
+				return {
+					icon: MCP.icon,
+					body: (
+						<>
+							Called <Em>{part.toolName.replace(/^mcp__/, '').replace('__', ' · ')}</Em>
+						</>
+					),
+				};
+			}
 			return {
 				icon: Wrench,
 				body: (
