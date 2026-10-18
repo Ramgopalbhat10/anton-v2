@@ -513,6 +513,39 @@ export type VisionModel = {
 	look(input: { model: string; prompt: string; image: Uint8Array; mimeType: string }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };
 
+/** An image model as the image port lists it: how many images it starts from, and the shapes it draws. */
+export type ImageModelInfo = {
+	/** `<gateway>/<model>`, as tasks name models. */
+	id: string;
+	name: string;
+	vendor: string;
+	description: string;
+	/** The most images it takes to start from or edit; 0 makes images from words alone. */
+	references: number;
+	/** Aspect ratios it draws, such as "16:9"; empty when it does not say. */
+	aspectRatios: string[];
+	/** Whether it can leave the background transparent. */
+	transparent: boolean;
+};
+
+export type ImageReference = { bytes: Uint8Array; mimeType: string };
+
+/**
+ * A model that makes an image from a prompt, and from images to start from,
+ * for the agent's generate_image tool: whatever model the task runs on, the
+ * image comes from here, so a model that cannot draw (or a plan whose route
+ * offers no image tool) still makes one.
+ */
+export type ImageModel = {
+	/** Whether it runs this `<gateway>/<model>` specifier. */
+	runs(model: string): boolean;
+	list(): Promise<ImageModelInfo[]>;
+	generate(
+		input: { model: string; prompt: string; references: ImageReference[]; aspectRatio?: string; transparent?: boolean },
+		signal?: AbortSignal,
+	): Promise<{ image: Uint8Array; mimeType: string; inputTokens: number; outputTokens: number; cost: number }>;
+};
+
 /** A browser running on a hosted service: Chrome DevTools Protocol for code, a live view for people. */
 export type HostedBrowser = {
 	id: string;

@@ -2,6 +2,7 @@ import { config } from '../config.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { InvalidInputError } from '../core/errors.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
+import { getProviders } from '../providers/index.ts';
 import { findModel } from './models.ts';
 
 /** How a new task starts when the launcher or an automation does not say. */
@@ -19,6 +20,8 @@ export type GeneralSettings = {
 	visualReplies: VisualReplies;
 	/** Pages the agent writes can call web APIs, through Anton (src/services/page-fetch.ts). */
 	pageNetwork: boolean;
+	/** The model generate_image draws with; null uses ANTON_IMAGE_MODEL. A task on an image model draws with its own. */
+	imageModel: string | null;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
 };
@@ -37,12 +40,16 @@ const KEY = 'general';
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
 	const agentModels = { explorer: null, tester: null, browser: null, computer: null, reviewer: null, ...stored.agentModels };
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', pageNetwork: true, ...stored, agentModels };
+	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', pageNetwork: true, imageModel: null, ...stored, agentModels };
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {
 	for (const model of [next.model, ...Object.values(next.agentModels).map((choice) => choice?.model)]) {
 		if (model && !(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+	}
+	const images = getProviders().images;
+	if (next.imageModel && images && !(await images.list()).some((info) => info.id === next.imageModel)) {
+		throw new InvalidInputError(`Unknown image model: ${next.imageModel}`);
 	}
 	await setSetting(KEY, next);
 	return next;

@@ -7,6 +7,7 @@ import type {
 	DecisionModel,
 	GatewayAccount,
 	GitHost,
+	ImageModel,
 	KeyPlan,
 	Mailbox,
 	ModelCatalog,
@@ -29,6 +30,7 @@ import { modalSandboxProvider } from './modal/sandbox.ts';
 import { openRouterAccount } from './openrouter/account.ts';
 import { openRouterCatalog } from './openrouter/catalog.ts';
 import { openRouterDecisions } from './openrouter/decisions.ts';
+import { openRouterImages } from './openrouter/images.ts';
 import { openRouterKey } from './openrouter/key.ts';
 import { openRouterVision } from './openrouter/vision.ts';
 import { openCodeGoPlan } from './opencode-go/plan.ts';
@@ -60,6 +62,7 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
  * `keyPlans` are plans used with a key from the vendor's dashboard (OpenCode Go, Cursor), pasted in Settings › Subscriptions.
  * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
  * `vision` is null without an OpenRouter key; the computer tool then says it cannot see the screen.
+ * `images` is null without an OpenRouter key; the agent then has no generate_image tool.
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
  * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
  */
@@ -75,6 +78,7 @@ export type Providers = {
 	keyPlans?: KeyPlan[];
 	browsers?: BrowserHost | null;
 	vision?: VisionModel | null;
+	images?: ImageModel | null;
 	push?: PushSender | null;
 	accounts?: AccountSignIn[];
 	mailboxes?: Mailbox[];
@@ -82,11 +86,12 @@ export type Providers = {
 
 let providers: Providers | undefined;
 
-/** The decision and vision models call OpenRouter with the key in use at the time, so they exist only while there is one. */
+/** The decision, vision and image models call OpenRouter with the key in use at the time, so they exist only while there is one. */
 function production(): Providers {
 	const { apiUrl, ttlMs } = config.openrouter;
 	const decisions = config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
 	const vision = openRouterVision({ apiUrl, apiKey: openRouterKey });
+	const images = openRouterImages({ apiUrl, apiKey: openRouterKey, ttlMs });
 	return {
 		sandbox: pick('sandbox', sandboxes, config.sandbox),
 		store: pick('store', stores, config.store),
@@ -102,6 +107,9 @@ function production(): Providers {
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 		get vision() {
 			return openRouterKey() ? vision : null;
+		},
+		get images() {
+			return openRouterKey() ? images : null;
 		},
 		push: webPushSender(),
 		accounts: [googleSignIn()],

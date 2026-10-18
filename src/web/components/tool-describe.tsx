@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 
@@ -267,6 +267,15 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					</>
 				) : (
 					<>Showed a card</>
+				),
+			};
+		case 'generate_image':
+			return {
+				icon: ImagePlus,
+				body: (
+					<>
+						{field(input, 'from') ? 'Changed an image' : 'Made an image'}: <Em>{field(input, 'prompt')}</Em>
+					</>
 				),
 			};
 		case 'render_html':

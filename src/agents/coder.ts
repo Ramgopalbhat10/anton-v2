@@ -58,6 +58,7 @@ import { noteAsk, notePlan } from '../services/asks.ts';
 import { checkImages, checkSpec, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
 import { pageGuide, saveRender } from '../services/renders.ts';
+import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
 import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
 import { secretsToHide } from '../services/secrets.ts';
@@ -828,6 +829,34 @@ function useRenderHtml(id: string) {
 	);
 }
 
+const ASPECT_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9'] as const;
+
+/** Images drawn by an image model through Anton, whatever model the task runs on: shown in the thread and kept in the Library. */
+function useGenerateImage(id: string) {
+	useTool(
+		defineTool({
+			name: 'generate_image',
+			description:
+				'Make an image with an image model and show it to the user in the thread: an illustration, a photo, a logo, an icon, a poster, a mockup, a picture for a page. ' +
+				'Write prompt as a full description: the subject, style, composition, colours, lighting, and any text in the image word for word. ' +
+				`To change an image or work from one (an image you made, a screenshot, one the user attached), pass its Library path in from, up to ${MAX_REFERENCES}, and say in prompt what to change or keep. ` +
+				'Returns the image\'s path in the Library. Takes up to a minute.',
+			input: v.object({
+				prompt: v.pipe(v.string(), v.minLength(1), v.maxLength(4000), v.description('What the image shows, in full')),
+				name: v.optional(v.pipe(v.string(), v.maxLength(60), v.description('A short file name, without extension'))),
+				from: v.optional(
+					v.pipe(v.array(v.string()), v.maxLength(MAX_REFERENCES), v.description('Library paths of images to start from or edit, such as images/logo-a1b2c3.png or uploads/photo.jpg')),
+				),
+				aspect_ratio: v.optional(v.pipe(v.picklist(ASPECT_RATIOS), v.description('The shape, width:height (default square or the model\'s own)'))),
+				transparent: v.optional(v.pipe(v.boolean(), v.description('Leave the background transparent, for a logo or icon, where the model can'))),
+			}),
+			run: async ({ data, signal }) => ({ output: await generateImage(id, data, signal) }),
+		}),
+	);
+}
+
+const IMAGE_HINT = 'When the user asks for an image, or a picture would serve them better than words, make it with generate_image; to change one, pass it in from rather than starting over.';
+
 /** A thread reads the project's Library here, as text; with a sandbox the originals are in ../project-files too. */
 function useProjectFiles(id: string) {
 	useTool(
@@ -1177,6 +1206,8 @@ export function Coder({ id }: AgentProps) {
 	useAgentRuns(id);
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
+	const drawing = imagesAvailable();
+	if (drawing) useGenerateImage(id);
 	if (visual !== 'off') {
 		useShow(id);
 		useRenderHtml(id);
@@ -1248,9 +1279,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT} ${mailHint(mailboxesFor(id))}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT} ${mailHint(mailboxesFor(id))}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${REMEMBER_HINT} ${SKILL_HINT} ${mailHint(mailboxesFor(id))}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${SKILL_HINT} ${mailHint(mailboxesFor(id))}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

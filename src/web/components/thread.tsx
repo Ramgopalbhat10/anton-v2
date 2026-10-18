@@ -39,14 +39,26 @@ type Block =
 	| { kind: 'ask'; part: ToolPart }
 	| { kind: 'show'; part: ToolPart }
 	| { kind: 'page'; part: ToolPart }
+	| { kind: 'image'; part: ToolPart }
 	| { kind: 'mail'; part: ToolPart };
 
 const PLAN_TOOL = 'propose_plan';
 /** The todo list shows as the pill above the composer, not as steps in the thread. */
 const TODO_TOOL = 'update_todos';
+/** Images an image model made: drawn in the reply where they were made, so they are not repeated among its files. */
+const IMAGE_TOOL = 'generate_image';
 const APPROVED = 'Your plan is approved. Go ahead and build it.';
 /** Tools whose calls draw in the reply itself rather than as a step; one that failed stays a step, with its error. */
-const DRAWN: Record<string, 'ask' | 'show' | 'page'> = { ask: 'ask', show: 'show', render_html: 'page' };
+const DRAWN: Record<string, 'ask' | 'show' | 'page' | 'image'> = { ask: 'ask', show: 'show', render_html: 'page', [IMAGE_TOOL]: 'image' };
+
+/** The Library path of an image generate_image made, and the model that drew it, from the tool's result. */
+function madeImageOf(part: ToolPart): { path: string; model: string } | null {
+	if (part.state !== 'output-available') return null;
+	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
+	const output = record.output && typeof record.output === 'object' ? (record.output as Record<string, unknown>) : record;
+	const path = field(output, 'path');
+	return path ? { path, model: field(output, 'model') } : null;
+}
 
 /** What a page from render_html says it is, from the tool's result. */
 function pageOf(part: ToolPart): { path: string; title: string; height: number } | null {
@@ -108,6 +120,7 @@ function screenshotPath(part: ToolPart): string {
  */
 function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null): string[] {
 	const named: { path: string; linked: boolean }[] = [];
+	const drawn = new Set(parts.flatMap((part) => (part.type === 'dynamic-tool' && part.toolName === IMAGE_TOOL ? [madeImageOf(part)?.path ?? ''] : [])));
 	for (const part of parts) {
 		if (part.type === 'text') for (const path of outputLinksIn(part.text)) named.push({ path, linked: true });
 		if (part.type !== 'dynamic-tool' || part.state !== 'output-available') continue;
@@ -117,7 +130,7 @@ function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null): 
 	const linked = new Set(named.filter((entry) => entry.linked).map((entry) => entry.path));
 	const paths: string[] = [];
 	for (const { path } of named) {
-		if (!path || path.startsWith('uploads/') || paths.includes(path)) continue;
+		if (!path || path.startsWith('uploads/') || drawn.has(path) || paths.includes(path)) continue;
 		if (linked.has(path) || !kept || kept.has(path)) paths.push(path);
 	}
 	return paths;
@@ -638,6 +651,8 @@ const AssistantMessage = memo(function AssistantMessage({
 					)
 				) : block.kind === 'page' ? (
 					<PageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />
+				) : block.kind === 'image' ? (
+					<ImageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />
 				) : (
 					<StepsCard key={index} steps={block.steps} live={live && foot && index === blocks.length - 1} duration={head && index === firstTrace ? duration : undefined} />
 				),
@@ -686,6 +701,55 @@ const PageBlock = memo(function PageBlock({ sessionId, part }: { sessionId: stri
 	const page = pageOf(part);
 	if (!page) return <Drawing what="Drawing a page" />;
 	return <HtmlFrame sessionId={sessionId} path={page.path} title={page.title} height={page.height} />;
+});
+
+/** A width:height the tool was asked for, as CSS; square when it named none. */
+function aspectOf(input: unknown): string {
+	const [width, height] = field(input, 'aspect_ratio').split(':').map(Number);
+	return width > 0 && height > 0 ? `${width} / ${height}` : '1 / 1';
+}
+
+/** A light checkerboard under an image asked for with a transparent background, so a dark mark on it still shows. */
+const CHECKERBOARD = { background: 'repeating-conic-gradient(var(--neutral-200) 0% 25%, var(--neutral-50) 0% 50%) 50% / 16px 16px' };
+
+/** An image the agent made: a frame of its shape while the model draws, then the image, which opens full size. */
+const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
+	const made = madeImageOf(part);
+	const prompt = field(part.input, 'prompt');
+	if (!made) {
+		return (
+			<div
+				role="status"
+				className="in-sweep flex h-60 max-w-full items-center justify-center gap-2 self-start rounded-[12px] border border-dashed border-(--card-border) bg-(--bg-inset) px-3 text-[12px] text-(--text-tertiary)"
+				style={{ aspectRatio: aspectOf(part.input) }}
+			>
+				<Spinner size={12} />
+				Making an image
+			</div>
+		);
+	}
+	return (
+		<figure className="flex max-w-full flex-col gap-1.5 self-start">
+			<button
+				type="button"
+				title={`Open ${made.path}`}
+				onClick={() => openViewer({ sessionId, path: made.path }, [], sessionId)}
+				className="block w-fit max-w-full cursor-zoom-in rounded-[12px] outline-none focus-visible:shadow-(--focus-ring)"
+			>
+				<img
+					src={outputUrl(sessionId, made.path)}
+					alt={prompt}
+					className="block max-h-[420px] max-w-full rounded-[12px] border border-(--card-border) bg-(--bg-inset)"
+					style={part.input && (part.input as { transparent?: unknown }).transparent === true ? CHECKERBOARD : undefined}
+				/>
+			</button>
+			<figcaption className="max-w-[560px] truncate text-[11.5px] text-(--text-tertiary)" title={prompt}>
+				{made.model ? <span className="text-(--text-secondary)">{made.model}</span> : null}
+				{made.model && prompt ? ' · ' : ''}
+				{prompt}
+			</figcaption>
+		</figure>
+	);
 });
 
 /** A batch of subagent calls; its list is rebuilt each render, so it re-renders only when one of its calls changed. */
@@ -758,6 +822,7 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 			if (now.tool === 'update_todos') return 'Updating the todo list';
 			if (now.tool === 'render_html') return `Drawing a page${size}`;
 			if (now.tool === 'show') return 'Drawing a card';
+			if (now.tool === IMAGE_TOOL) return 'Describing an image';
 			return `Preparing ${now.tool ?? 'a step'}`;
 		}
 		case 'running':
@@ -766,6 +831,7 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 			if (now.tool === 'read' && file) return `Reading ${file}`;
 			if (now.tool === 'bash') return 'Running a command';
 			if (now.tool === 'start_workspace') return 'Starting the sandbox';
+			if (now.tool === IMAGE_TOOL) return 'Making an image';
 			return `Running ${now.tool ?? 'a step'}`;
 	}
 }

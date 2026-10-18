@@ -25,6 +25,7 @@ import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, rea
 import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
+import { imageModels, imagesAvailable } from './services/images.ts';
 import { defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
@@ -334,6 +335,7 @@ app.put('/api/settings/general', async (c) => {
 			codeMode: v.boolean(),
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			pageNetwork: v.optional(v.boolean(), true),
+			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
@@ -412,6 +414,8 @@ app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
 app.get('/api/models', async (c) => c.json({ models: await listModels(), default: await defaultModel(), pinned: await pinnedModels() }));
+// What generate_image can draw with, for Settings › General; empty without an OpenRouter key.
+app.get('/api/image-models', async (c) => c.json({ models: await imageModels(), default: config.imageModel, available: imagesAvailable() }));
 app.put('/api/models/pinned', async (c) => {
 	const { pinned } = await body(c, v.object({ pinned: v.pipe(v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(200))), v.maxLength(100)) }));
 	return c.json({ pinned: await setPinnedModels(pinned) });
