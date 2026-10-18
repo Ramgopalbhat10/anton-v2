@@ -4,7 +4,7 @@ import type { Client } from '@libsql/client';
  * Append-only list of schema changes. Each runs once, in order, and is
  * recorded in `schema_migrations`. Never edit a shipped entry; add a new one.
  */
-const migrations: string[][] = [
+export const migrations: string[][] = [
 	// 1: the schema as it existed before versioning.
 	[
 		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, github_id TEXT, login TEXT NOT NULL, avatar_url TEXT, created_at TEXT NOT NULL)`,
@@ -125,15 +125,34 @@ const migrations: string[][] = [
 	[`CREATE TABLE IF NOT EXISTS deleted_sessions (session_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)`],
 	// 28: where in a reply the agent read each message sent while it worked, so the thread shows it there.
 	[`ALTER TABLE sessions ADD COLUMN joins_json TEXT`],
+	// 29: MCP servers are added once for every task, as skills are, rather than per repository; each repository's are moved over, the first of a name kept.
+	[
+		`CREATE TABLE IF NOT EXISTS mcp_servers (name TEXT PRIMARY KEY, url TEXT NOT NULL, auth TEXT, tools_json TEXT NOT NULL, code_mode INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 1, added_at TEXT NOT NULL)`,
+		`INSERT OR IGNORE INTO mcp_servers (name, url, auth, tools_json, code_mode, enabled, added_at)
+			SELECT json_extract(server.value, '$.name'), json_extract(server.value, '$.url'), json_extract(server.value, '$.auth'),
+				COALESCE(json_extract(server.value, '$.tools'), '[]'), CASE WHEN json_extract(server.value, '$.codeMode') = 0 THEN 0 ELSE 1 END, 1,
+				strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+			FROM projects, json_each(projects.mcp_json) AS server
+			WHERE projects.mcp_json IS NOT NULL AND json_valid(projects.mcp_json) AND json_extract(server.value, '$.name') IS NOT NULL AND json_extract(server.value, '$.url') IS NOT NULL
+			ORDER BY projects.updated_at`,
+	],
+	// 30: emails the agent asked to send, each waiting for your Send in the thread; the draft's digest makes sure what you approved is what goes.
+	[
+		`CREATE TABLE IF NOT EXISTS mail_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, connector TEXT NOT NULL, draft_id TEXT NOT NULL, draft_json TEXT NOT NULL, digest TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT, sent_id TEXT)`,
+		`CREATE INDEX IF NOT EXISTS mail_approvals_session ON mail_approvals (session_id)`,
+	],
+	// 31: an MCP server's sign-in (OAuth): its registered client, where it signs in, and its tokens, kept apart from the server's view.
+	[`ALTER TABLE mcp_servers ADD COLUMN oauth_json TEXT`],
 ];
 
-export async function migrate(db: Client): Promise<void> {
+/** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */
+export async function migrate(db: Client, upTo = migrations.length): Promise<void> {
 	await db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
 	const applied = await db.execute('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations');
 	const current = Number(applied.rows[0]?.version ?? 0);
 	for (const [index, statements] of migrations.entries()) {
 		const version = index + 1;
-		if (version <= current) continue;
+		if (version <= current || version > upTo) continue;
 		await db.batch(
 			[...statements, { sql: 'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', args: [version, new Date().toISOString()] }],
 			'write',

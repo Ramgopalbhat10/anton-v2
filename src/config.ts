@@ -53,6 +53,11 @@ export const config = {
 		/** Optional, for higher rate limits. */
 		apiKey: read('PARALLEL_API_KEY'),
 	},
+	/** Your own Google OAuth client, for Gmail in Settings › Connectors; the client pasted there is used instead when there is one. */
+	google: {
+		clientId: read('GOOGLE_CLIENT_ID'),
+		clientSecret: read('GOOGLE_CLIENT_SECRET'),
+	},
 	/** Kernel's hosted browsers, for the Browser panel; without a key the panel says how to set one. */
 	kernel: {
 		apiUrl: read('ANTON_KERNEL_API_URL', 'https://api.onkernel.com'),

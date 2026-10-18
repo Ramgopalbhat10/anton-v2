@@ -1,4 +1,4 @@
-import type { McpServer, Project, ProjectSettings } from '../core/types.ts';
+import type { Project, ProjectSettings } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { clearWarmImage, deleteProjectRecord, getProject, listProjects, projectSessionIds, setProjectSettings, upsertProject } from '../db/projects.ts';
@@ -10,21 +10,17 @@ import { deleteSession } from './sessions.ts';
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 
-/** An MCP server as the browser sees it: whether it has a token, never the token. */
-export type McpServerView = Omit<McpServer, 'auth'> & { hasAuth: boolean };
-
 /**
- * What the browser sees of a repo: variable names and whether servers have
- * tokens, never the secrets; when its prepared image was built, not the image.
+ * What the browser sees of a repo: variable names, never their values; when
+ * its prepared image was built, not the image.
  */
-export type ProjectView = Omit<Project, 'env' | 'warmImage' | 'mcpServers'> & { envKeys: string[]; mcpServers: McpServerView[] };
+export type ProjectView = Omit<Project, 'env' | 'warmImage'> & { envKeys: string[] };
 
-function present({ env, warmImage, warmedAt, mcpServers, ...project }: Project): ProjectView {
+function present({ env, warmImage, warmedAt, ...project }: Project): ProjectView {
 	return {
 		...project,
 		warmedAt: warmImage ? warmedAt : null,
 		envKeys: Object.keys(env).sort(),
-		mcpServers: mcpServers.map(({ auth, ...server }) => ({ ...server, hasAuth: Boolean(auth) })),
 	};
 }
 
@@ -71,15 +67,13 @@ export async function branches(projectId: string): Promise<string[]> {
 
 /**
  * A settings change from the browser. A variable set to null keeps its stored
- * value and one left out is removed; a server sent without a token keeps its
- * stored one and an empty token removes it. Leaving out `followUps`, `reviewOthers`, `fullVm` or `mcpServers` keeps them as they are.
+ * value and one left out is removed. Leaving out `followUps`, `reviewOthers` or `fullVm` keeps them as they are.
  */
-export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm' | 'mcpServers'> & {
+export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm'> & {
 	env: Record<string, string | null>;
 	followUps?: boolean;
 	reviewOthers?: boolean;
 	fullVm?: boolean;
-	mcpServers?: Array<Omit<McpServer, 'auth'> & { auth?: string | null }>;
 };
 
 /**
@@ -90,23 +84,12 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'review
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
 	const env = mergeEnv(project.env, change.env);
-	// A token stays only with the host it was given for, so pointing a server at a new host never sends it there.
-	const keyOf = (name: string, url: string) => `${name} ${URL.canParse(url) ? new URL(url).origin : url}`;
-	const tokens = new Map(project.mcpServers.map((server) => [keyOf(server.name, server.url), server.auth]));
-	const mcpServers = (change.mcpServers ?? project.mcpServers).map(({ name, url, tools, auth, codeMode }) => ({
-		name,
-		url,
-		tools,
-		...(codeMode === false ? { codeMode } : {}),
-		auth: auth === '' ? null : (auth ?? tokens.get(keyOf(name, url)) ?? null),
-	}));
 	await setProjectSettings(id, {
 		...change,
 		env,
 		followUps: change.followUps ?? project.followUps,
 		reviewOthers: change.reviewOthers ?? project.reviewOthers,
 		fullVm: change.fullVm ?? project.fullVm,
-		mcpServers,
 		baseImage: change.baseImage?.trim() || null,
 	});
 	return present(await existing(id));

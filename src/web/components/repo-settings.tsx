@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { BookOpen, Box, Plus, Trash2, Workflow, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
@@ -10,12 +10,6 @@ import { useProjects } from '@/lib/projects';
 
 /** A variable row; a stored one keeps its value unless a new one is typed. */
 export type Variable = { name: string; value: string; stored: boolean };
-
-/** An MCP server row; `token` is only what was typed, since a stored token is never sent back. */
-type Server = { name: string; url: string; token: string; hasAuth: boolean; tools: string; codeMode: boolean };
-
-const toServers = (project: Project): Server[] =>
-	project.mcpServers.map((server) => ({ ...server, token: '', tools: server.tools.join(', '), codeMode: server.codeMode !== false }));
 
 const FIELD = WELL_FIELD;
 
@@ -35,7 +29,7 @@ function parsePorts(text: string): number[] {
 	return [...new Set(text.split(/[\s,]+/).filter(Boolean).map(Number))];
 }
 
-type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean; servers: Server[] };
+type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean };
 
 export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
 
@@ -47,19 +41,8 @@ export function toEnv(variables: Variable[]): Record<string, string | null> {
 	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
 }
 
-function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers, servers }: Draft): SettingsChange {
-	const env = toEnv(variables);
-	const mcpServers = servers
-		.filter((row) => row.name.trim() || row.url.trim())
-		.map((row) => ({
-			name: row.name.trim(),
-			url: row.url.trim(),
-			// Null keeps a stored token; an empty one says there is none.
-			auth: row.token ? row.token : row.hasAuth ? null : '',
-			tools: row.tools.split(/[\s,]+/).filter(Boolean),
-			...(row.codeMode ? {} : { codeMode: false }),
-		}));
-	return { env, setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers, mcpServers };
+function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers }: Draft): SettingsChange {
+	return { env: toEnv(variables), setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers };
 }
 
 export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
@@ -101,66 +84,6 @@ export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange
 	);
 }
 
-function ServersEditor({ rows, onChange }: { rows: Server[]; onChange: (rows: Server[]) => void }) {
-	const update = (index: number, patch: Partial<Server>) => onChange(rows.map((row, at) => (at === index ? { ...row, ...patch } : row)));
-	return (
-		<div className="flex flex-col gap-3">
-			{rows.map((row, index) => (
-				<div key={index} className="flex items-start gap-1.5">
-					<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-1.5">
-						<input
-							value={row.name}
-							onChange={(event) => update(index, { name: event.target.value })}
-							placeholder="name"
-							aria-label="Server name"
-							className={`${FIELD} font-mono`}
-						/>
-						<input
-							value={row.url}
-							onChange={(event) => update(index, { url: event.target.value })}
-							placeholder="https://mcp.example.com/mcp"
-							aria-label="Server URL"
-							className={`${FIELD} font-mono`}
-						/>
-						<input
-							type="password"
-							autoComplete="off"
-							value={row.token}
-							onChange={(event) => update(index, { token: event.target.value })}
-							placeholder={row.hasAuth ? 'Token saved. Type to replace' : 'Bearer token (optional)'}
-							aria-label={`Token for ${row.name || 'the server'}`}
-							className={`${FIELD} font-mono`}
-						/>
-						<input
-							value={row.tools}
-							onChange={(event) => update(index, { tools: event.target.value })}
-							placeholder="All tools, or a list: search, fetch"
-							aria-label={`Tools of ${row.name || 'the server'}`}
-							className={`${FIELD} font-mono`}
-						/>
-						<Switch
-							checked={row.codeMode}
-							onChange={(codeMode) => update(index, { codeMode })}
-							label={<span className="text-[12px] text-(--text-secondary)">Through code mode</span>}
-							className="col-span-2 self-start py-0.5"
-						/>
-					</div>
-					<IconBtn icon={X} size="sm" label="Remove server" onClick={() => onChange(rows.filter((_, at) => at !== index))} />
-				</div>
-			))}
-			<Btn
-				size="sm"
-				variant="ghost"
-				icon={Plus}
-				className="self-start"
-				onClick={() => onChange([...rows, { name: '', url: '', token: '', hasAuth: false, tools: '', codeMode: true }])}
-			>
-				Add a server
-			</Btn>
-		</div>
-	);
-}
-
 function SettingsForm({ project }: { project: Project }) {
 	const queryClient = useQueryClient();
 	const [variables, setVariables] = useState(() => storedVariables(project.envKeys));
@@ -170,12 +93,10 @@ function SettingsForm({ project }: { project: Project }) {
 	const [fullVm, setFullVm] = useState(project.fullVm);
 	const [followUps, setFollowUps] = useState(project.followUps);
 	const [reviewOthers, setReviewOthers] = useState(project.reviewOthers);
-	const [servers, setServers] = useState(() => toServers(project));
 	const save = useMutation({
-		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers, servers })),
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers })),
 		onSuccess: (saved) => {
 			setVariables(storedVariables(saved.envKeys));
-			setServers(toServers(saved));
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
 		},
 	});
@@ -253,9 +174,17 @@ function SettingsForm({ project }: { project: Project }) {
 				</Section>
 				<Section
 					title="MCP servers"
-					help="Remote MCP servers the agent can call, over HTTPS. A token is sent as a bearer header and never shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, which costs a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
+					help={
+						<>
+							MCP servers are added once for every task, a repository's and a chat's alike, in{' '}
+							<Link to="/settings/$section" params={{ section: 'connectors' }} className="text-(--accent-text) hover:underline">
+								Settings › Connectors
+							</Link>
+							, where each can be turned off.
+						</>
+					}
 				>
-					<ServersEditor rows={servers} onChange={setServers} />
+					{null}
 				</Section>
 			</Block>
 		</form>

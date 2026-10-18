@@ -560,3 +560,65 @@ export type PushSender = {
 	/** `gone` when the push service says the subscription no longer exists, so it can be forgotten. */
 	send(target: PushTarget, message: PushMessage, auth: { keys: PushKeys; subject: string }): Promise<{ ok: boolean; gone: boolean; status: number; detail: string }>;
 };
+
+/** Your own OAuth client at a vendor, made in its console: a self-hosted Anton has no verified app of its own. */
+export type OAuthClient = { clientId: string; clientSecret: string };
+
+/**
+ * An account the agent's tools reach (Google), signed in to with the vendor's
+ * OAuth flow on your own client. The credential is the same shape a plan's is.
+ */
+export type AccountSignIn = {
+	/** `google`: how settings and routes name it. */
+	readonly id: string;
+	readonly name: string;
+	/** A sign-in for `scopes` that returns to `redirectUri`, Anton's own callback; `complete` takes that address with its query. */
+	startLogin(client: OAuthClient, scopes: string[], redirectUri: string, hint?: string | null): SubscriptionLogin;
+	/** Renews the access token; a refresh token the vendor does not rotate is kept. */
+	refresh(client: OAuthClient, credential: SubscriptionCredential, signal?: AbortSignal): Promise<SubscriptionCredential>;
+	/** Tells the vendor to forget the sign-in, so Anton no longer appears among the account's connected apps. */
+	revoke(credential: SubscriptionCredential): Promise<void>;
+};
+
+/** A conversation in a mailbox as a search lists it: its first message's subject, the latest sender and date. */
+export type MailThreadSummary = { id: string; subject: string; from: string; date: string; snippet: string; messages: number; unread: boolean; labels: string[] };
+
+export type MailAttachment = { name: string; mimeType: string; size: number };
+
+export type MailMessage = {
+	id: string;
+	from: string;
+	to: string;
+	cc: string;
+	date: string;
+	subject: string;
+	/** The text of the message, from its plain part or else its HTML. */
+	body: string;
+	attachments: MailAttachment[];
+};
+
+export type MailThread = { id: string; subject: string; messages: MailMessage[] };
+
+/** A message to write as a draft; with `threadId` it replies in that conversation, to its latest message. */
+export type MailDraftInput = { to: string[]; cc: string[]; bcc: string[]; subject: string; body: string; threadId: string | null };
+
+export type MailDraft = MailDraftInput & { id: string; messageId: string };
+
+/** A mailbox the agent reads and writes drafts in (Gmail), with an access token from its account's sign-in. */
+export type Mailbox = {
+	/** `gmail` */
+	readonly id: string;
+	readonly name: string;
+	/** The sign-in it uses: an `AccountSignIn`'s id. */
+	readonly account: string;
+	/** Scopes to read, and to write drafts and send them. */
+	readonly scopes: { read: string[]; draft: string[] };
+	/** Conversations matching the mailbox's own search syntax, newest first. */
+	search(token: string, query: string, max: number, signal?: AbortSignal): Promise<MailThreadSummary[]>;
+	thread(token: string, id: string, signal?: AbortSignal): Promise<MailThread>;
+	/** Writes a draft, or rewrites the draft `draftId`. */
+	saveDraft(token: string, draft: MailDraftInput, draftId: string | null, signal?: AbortSignal): Promise<MailDraft>;
+	draft(token: string, id: string, signal?: AbortSignal): Promise<MailDraft>;
+	/** Sends a draft as it stands. */
+	sendDraft(token: string, id: string, signal?: AbortSignal): Promise<{ id: string; threadId: string }>;
+};

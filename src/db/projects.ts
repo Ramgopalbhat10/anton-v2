@@ -23,7 +23,6 @@ function toProject(row: Row): Project {
 		fullVm: Number(row.full_vm ?? 0) === 1,
 		followUps: row.follow_ups == null ? true : Number(row.follow_ups) === 1,
 		reviewOthers: row.review_others_at != null,
-		mcpServers: parsed(row.mcp_json, []),
 		memory: String(row.memory ?? ''),
 	};
 }
@@ -92,7 +91,7 @@ export async function clearWarmImage(id: string): Promise<void> {
 export async function setProjectSettings(id: string, settings: ProjectSettings): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `UPDATE projects SET env_json = ?, setup_script = ?, preview_ports = ?, follow_ups = ?, mcp_json = ?, full_vm = ?,
+		sql: `UPDATE projects SET env_json = ?, setup_script = ?, preview_ports = ?, follow_ups = ?, full_vm = ?,
 			review_others_at = CASE WHEN ? THEN COALESCE(review_others_at, ?) END,
 			snapshot_image_id = CASE WHEN base_image IS ? THEN snapshot_image_id END,
 			warmed_at = CASE WHEN base_image IS ? THEN warmed_at END,
@@ -102,7 +101,6 @@ export async function setProjectSettings(id: string, settings: ProjectSettings):
 			settings.setupScript,
 			JSON.stringify(settings.previewPorts),
 			settings.followUps ? 1 : 0,
-			JSON.stringify(settings.mcpServers),
 			settings.fullVm ? 1 : 0,
 			settings.reviewOthers ? 1 : 0,
 			new Date().toISOString(),

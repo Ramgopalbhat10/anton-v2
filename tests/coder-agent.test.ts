@@ -23,3 +23,17 @@ test('Coder gives a workspace the computer subagent, whose tool sees through the
 	assert.doesNotMatch(tool, /harness/);
 	assert.match(tool, /asAgentStep\(id/);
 });
+
+test('Coder gives each connected mailbox its tools, drafts and sending only where allowed, and sending only asks', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /for \(const mailbox of mailboxesFor\(id\)\) useMailbox\(id, mailbox\);/);
+	const tools = source.slice(source.indexOf('function useMailbox'), source.indexOf('function mailHint'));
+	for (const tool of ['search', 'read_thread', 'draft', 'send']) assert.match(tools, new RegExp(`name: \`\\$\\{name\\}_${tool}\``));
+	assert.match(tools, /if \(mailbox\.access\.draft\)/);
+	assert.match(tools, /if \(mailbox\.access\.send\)/);
+	// The agent never sends: its tool asks, and the task waits on the user's Send.
+	const send = tools.slice(tools.indexOf('_send`'));
+	assert.match(send, /requestSend\(id, name, data\.draft_id, signal\)/);
+	assert.match(send, /noteAsk\(id,/);
+	assert.doesNotMatch(tools, /sendDraft|decideSend/);
+});

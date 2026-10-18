@@ -5,6 +5,8 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
 import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent, type VisualReplies } from './general.ts';
+import { type MailboxAccess, mailboxAccess, mailboxes } from './connectors.ts';
+import { enabledMcpServers } from './mcp-servers.ts';
 import { warmServerTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
@@ -15,13 +17,13 @@ import { primeAllCoordinators, primeCoordinator } from './coordinator.ts';
 
 /**
  * The agent renders synchronously, so it reads each task's MCP servers from
- * here. Filled before every message, with the model.
+ * here: the ones on in Settings › Connectors. Filled before every message, with the model.
  */
 const servers = new Map<string, McpServer[]>();
 
-/** Web search and fetch for every task, unless turned off or a repo server already uses the name. */
-function webServer(repoServers: McpServer[]): McpServer[] {
-	if (config.web.mcpUrl === 'off' || repoServers.some((server) => server.name === WEB)) return [];
+/** Web search and fetch for every task, unless turned off or an added server already uses the name. */
+function webServer(added: McpServer[]): McpServer[] {
+	if (config.web.mcpUrl === 'off' || added.some((server) => server.name === WEB)) return [];
 	return [{ name: WEB, url: config.web.mcpUrl, auth: config.web.apiKey || null, tools: ['web_search', 'web_fetch'] }];
 }
 
@@ -32,10 +34,23 @@ export function isWebServer(server: McpServer): boolean {
 	return server.name === WEB && server.url === config.web.mcpUrl;
 }
 
-/** The MCP servers a task's agent connects to: web search, then its repo's own. */
+/** The MCP servers a task's agent connects to: web search, then the ones added in Settings › Connectors. */
 export function mcpServersFor(id: string): McpServer[] {
-	const repoServers = servers.get(id) ?? [];
-	return [...webServer(repoServers), ...repoServers];
+	const added = servers.get(id) ?? [];
+	return [...webServer(added), ...added];
+}
+
+/** The mailboxes connected in Settings › Connectors and what the agent may do in each, read while it renders. */
+export type ConnectedMailbox = { id: string; name: string; access: MailboxAccess };
+const mail = new Map<string, ConnectedMailbox[]>();
+
+export function mailboxesFor(id: string): ConnectedMailbox[] {
+	return mail.get(id) ?? [];
+}
+
+async function connectedMailboxes(): Promise<ConnectedMailbox[]> {
+	const found = await Promise.all(mailboxes().map(async ({ id, name }) => ({ id, name, access: await mailboxAccess(id).catch(() => null) })));
+	return found.filter((mailbox): mailbox is ConnectedMailbox => mailbox.access !== null);
 }
 
 /** Each task's repo notes, read into the agent's instructions. */
@@ -101,11 +116,11 @@ async function primeAgentSettings(): Promise<void> {
 	agentSettings = { codeMode, visualReplies, pageNetwork, models: models as AgentSettings['models'] };
 }
 
-/** How long a message waits for its repo's MCP servers to list their tools, so run_script can describe them. */
+/** How long a message waits for the MCP servers to list their tools, so run_script can describe them. */
 const WARM_MS = 5000;
 
 /**
- * Loads what the agent reads while it renders: the task's model, its repo's MCP servers (and, with code mode on,
+ * Loads what the agent reads while it renders: the task's model, the MCP servers that are on (and, with code mode on,
  * their tool lists), notes and skills, whether it has a machine and whether it is planning.
  */
 export async function primeAgent(id: string, { warm = true }: { warm?: boolean } = {}): Promise<void> {
@@ -113,7 +128,8 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 	await primeAgentSettings();
 	const session = await getSessionRecord(id);
 	const project = session && (await getProject(session.projectId));
-	servers.set(id, project?.mcpServers ?? []);
+	servers.set(id, await enabledMcpServers());
+	mail.set(id, await connectedMailboxes());
 	if (warm && agentSettings.codeMode) await warmServerTools(mcpServersFor(id).filter((server) => server.codeMode !== false && !isWebServer(server)), WARM_MS);
 	memories.set(id, project?.memory ?? '');
 	const space = session?.spaceId ? await getSpace(session.spaceId) : null;

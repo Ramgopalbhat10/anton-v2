@@ -4,12 +4,14 @@ import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, Corner
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
+import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
+import { approvalOf, MailSendCard, MAIL_SEND_TOOLS } from '@/components/mail-card';
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -36,7 +38,8 @@ type Block =
 	| { kind: 'agents'; calls: ToolPart[] }
 	| { kind: 'ask'; part: ToolPart }
 	| { kind: 'show'; part: ToolPart }
-	| { kind: 'page'; part: ToolPart };
+	| { kind: 'page'; part: ToolPart }
+	| { kind: 'mail'; part: ToolPart };
 
 const PLAN_TOOL = 'propose_plan';
 /** The todo list shows as the pill above the composer, not as steps in the thread. */
@@ -140,6 +143,8 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
 		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {
 			blocks.push({ kind: 'plan', part });
+		} else if (part.type === 'dynamic-tool' && MAIL_SEND_TOOLS.has(part.toolName) && part.state !== 'output-error') {
+			blocks.push({ kind: 'mail', part });
 		} else if (part.type === 'dynamic-tool' && DRAWN[part.toolName] && part.state !== 'output-error') {
 			blocks.push({ kind: DRAWN[part.toolName], part });
 		} else if (part.type === 'dynamic-tool' && part.toolName === 'task') {
@@ -194,13 +199,24 @@ function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean)
 	return data?.scripts[toolCallId] ?? [];
 }
 
-/** Each call of a program on its own line: the tool, its input, and how long it took or that it failed. */
+/** Each call of a program on its own line: the tool (an MCP server's with the server's mark), its input, and how long it took or that it failed. */
 function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
+	const mcp = calls.some((call) => call.tool.startsWith('mcp__'));
+	const servers = useMcpServers(mcp);
+	const brands = useBrands(mcp);
 	return (
 		<ul className="flex min-w-0 flex-col gap-0.5 pt-1 pr-1 pl-6">
 			{calls.map((call, index) => (
 				<li key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] leading-[18px] text-(--text-tertiary)">
-					{call.state === 'running' ? <Spinner size={10} /> : <Icon icon={call.state === 'failed' ? CircleAlert : CornerDownRight} size={10} className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'} />}
+					{call.state === 'running' ? (
+						<Spinner size={10} />
+					) : (
+						<Icon
+							icon={call.state === 'failed' ? CircleAlert : (toolServerMark(call.tool, servers, brands)?.icon ?? CornerDownRight)}
+							size={10}
+							className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'}
+						/>
+					)}
 					<span className={cn('shrink-0', call.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{call.tool.replace(/^mcp__/, '').replace('__', ' · ')}</span>
 					<span className="min-w-0 flex-1 truncate" title={call.input}>
 						{call.input}
@@ -215,7 +231,13 @@ function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
 }
 
 const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
-	const { icon, body } = describeTool(part);
+	const described = describeTool(part);
+	const { body } = described;
+	// A server's tool given to the agent directly shows the server's mark.
+	const mcp = part.toolName.startsWith('mcp__');
+	const servers = useMcpServers(mcp);
+	const brands = useBrands(mcp);
+	const icon = (mcp ? toolServerMark(part.toolName, servers, brands)?.icon : null) ?? described.icon;
 	const failed = part.state === 'output-error';
 	const script = part.toolName === 'run_script';
 	const expandable = script || part.toolName === 'bash';
@@ -607,6 +629,12 @@ const AssistantMessage = memo(function AssistantMessage({
 						<ShowCard key={block.part.toolCallId} sessionId={sessionId} input={block.part.input} place={place} />
 					) : (
 						<Drawing key={block.part.toolCallId} what="Drawing a card" />
+					)
+				) : block.kind === 'mail' ? (
+					approvalOf(block.part.output) ? (
+						<MailSendCard key={block.part.toolCallId} sessionId={sessionId} approvalId={approvalOf(block.part.output)!} place={place} />
+					) : (
+						<Drawing key={block.part.toolCallId} what="Preparing the email" />
 					)
 				) : block.kind === 'page' ? (
 					<PageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />
