@@ -163,7 +163,7 @@ function Route({ repo, branch, planMode }: { repo?: string; branch: string; plan
 function ChatRoute() {
 	const stages: Stage[] = [
 		{ title: 'Ask', note: 'no repository' },
-		{ title: 'Browse', note: 'web and Browser panel' },
+		{ title: 'Browse', note: 'on the web' },
 		{ title: 'Scratch', note: 'when it runs code' },
 		{ title: 'Answer', note: 'right in the chat' },
 	];
@@ -180,7 +180,7 @@ function RouteWell({ art, label, stages }: { art: ReactNode; label: string; stag
 						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
 							{String(index + 1).padStart(2, '0')} {stage.title}
 						</span>
-						<div className="w-full truncate text-[12px] text-(--text-secondary)">{stage.note}</div>
+						<div className="line-clamp-2 w-full text-[11.5px] leading-[15px] text-balance text-(--text-secondary) sm:line-clamp-1 sm:text-[12px] sm:leading-[18px]">{stage.note}</div>
 					</li>
 				))}
 			</ol>

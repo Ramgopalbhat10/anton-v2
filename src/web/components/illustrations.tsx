@@ -596,8 +596,9 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan' }: { classN
 			<Label at={[22, 86, 18]} run={-46} rise={-30}>
 				anton
 			</Label>
-			<Label at={[86, 22, 18]} run={46} rise={-30} accent={linked}>
-				{`${plan.toLowerCase()} ${noun}`}
+			{/* The plan's name alone, so a long one still fits the drawing at phone width; the frame's label says the rest. */}
+			<Label at={[86, 22, 18]} run={34} rise={-30} accent={linked}>
+				{plan.toLowerCase()}
 			</Label>
 			{linked ? (
 				<Label at={[65, 65, 3]} run={30} rise={14} accent>

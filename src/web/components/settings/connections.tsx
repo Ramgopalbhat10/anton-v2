@@ -48,14 +48,14 @@ export function ConnectionsPage() {
 		<>
 			<PageHeading
 				title="Connections"
+				info="Anton needs a code host, somewhere to run sandboxes, object storage and a model gateway. Each is set by environment variables on the server."
 				actions={
 					<Btn size="sm" icon={RotateCw} disabled={connections.isFetching} onClick={() => void connections.refetch()}>
 						{connections.isFetching ? 'Checking…' : 'Check again'}
 					</Btn>
 				}
 			>
-				Anton needs a code host, somewhere to run sandboxes, object storage and a model gateway. Each is set by environment variables on the server
-				and checked here when this page opens.
+				What Anton runs on, checked when this page opens.
 			</PageHeading>
 			{connections.isPending ? (
 				<Spinner size={12} />

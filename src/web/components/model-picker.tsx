@@ -785,12 +785,16 @@ export const ModelPicker = memo(function ModelPicker({
 					</div>
 
 					<div ref={list} role="listbox" aria-label="Models" className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
-						{unconnected.map((entry) => (
-							<p key={entry.name} className="m-0 mx-1 mt-1.5 flex items-center gap-2 px-1 py-1 text-[11px] text-(--text-tertiary)">
-								<span className="size-1.5 shrink-0 rounded-full border border-(--neutral-600)" />
-								{entry.name} is not connected. Sign in under Settings › Subscriptions.
+						{/* One line for every plan not signed in to, so they do not push the models off a phone's screen. */}
+						{unconnected.length ? (
+							<p className="m-0 mx-1 mt-1.5 flex items-start gap-2 px-1 py-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+								<span className="mt-[4.5px] size-1.5 shrink-0 rounded-full border border-(--neutral-600)" />
+								<span>
+									{new Intl.ListFormat('en', { type: 'conjunction' }).format(unconnected.map((entry) => entry.name))} {unconnected.length === 1 ? 'is' : 'are'} not
+									connected. Sign in under Settings › Subscriptions.
+								</span>
 							</p>
-						))}
+						) : null}
 						{models.isPending ? (
 							<div className="flex h-16 items-center justify-center gap-2 text-[12px] text-(--text-tertiary)">
 								<Spinner size={12} />

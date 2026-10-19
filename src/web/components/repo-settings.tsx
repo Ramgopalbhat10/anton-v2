@@ -17,9 +17,9 @@ const FIELD = WELL_FIELD;
 export const AREA =
 	'w-full resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
-function Section({ title, help, children }: { title: string; help: ReactNode; children: ReactNode }) {
+function Section({ title, help, info, children }: { title: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
-		<SubBlock label={title} help={help}>
+		<SubBlock label={title} help={help} info={info}>
 			{children}
 		</SubBlock>
 	);
@@ -111,7 +111,7 @@ function SettingsForm({ project }: { project: Project }) {
 			<Block
 				title="Every new sandbox"
 				icon={Box}
-				help="What a task's sandbox gets for this repository, and what the agent can reach from it."
+				help="What this repository's sandboxes get."
 				footer={
 					<>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. New sandboxes use these settings." />
@@ -123,13 +123,15 @@ function SettingsForm({ project }: { project: Project }) {
 			>
 				<Section
 					title="Environment variables"
-					help="Set in every command the agent runs and in the terminal, over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
+					help="For the agent's commands and the terminal."
+					info="Over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
 				>
 					<VariablesEditor rows={variables} onChange={setVariables} />
 				</Section>
 				<Section
 					title="Setup script"
-					help="Runs in the repository each time a task's sandbox is set up, before the agent starts. Install dependencies or seed a database here. A failure stops the task's setup."
+					help="Runs before the agent starts, at each setup."
+					info="Install dependencies or seed a database here. A failure stops the task's setup."
 				>
 					<textarea
 						value={setupScript}
@@ -140,12 +142,13 @@ function SettingsForm({ project }: { project: Project }) {
 						className={`${AREA} font-mono text-[12px] leading-[18px]`}
 					/>
 				</Section>
-				<Section title="Preview ports" help="Ports that get a public URL in the Preview panel. Up to eight, separated by commas.">
+				<Section title="Preview ports" help="Public URLs in the Preview panel." info="Up to eight, separated by commas.">
 					<input value={ports} onChange={(event) => setPorts(event.target.value)} placeholder="3000, 5173" className={`${FIELD} max-w-[320px] font-mono`} />
 				</Section>
 				<Section
 					title="Base image"
-					help="A container image to build the sandbox from instead of Anton's default, for languages it does not include. Anton adds git and its tools on top."
+					help="Instead of Anton's default image."
+					info="For languages the default does not include. Anton adds git and its tools on top."
 				>
 					<input
 						value={baseImage}
@@ -156,19 +159,22 @@ function SettingsForm({ project }: { project: Project }) {
 				</Section>
 				<Section
 					title="Full virtual machine"
-					help="Runs each task's sandbox on Modal as a virtual machine with its own kernel instead of a container, so Docker, FUSE and system services work inside it, at the same price. Its desktop in the Computer panel works either way. Sandboxes started after you save use it."
+					help="For Docker, FUSE and system services."
+					info="Runs each task's sandbox on Modal as a virtual machine with its own kernel instead of a container, at the same price. Its desktop in the Computer panel works either way. Sandboxes started after you save use it."
 				>
 					<Switch checked={fullVm} onChange={setFullVm} label="Run sandboxes as full VMs" className="self-start" />
 				</Section>
 				<Section
 					title="Pull request follow-ups"
-					help="Every five minutes Anton checks the pull requests its agents opened. Merge conflicts, failed checks on the latest commit and new review comments go to that task's agent, up to five times per task."
+					help="Conflicts, failing checks and reviews go back to the agent."
+					info="Every five minutes Anton checks the pull requests its agents opened, up to five follow-ups per task."
 				>
 					<Switch checked={followUps} onChange={setFollowUps} label="Follow up on conflicts, CI and reviews" className="self-start" />
 				</Section>
 				<Section
 					title="Review every pull request"
-					help="Anton also reviews the pull requests people open on this repository, each in a task of its own: a correctness pass and a security pass, posted on GitHub, and again after each push, up to three times. Only pull requests opened or updated after you turn this on, and not drafts or ones from people who can't push to the repository; paste any pull request on the Reviews page to review it by hand."
+					help="Pull requests people open get a review too."
+					info="Each in a task of its own: a correctness pass and a security pass, posted on GitHub, and again after each push, up to three times. Only pull requests opened or updated after you turn this on, and not drafts or ones from people who can't push to the repository. Paste any pull request on the Reviews page to review it by hand."
 				>
 					<Switch checked={reviewOthers} onChange={setReviewOthers} label="Review others' pull requests" className="self-start" />
 				</Section>
@@ -176,11 +182,11 @@ function SettingsForm({ project }: { project: Project }) {
 					title="MCP servers"
 					help={
 						<>
-							MCP servers are added once for every task, a repository's and a chat's alike, in{' '}
+							Added once for every task, in{' '}
 							<Link to="/settings/$section" params={{ section: 'connectors' }} className="text-(--accent-text) hover:underline">
 								Settings › Connectors
 							</Link>
-							, where each can be turned off.
+							.
 						</>
 					}
 				>
@@ -212,7 +218,8 @@ function MemoryEditor({ project }: { project: Project }) {
 		<Block
 			title="Memory"
 			icon={BookOpen}
-			help="Notes every task's agent reads about this repository. The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
+			help="Notes every task's agent reads about this repository."
+			info="The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
 			footer={
 				<>
 					{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
@@ -278,15 +285,16 @@ export function RepoSettingsPage() {
 	if (!project) return <EmptyState title="Repository not found" body={projects.error?.message} />;
 	return (
 		<>
-			<PageHeading title={project.repoFullName}>
-				What every new sandbox for this repository gets. Tasks already running keep theirs until their sandbox restarts.
+			<PageHeading title={project.repoFullName} info="Tasks already running keep theirs until their sandbox restarts.">
+				What every new sandbox for this repository gets.
 			</PageHeading>
 			<SettingsForm key={project.id} project={project} />
 			<MemoryEditor key={project.id} project={project} />
 			<Block
 				title="Automations"
 				icon={Workflow}
-				help="Tasks that start on their own, checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached."
+				help="Tasks that start on their own."
+				info="Checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached."
 			>
 				<Automations projectId={project.id} />
 			</Block>
@@ -294,7 +302,8 @@ export function RepoSettingsPage() {
 				title="Remove"
 				icon={Trash2}
 				className="border-(--danger-border)"
-				help="Deletes this repository's tasks, their sandboxes and history, its automations and memory from Anton. Branches and pull requests stay on GitHub."
+				help="Deletes its tasks, automations and memory from Anton."
+				info="Its tasks' sandboxes and history go too. Branches and pull requests stay on GitHub."
 				footer={<RemoveRepo project={project} />}
 			/>
 		</>

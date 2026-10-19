@@ -7,7 +7,7 @@ import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/i
 import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type CatalogItem, type GitHubSearch, type Plugin, type PluginPick } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { FIELD, PageHeading } from './parts';
+import { FIELD, Note, PageHeading } from './parts';
 
 /** Cards shown at once on Discover; "Show more" adds as many again. */
 const PAGE = 24;
@@ -190,10 +190,9 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					</button>
 				</p>
 			)}
-			<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-tertiary)">
-				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> are always used too, ahead of these. Type <code>/</code> and a skill’s name in a task to
-				ask for it.
-			</p>
+			<Note className="rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
+				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> come first.
+			</Note>
 		</div>
 	);
 }
@@ -486,9 +485,11 @@ export function SkillsPage() {
 		void navigate({ to: '/settings/$section', params: { section: 'skills' }, search: { tab, q: query || undefined, ...next }, replace: true });
 	return (
 		<>
-			<PageHeading title="Skills">
-				Instructions the agent loads when a task needs them, in the open Agent Skills format. Plugins for Claude Code, Devin, Codex or Cursor work too; Anton uses their
-				skills.
+			<PageHeading
+				title="Skills"
+				info="In the open Agent Skills format. Plugins for Claude Code, Devin, Codex or Cursor work too; Anton uses their skills."
+			>
+				Instructions the agent loads when a task needs them.
 			</PageHeading>
 			<div className="flex flex-wrap items-center gap-3">
 				<Segmented label="Skills" className="shrink-0">

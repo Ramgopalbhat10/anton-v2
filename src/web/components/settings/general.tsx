@@ -7,16 +7,17 @@ import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigg
 import { api, type GeneralSettings, type HelperAgent, type ImageModelInfo, type Reasoning } from '@/lib/api';
 import { Block, PageHeading, SaveState, SettingRow } from './parts';
 
-const HELPERS: Array<{ agent: HelperAgent; title: string; help: string }> = [
-	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code for the agent and reports what it found.' },
-	{ agent: 'tester', title: 'Tester', help: 'Runs the project\'s tests and reports the failures.' },
-	{ agent: 'browser', title: 'Browser', help: 'Does tasks on web pages for the agent, in the Browser panel or the sandbox, and reports back.' },
+const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: string }> = [
+	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code.' },
+	{ agent: 'tester', title: 'Tester', help: 'Runs the tests and reports failures.' },
+	{ agent: 'browser', title: 'Browser', help: 'Works on web pages.', info: 'In the Browser panel or the sandbox, and reports back.' },
 	{
 		agent: 'computer',
 		title: 'Computer',
-		help: "Uses the desktop in the sandbox for the agent: apps, dialogs, a visual check. It sees the screen with this model when it is an OpenRouter model that reads images, else with the task's, else with ANTON_VISION_MODEL.",
+		help: 'Uses the sandbox desktop.',
+		info: "Apps, dialogs, a visual check. It sees the screen with this model when it is an OpenRouter model that reads images, else with the task's, else with ANTON_VISION_MODEL.",
 	},
-	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews each pull request the agent opens or updates and comments on GitHub.' },
+	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews pull requests on GitHub.', info: 'Each pull request the agent opens or updates.' },
 ];
 
 type AgentModel = { model: string; reasoning: Reasoning | null };
@@ -31,6 +32,7 @@ const VISUAL_LEVELS: Array<{ value: GeneralSettings['visualReplies']; label: str
 function HelperModel({
 	title,
 	help,
+	info,
 	value,
 	fallback,
 	disabled,
@@ -38,13 +40,14 @@ function HelperModel({
 }: {
 	title: string;
 	help: string;
+	info?: string;
 	value: AgentModel | null;
 	fallback: string;
 	disabled: boolean;
 	onChange: (value: AgentModel | null) => void;
 }) {
 	return (
-		<SettingRow title={title} help={help}>
+		<SettingRow title={title} help={help} info={info}>
 			{value ? (
 				<ModelPicker
 					value={value}
@@ -134,7 +137,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<Block
 				title="Default model"
 				icon={Cpu}
-				help="New tasks and automations without a model of their own start with this one and its reasoning level. Each task can change its own."
+				help="What new tasks and automations start on."
+				info="With its reasoning level, unless a task or automation picks its own. Each task can change its own."
 			>
 				<div className="self-start">
 					<ModelPicker
@@ -146,7 +150,11 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				</div>
 			</Block>
 			<Block title="New tasks" icon={ListChecks}>
-				<SettingRow title="Start in plan mode" help="The agent reads the code and proposes a plan, and changes nothing until you approve it. The launcher can still turn it off.">
+				<SettingRow
+					title="Start in plan mode"
+					help="Changes nothing until you approve a plan."
+					info="The agent reads the code and proposes a plan first. The launcher can still turn it off for a task."
+				>
 					<Switch
 						checked={settings.planMode}
 						disabled={save.isPending}
@@ -158,7 +166,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<Block title="Agent" icon={Braces}>
 				<SettingRow
 					title="Code mode"
-					help="The agent can write one short program that calls many tools at once (repo reads and searches, MCP servers, the decision model) and reads back only its result, which saves turns and tokens on jobs with many lookups. A repository's MCP servers are reached only this way, listed in a line per tool, unless a server opts out in its settings. Programs run on Anton, not in the sandbox, and can reach nothing else."
+					help="Calls many tools in one short program."
+					info="The agent writes one program that calls repo reads and searches, MCP servers and the decision model, and reads back only its result, which saves turns and tokens on jobs with many lookups. MCP servers are reached only this way unless a server opts out. Programs run on Anton, not in the sandbox, and can reach nothing else."
 				>
 					<Switch
 						checked={settings.codeMode}
@@ -171,7 +180,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<Block title="Replies" icon={LayoutPanelTop}>
 				<SettingRow
 					title="Visual replies"
-					help="The agent can answer with cards in the thread: figures, tables, charts, timelines, buttons and forms you press, and small pages it draws in a sandbox. Some uses them when they say it better than text; More reaches for them whenever a reply has numbers or choices; Off keeps replies to text. Questions it needs you to decide still come with options to tap."
+					help="Cards, charts and small pages in replies."
+					info="Figures, tables, charts, timelines, buttons and forms, and small pages it draws. Some uses them when they say it better than text; More reaches for them whenever a reply has numbers or choices; Off keeps replies to text. Questions for you still come with options to tap."
 				>
 					<Segmented label="Visual replies" role="radiogroup">
 						{VISUAL_LEVELS.map((level) => (
@@ -183,7 +193,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				</SettingRow>
 				<SettingRow
 					title="Pages reach the web"
-					help="Pages the agent draws can call web APIs, such as a dashboard fetching live prices. Anton makes each request for the page, so it works whatever the API's CORS rules, reaches only the public internet (never this machine or its network) and carries no cookies. Off, pages have no network at all."
+					help="Pages the agent draws can call web APIs."
+					info="Such as a dashboard fetching live prices. Anton makes each request for the page, so it works whatever the API's CORS rules, reaches only the public internet (never this machine or its network) and carries no cookies. Off, pages have no network at all."
 				>
 					<Switch
 						checked={settings.pageNetwork}
@@ -194,7 +205,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				</SettingRow>
 				<SettingRow
 					title="Image model"
-					help="The agent makes images with this model when you ask for one (an illustration, a logo, an icon, a picture for a page), or changes one you made or attached, whatever model the task runs on. A task running on an image model draws with its own. Images show in the thread and are kept in the Library; each is counted in the task's spend."
+					help="Draws and edits images you ask for."
+					info="Whatever model the task runs on; a task running on an image model draws with its own. Images show in the thread and are kept in the Library, and each is counted in the task's spend."
 				>
 					<ImageModelPicker value={settings.imageModel} disabled={save.isPending} onChange={(imageModel) => edit({ imageModel })} />
 				</SettingRow>
@@ -202,13 +214,15 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<Block
 				title="Helper agents"
 				icon={Bot}
-				help="The agents that work for the main one can each run on their own model, often a cheaper or faster one. Off, they use the task's model."
+				help="Each can run on its own, cheaper or faster model."
+				info="The agents that work for the main one. Off, they use the task's model."
 			>
 				{HELPERS.map((helper) => (
 					<HelperModel
 						key={helper.agent}
 						title={helper.title}
 						help={helper.help}
+						info={helper.info}
 						value={settings.agentModels[helper.agent]}
 						fallback={model}
 						disabled={save.isPending}
@@ -219,7 +233,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<Block title="Pull requests" icon={GitPullRequest}>
 				<SettingRow
 					title="Review pull requests"
-					help="Each time the agent opens or updates a pull request, a reviewer agent reads the change and comments on GitHub; with follow-ups on, the agent then fixes what it found. It follows the repository's REVIEW.md if there is one, and stops after three reviews of one pull request."
+					help="A reviewer comments on each push."
+					info="Each time the agent opens or updates a pull request, a reviewer agent reads the change and comments on GitHub; with follow-ups on, the agent then fixes what it found. It follows the repository's REVIEW.md if there is one, and stops after three reviews of one pull request."
 				>
 					<Switch
 						checked={settings.reviewPullRequests}
@@ -269,7 +284,7 @@ export function GeneralPage() {
 	const settings = useGeneralSettings();
 	return (
 		<>
-			<PageHeading title="General">How a new task starts when you do not choose on the launcher, how the agent works, and how its pull requests are reviewed.</PageHeading>
+			<PageHeading title="General">How new tasks start and how the agent works.</PageHeading>
 			{settings.data ? <Form settings={settings.data} /> : <Spinner size={12} />}
 		</>
 	);

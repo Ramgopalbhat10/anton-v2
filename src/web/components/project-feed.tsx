@@ -102,10 +102,10 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 				type="button"
 				aria-expanded={open}
 				onClick={() => setOpen((current) => !current)}
-				className="group/report flex h-7 items-center gap-2 self-start rounded-full border border-(--border-subtle) bg-(--well-bg) pr-3 pl-1.5 text-[12px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-full border border-(--border-subtle) bg-(--well-bg) pr-3 pl-1.5 text-left text-[12px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) transition-transform duration-(--duration-micro)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
-				<span className="flex items-center -space-x-1">
+				<span className="flex shrink-0 items-center -space-x-1">
 					{reports.slice(0, 5).map((report, index) => {
 						const thread = byPrefix(threads, report.id);
 						return (
@@ -115,10 +115,18 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 						);
 					})}
 				</span>
-				<span>
-					{reports.length === 1 ? `${reports[0].title} ${said(reports[0])}` : `${reports.length} threads reported`}
-					{needs && reports.length > 1 ? <span className="text-(--warning-text)"> · {needs} need you</span> : null}
-				</span>
+				{reports.length === 1 ? (
+					// A long title gives way, never what happened to it.
+					<span className="flex min-w-0 gap-1">
+						<span className="min-w-0 truncate">{reports[0].title}</span>
+						<span className="shrink-0">{said(reports[0])}</span>
+					</span>
+				) : (
+					<span className="min-w-0 truncate">
+						{reports.length} threads reported
+						{needs ? <span className="text-(--warning-text)"> · {needs} need you</span> : null}
+					</span>
+				)}
 			</button>
 			{open ? (
 				<div className="ml-3 flex flex-col gap-1 border-l border-(--border-subtle) py-1 pl-3">

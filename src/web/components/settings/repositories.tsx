@@ -43,14 +43,14 @@ export function RepositoriesPage() {
 		<>
 			<PageHeading
 				title="Repositories"
+				info="Tasks only work on repositories added here, through Anton's GitHub token. Each has its own variables, setup script, preview ports, memory and automations."
 				actions={
 					<Btn size="sm" icon={Plus} onClick={() => setAdding(true)}>
 						Add
 					</Btn>
 				}
 			>
-				Tasks only work on repositories added here, through Anton's GitHub token. Each one has its own variables, setup script, preview ports,
-				memory and automations.
+				What tasks can work on, each with its own settings.
 			</PageHeading>
 			{adding ? <AddRepo onAdded={() => setAdding(false)} onCancel={() => setAdding(false)} /> : null}
 			{projects.isPending ? (

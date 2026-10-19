@@ -85,7 +85,7 @@ export function Card({
 				<header className="flex min-h-12 items-center gap-2.5 px-4 pt-3 pb-2">
 					{icon ? <IconTile icon={icon} /> : null}
 					<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-						<h2 className="m-0 truncate text-[13px] leading-[18px] font-medium tracking-[-0.005em] text-(--text-primary)">{title}</h2>
+						<h2 className="m-0 max-w-full shrink-0 truncate text-[13px] leading-[18px] font-medium tracking-[-0.005em] text-(--text-primary)">{title}</h2>
 						{sub ? (
 							<>
 								<span className="text-[12px] text-(--text-disabled)">/</span>

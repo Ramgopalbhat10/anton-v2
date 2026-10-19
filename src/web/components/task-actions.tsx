@@ -334,7 +334,8 @@ export function TaskMenu({
 						Stop sandbox
 					</MenuItem>
 				) : null}
-				<MenuSeparator />
+				{/* Without any of the items above, one rule is enough. */}
+				{(onAskForPullRequest && !isChat(session)) || session.prUrl || repoId || isLive(session) ? <MenuSeparator /> : null}
 				<MenuItem
 					icon={Trash2}
 					className="sg-menu-item--destructive"

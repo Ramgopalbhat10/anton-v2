@@ -69,7 +69,7 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 		staleTime: 60_000,
 	});
 	return (
-		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-[9.5px] leading-[14px] whitespace-pre-wrap break-all text-(--text-tertiary) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
+		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-[9.5px] leading-[14px] whitespace-pre-wrap wrap-anywhere text-(--text-tertiary) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
 			{(text.data ?? '').slice(0, 1200)}
 		</pre>
 	);

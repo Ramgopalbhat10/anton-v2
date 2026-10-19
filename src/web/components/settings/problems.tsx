@@ -77,9 +77,11 @@ function Problems() {
 export function ProblemsPage() {
 	return (
 		<>
-			<PageHeading title="Recent problems">
-				Warnings and errors from work that runs on its own: sandbox setup, checkpoints, automations, pull request follow-ups and failed replies. Kept
-				until Anton restarts; the server log has everything.
+			<PageHeading
+				title="Recent problems"
+				info="Sandbox setup, checkpoints, automations, pull request follow-ups and failed replies. Kept until Anton restarts; the server log has everything."
+			>
+				Warnings and errors from work that runs on its own.
 			</PageHeading>
 			<Problems />
 		</>

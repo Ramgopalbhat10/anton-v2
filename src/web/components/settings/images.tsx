@@ -35,7 +35,8 @@ function Defaults({ view }: { view: SandboxView }) {
 			<Block
 				title="Default base image"
 				icon={Layers}
-				help={`A container image from a registry. Anton adds git, ripgrep, Python and a browser for screenshots on top. A repository can set its own. Changing it rebuilds the prepared images of repositories that use the default.`}
+				help="A container image from a registry."
+				info="Anton adds git, ripgrep, Python and a browser for screenshots on top. A repository can set its own. Changing it rebuilds the prepared images of repositories that use the default."
 				footer={
 					<>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
@@ -55,7 +56,7 @@ function Defaults({ view }: { view: SandboxView }) {
 							options={MAX_AGE}
 							fallback={`${warmImageDays} days`}
 							onChange={setWarmImageDays}
-							help="An older one is rebuilt by the next task, so new dependencies are picked up."
+							info="An older one is rebuilt by the next task, so new dependencies are picked up."
 						/>
 					</div>
 				</SubBlock>
@@ -97,9 +98,11 @@ export function ImagesPage() {
 	const projects = useProjects();
 	return (
 		<>
-			<PageHeading title="Images">
-				A new task starts from its repository's prepared image: the repo cloned, dependencies installed and the setup script run, saved after the
-				first task sets it up. Without one, setup runs from the base image.
+			<PageHeading
+				title="Images"
+				info="A prepared image is the repo cloned, dependencies installed and the setup script run, saved after the first task sets it up. Without one, setup runs from the base image."
+			>
+				New tasks start from their repository's prepared image.
 			</PageHeading>
 			{view.data ? <Defaults view={view.data} /> : <Spinner size={12} />}
 			{view.data && projects.data ? (
@@ -107,7 +110,7 @@ export function ImagesPage() {
 					title="Prepared images"
 					icon={Package}
 					aside={<Status>{`${projects.data.projects.filter((project) => project.warmedAt).length} of ${projects.data.projects.length} built`}</Status>}
-					help="Rebuild drops one, so the next task sets up from scratch and saves a fresh image."
+					info="Rebuild drops one, so the next task sets up from scratch and saves a fresh image."
 				>
 					<List>
 						{projects.data.projects.map((project) => (

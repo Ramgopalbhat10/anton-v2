@@ -7,7 +7,7 @@ import { Status } from '@/components/instrument';
 import { Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer, type McpServerInput } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Block, FIELD, PageHeading, SettingRow, SubBlock } from './parts';
+import { Block, FIELD, Note, PageHeading, SettingRow, SubBlock } from './parts';
 
 function useConnectors() {
 	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors });
@@ -178,15 +178,16 @@ function MailboxBlock({ mailbox, account }: { mailbox: ConnectorMailbox; account
 			title={mailbox.name}
 			mark={<MarkTile mark={GMAIL} />}
 			aside={state}
-			help={
+			help={connected ? 'Every task can read, draft and ask to send mail.' : 'Let every task read your mail, write drafts and ask to send them.'}
+			info={
 				connected
-					? `Every task's agent can search and read ${account.email ?? 'this account'}'s mail, write drafts, and ask to send one; an email goes only when you press Send in the thread.`
-					: `Let every task's agent search and read your mail, write drafts, and ask to send them. The sign-in stays on Anton's server and never reaches a sandbox, and nothing is sent until you press Send in the thread.`
+					? `The agent can search and read ${account.email ?? 'this account'}'s mail, write drafts, and ask to send one; an email goes only when you press Send in the thread.`
+					: "The sign-in stays on Anton's server and never reaches a sandbox, and nothing is sent until you press Send in the thread."
 			}
 			footer={connected ? <Disconnect account={account} /> : undefined}
 		>
 			{!account.client ? (
-				<SubBlock label="Set up once" help={`${account.name} needs an OAuth client of your own before it can sign in. It takes about five minutes in Google Cloud.`}>
+				<SubBlock label="Set up once" help={`${account.name} needs an OAuth client of your own.`} info="It takes about five minutes in Google Cloud.">
 					<GoogleClient account={account} open />
 				</SubBlock>
 			) : !connected ? (
@@ -239,12 +240,13 @@ function MailboxBlock({ mailbox, account }: { mailbox: ConnectorMailbox; account
 							{account.email ?? 'Google account'}
 						</span>
 					</SettingRow>
-					<SettingRow title={`Use ${mailbox.name} in tasks`} help="Off leaves the sign-in in place, but no task's agent gets the tools.">
+					<SettingRow title={`Use ${mailbox.name} in tasks`} info="Off leaves the sign-in in place, but no task's agent gets the tools.">
 						<Switch checked={mailbox.options.enabled} disabled={options.isPending} onChange={(enabled) => set({ enabled })} label={<span className="sr-only">Use {mailbox.name}</span>} />
 					</SettingRow>
 					<SettingRow
 						title="Write drafts"
-						help={mailbox.canDraft ? 'Drafts land in your Drafts folder, where you can edit them too.' : 'This sign-in only allowed reading. Connect again with drafts and sending allowed.'}
+						help={mailbox.canDraft ? 'In your Drafts folder, where you can edit them.' : 'This sign-in only allowed reading.'}
+						info={mailbox.canDraft ? undefined : 'Connect again with drafts and sending allowed.'}
 					>
 						{mailbox.canDraft ? null : <ConnectButton mailbox={mailbox} access="draft" label="Allow" variant="secondary" />}
 						<Switch
@@ -254,7 +256,11 @@ function MailboxBlock({ mailbox, account }: { mailbox: ConnectorMailbox; account
 							label={<span className="sr-only">Write drafts</span>}
 						/>
 					</SettingRow>
-					<SettingRow title="Send, when you press Send" help="The agent asks; the thread shows you the email as it will go, with Send and Don't send. A draft changed after you were shown it is not sent.">
+					<SettingRow
+						title="Send, when you press Send"
+						help="Nothing goes until you press Send."
+						info="The agent asks; the thread shows you the email as it will go, with Send and Don't send. A draft changed after you were shown it is not sent."
+					>
 						<Switch
 							checked={mailbox.canDraft && mailbox.options.send}
 							disabled={!mailbox.canDraft || !mailbox.options.enabled || options.isPending}
@@ -416,9 +422,9 @@ function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<t
 				signIn.mutate({ clientId: clientId.trim(), clientSecret: secret || null });
 			}}
 		>
-			<p className="m-0 text-[12px] leading-[18px] text-(--text-tertiary)">
-				In the service's developer settings, create an OAuth app with this redirect URI, then paste its client id, and its secret if it has one.
-			</p>
+			<Note info="In the service's developer settings, create an OAuth app with this redirect URI, then paste its client id, and its secret if it has one.">
+				Create an OAuth app with this redirect URI.
+			</Note>
 			<CopyField value={`${window.location.origin}/api/mcp-servers/callback`} label="Redirect URI" />
 			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
 				<input value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Client id" aria-label="OAuth client id" className={cn(FIELD, 'font-mono')} />
@@ -506,7 +512,8 @@ function McpServers({ servers }: { servers: McpServer[] }) {
 			title="MCP servers"
 			mark={<MarkTile mark={MCP} />}
 			aside={servers.length ? <Status tone={servers.some((server) => server.enabled) ? 'accent' : 'neutral'}>{servers.filter((server) => server.enabled).length} on</Status> : undefined}
-			help="Remote MCP servers every task's agent can call, a repository's and a chat's alike, over HTTPS. Sign in connects one that uses OAuth, as Linear and Notion do; Anton keeps and renews the sign-in. A pasted token is sent as a bearer header instead. Neither is shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts, a line per tool rather than a full tool each; turn Through code mode off to give the agent a server's tools directly."
+			help="Remote servers every task can call over HTTPS."
+			info="Sign in connects one that uses OAuth, as Linear and Notion do; Anton keeps and renews the sign-in. A pasted token is sent as a bearer header instead. Neither is shown again. List tool names to allow only those. With code mode on, the agent calls a server's tools from its scripts; turn Through code mode off to give it a server's tools directly."
 		>
 			{servers.length ? (
 				<div className="flex flex-col">
@@ -554,9 +561,11 @@ export function ConnectorsPage() {
 	const connectors = useConnectors();
 	return (
 		<>
-			<PageHeading title="Connectors">
-				Services every task's agent can use, added once like skills: your email, and MCP servers. Each can be turned off without removing it. Sign-ins and tokens stay on
-				Anton's server and never reach a sandbox.
+			<PageHeading
+				title="Connectors"
+				info="Added once, like skills, and each can be turned off without removing it. Sign-ins and tokens stay on Anton's server and never reach a sandbox."
+			>
+				Your email and MCP servers, for every task.
 			</PageHeading>
 			<Returned />
 			{connectors.data ? (

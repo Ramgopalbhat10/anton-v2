@@ -30,7 +30,8 @@ function Shared({ view }: { view: SecretsView }) {
 				title="For every repository"
 				icon={KeyRound}
 				aside={<Status>{count === 1 ? '1 variable' : `${count} variables`}</Status>}
-				help="Set in every sandbox, for the agent's commands, setup and the terminal. A repository's own variable of the same name wins."
+				help="Set in every sandbox."
+				info="For the agent's commands, setup and the terminal. A repository's own variable of the same name wins."
 				footer={
 					<>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes get them from their next start." />
@@ -68,14 +69,13 @@ export function SecretsPage() {
 	const repos = view.data?.repos ?? [];
 	return (
 		<>
-			<PageHeading title="Secrets">
-				Environment variables for sandboxes, such as API keys for tests. Values are stored by Anton and never shown again; Git credentials are not
-				needed here.
+			<PageHeading title="Secrets" info="Values are stored by Anton and never shown again. Git credentials are not needed here.">
+				Environment variables for sandboxes, such as API keys for tests.
 			</PageHeading>
 			{view.data ? (
 				<>
 					<Shared view={view.data} />
-					<Block title="Set by a repository" icon={Folder} help="Each repository's own variables, edited in its settings.">
+					<Block title="Set by a repository" icon={Folder} help="Edited in each repository's settings.">
 						{repos.length ? (
 							<List>
 								{repos.map((repo) => (

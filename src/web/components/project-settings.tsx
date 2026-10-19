@@ -88,17 +88,17 @@ function General({ space }: { space: Space }) {
 					className={`${AREA} text-[13px] leading-[19px]`}
 				/>
 				<SubBlock label="Models">
-					<SettingRow title="Coordinator" help="Plans, starts and tracks threads. A small, fast model is enough; low reasoning by default.">
+					<SettingRow title="Coordinator" help="Plans, starts and tracks threads." info="A small, fast model is enough; low reasoning by default.">
 						<ModelPicker value={{ model: coordinator.model || fallback, reasoning: coordinator.reasoning ?? 'low' }} onChange={(change) => setCoordinator((current) => ({ ...current, ...change }))} side="bottom" />
 					</SettingRow>
-					<SettingRow title="Threads" help="Each thread's agent, unless a thread or routine picks its own.">
+					<SettingRow title="Threads" help="Each thread's agent." info="Unless a thread or routine picks its own.">
 						<ModelPicker value={{ model: thread.model || fallback, reasoning: thread.reasoning }} onChange={(change) => setThread((current) => ({ ...current, ...change }))} side="bottom" />
 					</SettingRow>
 				</SubBlock>
 				<SubBlock label="Running threads">
 					<div className="grid gap-3 sm:grid-cols-2">
-						<Select label="At once" icon={Layers} value={maxParallel} options={PARALLEL} onChange={setMaxParallel} help="More wait as queued and start when one finishes." />
-						<Select label="The coordinator" icon={Waypoints} value={autonomy} options={AUTONOMY} onChange={setAutonomy} help="Suggested threads show as cards to start with one click." />
+						<Select label="At once" icon={Layers} value={maxParallel} options={PARALLEL} onChange={setMaxParallel} info="More wait as queued and start when one finishes." />
+						<Select label="The coordinator" icon={Waypoints} value={autonomy} options={AUTONOMY} onChange={setAutonomy} info="Suggested threads show as cards to start with one click." />
 					</div>
 				</SubBlock>
 			</Block>
@@ -107,7 +107,23 @@ function General({ space }: { space: Space }) {
 }
 
 /** A text the coordinator and every thread read, saved on its own. */
-function TextBlock({ space, field, title, icon, help, placeholder }: { space: Space; field: 'instructions' | 'memory'; title: string; icon: typeof BookOpen; help: string; placeholder: string }) {
+function TextBlock({
+	space,
+	field,
+	title,
+	icon,
+	help,
+	info,
+	placeholder,
+}: {
+	space: Space;
+	field: 'instructions' | 'memory';
+	title: string;
+	icon: typeof BookOpen;
+	help: string;
+	info?: string;
+	placeholder: string;
+}) {
 	const save = useSave(space);
 	const [text, setText] = useState(space[field]);
 	const [base, setBase] = useState(space[field]);
@@ -121,6 +137,7 @@ function TextBlock({ space, field, title, icon, help, placeholder }: { space: Sp
 			title={title}
 			icon={icon}
 			help={help}
+			info={info}
 			footer={
 				<>
 					<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
@@ -144,7 +161,8 @@ function Repositories({ space }: { space: Space }) {
 		<Block
 			title="Repositories"
 			icon={FolderGit2}
-			help="Threads work on one of these each, on their own branch; without any, threads work as chats with a scratch sandbox. Removing one keeps its threads."
+			help="Each thread works on one, on its own branch."
+			info="Without any, threads work as chats with a scratch sandbox. Removing one keeps its threads."
 			aside={
 				<Menu>
 					<MenuTrigger asChild>
@@ -256,7 +274,8 @@ function Lifecycle({ space }: { space: Space }) {
 			title="Pause, archive or delete"
 			icon={Trash2}
 			className="border-(--danger-border)"
-			help="Paused projects queue new threads instead of starting them. Archived ones leave the sidebar. Deleting removes the project, its coordinator conversation and its files; its threads stay as ordinary tasks."
+			help="Pause, archive or delete the project."
+			info="Paused projects queue new threads instead of starting them. Archived ones leave the sidebar. Deleting removes the project, its coordinator conversation and its files; its threads stay as ordinary tasks."
 			footer={
 				<>
 					{remove.isError ? <span className="text-[12px] text-(--danger-text)">{remove.error.message}</span> : null}
@@ -295,14 +314,17 @@ export function ProjectSettingsPage() {
 					{space.isError ? <EmptyState icon={Gauge} title="No such project" body={space.error.message} /> : null}
 					{space.data ? (
 						<>
-							<PageHeading title={space.data.name}>Settings for the coordinator and every thread in this project. Threads already running keep their model until their next message.</PageHeading>
+							<PageHeading title={space.data.name} info="Threads already running keep their model until their next message.">
+								For the coordinator and every thread in this project.
+							</PageHeading>
 							<General key={`general-${space.data.id}`} space={space.data} />
 							<TextBlock
 								space={space.data}
 								field="instructions"
 								title="Instructions"
 								icon={ScrollText}
-								help="Read by the coordinator and every thread, after each repository's own AGENTS.md."
+								help="Read by the coordinator and every thread."
+								info="After each repository's own AGENTS.md."
 								placeholder="- Keep pull requests small; one concern each."
 							/>
 							<TextBlock
@@ -310,7 +332,8 @@ export function ProjectSettingsPage() {
 								field="memory"
 								title="Memory"
 								icon={BookOpen}
-								help="What the coordinator and threads learned about this project. They add to it; edit or remove anything."
+								help="What the coordinator and threads learned."
+								info="They add to it; edit or remove anything."
 								placeholder="Decisions, conventions and facts a new thread should know."
 							/>
 							<Repositories space={space.data} />

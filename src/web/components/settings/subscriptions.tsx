@@ -5,13 +5,13 @@ import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SpecGrid, Status, Well } from '@/components/instrument';
 import { EffortRange, useModels } from '@/components/model-picker';
 import { AREA } from '@/components/repo-settings';
-import { Btn, Icon, InlineCode, Spinner, Switch } from '@/components/signal';
+import { Btn, Icon, InfoTip, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
-import { FIELD, PageHeading, SaveState, SettingRow } from './parts';
+import { FIELD, Note, PageHeading, SaveState, SettingRow } from './parts';
 
 const STATUS: Record<Subscription['state'], { tone: 'success' | 'danger' | 'neutral'; label: string }> = {
 	connected: { tone: 'success', label: 'Connected' },
@@ -63,15 +63,25 @@ function useSignIn(subscription: Subscription) {
 	});
 }
 
-/** The card's lead under its drawing: a headline and what it means. */
-function Lead({ title, children }: { title: string; children: ReactNode }) {
+/** The card's lead under its drawing: a headline, what it means in a line, and the rest behind an info icon. */
+function Lead({ title, info, children }: { title: string; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1 px-4 pt-1 pb-3.5">
-			<h3 className="m-0 text-[15px] leading-[22px] font-medium tracking-[-0.01em]">{title}</h3>
+			<h3 className="m-0 flex items-center gap-1.5 text-[15px] leading-[22px] font-medium tracking-[-0.01em]">
+				{title}
+				{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
+			</h3>
 			<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{children}</p>
 		</div>
 	);
 }
+
+/** Where a plan's models are found in the picker. */
+const Named = ({ gateway }: { gateway: string }) => (
+	<>
+		Their names start with <InlineCode>{gateway}/</InlineCode>.
+	</>
+);
 
 /** Waiting for ChatGPT to send the browser back: caught by Anton on this computer, or pasted from the address bar. */
 function Pending({ subscription }: { subscription: Subscription }) {
@@ -142,10 +152,11 @@ function Connect({ subscription }: { subscription: Subscription }) {
 	return (
 		<>
 			<CardSection label={subscription.state === 'expired' ? 'Sign in again' : `Option 1 · Sign in with ${subscription.name}`} hint="Recommended">
-				<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-					Opens {subscription.name} in a new tab, where you approve Anton for your Plus or Pro plan. {subscription.name} only sends you back to an
-					address on your own computer, so when Anton is hosted elsewhere you paste that address here.
-				</p>
+				<Note
+					info={`${subscription.name} only sends you back to an address on your own computer, so when Anton is hosted elsewhere you paste that address here.`}
+				>
+					Approve Anton for your Plus or Pro plan in a new tab.
+				</Note>
 				<div className="flex flex-wrap items-center gap-3">
 					<Btn size="sm" variant="primary" disabled={signIn.isPending} onClick={() => signIn.mutate(window.open('', '_blank'))}>
 						{signIn.isPending ? 'Opening…' : `Sign in with ${subscription.name}`}
@@ -154,11 +165,10 @@ function Connect({ subscription }: { subscription: Subscription }) {
 				</div>
 			</CardSection>
 			<CardSection label="Option 2 · Bring a sign-in from your computer">
-				<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-					On a computer with a browser, run <InlineCode>npx @earendil-works/pi-ai@latest login openai</InlineCode>, approve it in {subscription.name},
-					and paste the <InlineCode>auth.json</InlineCode> it writes in that folder. Anton renews it at once and keeps it renewed from then on, so the
-					copy on that computer stops working; delete it there.
-				</p>
+				<Note info="Anton renews it at once and keeps it renewed from then on, so the copy on that computer stops working; delete it there.">
+					Run this on a computer with a browser, approve it in {subscription.name}, then paste the <InlineCode>auth.json</InlineCode> it writes.
+				</Note>
+				<Command text="npx @earendil-works/pi-ai@latest login openai" label="Command that signs in to ChatGPT on your computer" />
 				<form
 					className="flex flex-col gap-2"
 					onSubmit={(event) => {
@@ -280,7 +290,8 @@ function PlanSettings({ subscription, error, pricedAs }: { subscription: Subscri
 			<div className="flex flex-col">
 				<SettingRow
 					title={`Use ${subscription.name} models`}
-					help="Off hides them from the model picker. Tasks already set to one of them stop until you pick another model."
+					help="Off hides them from the model picker."
+					info="Tasks already set to one of them stop until you pick another model."
 				>
 					<Switch
 						checked={enabled}
@@ -292,7 +303,8 @@ function PlanSettings({ subscription, error, pricedAs }: { subscription: Subscri
 				{vendorApi ? (
 					<SettingRow
 						title="Count toward the spending caps"
-						help={`Records each call at what ${vendorApi} would charge for it, so the daily and per-task caps also stop a runaway task on your plan. Off, calls are recorded at $0 and only the plan's own limits apply.`}
+						help={`Each call counts at ${vendorApi} prices.`}
+						info="So the daily and per-task caps also stop a runaway task on your plan. Off, calls are recorded at $0 and only the plan's own limits apply."
 					>
 						<Switch
 							checked={countAtApiPrices}
@@ -368,9 +380,15 @@ function Plan({ subscription }: { subscription: Subscription }) {
 				</Well>
 			</CardSection>
 			{connected ? (
-				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}>
-					Tasks on these models bill your {subscription.name} plan's usage instead of paying per token. Their names start with{' '}
-					<InlineCode>{subscription.gateway}/</InlineCode>, and Anton renews the sign-in on its own a few minutes before each token lapses.
+				<Lead
+					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}
+					info={
+						<>
+							<Named gateway={subscription.gateway} /> Anton renews the sign-in on its own a few minutes before each token lapses.
+						</>
+					}
+				>
+					Billed to your {subscription.name} plan's usage, not per token.
 				</Lead>
 			) : subscription.login ? (
 				<Lead title={`Waiting for ${subscription.name}`}>Approve Anton in the {subscription.name} tab, then finish here.</Lead>
@@ -379,9 +397,11 @@ function Plan({ subscription }: { subscription: Subscription }) {
 					<span className="text-(--danger-text)">{subscription.problem}</span>
 				</Lead>
 			) : (
-				<Lead title={`Run tasks on your ${subscription.name} plan`}>
-					Plus and Pro plans work through OpenAI's Sign in with ChatGPT. Their models join the model picker, and their calls count toward the plan's
-					limits instead of costing money per token.
+				<Lead
+					title={`Run tasks on your ${subscription.name} plan`}
+					info="Their models join the model picker, and their calls count toward the plan's limits instead of costing money per token."
+				>
+					Plus and Pro plans, through Sign in with ChatGPT.
 				</Lead>
 			)}
 			{connected ? <Connected subscription={subscription} /> : subscription.login ? <Pending subscription={subscription} /> : <Connect subscription={subscription} />}
@@ -440,18 +460,26 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 				</Well>
 			</CardSection>
 			{connected ? (
-				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}>
-					Tasks on these models run through Claude Code on this server, which uses only Anton's tools and bills your {subscription.name} plan's usage
-					instead of paying per token. Their names start with <InlineCode>{subscription.gateway}/</InlineCode>.
+				<Lead
+					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}
+					info={
+						<>
+							Claude Code runs on this server with only Anton's tools. <Named gateway={subscription.gateway} />
+						</>
+					}
+				>
+					Billed to your {subscription.name} plan's usage, not per token.
 				</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title="Claude Code cannot use your plan">
 					<span className="text-(--danger-text)">{subscription.problem}</span>
 				</Lead>
 			) : (
-				<Lead title={`Run tasks on your ${subscription.name} plan`}>
-					Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on this server with its built-in tools off: Claude does the
-					thinking, and Anton runs every tool. Claude Code signs in through its own flow and keeps the sign-in to itself.
+				<Lead
+					title={`Run tasks on your ${subscription.name} plan`}
+					info="Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on this server with its built-in tools off: Claude does the thinking, and Anton runs every tool. Claude Code signs in through its own flow and keeps the sign-in to itself."
+				>
+					Pro and Max plans, through Claude Code on this server.
 				</Lead>
 			)}
 			{connected ? (
@@ -469,8 +497,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					{subscription.extraUsageAt ? (
 						<CardSection label="Extra usage">
 							<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--warning-text)">
-								Claude Code said {age(subscription.extraUsageAt)} ago that your plan's limit ran out and calls now bill extra usage, which costs money.
-								Turn extra usage off at{' '}
+								Your plan's limit ran out {age(subscription.extraUsageAt)} ago and calls now bill extra usage, which costs money. Turn it off at{' '}
 								<a href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer" className="text-(--accent-text) hover:underline">
 									claude.ai/settings/usage
 								</a>{' '}
@@ -489,17 +516,19 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 				</>
 			) : (
 				<CardSection label="Sign in on the server" hint="Once">
-					<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-						Run this in a shell on the computer Anton runs on, such as over ssh. Claude Code shows a link: open it, approve, and paste the code it gives
-						you back into the shell. Then check again here.
-					</p>
+					<Note info="Over ssh, for example. Claude Code shows a link: open it, approve, and paste the code it gives you back into the shell.">
+						Run this in a shell where Anton runs, then check again.
+					</Note>
 					{subscription.signIn ? <Command text={subscription.signIn} label="Command that signs Claude Code in" /> : null}
 					<SaveState pending={refresh.isPending} success={false} error={refresh.error} />
 				</CardSection>
 			)}
 			<CardFooter
 				caption={
-					<Caption>For your own use only: Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</Caption>
+					<Caption className="inline-flex items-center gap-1.5">
+						For your own use only
+						<InfoTip>Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</InfoTip>
+					</Caption>
 				}
 			>
 				<Btn size="sm" variant={connected ? 'ghost' : 'primary'} icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
@@ -511,9 +540,10 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 }
 
 /** What a key plan's card says, by plan; a plan not listed here gets plain wording. */
-const KEY_PLANS: Record<string, { tagline: string; about: string; howTo: string; placeholder: string; pricedAs: string | null; terms?: string }> = {
+const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; howTo: string; placeholder: string; pricedAs: string | null; terms?: string }> = {
 	'opencode-go': {
 		tagline: 'open coding models',
+		lead: 'A monthly plan of open coding models, with a key from OpenCode.',
 		about:
 			'OpenCode Go is a monthly plan of open coding models (GLM, Kimi, DeepSeek, Qwen, MiniMax and more) that OpenCode offers for its own agent and others. Anton calls them from this server with a key from your OpenCode workspace.',
 		howTo: 'Subscribe to Go in the OpenCode Console, make an API key in the same workspace, and paste it here.',
@@ -522,6 +552,7 @@ const KEY_PLANS: Record<string, { tagline: string; about: string; howTo: string;
 	},
 	cursor: {
 		tagline: 'through the Cursor SDK',
+		lead: "Your plan's usage, through Cursor's SDK on this server.",
 		about:
 			"Cursor plans run through Cursor's own agent, so Anton runs it on this server through Cursor's official SDK with its built-in tools off: the model does the thinking, and Anton runs every tool. Calls use your plan's usage.",
 		howTo: "Make a user API key in Cursor's dashboard and paste it here.",
@@ -572,16 +603,15 @@ function KeyForm({ subscription, howTo, placeholder }: { subscription: Subscript
 	});
 	return (
 		<CardSection label={subscription.state === 'expired' ? 'Paste a new key' : 'Paste your key'}>
-			<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+			<Note info="The key stays on this server and never reaches a task's sandbox.">
 				{howTo}{' '}
 				{subscription.keyPage ? (
 					<a href={subscription.keyPage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-(--accent-text) hover:underline">
 						Open the key page
 						<Icon icon={ExternalLink} size={11} />
 					</a>
-				) : null}{' '}
-				The key stays on this server and never reaches a task's sandbox.
-			</p>
+				) : null}
+			</Note>
 			<form
 				className="flex flex-wrap items-center gap-2"
 				onSubmit={(event) => {
@@ -617,6 +647,7 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 	const status = STATUS[subscription.state];
 	const copy = KEY_PLANS[subscription.id] ?? {
 		tagline: 'with your key',
+		lead: `Anton calls ${subscription.name} from this server with your key.`,
 		about: `Anton calls ${subscription.name} from this server with a key from your account.`,
 		howTo: `Make a key on ${subscription.name}'s dashboard and paste it here.`,
 		placeholder: 'Key',
@@ -641,16 +672,20 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 				</Well>
 			</CardSection>
 			{connected ? (
-				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}>
-					Tasks on these models use your {subscription.name} plan instead of paying per token. Their names start with{' '}
-					<InlineCode>{subscription.gateway}/</InlineCode>.
+				<Lead
+					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}
+					info={<Named gateway={subscription.gateway} />}
+				>
+					Billed to your {subscription.name} plan, not per token.
 				</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title={`${subscription.name} stopped taking the key`}>
 					<span className="text-(--danger-text)">{subscription.problem}</span>
 				</Lead>
 			) : (
-				<Lead title={`Run tasks on your ${subscription.name} plan`}>{copy.about}</Lead>
+				<Lead title={`Run tasks on your ${subscription.name} plan`} info={copy.about}>
+					{copy.lead}
+				</Lead>
 			)}
 			{connected ? (
 				<>
@@ -851,14 +886,22 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 				</Well>
 			</CardSection>
 			{connected ? (
-				<Lead title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} for your key`}>
-					Hundreds of models from every major lab, billed to your OpenRouter account per token. Their names start with{' '}
-					<InlineCode>{subscription.gateway}/</InlineCode>, and their calls count toward the spending caps at OpenRouter's price.
+				<Lead
+					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} for your key`}
+					info={
+						<>
+							<Named gateway={subscription.gateway} /> Their calls count toward the spending caps at OpenRouter's price.
+						</>
+					}
+				>
+					Billed per token to your OpenRouter account.
 				</Lead>
 			) : (
-				<Lead title={`Connect ${subscription.name}`}>
-					OpenRouter serves hundreds of models from every major lab through one key, billed per token. Anton lists the models your key may use, and
-					the agents, the decision model and the computer's eyes call them with it.
+				<Lead
+					title={`Connect ${subscription.name}`}
+					info="Anton lists the models your key may use, and the agents, the decision model and the computer's eyes call them with it."
+				>
+					Hundreds of models from every major lab through one key, billed per token.
 				</Lead>
 			)}
 			{connected ? (
@@ -879,10 +922,9 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 					{subscription.windows?.length ? <Windows windows={subscription.windows} label="Limits and credits" /> : null}
 					{fromServer && !replacing ? (
 						<CardSection label="Key">
-							<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-								Using <InlineCode>{envVar}</InlineCode> from the server's environment. A key pasted here takes its place, and the server's key comes back
-								if you disconnect it.
-							</p>
+							<Note info="A key pasted here takes its place, and the server's key comes back if you disconnect it.">
+								Using <InlineCode>{envVar}</InlineCode> from the server's environment.
+							</Note>
 							<div>
 								<Btn size="sm" variant="ghost" icon={KeyRound} onClick={() => setReplacing(true)}>
 									Paste a key instead
@@ -936,7 +978,7 @@ function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; o
 			aria-controls={`plan-panel-${subscription.id}`}
 			onClick={onSelect}
 			className={cn(
-				'-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-1 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
+				'inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-1 text-[13px] whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
 				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 			)}
 		>
@@ -960,9 +1002,11 @@ export function SubscriptionsPage() {
 	const current = plans.find((plan) => plan.id === picked) ?? plans[0];
 	return (
 		<>
-			<PageHeading title="Subscriptions">
-				Run tasks on a plan you already pay for instead of paying per token. A connected plan gets its own tab in the model picker, its models are
-				marked PLAN, and their calls count against the plan's own limits. OpenRouter's tab takes your key for the models it bills per token.
+			<PageHeading
+				title="Subscriptions"
+				info="A connected plan gets its own tab in the model picker, its models are marked PLAN, and their calls count against the plan's own limits. OpenRouter's tab takes your key for the models it bills per token."
+			>
+				Run tasks on a plan you already pay for.
 			</PageHeading>
 			{view.isPending ? (
 				<Spinner size={12} />
@@ -970,7 +1014,7 @@ export function SubscriptionsPage() {
 				<p className="m-0 text-[12px] text-(--danger-text)">{view.error.message}</p>
 			) : current ? (
 				<div className="flex flex-col gap-5">
-					<div role="tablist" aria-label="Plans" className="flex gap-6 border-b border-(--border-subtle)">
+					<div role="tablist" aria-label="Plans" className="flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border-subtle)] [scrollbar-width:none] sm:gap-6">
 						{plans.map((plan) => (
 							<PlanTab key={plan.id} subscription={plan} on={plan.id === current.id} onSelect={() => setPicked(plan.id)} />
 						))}

@@ -22,9 +22,11 @@ export function GuardrailsPage() {
 	});
 	return (
 		<>
-			<PageHeading title="Guardrails">
-				What the agent cannot see or do. Git credentials never enter a sandbox the agent uses: Anton clones before the agent starts and pushes
-				through the GitHub API.
+			<PageHeading
+				title="Guardrails"
+				info="Git credentials never enter a sandbox the agent uses: Anton clones before the agent starts and pushes through the GitHub API."
+			>
+				What the agent cannot see or do.
 			</PageHeading>
 			{settings.data ? (
 				<Block
@@ -34,7 +36,8 @@ export function GuardrailsPage() {
 				>
 					<SettingRow
 						title="Hide secret values from the agent"
-						help="Command output shows [NAME hidden] in place of a variable's value, so a value a command prints does not end up in a reply, commit or pull request. Values shorter than eight characters, and files the agent reads, are left as they are."
+						help="Command output shows [NAME hidden] instead."
+						info="So a value a command prints does not end up in a reply, commit or pull request. Values shorter than eight characters, and files the agent reads, are left as they are."
 					>
 						<Switch
 							checked={settings.data.hideSecrets}
@@ -48,7 +51,7 @@ export function GuardrailsPage() {
 			) : (
 				<Spinner size={12} />
 			)}
-			<Block title="Set elsewhere" icon={ArrowUpRight} help="The other limits that keep the agent in bounds, each on its own page.">
+			<Block title="Set elsewhere" icon={ArrowUpRight} help="Other limits, each on its own page.">
 				<List>
 					{ELSEWHERE.map((item) => (
 						<Link

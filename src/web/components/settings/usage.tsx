@@ -7,7 +7,7 @@ import { useModels } from '@/components/model-picker';
 import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type Budget, type Limits, type PlanUsage, type SpendRow, type UsageView } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
-import { FIELD, PageHeading, SaveState } from './parts';
+import { FIELD, Note, PageHeading, SaveState } from './parts';
 
 const toInput = (value: number | null) => (value === null ? '' : String(value));
 const fromInput = (value: string) => (value.trim() === '' ? null : Math.max(0, Number(value)));
@@ -58,10 +58,9 @@ function Caps({ limits }: { limits: Limits }) {
 				}
 			>
 				<CardSection ruled={false} className="pt-0">
-					<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
-						Once a cap is reached, Anton stops the reply that crossed it and takes no new messages until the next day or until you raise it.
-						Automations start nothing while today's cap is reached.
-					</p>
+					<Note info="Anton stops the reply that crossed it and takes no new messages until the next day or until you raise it. Automations start nothing while today's cap is reached.">
+						A reached cap stops the agent.
+					</Note>
 					<div className="grid gap-3 sm:grid-cols-2">
 						<label className="flex flex-col gap-1.5">
 							<span className="in-caption">Per day, all tasks</span>
@@ -401,9 +400,11 @@ export function UsagePage() {
 	);
 	return (
 		<>
-			<PageHeading title="Usage and limits">
-				Model spend from OpenRouter's listed prices, including its cache prices, so the real bill may differ slightly; models on a plan you
-				connected cost nothing per token and count in tokens. Sandbox and storage costs are billed by Modal and Tigris and are not counted here.
+			<PageHeading
+				title="Usage and limits"
+				info="Spend is from OpenRouter's listed prices, including its cache prices, so the real bill may differ slightly. Models on a plan you connected cost nothing per token and count in tokens. Sandbox and storage costs are billed by Modal and Tigris and are not counted here."
+			>
+				Model spend, and the caps that stop it.
 			</PageHeading>
 			{usage.data && budget.data ? (
 				<>
