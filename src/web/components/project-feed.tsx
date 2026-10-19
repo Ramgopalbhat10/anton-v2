@@ -87,7 +87,7 @@ const REPORTED: Record<Report['state'], string> = {
 	resolved: 'is done',
 };
 
-const said = (report: Report) => (report.routine ? 'was started by a routine' : REPORTED[report.state]);
+const said = (report: Report) => REPORTED[report.state];
 
 function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Session[] }) {
 	const [open, setOpen] = useState(false);
@@ -142,6 +142,30 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 					})}
 				</div>
 			) : null}
+		</div>
+	);
+}
+
+/**
+ * Threads you or a routine started, not the coordinator: a quiet line saying
+ * who, over the same live card the coordinator's threads get, so the feed
+ * shows them as they begin and follows them from there. A deleted thread
+ * leaves the card.
+ */
+function StartedRows({ reports, threads }: { reports: Report[]; threads: Session[] }) {
+	const rows = reports.flatMap((report) => {
+		const thread = byPrefix(threads, report.id);
+		return thread ? [<ThreadRow key={report.id} thread={thread} />] : [];
+	});
+	if (!rows.length) return null;
+	const who = reports.every((report) => report.started === 'routine') ? 'A routine' : 'You';
+	const what = rows.length === 1 ? 'a thread' : `${rows.length} threads`;
+	return (
+		<div className="flex flex-col gap-1.5">
+			<ActionRow icon={Waypoints}>
+				{who} started {what}
+			</ActionRow>
+			<ThreadRows label={`${who} started ${what}`}>{rows}</ThreadRows>
 		</div>
 	);
 }
@@ -377,7 +401,15 @@ const UserEntry = memo(
 	function UserEntry({ message, threads }: { message: FlueConversationMessage; threads: Session[] }) {
 		const text = textOf(message);
 		const reports = useMemo(() => parseReports(text), [text]);
-		return reports ? <ReportRow reports={reports} threads={threads} /> : <Bubble message={message} />;
+		if (!reports) return <Bubble message={message} />;
+		const started = reports.filter((report) => report.started);
+		const changed = reports.filter((report) => !report.started);
+		return (
+			<>
+				{started.length ? <StartedRows reports={started} threads={threads} /> : null}
+				{changed.length ? <ReportRow reports={changed} threads={threads} /> : null}
+			</>
+		);
 	},
 	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads,
 );

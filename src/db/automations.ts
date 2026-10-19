@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Reasoning } from '../core/ports.ts';
+import { announce } from '../core/changes.ts';
 import { appDb } from './client.ts';
 
 /** A way tasks start without anyone typing: from labeled issues, or every few hours. */
@@ -62,6 +63,7 @@ export async function insertAutomation(input: NewAutomation): Promise<Automation
 		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, plan_first, enabled, created_at, space_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
 		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, input.planFirst ? 1 : 0, new Date().toISOString(), input.spaceId ?? null],
 	});
+	announce({ kind: 'automations' });
 	return (await getAutomation(id))!;
 }
 
@@ -115,11 +117,14 @@ export async function updateAutomation(id: string, update: AutomationUpdate): Pr
 		sql: `UPDATE automations SET ${entries.map((key) => `${columns[key]} = ?`).join(', ')} WHERE id = ?`,
 		args: [...entries.map((key) => stored(key, update[key])), id],
 	});
+	// A run moves its last-run time, and may have taken issues: the routine lists show it.
+	announce({ kind: 'automations' });
 }
 
 export async function deleteAutomation(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM automations WHERE id = ?', args: [id] });
+	announce({ kind: 'automations' });
 }
 
 /** Takes an issue for one task; false when it already has one. */

@@ -199,6 +199,21 @@ test('the coordinator reads the project, its threads and what they ask', async (
 	await assert.rejects(() => spaces.findThread(space.id, 'nope'), /No thread/);
 });
 
+test('a thread you start is reported as it starts, with its brief, and again when it replies', async () => {
+	const space = await spaces.createSpace({ name: 'Yours', repoIds: [api.id] });
+	const thread = await spaces.startThread(space.id, { title: 'API keys', brief: 'Add API key auth <for> third-party apps.' });
+	await reports.threadStarted(thread.id, { by: 'you', brief: 'Add API key auth <for> third-party apps.' });
+	await reports.flushReports();
+	const mine = () => toCoordinator.filter((sent) => sent.id === space.id);
+	assert.equal(mine().length, 1, 'the coordinator hears of it at once, before it replies');
+	assert.match(mine()[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="API keys" state="\\w+" started="you">Add API key auth &lt;for> third-party apps\\.</thread>`));
+	// Its first reply is news, as for any thread.
+	await reports.threadFinished(thread.id, 'Which routes should the keys reach?');
+	await reports.flushReports();
+	assert.equal(mine().length, 2);
+	assert.doesNotMatch(mine()[1].text, /started=/);
+});
+
 test('a project without repositories runs routines on a schedule, starting chats', async () => {
 	const space = await spaces.createSpace({ name: 'Digest', goal: 'A weekly digest' });
 	await assert.rejects(() => automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the news.' }), /repository/);
