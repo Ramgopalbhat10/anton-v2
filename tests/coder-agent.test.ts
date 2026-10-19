@@ -37,3 +37,11 @@ test('Coder gives each connected mailbox its tools, drafts and sending only wher
 	assert.match(send, /noteAsk\(id,/);
 	assert.doesNotMatch(tools, /sendDraft|decideSend/);
 });
+
+test('Coder makes images through the image port whatever its model, with the tool only when there is one', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /if \(drawing\) useGenerateImage\(id\);/);
+	const tool = source.slice(source.indexOf('function useGenerateImage'), source.indexOf('const IMAGE_HINT'));
+	assert.match(tool, /name: 'generate_image'/);
+	assert.match(tool, /generateImage\(id, data, signal\)/);
+});

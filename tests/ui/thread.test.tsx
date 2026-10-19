@@ -466,6 +466,37 @@ describe('response details', () => {
 		expect(screen.getByRole('link', { name: 'Open Explainer in a new tab' }).getAttribute('href')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
 	});
 
+	it('draws an image the agent made where it made it, in its shape while it draws, and not again among the files', async () => {
+		closeViewer();
+		const drawing = tool('generate_image', { prompt: 'A lighthouse at dusk', aspect_ratio: '16:9' });
+		const { unmount } = show(agent([user('u1', 'Draw a lighthouse'), assistant('a1', [drawing])], { status: 'streaming' }));
+		const frame = screen.getAllByRole('status').find((status) => status.textContent === 'Making an image')!;
+		expect(frame.style.aspectRatio).toBe('16 / 9');
+		unmount();
+
+		const made = tool('generate_image', { prompt: 'A lighthouse at dusk', aspect_ratio: '16:9' }, { output: { path: 'images/lighthouse-abc123.png', model: 'OpenAI: GPT Image 2.5 Flare', note: '' } });
+		const text = 'Here it is: [lighthouse](../outputs/images/lighthouse-abc123.png)';
+		renderWithQueries(
+			<>
+				<Thread sessionId="s1" agent={agent([user('u1', 'Draw a lighthouse'), assistant('a1', [made, { type: 'text', text }])])} />
+				<OutputViewerHost />
+			</>,
+			[
+				[['session', 's1'], session()],
+				[['health'], { ok: true, openRouter: true }],
+				[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
+				[['models'], { models: [], default: '' }],
+				[['outputs', 's1'], { source: 'saved', at: null, outputs: [{ path: 'images/lighthouse-abc123.png', size: 1, mtimeMs: 1 }] }],
+			],
+		);
+		expect(screen.getByRole('img', { name: 'A lighthouse at dusk' }).getAttribute('src')).toBe('/api/sessions/s1/output?path=images%2Flighthouse-abc123.png');
+		expect(screen.getByText('OpenAI: GPT Image 2.5 Flare')).toBeTruthy();
+		expect(screen.queryByRole('list', { name: 'Files from this reply' })).toBeNull();
+		fireEvent.click(screen.getByRole('img', { name: 'A lighthouse at dusk' }).closest('button')!);
+		expect(await screen.findByRole('complementary', { name: 'Viewing lighthouse-abc123.png' })).toBeTruthy();
+		fireEvent.keyDown(window, { key: 'Escape' });
+	});
+
 	it('shows the files a reply made as cards, and opens a linked one beside the chat, ready to mark up', async () => {
 		closeViewer();
 		const text = 'Both are in the Library:\n\n- [Editable SVG](../outputs/stream-architecture.svg)\n- [Browser-rendered PNG](../outputs/stream-architecture.png)\n\n![Preview](../outputs/stream-architecture.png)\n\nNotes in [the report](../outputs/reports/notes.md).';

@@ -82,6 +82,11 @@ export const config = {
 	 * says what the screen shows.
 	 */
 	visionModel: read('ANTON_VISION_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
+	/**
+	 * The OpenRouter image model generate_image draws with when Settings › General names none and the task's own
+	 * model is not one: GPT Image 2.5's speed tier, which edits images and leaves backgrounds transparent.
+	 */
+	imageModel: read('ANTON_IMAGE_MODEL', 'openrouter/openai/gpt-image-2.5-flare'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.56.1',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */

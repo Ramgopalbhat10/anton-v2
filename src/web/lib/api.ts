@@ -435,9 +435,13 @@ export type GeneralSettings = {
 	visualReplies: 'off' | 'some' | 'more';
 	/** Pages the agent writes can call web APIs, through Anton. */
 	pageNetwork: boolean;
+	/** The model generate_image draws with; null is the server's default. */
+	imageModel: string | null;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 };
+/** A model the agent's generate_image tool can draw with. */
+export type ImageModelInfo = { id: string; name: string; vendor: string; description: string; references: number; aspectRatios: string[]; transparent: boolean };
 export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
@@ -608,6 +612,7 @@ export const api = {
 	cleanUpStorage: () => post<CleanupResult>('/api/storage/cleanup'),
 	/** `pinned` are the models you pinned to the top of the picker, in the order you pinned them. */
 	models: () => json<{ models: ModelInfo[]; default: string; pinned?: string[] }>('/api/models'),
+	imageModels: () => json<{ models: ImageModelInfo[]; default: string; available: boolean }>('/api/image-models'),
 	setPinnedModels: (pinned: string[]) => json<{ pinned: string[] }>('/api/models/pinned', { method: 'PUT', body: JSON.stringify({ pinned }) }),
 	subscriptions: () => json<{ subscriptions: Subscription[] }>('/api/subscriptions'),
 	setSubscriptionOptions: (id: string, options: SubscriptionOptions) =>

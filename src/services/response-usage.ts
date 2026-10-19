@@ -48,6 +48,18 @@ export function countReplyCall(event: TurnEvent): void {
 	if (!onPlan(`${event.request?.providerId ?? ''}/`)) reply.billing = 'api';
 }
 
+/**
+ * Adds what a tool paid for on the side (an image model's picture, say) to the
+ * task's open reply, so the reply's cost says what it spent. Only the dollars:
+ * its tokens are not the agent's.
+ */
+export function countReplySpend(id: string, cost: number): void {
+	const reply = open.get(id);
+	if (!reply || cost <= 0) return;
+	reply.main.cost += cost;
+	reply.billing = 'api';
+}
+
 /** The reply's calls, ending the count; null when its start was not seen (a reply resumed after a restart). */
 export function finishReply(id: string): ReplyUsage | null {
 	const reply = open.get(id) ?? null;

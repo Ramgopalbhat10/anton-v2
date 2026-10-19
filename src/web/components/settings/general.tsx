@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Bot, Braces, Cpu, GitPullRequest, LayoutPanelTop, ListChecks } from 'lucide-react';
+import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks } from 'lucide-react';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { Btn, Spinner, Switch } from '@/components/signal';
-import { api, type GeneralSettings, type HelperAgent, type Reasoning } from '@/lib/api';
+import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
+import { api, type GeneralSettings, type HelperAgent, type ImageModelInfo, type Reasoning } from '@/lib/api';
 import { Block, PageHeading, SaveState, SettingRow } from './parts';
 
 const HELPERS: Array<{ agent: HelperAgent; title: string; help: string }> = [
@@ -62,6 +62,41 @@ function HelperModel({
 				label={<span className="sr-only">{title} uses its own model</span>}
 			/>
 		</SettingRow>
+	);
+}
+
+/** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
+function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {
+	const listed = useQuery({ queryKey: ['image-models'], queryFn: api.imageModels, staleTime: 5 * 60_000 });
+	if (!listed.data) return listed.error ? <span className="text-[12px] text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
+	if (!listed.data.available) return <span className="text-[12px] text-(--text-tertiary)">Needs an OpenRouter key</span>;
+	const { models, default: fallback } = listed.data;
+	const label = (id: string) => models.find((model) => model.id === id)?.name ?? id.replace(/^openrouter\//, '');
+	const vendors = new Map<string, ImageModelInfo[]>();
+	for (const model of models) vendors.set(model.vendor, [...(vendors.get(model.vendor) ?? []), model]);
+	return (
+		<Menu>
+			<MenuTrigger asChild disabled={disabled}>
+				<PickerChip icon={ImagePlus} label={value ? label(value) : `Default · ${label(fallback)}`} height={28} />
+			</MenuTrigger>
+			<MenuContent align="end" className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto">
+				<MenuItem checked={value === null} hint={label(fallback)} onSelect={() => onChange(null)}>
+					Default
+				</MenuItem>
+				{[...vendors].map(([vendor, list]) => (
+					<MenuSub key={vendor}>
+						<MenuSubTrigger hint={list.some((model) => model.id === value) ? label(value!) : undefined}>{vendor}</MenuSubTrigger>
+						<MenuSubContent className="max-w-[320px]">
+							{list.map((model) => (
+								<MenuItem key={model.id} checked={model.id === value} title={model.description} onSelect={() => onChange(model.id)}>
+									{model.name}
+								</MenuItem>
+							))}
+						</MenuSubContent>
+					</MenuSub>
+				))}
+			</MenuContent>
+		</Menu>
 	);
 }
 
@@ -156,6 +191,12 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						onChange={(pageNetwork) => edit({ pageNetwork })}
 						label={<span className="sr-only">Pages reach the web</span>}
 					/>
+				</SettingRow>
+				<SettingRow
+					title="Image model"
+					help="The agent makes images with this model when you ask for one (an illustration, a logo, an icon, a picture for a page), or changes one you made or attached, whatever model the task runs on. A task running on an image model draws with its own. Images show in the thread and are kept in the Library; each is counted in the task's spend."
+				>
+					<ImageModelPicker value={settings.imageModel} disabled={save.isPending} onChange={(imageModel) => edit({ imageModel })} />
 				</SettingRow>
 			</Block>
 			<Block
