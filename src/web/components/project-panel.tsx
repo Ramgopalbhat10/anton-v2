@@ -10,6 +10,7 @@ import { Library as LibraryView, type LibrarySource, type Place, spacePlace, tas
 import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
 import { age } from '@/lib/format';
+import { shownPaths, threadFolders } from '@/lib/project-library';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -117,14 +118,13 @@ function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }
 			remove: () => api.deleteSpaceFile(space.id, file.path),
 		});
 	}
-	const names = new Set<string>();
+	// A folder per thread, named for it, with its files one click inside (threadFolders, shownPaths).
+	const folders = threadFolders(recent);
 	recent.forEach((thread, index) => {
-		// A folder per thread, named for it; a slash in a title would make a folder of its own.
-		let name = thread.title.replaceAll('/', '∕').trim() || 'Untitled';
-		if (names.has(name)) name = `${name} · ${thread.id.slice(0, 6)}`;
-		names.add(name);
-		for (const output of outputs[index]?.data?.outputs ?? []) {
-			const path = `${FROM_THREADS}/${name}/${output.path}`;
+		const saved = outputs[index]?.data?.outputs ?? [];
+		const shown = shownPaths(saved.map((output) => output.path));
+		for (const output of saved) {
+			const path = `${FROM_THREADS}/${folders.get(thread.id)}/${shown.get(output.path) ?? output.path}`;
 			listed.push({ ...output, path });
 			entries.set(path, { place: taskPlace(thread.id, output.path), agentPath: `outputs/${output.path}`, remove: () => api.deleteOutput(thread.id, output.path) });
 		}

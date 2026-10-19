@@ -24,6 +24,7 @@ import {
 	Search,
 	Settings,
 	Shapes,
+	Server,
 	SlidersHorizontal,
 	Square,
 	Waypoints,
@@ -120,7 +121,7 @@ export function SidebarRail({ onExpand }: { onExpand: () => void }) {
 	);
 }
 
-const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
+const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
 /**
  * Sort, filter, group and what each row shows, in one menu with a submenu each.

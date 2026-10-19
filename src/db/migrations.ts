@@ -143,6 +143,20 @@ export const migrations: string[][] = [
 	],
 	// 31: an MCP server's sign-in (OAuth): its registered client, where it signs in, and its tokens, kept apart from the server's view.
 	[`ALTER TABLE mcp_servers ADD COLUMN oauth_json TEXT`],
+	// 32: the routine that started a task, whose runs are done once they reply without asking you; and a routine's short name, its threads' title.
+	// A schedule's runs so far are found by the title they were given (the first line of its instructions, cut at 80), and those left idle are done.
+	[
+		`ALTER TABLE sessions ADD COLUMN automation_id TEXT`,
+		`ALTER TABLE automations ADD COLUMN title TEXT`,
+		`UPDATE sessions SET automation_id = (
+			SELECT a.id FROM automations a
+			WHERE a.kind = 'schedule' AND a.space_id = sessions.space_id
+				AND substr(CASE WHEN instr(a.prompt, char(10)) > 0 THEN substr(a.prompt, 1, instr(a.prompt, char(10)) - 1) ELSE a.prompt END, 1, 80) = sessions.title
+			ORDER BY a.created_at LIMIT 1)
+		WHERE space_id IS NOT NULL AND automation_id IS NULL`,
+		`UPDATE sessions SET resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE automation_id IS NOT NULL AND resolved_at IS NULL AND asking IS NULL AND plan IS NULL AND brief IS NULL AND pr_url IS NULL AND status != 'error' AND last_reply IS NOT NULL`,
+	],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

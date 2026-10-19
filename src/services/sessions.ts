@@ -18,6 +18,7 @@ import { forgetSubagentRuns } from './subagent-runs.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
 import { threadState } from '../core/thread-state.ts';
+import { nameTask, titleFrom } from './titles.ts';
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -47,7 +48,7 @@ function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
 export function present(record: SessionRecord, running: Set<string>): Session {
 	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, reportedState: _reported, ...session } = record;
 	const shown = { ...session, status: statusOf(record, running), working: isWorking(record.id), workspace: record.machineState !== null };
-	return { ...shown, threadState: record.spaceId ? threadState(shown) : null };
+	return { ...shown, threadState: threadState(shown) };
 }
 
 export type ModelChoice = { model: string; reasoning: Reasoning };
@@ -110,10 +111,14 @@ export async function createSession(input: {
 	review?: ReviewOf;
 	prUrl?: string;
 	baseSha?: string;
+	/** The routine that starts it. */
+	automationId?: string;
+	/** The message to name the task from: a fast model gives it a short title in a moment, in place of `title`. */
+	titleFrom?: string;
 }): Promise<Session> {
 	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch, input.baseSha);
 	const id = randomUUID();
-	const title = input.title?.trim() || 'New task';
+	const title = input.title?.trim() || (input.titleFrom && titleFrom(input.titleFrom)) || 'New task';
 	const general = await generalSettings();
 	// The default reasoning level belongs to the default model; another model starts at its own default.
 	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
@@ -121,7 +126,23 @@ export async function createSession(input: {
 	// Plan mode plans changes to code; a chat has none to plan.
 	const planMode = projectId ? (input.planMode ?? general.planMode) : false;
 	const branch = projectId ? branchFor(title, id) : SCRATCH_BRANCH;
-	await insertSession({ id, projectId, title, model, reasoning, baseBranch, baseSha, branch, planMode, spaceId: input.spaceId, brief: input.brief, review: input.review, prUrl: input.prUrl });
+	await insertSession({
+		id,
+		projectId,
+		title,
+		model,
+		reasoning,
+		baseBranch,
+		baseSha,
+		branch,
+		planMode,
+		spaceId: input.spaceId,
+		brief: input.brief,
+		review: input.review,
+		prUrl: input.prUrl,
+		automationId: input.automationId,
+	});
+	if (input.titleFrom) void nameTask(id, input.titleFrom);
 	return getSession(id);
 }
 
@@ -173,8 +194,8 @@ export async function isRunning(id: string): Promise<boolean> {
 export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean; pinned?: boolean; resolved?: boolean };
 
 /**
- * Renames the task, changes its model or reasoning level, turns plan mode on or off, pins it, or marks a
- * project's thread done or open again; the agent sees a change from the next prompt.
+ * Renames the task, changes its model or reasoning level, turns plan mode on or off, pins it, or marks it
+ * done or open again; the agent sees a change from the next prompt.
  */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));

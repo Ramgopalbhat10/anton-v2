@@ -32,3 +32,32 @@ test("each repository's MCP servers move to the servers every task gets, the fir
 	]);
 	db.close();
 });
+
+test("a schedule's runs from before tasks kept their routine are found by title, and those left idle are done", async () => {
+	const db = createClient({ url: `file:${path.join(dir, 'routines.db')}` });
+	const kept = migrations.findIndex((statements) => statements.some((sql) => sql.includes('ADD COLUMN automation_id')));
+	await migrate(db, kept);
+	const prompt = 'Go through the internet and capture the latest news on tech and AI from yesterday, with every source linked\nKeep it short.';
+	await db.execute({
+		sql: `INSERT INTO automations (id, project_id, kind, every_hours, prompt, created_at, space_id) VALUES ('auto_1', '', 'schedule', 24, ?, '2026-10-01', 'space_1')`,
+		args: [prompt],
+	});
+	// As runs were titled: the first line, cut at 80.
+	const title = prompt.split('\n')[0].slice(0, 80);
+	const add = (id: string, columns: Record<string, string | null>) =>
+		db.execute({
+			sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, title, created_at, space_id, ${Object.keys(columns).join(', ')}) VALUES (?, '', ?, 'stopped', 'm', ?, '2026-10-02', 'space_1', ${Object.keys(columns).map(() => '?').join(', ')})`,
+			args: [id, id, columns.title ?? title, ...Object.values(columns)],
+		});
+	await add('replied', { last_reply: 'Here is the briefing.' });
+	await add('asks', { last_reply: 'Broad or narrow?', asking: 'Broad or narrow?' });
+	await add('other', { title: 'Fix the login page', last_reply: 'Fixed.' });
+	await migrate(db);
+	const rows = Object.fromEntries((await db.execute('SELECT id, automation_id, resolved_at FROM sessions')).rows.map((row) => [row.id, { routine: row.automation_id, done: row.resolved_at !== null }]));
+	assert.deepEqual(rows, {
+		replied: { routine: 'auto_1', done: true },
+		asks: { routine: 'auto_1', done: false },
+		other: { routine: null, done: false },
+	});
+	db.close();
+});

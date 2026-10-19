@@ -160,11 +160,10 @@ function ProjectItems({ session }: { session: Session }) {
 	const others = (spaces.data?.spaces ?? []).filter((space) => space.id !== session.spaceId && space.state !== 'archived');
 	return (
 		<>
-			{session.spaceId ? (
-				<MenuItem icon={session.resolvedAt ? RotateCcw : CircleCheck} disabled={resolve.isPending} onSelect={() => resolve.mutate(!session.resolvedAt)}>
-					{session.resolvedAt ? 'Reopen thread' : 'Mark done'}
-				</MenuItem>
-			) : null}
+			{/* Any task can be done, as a project's thread can: the sidebar and the project show the same states. */}
+			<MenuItem icon={session.resolvedAt ? RotateCcw : CircleCheck} disabled={resolve.isPending} onSelect={() => resolve.mutate(!session.resolvedAt)}>
+				{session.resolvedAt ? (session.spaceId ? 'Reopen thread' : 'Reopen') : 'Mark done'}
+			</MenuItem>
 			{/* A task's repository joins the project's; a chat stays a chat, as threads of a project without repositories are. */}
 			{others.length ? (
 				<MenuSub>

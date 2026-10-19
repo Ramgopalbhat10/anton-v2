@@ -37,7 +37,8 @@ export function useCreateChat() {
 			askToNotify();
 			const prompt = raw?.trim();
 			const named = prompt || files[0]?.name || (images.length ? 'Look at the attached image' : '');
-			const session = await api.createSession({ ...input, title: named ? titleFrom(named) : input.projectId ? 'New task' : 'New chat' });
+			// The start of the prompt names it until a fast model gives it a short title.
+			const session = await api.createSession({ ...input, title: named ? titleFrom(named) : input.projectId ? 'New task' : 'New chat', ...(prompt ? { titleFrom: prompt } : {}) });
 			rememberProject(input.projectId ?? NO_REPO);
 			const attached = await Promise.all(files.map((file) => api.attachToTask(session.id, file.file)));
 			const message = withAttachments(prompt || (images.length && !attached.length ? 'Look at the attached image.' : ''), attached, 'task');

@@ -73,9 +73,9 @@ export type Session = {
 	plan?: string | null;
 	/** The project the task is a thread of; null for a task of its own. */
 	spaceId?: string | null;
-	/** Where a project's thread stands; null outside a project. */
+	/** Where the task stands, the same for a project's thread and a task of its own (src/core/thread-state.ts). */
 	threadState?: ThreadState | null;
-	/** When the thread was marked done. */
+	/** When the task was marked done. */
 	resolvedAt?: string | null;
 	/** The brief a queued thread starts with once a slot frees. */
 	brief?: string | null;
@@ -83,9 +83,11 @@ export type Session = {
 	lastReply?: string | null;
 	/** Someone else's pull request (`prUrl`) the task reviews; null for a task doing its own work. */
 	review?: { number: number; author: string; trusted: boolean; reviewedHead: string | null; automatic: boolean } | null;
+	/** The routine that started the task; null for one started by you or the coordinator. */
+	automationId?: string | null;
 };
 
-/** Where a project's thread stands, in the order the project lists them (src/core/thread-state.ts). */
+/** Where a task stands, in the order a project lists its threads (src/core/thread-state.ts). */
 export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
 export type ThreadState = (typeof THREAD_STATES)[number];
 
@@ -684,7 +686,8 @@ export const api = {
 	projectFiles: (projectId: string, branch?: string) =>
 		json<{ paths: string[] }>(`/api/projects/${projectId}/files${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
-	createSession: (body: { projectId?: string; branch?: string; title?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
+	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
+	createSession: (body: { projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),

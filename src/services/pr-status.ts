@@ -21,8 +21,8 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 	if (!session.prUrl) return;
 	if (JSON.stringify(session.pullRequest) === JSON.stringify(status)) return;
 	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: session.prUrl, ...status }) });
-	// A project's thread tells its coordinator, and is done once its pull request merges or closes.
-	if (session.spaceId) await threadChanged(session.id).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, session.id));
+	// A task is done once its pull request merges or closes; a project's thread also tells its coordinator.
+	await threadChanged(session.id).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, session.id));
 }
 
 /** Reads a task's pull request from the host and keeps its state and checks for the sidebar. */

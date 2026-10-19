@@ -88,7 +88,7 @@ function Summary({ sessions }: { sessions: Session[] }) {
 	];
 	return (
 		<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-			<Card icon={ListIcon} title="All tasks" sub="by state" status={parts[0].value ? <Status tone="accent" pulse>{parts[0].value} live</Status> : <Status>Idle</Status>}>
+			<Card icon={ListIcon} title="All tasks" sub="by state" status={parts[0].value ? <Status tone="accent" pulse>{parts[0].value} live</Status> : <Status>None running</Status>}>
 				<CardSection ruled={false} className="pt-1">
 					<Figure value={String(sessions.length)} unit={sessions.length === 1 ? 'task' : 'tasks'} />
 					<SplitBar label="Tasks by state" parts={parts} />
@@ -176,7 +176,7 @@ export function TasksPage() {
 					<div className="flex flex-col gap-0.5 p-1.5">
 						<div className={`${COLUMNS} in-caption px-2.5 pt-1 pb-1.5`}>
 							<span>Task</span>
-							<span className="text-right md:text-left">Status</span>
+							<span className="text-right md:text-left">Sandbox</span>
 							<span className="hidden md:block">Repository</span>
 							<span className="hidden text-right md:block">Cost</span>
 							<span className="hidden text-right md:block">Started</span>

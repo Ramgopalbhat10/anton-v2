@@ -3,6 +3,7 @@ import { CircleAlert, CircleCheck, Clock, GitMerge, GitPullRequest, type LucideI
 import type { Tone } from '@/components/instrument';
 import { useCallback, useMemo } from 'react';
 import { api, SAFETY_NET_MS, type Session, type Space, THREAD_STATES, type ThreadState } from '@/lib/api';
+import { threadState } from '../../core/thread-state';
 
 /** Every project, newest activity first. */
 export function useSpaces() {
@@ -52,7 +53,20 @@ export const STATE_LOOK: Record<ThreadState, StateLook> = {
 /** A failed thread waits on you too, but says so in red. */
 export const failed = (thread: Session) => thread.status === 'error' || thread.pullRequest?.checks === 'failed';
 
-export const stateOf = (thread: Session): ThreadState => thread.threadState ?? 'idle';
+/** Where the task stands, as the server says; worked out the same way (src/core/thread-state.ts) when it does not. */
+export const stateOf = (thread: Session): ThreadState =>
+	thread.threadState ??
+	threadState({
+		working: thread.working,
+		status: thread.status,
+		asking: thread.asking ?? null,
+		planMode: thread.planMode,
+		plan: thread.plan ?? null,
+		pullRequest: thread.pullRequest,
+		prUrl: thread.prUrl,
+		resolvedAt: thread.resolvedAt ?? null,
+		brief: thread.brief ?? null,
+	});
 
 /** Threads in the project's order of states, each group newest first. */
 export function groupByState(threads: Session[]): Array<{ state: ThreadState; threads: Session[] }> {
