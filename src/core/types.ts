@@ -58,7 +58,7 @@ export type Session = {
 	working: boolean;
 	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
 	workspace: boolean;
-	/** Where a project's thread stands (src/core/thread-state.ts); null for a task outside a project. */
+	/** Where the task stands (src/core/thread-state.ts), the same for a project's thread and a task of its own; null only from older servers. */
 	threadState: ThreadState | null;
 	/** The agent investigates and proposes a plan, changing nothing until the plan is approved. */
 	planMode: boolean;
@@ -81,7 +81,7 @@ export type Session = {
 	plan: string | null;
 	/** The project the task is a thread of; null for a task of its own. */
 	spaceId: string | null;
-	/** When the thread was marked done, by you or Anton; null while it is open. */
+	/** When the task was marked done, by you or Anton; null while it is open. */
 	resolvedAt: string | null;
 	/** The coordinator's brief while the thread waits for a free slot; null once it has started. */
 	brief: string | null;
@@ -89,6 +89,8 @@ export type Session = {
 	lastReply: string | null;
 	/** Someone else's pull request (`prUrl`) this task reviews; null for a task that does its own work. */
 	review: ReviewOf | null;
+	/** The routine (automation) that started the task; null for one you or the coordinator started. */
+	automationId: string | null;
 };
 
 /**

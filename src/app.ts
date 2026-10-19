@@ -719,6 +719,8 @@ app.post('/api/sessions', async (c) => {
 			model: v.optional(v.string()),
 			reasoning: v.optional(REASONING),
 			title: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			// The first message, which a fast model names the task from.
+			titleFrom: v.optional(v.pipe(v.string(), v.maxLength(40_000))),
 			planMode: v.optional(v.boolean()),
 		}),
 	);

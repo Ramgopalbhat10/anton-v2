@@ -28,6 +28,8 @@ export type Automation = {
 	seen: number[];
 	/** The project its tasks start in, as threads; null for tasks of their own. */
 	spaceId: string | null;
+	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
+	title: string | null;
 	createdAt: string;
 };
 
@@ -50,6 +52,7 @@ function toAutomation(row: Row): Automation {
 		lastError: optional(row.last_error),
 		seen: (JSON.parse(String(row.seen_json ?? '[]')) as Array<number | null>).filter((number): number is number => number !== null),
 		spaceId: optional(row.space_id),
+		title: optional(row.title),
 		createdAt: String(row.created_at),
 	};
 }
@@ -103,6 +106,7 @@ const columns = {
 	model: 'model',
 	reasoning: 'reasoning',
 	planFirst: 'plan_first',
+	title: 'title',
 } as const;
 export type AutomationUpdate = Partial<Pick<Automation, keyof typeof columns>>;
 

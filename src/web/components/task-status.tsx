@@ -1,21 +1,21 @@
-import { CircleAlert, CircleCheck, CircleDot, MessageCircleQuestion } from 'lucide-react';
-import { Icon, Spinner } from '@/components/signal';
+import { Glyph, glyphKind, KIND_LABEL } from '@/components/thread-glyph';
 import type { Session } from '@/lib/api';
 
 /** Whether a task's sandbox is up: starting, idle or busy with the agent. */
 export const isLive = (session: Session) => session.working || session.status === 'running' || session.status === 'starting';
 
-/** What a live task is doing, in a word. */
+/** What a live task's sandbox is doing, in a word; Idle is a task's state, not its sandbox's, so an idle sandbox is Running. */
 export function liveLabel(session: Session): string {
 	if (session.status === 'starting') return 'Starting';
-	return session.working ? 'Working' : 'Idle';
+	return session.working ? 'Working' : 'Running';
 }
 
-/** Spins only while something is happening; a live but idle sandbox gets a still dot. */
+/**
+ * Where the task stands as one mark: the same glyph and the same states (Needs you, Working, Idle, Done…) a
+ * project shows its threads with, so a task reads the same in the sidebar, the task list and its project.
+ * Whether its sandbox runs is said apart, by the list it is in.
+ */
 export function TaskStatusIcon({ session, size = 14 }: { session: Session; size?: number }) {
-	if (session.working || session.status === 'starting') return <Spinner size={size} />;
-	if (session.status === 'error') return <Icon icon={CircleAlert} size={size} className="text-(--danger-text)" />;
-	if (session.asking) return <Icon icon={MessageCircleQuestion} size={size} className="text-(--warning-text)" />;
-	if (session.status === 'running') return <Icon icon={CircleDot} size={size} className="text-(--accent-text)" />;
-	return <Icon icon={CircleCheck} size={size} className="text-(--success-text)" />;
+	const kind = glyphKind(session);
+	return <Glyph kind={kind} size={size} title={KIND_LABEL[kind]} />;
 }

@@ -237,11 +237,14 @@ test('a project without repositories runs routines on a schedule, starting chats
 	await reports.flushReports();
 	const told = toCoordinator.filter((sent) => sent.id === space.id);
 	assert.equal(told.length, 1);
-	assert.match(told[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="Summarize the news\\." state="\\w+" started="routine">Started by the routine that runs every 24 hours\\.</thread>`));
-	// Its first reply is reported too, whatever state it leaves the thread in.
+	// Without a title model, a run is named by the start of the routine's instructions and the day it ran.
+	assert.match(thread.title, /^Summarize the news · \w{3} \d{1,2}$/);
+	assert.equal(thread.automationId, routine.id);
+	assert.match(told[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="Summarize the news · \\w+ \\d+" state="\\w+" started="routine">Started by the routine that runs every 24 hours\\.</thread>`));
+	// Its first reply is reported too; a run that replies without asking anything is done, with no decision model to judge it.
 	await reports.threadFinished(thread.id, 'Here is the digest.');
 	await reports.flushReports();
-	assert.match(toCoordinator.filter((sent) => sent.id === space.id)[1]?.text ?? '', /title="Summarize the news\." state="idle">Here is the digest\.<\/thread>/);
+	assert.match(toCoordinator.filter((sent) => sent.id === space.id)[1]?.text ?? '', /title="Summarize the news · \w+ \d+" state="resolved">Here is the digest\.<\/thread>/);
 
 	// A routine is changed in place, checked as when it was added, and keeps its runs.
 	const edited = await automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: ' Summarize the headlines. ', model: 'openrouter/test/cheap', reasoning: 'low' });
@@ -272,7 +275,7 @@ test('tasks move into and out of a project, and deleting it keeps its threads', 
 	await spaces.removeSpace(space.id);
 	const kept = await sessions.getSession(task.id);
 	assert.equal(kept.spaceId, null);
-	assert.equal(kept.threadState, null);
+	assert.equal(kept.threadState, 'idle', 'a task of its own stands where it did, as every task has a state');
 });
 
 test('idle threads resolve after a week, and project files reach every thread', async () => {
@@ -361,6 +364,105 @@ test('a thread whose reply delivers what was asked is done, an answer stays open
 		assert.equal((await sessions.getSession(answered.id)).threadState, 'idle', 'an answer leaves the thread open');
 		await recordLatestInput(made.id, 'Make the arrows vertical');
 		assert.equal((await sessions.getSession(made.id)).resolvedAt, null);
+	} finally {
+		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
+	}
+});
+
+test('a reply is judged as it ends, while it still counts as working, and any task can be done, not only a thread', async () => {
+	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	setProviders({
+		sandbox: localSandboxProvider(path.join(dir, 'data')),
+		store: diskStore(path.join(dir, 'data', 'objects')),
+		git: fakeHost,
+		models: fakeCatalog,
+		decisions: {
+			name: 'fake',
+			decide: async (_state, questions) => ({ answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { yes: key === 'finished' ? 0.9 : 0.1 }])), inputTokens: 1, cost: 0 }),
+		},
+	});
+	try {
+		const space = await spaces.createSpace({ name: 'In flight', repoIds: [] });
+		const thread = await spaces.startThread(space.id, { title: 'Report', brief: 'Write the report' });
+		const task = await sessions.createSession({ title: 'Loose report' });
+		for (const id of [thread.id, task.id]) {
+			// The finish hook runs inside the reply, before its submission settles.
+			recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId: 'reply' });
+			assert.equal((await sessions.getSession(id)).threadState, 'working');
+			await reports.threadFinished(id, 'Saved report.md.');
+			recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId: 'reply' });
+			assert.equal((await sessions.getSession(id)).threadState, 'resolved');
+		}
+		assert.equal((await sessions.getSession(task.id)).lastReply, 'Saved report.md.');
+	} finally {
+		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
+	}
+});
+
+test('a thread finishing its reply frees its slot for a queued one at once', async () => {
+	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	const space = await spaces.createSpace({ name: 'One at a time', repoIds: [], maxParallel: 1 });
+	const first = await spaces.startThread(space.id, { title: 'First', brief: 'Do the first' });
+	const second = await spaces.startThread(space.id, { title: 'Second', brief: 'Do the second' });
+	recordAgentEvent({ type: 'submission_running', instanceId: first.id, submissionId: 'first' });
+	assert.equal((await sessions.getSession(second.id)).threadState, 'queued');
+	await reports.threadFinished(first.id, 'Done the first.');
+	recordAgentEvent({ type: 'submission_settled', instanceId: first.id, submissionId: 'first' });
+	assert.deepEqual(
+		toThreads.map((sent) => sent.text),
+		['Do the first', 'Do the second'],
+	);
+});
+
+test('tasks and routines are named in a few words by the title model, unless renamed first', async () => {
+	const prompts: string[] = [];
+	let answer = '"Daily tech briefing."';
+	setProviders({
+		sandbox: localSandboxProvider(path.join(dir, 'data')),
+		store: diskStore(path.join(dir, 'data', 'objects')),
+		git: fakeHost,
+		models: fakeCatalog,
+		text: {
+			runs: (model) => model.startsWith('openrouter/'),
+			write: async ({ prompt }) => {
+				prompts.push(prompt);
+				return { text: answer, inputTokens: 40, outputTokens: 4, cost: 0.0001 };
+			},
+		},
+	});
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+	try {
+		const space = await spaces.createSpace({ name: 'Names', repoIds: [] });
+		const long = 'Go through the internet and capture the latest news on tech and AI from yesterday, with sources';
+		const { titleFrom, cleanTitle } = await import('../src/services/titles.ts');
+		assert.equal(titleFrom(long), 'Go through the internet and capture the latest news on…', 'the start of the brief, until the model answers or without one');
+		assert.equal(cleanTitle('Title: **"Q3 pricing review."**\nBecause…'), 'Q3 pricing review');
+		const thread = await spaces.startThread(space.id, { title: '', brief: long });
+		await settle();
+		assert.equal((await sessions.getSession(thread.id)).title, 'Daily tech briefing');
+		assert.match(prompts[0], /capture the latest news/);
+		assert.ok((await sessions.getSession(thread.id)).usage.cost > 0, 'the call counts on the task');
+
+		// A title the coordinator gave stands; a task renamed meanwhile keeps your name.
+		const named = await spaces.startThread(space.id, { title: 'Pricing', brief: 'Compare pricing' });
+		const task = await sessions.createSession({ title: 'Compare pricing pages', titleFrom: 'Compare pricing pages' });
+		await sessions.editSession(task.id, { title: 'Mine' });
+		await settle();
+		assert.equal((await sessions.getSession(named.id)).title, 'Pricing');
+		assert.equal((await sessions.getSession(task.id)).title, 'Mine');
+
+		// A routine is named once, and each run takes that name with its day.
+		answer = 'Morning briefing';
+		const routine = await automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: long, spaceId: space.id });
+		const calls = prompts.length;
+		await automations.runAutomation(routine.id, { force: true });
+		await automations.runAutomation(routine.id, { force: true });
+		assert.equal(prompts.length, calls + 1, 'named on its first run only');
+		const runs = (await sessions.listThreads(space.id)).filter((item) => item.automationId === routine.id);
+		assert.equal(runs.length, 2);
+		for (const run of runs) assert.match(run.title, /^Morning briefing · \w{3} \d{1,2}$/);
+		const edited = await automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the markets' });
+		assert.equal(edited.title, null, 'new instructions are named again');
 	} finally {
 		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
 	}

@@ -513,6 +513,16 @@ export type VisionModel = {
 	look(input: { model: string; prompt: string; image: Uint8Array; mimeType: string }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };
 
+/**
+ * A fast model that answers a short prompt in a few words, with no tools: for
+ * code that needs a little text written, such as a task's short title.
+ */
+export type TextModel = {
+	/** Whether it runs this `<gateway>/<model>` specifier. */
+	runs(model: string): boolean;
+	write(input: { model: string; prompt: string; maxTokens: number }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
+};
+
 /** An image model as the image port lists it: how many images it starts from, and the shapes it draws. */
 export type ImageModelInfo = {
 	/** `<gateway>/<model>`, as tasks name models. */

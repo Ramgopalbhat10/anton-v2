@@ -1,8 +1,9 @@
 import { splitAttachments } from '../core/attachments.ts';
 import type { Session } from '../core/types.ts';
+import { getAutomation } from '../db/automations.ts';
 import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { sendToAgent } from './agent-runner.ts';
-import type { ThreadState } from '../core/thread-state.ts';
+import { type ThreadState, threadState } from '../core/thread-state.ts';
 import { logProblem } from './log.ts';
 import { finishesWork } from './reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
@@ -80,14 +81,15 @@ async function flush(spaceId: string): Promise<void> {
 	await sendToAgent(spaceId, reportMessage(lines), 'coordinator').catch((error: unknown) => logProblem('warn', 'Could not report threads to the coordinator', error));
 }
 
-/** Notes that a thread may have changed state; the coordinator hears of it once the batch goes out. */
+/** Notes that a task may have changed state: done once its pull request is merged or closed, and for a project's thread, news the coordinator hears of once the batch goes out. */
 export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Promise<void> {
 	const record = await getSessionRecord(id);
-	if (!record?.spaceId) return;
-	const spaceId = record.spaceId;
-	// A merged or closed pull request is the thread's last step.
+	if (!record) return;
+	// A merged or closed pull request is the task's last step.
 	const pr = record.prUrl ? record.pullRequest : null;
 	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) await updateSession(id, { resolvedAt: new Date().toISOString() });
+	if (!record.spaceId) return;
+	const spaceId = record.spaceId;
 	pending.set(spaceId, (pending.get(spaceId) ?? new Set()).add(id));
 	// A batch already waiting goes out with this note, sooner when this one is due first.
 	const at = Date.now() + delayMs;
@@ -114,40 +116,51 @@ export async function flushReports(): Promise<void> {
 }
 
 /**
- * At the end of a thread's reply: keeps what it said, frees its slot for a
- * queued thread, and notes it for the coordinator.
+ * At the end of any task's reply: keeps what it said and marks it done when
+ * the reply finished the work; a project's thread also frees its slot for a
+ * queued thread and is noted for the coordinator.
  */
 export async function threadFinished(id: string, reply: string | null): Promise<void> {
 	const record = await getSessionRecord(id);
-	if (!record?.spaceId) return;
-	launched(id);
+	if (!record) return;
+	if (record.spaceId) launched(id);
 	if (reply) await updateSession(id, { lastReply: reply.slice(0, MAX_REPLY) });
-	if (reply) await closeIfFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not judge whether the thread is done', error, id));
+	if (reply) await closeIfFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not judge whether the task is done', error, id));
+	if (!record.spaceId) return;
 	await threadChanged(id);
-	await drainQueue(record.spaceId);
+	await drainQueue(record.spaceId, id);
 }
 
 /**
- * A thread whose reply delivered what it was asked is done: resolved, as a
+ * A task whose reply delivered what it was asked is done: resolved, as a
  * person would mark it, and reopened by the next message it is given. Only
- * one that would otherwise sit idle: a thread that asks you something, waits
+ * one that would otherwise sit idle: a task that asks you something, waits
  * in the queue or has a pull request open stays as it is (a pull request
- * resolves its thread once merged or closed).
+ * resolves its task once merged or closed). A scheduled routine's run is done
+ * once it replies without asking you anything, since delivering is all a run does,
+ * even when its reply offers more; any other task is judged by the decision
+ * model, so an answer or an offer of a next step leaves it open.
  */
 async function closeIfFinished(id: string, reply: string): Promise<void> {
-	const thread = await getSession(id);
-	if (thread.threadState !== 'idle' || thread.prUrl) return;
-	if (await finishesWork(id, thread.lastInput, reply)) await updateSession(id, { resolvedAt: new Date().toISOString() });
+	const task = await getSession(id);
+	// This runs as the reply ends, before it settles, so the task still counts as working: it is judged as it is about to stand.
+	if (threadState({ ...task, working: false }) !== 'idle' || task.prUrl) return;
+	if ((await scheduledRun(task)) || (await finishesWork(id, task.lastInput, reply))) await updateSession(id, { resolvedAt: new Date().toISOString() });
 }
 
-/** How long an idle thread stays open before it resolves itself. */
+/** A run of a scheduled routine; a labeled issue's task is there to open a pull request, so it is judged as any other. */
+async function scheduledRun(task: Session): Promise<boolean> {
+	return task.automationId ? (await getAutomation(task.automationId))?.kind === 'schedule' : false;
+}
+
+/** How long an idle task stays open before it resolves itself. */
 export const IDLE_RESOLVE_MS = 7 * 24 * 60 * 60_000;
 
-/** Resolves threads idle for a week; their tasks and branches stay. Run by the headless poll. */
+/** Resolves tasks idle for a week; their branches and files stay. Run by the headless poll. */
 export async function resolveIdleThreads(now = Date.now()): Promise<number> {
 	let resolved = 0;
 	for (const record of await listSessionRecords()) {
-		if (!record.spaceId || record.resolvedAt || record.brief) continue;
+		if (record.resolvedAt || record.brief) continue;
 		const thread = await getSession(record.id);
 		const at = new Date(thread.checkpointAt ?? thread.lastInputAt ?? thread.createdAt).getTime();
 		if (thread.threadState !== 'idle' || now - at < IDLE_RESOLVE_MS) continue;

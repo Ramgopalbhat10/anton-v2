@@ -1,7 +1,7 @@
 import type { Session } from './types.ts';
 
 /**
- * Where a project's thread stands, in the order the project shows them:
+ * Where a task stands, a project's thread or a task of its own, in the order a project shows them:
  * what needs you first, then what runs, waits for a slot, waits on review,
  * is about to land, sits idle, and what is done.
  */
@@ -24,9 +24,9 @@ type Facts = Pick<Session, 'working' | 'status' | 'asking' | 'planMode' | 'plan'
 const planReady = (thread: Facts) => thread.planMode && !thread.working && Boolean(thread.plan);
 
 /**
- * One thread's state from the task's own fields; the first rule that holds
- * wins. The server reports and counts with it and the page shows it, so the
- * two never disagree. Nothing here is stored.
+ * One task's state from its own fields; the first rule that holds wins. The
+ * server reports and counts with it, and every page (the sidebar, a project,
+ * its rack) shows it, so none of them disagree. Nothing here is stored.
  */
 export function threadState(thread: Facts): ThreadState {
 	if (thread.resolvedAt) return 'resolved';

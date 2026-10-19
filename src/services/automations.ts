@@ -23,7 +23,10 @@ import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
+import { logProblem } from './log.ts';
 import { threadStarted } from './thread-reports.ts';
+import { type ShortTitle, shortTitle, titleFrom } from './titles.ts';
+import { recordUsage } from './usage.ts';
 
 /** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
 const ISSUES_AT_ONCE = 3;
@@ -89,7 +92,8 @@ export async function editAutomation(id: string, input: Omit<AutomationInput, 's
 		planFirst: input.planFirst ?? automation.planFirst,
 		spaceId: automation.spaceId,
 	});
-	await updateAutomation(id, change);
+	// New instructions are named again at the next run.
+	await updateAutomation(id, { ...change, ...(change.prompt !== automation.prompt ? { title: null } : {}) });
 	return existing(id);
 }
 
@@ -135,6 +139,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 			projectId: automation.projectId || null,
 			title,
 			brief: prompt,
+			automationId: automation.id,
 			model: automation.model ?? undefined,
 			reasoning: automation.reasoning ?? undefined,
 			planMode: automation.planFirst,
@@ -147,6 +152,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 	const session = await createSession({
 		projectId: automation.projectId,
 		title,
+		automationId: automation.id,
 		model: automation.model ?? undefined,
 		reasoning: automation.reasoning ?? undefined,
 		planMode: automation.planFirst,
@@ -157,6 +163,24 @@ async function startTask(automation: Automation, title: string, prompt: string):
 		throw error;
 	});
 	return session.id;
+}
+
+/** The day a run started, as its thread's title ends: runs of one routine read apart in lists and in the project's Library. */
+const runDay = (now: number) => new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+/**
+ * A routine's short name, its runs' title: written once from its instructions by the title model and kept on it
+ * (until they change), or the start of them without one. `spent` is the model's call, counted on the run it names.
+ */
+async function routineName(automation: Automation): Promise<{ name: string; spent: ShortTitle | null }> {
+	if (automation.title) return { name: automation.title, spent: null };
+	const named = await shortTitle(automation.prompt).catch((error: unknown) => {
+		logProblem('warn', 'Could not name the routine', error);
+		return null;
+	});
+	if (!named) return { name: titleFrom(automation.prompt) || 'Routine', spent: null };
+	await updateAutomation(automation.id, { title: named.title });
+	return { name: named.title, spent: named };
 }
 
 type Run = { now: number; force: boolean };
@@ -188,7 +212,9 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
 		const since = Date.parse(automation.lastRunAt ?? automation.createdAt);
 		const due = force || now - since >= (automation.everyHours ?? 24) * HOUR_MS;
 		if (!due) return {};
-		await startTask(automation, automation.prompt.split('\n')[0].slice(0, 80), automation.prompt);
+		const { name, spent } = await routineName(automation);
+		const id = await startTask(automation, `${name} · ${runDay(now)}`, automation.prompt);
+		if (spent) await recordUsage(id, spent.usage, spent.model);
 		return { lastRunAt: new Date(now).toISOString() };
 	},
 };

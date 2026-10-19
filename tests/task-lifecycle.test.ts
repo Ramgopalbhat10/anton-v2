@@ -900,7 +900,7 @@ test('automations start one task per labeled issue and run schedules when due', 
 	assert.equal(delivered.length, 5, 'the first run is one interval after it was added');
 	const ran = await runAutomation(schedule.id, { now });
 	assert.equal(delivered.length, 6);
-	assert.equal((await sessions.getSession(delivered[5].id)).title, 'Update the dependencies');
+	assert.match((await sessions.getSession(delivered[5].id)).title, /^Update the dependencies · \w{3} \d{1,2}$/);
 	await runAutomation(schedule.id, { now: now + 60 * 60_000 });
 	assert.equal(delivered.length, 6, 'not due again within the day');
 	await runAutomation(schedule.id, { now: now + 60 * 60_000, force: true });

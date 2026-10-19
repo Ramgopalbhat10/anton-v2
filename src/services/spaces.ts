@@ -143,7 +143,17 @@ export async function findThread(spaceId: string, ref: string): Promise<Session>
 }
 
 /** `projectId` null, or `repo` "none", starts a thread with no repository: a chat, as every thread of a project without repositories is. */
-export type ThreadInput = { title: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
+/** Without a `title`, the thread is named from its brief by a fast model. `automationId` is the routine that starts it. */
+export type ThreadInput = {
+	title: string;
+	brief: string;
+	projectId?: string | null;
+	repo?: string;
+	model?: string;
+	reasoning?: Reasoning;
+	planMode?: boolean;
+	automationId?: string;
+};
 
 const NO_REPO = new Set(['none', 'no repository', 'chat']);
 
@@ -177,10 +187,12 @@ export async function startThread(spaceId: string, input: ThreadInput): Promise<
 	const brief = input.brief.trim();
 	if (!brief) throw new InvalidInputError('Say what the thread should do');
 	const projectId = await repoFor(space, input);
-	const title = input.title.trim() || brief.split('\n')[0].slice(0, 60);
+	const title = input.title.trim();
 	const thread = await createSession({
 		projectId,
 		title,
+		...(title ? {} : { titleFrom: brief }),
+		automationId: input.automationId,
 		spaceId,
 		brief,
 		model: input.model ?? space.threadModel ?? undefined,
@@ -215,20 +227,24 @@ async function sendWithPictures(spaceId: string, threadId: string, message: stri
 
 const draining = new Map<string, Promise<void>>();
 
-/** Starts queued threads, oldest first, while the project has free slots; one pass at a time per project. */
-export function drainQueue(spaceId: string): Promise<void> {
+/**
+ * Starts queued threads, oldest first, while the project has free slots; one pass at a time per project.
+ * `finishing` is a thread whose reply is ending: it still counts as working until its reply settles, but its slot is free.
+ */
+export function drainQueue(spaceId: string, finishing?: string): Promise<void> {
 	const previous = draining.get(spaceId) ?? Promise.resolve();
-	const next = previous.then(() => drain(spaceId)).catch((error: unknown) => logProblem('warn', 'Could not start queued threads', error));
+	const next = previous.then(() => drain(spaceId, finishing)).catch((error: unknown) => logProblem('warn', 'Could not start queued threads', error));
 	draining.set(spaceId, next);
 	return next;
 }
 
-async function drain(spaceId: string): Promise<void> {
+async function drain(spaceId: string, finishing?: string): Promise<void> {
 	const space = await getSpace(spaceId);
 	if (!space || space.state !== 'active') return;
 	const threads = await listThreads(spaceId);
 	const now = Date.now();
 	const busy = threads.filter((thread) => {
+		if (thread.id === finishing) return false;
 		if (thread.threadState === 'working') return true;
 		const at = launching.get(thread.id);
 		return at !== undefined && now - at < LAUNCH_MS;

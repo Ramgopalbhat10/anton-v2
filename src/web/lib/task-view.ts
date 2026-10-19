@@ -1,4 +1,5 @@
 import { isLive } from '@/components/task-status';
+import { type GlyphKind, glyphKind } from '@/components/thread-glyph';
 import type { Session } from '@/lib/api';
 
 /**
@@ -46,7 +47,7 @@ export function taskNote(session: Session): TaskNote | null {
 	if (session.status === 'error') return { text: 'Failed', tone: 'danger', attention: true };
 	if (planReady(session)) return { text: 'Plan ready for review', tone: 'warning', attention: true };
 	if (session.asking) return { text: 'Waiting on you', tone: 'warning', attention: true };
-	return prNote(session) ?? (isLive(session) ? { text: 'Idle', tone: 'muted', attention: false } : null);
+	return prNote(session) ?? (isLive(session) ? { text: 'Sandbox running', tone: 'muted', attention: false } : null);
 }
 
 /** When the task last did something: its last checkpoint, or when it started. */
@@ -70,12 +71,24 @@ const within = (days: number) => (session: Session) => Date.now() - new Date(ses
 const distinct = (values: string[], label: (value: string) => string): Option[] =>
 	[...new Set(values)].sort((a, b) => label(a).localeCompare(label(b))).map((value) => ({ value, label: label(value) }));
 
+const isKind = (...kinds: GlyphKind[]) => (session: Session) => kinds.includes(glyphKind(session));
+
+/** Where a task stands, as its mark shows it and as a project shows its threads: the same states everywhere. */
 const STATUS: Record<string, { label: string; test: (session: Session) => boolean }> = {
-	attention: { label: 'Needs you', test: (session) => taskNote(session)?.attention === true },
-	working: { label: 'Working', test: (session) => session.working || session.status === 'starting' },
-	idle: { label: 'Idle', test: (session) => isLive(session) && !session.working && session.status !== 'starting' },
-	stopped: { label: 'Stopped', test: (session) => !isLive(session) && session.status !== 'error' },
-	failed: { label: 'Failed', test: (session) => session.status === 'error' },
+	// A failure waits on you too, as a project counts it.
+	attention: { label: 'Needs you', test: isKind('waiting', 'failed') },
+	failed: { label: 'Failed', test: isKind('failed') },
+	working: { label: 'Working', test: isKind('working') },
+	queued: { label: 'Queued', test: isKind('queued') },
+	review: { label: 'In review', test: isKind('review', 'landing') },
+	idle: { label: 'Idle', test: isKind('idle') },
+	done: { label: 'Done', test: isKind('resolved') },
+};
+
+/** Whether the task's sandbox is up, which is apart from where its work stands: a done task's sandbox may still run for a while. */
+const SANDBOX: Record<string, { label: string; test: (session: Session) => boolean }> = {
+	running: { label: 'Running', test: isLive },
+	stopped: { label: 'Stopped', test: (session) => !isLive(session) },
 };
 
 const PULL_REQUEST: Record<string, { label: string; test: (session: Session) => boolean }> = {
@@ -101,6 +114,7 @@ const fixed = (choices: typeof STATUS) => () => Object.entries(choices).map(([va
  */
 export const FACETS = {
 	status: { label: 'Status', options: fixed(STATUS), test: (session: Session, value: string) => STATUS[value]?.test(session) ?? true },
+	sandbox: { label: 'Sandbox', options: fixed(SANDBOX), test: (session: Session, value: string) => SANDBOX[value]?.test(session) ?? true },
 	pr: { label: 'Pull request', options: fixed(PULL_REQUEST), test: (session: Session, value: string) => PULL_REQUEST[value]?.test(session) ?? true },
 	repo: { label: 'Repository', options: (tasks: Session[]) => distinct(tasks.map((task) => task.repo), repoName), test: (session: Session, value: string) => session.repo === value },
 	model: { label: 'Model', options: (tasks: Session[]) => distinct(tasks.map((task) => task.model), modelName), test: (session: Session, value: string) => session.model === value },
@@ -112,7 +126,7 @@ export const FACET_KEYS = Object.keys(FACETS) as FacetKey[];
 export const DEFAULT_VIEW: TaskView = {
 	sort: 'active',
 	group: 'none',
-	filters: { status: [], pr: [], repo: [], model: [], created: [] },
+	filters: { status: [], sandbox: [], pr: [], repo: [], model: [], created: [] },
 	show: { repo: true, time: true, spend: false },
 	compact: false,
 	collapsed: [],
@@ -168,7 +182,8 @@ export function readView(): TaskView {
 			...DEFAULT_VIEW,
 			...saved,
 			sort: saved.sort && saved.sort in SORTS ? saved.sort : DEFAULT_VIEW.sort,
-			filters: { ...DEFAULT_VIEW.filters, ...saved.filters },
+			// Statuses saved before they were the project's states (Stopped was the sandbox's) are dropped.
+			filters: { ...DEFAULT_VIEW.filters, ...saved.filters, status: (saved.filters?.status ?? []).filter((value) => value in STATUS) },
 			show: { ...DEFAULT_VIEW.show, ...saved.show },
 		};
 	} catch {
