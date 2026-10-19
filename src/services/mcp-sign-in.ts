@@ -124,6 +124,12 @@ class ServerSignIn implements OAuthClientProvider {
 	}
 
 	redirectToAuthorization(url: URL) {
+		// Google gives a refresh token only when asked this way (its `offline_access` scope is not enough),
+		// and again on a second sign-in only with consent; without one, its MCP servers sign you out hourly.
+		if (url.hostname === 'accounts.google.com') {
+			url.searchParams.set('access_type', 'offline');
+			url.searchParams.set('prompt', 'consent');
+		}
 		this.authorizationUrl = url;
 	}
 
