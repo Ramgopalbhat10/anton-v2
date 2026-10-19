@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
-import { DropdownMenu as MenuPrimitive } from 'radix-ui';
-import type { ComponentProps, CSSProperties, ReactNode } from 'react';
+import { Check, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { DropdownMenu as MenuPrimitive, Popover } from 'radix-ui';
+import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
@@ -83,7 +83,8 @@ export function Kbd({ keys, size = 'md' }: { keys: string; size?: 'sm' | 'md' })
 }
 
 export function InlineCode({ children }: { children: ReactNode }) {
-	return <code className="sg-code">{children}</code>;
+	// Long commands and paths wrap rather than run out of a phone-width card.
+	return <code className="sg-code wrap-break-word whitespace-normal [box-decoration-break:clone]">{children}</code>;
 }
 
 function initials(name: string) {
@@ -105,6 +106,64 @@ export function SectionLabel({ children, className }: { children: ReactNode; cla
 		<div className={cn('font-mono text-[10.5px] leading-4 font-medium tracking-[0.08em] uppercase text-(--text-disabled)', className)}>
 			{children}
 		</div>
+	);
+}
+
+/**
+ * The rest of what a setting means, behind an info icon beside its label:
+ * a popover that opens while the pointer rests on the icon, and on a tap
+ * where there is no pointer to rest.
+ */
+export function InfoTip({ children, label = 'More about this' }: { children: ReactNode; label?: string }) {
+	const [open, setOpen] = useState(false);
+	const leaving = useRef<ReturnType<typeof setTimeout>>(undefined);
+	const stay = () => clearTimeout(leaving.current);
+	const leave = () => {
+		stay();
+		leaving.current = setTimeout(() => setOpen(false), 120);
+	};
+	const hover = {
+		onPointerEnter: (event: ReactPointerEvent) => {
+			if (event.pointerType !== 'mouse') return;
+			stay();
+			setOpen(true);
+		},
+		onPointerLeave: (event: ReactPointerEvent) => {
+			if (event.pointerType === 'mouse') leave();
+		},
+	};
+	return (
+		<Popover.Root open={open} onOpenChange={setOpen}>
+			<Popover.Trigger asChild>
+				<button
+					type="button"
+					aria-label={label}
+					{...hover}
+					// A mouse opened it by resting there, so a click keeps it open rather than toggling it shut.
+					onClick={(event) => {
+						if (!open || (event.nativeEvent as PointerEvent).pointerType !== 'mouse') return;
+						event.preventDefault();
+					}}
+					className="inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full align-[-2px] text-(--icon-tertiary) outline-none hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:text-(--icon-secondary)"
+				>
+					<Icon icon={Info} size={13} />
+				</button>
+			</Popover.Trigger>
+			<Popover.Portal>
+				<Popover.Content
+					side="top"
+					align="start"
+					sideOffset={6}
+					collisionPadding={12}
+					{...hover}
+					onOpenAutoFocus={(event) => event.preventDefault()}
+					onClick={(event) => event.stopPropagation()}
+					className="in-pop z-50 w-[min(300px,calc(100vw-24px))] px-3 py-2.5 text-[12px] leading-[18px] font-normal tracking-normal text-pretty normal-case text-(--text-secondary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+				>
+					{children}
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
 	);
 }
 

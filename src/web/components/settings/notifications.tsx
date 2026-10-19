@@ -38,14 +38,20 @@ function ThisDevice({ view, thisDevice }: { view: PushView; thisDevice: string |
 	const help = !view.publicKey
 		? 'The server cannot send notifications.'
 		: support === 'install-first'
-			? 'An iPhone or iPad gets notifications only from Anton on its home screen. Tap Share, then Add to Home Screen, and open Anton from there to turn them on.'
+			? 'Add Anton to your home screen first.'
 			: support === 'blocked'
-				? 'Notifications are blocked for Anton in this browser. Allow them in its site settings, then come back.'
+				? 'Blocked for Anton in this browser.'
 				: support === 'unsupported'
 					? 'This browser cannot get notifications from Anton.'
-					: 'Notifications reach this device with no Anton tab open, so you can answer from your phone.';
+					: 'Reach this device with no Anton tab open.';
+	const info =
+		support === 'install-first'
+			? 'An iPhone or iPad gets notifications only from Anton on its home screen. Tap Share, then Add to Home Screen, and open Anton from there to turn them on.'
+			: support === 'blocked'
+				? 'Allow notifications in the browser’s site settings, then come back.'
+				: undefined;
 	return (
-		<Block title="This device" icon={Smartphone} help={help} aside={status}>
+		<Block title="This device" icon={Smartphone} help={help} info={info} aside={status}>
 			{support === 'ready' && view.publicKey ? (
 				<SettingRow title={on ? 'Notifications are on here' : 'Get notifications here'} help={on ? 'Send a test to see one arrive.' : 'Your browser asks to allow notifications.'}>
 					{on ? (
@@ -74,15 +80,16 @@ function WhatYouHear({ view }: { view: PushView }) {
 		<Block
 			title="What you hear about"
 			icon={ListChecks}
-			help="Every device below gets these, unless an Anton window is in front of you at the time: the page shows it there."
+			help="Sent to every device below."
+			info="Unless an Anton window is in front of you at the time: the page shows it there."
 		>
-			<SettingRow title="A task needs you" help="It asks a question, or a plan waits for your approval. The notification says what it asks.">
+			<SettingRow title="A task needs you" help="A question, or a plan to approve.">
 				<Status tone="success">Always</Status>
 			</SettingRow>
 			<SettingRow title="A task fails" help="Its reply stopped with an error.">
 				<Status tone="success">Always</Status>
 			</SettingRow>
-			<SettingRow title="A task finishes" help="It replied and waits on nothing, with the start of what it said.">
+			<SettingRow title="A task finishes" help="It replied and waits on nothing.">
 				<Switch
 					checked={view.finished}
 					disabled={save.isPending}
@@ -99,9 +106,9 @@ function Devices({ view, thisDevice }: { view: PushView; thisDevice: string | nu
 	const queryClient = useQueryClient();
 	const remove = useMutation({ mutationFn: api.removePushDevice, onSuccess: (next) => queryClient.setQueryData(['push'], next) });
 	return (
-		<Block title="Devices" icon={MonitorSmartphone} help="Each phone and browser that turned notifications on. Removing one stops its notifications.">
+		<Block title="Devices" icon={MonitorSmartphone} help="Phones and browsers with notifications on." info="Removing one stops its notifications.">
 			{view.devices.length === 0 ? (
-				<p className="m-0 text-[12px] text-(--text-tertiary)">None yet. Turn them on above, on each device you want to hear from Anton on.</p>
+				<p className="m-0 text-[12px] text-(--text-tertiary)">None yet. Turn them on above, on each device.</p>
 			) : (
 				<List>
 					{view.devices.map((device) => (
@@ -130,15 +137,20 @@ function Install() {
 	const [, rerender] = useState(0);
 	useEffect(() => onInstallChange(() => rerender((count) => count + 1)), []);
 	if (isInstalled()) {
-		return <Block title="Anton as an app" icon={Download} help="You are using Anton as an app, opened from your home screen or dock." aside={<Status tone="success">Installed</Status>} />;
+		return <Block title="Anton as an app" icon={Download} help="Opened from your home screen or dock." aside={<Status tone="success">Installed</Status>} />;
 	}
 	const help = isIos()
-		? 'In Safari, tap Share, then Add to Home Screen. Anton then opens full screen, like an app, and can send notifications.'
+		? 'In Safari, tap Share, then Add to Home Screen.'
 		: canPromptInstall()
-			? 'Anton opens in its own window, from your home screen or dock, and keeps getting notifications.'
-			: 'Use your browser’s Install or Add to Home Screen item, in its menu or address bar. Anton then opens in its own window.';
+			? 'Its own window, from your home screen or dock.'
+			: 'Use your browser’s Install or Add to Home Screen item.';
+	const info = isIos()
+		? 'Anton then opens full screen, like an app, and can send notifications.'
+		: canPromptInstall()
+			? 'Installed, Anton keeps getting notifications with no tab open.'
+			: 'It is in the browser’s menu or address bar. Anton then opens in its own window.';
 	return (
-		<Block title="Anton as an app" icon={Download} help={help}>
+		<Block title="Anton as an app" icon={Download} help={help} info={info}>
 			{canPromptInstall() ? (
 				<div>
 					<Btn size="sm" variant="primary" icon={Download} onClick={() => void promptInstall()}>
@@ -155,9 +167,8 @@ export function NotificationsPage() {
 	const thisDevice = useThisDevice(view.data);
 	return (
 		<>
-			<PageHeading title="Notifications">
-				Hear from Anton on your phone or with the browser closed when a task needs you, so a question or a plan waiting for approval does not sit until
-				you open a tab.
+			<PageHeading title="Notifications" info="So a question or a plan waiting for approval does not sit until you open a tab.">
+				Hear when a task needs you, with no tab open.
 			</PageHeading>
 			{view.data ? (
 				<>

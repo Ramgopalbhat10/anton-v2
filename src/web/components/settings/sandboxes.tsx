@@ -48,7 +48,7 @@ function Form({ view }: { view: SandboxView }) {
 			<Block
 				title="Every new sandbox"
 				icon={Cpu}
-				help="What each sandbox gets when it starts, how long it may run, and which sites it can reach."
+				help="Size, lifetime and reach of each sandbox."
 				footer={
 					<>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes that start from now on use these." />
@@ -69,7 +69,7 @@ function Form({ view }: { view: SandboxView }) {
 							const machine = MACHINES.find((option) => option.value === value);
 							if (machine) change({ cpu: machine.cpu, memoryMiB: machine.memoryMiB });
 						}}
-						help="Reserved for each sandbox. Bigger machines install and test faster and cost more."
+						info="Reserved for each sandbox. Bigger machines install and test faster and cost more."
 					/>
 					<Select
 						label="Region"
@@ -77,7 +77,7 @@ function Form({ view }: { view: SandboxView }) {
 						value={draft.region}
 						options={REGIONS}
 						onChange={(region) => change({ region })}
-						help="Pinning a region costs about 15 percent more on Modal."
+						info="Pinning a region costs about 15 percent more on Modal."
 					/>
 					<Select
 						label="Idle shutdown"
@@ -86,7 +86,7 @@ function Form({ view }: { view: SandboxView }) {
 						options={IDLE}
 						fallback={`${draft.idleMinutes} minutes`}
 						onChange={(idleMinutes) => change({ idleMinutes })}
-						help="A sandbox stops this long after its agent finishes, unless a terminal is open on it or you have its computer. Its files are kept."
+						info="A sandbox stops this long after its agent finishes, unless a terminal is open on it or you have its computer. Its files are kept."
 					/>
 					<Select
 						label="Maximum lifetime"
@@ -95,12 +95,13 @@ function Form({ view }: { view: SandboxView }) {
 						options={LIFETIME}
 						fallback={`${draft.lifetimeHours} hours`}
 						onChange={(lifetimeHours) => change({ lifetimeHours })}
-						help="Stopped this long after it starts, even while working. The branch and files are kept."
+						info="Stopped this long after it starts, even while working. The branch and files are kept."
 					/>
 				</div>
 				<SubBlock
 					label="Allowed domains"
-					help="One per line, *.example.com for subdomains. When set, sandboxes can reach only these and GitHub, which setup needs. Leave it empty to allow everything. Web search runs on Anton's side and is not affected."
+					help="One per line. Empty allows everything."
+					info="Use *.example.com for subdomains. When set, sandboxes can reach only these and GitHub, which setup needs. Web search runs on Anton's side and is not affected."
 				>
 					<textarea
 						value={domains}
@@ -121,10 +122,9 @@ export function SandboxesPage() {
 	const view = useQuery({ queryKey: ['sandbox-settings'], queryFn: api.sandboxSettings });
 	return (
 		<>
-			<PageHeading title="Sandboxes">
-				Each task that edits or runs code gets its own sandbox. These apply when one starts; a running sandbox keeps what it started with until it
-				stops.
-				{view.data && view.data.provider !== 'modal' ? ' Sandboxes run on this server right now, which ignores these settings.' : ''}
+			<PageHeading title="Sandboxes" info="Each task that edits or runs code gets its own sandbox. A running sandbox keeps what it started with until it stops.">
+				These apply when a sandbox starts.
+				{view.data && view.data.provider !== 'modal' ? ' Sandboxes run on this server right now, which ignores them.' : ''}
 			</PageHeading>
 			{view.data ? <Form view={view.data} /> : <Spinner size={12} />}
 		</>

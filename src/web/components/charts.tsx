@@ -320,7 +320,14 @@ export function DotMatrix({
 									);
 								})}
 								{on > 0 && (active === index || (active === null && index === peakIndex)) ? (
-									<text x={x(index) + cell / 2} y={y(on - 1) - 5} textAnchor="middle" fill="var(--text-secondary)" pointerEvents="none">
+									// Near either end the figure lines up with its column's outer edge, so it stays inside the chart.
+									<text
+										x={index >= cols - 3 ? x(index) + cell : index < 3 ? x(index) : x(index) + cell / 2}
+										y={y(on - 1) - 5}
+										textAnchor={index >= cols - 3 ? 'end' : index < 3 ? 'start' : 'middle'}
+										fill="var(--text-secondary)"
+										pointerEvents="none"
+									>
 										{format(entry.value)}
 									</text>
 								) : null}

@@ -218,7 +218,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 	const open = (item: ViewerItem) => openViewer(item, items, thread.spaceId ?? null);
 	const [first, ...rest] = items;
 	return (
-		<span className="flex shrink-0 items-center gap-1" onPointerEnter={() => onPeek?.(true)} onPointerLeave={() => onPeek?.(false)}>
+		<span className="flex min-w-0 items-center gap-1" onPointerEnter={() => onPeek?.(true)} onPointerLeave={() => onPeek?.(false)}>
 			<HoverPeek content={<FilePeek item={first} output={outputs[0]} />} width={268} openDelay={200}>
 				<button
 					type="button"
@@ -227,7 +227,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 						event.stopPropagation();
 						open(first);
 					}}
-					className={CHIP_BUTTON}
+					className={cn(CHIP_BUTTON, 'min-w-0 shrink')}
 				>
 					<FileMark item={first} />
 					<span className="min-w-0 truncate">{nameOf(first.path)}</span>
@@ -376,14 +376,15 @@ export function ThreadRow({ thread }: { thread: Session }) {
 				onClick={() => open(thread)}
 				className="group/thread flex min-w-0 cursor-pointer flex-col justify-center gap-0.5 px-3 py-2 transition-colors duration-(--duration-micro) hover:bg-(--bg-hover)"
 			>
-				<div className="flex min-h-6 min-w-0 items-center gap-2.5">
+				<div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 sm:flex-nowrap">
 					<ThreadGlyph thread={thread} size={14} />
-					<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{thread.title}</span>
-					<span className="flex min-w-0 shrink items-center gap-1">
+					<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary) sm:flex-initial">{thread.title}</span>
+					{/* On a phone the chips take a line of their own under the title, so neither squeezes the other. */}
+					<span className="order-last flex min-w-0 basis-full items-center gap-1 pl-[24px] empty:hidden sm:order-none sm:basis-auto sm:pl-0">
 						<ThreadChips thread={thread} />
 						<ThreadOutputChips thread={thread} onPeek={setPeeking} />
 					</span>
-					<span className="flex-1" />
+					<span className="hidden flex-1 sm:block" />
 					<span className={cn('in-num shrink-0 text-[11px]', state === 'working' ? 'text-(--accent-text)' : 'text-(--text-disabled)', !waiting && nextSteps(thread).length && 'sm:group-focus-within/thread:hidden sm:group-hover/thread:hidden')}>
 						{state === 'queued' ? '' : phaseOf(thread, now)}
 					</span>

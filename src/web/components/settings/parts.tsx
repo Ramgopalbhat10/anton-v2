@@ -2,19 +2,33 @@ import type { LucideIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IconTile } from '@/components/instrument';
-import { Icon, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel } from '@/components/signal';
+import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
 export const FIELD =
 	'h-8 min-w-0 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
-/** A settings page's title and what it decides, with actions on the right. */
-export function PageHeading({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
+/** A title with its info icon beside it, when there is more to say than its one line. */
+function Titled({ children, info }: { children: ReactNode; info?: ReactNode }) {
+	if (!info) return <>{children}</>;
+	return (
+		<span className="inline-flex min-w-0 items-center gap-1.5">
+			<span className="min-w-0 truncate">{children}</span>
+			<InfoTip>{info}</InfoTip>
+		</span>
+	);
+}
+
+/** A settings page's title and what it decides in a line, with actions on the right. */
+export function PageHeading({ title, children, info, actions }: { title: string; children?: ReactNode; info?: ReactNode; actions?: ReactNode }) {
 	return (
 		<div className="flex flex-wrap items-start gap-4">
-			<div className="flex min-w-0 flex-1 basis-[320px] flex-col gap-2">
-				<h1 className="m-0 text-[22px] leading-[28px] font-semibold tracking-[-0.02em]">{title}</h1>
-				<p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">{children}</p>
+			<div className="flex min-w-0 flex-1 basis-[280px] flex-col gap-1.5">
+				<h1 className="m-0 flex min-w-0 items-center gap-2 text-[22px] leading-[28px] font-semibold tracking-[-0.02em]">
+					<span className="min-w-0 truncate">{title}</span>
+					{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
+				</h1>
+				{children ? <p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">{children}</p> : null}
 			</div>
 			{actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
 		</div>
@@ -24,13 +38,15 @@ export function PageHeading({ title, children, actions }: { title: string; child
 /**
  * One titled block within a settings page, as a card: an icon tile and title,
  * what it decides, then its rows, and a footer for the save that applies them.
- * A product's block shows its own mark in place of the icon.
+ * A product's block shows its own mark in place of the icon; `info` is the
+ * rest of what it decides, behind an icon by its title.
  */
 export function Block({
 	title,
 	icon,
 	mark,
 	help,
+	info,
 	children,
 	className,
 	aside,
@@ -40,6 +56,7 @@ export function Block({
 	icon?: LucideIcon;
 	mark?: ReactNode;
 	help?: ReactNode;
+	info?: ReactNode;
 	children?: ReactNode;
 	className?: string;
 	aside?: ReactNode;
@@ -50,8 +67,11 @@ export function Block({
 			<header className="flex items-start gap-3 px-4 pt-3.5 pb-1">
 				{mark || icon ? <span className="mt-px">{mark ?? (icon ? <IconTile icon={icon} /> : null)}</span> : null}
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<div className="flex min-h-[26px] items-center gap-3">
-						<h2 className="m-0 min-w-0 flex-1 truncate text-[13px] leading-[18px] font-medium tracking-[-0.005em]">{title}</h2>
+					<div className="flex min-h-[26px] flex-wrap items-center gap-x-3 gap-y-1">
+						<h2 className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-[18px] font-medium tracking-[-0.005em]">
+							<span className="min-w-0 truncate">{title}</span>
+							{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
+						</h2>
 						{aside}
 					</div>
 					{help ? <p className="m-0 max-w-[76ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
@@ -64,13 +84,33 @@ export function Block({
 }
 
 /** A part of a block under its own mono label, ruled off from what is above it. */
-export function SubBlock({ label, help, children }: { label?: string; help?: ReactNode; children: ReactNode }) {
+export function SubBlock({ label, help, info, children }: { label?: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="-mx-4 mt-2 flex flex-col gap-2 border-t border-(--border-subtle) px-4 pt-3.5">
-			{label ? <SectionLabel>{label}</SectionLabel> : null}
+			{label ? (
+				<SectionLabel className="flex items-center gap-1.5">
+					{label}
+					{info ? <InfoTip label={`About ${label}`}>{info}</InfoTip> : null}
+				</SectionLabel>
+			) : null}
 			{help ? <p className="m-0 max-w-[76ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
 			{children}
 		</div>
+	);
+}
+
+/** A line of explanation in a card, with the rest behind an info icon at its end. */
+export function Note({ children, info, className }: { children: ReactNode; info?: ReactNode; className?: string }) {
+	return (
+		<p className={cn('m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)', className)}>
+			{children}
+			{info ? (
+				<>
+					{' '}
+					<InfoTip>{info}</InfoTip>
+				</>
+			) : null}
+		</p>
 	);
 }
 
@@ -83,15 +123,21 @@ export function RowIcon({ icon }: { icon: LucideIcon }) {
 	);
 }
 
-/** A setting as a row: what it is and what it does, with its control on the right. Rows in a block are ruled apart. */
-export function SettingRow({ title, help, children }: { title: ReactNode; help?: ReactNode; children: ReactNode }) {
+/**
+ * A setting as a row: what it is in a line, with its control on the right;
+ * `info` is the rest, behind an icon by its title. On a phone a wide control
+ * drops below. Rows in a block are ruled apart.
+ */
+export function SettingRow({ title, help, info, children }: { title: ReactNode; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
-		<div className="flex min-h-11 items-center gap-4 border-t border-(--border-subtle) py-2.5 first:border-t-0 first:pt-1">
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<div className="text-[13px] font-medium">{title}</div>
+		<div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--border-subtle) py-2.5 first:border-t-0 first:pt-1">
+			<div className="flex min-w-0 flex-1 basis-[200px] flex-col gap-0.5">
+				<div className="text-[13px] font-medium">
+					<Titled info={info}>{title}</Titled>
+				</div>
 				{help ? <div className="max-w-[68ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</div> : null}
 			</div>
-			<div className="flex shrink-0 items-center gap-2">{children}</div>
+			<div className="ml-auto flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
 		</div>
 	);
 }
@@ -128,6 +174,7 @@ export function Select<T extends string | number | null>({
 	options,
 	onChange,
 	help,
+	info,
 	fallback = 'Custom',
 }: {
 	label: string;
@@ -136,12 +183,16 @@ export function Select<T extends string | number | null>({
 	options: Array<{ value: T; label: string }>;
 	onChange: (value: T) => void;
 	help?: ReactNode;
+	info?: ReactNode;
 	fallback?: string;
 }) {
 	const current = options.find((option) => option.value === value);
 	return (
 		<div className="flex min-w-0 flex-col gap-1.5">
-			<SectionLabel>{label}</SectionLabel>
+			<SectionLabel className="flex items-center gap-1.5">
+				{label}
+				{info ? <InfoTip label={`About ${label}`}>{info}</InfoTip> : null}
+			</SectionLabel>
 			<Menu>
 				<MenuTrigger asChild>
 					<button

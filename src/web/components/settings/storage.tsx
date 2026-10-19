@@ -65,7 +65,9 @@ function Usage() {
 export function StoragePage() {
 	return (
 		<>
-			<PageHeading title="Storage">Checkpoints, diffs and Library files are kept in object storage, so a stopped task's work is there without its sandbox.</PageHeading>
+			<PageHeading title="Storage" info="So a stopped task's work is there without its sandbox.">
+				Checkpoints, diffs and Library files, in object storage.
+			</PageHeading>
 			<Usage />
 		</>
 	);

@@ -54,14 +54,18 @@ const TREE_DEFAULT = 220;
 const TREE_MIN = 140;
 /** The open file keeps at least this much room. */
 const VIEWER_MIN = 200;
+/** Below this the tree and the open file take turns at full width, as on a phone, rather than squeezing side by side. */
+const SIDE_BY_SIDE_MIN = 520;
 
 export function FilesTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	const [opened, setOpened] = useState<string[]>([]);
 	const viewerId = useId();
+	const [treeTurn, setTreeTurn] = useState(false);
 	const open = (path: string) => {
 		setOpened((current) => (current.includes(path) ? current : [...current, path]));
 		setSelected(path);
+		setTreeTurn(false);
 	};
 	const close = (path: string) => {
 		const next = opened.filter((item) => item !== path);
@@ -112,7 +116,9 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 	}, []);
 	const treeMax = Math.max(TREE_MIN, (rowWidth || 800) - VIEWER_MIN);
 	const width = Math.min(treeMax, Math.max(TREE_MIN, treeWidth));
-	const showTree = !selected || !treeHidden;
+	const narrow = rowWidth > 0 && rowWidth < SIDE_BY_SIDE_MIN;
+	const showTree = narrow ? !selected || treeTurn : !selected || !treeHidden;
+	const showViewer = !narrow || !showTree;
 
 	return (
 		<FileIcons>
@@ -121,8 +127,8 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					<div
 						aria-label="File tree"
 						hidden={!showTree}
-						className={cn('min-h-0 shrink-0 flex-col overflow-auto', showTree ? 'flex' : 'hidden')}
-						style={{ width }}
+						className={cn('min-h-0 shrink-0 flex-col overflow-auto', showTree ? 'flex' : 'hidden', narrow && 'flex-1')}
+						style={narrow ? undefined : { width }}
 					>
 						<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
 							<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
@@ -176,18 +182,18 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 							/>
 						)}
 					</div>
-					{showTree ? (
+					{showTree && !narrow ? (
 						<ResizeHandle label="Resize the file tree" width={width} min={TREE_MIN} max={treeMax} initial={TREE_DEFAULT} onResize={setTreeWidth} className="mx-0.5" />
 					) : null}
-					<div className="in-well flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
+					<div className={cn('in-well min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', showViewer ? 'flex' : 'hidden')}>
 						{opened.length ? (
 							<div className="flex shrink-0 items-center gap-1 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-1">
 								<IconBtn
-									icon={treeHidden ? PanelLeftOpen : PanelLeftClose}
+									icon={narrow || treeHidden ? PanelLeftOpen : PanelLeftClose}
 									size="xs"
-									label={treeHidden ? 'Show the file tree' : 'Hide the file tree'}
-									aria-pressed={!treeHidden}
-									onClick={() => setTreeHidden(!treeHidden)}
+									label={narrow || treeHidden ? 'Show the file tree' : 'Hide the file tree'}
+									aria-pressed={!narrow && !treeHidden}
+									onClick={() => (narrow ? setTreeTurn(true) : setTreeHidden(!treeHidden))}
 									className="shrink-0"
 								/>
 								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />

@@ -96,9 +96,11 @@ export function ComputePage() {
 	const view = compute.data;
 	return (
 		<>
-			<PageHeading title="Compute">
-				Every task that edits or runs code gets its own sandbox. Stopping one saves a checkpoint first, and the task picks up where it left off the
-				next time it needs a machine.
+			<PageHeading
+				title="Compute"
+				info="Stopping a sandbox saves a checkpoint first, and the task picks up where it left off the next time it needs a machine."
+			>
+				Where sandboxes run, and which are running now.
 			</PageHeading>
 			{compute.isPending ? (
 				<Spinner size={12} />

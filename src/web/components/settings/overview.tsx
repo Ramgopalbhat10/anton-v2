@@ -185,10 +185,7 @@ export function SettingsOverview() {
 		<div className="flex flex-col gap-6">
 			<div className="flex flex-col gap-2">
 				<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
-				<p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">
-					Anton runs every task in its own sandbox, on its own branch. What you set here decides what it may spend, which repositories it works on,
-					and what it keeps between tasks.
-				</p>
+				<p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">What Anton may spend, work on and keep.</p>
 			</div>
 			<div className="grid gap-3 sm:grid-cols-2">
 				<SpendCard />
