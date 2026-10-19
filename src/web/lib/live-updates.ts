@@ -10,6 +10,7 @@ type Change =
 	| { kind: 'models' }
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
+	| { kind: 'automations' }
 	| PageChange
 	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
 	| { kind: 'now'; id: string; now: AgentNow | null };
@@ -33,8 +34,10 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
 	if (change.kind === 'connectors') return [['connectors'], ['connections']];
-	// Projects count their threads by state, so a change to any task can move a count.
-	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts']];
+	// A routine added, edited or run: a repo's automations and a project's routines show it.
+	if (change.kind === 'automations') return [['automations'], ['space-automations']];
+	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
+	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts'], ['reviews']];
 	if (change.kind === 'spaces') return [['spaces'], ['space']];
 	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
 	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
@@ -60,7 +63,11 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 		['space'],
 		['budget'],
 		['usage'],
+		// A reply's spend: which project it counts toward is the server's to know.
+		['space-usage'],
 		['compute'],
+		// A pull request opened, or its checks or review moved.
+		['reviews'],
 		['session', change.id],
 		['context', change.id],
 		['checkpoints', change.id],

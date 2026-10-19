@@ -102,7 +102,8 @@ export function saveThreadPanels<Name extends string>(threadId: string, panels: 
 
 /** Thread reports reach the coordinator as a message; the feed shows them as a quiet row, not a bubble. */
 /** `routine` marks a thread one of the project's routines just started. */
-export type Report = { id: string; title: string; state: ThreadState; text: string; routine: boolean };
+/** One thread's line in a report; `started` says who started it just now, when the coordinator did not. */
+export type Report = { id: string; title: string; state: ThreadState; text: string; started: 'you' | 'routine' | null };
 
 export function parseReports(text: string): Report[] | null {
 	const match = /^\s*<thread-reports>([\s\S]*)<\/thread-reports>\s*$/.exec(text);
@@ -112,7 +113,7 @@ export function parseReports(text: string): Report[] | null {
 	for (const line of match[1].matchAll(/<thread ([^>]*?)(?:\/>|>([\s\S]*?)<\/thread>)/g)) {
 		const attrs = Object.fromEntries([...line[1].matchAll(/(\w+)="([^"]*)"/g)].map(([, key, value]) => [key, unescape(value)]));
 		const state = (THREAD_STATES as readonly string[]).includes(attrs.state) ? (attrs.state as ThreadState) : 'idle';
-		reports.push({ id: attrs.id ?? '', title: attrs.title ?? 'A thread', state, text: unescape(line[2] ?? attrs.asks ?? '').trim(), routine: attrs.started === 'routine' });
+		reports.push({ id: attrs.id ?? '', title: attrs.title ?? 'A thread', state, text: unescape(line[2] ?? attrs.asks ?? '').trim(), started: attrs.started === 'you' || attrs.started === 'routine' ? attrs.started : null });
 	}
 	return reports;
 }

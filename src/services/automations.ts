@@ -23,7 +23,7 @@ import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
-import { routineStarted } from './thread-reports.ts';
+import { threadStarted } from './thread-reports.ts';
 
 /** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
 const ISSUES_AT_ONCE = 3;
@@ -140,7 +140,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 			planMode: automation.planFirst,
 		});
 		// The coordinator did not start it, so it hears of it, and its feed shows it as it starts.
-		await routineStarted(thread.id, automation.kind === 'issues' ? `on issues labeled “${automation.label}”` : `every ${automation.everyHours} hours`);
+		await threadStarted(thread.id, { by: 'routine', routine: automation.kind === 'issues' ? `on issues labeled “${automation.label}”` : `every ${automation.everyHours} hours` });
 		return thread.id;
 	}
 	if (!automation.projectId) throw new NotFoundError('Project not found');

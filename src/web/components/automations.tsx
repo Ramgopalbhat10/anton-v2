@@ -3,7 +3,7 @@ import { CircleDot, Clock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
-import { api, type Automation, type AutomationInput, type ModelChoice } from '@/lib/api';
+import { api, type Automation, type AutomationInput, type ModelChoice, SAFETY_NET_MS } from '@/lib/api';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -156,7 +156,7 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 /** Tasks this repo starts on its own. Each change saves at once, apart from the settings form. */
 export function Automations({ projectId }: { projectId: string }) {
 	const [adding, setAdding] = useState(false);
-	const list = useQuery({ queryKey: queryKey(projectId), queryFn: () => api.automations(projectId), refetchInterval: 60_000 });
+	const list = useQuery({ queryKey: queryKey(projectId), queryFn: () => api.automations(projectId), refetchInterval: SAFETY_NET_MS });
 	if (list.isPending) return <Spinner size={12} />;
 	if (list.isError) return <p className="m-0 text-[12px] text-(--danger-text)">{list.error.message}</p>;
 	return (

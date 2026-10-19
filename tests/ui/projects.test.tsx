@@ -340,12 +340,13 @@ describe('threads', () => {
 
 	it('reads thread reports back out of the coordinator message', () => {
 		const reports = parseReports(
-			'<thread-reports>\n  <thread id="asks1234" title="Pick &quot;a&quot; name" state="waiting" asks="Billing or invoices?"/>\n  <thread id="pr123456" title="Endpoint" state="review">Opened #12 &lt;ok&gt;</thread>\n  <thread id="nightly1" title="Nightly check" state="working" started="routine">Started by the routine that runs every 24 hours.</thread>\n</thread-reports>',
+			'<thread-reports>\n  <thread id="asks1234" title="Pick &quot;a&quot; name" state="waiting" asks="Billing or invoices?"/>\n  <thread id="pr123456" title="Endpoint" state="review">Opened #12 &lt;ok&gt;</thread>\n  <thread id="nightly1" title="Nightly check" state="working" started="routine">Started by the routine that runs every 24 hours.</thread>\n  <thread id="mine1234" title="API keys" state="working" started="you">Add API key auth.</thread>\n</thread-reports>',
 		);
 		expect(reports).toEqual([
-			{ id: 'asks1234', title: 'Pick "a" name', state: 'waiting', text: 'Billing or invoices?', routine: false },
-			{ id: 'pr123456', title: 'Endpoint', state: 'review', text: 'Opened #12 <ok>', routine: false },
-			{ id: 'nightly1', title: 'Nightly check', state: 'working', text: 'Started by the routine that runs every 24 hours.', routine: true },
+			{ id: 'asks1234', title: 'Pick "a" name', state: 'waiting', text: 'Billing or invoices?', started: null },
+			{ id: 'pr123456', title: 'Endpoint', state: 'review', text: 'Opened #12 <ok>', started: null },
+			{ id: 'nightly1', title: 'Nightly check', state: 'working', text: 'Started by the routine that runs every 24 hours.', started: 'routine' },
+			{ id: 'mine1234', title: 'API keys', state: 'working', text: 'Add API key auth.', started: 'you' },
 		]);
 		expect(parseReports('Just a message')).toBeNull();
 		expect(groupByState(threads).map((group) => group.state)).toEqual(['waiting', 'working', 'review', 'resolved']);

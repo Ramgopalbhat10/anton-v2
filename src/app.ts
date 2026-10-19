@@ -77,6 +77,7 @@ import { scheduleHeadlessWork } from './services/headless.ts';
 import { scheduleIdleStops } from './services/idle-stop.ts';
 import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
 import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
+import { threadStarted } from './services/thread-reports.ts';
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
 import { attachToProject, attachToTask } from './services/attachments.ts';
@@ -656,7 +657,10 @@ app.post('/api/spaces/:id/threads', async (c) => {
 			planMode: v.optional(v.boolean()),
 		}),
 	);
-	return c.json(await startThread(c.req.param('id'), input));
+	const thread = await startThread(c.req.param('id'), input);
+	// You started it, not the coordinator: it hears of it, and its feed shows it as it starts.
+	await threadStarted(thread.id, { by: 'you', brief: input.brief });
+	return c.json(thread);
 });
 app.post('/api/spaces/:id/threads/:threadId/nudge', async (c) => {
 	const { text } = await body(c, v.object({ text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20_000)) }));

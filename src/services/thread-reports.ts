@@ -1,3 +1,4 @@
+import { splitAttachments } from '../core/attachments.ts';
 import type { Session } from '../core/types.ts';
 import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { sendToAgent } from './agent-runner.ts';
@@ -12,8 +13,9 @@ import { getSession } from './sessions.ts';
  * reply, or whose pull request changes, is noted; notes from one project are
  * gathered for a short while and sent as one message, and only a change of
  * state is sent, so a thread that follows up on CI three times reports once
- * when it goes green. Working and queued are not news: the coordinator
- * started them.
+ * when it goes green. Working and queued are not news when the coordinator
+ * started them; a thread you or a routine started is reported as it starts,
+ * so the coordinator knows of it and its feed shows it at once.
  */
 export const REPORT_DELAY_MS = 20_000;
 /** The start of a reply kept for the card and the report. */
@@ -21,26 +23,30 @@ const MAX_REPLY = 4_000;
 
 const pending = new Map<string, Set<string>>();
 const timers = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> }>();
-/** Threads a routine started, by what the routine is: news to the coordinator, which did not start them. */
-const routineStarts = new Map<string, string>();
-/** A routine's thread is reported soon after it starts, so the feed shows it as it begins. */
-export const ROUTINE_REPORT_DELAY_MS = 2_000;
+/** Who started a thread, when the coordinator did not: you, with the brief you gave it, or a routine. */
+export type Starter = { by: 'you'; brief: string } | { by: 'routine'; routine: string };
+/** Threads the coordinator did not start, by who did: news to the coordinator. */
+const starts = new Map<string, Starter>();
+/** A thread the coordinator did not start is reported a moment after it starts (threads started together go as one), so the feed shows it as it begins. */
+export const START_REPORT_DELAY_MS = 1_000;
 
 const QUIET: ThreadState[] = ['working', 'queued'];
 
 const attr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const body = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const prNumber = (url: string) => /\/pull\/(\d+)/.exec(url)?.[1];
+const clip = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text).trim();
 
-/** One thread's line in a report, as the coordinator reads it and the feed shows it; `routine` names the routine that just started it. */
-export function reportLine(thread: Session, state: ThreadState, routine?: string): string {
+/** One thread's line in a report, as the coordinator reads it and the feed shows it; `started` says who just started it, when the coordinator did not. */
+export function reportLine(thread: Session, state: ThreadState, started?: Starter): string {
 	const pr = thread.prUrl && thread.pullRequest ? ` pr="#${prNumber(thread.prUrl) ?? '?'} ${thread.pullRequest.state}${thread.pullRequest.checks ? `, checks ${thread.pullRequest.checks}` : ''}"` : '';
 	const asks = state === 'waiting' && thread.asking ? ` asks="${attr(thread.asking)}"` : '';
 	const said = (thread.lastReply ?? '').slice(0, 600).trim();
 	const failed = thread.status === 'error' && thread.errorMessage ? `Failed: ${thread.errorMessage}` : '';
-	const text = failed || said || (routine ? `Started by the routine that runs ${routine}.` : '');
-	const started = routine ? ' started="routine"' : '';
-	const open = `  <thread id="${thread.id.slice(0, 8)}" title="${attr(thread.title)}" state="${state}"${started}${pr}${asks}`;
+	const why = started?.by === 'routine' ? `Started by the routine that runs ${started.routine}.` : started?.by === 'you' ? clip(splitAttachments(started.brief).text, 600) : '';
+	const text = failed || said || why;
+	const by = started ? ` started="${started.by}"` : '';
+	const open = `  <thread id="${thread.id.slice(0, 8)}" title="${attr(thread.title)}" state="${state}"${by}${pr}${asks}`;
 	return text ? `${open}>${body(text)}</thread>` : `${open}/>`;
 }
 
@@ -55,15 +61,15 @@ async function flush(spaceId: string): Promise<void> {
 	pending.delete(spaceId);
 	const lines: string[] = [];
 	for (const id of ids) {
-		const routine = routineStarts.get(id);
-		routineStarts.delete(id);
+		const started = starts.get(id);
+		starts.delete(id);
 		const record = await getSessionRecord(id);
 		if (!record || record.spaceId !== spaceId) continue;
 		const thread = await getSession(id);
 		const state = thread.threadState;
-		if (routine) {
+		if (started) {
 			// Its state is not kept: it has not replied yet, and its first reply is news whatever state it leaves.
-			lines.push(reportLine(thread, state ?? 'queued', routine));
+			lines.push(reportLine(thread, state ?? 'queued', started));
 			continue;
 		}
 		if (!state || state === record.reportedState) continue;
@@ -93,10 +99,10 @@ export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Prom
 	timers.set(spaceId, { at, timer });
 }
 
-/** A routine started the thread: the coordinator hears of it in a moment, with what the routine is, and the feed shows it. */
-export async function routineStarted(id: string, routine: string): Promise<void> {
-	routineStarts.set(id, routine);
-	await threadChanged(id, ROUTINE_REPORT_DELAY_MS);
+/** You or a routine started the thread, not the coordinator: it hears of it in a moment, with who did, and the feed shows it. */
+export async function threadStarted(id: string, starter: Starter): Promise<void> {
+	starts.set(id, starter);
+	await threadChanged(id, START_REPORT_DELAY_MS);
 }
 
 /** Sends every waiting report now (tests, and shutting down). */
