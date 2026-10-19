@@ -140,6 +140,41 @@ test('a server that lets no app register itself takes a client you paste, and ke
 	assert.equal((await servers.enabledMcpServers()).find((server) => server.name === 'closed')?.auth, null);
 });
 
+test("Google's MCP servers sign in with your Google client and ask for a refresh token, as Google needs", async () => {
+	const seen: Array<{ url: string; body: string; headers: Headers }> = [];
+	const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+		const url = String(input instanceof Request ? input.url : input);
+		seen.push({ url, body: init?.body ? String(init.body) : '', headers: new Headers(init?.headers) });
+		if (url === 'https://gmailmcp.googleapis.com/.well-known/oauth-protected-resource/mcp/v1') {
+			return json({ resource: 'https://gmailmcp.googleapis.com/mcp/v1', authorization_servers: ['https://accounts.google.com/'], scopes_supported: ['https://www.googleapis.com/auth/gmail.readonly'] });
+		}
+		if (url === 'https://accounts.google.com/.well-known/oauth-authorization-server') {
+			return json({
+				issuer: 'https://accounts.google.com',
+				authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+				token_endpoint: 'https://oauth2.googleapis.com/token',
+				response_types_supported: ['code'],
+				code_challenge_methods_supported: ['S256'],
+				token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
+			});
+		}
+		if (url === 'https://oauth2.googleapis.com/token') return json({ access_token: 'ya29', token_type: 'Bearer', expires_in: 3599, refresh_token: '1//r' });
+		return new Response('not found', { status: 404 });
+	}) as typeof fetch;
+	await servers.addMcpServer({ name: 'gmail', url: 'https://gmailmcp.googleapis.com/mcp/v1', tools: [] });
+	await assert.rejects(signIns.beginMcpSignIn('gmail', ANTON), /doesn't let apps register themselves/);
+
+	const { url } = await signIns.beginMcpSignIn('gmail', ANTON, { clientId: 'web.apps.googleusercontent.com', clientSecret: 'GOCSPX' });
+	const at = new URL(url ?? '');
+	assert.equal(at.searchParams.get('access_type'), 'offline');
+	assert.equal(at.searchParams.get('prompt'), 'consent');
+	await signIns.finishMcpSignIn(new URLSearchParams({ code: 'c', state: at.searchParams.get('state') ?? '' }));
+	const exchange = seen.find((request) => request.url === 'https://oauth2.googleapis.com/token');
+	assert.match(exchange?.headers.get('authorization') ?? '', /^Basic /, 'the code is exchanged with the client secret, as Google requires');
+	assert.equal((await servers.enabledMcpServers()).find((server) => server.name === 'gmail')?.auth, 'ya29');
+});
+
 test('a server that offers no OAuth sign-in says so, rather than failing somewhere in the flow', async () => {
 	fakeOAuth();
 	await servers.addMcpServer({ name: 'open', url: 'https://open.test/mcp', tools: [] });
