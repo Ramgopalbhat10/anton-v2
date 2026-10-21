@@ -2,13 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleDot, Clock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
+import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
 import { Btn, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { api, type Automation, type AutomationInput, type ModelChoice, SAFETY_NET_MS } from '@/lib/api';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
-
-const FIELD =
-	'h-8 min-w-0 rounded-lg bg-(--bg-surface) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+import { defaultSchedule, type Schedule, scheduleProblem } from '../../core/schedule';
 
 const queryKey = (projectId: string) => ['automations', projectId];
 
@@ -21,13 +23,14 @@ function useRefresh(projectId: string) {
 }
 
 function summary(automation: Automation): string {
-	return automation.kind === 'issues' ? `Open issues labeled “${automation.label}”` : `Every ${automation.everyHours} hours`;
+	return automation.kind === 'issues' ? `Open issues labeled “${automation.label}”` : whenItRuns(automation);
 }
 
 function lastRun(automation: Automation): string {
 	const picked = automation.kind === 'issues' ? ` · ${automation.seen.length} ${automation.seen.length === 1 ? 'issue' : 'issues'} picked up` : '';
 	const ran = automation.lastRunAt && age(automation.lastRunAt);
-	return `${ran ? `Last run ${ran === 'now' ? 'just now' : `${ran} ago`}` : 'Not run yet'}${picked}`;
+	const next = automation.enabled && automation.schedule ? ` · ${nextRunText(automation)}` : '';
+	return `${ran ? `Last run ${ran === 'now' ? 'just now' : `${ran} ago`}` : 'Not run yet'}${picked}${next}`;
 }
 
 function AutomationRow({ automation }: { automation: Automation }) {
@@ -64,16 +67,15 @@ function AutomationRow({ automation }: { automation: Automation }) {
 }
 
 function KindChoice({ value, onChange }: { value: Automation['kind']; onChange: (kind: Automation['kind']) => void }) {
-	const option = (kind: Automation['kind'], label: string) => (
-		<Btn size="sm" variant={value === kind ? 'secondary' : 'ghost'} aria-pressed={value === kind} onClick={() => onChange(kind)}>
-			{label}
-		</Btn>
-	);
 	return (
-		<div className="flex gap-1">
-			{option('issues', 'From labeled issues')}
-			{option('schedule', 'On a schedule')}
-		</div>
+		<ToggleGroup type="single" size="sm" aria-label="Starts" value={value} onValueChange={(next) => next && onChange(next as Automation['kind'])}>
+			<ToggleGroupItem value="issues" className="text-[12px]">
+				From labeled issues
+			</ToggleGroupItem>
+			<ToggleGroupItem value="schedule" className="text-[12px]">
+				On a schedule
+			</ToggleGroupItem>
+		</ToggleGroup>
 	);
 }
 
@@ -83,7 +85,7 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 	const models = useModels();
 	const [kind, setKind] = useState<Automation['kind']>(automation?.kind ?? 'issues');
 	const [label, setLabel] = useState(automation?.label ?? 'anton');
-	const [hours, setHours] = useState(String(automation?.everyHours ?? 24));
+	const [schedule, setSchedule] = useState<Schedule>(automation?.schedule ?? defaultSchedule());
 	const [prompt, setPrompt] = useState(automation?.prompt ?? '');
 	const [choice, setChoice] = useState<ModelChoice | null>(automation?.model ? { model: automation.model, reasoning: automation.reasoning } : null);
 	const [planFirst, setPlanFirst] = useState(automation?.planFirst ?? false);
@@ -91,13 +93,13 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 	const input: AutomationInput = {
 		kind,
 		label: kind === 'issues' ? label.trim() : null,
-		everyHours: kind === 'schedule' ? Number(hours) : null,
+		schedule: kind === 'schedule' ? schedule : null,
 		prompt,
 		model: choice?.model ?? null,
 		reasoning: choice?.reasoning ?? null,
 		planFirst,
 	};
-	const ready = kind === 'issues' ? Boolean(input.label) : Number.isInteger(input.everyHours) && (input.everyHours ?? 0) >= 1 && prompt.trim() !== '';
+	const ready = kind === 'issues' ? Boolean(input.label) : !scheduleProblem(schedule) && prompt.trim() !== '';
 	const add = useMutation({
 		mutationFn: () => (automation ? api.editAutomation(automation.id, input) : api.addAutomation(projectId, input)),
 		onSuccess: () => {
@@ -117,21 +119,18 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 			{kind === 'issues' ? (
 				<label className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
 					Label
-					<input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="anton" className={`${FIELD} w-[180px]`} />
+					<Input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="anton" className="w-[180px] text-[13px] md:text-[13px]" />
 				</label>
 			) : (
-				<label className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
-					Every
-					<input inputMode="numeric" value={hours} onChange={(event) => setHours(event.target.value)} className={`${FIELD} w-[64px]`} />
-					hours
-				</label>
+				<ScheduleEditor value={schedule} onChange={setSchedule} />
 			)}
-			<textarea
+			<Textarea
+				aria-label="Instructions"
 				value={prompt}
 				onChange={(event) => setPrompt(event.target.value)}
 				rows={3}
 				placeholder={kind === 'issues' ? 'Extra instructions for every issue (optional)' : 'What the agent should do each time'}
-				className="w-full resize-y rounded-lg bg-(--bg-surface) px-2.5 py-2 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+				className="resize-y text-[13px] leading-[19px] md:text-[13px]"
 			/>
 			<Switch
 				checked={planFirst}

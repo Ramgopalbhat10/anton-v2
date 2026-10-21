@@ -1,6 +1,7 @@
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Issue, Reasoning } from '../core/ports.ts';
 import type { Project } from '../core/types.ts';
+import { describeSchedule, nextRun, normalizeSchedule, type Schedule, type ScheduleInput, scheduleProblem } from '../core/schedule.ts';
 import {
 	type Automation,
 	claimIssue,
@@ -30,12 +31,13 @@ import { recordUsage } from './usage.ts';
 
 /** At most this many issue tasks of a repo work at once, so labeling a backlog does not start them all together. */
 const ISSUES_AT_ONCE = 3;
-const HOUR_MS = 60 * 60_000;
+/** A scheduled run that could not start tries again this much later, rather than at every check. */
+const RETRY_MS = 5 * 60_000;
 
 export type AutomationInput = {
 	kind: Automation['kind'];
 	label?: string | null;
-	everyHours?: number | null;
+	schedule?: ScheduleInput | null;
 	prompt: string;
 	model?: string | null;
 	reasoning?: Reasoning | null;
@@ -60,12 +62,20 @@ async function checked(projectId: string | null, input: AutomationInput): Promis
 	}
 	const label = input.label?.trim() || null;
 	if (input.kind === 'issues' && !label) throw new InvalidInputError('Name the label that marks issues for Anton');
-	if (input.kind === 'schedule' && !(input.everyHours && input.prompt.trim())) throw new InvalidInputError('A schedule needs hours and instructions');
+	const schedule = input.kind === 'schedule' && input.schedule ? normalizeSchedule(input.schedule) : null;
+	if (input.kind === 'schedule') {
+		if (!schedule) throw new InvalidInputError('Pick when the routine runs');
+		const problem = scheduleProblem(schedule);
+		if (problem) throw new InvalidInputError(problem);
+		if (!input.prompt.trim()) throw new InvalidInputError('A schedule needs instructions');
+	}
 	return {
 		projectId: projectId ?? '',
 		kind: input.kind,
 		label: input.kind === 'issues' ? label : null,
-		everyHours: input.kind === 'schedule' ? (input.everyHours ?? null) : null,
+		schedule,
+		// Counted from now: a new or changed schedule runs at its next time, never for times already past.
+		nextRunAt: schedule ? upcoming(schedule, Date.now()) : null,
 		prompt: input.prompt.trim(),
 		model: input.model || null,
 		reasoning: input.model ? (input.reasoning ?? null) : null,
@@ -107,8 +117,10 @@ async function existing(id: string): Promise<Automation> {
 }
 
 export async function setAutomationEnabled(id: string, enabled: boolean): Promise<Automation> {
-	await existing(id);
-	await updateAutomation(id, { enabled });
+	const automation = await existing(id);
+	// Turned back on, a schedule picks up at its next time rather than making up for the runs it was off for.
+	const resumed = enabled && !automation.enabled && automation.schedule ? { nextRunAt: upcoming(automation.schedule, Date.now()) } : {};
+	await updateAutomation(id, { enabled, ...resumed });
 	return existing(id);
 }
 
@@ -145,7 +157,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 			planMode: automation.planFirst,
 		});
 		// The coordinator did not start it, so it hears of it, and its feed shows it as it starts.
-		await threadStarted(thread.id, { by: 'routine', routine: automation.kind === 'issues' ? `on issues labeled “${automation.label}”` : `every ${automation.everyHours} hours` });
+		await threadStarted(thread.id, { by: 'routine', routine: automation.schedule ? describeSchedule(automation.schedule) : `on issues labeled “${automation.label}”` });
 		return thread.id;
 	}
 	if (!automation.projectId) throw new NotFoundError('Project not found');
@@ -165,8 +177,21 @@ async function startTask(automation: Automation, title: string, prompt: string):
 	return session.id;
 }
 
-/** The day a run started, as its thread's title ends: runs of one routine read apart in lists and in the project's Library. */
-const runDay = (now: number) => new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+/** The day a run started on its schedule's clock, as its thread's title ends: runs of one routine read apart in lists and in the project's Library. */
+const runDay = (now: number, timeZone?: string) => new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone });
+
+/** A schedule's next run after `now`, as kept on the automation. */
+const upcoming = (schedule: Schedule, now: number) => nextRun(schedule, new Date(now))?.toISOString() ?? null;
+
+/**
+ * When a schedule is due: its next run as kept, or for one kept before next runs were (an "every N hours"
+ * routine moved to a schedule), the first after its last run, else after it was added.
+ */
+function dueAt(automation: Automation & { schedule: Schedule }): number {
+	if (automation.nextRunAt) return Date.parse(automation.nextRunAt);
+	const next = nextRun(automation.schedule, new Date(automation.lastRunAt ?? automation.createdAt));
+	return next ? next.getTime() : Number.POSITIVE_INFINITY;
+}
 
 /**
  * A routine's short name, its runs' title: written once from its instructions by the title model and kept on it
@@ -208,14 +233,17 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
 		return { lastRunAt: new Date(now).toISOString() };
 	},
 	async schedule(automation, _project, { now, force }) {
-		// The first run comes one interval after the schedule is added; Run now starts one sooner.
-		const since = Date.parse(automation.lastRunAt ?? automation.createdAt);
-		const due = force || now - since >= (automation.everyHours ?? 24) * HOUR_MS;
-		if (!due) return {};
+		const { schedule } = automation;
+		if (!schedule) throw new InvalidInputError('Pick when the routine runs');
+		// Run now starts one early; the schedule's next time stands. A run missed while Anton was down starts once.
+		if (!force && dueAt({ ...automation, schedule }) > now) return {};
 		const { name, spent } = await routineName(automation);
-		const id = await startTask(automation, `${name} · ${runDay(now)}`, automation.prompt);
+		const id = await startTask(automation, `${name} · ${runDay(now, schedule.timeZone)}`, automation.prompt).catch(async (error: unknown) => {
+			if (!force) await updateAutomation(automation.id, { nextRunAt: new Date(now + RETRY_MS).toISOString() });
+			throw error;
+		});
 		if (spent) await recordUsage(id, spent.usage, spent.model);
-		return { lastRunAt: new Date(now).toISOString() };
+		return { lastRunAt: new Date(now).toISOString(), nextRunAt: upcoming(schedule, now) };
 	},
 };
 
@@ -242,10 +270,10 @@ export async function runAutomation(id: string, { now = Date.now(), force = fals
 	return existing(id);
 }
 
-/** Runs every enabled automation that is due; nothing starts while today's spending cap is reached. */
-export async function runDueAutomations(now = Date.now()): Promise<void> {
+/** Runs every enabled automation (of `kind`, if given) that is due; nothing starts while today's spending cap is reached. */
+export async function runDueAutomations(now = Date.now(), kind?: Automation['kind']): Promise<void> {
 	if ((await budget()).blocked) return;
 	for (const automation of await listAutomations()) {
-		if (automation.enabled) await runAutomation(automation.id, { now });
+		if (automation.enabled && (!kind || automation.kind === kind)) await runAutomation(automation.id, { now });
 	}
 }

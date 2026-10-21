@@ -53,6 +53,8 @@ const { stateBlock } = await import('../src/services/coordinator.ts');
 const sessions = await import('../src/services/sessions.ts');
 const { updateSession, getSessionRecord } = await import('../src/db/sessions.ts');
 const automations = await import('../src/services/automations.ts');
+/** A routine's schedule in the tests: every day at 9:00 on the UTC clock. */
+const DAILY = { frequency: 'daily', time: '09:00', timeZone: 'UTC' } as const;
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
@@ -216,9 +218,9 @@ test('a thread you start is reported as it starts, with its brief, and again whe
 
 test('a project without repositories runs routines on a schedule, starting chats', async () => {
 	const space = await spaces.createSpace({ name: 'Digest', goal: 'A weekly digest' });
-	await assert.rejects(() => automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the news.' }), /repository/);
+	await assert.rejects(() => automations.addAutomation(null, { kind: 'schedule', schedule: DAILY, prompt: 'Summarize the news.' }), /repository/);
 	await assert.rejects(() => automations.addAutomation(null, { kind: 'issues', label: 'anton', prompt: '', spaceId: space.id }), /need a repository/);
-	const routine = await automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the news.', spaceId: space.id });
+	const routine = await automations.addAutomation(null, { kind: 'schedule', schedule: DAILY, prompt: 'Summarize the news.', spaceId: space.id });
 	assert.equal(routine.projectId, '');
 	assert.deepEqual(
 		(await automations.spaceAutomations(space.id)).map((item) => item.id),
@@ -240,25 +242,34 @@ test('a project without repositories runs routines on a schedule, starting chats
 	// Without a title model, a run is named by the start of the routine's instructions and the day it ran.
 	assert.match(thread.title, /^Summarize the news · \w{3} \d{1,2}$/);
 	assert.equal(thread.automationId, routine.id);
-	assert.match(told[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="Summarize the news · \\w+ \\d+" state="\\w+" started="routine">Started by the routine that runs every 24 hours\\.</thread>`));
+	assert.match(told[0].text, new RegExp(`<thread id="${thread.id.slice(0, 8)}" title="Summarize the news · \\w+ \\d+" state="\\w+" started="routine">Started by the routine that runs every day at 9:00 AM, UTC\\.</thread>`));
 	// Its first reply is reported too; a run that replies without asking anything is done, with no decision model to judge it.
 	await reports.threadFinished(thread.id, 'Here is the digest.');
 	await reports.flushReports();
 	assert.match(toCoordinator.filter((sent) => sent.id === space.id)[1]?.text ?? '', /title="Summarize the news · \w+ \d+" state="resolved">Here is the digest\.<\/thread>/);
 
 	// A routine is changed in place, checked as when it was added, and keeps its runs.
-	const edited = await automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: ' Summarize the headlines. ', model: 'openrouter/test/cheap', reasoning: 'low' });
+	const sixHourly = { frequency: 'hourly', everyHours: 6, time: '00:30', timeZone: 'Asia/Kolkata' } as const;
+	const edited = await automations.editAutomation(routine.id, { kind: 'schedule', schedule: sixHourly, prompt: ' Summarize the headlines. ', model: 'openrouter/test/cheap', reasoning: 'low' });
 	assert.equal(edited.id, routine.id);
-	assert.equal(edited.everyHours, 6);
+	assert.deepEqual(edited.schedule, { ...sixHourly, days: [1], dayOfMonth: 1, cron: '', timeZone: 'Asia/Kolkata' }, 'what it leaves out takes its defaults');
+	// 00:30, 06:30, 12:30 and 18:30 in Kolkata: on the hour in UTC, and never more than six hours away.
+	const next = Date.parse(edited.nextRunAt!);
+	assert.equal(new Date(next).getUTCMinutes(), 0);
+	assert.ok(next > Date.now() && next <= Date.now() + 6 * 60 * 60_000);
 	assert.equal(edited.prompt, 'Summarize the headlines.');
 	assert.equal(edited.model, 'openrouter/test/cheap');
 	assert.equal(edited.reasoning, 'low');
 	assert.equal(edited.lastRunAt, ran.lastRunAt);
 	assert.equal(edited.spaceId, space.id);
 	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'issues', label: 'anton', prompt: '' }), /need a repository/);
-	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: ' ' }), /hours and instructions/);
-	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 6, prompt: 'x', projectId: api.id }), /not in this project/);
-	assert.equal((await automations.spaceAutomations(space.id))[0].everyHours, 6, 'a rejected change leaves it as it was');
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', schedule: sixHourly, prompt: ' ' }), /needs instructions/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', prompt: 'x' }), /when the routine runs/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', schedule: { frequency: 'weekly', days: [] }, prompt: 'x' }), /at least one day/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', schedule: { frequency: 'cron', cron: '0 9 * *' }, prompt: 'x' }), /five fields/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', schedule: { frequency: 'daily', timeZone: 'Mars/Olympus' }, prompt: 'x' }), /not a time zone/);
+	await assert.rejects(() => automations.editAutomation(routine.id, { kind: 'schedule', schedule: sixHourly, prompt: 'x', projectId: api.id }), /not in this project/);
+	assert.equal((await automations.spaceAutomations(space.id))[0].schedule?.everyHours, 6, 'a rejected change leaves it as it was');
 
 	// It only ever starts this project's threads, so it goes when the project does.
 	await spaces.removeSpace(space.id);
@@ -453,7 +464,7 @@ test('tasks and routines are named in a few words by the title model, unless ren
 
 		// A routine is named once, and each run takes that name with its day.
 		answer = 'Morning briefing';
-		const routine = await automations.addAutomation(null, { kind: 'schedule', everyHours: 24, prompt: long, spaceId: space.id });
+		const routine = await automations.addAutomation(null, { kind: 'schedule', schedule: DAILY, prompt: long, spaceId: space.id });
 		const calls = prompts.length;
 		await automations.runAutomation(routine.id, { force: true });
 		await automations.runAutomation(routine.id, { force: true });
@@ -461,7 +472,7 @@ test('tasks and routines are named in a few words by the title model, unless ren
 		const runs = (await sessions.listThreads(space.id)).filter((item) => item.automationId === routine.id);
 		assert.equal(runs.length, 2);
 		for (const run of runs) assert.match(run.title, /^Morning briefing · \w{3} \d{1,2}$/);
-		const edited = await automations.editAutomation(routine.id, { kind: 'schedule', everyHours: 24, prompt: 'Summarize the markets' });
+		const edited = await automations.editAutomation(routine.id, { kind: 'schedule', schedule: DAILY, prompt: 'Summarize the markets' });
 		assert.equal(edited.title, null, 'new instructions are named again');
 	} finally {
 		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });

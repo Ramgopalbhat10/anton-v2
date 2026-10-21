@@ -3,7 +3,12 @@ import { ArrowLeft, CalendarClock, Clock, GitPullRequest, LayoutDashboard, Libra
 import { memo, useState } from 'react';
 import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
+import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
 import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
@@ -13,6 +18,7 @@ import { age } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
+import { defaultSchedule, type Schedule, scheduleProblem } from '../../core/schedule';
 
 export const PROJECT_TABS = [
 	{ name: 'Overview', icon: LayoutDashboard },
@@ -182,7 +188,8 @@ function PullRequests({ threads }: { threads: Session[] }) {
 	);
 }
 
-const FIELD = 'h-8 min-w-0 rounded-lg bg-(--bg-surface) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+/** Chats, for a routine without a repository: a Select item needs a value, and '' is its own. */
+const NO_REPO = 'none';
 
 function RoutineRow({ automation, space }: { automation: Automation; space: Space }) {
 	const queryClient = useQueryClient();
@@ -197,8 +204,8 @@ function RoutineRow({ automation, space }: { automation: Automation; space: Spac
 		<div className="flex flex-col gap-1.5 border-t border-(--border-subtle) px-4 py-2.5">
 			<div className="flex items-center gap-2">
 				<Icon icon={Clock} size={13} className="text-(--icon-tertiary)" />
-				<span className={cn('min-w-0 flex-1 truncate text-[13px]', automation.enabled ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>
-					{automation.kind === 'issues' ? `Issues labeled “${automation.label}”` : `Every ${automation.everyHours} hours`}
+				<span className={cn('line-clamp-2 min-w-0 flex-1 text-[13px] leading-[18px]', automation.enabled ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>
+					{automation.kind === 'issues' ? `Issues labeled “${automation.label}”` : whenItRuns(automation)}
 				</span>
 				<Switch checked={automation.enabled} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Enabled</span>} />
 				<Btn size="xs" variant="ghost" icon={Play} disabled={run.isPending} onClick={() => run.mutate()}>
@@ -210,6 +217,7 @@ function RoutineRow({ automation, space }: { automation: Automation; space: Spac
 			{automation.prompt ? <p className="m-0 line-clamp-2 text-[12px] leading-[17px] text-(--text-secondary)">{automation.prompt}</p> : null}
 			<Caption>
 				{repo?.repoFullName.split('/').pop() ?? 'No repository'} · {automation.lastRunAt ? `ran ${age(automation.lastRunAt)} ago` : 'not run yet'}
+				{automation.enabled && automation.schedule ? ` · ${nextRunText(automation)}` : ''}
 			</Caption>
 			{automation.lastError ? <div className="text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
 		</div>
@@ -225,7 +233,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 	const repoId = picked === '' || space.repos.some((repo) => repo.id === picked) ? picked! : (space.repos[0]?.id ?? '');
 	// Labeled issues belong to a repository; without one a routine runs on a schedule.
 	const kind = repoId ? pickedKind : 'schedule';
-	const [hours, setHours] = useState(automation?.everyHours ?? 24);
+	const [schedule, setSchedule] = useState<Schedule>(automation?.schedule ?? defaultSchedule());
 	const [label, setLabel] = useState(automation?.label ?? 'anton');
 	const [prompt, setPrompt] = useState(automation?.prompt ?? '');
 	const models = useModels();
@@ -236,7 +244,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				projectId: repoId || null,
 				kind,
 				label: kind === 'issues' ? label : null,
-				everyHours: kind === 'schedule' ? hours : null,
+				schedule: kind === 'schedule' ? schedule : null,
 				prompt,
 				model: choice.model || null,
 				reasoning: choice.reasoning,
@@ -257,50 +265,51 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				save.mutate();
 			}}
 		>
-			<div className="flex flex-wrap gap-1">
-				<Btn size="sm" variant={kind === 'schedule' ? 'secondary' : 'ghost'} onClick={() => setKind('schedule')}>
+			<ToggleGroup type="single" size="sm" aria-label="Starts" value={kind} onValueChange={(next) => next && setKind(next as Automation['kind'])}>
+				<ToggleGroupItem value="schedule" className="text-[12px]">
 					On a schedule
-				</Btn>
-				<Btn size="sm" variant={kind === 'issues' ? 'secondary' : 'ghost'} disabled={!repoId} onClick={() => setKind('issues')}>
+				</ToggleGroupItem>
+				<ToggleGroupItem value="issues" disabled={!repoId} className="text-[12px]">
 					From labeled issues
-				</Btn>
-			</div>
+				</ToggleGroupItem>
+			</ToggleGroup>
 			<div className="flex flex-wrap items-center gap-2">
 				{space.repos.length ? (
-					<select aria-label="Repository" value={repoId} onChange={(event) => setRepoId(event.target.value)} className={FIELD}>
-						{space.repos.map((repo) => (
-							<option key={repo.id} value={repo.id}>
-								{repo.repoFullName}
-							</option>
-						))}
-						<option value="">No repository</option>
-					</select>
+					<Select value={repoId || NO_REPO} onValueChange={(next) => setRepoId(next === NO_REPO ? '' : next)}>
+						<SelectTrigger aria-label="Repository" className="max-w-[260px] min-w-0 text-[13px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent position="popper">
+							{space.repos.map((repo) => (
+								<SelectItem key={repo.id} value={repo.id} className="text-[13px]">
+									{repo.repoFullName}
+								</SelectItem>
+							))}
+							<SelectSeparator />
+							<SelectItem value={NO_REPO} className="text-[13px]">
+								No repository
+							</SelectItem>
+						</SelectContent>
+					</Select>
 				) : null}
-				{kind === 'schedule' ? (
-					<label className="flex items-center gap-1.5 text-[12px] text-(--text-tertiary)">
-						Every
-						<input type="number" min={1} max={168} value={hours} onChange={(event) => setHours(Number(event.target.value))} className={cn(FIELD, 'w-16')} />
-						hours
-					</label>
-				) : (
-					<input aria-label="Label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="label" className={cn(FIELD, 'w-32')} />
-				)}
+				{kind === 'issues' ? <Input aria-label="Label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="label" className="w-32 text-[13px] md:text-[13px]" /> : null}
 				<ModelPicker value={{ ...choice, model: choice.model || models.data?.default || '' }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} side="bottom" />
 			</div>
-			<textarea
+			{kind === 'schedule' ? <ScheduleEditor value={schedule} onChange={setSchedule} /> : null}
+			<Textarea
 				aria-label="Instructions"
 				value={prompt}
 				onChange={(event) => setPrompt(event.target.value)}
 				rows={3}
 				placeholder={kind === 'schedule' ? 'What each run should do' : 'Anything to add to each issue (optional)'}
-				className="min-h-[72px] rounded-lg bg-(--bg-surface) px-2.5 py-2 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+				className="min-h-[72px] text-[13px] md:text-[13px]"
 			/>
 			<div className="flex items-center gap-2">
 				{save.isError ? <span className="min-w-0 flex-1 text-[12px] text-(--danger-text)">{save.error.message}</span> : <span className="flex-1" />}
 				<Btn size="sm" variant="ghost" onClick={onDone}>
 					Cancel
 				</Btn>
-				<Btn type="submit" size="sm" variant="primary" disabled={save.isPending || (kind === 'schedule' && !prompt.trim())}>
+				<Btn type="submit" size="sm" variant="primary" disabled={save.isPending || (kind === 'schedule' && (!prompt.trim() || Boolean(scheduleProblem(schedule))))}>
 					{automation ? 'Save routine' : 'Add routine'}
 				</Btn>
 			</div>

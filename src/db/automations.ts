@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Reasoning } from '../core/ports.ts';
 import { announce } from '../core/changes.ts';
+import type { Schedule } from '../core/schedule.ts';
 import { appDb } from './client.ts';
 
-/** A way tasks start without anyone typing: from labeled issues, or every few hours. */
+/** A way tasks start without anyone typing: from labeled issues, or on a schedule. */
 export type Automation = {
 	id: string;
 	/** The repository its tasks work on; empty for a project's routine whose threads start as chats. */
@@ -11,8 +12,10 @@ export type Automation = {
 	kind: 'issues' | 'schedule';
 	/** Issues with this label start tasks (kind `issues`). */
 	label: string | null;
-	/** Hours between runs (kind `schedule`). */
-	everyHours: number | null;
+	/** When it runs (kind `schedule`), on its time zone's clock. */
+	schedule: Schedule | null;
+	/** When a schedule runs next; null until worked out, from its last run. */
+	nextRunAt: string | null;
 	/** The task's instructions; for issues, added after the issue itself. */
 	prompt: string;
 	/** Model for the tasks it starts; null uses the default. */
@@ -42,7 +45,8 @@ function toAutomation(row: Row): Automation {
 		projectId: String(row.project_id),
 		kind: String(row.kind) as Automation['kind'],
 		label: optional(row.label),
-		everyHours: row.every_hours == null ? null : Number(row.every_hours),
+		schedule: row.schedule_json == null ? null : (JSON.parse(String(row.schedule_json)) as Schedule),
+		nextRunAt: optional(row.next_run_at),
 		prompt: String(row.prompt),
 		model: optional(row.model),
 		reasoning: optional(row.reasoning) as Reasoning | null,
@@ -57,14 +61,29 @@ function toAutomation(row: Row): Automation {
 	};
 }
 
-export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
+export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'schedule' | 'nextRunAt' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & {
+	spaceId?: string | null;
+};
 
 export async function insertAutomation(input: NewAutomation): Promise<Automation> {
 	const db = await appDb();
 	const id = `auto_${randomUUID()}`;
 	await db.execute({
-		sql: `INSERT INTO automations (id, project_id, kind, label, every_hours, prompt, model, reasoning, plan_first, enabled, created_at, space_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		args: [id, input.projectId, input.kind, input.label, input.everyHours, input.prompt, input.model, input.reasoning, input.planFirst ? 1 : 0, new Date().toISOString(), input.spaceId ?? null],
+		sql: `INSERT INTO automations (id, project_id, kind, label, schedule_json, next_run_at, prompt, model, reasoning, plan_first, enabled, created_at, space_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		args: [
+			id,
+			input.projectId,
+			input.kind,
+			input.label,
+			input.schedule ? JSON.stringify(input.schedule) : null,
+			input.nextRunAt,
+			input.prompt,
+			input.model,
+			input.reasoning,
+			input.planFirst ? 1 : 0,
+			new Date().toISOString(),
+			input.spaceId ?? null,
+		],
 	});
 	announce({ kind: 'automations' });
 	return (await getAutomation(id))!;
@@ -101,7 +120,8 @@ const columns = {
 	projectId: 'project_id',
 	kind: 'kind',
 	label: 'label',
-	everyHours: 'every_hours',
+	schedule: 'schedule_json',
+	nextRunAt: 'next_run_at',
 	prompt: 'prompt',
 	model: 'model',
 	reasoning: 'reasoning',
@@ -111,7 +131,15 @@ const columns = {
 export type AutomationUpdate = Partial<Pick<Automation, keyof typeof columns>>;
 
 const stored = (key: keyof typeof columns, value: unknown) =>
-	key === 'enabled' || key === 'planFirst' ? (value ? 1 : 0) : ((value as string | number | null) ?? null);
+	key === 'enabled' || key === 'planFirst'
+		? value
+			? 1
+			: 0
+		: key === 'schedule'
+			? value
+				? JSON.stringify(value)
+				: null
+			: ((value as string | number | null) ?? null);
 
 export async function updateAutomation(id: string, update: AutomationUpdate): Promise<void> {
 	const entries = (Object.keys(columns) as Array<keyof typeof columns>).filter((key) => key in update);

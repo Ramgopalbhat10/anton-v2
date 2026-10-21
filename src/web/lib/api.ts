@@ -1,5 +1,6 @@
 import type { AgentNow } from '../../core/agent-now';
 import type { AttachedFile } from '../../core/attachments';
+import type { Schedule } from '../../core/schedule';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -277,13 +278,16 @@ export type SettingsChange = Omit<ProjectSettings, 'envKeys'> & {
 	env: Record<string, string | null>;
 };
 
-/** A way tasks start on their own: from issues with a label, or every few hours. */
+/** A way tasks start on their own: from issues with a label, or on a schedule. */
 export type Automation = {
 	id: string;
 	projectId: string;
 	kind: 'issues' | 'schedule';
 	label: string | null;
-	everyHours: number | null;
+	/** When it runs (kind `schedule`), on its time zone's clock. */
+	schedule: Schedule | null;
+	/** When a schedule runs next; null until the server works it out. */
+	nextRunAt: string | null;
 	prompt: string;
 	model: string | null;
 	reasoning: Reasoning | null;
@@ -298,7 +302,7 @@ export type Automation = {
 	createdAt: string;
 };
 
-export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'everyHours' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'schedule' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';
