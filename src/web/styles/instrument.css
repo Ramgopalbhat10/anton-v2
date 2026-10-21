@@ -245,6 +245,221 @@
 	}
 }
 
+/* Three parts take turns on a seven-and-a-half-second loop, each lit for a
+   third of it: the subagent pods, the storage platters. A part sets --stage to
+   its index; its wire draws from the source, a dot runs along it (--run and
+   --rise, in drawing units), then the part lights and rises into place. */
+.cycle-lit,
+.cycle-rise,
+.cycle-trail,
+.cycle-dot {
+	animation-duration: 7.5s;
+	animation-iteration-count: infinite;
+	animation-fill-mode: both;
+	animation-timing-function: var(--ease-out);
+	animation-delay: calc(var(--stage, 0) * 2.5s);
+}
+.cycle-lit {
+	opacity: 0;
+	animation-name: cycle-lit;
+}
+@keyframes cycle-lit {
+	0%,
+	6% {
+		opacity: 0;
+	}
+	10%,
+	30% {
+		opacity: 1;
+	}
+	33.3%,
+	100% {
+		opacity: 0;
+	}
+}
+.cycle-rise {
+	animation-name: cycle-rise;
+}
+@keyframes cycle-rise {
+	0%,
+	6% {
+		transform: translateY(7px);
+	}
+	14%,
+	100% {
+		transform: translateY(0);
+	}
+}
+.cycle-trail {
+	stroke-dasharray: 1 1;
+	stroke-dashoffset: 1;
+	animation-name: cycle-trail;
+}
+@keyframes cycle-trail {
+	0% {
+		stroke-dashoffset: 1;
+		opacity: 1;
+	}
+	8%,
+	30% {
+		stroke-dashoffset: 0;
+		opacity: 1;
+	}
+	33.3%,
+	100% {
+		stroke-dashoffset: 0;
+		opacity: 0;
+	}
+}
+.cycle-dot {
+	opacity: 0;
+	animation-name: cycle-dot;
+}
+@keyframes cycle-dot {
+	0% {
+		opacity: 1;
+		transform: translate(0, 0);
+	}
+	8% {
+		opacity: 1;
+		transform: translate(calc(var(--run, 0) * 1px), calc(var(--rise, 0) * 1px));
+	}
+	10%,
+	100% {
+		opacity: 0;
+		transform: translate(calc(var(--run, 0) * 1px), calc(var(--rise, 0) * 1px));
+	}
+}
+/* A part spinning in the plane of its face, about its own origin. */
+.art-spin {
+	animation: art-spin 9s linear infinite;
+}
+@keyframes art-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+/* A part hovering: a slow bob. */
+.art-bob {
+	animation: art-bob 2.4s ease-in-out infinite alternate;
+	animation-delay: calc(var(--bob, 0) * -0.8s);
+}
+@keyframes art-bob {
+	to {
+		transform: translateY(-2.5px);
+	}
+}
+/* A dashed line whose dashes run along it, like data on a wire; --period is
+   the length of one dash and gap. */
+.art-march {
+	animation: art-march 1.4s linear infinite;
+}
+@keyframes art-march {
+	to {
+		stroke-dashoffset: calc(var(--period, 10) * -1);
+	}
+}
+/* The Changes drawing: lines of a diff are typed in one after another, the
+   branch draws itself, and its newest commit lands; then it all starts again.
+   --row staggers the lines. */
+.diff-type,
+.diff-draw,
+.diff-pop {
+	animation-duration: 6s;
+	animation-iteration-count: infinite;
+	animation-fill-mode: both;
+}
+.diff-type {
+	transform-box: fill-box;
+	transform-origin: left center;
+	animation-name: diff-type;
+	animation-timing-function: steps(8, end);
+	animation-delay: calc(var(--row, 0) * 0.7s);
+}
+@keyframes diff-type {
+	0% {
+		transform: scaleX(0);
+		opacity: 1;
+	}
+	12%,
+	80% {
+		transform: scaleX(1);
+		opacity: 1;
+	}
+	88%,
+	100% {
+		transform: scaleX(1);
+		opacity: 0;
+	}
+}
+.diff-draw {
+	stroke-dasharray: 1 1;
+	animation-name: diff-draw;
+	animation-timing-function: var(--ease-out);
+}
+@keyframes diff-draw {
+	0% {
+		stroke-dashoffset: 1;
+		opacity: 1;
+	}
+	22%,
+	90% {
+		stroke-dashoffset: 0;
+		opacity: 1;
+	}
+	97%,
+	100% {
+		stroke-dashoffset: 0;
+		opacity: 0;
+	}
+}
+.diff-pop {
+	transform-box: fill-box;
+	transform-origin: center;
+	animation-name: diff-pop;
+	animation-timing-function: var(--ease-out);
+}
+@keyframes diff-pop {
+	0%,
+	20% {
+		opacity: 0;
+		transform: scale(0.2);
+	}
+	28%,
+	90% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	97%,
+	100% {
+		opacity: 0;
+		transform: scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cycle-lit,
+	.cycle-rise,
+	.cycle-trail,
+	.cycle-dot,
+	.art-spin,
+	.art-bob,
+	.art-march,
+	.diff-type,
+	.diff-draw,
+	.diff-pop {
+		animation: none;
+	}
+	.cycle-lit[data-first],
+	.cycle-trail[data-first] {
+		opacity: 1;
+		stroke-dashoffset: 0;
+	}
+	.diff-draw {
+		stroke-dashoffset: 0;
+	}
+}
+
 /* The task rack: blades slide in one after another, running ones blink, and an
    indexing light sweeps each bay's lid. The open blade is drawn out of its slot
    in script (task-rack.tsx), since its body grows as it comes out. */
