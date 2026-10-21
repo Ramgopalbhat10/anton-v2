@@ -117,6 +117,34 @@
  box-shadow: var(--focus-ring-inset);
 }
 
+/* The sidebar slides like a sheet: its column narrows to the rail while the
+   sidebar keeps its 288px and moves out, so nothing in it reflows. On a phone
+   it is a sheet over the page, slid in from the left. */
+.sg-nav { transition: transform var(--transition-sheet), visibility 0s; }
+.sg-nav-rail { transition: opacity var(--transition-sheet), visibility 0s; }
+.sg-nav-rail[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--transition-sheet), visibility 0s var(--duration-sheet); }
+.sg-nav-scrim { transition: opacity var(--transition-sheet), visibility 0s; }
+.sg-nav-scrim[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--transition-sheet), visibility 0s var(--duration-sheet); }
+@media (max-width: 767.98px) {
+ .sg-nav-column { display: contents; }
+ .sg-nav {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 30;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  box-shadow: var(--shadow-modal);
+ }
+ .sg-nav[data-open='false'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--transition-sheet), visibility 0s var(--duration-sheet); }
+}
+@media (min-width: 768px) {
+ .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: 288px; overflow: hidden; transition: width var(--transition-sheet); }
+ .sg-nav-column[data-collapsed='true'] { width: 48px; }
+ .sg-nav[data-collapsed='true'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--transition-sheet), visibility 0s var(--duration-sheet); }
+}
+
 .sg-workspace { flex: 1 1 0%; }
 .sg-workspace[data-resizing='true'] { user-select: none; }
 .sg-workspace-resizer::after {
@@ -133,6 +161,14 @@
 .sg-workspace[data-resizing='true'] .sg-workspace-resizer::after { opacity: 1; }
 @media (min-width: 768px) {
  .sg-workspace[data-expanded='false'][data-compact='false'] { flex: 0 0 var(--workspace-width, 46%); }
+ /* Beside the conversation the workspace slides in and out from the right: its
+    column opens to its width while the panels inside keep theirs. */
+ .sg-workspace[data-expanded='false'][data-compact='false'] > .sg-workspace-body { width: var(--workspace-width, 46%); }
+ .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='in'] { overflow: hidden; transition: flex-basis var(--transition-sheet); }
+ .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='out'] { overflow: hidden; flex-basis: 0; transition: flex-basis var(--transition-sheet); }
+ @starting-style {
+  .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='in'] { flex-basis: 0; }
+ }
 }
 
 .sg-file-row[aria-current='true'] { background: var(--bg-selected); }

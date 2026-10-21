@@ -423,33 +423,47 @@ export function BranchArt({ className }: { className?: string }) {
 				main
 			</Label>
 			<Label at={[126, 22, 13]} run={18} accent>
-				anton/…
+				branch
 			</Label>
 		</Frame>
 	);
 }
 
 /** An exploded drive: platters lifted apart along their axis, one for each
-    thing storage keeps, the checkpoint layer lit. */
+    thing storage keeps. They spin and hover, and light in turn, a dot running
+    up the spindle to each. */
 export function StorageArt({ className }: { className?: string }) {
 	const R = 26;
 	const rim = (z: number): Point => [R / Math.SQRT2, -R / Math.SQRT2, z];
-	const platter = (accent?: boolean) => {
+	const platter = (accent: boolean, speed: number) => {
 		const stroke = accent ? ACCENT : DETAIL;
 		return (
 			<>
-				<Ring at={[0, 0]} r={20} stroke={stroke} />
-				<Ring at={[0, 0]} r={9} stroke={stroke} />
+				<g className="art-spin" style={{ animationDuration: `${speed}s` }}>
+					<Ring at={[0, 0]} r={20} stroke={stroke} />
+					<Ring at={[0, 0]} r={9} stroke={stroke} />
+					{/* Sectors, so the turn shows. */}
+					{[0, 120, 240].map((deg) => {
+						const a = (deg * Math.PI) / 180;
+						return <Ln key={deg} a={[11 * Math.cos(a), 11 * Math.sin(a)]} b={[18 * Math.cos(a), 18 * Math.sin(a)]} stroke={stroke} />;
+					})}
+					{accent ? <Turn at={[0, 0]} r={14.5} from={-150} to={-40} /> : null}
+				</g>
 				<Ring at={[0, 0]} r={3.2} fill={RECESS} stroke={accent ? ACCENT : EDGE} />
-				{accent ? <Turn at={[0, 0]} r={14.5} from={-150} to={-40} /> : null}
 			</>
 		);
 	};
 	const [ax0, ay0] = pt([0, 0, -6]);
 	const [, ay1] = pt([0, 0, 104]);
+	const layers = [
+		{ z: 62, label: 'checkpoints', speed: 7 },
+		{ z: 34, label: 'diffs', speed: 9 },
+		{ z: 90, label: 'library', speed: 11 },
+	];
+	const [, base] = pt([0, 0, 9]);
 	return (
-		<Frame label="An exploded stack of storage platters, the checkpoint layer lit" viewBox="-44 -120 168 148" className={className}>
-			<line x1={ax0} y1={ay0} x2={ax0} y2={ay1} stroke={DETAIL} strokeDasharray="7 3 1.5 3" {...ve} />
+		<Frame label="An exploded stack of storage platters, each lighting in turn" viewBox="-44 -120 168 148" className={className}>
+			<line className="art-march" x1={ax0} y1={ay0} x2={ax0} y2={ay1} stroke={DETAIL} strokeDasharray="7 3 1.5 3" style={{ '--period': 14.5 } as CSSProperties} {...ve} />
 			<Disc
 				at={[0, 0, 0]}
 				r={R}
@@ -461,21 +475,325 @@ export function StorageArt({ className }: { className?: string }) {
 						{[45, 135, 225, 315].map((deg) => (
 							<Ring key={deg} at={[23.8 * Math.cos((deg * Math.PI) / 180), 23.8 * Math.sin((deg * Math.PI) / 180)]} r={1.1} fill={DETAIL} stroke="none" />
 						))}
+						<Ring at={[0, 0]} r={2} fill="var(--cyan-300)" stroke="none" />
 					</>
 				}
 			/>
-			<Disc at={[0, 0, 34]} r={R} h={3} tone="glass" top={platter()} />
-			<Disc at={[0, 0, 62]} r={R} h={3} tone="accent" top={platter(true)} />
-			<Disc at={[0, 0, 90]} r={R} h={3} tone="glass" top={platter()} />
-			<Label at={rim(91.5)} run={16}>
-				library
+			{/* Bottom to top, so each platter is drawn over the one under it. */}
+			{[...layers]
+				.sort((a, b) => a.z - b.z)
+				.map((layer) => {
+					const stage = layers.indexOf(layer);
+					const [, top] = pt([0, 0, layer.z]);
+					return (
+						<g key={layer.z}>
+							<circle className="cycle-dot" cx={ax0} cy={base} r={2.2} fill="var(--cyan-200)" style={{ '--stage': stage, '--rise': top - base } as CSSProperties} />
+							<g className="art-bob" style={{ '--bob': stage } as CSSProperties}>
+								<Disc at={[0, 0, layer.z]} r={R} h={3} tone="glass" top={platter(false, layer.speed)} />
+								<Turned stage={stage}>
+									<Disc at={[0, 0, layer.z]} r={R} h={3} tone="accent" top={platter(true, layer.speed)} />
+								</Turned>
+							</g>
+						</g>
+					);
+				})}
+			{layers.map((layer, stage) => (
+				<g key={layer.z}>
+					<Label at={rim(layer.z + 1.5)} run={16}>
+						{layer.label}
+					</Label>
+					<Turned stage={stage}>
+						<Label at={rim(layer.z + 1.5)} run={16} accent>
+							{layer.label}
+						</Label>
+					</Turned>
+				</g>
+			))}
+		</Frame>
+	);
+}
+
+/** Shown only while its part's turn lasts; three parts take turns (see
+    .cycle-lit in instrument.css). The first is the one shown when motion is
+    reduced. */
+function Turned({ stage, children, className }: { stage: number; children: ReactNode; className?: string }) {
+	return (
+		<g className={cn('cycle-lit', className)} data-first={stage === 0 || undefined} style={{ '--stage': stage } as CSSProperties}>
+			{children}
+		</g>
+	);
+}
+
+/** A wire across the floor from a to b, dashed while idle; on its part's turn
+    it draws on in cyan and a dot runs down it. */
+function Wire({ a, b, stage }: { a: Point; b: Point; stage: number }) {
+	const [x1, y1] = pt(a);
+	const [x2, y2] = pt(b);
+	return (
+		<g>
+			<Ln a={[x1, y1]} b={[x2, y2]} stroke={EDGE} dash="2 3" />
+			<line
+				className="cycle-trail"
+				data-first={stage === 0 || undefined}
+				x1={x1}
+				y1={y1}
+				x2={x2}
+				y2={y2}
+				pathLength={1}
+				stroke={ACCENT}
+				strokeWidth={1.2}
+				style={{ '--stage': stage } as CSSProperties}
+			/>
+			<circle className="cycle-dot" cx={x1} cy={y1} r={2.4} fill="var(--cyan-200)" style={{ '--stage': stage, '--run': x2 - x1, '--rise': y2 - y1 } as CSSProperties} />
+		</g>
+	);
+}
+
+/**
+ * The agent at its desk with three empty landing pads wired to it: one to
+ * browse, one to explore the code, one to run the tests. The pads take turns:
+ * a wire lights, a dot runs out along it, and a subagent pod rises over its
+ * pad and hovers while it works. Before any run, the pods are dashed outlines.
+ */
+export function AgentsArt({ className }: { className?: string }) {
+	const S = 14;
+	const pads = [
+		{ at: [22, 88] as Pair, from: [22, 40, 0] as Point, to: [22, 76, 0] as Point, label: 'explore', run: -22, icon: 'explore' },
+		{ at: [88, 22] as Pair, from: [40, 22, 0] as Point, to: [76, 22, 0] as Point, label: 'browse', run: 22, icon: 'browse' },
+		{ at: [86, 86] as Pair, from: [40, 40, 0] as Point, to: [77.5, 77.5, 0] as Point, label: 'test', run: 26, icon: 'test' },
+	] as const;
+	const icon = (kind: (typeof pads)[number]['icon']) => {
+		if (kind === 'browse') {
+			return (
+				<>
+					<Ring at={[7, 7]} r={4.4} stroke={ACCENT} />
+					<ellipse cx={7} cy={7} rx={1.9} ry={4.4} stroke={ACCENT} {...ve} />
+					<Ln a={[2.6, 7]} b={[11.4, 7]} stroke={ACCENT} />
+				</>
+			);
+		}
+		if (kind === 'explore') {
+			return (
+				<>
+					<Ring at={[6.2, 6.2]} r={3.2} stroke={ACCENT} />
+					<Ln a={[8.6, 8.6]} b={[11.4, 11.4]} stroke={ACCENT} />
+				</>
+			);
+		}
+		return <Trace points={[[3.4, 7.4], [6, 10], [10.8, 4.2]]} stroke="var(--cyan-200)" />;
+	};
+	/** A subagent pod over a pad: a dashed outline while idle, lit while it works. */
+	const pod = (at: Pair, lit: boolean, kind?: (typeof pads)[number]['icon']) => (
+		<Block
+			at={[at[0] - S / 2, at[1] - S / 2, 10]}
+			size={[S, S, 11]}
+			r={2}
+			tone={lit ? 'accent' : 'glass'}
+			dashed={!lit}
+			top={lit && kind ? icon(kind) : undefined}
+			left={
+				<>
+					<Slot x={2.5} y={4} w={9} h={3.4} r={1} edge={lit} />
+					{lit ? <circle className="rack-activity" cx={5} cy={5.7} r={0.8} fill="var(--cyan-200)" /> : null}
+				</>
+			}
+		/>
+	);
+	const halo = (at: Pair) => (
+		<OnFace on="top" at={[at[0], at[1], 3]}>
+			<Ring at={[0, 0]} r={8} stroke={ACCENT} />
+			<g opacity={0.5}>
+				<Ring at={[0, 0]} r={10.5} stroke={ACCENT} />
+			</g>
+		</OnFace>
+	);
+	/** Dashed cyan lines from a pad up to its pod, like a lift. */
+	const lift = (at: Pair) =>
+		(
+			[
+				[-S / 2, S / 2],
+				[S / 2, S / 2],
+				[S / 2, -S / 2],
+			] as const
+		).map(([dx, dy]) => <Trace key={`${dx}${dy}`} points={[pt([at[0] + dx, at[1] + dy, 3]), pt([at[0] + dx, at[1] + dy, 10])]} stroke={ACCENT} dash="1.5 2.5" />);
+	return (
+		<Frame label="An agent wired to three landing pads, a subagent pod rising over each in turn" viewBox="-106 -54 214 150" className={className}>
+			{pads.map((pad, i) => (
+				<Wire key={pad.label} a={pad.from} b={pad.to} stage={i} />
+			))}
+			<Block
+				at={[0, 0, 0]}
+				size={[40, 40, 24]}
+				r={3.5}
+				tone="accent"
+				top={
+					<>
+						<Ring at={[17, 20]} r={10} fill={RECESS} stroke={ACCENT} />
+						<g transform="translate(17 20)">
+							<g className="art-spin">
+								<Turn at={[0, 0]} r={6.6} from={-160} to={70} />
+							</g>
+						</g>
+						<Ring at={[17, 20]} r={2.2} fill="var(--cyan-300)" stroke="none" />
+						{[8, 15, 22, 29].map((v, i) => (
+							<Led key={v} at={[34, v]} lit={i < 3} r={1.2} />
+						))}
+					</>
+				}
+				left={
+					<>
+						<Slot x={5} y={6} w={30} h={12} r={1.6} edge />
+						<Bar x={8} y={13} w={14} accent />
+						<Bar x={8} y={9} w={8} accent />
+						<rect className="art-blink" x={18} y={8.2} width={3} height={4} rx={0.5} fill={ACCENT} />
+					</>
+				}
+				right={[6, 10, 14].map((v) => (
+					<Slot key={v} x={8} y={v} w={24} h={1.8} r={0.9} />
+				))}
+			/>
+			{pads.map((pad, i) => (
+				<g key={pad.label}>
+					<Disc
+						at={[pad.at[0], pad.at[1], 0]}
+						r={12}
+						h={3}
+						top={
+							<>
+								<Ring at={[0, 0]} r={8} stroke={DETAIL} />
+								<Ring at={[0, 0]} r={2.6} fill={RECESS} stroke={EDGE} />
+							</>
+						}
+					/>
+					{pod(pad.at, false)}
+					<Turned stage={i}>
+						{halo(pad.at)}
+						{lift(pad.at)}
+						<g className="cycle-rise" style={{ '--stage': i } as CSSProperties}>
+							<g className="art-bob" style={{ '--bob': i } as CSSProperties}>
+								{pod(pad.at, true, pad.icon)}
+							</g>
+						</g>
+					</Turned>
+					<Label at={[pad.at[0] + (pad.run > 0 ? 8.5 : 0), pad.at[1] + (pad.run > 0 ? -8.5 : 12), 1.5]} run={pad.run}>
+						{pad.label}
+					</Label>
+					<Turned stage={i}>
+						<Label at={[pad.at[0] + (pad.run > 0 ? 8.5 : 0), pad.at[1] + (pad.run > 0 ? -8.5 : 12), 1.5]} run={pad.run} accent>
+							{pad.label}
+						</Label>
+					</Turned>
+				</g>
+			))}
+			<Label at={[20, 0, 24]} run={-40} rise={-12} accent>
+				agent
 			</Label>
-			<Label at={rim(63.5)} run={16} accent>
-				checkpoints
-			</Label>
-			<Label at={rim(35.5)} run={16}>
-				diffs
-			</Label>
+		</Frame>
+	);
+}
+
+/** A branch name short enough to sit beside a drawing. */
+const shortName = (name: string, max = 22) => (name.length > max ? `${name.slice(0, max - 1)}…` : name);
+
+/**
+ * A file open on the desk, with the version before it standing dashed behind:
+ * its diff is written line by line, added lines lit, a removed one sunk. On
+ * the desk, the task's branch draws off its base and lands a commit. The
+ * branches are labelled with their real names when the task has them.
+ */
+export function ChangesArt({ className, branch, base }: { className?: string; branch?: string; base?: string }) {
+	/** A row of the diff: its gutter mark, then its line, `typed` in turn when it is new. */
+	const row = (v: number, w: number, kind: 'context' | 'added' | 'removed', typed?: number) => (
+		<g key={v}>
+			{kind === 'added' ? <rect x={3} y={v - 1.6} width={74} height={5.2} rx={1} fill={ACCENT} opacity={0.14} /> : null}
+			{kind === 'removed' ? <Slot x={3} y={v - 1.6} w={74} h={5.2} r={1} /> : null}
+			{kind === 'added' ? (
+				<>
+					<rect x={4.4} y={v + 0.4} width={4} height={1.2} rx={0.6} fill={ACCENT} />
+					<rect x={5.8} y={v - 1} width={1.2} height={4} rx={0.6} fill={ACCENT} />
+				</>
+			) : null}
+			{kind === 'removed' ? <rect x={4.4} y={v + 0.4} width={4} height={1.2} rx={0.6} fill={EDGE} /> : null}
+			<rect
+				className={typed === undefined ? undefined : 'diff-type'}
+				style={typed === undefined ? undefined : ({ '--row': typed } as CSSProperties)}
+				x={13}
+				y={v}
+				width={w}
+				height={2}
+				rx={1}
+				fill={kind === 'added' ? ACCENT : DETAIL}
+				opacity={kind === 'removed' ? 0.6 : 1}
+			/>
+		</g>
+	);
+	const branchPath = 'M 40 24 C 40 40 48 52 62 52 L 112 52';
+	// Room for the labels only when they are drawn, so the desk stays centred without them.
+	const left = base ? -78 : -58;
+	const right = branch ? 194 : 114;
+	return (
+		<Frame label={branch ? `A file's diff being written on ${branch}` : "A file's diff being written, line by line"} viewBox={`${left} -60 ${right - left} 156`} className={className}>
+			<Block
+				at={[0, 0, 0]}
+				size={[124, 66, 4]}
+				r={3}
+				top={
+					<>
+						<Ln a={[6, 24]} b={[118, 24]} stroke={EDGE} />
+						<path d={branchPath} stroke={EDGE} strokeDasharray="2 3" {...ve} />
+						<path d={branchPath} stroke={ACCENT} strokeWidth={1.3} className="diff-draw" pathLength={1} vectorEffect="none" />
+						{[16, 40, 70].map((u) => (
+							<Ring key={u} at={[u, 24]} r={2.4} fill="var(--art-top)" stroke={EDGE} />
+						))}
+						{[78, 95].map((u) => (
+							<Ring key={u} at={[u, 52]} r={2.4} fill="var(--art-accent-top)" stroke={ACCENT} />
+						))}
+						<g className="diff-pop">
+							<Ring at={[112, 52]} r={3.2} fill="var(--cyan-300)" stroke={ACCENT} />
+						</g>
+					</>
+				}
+			/>
+			<Block
+				at={[26, 2, 4]}
+				size={[80, 2, 50]}
+				r={2.5}
+				tone="glass"
+				dashed
+				left={[38, 32, 26, 20, 14, 8].map((v, i) => (
+					<Bar key={v} x={13} y={v} w={[30, 40, 22, 36, 28, 18][i]} />
+				))}
+			/>
+			<Block
+				at={[8, 10, 4]}
+				size={[80, 3, 54]}
+				r={2.5}
+				left={
+					<>
+						<Slot x={3} y={3} w={74} h={40} r={2} edge />
+						{[5.5, 9.5, 13.5].map((u, i) => (
+							<Led key={u} at={[u, 48]} lit={i === 0} r={1.3} />
+						))}
+						<Bar x={19} y={47.2} w={24} />
+						{row(37, 34, 'context')}
+						{row(31, 42, 'removed')}
+						{row(25, 46, 'added', 0)}
+						{row(19, 30, 'added', 1)}
+						{row(13, 38, 'added', 2)}
+						{row(7, 24, 'context')}
+					</>
+				}
+			/>
+			{base ? (
+				<Label at={[6, 24, 4]} run={-28}>
+					{shortName(base)}
+				</Label>
+			) : null}
+			{branch ? (
+				<Label at={[112, 52, 4]} run={16} accent>
+					{shortName(branch)}
+				</Label>
+			) : null}
 		</Frame>
 	);
 }
