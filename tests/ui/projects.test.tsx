@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
 	attachToProject: vi.fn(),
 	budget: vi.fn(async () => ({ limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null })),
 	commands: vi.fn(async () => ({ commands: [] })),
+	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
+	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
@@ -130,6 +132,53 @@ describe('threads', () => {
 
 		await userEvent.click(row);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks'));
+	});
+
+	it('follows a working thread live with the step it is on, and opens a thread that asks something of you into a card with its buttons', async () => {
+		let todos = [
+			{ content: 'Read the billing schema', status: 'completed' as const },
+			{ content: 'Add the invoices table', status: 'in_progress' as const },
+			{ content: 'Write the migration test', status: 'pending' as const },
+		];
+		api.todos.mockImplementation(async () => ({ list: { todos, updatedAt: '2026-10-03T00:00:00Z' } }));
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		const root = createRootRoute({
+			component: () => (
+				<div>
+					<ThreadRow thread={threads[1]} />
+					<ThreadRow thread={threads[2]} />
+					<ThreadRow thread={threads[3]} />
+				</div>
+			),
+		});
+		const tree = root.addChildren([createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/threads/$threadId', component: () => null })]);
+		const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+		render(
+			<QueryClientProvider client={client}>
+				<RouterProvider router={router} />
+			</QueryClientProvider>,
+		);
+		const working = await screen.findByRole('article', { name: 'Add the table' });
+		expect(await within(working).findByText('Add the invoices table')).toBeTruthy();
+		expect(within(working).getByTitle('1 of 3 steps done').textContent).toBe('1/3');
+		// Only a working thread asks for its list.
+		expect(api.todos).toHaveBeenCalledTimes(1);
+		expect(api.todos).toHaveBeenCalledWith('runs');
+
+		// The agent ticks a step off: the live update refetches the list, and the card moves on.
+		todos = todos.map((todo, index) => ({ ...todo, status: index < 2 ? 'completed' : index === 2 ? 'in_progress' : todo.status }) as (typeof todos)[number]);
+		await client.invalidateQueries({ queryKey: ['todos', 'runs'] });
+		expect(await within(working).findByText('Write the migration test')).toBeTruthy();
+		expect(within(working).getByTitle('2 of 3 steps done')).toBeTruthy();
+		expect(within(working).queryByRole('button')).toBeNull();
+
+		// A finished thread keeps to one line with what it last said; one ready for review opens out with its buttons.
+		const done = screen.getByRole('article', { name: 'Old cleanup' });
+		expect(within(done).queryByRole('button')).toBeNull();
+		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
+		expect(within(ready).getByRole('button', { name: 'Review' })).toBeTruthy();
+		await userEvent.click(within(ready).getByRole('button', { name: 'View thread' }));
+		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/pr'));
 	});
 
 	it('shows the rest of a thread on hover: its state, where it works, what it asks and its next steps', async () => {
