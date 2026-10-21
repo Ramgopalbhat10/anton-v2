@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
-import { ChevronLeft, ChevronRight, Download, ExternalLink, PencilLine, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FileX2, PencilLine, X } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useState } from 'react';
 import { HtmlFrame } from '@/components/html-frame';
 import { kindOf, PREVIEWS, Source, TextFile } from '@/components/library-tab';
@@ -11,6 +11,7 @@ import { outputUrl } from '@/lib/api';
 import { categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf } from '@/lib/artifacts';
 import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer } from '@/lib/composer-inbox';
+import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { closeViewer, openViewer, stepViewer, useViewer, type ViewerItem, type ViewerState } from '@/lib/viewer';
@@ -43,11 +44,53 @@ export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	);
 }
 
+/**
+ * Where a file you deleted was: in a reply (a page, an image), as a card's
+ * picture, or full size in the viewer. It says so plainly, rather than
+ * drawing a broken image or an empty page.
+ */
+export function DeletedArtifact({ path, variant = 'block', className }: { path: string; variant?: 'block' | 'thumb' | 'stage'; className?: string }) {
+	const noun = deletedNoun(path);
+	if (variant === 'thumb') {
+		return (
+			<span className={cn('flex size-full flex-col items-center justify-center gap-1.5 text-(--text-disabled)', className)}>
+				<Icon icon={FileX2} size={18} />
+				<span className="text-[11px]">Deleted</span>
+			</span>
+		);
+	}
+	const stage = variant === 'stage';
+	return (
+		<div
+			role="note"
+			aria-label={`Deleted ${noun}: ${nameOf(path)}`}
+			className={cn(
+				'flex items-center gap-3 text-left',
+				stage ? 'h-full flex-col justify-center px-6 text-center' : 'max-w-[520px] self-start rounded-[12px] border border-dashed border-(--border-default) bg-(--bg-inset) px-3.5 py-3',
+				className,
+			)}
+		>
+			<span className={cn('inline-flex shrink-0 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) text-(--icon-tertiary)', stage ? 'size-11' : 'size-8')}>
+				<Icon icon={FileX2} size={stage ? 18 : 14} />
+			</span>
+			<span className={cn('flex min-w-0 flex-col gap-0.5', stage && 'items-center')}>
+				<span className="text-[13px] leading-[18px] text-(--text-secondary)">This {noun} was deleted</span>
+				<span className="truncate font-mono text-[11px] leading-[16px] text-(--text-disabled)" title={path}>
+					{nameOf(path)}
+				</span>
+				{stage ? <span className="mt-1 max-w-[360px] text-[12px] leading-[17px] text-(--text-tertiary)">It was removed from the task's Library, so there is nothing to show here any more.</span> : null}
+			</span>
+		</div>
+	);
+}
+
 /** An image of the file, or its kind when it is not one or cannot be read. */
 export function OutputThumb({ item, className, fit }: { item: ViewerItem; className?: string; fit?: 'cover' | 'contain' }) {
 	const [broken, setBroken] = useState(false);
 	// A wide picture (a chart, a banner) is shown whole; others fill the card from their top, as a page's screenshot reads.
 	const [wide, setWide] = useState(false);
+	const deleted = useDeletedOutput(item.sessionId, item.path);
+	if (deleted) return <DeletedArtifact path={item.path} variant="thumb" />;
 	if (!isImagePath(item.path) || broken) return <FileFace path={item.path} />;
 	const contain = (fit ?? (wide ? 'contain' : 'cover')) === 'contain';
 	return (
@@ -59,6 +102,51 @@ export function OutputThumb({ item, className, fit }: { item: ViewerItem; classN
 			onLoad={(event) => setWide(event.currentTarget.naturalWidth > 2 * event.currentTarget.naturalHeight)}
 			className={cn('block size-full', contain ? 'object-contain' : 'object-cover object-top', className)}
 		/>
+	);
+}
+
+/** One file a reply made; one you deleted stays in its place, saying so, and opens nothing. */
+function OutputCard({ item, items, composer }: { item: ViewerItem; items: ViewerItem[]; composer: string | null }) {
+	const deleted = useDeletedOutput(item.sessionId, item.path);
+	const face = (
+		<>
+			<span className="relative block h-[96px] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
+				<OutputThumb item={item} />
+				<span className="absolute top-1.5 left-1.5 rounded-[5px] border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px font-mono text-[9.5px] leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
+					{extensionOf(item.path)}
+				</span>
+			</span>
+			<span
+				className={cn(
+					'line-clamp-2 px-2.5 py-2 text-[12px] leading-[16px] break-all',
+					deleted ? 'text-(--text-disabled) line-through' : 'text-(--text-secondary) group-hover/out:text-(--text-primary)',
+				)}
+			>
+				{nameOf(item.path)}
+			</span>
+		</>
+	);
+	if (deleted) {
+		return (
+			<div
+				role="listitem"
+				title={`${item.path} was deleted`}
+				className="flex w-[156px] flex-col overflow-hidden rounded-[10px] border border-dashed border-(--border-default) bg-transparent text-left"
+			>
+				{face}
+			</div>
+		);
+	}
+	return (
+		<button
+			type="button"
+			role="listitem"
+			title={`Open ${item.path}`}
+			onClick={() => openViewer(item, items, composer)}
+			className="group/out flex w-[156px] flex-col overflow-hidden rounded-[10px] border border-(--card-border) bg-(--card-bg) text-left shadow-(--card-highlight) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+		>
+			{face}
+		</button>
 	);
 }
 
@@ -76,22 +164,7 @@ export function OutputCards({ items, composer }: { items: ViewerItem[]; composer
 	return (
 		<div className="flex flex-wrap gap-2" role="list" aria-label="Files from this reply">
 			{shown.map((item) => (
-				<button
-					key={keyOf(item)}
-					type="button"
-					role="listitem"
-					title={`Open ${item.path}`}
-					onClick={() => openViewer(item, items, composer)}
-					className="group/out flex w-[156px] flex-col overflow-hidden rounded-[10px] border border-(--card-border) bg-(--card-bg) text-left shadow-(--card-highlight) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
-				>
-					<span className="relative block h-[96px] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
-						<OutputThumb item={item} />
-						<span className="absolute top-1.5 left-1.5 rounded-[5px] border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px font-mono text-[9.5px] leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
-							{extensionOf(item.path)}
-						</span>
-					</span>
-					<span className="line-clamp-2 px-2.5 py-2 text-[12px] leading-[16px] break-all text-(--text-secondary) group-hover/out:text-(--text-primary)">{nameOf(item.path)}</span>
-				</button>
+				<OutputCard key={keyOf(item)} item={item} items={items} composer={composer} />
 			))}
 			{rest > 0 ? (
 				<button
@@ -113,6 +186,8 @@ export function OutputPreview({ item, code = false, title }: { item: ViewerItem;
 	const { sessionId, path } = item;
 	const app = categoryOf(path) === 'app';
 	const readable = app || isMarkdown(path);
+	const deleted = useDeletedOutput(sessionId, path);
+	if (deleted) return <DeletedArtifact path={path} variant="stage" className="min-h-[320px]" />;
 	if (app && !code)
 		return (
 			<div className="mx-auto h-full max-w-[960px] px-4 pt-6 md:px-6">
@@ -134,10 +209,12 @@ export function OutputPreview({ item, code = false, title }: { item: ViewerItem;
 function ImageStage({ item }: { item: ViewerItem }) {
 	const [actual, setActual] = useState(false);
 	const [broken, setBroken] = useState(false);
+	const deleted = useDeletedOutput(item.sessionId, item.path);
 	useEffect(() => {
 		setActual(false);
 		setBroken(false);
 	}, [item.sessionId, item.path]);
+	if (deleted) return <DeletedArtifact path={item.path} variant="stage" />;
 	if (broken)
 		return (
 			<div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
@@ -263,8 +340,9 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 	const many = viewer.items.length > 1;
 	const info = categoryInfo(categoryOf(item.path));
 	const dock = useDock();
+	const deleted = useDeletedOutput(item.sessionId, item.path);
 
-	useEffect(() => setMarking(false), [item.sessionId, item.path]);
+	useEffect(() => setMarking(false), [item.sessionId, item.path, deleted]);
 	useEffect(() => {
 		if (!notice) return;
 		const timer = setTimeout(() => setNotice(null), 3000);
@@ -314,26 +392,30 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 						<IconBtn icon={ChevronRight} size="sm" label="Next file" disabled={marking} onClick={() => stepViewer(1)} />
 					</span>
 				) : null}
-				{image && viewer.composer ? (
+				{image && viewer.composer && !deleted ? (
 					<Btn size="sm" variant={marking ? 'secondary' : 'ghost'} icon={PencilLine} onClick={() => setMarking((current) => !current)} className="shrink-0">
 						<span className="max-sm:hidden">{marking ? 'Drawing' : 'Mark up'}</span>
 					</Btn>
 				) : null}
-				<a
-					href={outputUrl(item.sessionId, item.path)}
-					target="_blank"
-					rel="noreferrer"
-					aria-label="Open in a new tab"
-					title="Open in a new tab"
-					className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm shrink-0"
-				>
-					<Icon icon={ExternalLink} size={14} />
-				</a>
-				<IconBtn icon={Download} size="sm" label="Download" onClick={() => download(item)} className="shrink-0" />
+				{deleted ? null : (
+					<>
+						<a
+							href={outputUrl(item.sessionId, item.path)}
+							target="_blank"
+							rel="noreferrer"
+							aria-label="Open in a new tab"
+							title="Open in a new tab"
+							className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm shrink-0"
+						>
+							<Icon icon={ExternalLink} size={14} />
+						</a>
+						<IconBtn icon={Download} size="sm" label="Download" onClick={() => download(item)} className="shrink-0" />
+					</>
+				)}
 				<IconBtn icon={X} size="sm" label="Close" onClick={closeViewer} className="shrink-0" />
 			</header>
 			<div className={cn('relative min-h-0 flex-1 bg-(--bg-inset)', image ? 'overflow-hidden' : 'overflow-y-auto')}>
-				{marking && viewer.composer ? (
+				{marking && viewer.composer && !deleted ? (
 					<MarkupStage
 						key={keyOf(item)}
 						item={item}

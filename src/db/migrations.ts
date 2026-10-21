@@ -157,6 +157,8 @@ export const migrations: string[][] = [
 		`UPDATE sessions SET resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE automation_id IS NOT NULL AND resolved_at IS NULL AND asking IS NULL AND plan IS NULL AND brief IS NULL AND pr_url IS NULL AND status != 'error' AND last_reply IS NOT NULL`,
 	],
+	// 33: files you deleted from a task's Library or from Artifacts, so a reply that showed one says it was deleted rather than drawing it broken.
+	[`CREATE TABLE IF NOT EXISTS deleted_outputs (session_id TEXT NOT NULL, path TEXT NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

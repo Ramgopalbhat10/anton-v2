@@ -112,3 +112,19 @@ export async function forgetOutputIndex(sessionId: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM output_index WHERE session_id = ?', args: [sessionId] });
 }
+
+/* Files you deleted from a task's Library, so its replies show them as deleted rather than broken. */
+
+export async function noteDeletedOutput(sessionId: string, path: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: 'INSERT OR REPLACE INTO deleted_outputs (session_id, path, deleted_at) VALUES (?, ?, ?)',
+		args: [sessionId, path, new Date().toISOString()],
+	});
+}
+
+export async function deletedOutputs(sessionId: string): Promise<string[]> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT path FROM deleted_outputs WHERE session_id = ?', args: [sessionId] });
+	return result.rows.map((row) => String(row.path));
+}
