@@ -1,6 +1,7 @@
-import { ArrowLeft, Bot, ChevronDown, CornerDownRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CornerDownRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import { useEffect, useRef, useState } from 'react';
+import { AgentsArt } from '@/components/illustrations';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { Caption, Status, type Tone } from '@/components/instrument';
@@ -448,7 +449,7 @@ export function AgentsTab({ sessionId }: { sessionId: string }) {
 	if (!runs.length) {
 		return (
 			<EmptyState
-				icon={Bot}
+				art={<AgentsArt className="w-full max-w-[360px]" />}
 				title="No subagents yet"
 				body="When the agent hands work to a subagent (to browse a site, explore the code or run the tests), it shows here, step by step, as it works."
 			/>
