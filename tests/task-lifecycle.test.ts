@@ -1320,12 +1320,13 @@ test('run_script runs a program over the read-only repo and the decision model, 
 	}
 });
 
-test('with code mode on, an MCP server is reached only through run_script: listed a line per tool, searched, called, and kept connected', async () => {
+test('an MCP connector is found and called on demand, from connector tools and programs, and turning it off keeps the prompt as it was', async () => {
 	const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
 	const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
 	const { z } = await import('zod');
 	const { directServer, runScript, scriptServers, scriptToolDescription } = await import('../src/services/code-mode.ts');
 	const { primeAgent } = await import('../src/services/agent-runner.ts');
+	const { callConnectorTool, connectorToolsText } = await import('../src/services/connector-tools.ts');
 	const { resetMcpToolsForTests } = await import('../src/services/mcp-tools.ts');
 	const { forgetScriptCalls, noteScriptCalls, scriptCalls } = await import('../src/services/script-runs.ts');
 	let connects = 0;
@@ -1367,20 +1368,27 @@ test('with code mode on, an MCP server is reached only through run_script: liste
 		const session = await sessions.createSession({ projectId: project.id, title: 'Tracker' });
 		sessionId = session.id;
 		await primeAgent(session.id);
-		const tracker = scriptServers(session.id).find((server) => server.name === 'tracker')!;
+		const tracker = (await scriptServers(session.id)).find((server) => server.name === 'tracker')!;
 		assert.ok(tracker, 'the tracker is reached from programs');
-		assert.ok(!scriptServers(session.id).some((server) => server.name === 'docs'), 'a server that opted out is not');
+		assert.ok(!(await scriptServers(session.id)).some((server) => server.name === 'docs'), 'a server that opted out is not');
 		assert.equal(directServer(tracker, true), false, 'the agent does not connect to it itself');
-		assert.equal(directServer(tracker, false), true, 'unless code mode is off');
 		assert.equal(directServer({ name: 'docs', url, auth: null, tools: [], codeMode: false }, true), true);
 
-		// Its tools were listed before the agent rendered: one line each, with the start of their description.
+		// run_script's description names no connector's tools, so it reads the same whichever are on.
 		const description = scriptToolDescription(session.id, { repo: true, mcp: true });
-		assert.match(description, /tracker \(3 tools\):/);
-		assert.match(description, /- tools\.mcp__tracker__find_issues\(args: \{ query: string; \}\): Promise<string> \/\/ Find issues whose title matches words\.\n/);
-		assert.doesNotMatch(description, /Longer help|Words to match/, 'a listing is one line');
+		assert.match(description, /tools\.mcp__<server>__<tool>\(args\)/);
+		assert.doesNotMatch(description, /find_issues|docs/);
 		assert.match(description, /search_tools\(query: string/);
-		assert.doesNotMatch(description, /docs/);
+
+		// connector_tools gives each tool of the connectors that are on with its arguments in full; connector_call calls one.
+		const listed = await connectorToolsText('');
+		assert.match(listed, /## tracker: on, 3 tools/);
+		assert.match(listed, /### mcp__tracker__find_issues\nFind issues whose title matches words\.\nLonger help\.\nArguments: .*Words to match/);
+		assert.match(listed, /## docs: on, 3 tools/);
+		assert.match(await connectorToolsText('picture'), /## tracker: on, 3 tools, 1 matching\n\n### mcp__tracker__issue_picture/);
+		assert.equal((await callConnectorTool(session.id, 'mcp__docs__find_issues', { query: 'direct' })).output, 'issue 7: direct', 'a server out of code mode is called the same way');
+		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__broken', {}), /tracker is down/);
+		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__missing', {}), /No connector that is on has a tool named/);
 
 		const calls: Array<{ tool: string; state: string }> = [];
 		const output = await runScript(
@@ -1404,7 +1412,7 @@ test('with code mode on, an MCP server is reached only through run_script: liste
 			calls.map(({ tool, state }) => `${tool} ${state}`),
 			['mcp__tracker__find_issues done', 'mcp__tracker__find_issues done', 'mcp__tracker__issue_picture done', 'mcp__tracker__broken failed'],
 		);
-		assert.ok(tokens.every((token) => token === 'Bearer tracker-token'), 'the token goes to its server as a bearer header');
+		assert.ok(tokens.includes('Bearer tracker-token') && tokens.every((token) => token === 'Bearer tracker-token' || token === ''), 'the token goes to its server as a bearer header, and only there');
 		const before = connects;
 		await runScript(session.id, 'return await tools.mcp__tracker__find_issues({ query: "again" });', { repo: false, mcp: true });
 		assert.equal(connects, before, 'the next program reuses the connection');
@@ -1415,13 +1423,15 @@ test('with code mode on, an MCP server is reached only through run_script: liste
 		assert.equal(kept.tool, 'mcp__tracker__find_issues');
 		assert.ok(kept.input.startsWith('{"query":"xxx') && kept.input.length <= 160);
 
-		// Every task gets them, a chat with no repository too, until one is turned off.
-		const chat = await sessions.createSession({ title: 'Chat' });
-		await primeAgent(chat.id, { warm: false });
-		assert.ok(scriptServers(chat.id).some((server) => server.name === 'tracker'), 'a chat reaches the tracker too');
+		// Turned off from the composer, it is gone from the next call, with no new message, and the prompt stays as it was.
 		await toggleMcpServer('tracker', false);
-		await primeAgent(chat.id, { warm: false });
-		assert.ok(!scriptServers(chat.id).some((server) => server.name === 'tracker'), 'a server turned off is left out');
+		assert.ok(!(await scriptServers(session.id)).some((server) => server.name === 'tracker'), 'a program no longer reaches it');
+		assert.match(await connectorToolsText(''), /## tracker: it is off\. If the work needs it, ask the user to turn it on/);
+		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__find_issues', { query: 'x' }), /tracker is off/);
+		await primeAgent(session.id, { warm: false });
+		assert.equal(scriptToolDescription(session.id, { repo: true, mcp: true }), description, 'the cached prompt holds');
+		await toggleMcpServer('tracker', true);
+		assert.match(await connectorToolsText('find'), /### mcp__tracker__find_issues/, 'turned back on, it is there again');
 	} finally {
 		if (sessionId) await forgetScriptCalls(sessionId);
 		await removeMcpServer('tracker').catch(() => undefined);

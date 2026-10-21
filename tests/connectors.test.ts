@@ -14,6 +14,7 @@ const { googleSignIn } = await import('../src/providers/google/sign-in.ts');
 const { gmailMailbox, htmlText, rawMessage, withoutQuotes } = await import('../src/providers/google/gmail.ts');
 const connectors = await import('../src/services/connectors.ts');
 const mail = await import('../src/services/mail.ts');
+const connectorTools = await import('../src/services/connector-tools.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, accounts: [googleSignIn()], mailboxes: [gmailMailbox()] });
@@ -278,6 +279,33 @@ test('drafts reply in their conversation, and only your Send sends one, as you w
 
 	await connectors.setMailboxOptions('gmail', { enabled: true, draft: true, send: false });
 	await assert.rejects(mail.requestSend('session-1', 'gmail', 'd2'), /Sending is turned off/);
+	await connectors.setMailboxOptions('gmail', { enabled: true, draft: true, send: true });
+});
+
+test('the agent finds Gmail through connector_tools and calls it through connector_call, only while it is on', async () => {
+	fakeGoogle();
+	await connect();
+	assert.deepEqual(
+		(await connectorTools.setUpConnectors()).map(({ id, kind }) => `${kind}:${id}`),
+		['mailbox:gmail'],
+	);
+	const listed = await connectorTools.connectorToolsText('');
+	assert.match(listed, /## Gmail: on, 4 tools/);
+	for (const tool of ['gmail_search', 'gmail_read_thread', 'gmail_draft', 'gmail_send']) assert.match(listed, new RegExp(`### ${tool}\\n`));
+	assert.match(listed, /Arguments: \{"type":"object","properties":\{"query"/, 'each tool comes with its arguments in full');
+	assert.match((await connectorTools.callConnectorTool('session-2', 'gmail_search', { query: 'invoice' })).output, /thread_id t1/);
+	await assert.rejects(connectorTools.callConnectorTool('session-2', 'gmail_search', { query: 7 }), /Wrong arguments: query/);
+	assert.match((await connectorTools.callConnectorTool('session-2', 'gmail_draft', { to: ['ada@example.com'], subject: 'Hi', body: 'Hello' })).output, /Saved draft d1/);
+	const asked = await connectorTools.callConnectorTool('session-2', 'gmail_send', { draft_id: 'd1' });
+	assert.equal(asked.approval?.state, 'pending', 'sending only asks the user');
+
+	// Off from the composer: named, never its tools, and its calls refused from the next one.
+	await connectors.setMailboxOptions('gmail', { enabled: false, draft: true, send: true });
+	assert.match(await connectorTools.connectorToolsText(''), /## Gmail: it is off\. If the work needs it, ask the user to turn it on from the composer/);
+	assert.doesNotMatch(await connectorTools.connectorToolsText(''), /gmail_search/);
+	await assert.rejects(connectorTools.callConnectorTool('session-2', 'gmail_search', { query: 'invoice' }), /Gmail is off/);
+	await connectors.setMailboxOptions('gmail', { enabled: true, draft: true, send: false });
+	assert.doesNotMatch(await connectorTools.connectorToolsText('send'), /### gmail_send/, 'sending turned off in Settings leaves its tool out');
 	await connectors.setMailboxOptions('gmail', { enabled: true, draft: true, send: true });
 });
 
