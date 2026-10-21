@@ -7,6 +7,7 @@ import { MenuButton } from '@/components/nav';
 import { ProjectFeed } from '@/components/project-feed';
 import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/project-panel';
 import { SpaceMark } from '@/components/project-sidebar';
+import { PaneSlideContext, usePaneSlide } from '@/components/workspace-pane';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { useOnePane } from '@/lib/one-pane';
@@ -52,6 +53,7 @@ export function ProjectPage() {
 	const onePane = useOnePane();
 	const [paneOpen, setPaneOpen] = useState(false);
 	const panel = { ...saved, open: onePane ? paneOpen : saved.open };
+	const slide = usePaneSlide(panel.open);
 	const [expanded, setExpanded] = useState(false);
 	const [starting, setStarting] = useState(Boolean(search.new));
 	const asked = useRef(false);
@@ -126,16 +128,18 @@ export function ProjectPage() {
 				</header>
 				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} />
 			</div>
-			{panel.open ? (
-				<ProjectPanel
-					space={data}
-					threads={threads}
-					tab={panel.tab}
-					onTab={changeTab}
-					expanded={expanded}
-					onToggleExpanded={toggleExpanded}
-					onClose={closePanel}
-				/>
+			{slide ? (
+				<PaneSlideContext.Provider value={slide}>
+					<ProjectPanel
+						space={data}
+						threads={threads}
+						tab={panel.tab}
+						onTab={changeTab}
+						expanded={expanded}
+						onToggleExpanded={toggleExpanded}
+						onClose={closePanel}
+					/>
+				</PaneSlideContext.Provider>
 			) : null}
 		</div>
 	);

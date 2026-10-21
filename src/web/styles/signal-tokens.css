@@ -282,8 +282,9 @@
   --shadow-inset-hairline:inset 0 0 0 1px var(--border-default);
 }
 
-/* Motion — three durations, one curve. Nothing animates that would delay
-   the next keystroke; transforms and opacity only. */
+/* Motion — four durations, one curve. Nothing animates that would delay
+   the next keystroke; transforms and opacity only, but for the sidebars,
+   whose column slides while what is in it keeps its width. */
 :root{
   /* hover, press, checkbox, switch */
   --duration-micro:80ms;
@@ -291,10 +292,13 @@
   --duration-standard:120ms;
   /* popover, menu, modal enter */
   --duration-overlay:180ms;
+  /* a sidebar or the workspace sliding in or out */
+  --duration-sheet:240ms;
   --ease-out:cubic-bezier(0.25,1,0.5,1);
   --transition-micro:var(--duration-micro) var(--ease-out);
   --transition-standard:var(--duration-standard) var(--ease-out);
   --transition-overlay:var(--duration-overlay) var(--ease-out);
+  --transition-sheet:var(--duration-sheet) var(--ease-out);
 
   /* Focus ring — one treatment everywhere. A 1px accent edge plus a 3px
      accent wash: the wash makes it visible on --bg-overlay, the edge
@@ -309,6 +313,7 @@
     --duration-micro:0ms;
     --duration-standard:0ms;
     --duration-overlay:0ms;
+    --duration-sheet:0ms;
   }
 }
 

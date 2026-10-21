@@ -47,7 +47,7 @@ const tasks = [
 ];
 
 function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-	const root = createRootRoute({ component: () => <ChatSidebar open onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
+	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),

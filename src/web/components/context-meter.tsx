@@ -220,10 +220,8 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 									<span className="text-(--text-tertiary)">until the agent compacts older turns</span>
 								</div>
 								{measured.task && measured.task.calls > 1 ? (
-									<p className="m-0 text-[11px] leading-[16px] text-pretty text-(--text-disabled)">
-										The window is what the agent holds now, not what you pay for. This task used{' '}
-										<span className="in-num text-(--text-tertiary)">{tokens(measured.task.tokens)}</span> tokens over {measured.task.calls} model calls, its
-										subagents' included: that is what usage and cost count. Each call reads its conversation again, so the total grows much faster than the window.
+									<p className="m-0 truncate text-[11px] leading-[16px] text-(--text-disabled)">
+										<span className="in-num text-(--text-tertiary)">{tokens(measured.task.tokens)}</span> tokens used this task, over {measured.task.calls} model calls
 									</p>
 								) : null}
 							</>

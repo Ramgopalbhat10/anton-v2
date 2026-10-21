@@ -1,8 +1,36 @@
-import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, createContext, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 const WIDTH_KEY = 'anton.workspace-width';
 const MIN_WIDTH = 360;
 const CONVERSATION_WIDTH = 340;
+
+/** As long as `--duration-sheet`: how long the workspace takes to slide in or out. */
+const SLIDE_MS = 240;
+
+/** Where the workspace is in its slide: sliding in, sliding out, or standing open. */
+export type PaneSlide = 'in' | 'out' | 'still';
+
+/** The slide of the workspace around it, from `usePaneSlide`; a pane outside one stands open. */
+export const PaneSlideContext = createContext<PaneSlide>('still');
+
+/**
+ * Slides a workspace in and out as `open` changes: null while it is closed, so
+ * it is unmounted, and kept mounted while it slides out. A workspace open when
+ * the page first draws stands there without sliding in.
+ */
+export function usePaneSlide(open: boolean): PaneSlide | null {
+	const [slide, setSlide] = useState<PaneSlide | null>(open ? 'still' : null);
+	const last = useRef(open);
+	useEffect(() => {
+		if (last.current === open) return;
+		last.current = open;
+		setSlide(open ? 'in' : 'out');
+		const timer = setTimeout(() => setSlide(open ? 'still' : null), SLIDE_MS);
+		return () => clearTimeout(timer);
+	}, [open]);
+	return slide;
+}
 
 function savedWidth(): number | null {
 	try {
@@ -20,6 +48,7 @@ export function WorkspacePane({ expanded, children }: { expanded: boolean; child
 	const [available, setAvailable] = useState(0);
 	const [requested, setRequested] = useState(savedWidth);
 	const [resizing, setResizing] = useState(false);
+	const slide = useContext(PaneSlideContext);
 	useLayoutEffect(() => {
 		const parent = pane.current?.parentElement;
 		if (!parent) return;
@@ -48,13 +77,18 @@ export function WorkspacePane({ expanded, children }: { expanded: boolean; child
 	return (
 		<section
 			ref={pane}
-			className="sg-workspace relative flex min-h-0 min-w-0 flex-col border-(--border-subtle) md:border-l"
+			// Only beside the conversation does it slide out; covering it, it goes at once.
+			className={cn(
+				'sg-workspace relative flex min-h-0 min-w-0 flex-col border-(--border-subtle) md:border-l',
+				slide === 'out' && (expanded || compact ? 'hidden' : 'max-md:hidden'),
+			)}
 			data-expanded={expanded}
 			data-compact={compact}
 			data-resizing={resizing}
+			data-slide={slide}
 			style={{ '--workspace-width': available ? `${width}px` : '46%' } as CSSProperties}
 		>
-			{!expanded && !compact ? (
+			{!expanded && !compact && slide === 'still' ? (
 				<div
 					role="separator"
 					aria-label="Resize workspace"
@@ -95,7 +129,7 @@ export function WorkspacePane({ expanded, children }: { expanded: boolean; child
 					}}
 				/>
 			) : null}
-			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+			<div className="sg-workspace-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
 		</section>
 	);
 }
