@@ -13,6 +13,7 @@ import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
 import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
+import { FREQUENCIES } from './core/schedule.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
@@ -562,6 +563,16 @@ app.put('/api/projects/:id/settings', async (c) => {
 	);
 	return c.json(await updateSettings(c.req.param('id'), change));
 });
+/** When a routine runs; fields left out take their defaults, and `scheduleProblem` checks the whole. */
+const SCHEDULE = v.object({
+	frequency: v.picklist(FREQUENCIES),
+	time: v.optional(v.pipe(v.string(), v.regex(/^\d{2}:\d{2}$/))),
+	everyHours: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(12))),
+	days: v.optional(v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(6))), v.maxLength(7))),
+	dayOfMonth: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(28))),
+	cron: v.optional(v.pipe(v.string(), v.maxLength(200))),
+	timeZone: v.optional(v.pipe(v.string(), v.maxLength(64))),
+});
 app.get('/api/projects/:id/automations', async (c) => c.json({ automations: await automations(c.req.param('id')) }));
 app.post('/api/projects/:id/automations', async (c) => {
 	const input = await body(
@@ -569,7 +580,7 @@ app.post('/api/projects/:id/automations', async (c) => {
 		v.object({
 			kind: v.picklist(['issues', 'schedule']),
 			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
-			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			schedule: v.optional(v.nullable(SCHEDULE)),
 			prompt: v.pipe(v.string(), v.maxLength(20_000)),
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
@@ -590,7 +601,7 @@ app.put('/api/automations/:id', async (c) => {
 			projectId: v.optional(v.nullable(v.string())),
 			kind: v.picklist(['issues', 'schedule']),
 			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
-			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			schedule: v.optional(v.nullable(SCHEDULE)),
 			prompt: v.pipe(v.string(), v.maxLength(20_000)),
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
@@ -682,7 +693,7 @@ app.post('/api/spaces/:id/automations', async (c) => {
 			projectId: v.nullable(v.string()),
 			kind: v.picklist(['issues', 'schedule']),
 			label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(50)))),
-			everyHours: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(168)))),
+			schedule: v.optional(v.nullable(SCHEDULE)),
 			prompt: v.pipe(v.string(), v.maxLength(20_000)),
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),

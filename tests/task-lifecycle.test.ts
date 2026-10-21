@@ -164,7 +164,7 @@ const { computeView, stopAllSandboxes } = await import('../src/services/compute.
 const { addSessionUsage } = await import('../src/db/sessions.ts');
 const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
-const { addAutomation, removeAutomation, runAutomation, runDueAutomations } = await import('../src/services/automations.ts');
+const { addAutomation, removeAutomation, runAutomation, runDueAutomations, setAutomationEnabled } = await import('../src/services/automations.ts');
 const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/follow-ups.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 
@@ -896,17 +896,26 @@ test('automations start one task per labeled issue and run schedules when due', 
 	await removeAutomation(twin.id);
 	await removeAutomation(again.id);
 
-	const schedule = await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Update the dependencies\nand run the tests.' });
-	const now = Date.parse(schedule.createdAt) + 24 * 60 * 60_000;
+	const DAY_MS = 24 * 60 * 60_000;
+	const schedule = await addAutomation(project.id, {
+		kind: 'schedule',
+		schedule: { frequency: 'daily', time: '09:00', timeZone: 'UTC' },
+		prompt: 'Update the dependencies\nand run the tests.',
+	});
+	const now = Date.parse(schedule.nextRunAt!);
+	assert.equal(schedule.nextRunAt!.slice(11, 16), '09:00', 'it first runs at its next time');
+	assert.ok(now - Date.parse(schedule.createdAt) <= DAY_MS);
 	await runAutomation(schedule.id, { now: now - 60_000 });
-	assert.equal(delivered.length, 5, 'the first run is one interval after it was added');
+	assert.equal(delivered.length, 5, 'not before its time');
 	const ran = await runAutomation(schedule.id, { now });
 	assert.equal(delivered.length, 6);
+	assert.equal(ran.nextRunAt, new Date(now + DAY_MS).toISOString(), 'and next at the same time the day after');
 	assert.match((await sessions.getSession(delivered[5].id)).title, /^Update the dependencies · \w{3} \d{1,2}$/);
 	await runAutomation(schedule.id, { now: now + 60 * 60_000 });
 	assert.equal(delivered.length, 6, 'not due again within the day');
-	await runAutomation(schedule.id, { now: now + 60 * 60_000, force: true });
+	const early = await runAutomation(schedule.id, { now: now + 60 * 60_000, force: true });
 	assert.equal(delivered.length, 7, 'Run now starts it early');
+	assert.equal(early.nextRunAt, ran.nextRunAt, 'and leaves its next time where it was');
 	assert.ok(ran.lastRunAt);
 
 	deliveryFails = true;
@@ -915,6 +924,14 @@ test('automations start one task per labeled issue and run schedules when due', 
 	deliveryFails = false;
 	assert.equal(failed.lastError, 'agent unavailable');
 	assert.equal((await sessions.listSessions()).length, tasksBefore, 'a task its agent never got is removed');
+	deliveryFails = true;
+	const missed = await runAutomation(schedule.id, { now: now + DAY_MS });
+	deliveryFails = false;
+	assert.equal(missed.nextRunAt, new Date(now + DAY_MS + 5 * 60_000).toISOString(), 'a run that could not start tries again in a few minutes');
+	const paused = await setAutomationEnabled(schedule.id, false);
+	const resumed = await setAutomationEnabled(schedule.id, true);
+	assert.equal(paused.nextRunAt, missed.nextRunAt);
+	assert.ok(Date.parse(resumed.nextRunAt!) > Date.now(), 'turned back on, it runs at its next time from now');
 
 	await setLimits({ dailyUsd: 0, taskUsd: null });
 	await runDueAutomations(now + 48 * 60 * 60_000);
@@ -1687,7 +1704,7 @@ test('plan mode: the agent cannot write until the plan is approved, and plan-fir
 	assert.equal(await run(machine, 'cat new.txt'), 'hi\n');
 	await sessions.deleteSession(session.id);
 
-	const automation = await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Tidy the README.', planFirst: true });
+	const automation = await addAutomation(project.id, { kind: 'schedule', schedule: { frequency: 'daily' }, prompt: 'Tidy the README.', planFirst: true });
 	assert.equal(automation.planFirst, true);
 	delivered.length = 0;
 	await runAutomation(automation.id, { force: true });
@@ -1740,7 +1757,7 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 	const project = await addProject('acme/removed');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Goes away' });
 	await machineFor(session.id);
-	await addAutomation(project.id, { kind: 'schedule', everyHours: 24, prompt: 'Nightly.' });
+	await addAutomation(project.id, { kind: 'schedule', schedule: { frequency: 'daily' }, prompt: 'Nightly.' });
 
 	await removeProject(project.id);
 	assert.equal(await getProject(project.id), null);

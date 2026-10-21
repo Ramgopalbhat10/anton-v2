@@ -159,6 +159,27 @@ export const migrations: string[][] = [
 	],
 	// 33: files you deleted from a task's Library or from Artifacts, so a reply that showed one says it was deleted rather than drawing it broken.
 	[`CREATE TABLE IF NOT EXISTS deleted_outputs (session_id TEXT NOT NULL, path TEXT NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`],
+	// 34: a routine runs on a schedule kept on a time zone's clock (`src/core/schedule.ts`), and keeps when it runs next.
+	// Each "every N hours" routine moves to the nearest schedule on the UTC clock, at the time it last ran (else was added):
+	// hours dividing a day stay hourly (others round down to one that does), a day is daily, whole days are a cron
+	// expression, and a week or more is weekly on that weekday. Its next run is worked out from its last, as before.
+	[
+		`ALTER TABLE automations ADD COLUMN schedule_json TEXT`,
+		`ALTER TABLE automations ADD COLUMN next_run_at TEXT`,
+		`UPDATE automations SET schedule_json = (
+			SELECT json_object(
+				'frequency', CASE WHEN hours < 24 THEN 'hourly' WHEN hours = 24 THEN 'daily' WHEN hours >= 168 THEN 'weekly' WHEN hours % 24 = 0 THEN 'cron' ELSE 'daily' END,
+				'time', strftime('%H:%M', anchor),
+				'everyHours', CASE WHEN hours >= 12 THEN 12 WHEN hours >= 8 THEN 8 WHEN hours >= 6 THEN 6 WHEN hours >= 4 THEN 4 ELSE hours END,
+				'days', json_array(CAST(strftime('%w', anchor) AS INTEGER)),
+				'dayOfMonth', 1,
+				'cron', CASE WHEN hours > 24 AND hours < 168 AND hours % 24 = 0
+					THEN CAST(strftime('%M', anchor) AS INTEGER) || ' ' || CAST(strftime('%H', anchor) AS INTEGER) || ' */' || (hours / 24) || ' * *'
+					ELSE '' END,
+				'timeZone', 'UTC')
+			FROM (SELECT MAX(1, COALESCE(automations.every_hours, 24)) AS hours, COALESCE(automations.last_run_at, automations.created_at) AS anchor))
+		WHERE kind = 'schedule'`,
+	],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

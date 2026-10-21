@@ -61,3 +61,36 @@ test("a schedule's runs from before tasks kept their routine are found by title,
 	});
 	db.close();
 });
+
+test('routines that ran every few hours move to schedules on the UTC clock, at the time they last ran', async () => {
+	const db = createClient({ url: `file:${path.join(dir, 'schedules.db')}` });
+	const scheduled = migrations.findIndex((statements) => statements.some((sql) => sql.includes('ADD COLUMN schedule_json')));
+	await migrate(db, scheduled);
+	const add = (id: string, hours: number, lastRun: string | null) =>
+		db.execute({
+			sql: `INSERT INTO automations (id, project_id, kind, every_hours, prompt, created_at, last_run_at) VALUES (?, '', 'schedule', ?, 'x', '2026-10-01T03:30:00.000Z', ?)`,
+			args: [id, hours, lastRun],
+		});
+	await add('daily', 24, '2026-10-20T13:45:12.345Z');
+	await add('six', 6, null);
+	await add('five', 5, null);
+	await add('two-days', 48, null);
+	await add('weekly', 168, null);
+	await db.execute(`INSERT INTO automations (id, project_id, kind, label, prompt, created_at) VALUES ('issues', 'p', 'issues', 'anton', '', '2026-10-01')`);
+	await migrate(db);
+	const rows = Object.fromEntries(
+		(await db.execute('SELECT id, schedule_json FROM automations')).rows.map((row) => {
+			const schedule = row.schedule_json == null ? null : JSON.parse(String(row.schedule_json));
+			return [row.id, schedule && { frequency: schedule.frequency, time: schedule.time, everyHours: schedule.everyHours, days: schedule.days, cron: schedule.cron, timeZone: schedule.timeZone }];
+		}),
+	);
+	assert.deepEqual(rows, {
+		daily: { frequency: 'daily', time: '13:45', everyHours: 12, days: [2], cron: '', timeZone: 'UTC' },
+		six: { frequency: 'hourly', time: '03:30', everyHours: 6, days: [4], cron: '', timeZone: 'UTC' },
+		five: { frequency: 'hourly', time: '03:30', everyHours: 4, days: [4], cron: '', timeZone: 'UTC' },
+		'two-days': { frequency: 'cron', time: '03:30', everyHours: 12, days: [4], cron: '30 3 */2 * *', timeZone: 'UTC' },
+		weekly: { frequency: 'weekly', time: '03:30', everyHours: 12, days: [4], cron: '', timeZone: 'UTC' },
+		issues: null,
+	});
+	db.close();
+});
