@@ -88,6 +88,8 @@ describe('Settings › Connectors', () => {
 		const yours = await screen.findByRole('region', { name: 'Your connectors' });
 		expect(within(yours).getByText('me@example.com')).toBeTruthy();
 		expect(within(yours).getByRole('link', { name: 'Linear' })).toBeTruthy();
+		expect(within(yours).getByRole('link', { name: 'tracker' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Add custom' })).toBeTruthy();
 		const offered = screen.getByRole('region', { name: 'Add a connector' });
 		expect(within(offered).queryByRole('link', { name: 'Linear' })).toBeNull();
 		expect(within(offered).queryByRole('link', { name: 'Gmail' })).toBeNull();

@@ -392,6 +392,7 @@ const matches = (words: string, ...texts: string[]) => !words || texts.some((tex
 /** Settings › Connectors: the connectors you have, each with its switch, then the ones to add. Each opens a page of its own. */
 export function ConnectorsPage() {
 	const connectors = useConnectors();
+	const navigate = useNavigate();
 	const returned = useSearch({ strict: false }) as Opened;
 	const [query, setQuery] = useState('');
 	const words = query.trim().toLowerCase();
@@ -408,14 +409,19 @@ export function ConnectorsPage() {
 				title="Connectors"
 				info="Sign-ins and tokens stay on Anton's server and never reach a sandbox or the model. A connector that is on is offered to every task, but its tools load only when a task looks them up, so the agent's prompt and its cache stay the same whichever are on."
 				actions={
-					<input
-						type="search"
-						value={query}
-						onChange={(event) => setQuery(event.target.value)}
-						placeholder="Search connectors"
-						aria-label="Search connectors"
-						className={cn(FIELD, 'w-[220px]')}
-					/>
+					<div className="flex items-center gap-2">
+						<input
+							type="search"
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							placeholder="Search connectors"
+							aria-label="Search connectors"
+							className={cn(FIELD, 'w-[200px]')}
+						/>
+						<Btn size="sm" icon={Plus} onClick={() => void navigate({ to: '/settings/connectors/view', search: { add: 'custom' } })}>
+							Add custom
+						</Btn>
+					</div>
 				}
 			>
 				Connect your tools once here, then turn each on or off from the + menu in any composer. Tools load only when a task uses them.
