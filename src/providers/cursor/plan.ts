@@ -132,11 +132,17 @@ export function toSubscriptionModels(item: ModelListItem): SubscriptionModel[] {
 	});
 }
 
+/** The context of the variant Cursor runs when none is named. */
+const defaultContext = (item: ModelListItem | undefined) =>
+	(item?.variants?.find((variant) => variant.isDefault) ?? item?.variants?.[0])?.params.find((param) => param.id === 'context')?.value;
+
 /**
  * The model and its parameters for a conversation at `effort`: the effort value
  * that names it, thinking on unless it is `off`, the variant's context or else
  * the smallest, and fast mode for a `[fast]` variant. Parameters left out take
- * the model's first value, as the SDK does.
+ * the model's default variant's value. The context that variant has is left
+ * out too: Grok 4.7 refuses it named ("Invalid parameters for registry model")
+ * and runs it when it is not.
  */
 export function selectionFor(model: string, item: ModelListItem | undefined, effort: string | null): ModelSelection {
 	const { base: id, context, fast } = parseVariant(model);
@@ -151,7 +157,7 @@ export function selectionFor(model: string, item: ModelListItem | undefined, eff
 			if (param.values.some((option) => option.value === value)) params.push({ id: param.id, value });
 		} else if (param.id === 'context') {
 			const chosen = (context && param.values.find((option) => option.value === context)?.value) || contextParam(item!)?.value;
-			if (chosen) params.push({ id: param.id, value: chosen });
+			if (chosen && chosen !== defaultContext(item)) params.push({ id: param.id, value: chosen });
 		} else if (param.id === 'fast' && fast && offersFast(item)) {
 			params.push({ id: param.id, value: 'true' });
 		}
@@ -211,6 +217,32 @@ const toolResult = (output: { content: RuntimeContent[]; isError: boolean }): SD
 	content: output.content.map((part) => (part.type === 'text' ? { type: 'text' as const, text: part.text } : { type: 'image' as const, data: part.data, mimeType: part.mimeType })),
 	isError: output.isError,
 });
+
+/**
+ * Cursor writes a tool result whose text passes 40,000 bytes to a file in its
+ * own folder on Anton's server and hands the model only its path, which none
+ * of Anton's tools can read: an activated skill's instructions or a long file
+ * never reached it. So a longer result goes back in parts under that size,
+ * the rest read with `read_tool_output`, which Anton answers itself.
+ */
+const PART_BYTES = 32_000;
+const MORE_TOOL = 'read_tool_output';
+/** The long results a conversation keeps for `read_tool_output`, the oldest dropped first. */
+const KEEP_LONG = 20;
+
+/** The text from `offset` that fits in a part, cut on a character. */
+export function partAt(text: string, offset: number): string {
+	let part = text.slice(offset, offset + PART_BYTES);
+	for (let excess = Buffer.byteLength(part) - PART_BYTES; excess > 0; excess = Buffer.byteLength(part) - PART_BYTES) part = part.slice(0, part.length - excess);
+	// Never half of a surrogate pair.
+	if (/[\uD800-\uDBFF]$/.test(part)) part = part.slice(0, -1);
+	return part;
+}
+
+const partNote = (id: string, total: number, end: number) =>
+	end < total
+		? `\n\n[Characters ${end.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} shown. Call ${MORE_TOOL} with id "${id}" and offset ${end} for the rest.]`
+		: '';
 
 type Start = { sdk: CursorSdk; key: string; store: LocalAgentStore; workDir: string; model: (id: string) => Promise<ModelListItem | undefined> };
 
@@ -284,6 +316,35 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 		else if (update.type === 'thinking-delta') write('thinking', update.text);
 	}
 
+	const long = new Map<string, string>();
+	/** The result as Cursor takes it whole: a text too long for that is kept, and its first part goes back. */
+	const fitted = (output: { content: RuntimeContent[]; isError: boolean }): SDKCustomToolResult => {
+		const text = output.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n\n');
+		if (Buffer.byteLength(text) <= PART_BYTES) return toolResult(output);
+		const id = randomUUID().slice(0, 8);
+		long.set(id, text);
+		if (long.size > KEEP_LONG) long.delete(long.keys().next().value!);
+		const first = partAt(text, 0);
+		const images = output.content.filter((part) => part.type === 'image');
+		return toolResult({ content: [{ type: 'text', text: first + partNote(id, text.length, first.length) }, ...images], isError: output.isError });
+	};
+	const more: SDKCustomTool = {
+		description: 'Reads more of a tool result too long to be handed back whole, from the id and offset its note gives.',
+		inputSchema: {
+			type: 'object',
+			properties: { id: { type: 'string', description: 'The id the note gives.' }, offset: { type: 'number', description: 'The character to start from.' } },
+			required: ['id', 'offset'],
+		} as SDKCustomTool['inputSchema'],
+		execute: (args) => {
+			const id = String(args?.id ?? '');
+			const text = long.get(id);
+			if (text === undefined) return { content: [{ type: 'text', text: `No tool result "${id}" is kept; call the tool again.` }], isError: true };
+			const offset = Math.max(0, Math.min(text.length, Math.floor(Number(args?.offset) || 0)));
+			const part = partAt(text, offset);
+			return { content: [{ type: 'text', text: part + partNote(id, text.length, offset + part.length) }], isError: false };
+		},
+	};
+
 	const tools: Record<string, SDKCustomTool> = Object.fromEntries(
 		options.tools.map((tool) => [
 			tool.name,
@@ -300,11 +361,12 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 					events.push({ type: 'block_stop', index });
 					if (flush) clearTimeout(flush);
 					flush = setTimeout(() => end('tool_use'), BATCH_MS);
-					return toolResult(await options.callTool(id, tool.name));
+					return fitted(await options.callTool(id, tool.name));
 				},
 			} satisfies SDKCustomTool,
 		]),
 	);
+	if (!tools[MORE_TOOL]) tools[MORE_TOOL] = more;
 
 	async function create(): Promise<SDKAgent> {
 		mkdirSync(start.workDir, { recursive: true });
@@ -385,6 +447,7 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 			if (closed) return;
 			closed = true;
 			if (flush) clearTimeout(flush);
+			long.clear();
 			run?.cancel().catch(() => {});
 			void agent?.then((handle) => handle.close()).catch(() => {});
 			events.close();
