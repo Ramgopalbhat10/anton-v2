@@ -1599,22 +1599,23 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 	);
 }
 
-/** Anton's mark: an isometric cube on a cyan tile. */
+/**
+ * Anton's mark: the sandbox cube, lit from above, with an A cut into its foot.
+ * The same three faces make the favicon and app icons (scripts/make-icons.ts),
+ * and the mascot (mascot.tsx) is this cube on the legs the cut leaves.
+ */
+const MARK = [
+	{ d: 'M12 3.4 19.45 7.7 12 12 4.55 7.7Z', fill: 'var(--cyan-200)' },
+	{ d: 'M4.55 7.7 12 12 9.32 19.05 4.55 16.3Z', fill: 'var(--cyan-500)' },
+	{ d: 'M12 12 19.45 7.7 19.45 16.3 14.68 19.05Z', fill: 'var(--cyan-700)' },
+];
+
 export function Logo({ size = 20 }: { size?: number }) {
-	const id = `anton-mark${useId().replace(/[^\w-]/g, '')}`;
 	return (
-		<svg aria-hidden width={size} height={size} viewBox="0 0 20 20" className="shrink-0">
-			<defs>
-				<linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-					<stop offset="0" stopColor="var(--cyan-300)" />
-					<stop offset="1" stopColor="var(--cyan-600)" />
-				</linearGradient>
-			</defs>
-			<rect width="20" height="20" rx="5.5" fill={`url(#${id})`} />
-			<g fill="none" stroke="var(--accent-fg)" strokeWidth="1.3" strokeLinejoin="round">
-				<path d="M10 4.6 15 7.4V12.6L10 15.4 5 12.6V7.4Z" />
-				<path d="M5 7.4 10 10.2 15 7.4M10 10.2V15.4" />
-			</g>
+		<svg aria-hidden width={size} height={size} viewBox="2.5 2.5 19 19" className="shrink-0">
+			{MARK.map(({ d, fill }) => (
+				<path key={fill} d={d} fill={fill} />
+			))}
 		</svg>
 	);
 }
