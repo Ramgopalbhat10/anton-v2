@@ -92,6 +92,33 @@ test('Cursor’s larger context and fast mode are listed as variants, and each p
 	assert.deepEqual(selectionFor('claude-sonnet-5[fast]', sonnet as never, null), { id: 'claude-sonnet-5' }, 'a model without fast mode runs at its own speed');
 });
 
+test('the context of a Cursor model’s default variant is left out, since Grok 4.7 refuses it named', () => {
+	const grok = {
+		id: 'grok-4.7',
+		displayName: 'Grok 4.7',
+		parameters: [
+			{ id: 'effort', values: [{ value: 'low' }, { value: 'high' }] },
+			{ id: 'context', values: [{ value: '256k' }, { value: '500k' }] },
+		],
+		variants: [
+			{ displayName: 'Grok 4.7', params: [{ id: 'effort', value: 'low' }, { id: 'context', value: '256k' }] },
+			{ displayName: 'Grok 4.7', params: [{ id: 'effort', value: 'high' }, { id: 'context', value: '500k' }], isDefault: true },
+		],
+	};
+	assert.deepEqual(
+		toSubscriptionModels(grok as never).map((model) => model.id),
+		['cursor/grok-4.7', 'cursor/grok-4.7[500k]'],
+	);
+	assert.deepEqual(selectionFor('grok-4.7[500k]', grok as never, 'high'), { id: 'grok-4.7', params: [{ id: 'effort', value: 'high' }] });
+	assert.deepEqual(selectionFor('grok-4.7', grok as never, 'high'), {
+		id: 'grok-4.7',
+		params: [
+			{ id: 'effort', value: 'high' },
+			{ id: 'context', value: '256k' },
+		],
+	});
+});
+
 type Script = (agent: { onDelta: (update: object) => void; tools: Record<string, { execute: (args: unknown, context: { toolCallId: string }) => Promise<unknown> }> }) => Promise<{ status: string; error?: { message: string } }>;
 
 /** Cursor’s SDK as the plan sees it: each message the agent is sent plays the next script. */
@@ -206,7 +233,7 @@ test('a Cursor run is cut into steps at its tool calls, and each call waits for 
 	const local = options.local as { cwd: string; settingSources: unknown[]; customTools: object };
 	assert.equal(local.cwd, path.join(dir, 'work'));
 	assert.deepEqual(local.settingSources, [], 'no project or user settings are read on the server');
-	assert.deepEqual(Object.keys(local.customTools), ['read']);
+	assert.deepEqual(Object.keys(local.customTools), ['read', 'read_tool_output'], 'Anton’s tools, and one for the rest of a long result');
 	assert.match(fake.sent[0].text, /^You are working for Anton[\s\S]*<instructions>\nBe Anton\.\n<\/instructions>\n\nRead a\.ts\.$/);
 
 	const messages = [...context.messages, step1, { role: 'toolResult', toolCallId: 'tc_1', toolName: 'read', content: [{ type: 'text', text: 'A' }], isError: false, timestamp: 0 } as Message];
@@ -218,6 +245,37 @@ test('a Cursor run is cut into steps at its tool calls, and each call waits for 
 	assert.ok(step1.usage.input > 0 && step1.usage.input < step2.usage.input, 'each step holds the context it was sent');
 	assert.deepEqual(read, { content: [{ type: 'text', text: 'A' }], isError: false });
 	assert.equal(fake.created.length, 1, 'one Cursor agent for the conversation');
+});
+
+test('a result too long for Cursor to hand back goes in parts the model reads with read_tool_output', async () => {
+	// Past 40,000 bytes Cursor puts a result in a file on Anton's server, where no tool of Anton's reaches it.
+	const skill = `${'Draw boxes. ✏️ '.repeat(4_000)}\n<skill_resources>\n- references/style-guide.md\n</skill_resources>`;
+	const parts: string[] = [];
+	const fake = fakeSdk([
+		async ({ onDelta, tools }) => {
+			const first = (await tools.activate_skill.execute({ name: 'diagram-design' }, { toolCallId: 'tc_1' })) as { content: Array<{ text: string }> };
+			parts.push(first.content[0].text);
+			for (let note = first.content[0].text.match(/id "(\w+)" and offset (\d+)/); note; ) {
+				const next = (await tools.read_tool_output.execute({ id: note[1], offset: Number(note[2]) }, { toolCallId: '' })) as { content: Array<{ text: string }> };
+				parts.push(next.content[0].text);
+				note = next.content[0].text.match(/id "(\w+)" and offset (\d+)/);
+			}
+			onDelta({ type: 'text-delta', text: 'Read it all.' });
+			return { status: 'finished' };
+		},
+	]);
+	const { models, model } = bridge(fake);
+	const activate = { name: 'activate_skill', description: 'Loads a skill.', parameters: { type: 'object', properties: { name: { type: 'string' } } } } as never;
+	const context = { systemPrompt: 'Be Anton.', messages: [user('Draw it.')], tools: [activate] };
+	const step1 = await models.completeSimple(model, context, { sessionId: 'c-long' });
+	assert.equal(step1.stopReason, 'toolUse', step1.errorMessage);
+	const messages = [...context.messages, step1, { role: 'toolResult', toolCallId: 'tc_1', toolName: 'activate_skill', content: [{ type: 'text', text: skill }], isError: false, timestamp: 0 } as Message];
+	const step2 = await models.completeSimple(model, { ...context, messages }, { sessionId: 'c-long' });
+	assert.equal(step2.stopReason, 'stop', step2.errorMessage);
+
+	assert.ok(parts.length > 2, 'the result came in several parts');
+	for (const part of parts) assert.ok(Buffer.byteLength(part) < 40_000, 'each part is short enough for Cursor to hand back');
+	assert.equal(parts.map((part) => part.replace(/\n\n\[Characters [\s\S]*\]$/, '')).join(''), skill, 'the parts are the whole result');
 });
 
 test('a long run’s count, every model call in it summed, is not read as the last step’s context', async () => {
