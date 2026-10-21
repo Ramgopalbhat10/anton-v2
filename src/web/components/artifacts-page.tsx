@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, X } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Trash2, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl, PageThumbnail } from '@/components/html-frame';
@@ -8,11 +8,12 @@ import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { kindOf } from '@/components/library-tab';
 import { MenuButton } from '@/components/nav';
-import { OutputPreview, OutputThumb } from '@/components/output-viewer';
+import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output-viewer';
 import { PageFrame } from '@/components/page-frame';
-import { EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf } from '@/lib/artifacts';
+import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,25 @@ function download(artifact: Artifact) {
 	link.href = outputUrl(artifact.sessionId, artifact.path);
 	link.download = nameOf(artifact.path);
 	link.click();
+}
+
+/**
+ * Deletes an artifact from its task's Library. It leaves this page at once;
+ * a reply that showed it says it was deleted (src/web/lib/deleted-outputs.ts).
+ */
+function useDeleteArtifact(artifact: Artifact, onDeleted?: () => void) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => api.deleteOutput(artifact.sessionId, artifact.path),
+		onSuccess: () => {
+			queryClient.setQueryData<{ artifacts: Artifact[] }>(['artifacts'], (current) =>
+				current ? { artifacts: current.artifacts.filter((other) => !(other.sessionId === artifact.sessionId && other.path === artifact.path)) } : current,
+			);
+			void queryClient.invalidateQueries({ queryKey: ['artifacts'] });
+			void queryClient.invalidateQueries({ queryKey: ['outputs', artifact.sessionId] });
+			onDeleted?.();
+		},
+	});
 }
 
 /** True once the element has come near the screen, so cards fetch what they show only then. */
@@ -105,12 +125,18 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	);
 }
 
-/** Opening it elsewhere, saving it, or going to the task it came from. */
+/** Opening it elsewhere, saving it, going to the task it came from, or deleting it. Delete asks twice inside the menu. */
 function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 	const navigate = useNavigate();
 	const app = categoryOf(artifact.path) === 'app';
+	const [confirming, setConfirming] = useState(false);
+	const remove = useDeleteArtifact(artifact);
 	return (
-		<Menu>
+		<Menu
+			onOpenChange={(open) => {
+				if (!open) setConfirming(false);
+			}}
+		>
 			<MenuTrigger asChild>
 				<IconBtn icon={MoreVertical} size="xs" label={`Actions for ${artifact.title}`} className="shrink-0" />
 			</MenuTrigger>
@@ -133,6 +159,23 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 				>
 					Go to the task
 				</MenuItem>
+				<MenuSeparator />
+				<MenuItem
+					icon={Trash2}
+					className="sg-menu-item--destructive"
+					disabled={remove.isPending}
+					onSelect={(event) => {
+						event.preventDefault();
+						if (!confirming) return setConfirming(true);
+						remove.mutate();
+					}}
+				>
+					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete'}
+				</MenuItem>
+				{confirming && !remove.isError ? (
+					<div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">It leaves the task's Library too. Replies that showed it say it was deleted.</div>
+				) : null}
+				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
 			</MenuContent>
 		</Menu>
 	);
@@ -304,8 +347,21 @@ export function ArtifactView() {
 	const readable = app || isMarkdown(path);
 	const [code, setCode] = useState(false);
 	const text = isText(path);
+	const navigate = useNavigate();
+	const deleted = useDeletedOutput(sessionId, path);
+	const [confirming, setConfirming] = useState(false);
+	const remove = useDeleteArtifact(artifact, () => void navigate({ to: '/artifacts' }));
+	useEffect(() => {
+		if (!confirming) return;
+		const timer = setTimeout(() => setConfirming(false), 4000);
+		return () => clearTimeout(timer);
+	}, [confirming]);
 
-	const body = <OutputPreview item={{ sessionId, path }} code={code} title={artifact.title} />;
+	const body = deleted ? (
+		<DeletedArtifact path={path} variant="stage" className="min-h-[320px]" />
+	) : (
+		<OutputPreview item={{ sessionId, path }} code={code} title={artifact.title} />
+	);
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
@@ -322,7 +378,7 @@ export function ArtifactView() {
 						{listed ? ` · ${when(artifact)}` : ''}
 					</TaskLink>
 				</div>
-				{readable ? (
+				{readable && !deleted ? (
 					<Segmented label="Show" role="radiogroup" className="shrink-0">
 						<SegmentedItem role="radio" size="sm" on={!code} onClick={() => setCode(false)}>
 							Preview
@@ -332,14 +388,26 @@ export function ArtifactView() {
 						</SegmentedItem>
 					</Segmented>
 				) : null}
-				{text ? <CopiedText sessionId={sessionId} path={path} /> : null}
-				<IconBtn icon={Download} size="sm" label="Download" onClick={() => download(artifact)} />
-				{app ? (
-					<a href={frameUrl(sessionId, path)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
-						<Icon icon={ExternalLink} size={14} />
-					</a>
-				) : null}
+				{deleted ? null : (
+					<>
+						{text ? <CopiedText sessionId={sessionId} path={path} /> : null}
+						<IconBtn icon={Download} size="sm" label="Download" onClick={() => download(artifact)} />
+						{app ? (
+							<a href={frameUrl(sessionId, path)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
+								<Icon icon={ExternalLink} size={14} />
+							</a>
+						) : null}
+						{confirming || remove.isPending ? (
+							<Btn size="sm" variant="danger" icon={Trash2} disabled={remove.isPending} onClick={() => remove.mutate()} className="shrink-0">
+								{remove.isPending ? 'Deleting…' : 'Confirm delete'}
+							</Btn>
+						) : (
+							<IconBtn icon={Trash2} size="sm" label="Delete" onClick={() => setConfirming(true)} />
+						)}
+					</>
+				)}
 			</header>
+			{remove.isError ? <div className="border-b border-(--border-subtle) px-3 py-1.5 text-[12px] text-(--danger-text)">{remove.error.message}</div> : null}
 			<div className={cn('min-h-0 flex-1', app && !code ? 'overflow-hidden' : 'overflow-y-auto')}>{body}</div>
 		</div>
 	);

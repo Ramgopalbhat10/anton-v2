@@ -537,4 +537,34 @@ describe('response details', () => {
 		fireEvent.keyDown(window, { key: 'Escape' });
 		await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
 	});
+
+	it('says a page, an image or a file you deleted was deleted, instead of drawing it broken', () => {
+		closeViewer();
+		const page = tool('render_html', { title: 'Explainer', html: '<div>x</div>' }, { output: { path: 'renders/explainer-abc123.html', title: 'Explainer', height: 300 } });
+		const made = { ...tool('generate_image', { prompt: 'A lighthouse' }, { output: { path: 'images/lighthouse-abc123.png', model: 'x', note: '' } }), toolCallId: 'image-2' };
+		const text = 'See ![Chart](../outputs/chart.png) and [the report](../outputs/reports/notes.md).';
+		renderWithQueries(<Thread sessionId="s1" agent={agent([user('u1', 'Make them'), assistant('a1', [page, made, { type: 'text', text }])])} />, [
+			[['session', 's1'], session()],
+			[['health'], { ok: true, openRouter: true }],
+			[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
+			[['models'], { models: [], default: '' }],
+			[
+				['outputs', 's1'],
+				{ source: 'saved', at: null, outputs: [], deleted: ['renders/explainer-abc123.html', 'images/lighthouse-abc123.png', 'chart.png', 'reports/notes.md'] },
+			],
+		]);
+		expect(screen.queryByTitle('Explainer')).toBeNull();
+		expect(screen.getByRole('note', { name: 'Deleted page: explainer-abc123.html' })).toBeTruthy();
+		expect(screen.queryByRole('img', { name: 'A lighthouse' })).toBeNull();
+		expect(screen.getByRole('note', { name: 'Deleted image: lighthouse-abc123.png' })).toBeTruthy();
+		// In the reply's words: no broken picture, and the link struck through rather than opening nothing.
+		expect(screen.queryByRole('img', { name: 'Chart' })).toBeNull();
+		expect(screen.getByText('Chart').closest('[role="note"]')?.textContent).toContain('This image was deleted');
+		expect(screen.queryByRole('link', { name: 'the report' })).toBeNull();
+		expect(screen.getByTitle('This file was deleted').textContent).toContain('the report');
+		// Its cards stay, saying so, and open nothing.
+		const cards = within(screen.getByRole('list', { name: 'Files from this reply' })).getAllByRole('listitem');
+		expect(cards.map((card) => card.getAttribute('title'))).toEqual(['chart.png was deleted', 'reports/notes.md was deleted']);
+		expect(cards.every((card) => card.tagName === 'DIV')).toBe(true);
+	});
 });

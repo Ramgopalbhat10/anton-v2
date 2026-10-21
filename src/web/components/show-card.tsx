@@ -36,7 +36,9 @@ import { Markdown, FileLinks } from "@/components/markdown";
 import { type ReplyPlace, ReplyActions } from "@/components/reply-cards";
 import { Badge, Btn, Icon, Switch } from "@/components/signal";
 import { UiChart } from "@/components/ui-chart";
+import { DeletedArtifact } from "@/components/output-viewer";
 import { outputUrl } from "@/lib/api";
+import { useDeletedOutput } from "@/lib/deleted-outputs";
 import { cn } from "@/lib/utils";
 
 /*
@@ -612,6 +614,34 @@ function Form({ node }: { node: Extract<UiNode, { type: "form" }> }) {
   );
 }
 
+/** A picture from the task's Library; once you deleted it, a note saying so. */
+function LibraryImage({
+  sessionId,
+  path,
+  alt,
+}: {
+  sessionId: string;
+  path: string;
+  alt: string;
+}) {
+  const deleted = useDeletedOutput(sessionId, path);
+  if (deleted) return <DeletedArtifact path={path} />;
+  return (
+    <a
+      href={outputUrl(sessionId, path)}
+      target="_blank"
+      rel="noreferrer"
+      className="block w-fit"
+    >
+      <img
+        src={outputUrl(sessionId, path)}
+        alt={alt}
+        className="block max-h-80 max-w-full rounded-[10px] border border-(--card-border)"
+      />
+    </a>
+  );
+}
+
 function NodeView({ node }: { node: UiNode }) {
   const state = useContext(ShowState);
   switch (node.type) {
@@ -701,18 +731,11 @@ function NodeView({ node }: { node: UiNode }) {
       return <FileRef node={node} />;
     case "image":
       return state ? (
-        <a
-          href={outputUrl(state.sessionId, libraryPath(node.path))}
-          target="_blank"
-          rel="noreferrer"
-          className="block w-fit"
-        >
-          <img
-            src={outputUrl(state.sessionId, libraryPath(node.path))}
-            alt={node.alt ?? node.path}
-            className="block max-h-80 max-w-full rounded-[10px] border border-(--card-border)"
-          />
-        </a>
+        <LibraryImage
+          sessionId={state.sessionId}
+          path={libraryPath(node.path)}
+          alt={node.alt ?? node.path}
+        />
       ) : null;
     case "table":
       return <Table node={node} />;

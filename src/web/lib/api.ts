@@ -557,7 +557,7 @@ export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; a
 export type Output = { path: string; size: number; mtimeMs: number };
 /** Something the agent made in a task, for the Artifacts page (src/services/artifacts.ts). */
 export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean } };
-export type OutputsPayload = { source: Source; at: string | null; outputs: Output[] };
+export type OutputsPayload = { source: Source; at: string | null; outputs: Output[]; /** Files you deleted from the Library, which replies show as deleted. */ deleted: string[] };
 
 async function request(input: string, init?: RequestInit): Promise<Response> {
 	const response = await fetch(input, {
