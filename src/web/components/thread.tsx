@@ -23,6 +23,8 @@ import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
+import { useFollowLatest } from '@/lib/use-follow-latest';
+import { JumpToLatest } from '@/components/jump-to-latest';
 import { focusFile, ShowPanel } from '@/lib/workspace';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
@@ -937,8 +939,19 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		});
 		return map;
 	}, [rows]);
+	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
+	const { following, follow } = useFollowLatest(scroller, { reset: sessionId });
 	const send = agent.sendMessage;
-	const actions = useMemo<ReplyActions>(() => ({ send: (text: string) => void send(text), busy }), [send, busy]);
+	const actions = useMemo<ReplyActions>(
+		() => ({
+			send: (text: string) => {
+				follow();
+				void send(text);
+			},
+			busy,
+		}),
+		[send, busy, follow],
+	);
 	const fileLinks = useThreadFileLinks(sessionId);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
@@ -948,18 +961,12 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		if (pending) void (pending.images.length ? agent.sendMessage(pending.prompt, { images: deliveredImages(pending.images) }) : agent.sendMessage(pending.prompt));
 	}, [agent.historyReady, agent.sendMessage, sessionId]);
 
-	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
-	useEffect(() => {
-		const frame = requestAnimationFrame(() => {
-			const el = scroller.current;
-			if (el) el.scrollTop = el.scrollHeight;
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [conversation]);
-
 	const onSend = useCallback(
-		(text: string, images: ImageAttachment[]) => agent.sendMessage(text, { images: deliveredImages(images) }),
-		[agent.sendMessage],
+		(text: string, images: ImageAttachment[]) => {
+			follow();
+			return agent.sendMessage(text, { images: deliveredImages(images) });
+		},
+		[agent.sendMessage, follow],
 	);
 	// Stop also drops messages still waiting for the agent's next step, unread; they go back to the composer.
 	const waiting = useRef<{ texts: string[]; until: number } | null>(null);
@@ -1037,8 +1044,17 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							</Notice>
 						) : null}
 					</div>
+					<JumpToLatest show={!following} live={busy} onJump={follow} />
 				</div>
-				{planned ? <ApproveBar sessionId={sessionId} send={(text) => agent.sendMessage(text)} /> : null}
+				{planned ? (
+					<ApproveBar
+						sessionId={sessionId}
+						send={(text) => {
+							follow();
+							return agent.sendMessage(text);
+						}}
+					/>
+				) : null}
 				<Composer busy={busy} onSend={onSend} onStop={onStop} sessionId={sessionId} />
 			</div>
 			</FileLinks.Provider>
