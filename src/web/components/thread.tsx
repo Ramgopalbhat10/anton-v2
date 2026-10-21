@@ -8,7 +8,7 @@ import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-mar
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
-import { OutputCards } from '@/components/output-viewer';
+import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
 import { approvalOf, MailSendCard, MAIL_SEND_TOOLS } from '@/components/mail-card';
@@ -25,6 +25,7 @@ import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
+import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { IMAGE_TOOL, nowText, type ReplyPhase } from '@/lib/now-text';
 import { outputLinkPath, outputLinksIn } from '../../core/outputs';
@@ -117,7 +118,7 @@ function screenshotPath(part: ToolPart): string {
  * still has it (`kept`, once known): a check screenshot it later deleted is
  * not one it made for you.
  */
-function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null): string[] {
+function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null, deleted: Set<string> = new Set()): string[] {
 	const named: { path: string; linked: boolean }[] = [];
 	const drawn = new Set(parts.flatMap((part) => (part.type === 'dynamic-tool' && part.toolName === IMAGE_TOOL ? [madeImageOf(part)?.path ?? ''] : [])));
 	for (const part of parts) {
@@ -130,7 +131,8 @@ function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null): 
 	const paths: string[] = [];
 	for (const { path } of named) {
 		if (!path || path.startsWith('uploads/') || drawn.has(path) || paths.includes(path)) continue;
-		if (linked.has(path) || !kept || kept.has(path)) paths.push(path);
+		// One you deleted keeps its card, which says so.
+		if (linked.has(path) || !kept || kept.has(path) || deleted.has(path)) paths.push(path);
 	}
 	return paths;
 }
@@ -262,6 +264,7 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const sessionId = useContext(SessionId);
 	const calls = useScriptCalls(sessionId, part.toolCallId, script);
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';
+	const imageDeleted = useDeletedOutput(image ? sessionId : null, image);
 	const heading = (
 		<>
 			<span className={cn(NODE, 'relative')}>
@@ -299,7 +302,9 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 		<>
 			{script && calls.length ? <ScriptCalls calls={calls} /> : null}
 			{failed ? <div className="mx-1 mb-1 ml-6 text-[12px] leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
-			{image ? (
+			{image && imageDeleted ? (
+				<DeletedArtifact path={image} className="mx-1 mb-1 ml-6" />
+			) : image ? (
 				<button
 					type="button"
 					title={`Open ${image}`}
@@ -599,7 +604,11 @@ const AssistantMessage = memo(function AssistantMessage({
 	// The files it made show as cards once it is whole, so a half-written link never loads.
 	const library = useQuery({ queryKey: ['outputs', sessionId], queryFn: () => api.outputs(sessionId), staleTime: 30_000, enabled: !live });
 	const kept = useMemo(() => (library.data ? new Set(library.data.outputs.map((output) => output.path)) : null), [library.data]);
-	const made = useMemo<ViewerItem[]>(() => (live ? [] : replyOutputs(message.parts, kept).map((path) => ({ sessionId, path }))), [live, message.parts, sessionId, kept]);
+	const deleted = useMemo(() => new Set(library.data?.deleted ?? []), [library.data]);
+	const made = useMemo<ViewerItem[]>(
+		() => (live ? [] : replyOutputs(message.parts, kept, deleted).map((path) => ({ sessionId, path }))),
+		[live, message.parts, sessionId, kept, deleted],
+	);
 	const outputLinks = useMemo<OutputLinks>(
 		() => ({
 			resolve: (href) => {
@@ -698,7 +707,9 @@ function Drawing({ what }: { what: string }) {
 
 const PageBlock = memo(function PageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
 	const page = pageOf(part);
+	const deleted = useDeletedOutput(sessionId, page?.path);
 	if (!page) return <Drawing what="Drawing a page" />;
+	if (deleted) return <DeletedArtifact path={page.path} />;
 	return <HtmlFrame sessionId={sessionId} path={page.path} title={page.title} height={page.height} />;
 });
 
@@ -715,6 +726,8 @@ const CHECKERBOARD = { background: 'repeating-conic-gradient(var(--neutral-200) 
 const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
 	const made = madeImageOf(part);
 	const prompt = field(part.input, 'prompt');
+	const deleted = useDeletedOutput(sessionId, made?.path);
+	if (made && deleted) return <DeletedArtifact path={made.path} />;
 	if (!made) {
 		return (
 			<div

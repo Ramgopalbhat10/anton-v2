@@ -474,6 +474,9 @@ test('the Claude plan shows what Claude Code says, lists its models when signed 
 	assert.equal(fake.calls.list, listedBefore, 'listed once per start, then reused');
 	listed[0] = { ...listed[0], name: 'Claude Opus 5 (renamed)' };
 	subscriptions.resetSubscriptionsForTests();
+	// After a start the saved list is served at once, and Claude Code lists them again behind it.
+	assert.equal((await subscriptions.subscriptionsView())[0].models[0].name, 'Claude Opus 5');
+	await subscriptions.listingsSettledForTests();
 	assert.equal((await subscriptions.subscriptionsView())[0].models[0].name, 'Claude Opus 5 (renamed)');
 	await assert.rejects(subscriptions.beginLogin('claude'), /auth login/);
 
@@ -491,4 +494,28 @@ test('the Claude plan shows what Claude Code says, lists its models when signed 
 	const signedOut = await subscriptions.refreshSubscriptionModels('claude');
 	assert.equal(signedOut.state, 'signed-out');
 	assert.deepEqual(signedOut.models, []);
+});
+
+test('after a restart the Claude plan’s saved models are offered before Claude Code has started, and a sign-out it finds takes them away', async () => {
+	const { appDb } = await import('../src/db/client.ts');
+	await (await appDb()).execute("DELETE FROM settings WHERE key LIKE 'subscription%'");
+	subscriptions.resetSubscriptionsForTests();
+	const listed = toModels([{ value: 'opus', resolvedModel: 'claude-opus-5', displayName: 'Opus', description: 'Opus 5', supportedEffortLevels: ['low', 'high'] }]);
+	const fake = fakeRuntime({}, listed);
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, subscriptions: [], runtimes: [fake.runtime] });
+	assert.deepEqual((await listModels()).map((model) => model.id), ['claude-code/claude-opus-5'], 'the first list ever waits for Claude Code');
+
+	// A restart: Claude Code takes its time to start, and the saved list is served meanwhile.
+	subscriptions.resetSubscriptionsForTests();
+	let answer = (_signedIn: boolean) => {};
+	const starting = new Promise<AgentRuntimeStatus>((resolve) => (answer = (signedIn) => resolve({ signedIn, email: null, plan: null, version: null, problem: null })));
+	fake.runtime.status = () => starting;
+	let listedAgain = () => {};
+	fake.runtime.listModels = () => new Promise((resolve) => (listedAgain = () => resolve(listed)));
+	assert.deepEqual((await listModels()).map((model) => model.id), ['claude-code/claude-opus-5']);
+	answer(false);
+	listedAgain();
+	await subscriptions.listingsSettledForTests();
+	assert.deepEqual(await listModels(), [], 'signed out, once Claude Code says so');
+	subscriptions.resetSubscriptionsForTests();
 });

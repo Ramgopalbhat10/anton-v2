@@ -105,6 +105,26 @@ test('the catalog lists the models a key may use, and the public list without on
 	assert.deepEqual((await catalog.list(true)).map((info) => info.id), ['openrouter/lab/public'], 'the public list stands in when the key’s list fails');
 });
 
+test('once its hour is up the catalog serves the last list at once and swaps in the new one when it lands', async () => {
+	const model = (id: string) => ({ id, name: `Lab: ${id}`, supported_parameters: ['tools'], pricing: { prompt: '0.000001', completion: '0.000002' } });
+	let answer = (): Response | Promise<Response> => Response.json({ data: [model('lab/old')] });
+	const seen = stubFetch({ [`${API}/models`]: () => answer() });
+	const catalog = openRouterCatalog({ apiUrl: API, ttlMs: 0, apiKey: () => null });
+	assert.deepEqual((await catalog.list()).map((info) => info.id), ['openrouter/lab/old']);
+
+	let land = () => {};
+	answer = () => new Promise((resolve) => (land = () => resolve(Response.json({ data: [model('lab/new')] }))));
+	assert.deepEqual((await catalog.list()).map((info) => info.id), ['openrouter/lab/old'], 'a stale list is served without waiting');
+	assert.deepEqual((await catalog.list()).map((info) => info.id), ['openrouter/lab/old']);
+	assert.equal(seen.length, 2, 'one refresh at a time');
+	land();
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	answer = () => new Response('down', { status: 500 });
+	assert.deepEqual((await catalog.list()).map((info) => info.id), ['openrouter/lab/new']);
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.deepEqual((await catalog.list()).map((info) => info.id), ['openrouter/lab/new'], 'a failed refresh keeps the last good list');
+});
+
 const routed: ModelInfo = {
 	id: 'openrouter/lab/model',
 	name: 'Model',

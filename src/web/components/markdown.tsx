@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/code-block';
 import { MermaidDiagram } from '@/components/mermaid-diagram';
 import { outputUrl } from '@/lib/api';
+import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import type { ViewerItem } from '@/lib/viewer';
 
 /**
@@ -83,6 +84,52 @@ function repoFile(href: string, links: FileLinks | null): string | null {
 	return links.has(path) ? path : null;
 }
 
+/** A link to a file in the task's Library, opening it in the viewer; struck through once you deleted the file. */
+function OutputLink({ item, open, children }: { item: ViewerItem; open: (item: ViewerItem) => void; children: ReactNode }) {
+	const deleted = useDeletedOutput(item.sessionId, item.path);
+	if (deleted) {
+		return (
+			<span className="sg-output-deleted" title={`This ${deletedNoun(item.path)} was deleted`}>
+				{children}
+				<span className="sg-output-deleted__tag">deleted</span>
+			</span>
+		);
+	}
+	return (
+		<a
+			href={outputUrl(item.sessionId, item.path)}
+			target="_blank"
+			rel="noreferrer"
+			title={`Open ${item.path}`}
+			onClick={(event) => {
+				if (!plainClick(event.nativeEvent)) return;
+				event.preventDefault();
+				open(item);
+			}}
+		>
+			{children}
+		</a>
+	);
+}
+
+/** A picture of a file in the task's Library, drawn in place; once you deleted it, a line saying so. */
+function OutputImage({ item, alt, open }: { item: ViewerItem; alt?: string; open: (item: ViewerItem) => void }) {
+	const deleted = useDeletedOutput(item.sessionId, item.path);
+	if (deleted) {
+		return (
+			<span role="note" className="sg-output-deleted sg-output-deleted--block" title={item.path}>
+				This {deletedNoun(item.path)} was deleted
+				<span className="sg-output-deleted__tag">{alt || item.path.split('/').pop()}</span>
+			</span>
+		);
+	}
+	return (
+		<button type="button" className="sg-output-image" title={`Open ${item.path}`} onClick={() => open(item)}>
+			<img src={outputUrl(item.sessionId, item.path)} alt={alt || item.path} loading="lazy" />
+		</button>
+	);
+}
+
 /** How each Markdown element draws; exported so tests can parse a reply whole with the same. */
 export const components: Components = {
 	pre: ({ children }) => {
@@ -103,19 +150,9 @@ export const components: Components = {
 		if (item && outputs) {
 			return (
 				<InLink.Provider value={true}>
-					<a
-						href={outputUrl(item.sessionId, item.path)}
-						target="_blank"
-						rel="noreferrer"
-						title={`Open ${item.path}`}
-						onClick={(event) => {
-							if (!plainClick(event.nativeEvent)) return;
-							event.preventDefault();
-							outputs.open(item);
-						}}
-					>
+					<OutputLink item={item} open={outputs.open}>
 						{props.children}
-					</a>
+					</OutputLink>
 				</InLink.Provider>
 			);
 		}
@@ -150,13 +187,7 @@ export const components: Components = {
 		if (inLink) return <>{alt || src}</>;
 		// The task's own files are Anton's to show: the picture itself, opening full size.
 		const item = outputs?.resolve(src);
-		if (item && outputs) {
-			return (
-				<button type="button" className="sg-output-image" title={`Open ${item.path}`} onClick={() => outputs.open(item)}>
-					<img src={outputUrl(item.sessionId, item.path)} alt={alt || item.path} loading="lazy" />
-				</button>
-			);
-		}
+		if (item && outputs) return <OutputImage item={item} alt={alt} open={outputs.open} />;
 		return (
 			<a href={src} target="_blank" rel="noreferrer">
 				{alt || src}

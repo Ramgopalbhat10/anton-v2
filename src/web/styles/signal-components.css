@@ -185,3 +185,7 @@
 .sg-markdown .sg-output-image img{display:block;max-width:100%;max-height:360px;border-radius:10px;border:1px solid var(--card-border);background:var(--bg-inset)}
 .sg-markdown .sg-output-image:hover img{border-color:var(--border-strong)}
 .sg-markdown .sg-output-image:focus-visible{box-shadow:var(--focus-ring)}
+.sg-markdown .sg-output-deleted{color:var(--text-tertiary);text-decoration:line-through;text-decoration-color:var(--text-disabled);cursor:default}
+.sg-markdown .sg-output-deleted__tag{display:inline-block;margin-left:6px;padding:0 5px;border:1px dashed var(--border-default);border-radius:5px;font-family:var(--font-mono);font-size:10.5px;line-height:16px;letter-spacing:.02em;color:var(--text-disabled);text-decoration:none;vertical-align:1px}
+.sg-markdown .sg-output-deleted--block{display:flex;width:fit-content;max-width:100%;align-items:center;gap:4px;margin:8px 0;padding:8px 12px;border:1px dashed var(--border-default);border-radius:10px;background:var(--bg-inset);font-size:12.5px;text-decoration:none}
+.sg-markdown .sg-output-deleted--block .sg-output-deleted__tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}

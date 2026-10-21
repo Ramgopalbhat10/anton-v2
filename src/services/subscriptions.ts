@@ -269,14 +269,17 @@ async function listNow(plan: Plan): Promise<SubscriptionModel[]> {
 /**
  * The account's models, listed again once the last list is an hour old or
  * was made by an older listing; a failure serves the last list for a while.
+ * A plan with a list in hand serves it at once while the new one is made
+ * behind it (its save tells open pages), so the picker and a task's first
+ * message never wait on the vendor; only a plan never listed waits.
  */
-async function freshModels(provider: Plan, current: Stored): Promise<SubscriptionModel[]> {
+function freshModels(provider: Plan, current: Stored): Promise<SubscriptionModel[]> {
 	const fresh =
 		current.modelsAt !== null &&
 		Date.now() - current.modelsAt < MODELS_TTL_MS &&
 		current.modelsVersion === MODELS_VERSION &&
 		(!provider.local || listedHere.has(provider.id));
-	if (fresh || (retryAt.get(provider.id) ?? 0) > Date.now()) return current.models;
+	if (fresh || (retryAt.get(provider.id) ?? 0) > Date.now()) return Promise.resolve(current.models);
 	let pending = listing.get(provider.id);
 	if (!pending) {
 		pending = listNow(provider)
@@ -288,7 +291,28 @@ async function freshModels(provider: Plan, current: Stored): Promise<Subscriptio
 			.finally(() => listing.delete(provider.id));
 		listing.set(provider.id, pending);
 	}
-	return pending;
+	return current.models.length ? Promise.resolve(current.models) : pending;
+}
+
+/** Whether each program said it is signed in, as last read in this process. */
+const signedInHere = new Map<string, boolean>();
+
+/**
+ * Whether the program is signed in. Right after a start, a plan that had models
+ * is taken as still signed in while the program starts behind it, so the first
+ * list after a restart does not wait for Claude Code; a sign-out it finds then
+ * takes its models away and tells open pages.
+ */
+async function runtimeSignedIn(runtime: AgentRuntime, current: Stored): Promise<boolean> {
+	const read = runtime.status().then(({ signedIn }) => {
+		const before = signedInHere.get(runtime.id);
+		signedInHere.set(runtime.id, signedIn);
+		if (before === undefined && !signedIn && current.models.length) announce({ kind: 'models' });
+		return signedIn;
+	});
+	if (signedInHere.has(runtime.id) || !current.models.length) return read;
+	void read.catch(() => undefined);
+	return true;
 }
 
 /** Every signed-in plan's models that are switched on, for the model picker and the agents. */
@@ -301,7 +325,7 @@ export async function subscriptionModels(): Promise<ModelInfo[]> {
 		}),
 		...agentRuntimes().map(async (runtime) => {
 			const current = await stored(runtime.id);
-			if (!current.enabled || !(await runtime.status()).signedIn) return [];
+			if (!current.enabled || !(await runtimeSignedIn(runtime, current))) return [];
 			return (await freshModels(runtimePlan(runtime), current)).map((model) => priced(model, runtime.name, current));
 		}),
 		...keyPlans().map(async (plan) => {
@@ -980,6 +1004,12 @@ export function resetSubscriptionsForTests(): void {
 	cache.clear();
 	retryAt.clear();
 	listedHere.clear();
+	signedInHere.clear();
 	windowsCache.clear();
 	setSavedOpenRouterKey(null);
+}
+
+/** For tests: waits for the plans' lists being made behind the ones served. */
+export async function listingsSettledForTests(): Promise<void> {
+	await Promise.all(listing.values());
 }
