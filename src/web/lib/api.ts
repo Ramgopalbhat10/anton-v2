@@ -201,12 +201,12 @@ export type SkillSummary = { name: string; description: string };
 /** One distinct state of the task's files, newest first in the timeline. */
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
-/**
- * An MCP server every task gets while it is on; its token is never sent back, only whether it has one.
- * `codeMode: false` keeps the server's tools in the agent's tool list rather than only in run_script.
- */
 /** How a server's OAuth sign-in stands; `clientId` is a client you pasted for a server that lets no app register itself. */
 export type McpSignIn = { state: 'signed-in' | 'needed' | 'none'; since: string | null; problem: string | null; clientId: string | null; pastedClient: boolean };
+/**
+ * An MCP server, on or off for every task; the agent finds and calls its tools on demand. Its token is never sent
+ * back, only whether it has one. `codeMode: false` keeps run_script's programs from calling it.
+ */
 export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; signIn: McpSignIn; codeMode?: boolean; enabled: boolean; addedAt: string };
 /** A server as saved: a token left null keeps the stored one, and an empty one removes it. */
 export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null };
@@ -224,7 +224,7 @@ export type ConnectorAccount = {
 	callbackPath: string;
 };
 export type MailboxOptions = { enabled: boolean; draft: boolean; send: boolean };
-/** A mailbox on an account (Gmail); `access` is what the agent may do now, null when it is off or not connected. */
+/** A mailbox on an account (Gmail), on or off for every task (`options.enabled`); `access` is what the agent may do now, null when it is off or not connected. */
 export type ConnectorMailbox = {
 	id: string;
 	name: string;

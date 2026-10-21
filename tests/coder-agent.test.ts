@@ -36,7 +36,7 @@ test('Coder reaches connectors through two fixed tools, so turning one on or off
 	// Nothing about whether a connector is on reaches the prompt or a tool's definition: only the connectors set up are named.
 	assert.doesNotMatch(source, /useMcpConnection\(\{[^}]*connector/);
 	const tools2 = readFileSync(new URL('../src/services/connector-tools.ts', import.meta.url), 'utf8');
-	assert.match(tools2, /if \(access\.send\)/);
+	assert.match(tools2, /access\.send\s*\?/);
 	assert.match(tools2, /requestSend\(task, id, checked\(send, args\)\.draft_id, signal\)/);
 	assert.doesNotMatch(tools2, /sendDraft|decideSend/);
 });

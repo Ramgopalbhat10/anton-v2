@@ -5,7 +5,8 @@ import { type CSSProperties, type ReactNode, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { ChatRouteArt, TaskRouteArt } from '@/components/illustrations';
 import { Caption, Card } from '@/components/instrument';
-import { AttachButton, AttachmentTray, useAttachments } from '@/components/attachments';
+import { ComposerPlus } from '@/components/composer-plus';
+import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
@@ -284,7 +285,7 @@ export function Launcher() {
 							</div>
 						) : null}
 						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
-							<AttachButton attachments={attachments} />
+							<ComposerPlus attachments={attachments} side="bottom" />
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
 							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />

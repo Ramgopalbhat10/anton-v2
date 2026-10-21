@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { AttachButton, AttachmentTray, useAttachments } from '@/components/attachments';
+import { ComposerPlus } from '@/components/composer-plus';
+import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -198,7 +199,7 @@ export const Composer = memo(function Composer({
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
-					<AttachButton attachments={attachments} />
+					<ComposerPlus attachments={attachments} />
 					<ModelPicker value={choice} onChange={edit} />
 					{/* A chat has no code to plan changes to. */}
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
