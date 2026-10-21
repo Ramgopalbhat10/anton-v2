@@ -1600,34 +1600,12 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 }
 
 /**
- * Anton's mark: an A folded from two lit ribbons, the crossbar tucked behind
- * them and a bright crease where they meet. The same shapes make the favicon
- * and app icons (scripts/make-icons.ts); keep the two in step.
+ * Anton's mark: the sandbox as a frosted glass cube, the agent's prompt
+ * glowing inside it, rendered in 3D. The favicon and app icons are drawn
+ * from the same render (scripts/make-icons.ts).
  */
 export function Logo({ size = 20 }: { size?: number }) {
-	const id = useSvgId('anton-mark');
-	return (
-		<svg aria-hidden width={size} height={size} viewBox="2 2.6 20 18.8" className="shrink-0">
-			<defs>
-				<linearGradient id={`${id}-l`} x1="0" y1="1" x2="0.6" y2="0">
-					<stop offset="0" stopColor="#2394BC" />
-					<stop offset="1" stopColor="#7FDDF5" />
-				</linearGradient>
-				<linearGradient id={`${id}-r`} x1="1" y1="1" x2="0.4" y2="0">
-					<stop offset="0" stopColor="#0F5674" />
-					<stop offset="1" stopColor="#2C9BBD" />
-				</linearGradient>
-				<linearGradient id={`${id}-x`} x1="0" y1="0" x2="1" y2="0">
-					<stop offset="0" stopColor="#1E7FA3" />
-					<stop offset="1" stopColor="#145F7E" />
-				</linearGradient>
-			</defs>
-			<path d="M8.95 13.2H15.05L16.04 15.6H7.96Z" fill={`url(#${id}-x)`} />
-			<path d="M17 20.8H21.6L14.3 3.2H9.7Z" fill={`url(#${id}-r)`} />
-			<path d="M2.4 20.8H7L14.3 3.2H9.7Z" fill={`url(#${id}-l)`} />
-			<path d="M9.7 3.2H14.3L12 7.57Z" fill="#D4F7FF" />
-		</svg>
-	);
+	return <img src="/icons/anton-mark-128.png" alt="" aria-hidden width={size} height={size} draggable={false} className="shrink-0 select-none" />;
 }
 
 /** A coordinator unit lit in cyan, wired across the floor to three thread units, one of them at work:
