@@ -1600,22 +1600,32 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 }
 
 /**
- * Anton's mark: the sandbox cube, lit from above, with an A cut into its foot.
- * The same three faces make the favicon and app icons (scripts/make-icons.ts),
- * and the mascot (mascot.tsx) is this cube on the legs the cut leaves.
+ * Anton's mark: an A folded from two lit ribbons, the crossbar tucked behind
+ * them and a bright crease where they meet. The same shapes make the favicon
+ * and app icons (scripts/make-icons.ts); keep the two in step.
  */
-const MARK = [
-	{ d: 'M12 3.4 19.45 7.7 12 12 4.55 7.7Z', fill: 'var(--cyan-200)' },
-	{ d: 'M4.55 7.7 12 12 9.32 19.05 4.55 16.3Z', fill: 'var(--cyan-500)' },
-	{ d: 'M12 12 19.45 7.7 19.45 16.3 14.68 19.05Z', fill: 'var(--cyan-700)' },
-];
-
 export function Logo({ size = 20 }: { size?: number }) {
+	const id = useSvgId('anton-mark');
 	return (
-		<svg aria-hidden width={size} height={size} viewBox="2.5 2.5 19 19" className="shrink-0">
-			{MARK.map(({ d, fill }) => (
-				<path key={fill} d={d} fill={fill} />
-			))}
+		<svg aria-hidden width={size} height={size} viewBox="2 2.6 20 18.8" className="shrink-0">
+			<defs>
+				<linearGradient id={`${id}-l`} x1="0" y1="1" x2="0.6" y2="0">
+					<stop offset="0" stopColor="#2394BC" />
+					<stop offset="1" stopColor="#7FDDF5" />
+				</linearGradient>
+				<linearGradient id={`${id}-r`} x1="1" y1="1" x2="0.4" y2="0">
+					<stop offset="0" stopColor="#0F5674" />
+					<stop offset="1" stopColor="#2C9BBD" />
+				</linearGradient>
+				<linearGradient id={`${id}-x`} x1="0" y1="0" x2="1" y2="0">
+					<stop offset="0" stopColor="#1E7FA3" />
+					<stop offset="1" stopColor="#145F7E" />
+				</linearGradient>
+			</defs>
+			<path d="M8.95 13.2H15.05L16.04 15.6H7.96Z" fill={`url(#${id}-x)`} />
+			<path d="M17 20.8H21.6L14.3 3.2H9.7Z" fill={`url(#${id}-r)`} />
+			<path d="M2.4 20.8H7L14.3 3.2H9.7Z" fill={`url(#${id}-l)`} />
+			<path d="M9.7 3.2H14.3L12 7.57Z" fill="#D4F7FF" />
 		</svg>
 	);
 }

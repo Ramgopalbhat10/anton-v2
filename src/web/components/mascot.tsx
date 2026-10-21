@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Anton's mascot: the cube from the mark, drawn in pixels, with the mark's
- * notch for legs and an antenna whose light says what the agent does. It sits
+ * Anton's mascot: the sandbox cube from the app's drawings, in pixels, on
+ * two legs, with an antenna whose light says what the agent does. It sits
  * on the composer's top edge. Each mood is a pose plus a few CSS loops
  * (`.anton-mascot` in instrument.css); with reduced motion only the pose stays.
  */
