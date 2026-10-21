@@ -1600,12 +1600,26 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 }
 
 /**
- * Anton's mark: the sandbox as a frosted glass cube, the agent's prompt
- * glowing inside it, rendered in 3D. The favicon and app icons are drawn
- * from the same render (scripts/make-icons.ts).
+ * Anton's mark: a small machine with an antenna whose face is a terminal
+ * prompt, the composer mascot's head in one flat colour. The prompt is cut
+ * out, so the mark sits on any background. The favicon and app icons are
+ * drawn from the same shapes (scripts/make-icons.ts); keep the two in step.
  */
 export function Logo({ size = 20 }: { size?: number }) {
-	return <img src="/icons/anton-mark-128.png" alt="" aria-hidden width={size} height={size} draggable={false} className="shrink-0 select-none" />;
+	const id = useSvgId('anton-mark');
+	return (
+		<svg aria-hidden width={size} height={size} viewBox="2.5 1 19 20.5" className="shrink-0">
+			<mask id={id}>
+				<rect x="0" y="0" width="24" height="24" fill="#fff" />
+				<path d="M7.3 11.3 10.4 14 7.3 16.7M12.9 16.7h3.6" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+			</mask>
+			<g fill="var(--cyan-400)">
+				<path mask={`url(#${id})`} d="M7.4 7h9.2a4.4 4.4 0 0 1 4.4 4.4v5.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6v-5.2A4.4 4.4 0 0 1 7.4 7Z" />
+				<rect x="15.35" y="3.4" width="1.5" height="4" />
+				<circle cx="16.1" cy="3.1" r="1.75" />
+			</g>
+		</svg>
+	);
 }
 
 /** A coordinator unit lit in cyan, wired across the floor to three thread units, one of them at work:

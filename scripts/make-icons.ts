@@ -1,51 +1,50 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
 /**
  * Draws the app's icons (favicon, home screen, splash, notification badge)
- * from Anton's mark, `icons/anton-mark.png`: the glass sandbox cube with the
- * agent's prompt glowing inside, rendered in 3D at 512px on a clear ground.
- * `Logo` (illustrations.tsx) shows the same file. Run after replacing it:
- * `node scripts/make-icons.ts`. Needs Chromium (`ANTON_CHROMIUM` or Playwright's own).
+ * from Anton's mark, the prompt-faced machine in `Logo` (illustrations.tsx).
+ * Run after changing the mark: `node scripts/make-icons.ts`. Needs Chromium
+ * (`ANTON_CHROMIUM` or Playwright's own).
  */
 
 const OUT = new URL('../src/web/public/icons/', import.meta.url);
-const mark = `data:image/png;base64,${(await readFile(new URL('anton-mark.png', OUT))).toString('base64')}`;
-const GROUND = 'radial-gradient(circle at 50% 38%, #18262e, #0c0e10 72%)';
+const CYAN = '#3FB6D8';
+const TILE = '#101517';
+const VIEW = 'viewBox="2.5 1 19 20.5"';
+/** The mark in `fill`, its prompt cut out so whatever is behind shows through. */
+const mark = (fill: string) =>
+	'<mask id="m"><rect width="24" height="24" fill="#fff"/><path d="M7.3 11.3 10.4 14 7.3 16.7M12.9 16.7h3.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></mask>' +
+	`<g fill="${fill}"><path mask="url(#m)" d="M7.4 7h9.2a4.4 4.4 0 0 1 4.4 4.4v5.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6v-5.2A4.4 4.4 0 0 1 7.4 7Z"/><rect x="15.35" y="3.4" width="1.5" height="4"/><circle cx="16.1" cy="3.1" r="1.75"/></g>`;
+/** The mark centred at `scale` of a 24-unit square. */
+const centred = (scale: number, fill = CYAN) => `<g transform="translate(12 12) scale(${scale}) translate(-12 -11.25)">${mark(fill)}</g>`;
 
-/** The mark at `scale` of the square, on `ground` (clear when none), clipped to `radius` (a fraction of the side). */
-const page = (scale: number, ground = 'transparent', radius = 0, filter = '') => `
-	<html><body style="margin:0;background:transparent">
-		<div style="width:100vw;height:100vh;display:grid;place-items:center;background:${ground};border-radius:${radius * 100}vw;overflow:hidden;box-shadow:${radius ? 'inset 0 0 0 0.4vw rgba(255,255,255,.08)' : 'none'}">
-			<img src="${mark}" style="width:${scale * 100}vw;height:${scale * 100}vw;filter:${filter || 'none'}">
-		</div>
-	</body></html>`;
+/** The bare mark, as the sidebar shows it: the favicon, legible on light and dark tabs alike. */
+const favicon = `<svg xmlns="http://www.w3.org/2000/svg" ${VIEW}>${mark(CYAN)}</svg>`;
+/** On a dark rounded tile with a hairline edge: the plain app icon. */
+const tile = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.5" fill="${TILE}"/><rect x=".25" y=".25" width="23.5" height="23.5" rx="5.25" fill="none" stroke="#ffffff" stroke-opacity=".08" stroke-width=".5"/>${centred(0.72)}</svg>`;
+/** Edge to edge, the mark well inside the middle 80%, for launchers that cut their own shape (maskable) and for iOS, which rounds the corners itself. */
+const fullBleed = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="${TILE}"/>${centred(0.6)}</svg>`;
+/** One colour on clear, as Android's status bar draws a notification's badge. */
+const badge = `<svg xmlns="http://www.w3.org/2000/svg" ${VIEW}>${mark('#fff')}</svg>`;
 
-const pngs: Array<{ name: string; html: string; size: number }> = [
-	// The bare mark, as the sidebar shows it, legible on light and dark tabs alike.
-	{ name: 'favicon-64.png', html: page(1), size: 64 },
-	// What `Logo` loads: sharp up to about 40px on a 3x screen, a fraction of the source's weight.
-	{ name: 'anton-mark-128.png', html: page(1), size: 128 },
-	// On a dark rounded tile: the plain app icon.
-	{ name: 'icon-192.png', html: page(0.74, GROUND, 0.23), size: 192 },
-	{ name: 'icon-512.png', html: page(0.74, GROUND, 0.23), size: 512 },
-	// Edge to edge, the mark well inside the middle 80%, for launchers that cut their own shape (maskable) and for iOS, which rounds the corners itself.
-	{ name: 'maskable-512.png', html: page(0.6, GROUND), size: 512 },
-	{ name: 'apple-touch-icon.png', html: page(0.66, GROUND), size: 180 },
-	// One colour on clear, as Android's status bar draws a notification's badge.
-	{ name: 'badge-96.png', html: page(0.92, 'transparent', 0, 'brightness(0) invert(1)'), size: 96 },
+const pngs: Array<{ name: string; svg: string; size: number }> = [
+	{ name: 'icon-192.png', svg: tile, size: 192 },
+	{ name: 'icon-512.png', svg: tile, size: 512 },
+	{ name: 'maskable-512.png', svg: fullBleed, size: 512 },
+	{ name: 'apple-touch-icon.png', svg: fullBleed, size: 180 },
+	{ name: 'badge-96.png', svg: badge, size: 96 },
 ];
 
 await mkdir(OUT, { recursive: true });
-await rm(new URL('icon.svg', OUT), { force: true });
+await writeFile(new URL('icon.svg', OUT), `${favicon}\n`);
 const browser = await chromium.launch({ executablePath: process.env.ANTON_CHROMIUM || undefined });
 try {
-	for (const { name, html, size } of pngs) {
-		const tab = await browser.newPage({ viewport: { width: size, height: size } });
-		await tab.setContent(html);
-		await tab.waitForLoadState('load');
-		await writeFile(new URL(name, OUT), await tab.screenshot({ omitBackground: true }));
-		await tab.close();
+	for (const { name, svg, size } of pngs) {
+		const page = await browser.newPage({ viewport: { width: size, height: size } });
+		await page.setContent(`<html><body style="margin:0;background:transparent">${svg.replace('<svg ', `<svg width="${size}" height="${size}" `)}</body></html>`);
+		await writeFile(new URL(name, OUT), await page.screenshot({ omitBackground: true }));
+		await page.close();
 	}
 } finally {
 	await browser.close();
