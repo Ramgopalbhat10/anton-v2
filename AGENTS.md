@@ -38,6 +38,7 @@ Anton v2 is a Flue 2.0 coding agent with a React UI. Each task runs on its own b
 - New outside services go behind a port in `src/core/ports.ts`, not called directly from services.
 - Pages update from server events (`GET /api/events`), not polling: a change the UI shows is announced with `announce()` from `src/core/changes.ts`, and `src/web/lib/live-updates.ts` maps it to the queries to refetch. Polling is only a slow safety net.
 - Storage cleanup (`storage.ts`) removes only what is left of tasks this database deleted (`deleted_sessions`), never a task it does not know: a bucket can be shared with another server or a development copy, and a copy pointed at production storage once deleted every task's files.
+- Nothing a page or a message waits on lists models from a vendor when a list is in hand: OpenRouter's catalog, each plan's list and Claude Code's status probe serve the last answer and fetch the next behind it (the gateway's list and the browser's are saved for the first load after a restart). Startup primes only the tasks whose replies the runtime resumes (`unsettledTasks`); a message primes its task in parallel and waits only for MCP servers never read.
 - Services never import the agents; messages Anton sends on its own go through `sendToAgent` in `agent-runner.ts` (to the coder or the reviewer), so the caps apply to them too.
 
 ## Commands
