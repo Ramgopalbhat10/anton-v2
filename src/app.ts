@@ -470,11 +470,14 @@ app.get('/api/connectors/:account/callback', async (c) => {
 	const back = new URLSearchParams();
 	try {
 		const { mailbox } = await finishConnect(c.req.param('account'), query);
+		back.set('c', `mail:${mailbox}`);
 		back.set('connected', mailbox);
 	} catch (error) {
+		back.set('add', 'gmail');
 		back.set('problem', error instanceof Error ? error.message : String(error));
 	}
-	return c.redirect(`/settings/connectors?${back}`);
+	// The connector's own page, which says how it went.
+	return c.redirect(`/settings/connectors/view?${back}`);
 });
 const MCP_SERVER = v.object({
 	url: v.pipe(v.string(), v.trim(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
@@ -513,11 +516,15 @@ app.delete('/api/mcp-servers/:name/sign-in', async (c) => {
 app.get('/api/mcp-servers/callback', async (c) => {
 	const back = new URLSearchParams();
 	try {
-		back.set('connected', await finishMcpSignIn(new URL(c.req.url).searchParams));
+		const name = await finishMcpSignIn(new URL(c.req.url).searchParams);
+		back.set('c', `mcp:${name}`);
+		back.set('connected', name);
 	} catch (error) {
+		// No server is known when the sign-in is not, so Connectors itself says what went wrong.
 		back.set('problem', error instanceof Error ? error.message : String(error));
+		return c.redirect(`/settings/connectors?${back}`);
 	}
-	return c.redirect(`/settings/connectors?${back}`);
+	return c.redirect(`/settings/connectors/view?${back}`);
 });
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));

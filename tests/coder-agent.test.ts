@@ -24,18 +24,21 @@ test('Coder gives a workspace the computer subagent, whose tool sees through the
 	assert.match(tool, /asAgentStep\(id/);
 });
 
-test('Coder gives each connected mailbox its tools, drafts and sending only where allowed, and sending only asks', () => {
+test('Coder reaches connectors through two fixed tools, so turning one on or off never changes its tools, and sending only asks', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /for \(const mailbox of mailboxesFor\(id\)\) useMailbox\(id, mailbox\);/);
-	const tools = source.slice(source.indexOf('function useMailbox'), source.indexOf('function mailHint'));
-	for (const tool of ['search', 'read_thread', 'draft', 'send']) assert.match(tools, new RegExp(`name: \`\\$\\{name\\}_${tool}\``));
-	assert.match(tools, /if \(mailbox\.access\.draft\)/);
-	assert.match(tools, /if \(mailbox\.access\.send\)/);
-	// The agent never sends: its tool asks, and the task waits on the user's Send.
-	const send = tools.slice(tools.indexOf('_send`'));
-	assert.match(send, /requestSend\(id, name, data\.draft_id, signal\)/);
-	assert.match(send, /noteAsk\(id,/);
+	assert.match(source, /if \(connectors\.length\) useConnectorTools\(id, connectors\);/);
+	const tools = source.slice(source.indexOf('function useConnectorTools'), source.indexOf('function connectorHint'));
+	assert.match(tools, /name: 'connector_tools'/);
+	assert.match(tools, /name: 'connector_call'/);
+	// The agent never sends: the mailbox's send asks, and the task waits on the user's Send.
+	assert.match(tools, /if \(approval\) noteAsk\(id,/);
 	assert.doesNotMatch(tools, /sendDraft|decideSend/);
+	// Nothing about whether a connector is on reaches the prompt or a tool's definition: only the connectors set up are named.
+	assert.doesNotMatch(source, /useMcpConnection\(\{[^}]*connector/);
+	const tools2 = readFileSync(new URL('../src/services/connector-tools.ts', import.meta.url), 'utf8');
+	assert.match(tools2, /access\.send\s*\?/);
+	assert.match(tools2, /requestSend\(task, id, checked\(send, args\)\.draft_id, signal\)/);
+	assert.doesNotMatch(tools2, /sendDraft|decideSend/);
 });
 
 test('Coder makes images through the image port whatever its model, with the tool only when there is one', () => {

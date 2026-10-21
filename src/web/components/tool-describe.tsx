@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 
@@ -285,6 +285,17 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					<>
 						Drew the page <Em>{field(input, 'title')}</Em>
 					</>
+				),
+			};
+		case 'connector_tools':
+			return {
+				icon: Plug,
+				body: field(input, 'query') ? (
+					<>
+						Looked up connector tools for <Em>{field(input, 'query')}</Em>
+					</>
+				) : (
+					<>Looked up connector tools</>
 				),
 			};
 		case 'gmail_search':

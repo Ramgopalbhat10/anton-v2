@@ -1,11 +1,13 @@
-import { CodemodeSandbox, type CodemodeJsonSchema, type CodemodeResult, type CodemodeTool, renderDeclarations, renderToolSample, renderToolSignature } from '@earendil-works/pi-codemode';
+import { CodemodeSandbox, type CodemodeJsonSchema, type CodemodeResult, type CodemodeTool, renderDeclarations, renderToolSample } from '@earendil-works/pi-codemode';
 import type { Question } from '../core/ports.ts';
 import { redactor } from '../core/redact.ts';
 import type { McpServer } from '../core/types.ts';
-import { isWebServer, mcpServersFor } from './agent-runner.ts';
+import { connectorsFor, isWebServer, mcpServersFor } from './agent-runner.ts';
+import { mcpToolName } from './connector-tools.ts';
 import { ask, hasDecisionModel } from './decisions.ts';
 import { logProblem } from './log.ts';
-import { callServerTool, knownServerTools, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
+import { enabledMcpServers } from './mcp-servers.ts';
+import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
 import { repoPaths, repoText, searchRepo } from './repo-snapshot.ts';
 import type { ScriptCall } from './script-runs.ts';
 import { secretsToHide } from './secrets.ts';
@@ -19,11 +21,11 @@ import { secretsToHide } from './secrets.ts';
  * decision model. In a workspace the sandbox's own shell already does this
  * for files and commands.
  *
- * With code mode on, a repo's MCP servers are reached only from programs
- * (unless a server opts out): their tools are listed in run_script's
- * description as one line each, within a budget, and `search_tools()` finds
- * the rest, so a server with many tools costs the agent a few lines rather
- * than a full tool definition each. The built-in web search stays a direct
+ * Programs also reach the MCP servers of the connectors that are on (unless a
+ * server opts out), read as each program starts: the agent finds their tools
+ * with `connector_tools` or `search_tools()`, never in run_script's
+ * description, which stays the same whichever connectors are on, so turning
+ * one on or off keeps the cached prompt. The built-in web search is a direct
  * tool as well.
  */
 
@@ -34,11 +36,6 @@ const MEMORY_BYTES = 64 * 1024 * 1024;
 const MAX_RESULT_CHARS = 20_000;
 /** Decision model calls one program runs at a time; the rest wait their turn. */
 const DECISIONS_AT_ONCE = 4;
-/** About 2,000 tokens of MCP tool listings in run_script's description; search_tools() finds the rest. */
-const CATALOG_CHARS = 8000;
-const LISTED_DESCRIPTION_CHARS = 120;
-/** A listed tool whose arguments take more than this shows them as `unknown`; search_tools() gives them in full. */
-const LISTED_INPUT_CHARS = 400;
 const SEARCH_RESULTS = 8;
 
 /** Where a program runs: before a workspace it can read the repo; a subagent may have no MCP servers. */
@@ -105,17 +102,15 @@ function decideGlobal(id: string): CodemodeTool {
 	};
 }
 
-/** `mcp__<server>__<tool>`, the names Flue gives MCP tools, so a direct tool and its scripted form share one name. */
-const mcpName = (server: string, tool: string) => `mcp__${server}__${tool}`.replace(/[^\w]/g, '_');
-
-/** The servers a program reaches: the repo's, unless one opted out, and web search. */
-export function scriptServers(id: string): McpServer[] {
-	return mcpServersFor(id).filter((server) => server.codeMode !== false);
+/** Whether programs can reach any MCP server: web search, or a connector's server that has not opted out, on or off for now. */
+function reachesServers(id: string): boolean {
+	return mcpServersFor(id).length > 0 || connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.codeMode);
 }
 
-/** The servers listed in run_script's description; web search is a direct tool already. */
-function listedServers(id: string): McpServer[] {
-	return scriptServers(id).filter((server) => !isWebServer(server));
+/** The servers a program reaches, read as it starts: web search, and the connectors' servers that are on, unless one opted out. */
+export async function scriptServers(id: string): Promise<McpServer[]> {
+	const connected = connectorsFor(id).some((connector) => connector.kind === 'mcp') ? await enabledMcpServers() : [];
+	return [...mcpServersFor(id), ...connected].filter((server) => server.codeMode !== false);
 }
 
 /**
@@ -146,7 +141,7 @@ function mcpValue(result: McpCallResult, tool: string): unknown {
 
 function mcpTool(server: McpServer, tool: McpTool): CodemodeTool {
 	return {
-		name: mcpName(server.name, tool.name),
+		name: mcpToolName(server.name, tool.name),
 		description: tool.description,
 		inputSchema: (tool.inputSchema ?? { type: 'object' }) as CodemodeJsonSchema,
 		outputSchema: (tool.outputSchema ?? { type: 'string' }) as CodemodeJsonSchema,
@@ -157,7 +152,7 @@ function mcpTool(server: McpServer, tool: McpTool): CodemodeTool {
 /** The task's MCP tools for one program; a server that cannot be reached leaves its tools out. */
 async function mcpTools(id: string): Promise<CodemodeTool[]> {
 	const lists = await Promise.all(
-		scriptServers(id).map(async (server) => {
+		(await scriptServers(id)).map(async (server) => {
 			try {
 				return (await serverTools(server)).map((tool) => mcpTool(server, tool));
 			} catch (error) {
@@ -167,65 +162,6 @@ async function mcpTools(id: string): Promise<CodemodeTool[]> {
 		}),
 	);
 	return lists.flat();
-}
-
-/** A schema without descriptions, so a listed tool's arguments fit on one line. */
-function bare(schema: unknown): unknown {
-	if (Array.isArray(schema)) return schema.map(bare);
-	if (!schema || typeof schema !== 'object') return schema;
-	return Object.fromEntries(
-		Object.entries(schema)
-			.filter(([name]) => name !== 'description' && name !== 'title' && name !== 'examples')
-			.map(([name, value]) => [name, name === 'properties' && value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, bare(item)])) : bare(value)]),
-	);
-}
-
-/** One tool on one line: how to call it, and the start of what it does. */
-function listing(server: McpServer, tool: McpTool): string {
-	const signature = renderToolSignature(
-		{ name: mcpName(server.name, tool.name), inputSchema: bare(tool.inputSchema ?? { type: 'object' }) as CodemodeJsonSchema, outputSchema: bare(tool.outputSchema ?? { type: 'string' }) as CodemodeJsonSchema },
-		{ inputMaxChars: LISTED_INPUT_CHARS },
-	)
-		.replace(/\s*\n\s*/g, ' ')
-		.replace(/;$/, '');
-	const first = (tool.description ?? '').split('\n', 1)[0].trim();
-	const what = first.length > LISTED_DESCRIPTION_CHARS ? `${first.slice(0, LISTED_DESCRIPTION_CHARS - 1)}…` : first;
-	return `- tools.${signature}${what ? ` // ${what}` : ''}`;
-}
-
-/**
- * The repo's MCP tools as one line each, shortest first and taking turns between servers, until the budget
- * is spent; every server is named with how many of its tools show.
- */
-function mcpCatalog(id: string): string {
-	const servers = listedServers(id).map((server) => {
-		const tools = knownServerTools(server);
-		const lines = (tools ?? []).map((tool) => listing(server, tool)).sort((a, b) => a.length - b.length);
-		return { server, tools, lines, shown: [] as string[] };
-	});
-	if (!servers.length) return '';
-	let left = CATALOG_CHARS;
-	for (let round = 0, added = true; added; round++) {
-		added = false;
-		for (const entry of servers) {
-			const line = entry.lines[round];
-			if (line === undefined || line.length + 1 > left) continue;
-			entry.shown.push(line);
-			left -= line.length + 1;
-			added = true;
-		}
-	}
-	const partial = servers.some((entry) => entry.tools === null || entry.shown.length < entry.lines.length);
-	const sections = servers.map(({ server, tools, lines, shown }) => {
-		if (tools === null) return `${server.name}: its tools are not listed yet; find them with search_tools("${server.name}").`;
-		if (!lines.length) return `${server.name}: no tools right now (it may be unreachable).`;
-		const more = lines.length - shown.length;
-		return [`${server.name} (${lines.length} tools${more ? `, ${more} more found with search_tools()` : ''}):`, ...shown.sort()].join('\n');
-	});
-	return [
-		`The repo's MCP tools are called only from here, as tools.<name>(args); they resolve to the tool's structured result when it has one, else its text.${partial ? ' This list is partial: search before guessing a name.' : ''}`,
-		...sections,
-	].join('\n\n');
 }
 
 /** Finds tools a program can call by words in their names, descriptions and arguments; the best matches come back declared in full. */
@@ -258,25 +194,31 @@ function searchGlobal(tools: () => CodemodeTool[]): CodemodeTool {
 
 /** Whether run_script has anything to offer: the repo, the decision model or an MCP server. */
 export function hasScriptTools(id: string, scope: ScriptScope): boolean {
-	return scope.repo || hasDecisionModel() || (scope.mcp && scriptServers(id).length > 0);
+	return scope.repo || hasDecisionModel() || (scope.mcp && reachesServers(id));
 }
 
 /**
- * The run_script tool's description. It changes only when a server's tool list does, which the agent reads
- * before each message, so the cached prompt stays valid through a reply.
+ * The run_script tool's description. It names no connector's tools and does not change when one is turned on or
+ * off, so the cached prompt stays valid.
  */
 export function scriptToolDescription(id: string, scope: ScriptScope): string {
 	const globals = [...(hasDecisionModel() ? [decideGlobal(id)] : []), ...(scope.mcp ? [searchGlobal(() => [])] : [])];
 	const declared = renderDeclarations({ tools: scope.repo ? repoTools(id) : [], globals });
-	const web = scope.mcp && scriptServers(id).some(isWebServer) ? ['The web search tools in your tool list (mcp__web__…) can be called here too, as tools.<that name>(args).'] : [];
+	const web = scope.mcp && mcpServersFor(id).some(isWebServer) ? ['The web search tools in your tool list (mcp__web__…) can be called here too, as tools.<that name>(args).'] : [];
+	const connected = scope.mcp && connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.codeMode);
+	const connectors = connected
+		? [
+				"The MCP tools of the user's connectors that are on can be called here too, as tools.mcp__<server>__<tool>(args), the names connector_tools gives; they resolve to the tool's structured result when it has one, else its text. search_tools() finds them from a program.",
+			]
+		: [];
 	return [
 		'Run a short JavaScript program that calls tools, and get back only what it prints with text() or console.log() and what it returns.',
 		'Use it instead of many separate tool calls when a job needs several reads, searches or lookups, or when results are large and you only need part of them: loop, filter and combine in code.',
 		'The code is the body of an async function: top-level await and return work. There is no file system, network, require, fetch or timers; it can only call what is declared below.',
 		'Run independent calls together with Promise.all. Return something small: paths, short excerpts, counts, a summary.',
 		...web,
+		...connectors,
 		declared,
-		...(scope.mcp ? [mcpCatalog(id)].filter(Boolean) : []),
 	].join('\n\n');
 }
 

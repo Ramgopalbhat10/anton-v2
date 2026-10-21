@@ -7,8 +7,11 @@ import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, s
 import { type McpTool, serverTools } from './mcp-tools.ts';
 
 /**
- * MCP servers added once in Settings › Connectors, for every task and thread,
- * as skills are: each can be turned off without removing it. A server takes
+ * MCP servers added once in Settings › Connectors, each on or off for every
+ * task (from Settings or the composer's Connectors menu). A task's agent finds
+ * and calls their tools on demand (`connector-tools.ts`), so a server costs it
+ * no context until it is used, and turning one on or off never changes the
+ * cached prompt. A server takes
  * a pasted token or signs in with OAuth (`mcp-sign-in.ts`); either way its
  * token stays here and in the agent's connections, never in a view.
  */
@@ -33,19 +36,28 @@ async function connectable({ enabled: _, addedAt: __, ...server }: InstalledMcpS
 	return token ? { ...server, auth: token } : server;
 }
 
-/** The servers every task's agent connects to now: the ones that are on, leaving out any whose sign-in needs you. */
-export async function enabledMcpServers(): Promise<McpServer[]> {
-	const servers = await Promise.all(
-		(await listMcpServers())
-			.filter((server) => server.enabled)
-			.map((server) =>
-				connectable(server).catch((error: unknown) => {
-					if (!(error instanceof McpSignInNeeded)) logProblem('warn', `MCP server ${server.name} was left out`, error);
-					return null;
-				}),
-			),
+/** A server as a task can use it now: on with a working sign-in (`server` is what to connect with), off, or on but waiting for you to sign in. */
+export type McpServerState = { name: string; url: string; codeMode: boolean; state: 'on' | 'off' | 'needs-sign-in'; server: McpServer | null; problem: string | null };
+
+/** Every server added in Settings › Connectors, read now, so a server turned on or off in the composer counts from its next call. */
+export async function mcpServerStates(): Promise<McpServerState[]> {
+	return Promise.all(
+		(await listMcpServers()).map(async (installed): Promise<McpServerState> => {
+			const base = { name: installed.name, url: installed.url, codeMode: installed.codeMode !== false };
+			if (!installed.enabled) return { ...base, state: 'off', server: null, problem: null };
+			try {
+				return { ...base, state: 'on', server: await connectable(installed), problem: null };
+			} catch (error) {
+				if (!(error instanceof McpSignInNeeded)) logProblem('warn', `MCP server ${installed.name} was left out`, error);
+				return { ...base, state: 'needs-sign-in', server: null, problem: error instanceof Error ? error.message : String(error) };
+			}
+		}),
 	);
-	return servers.filter((server) => server !== null);
+}
+
+/** The servers a task's agent can reach now: the ones that are on, leaving out any whose sign-in needs you. */
+export async function enabledMcpServers(): Promise<McpServer[]> {
+	return (await mcpServerStates()).flatMap((entry) => (entry.server ? [entry.server] : []));
 }
 
 async function existing(name: string): Promise<InstalledMcpServer> {
