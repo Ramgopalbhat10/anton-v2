@@ -13,6 +13,7 @@ import { RepoSettingsPage } from '@/components/repo-settings';
 import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
 import { SkillDetailPage } from '@/components/settings/skill-detail';
+import { ConnectorDetailPage } from '@/components/settings/connectors';
 import type { SkillsTab, ViewSearch } from '@/components/settings/skills';
 import { OutputViewerHost } from '@/components/output-viewer';
 import { ProjectPage, ThreadPage } from '@/components/project-page';
@@ -158,6 +159,17 @@ const skillRoute = createRoute({
 	component: SkillDetailPage,
 });
 
+const connectorRoute = createRoute({
+	getParentRoute: () => settingsRoute,
+	path: 'connectors/view',
+	// `c` is a connector you have (`mail:gmail`, `mcp:<name>`), `add` one from the catalog; a sign-in comes back with how it went.
+	validateSearch: (search: Record<string, unknown>): { c?: string; add?: string; connected?: string; problem?: string } =>
+		Object.fromEntries(
+			['c', 'add', 'connected', 'problem'].flatMap((key) => (typeof search[key] === 'string' && search[key] ? [[key, (search[key] as string).slice(0, 500)]] : [])),
+		),
+	component: ConnectorDetailPage,
+});
+
 const repoSettingsRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: 'repos/$projectId',
@@ -185,7 +197,7 @@ const routeTree = rootRoute.addChildren([
 	artifactsRoute,
 	artifactRoute,
 	oldRepoSettingsRoute,
-	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, repoSettingsRoute]),
+	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, connectorRoute, repoSettingsRoute]),
 ]);
 const router = createRouter({ routeTree });
 

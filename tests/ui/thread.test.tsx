@@ -254,6 +254,22 @@ describe('Thread', () => {
 		api.joins.mockResolvedValue({ joins: [] });
 	});
 
+	it('draws a connector call as the tool it ran', () => {
+		show(
+			agent([
+				assistant('a1', [
+					tool('connector_tools', { query: 'mail' }, 'Gmail: on'),
+					tool('connector_call', { tool: 'gmail_search', arguments: { query: 'invoice' } }, 'thread_id t1'),
+				]),
+			]),
+		);
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+		expect(screen.getByText('Looked up connector tools for')).toBeTruthy();
+		expect(screen.getByText('Searched Gmail for')).toBeTruthy();
+		expect(screen.getByText('invoice')).toBeTruthy();
+		expect(screen.queryByText(/connector_call/)).toBeNull();
+	});
+
 	it('sends the prompt typed on the launcher once the history has loaded', async () => {
 		setPendingPrompt('s1', 'Start here');
 		const flue = agent([]);

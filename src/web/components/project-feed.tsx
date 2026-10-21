@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ComposerPlus } from '@/components/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
@@ -515,7 +516,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 			<AttachmentTray attachments={attachments} className="px-3.5 pt-2" />
 			{attachments.notice ? <div className="px-3.5 pt-2 text-[12px] text-(--warning-text)">{attachments.notice}</div> : null}
 			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2">
-				<AttachButton attachments={attachments} label="Attach files to the brief" />
+				<ComposerPlus attachments={attachments} label="Attach files to the brief" side="bottom" />
 				<Menu>
 					<MenuTrigger asChild>
 						<PickerChip icon={FolderGit2} label={repo ? repo.repoFullName.split('/').pop()! : 'No repository'} height={26} />

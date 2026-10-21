@@ -29,6 +29,7 @@ import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { IMAGE_TOOL, nowText, type ReplyPhase } from '@/lib/now-text';
 import { outputLinkPath, outputLinksIn } from '../../core/outputs';
+import { asConnectorTool } from '@/lib/connector-calls';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
@@ -151,7 +152,8 @@ function outputText(output: unknown): string {
 
 function toBlocks(parts: FlueConversationPart[]): Block[] {
 	const blocks: Block[] = [];
-	for (const part of parts) {
+	for (const each of parts) {
+		const part = each.type === 'dynamic-tool' ? asConnectorTool(each) : each;
 		if (part.type === 'dynamic-tool' && part.toolName === TODO_TOOL) continue;
 		if (part.type === 'text') {
 			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
