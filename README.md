@@ -22,6 +22,10 @@ npm run build && npm start   # production: one port (PORT, default 3000)
 
 With no Modal or Tigris keys, Anton runs everything locally: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
 
+## API
+
+Anton's HTTP API is a Hono app in `src/app.ts`, served on the API port (`:43128` in development) and on the single port in production. Every route it registers is listed in [docs/api-routes.md](docs/api-routes.md).
+
 ## How a task runs
 
 1. **Create.** Anton resolves the branch to a commit and names a task branch `anton/<title>-<id>`. Nothing starts yet.
@@ -110,6 +114,6 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |
 | `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
-| `src/app.ts` | HTTP routes |
+| `src/app.ts` | HTTP routes, listed in [docs/api-routes.md](docs/api-routes.md) |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
 | `src/web/` | React UI |
