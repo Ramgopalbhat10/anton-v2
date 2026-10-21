@@ -12,7 +12,7 @@ import { OutputCards } from '@/components/output-viewer';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/signal';
 import { ProjectRoute } from '@/components/project-viz';
-import { ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/thread-card';
+import { THREAD_CARD, ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/thread-card';
 import { Glyph, ThreadGlyph } from '@/components/thread-glyph';
 import { field } from '@/components/tool-describe';
 import { api, type ModelChoice, SAFETY_NET_MS, type Session, type Space } from '@/lib/api';
@@ -255,7 +255,7 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 function Starting({ part }: { part: ToolPart }) {
 	const failed = part.state === 'output-error';
 	return (
-		<div className="flex min-h-10 min-w-0 items-center gap-2.5 px-3 py-2">
+		<div className={cn(THREAD_CARD, 'min-h-9 flex-row items-center gap-2.5')}>
 			{failed ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
 			<span className={cn('min-w-0 truncate text-[13px]', failed ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>
 				{failed ? `Could not start “${field(part.input, 'title')}”` : field(part.input, 'title') || 'New thread'}
@@ -265,8 +265,8 @@ function Starting({ part }: { part: ToolPart }) {
 }
 
 /**
- * The threads a reply started, one line each in a single card, in the order
- * they were started: several at once read as one batch. A thread deleted since
+ * The threads a reply started, a live card each, in the order they were
+ * started: several at once read as one batch. A thread deleted since
  * leaves the card, as it leaves the sidebar; one the reply being written just
  * started may not be in the list yet, so it shows as starting until it is.
  */
