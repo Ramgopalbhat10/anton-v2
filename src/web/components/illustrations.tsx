@@ -1601,19 +1601,22 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 
 /**
  * Anton's mark: the composer mascot's head, its cube drawn in three flat
- * facets, with two eyes on the lit face and the antenna light on top. The
- * favicon and app icons are drawn from the same shapes (scripts/make-icons.ts);
- * keep the two in step.
+ * facets with two eyes on the lit face. Hovered, it hops and glances
+ * (`.anton-logo` in instrument.css). The favicon and app icons are drawn
+ * from the same shapes (scripts/make-icons.ts); keep the two in step.
  */
 export function Logo({ size = 20 }: { size?: number }) {
 	return (
-		<svg aria-hidden width={size} height={size} viewBox="1.25 0.9 21.5 21.5" className="shrink-0">
-			<line x1="12" y1="6.6" x2="12" y2="2.4" stroke="var(--cyan-700)" strokeWidth="1.15" />
-			<circle cx="12" cy="2.4" r="1.5" fill="var(--cyan-100)" />
-			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="var(--cyan-200)" />
-			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="var(--cyan-400)" />
-			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="var(--cyan-700)" />
-			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round" />
+		<svg aria-hidden width={size} height={size} viewBox="3.5 5.7 17 17" className="anton-logo shrink-0 overflow-visible">
+			<g className="al-cube">
+				<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="var(--cyan-200)" />
+				<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="var(--cyan-400)" />
+				<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="var(--cyan-700)" />
+				<g className="al-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+					<path className="al-eye" d="M7.03 14.28v2.13" />
+					<path className="al-eye" d="M9.87 15.92v2.13" />
+				</g>
+			</g>
 		</svg>
 	);
 }

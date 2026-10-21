@@ -971,3 +971,69 @@
 		display: none;
 	}
 }
+
+/* Anton's mark (Logo in illustrations.tsx): pointed at, the cube crouches,
+   hops and lands, glancing along its face and blinking once. Lengths are the
+   mark's own units (a 17-unit square). */
+.anton-logo .al-cube {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+}
+.anton-logo .al-eye {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+}
+.anton-logo:hover .al-cube {
+	animation: al-hop 0.62s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.anton-logo:hover .al-eyes {
+	animation: al-glance 1.1s ease-in-out;
+}
+.anton-logo:hover .al-eye {
+	animation: al-blink 1.1s steps(1, end);
+}
+@keyframes al-hop {
+	0%,
+	100% {
+		transform: none;
+	}
+	16% {
+		transform: scale(1.06, 0.9);
+	}
+	42% {
+		transform: translateY(-2.2px) scale(0.97, 1.04);
+	}
+	68% {
+		transform: scale(1.05, 0.93);
+	}
+	84% {
+		transform: scale(0.99, 1.01);
+	}
+}
+@keyframes al-glance {
+	0%,
+	20%,
+	100% {
+		transform: none;
+	}
+	38%,
+	62% {
+		transform: translate(0.9px, 0.52px);
+	}
+}
+@keyframes al-blink {
+	0%,
+	76%,
+	100% {
+		transform: none;
+	}
+	70% {
+		transform: scaleY(0.15);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anton-logo * {
+		animation: none !important;
+	}
+}
