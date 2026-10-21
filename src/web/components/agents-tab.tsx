@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronDown, CornerDownRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { AgentsArt } from '@/components/illustrations';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -9,6 +9,8 @@ import { AgentTile, decisionsOf, lookOf, runElapsed, runEnd, runLine, spanOf, St
 import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
 import { age, elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useFollowLatest } from '@/lib/use-follow-latest';
+import { JumpToLatest } from '@/components/jump-to-latest';
 import { focusRun, useFocusedRun } from '@/lib/workspace';
 
 /*
@@ -335,11 +337,9 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentRun; now: number }) {
 	const live = run.status === 'running';
 	const [briefOpen, setBriefOpen] = useState(false);
-	const end = useRef<HTMLDivElement>(null);
-	// While it works, keep the newest step in view.
-	useEffect(() => {
-		if (live) end.current?.scrollIntoView({ block: 'nearest' });
-	}, [live, run.steps.length, run.writing]);
+	const root = useRef<HTMLDivElement>(null);
+	// While it works, keep the newest step in view, unless you scroll up to read.
+	const { following, follow } = useFollowLatest(root, { enabled: live, reset: run.id });
 	const jev = decisionsOf(run);
 	const from = Date.parse(run.startedAt);
 	const to = Math.max(from + 1000, from + runElapsed(run, now));
@@ -351,7 +351,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 		['Model', run.model?.split('/').pop() ?? '—'],
 	];
 	return (
-		<div className="flex min-h-0 flex-col gap-3">
+		<div ref={root} className="flex min-h-0 flex-col gap-3">
 			<div className="flex items-center gap-2">
 				<IconBtn icon={ArrowLeft} size="sm" label="All agents" onClick={() => focusRun(sessionId, null)} />
 				<AgentTile agent={run.agent} running={live} size={26} />
@@ -427,7 +427,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 					<Markdown text={run.result} />
 				</section>
 			) : null}
-			<div ref={end} />
+			<JumpToLatest show={!following} live onJump={follow} className="-mt-3" />
 		</div>
 	);
 }

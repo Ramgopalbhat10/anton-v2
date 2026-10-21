@@ -25,6 +25,8 @@ import { openViewer, sameItem, type ViewerItem } from '@/lib/viewer';
 import { linkTargets } from '../../core/outputs';
 import { parseReports, type Report, threadsLoaded } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
+import { useFollowLatest } from '@/lib/use-follow-latest';
+import { JumpToLatest } from '@/components/jump-to-latest';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../core/attachments';
 
@@ -683,14 +685,20 @@ export function ProjectFeed({
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const resolveFile = useThreadFileResolver(threads);
 
-	// Kept at the bottom as the reply grows: once a frame at most, as reading the height lays the page out.
+	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
+	const { following, follow } = useFollowLatest(scroller, { reset: space.id });
+	const sendMessage = agent.sendMessage;
+	const send = useCallback<UseFlueAgentResult['sendMessage']>(
+		(...args) => {
+			follow();
+			return sendMessage(...args);
+		},
+		[sendMessage, follow],
+	);
+	// A new thread's form opens at the bottom, in view.
 	useEffect(() => {
-		const frame = requestAnimationFrame(() => {
-			const el = scroller.current;
-			if (el) el.scrollTop = el.scrollHeight;
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [agent.messages, starting]);
+		if (starting) follow();
+	}, [starting, follow]);
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -721,8 +729,9 @@ export function ProjectFeed({
 					) : null}
 					{starting ? <NewThreadForm space={space} onDone={() => setStarting(false)} /> : null}
 				</div>
+				<JumpToLatest show={!following} live={busy} onJump={follow} />
 			</div>
-			<CoordinatorComposer space={space} busy={busy} send={agent.sendMessage} draft={draft} onDraft={setDraft} onNewThread={newThread} />
+			<CoordinatorComposer space={space} busy={busy} send={send} draft={draft} onDraft={setDraft} onNewThread={newThread} />
 		</div>
 	);
 }
