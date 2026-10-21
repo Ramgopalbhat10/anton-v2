@@ -11,6 +11,9 @@ const api = vi.hoisted(() => ({
 	files: vi.fn(),
 	commands: vi.fn(),
 	attachToTask: vi.fn(),
+	connectors: vi.fn(),
+	setMailboxOptions: vi.fn(),
+	setMcpServerEnabled: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -30,6 +33,14 @@ const model = {
 	defaultReasoning: 'off',
 };
 
+const CONNECTORS = {
+	accounts: [{ id: 'google', name: 'Google', client: null, email: 'me@example.com', connectedAt: '2026-10-17T08:00:00Z', scopes: [], problem: null, callbackPath: '' }],
+	mailboxes: [{ id: 'gmail', name: 'Gmail', account: 'google', options: { enabled: true, draft: true, send: true }, canDraft: true, access: { read: true, draft: true, send: true } }],
+	mcpServers: [
+		{ name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false }, enabled: false, addedAt: '' },
+	],
+};
+
 function setup(patch = {}) {
 	const onSend = vi.fn(async () => undefined);
 	const onStop = vi.fn(async () => undefined);
@@ -39,6 +50,7 @@ function setup(patch = {}) {
 		[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
 		[['files', 's1'], { source: 'base', at: null, paths: ['src/app.ts', 'src/server.ts', 'README.md'], changes: [] }],
 		[['commands'], { commands: [{ name: 'review', prompt: 'Review the branch for bugs.' }] }],
+		[['connectors'], CONNECTORS],
 	]);
 	return { ...view, onSend, onStop, box: screen.getByRole('textbox') as HTMLElement };
 }
@@ -47,6 +59,26 @@ describe('Composer', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		api.editSession.mockImplementation(async (_id: string, change: object) => session(change));
+	});
+
+	it("turns connectors on and off from the + menu, for every task, without touching the task", async () => {
+		api.connectors.mockResolvedValue(CONNECTORS);
+		api.setMailboxOptions.mockResolvedValue({ accounts: CONNECTORS.accounts, mailboxes: [{ ...CONNECTORS.mailboxes[0], options: { enabled: false, draft: true, send: true } }] });
+		api.setMcpServerEnabled.mockResolvedValue({ mcpServers: [{ ...CONNECTORS.mcpServers[0], enabled: true }] });
+		setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Add files and connectors' }));
+		expect(screen.getByRole('menuitem', { name: 'Attach files' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('menuitem', { name: /Connectors/ }));
+		const gmail = await screen.findByRole('menuitemcheckbox', { name: /Gmail/ });
+		expect(gmail.getAttribute('aria-checked')).toBe('true');
+		expect(screen.getByRole('menuitemcheckbox', { name: /tracker/ }).getAttribute('aria-checked')).toBe('false');
+		await userEvent.click(gmail);
+		await waitFor(() => expect(api.setMailboxOptions).toHaveBeenCalledWith('gmail', { enabled: false, draft: true, send: true }));
+		// The menu stays open, so another can be flipped in a row.
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: /tracker/ }));
+		await waitFor(() => expect(api.setMcpServerEnabled).toHaveBeenCalledWith('tracker', true));
+		expect(screen.getByText(/Tools load only when a task uses them/)).toBeTruthy();
+		expect(api.editSession).not.toHaveBeenCalled();
 	});
 
 	it('sends on Enter and keeps Shift+Enter for a new line', async () => {

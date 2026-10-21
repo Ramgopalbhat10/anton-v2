@@ -9,7 +9,7 @@ import type { ModelInfo } from '../src/core/ports.ts';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-cursor-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { cursorPlan, levelsOf, selectionFor, toSubscriptionModel, toSubscriptionModels } = await import('../src/providers/cursor/plan.ts');
+const { cursorPlan, levelsOf, memoryStore, selectionFor, toSubscriptionModel, toSubscriptionModels } = await import('../src/providers/cursor/plan.ts');
 const { cursorProvider, closeClaudeCodeConversations, estimatedUsage } = await import('../src/flue/claude-code-models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
@@ -119,6 +119,45 @@ test('the context of a Cursor model’s default variant is left out, since Grok 
 	});
 });
 
+test('a Cursor agent keeps its run log in memory, numbered per run, as the SDK’s own stores do', async () => {
+	const sdk = await import('@cursor/sdk');
+	const store = memoryStore(sdk);
+	for (let i = 0; i < 5; i++) await store.runEvents.append({ runId: 'run-1', eventType: 'x', payload: `p${i}` });
+	await store.runEvents.append({ runId: 'run-2', eventType: 'x', payload: 'q' });
+	const page = await store.runEvents.list({ runId: 'run-1', limit: 2 });
+	assert.deepEqual([page.items.map((event) => event.offset), page.nextOffset], [['1', '2'], '2']);
+	const rest = await store.runEvents.list({ runId: 'run-1', afterOffset: page.nextOffset });
+	assert.deepEqual([rest.items.map((event) => event.payload), rest.nextOffset], [['p2', 'p3', 'p4'], undefined]);
+	assert.deepEqual((await store.runEvents.list({ runId: 'run-2' })).items.map((event) => [event.seq, event.offset]), [[1, '1']]);
+	await store.runEvents.delete({ filter: { runIds: ['run-1'] } });
+	assert.deepEqual((await store.runEvents.list({ runId: 'run-1' })).items, []);
+
+	const agent = { agentId: 'a1', cwd: '/work', status: 'idle' as const, createdAt: 1, updatedAt: 1 };
+	await store.agents.create({ agent });
+	await assert.rejects(store.agents.create({ agent }), /already exists/);
+	await store.agents.update({ agent: { ...agent, status: 'running' } });
+	assert.equal((await store.agents.get({ agentId: 'a1' }))?.status, 'running');
+	assert.equal(await store.agents.get({ agentId: 'a2' }), null);
+	await store.runs.create({ run: { runId: 'run-1', agentId: 'a1', turnNumber: 0, status: 'running', createdAt: 1, updatedAt: 1 } });
+	assert.equal(await store.runs.get({ agentId: 'a2', runId: 'run-1' }), null, 'a run is read under its own agent');
+	assert.deepEqual((await store.runs.list({ filter: { agentIds: ['a1'] } })).items.map((run) => run.runId), ['run-1']);
+	await store.checkpoints.create({ agentId: 'a1', blobId: 'b1', data: new Uint8Array([1, 2]) });
+	await assert.rejects(store.checkpoints.update({ agentId: 'a1', blobId: 'b2', data: new Uint8Array() }), /not found/);
+	assert.deepEqual(await store.checkpoints.get({ agentId: 'a1', blobId: 'b1' }), new Uint8Array([1, 2]));
+	assert.deepEqual((await store.checkpoints.list({ filter: { agentIds: ['a1'] } })).items, ['b1']);
+});
+
+test('a Cursor run’s updates are recorded in constant time, however many came before', async () => {
+	const store = memoryStore(await import('@cursor/sdk'));
+	const timed = async (count: number) => {
+		const start = performance.now();
+		for (let i = 0; i < count; i++) await store.runEvents.append({ runId: `run-${count}`, eventType: 'x', payload: 'word ' });
+		return performance.now() - start;
+	};
+	await timed(50_000);
+	assert.ok((await timed(1000)) < 250, 'a thousand more after fifty thousand take no time');
+});
+
 type Script = (agent: { onDelta: (update: object) => void; tools: Record<string, { execute: (args: unknown, context: { toolCallId: string }) => Promise<unknown> }> }) => Promise<{ status: string; error?: { message: string } }>;
 
 /** Cursor’s SDK as the plan sees it: each message the agent is sent plays the next script. */
@@ -132,12 +171,6 @@ function fakeSdk(scripts: Script[]) {
 				return { apiKeyName: 'Anton', userEmail: 'ada@example.com' };
 			},
 			models: { list: async () => [gpt, sonnet, composer, { id: 'default', displayName: 'Auto' }] },
-		},
-		JsonlLocalAgentStore: class {
-			root: string;
-			constructor(root: string) {
-				this.root = root;
-			}
 		},
 		Agent: {
 			create: async (options: Record<string, unknown>) => {

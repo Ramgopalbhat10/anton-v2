@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import type {
 	InteractionUpdate,
+	LocalAgentDocument,
+	LocalAgentRunDocument,
+	LocalAgentRunEventDocument,
 	LocalAgentStore,
 	ModelListItem,
 	ModelSelection,
@@ -36,13 +39,13 @@ import {
  * the only file that imports the SDK.
  */
 export type CursorOptions = {
-	/** Where the agents' working folder and Cursor's run store live. */
+	/** Where the agents' working folder lives. */
 	dir: string;
 	/** The SDK, swapped for a fake in tests. */
 	sdk?: () => Promise<CursorSdk>;
 };
 
-type CursorSdk = Pick<typeof import('@cursor/sdk'), 'Agent' | 'Cursor' | 'JsonlLocalAgentStore'>;
+type CursorSdk = Pick<typeof import('@cursor/sdk'), 'Agent' | 'Cursor' | 'paginateAgentDocuments' | 'paginateRunDocuments' | 'paginateCheckpointBlobIds'>;
 
 const GATEWAY = 'cursor';
 /** Tool calls made this close together are one model response asking for several tools. */
@@ -244,7 +247,110 @@ const partNote = (id: string, total: number, end: number) =>
 		? `\n\n[Characters ${end.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} shown. Call ${MORE_TOOL} with id "${id}" and offset ${end} for the rest.]`
 		: '';
 
-type Start = { sdk: CursorSdk; key: string; store: LocalAgentStore; workDir: string; model: (id: string) => Promise<ModelListItem | undefined> };
+/**
+ * Where a Cursor agent keeps its conversation state and run log, in memory for
+ * as long as Anton's conversation with it lasts. The SDK records every streamed
+ * update before it takes the next, and its JSONL store reads its whole file to
+ * add one line: a file shared by every run Anton ever made, so the more Cursor
+ * had been used, the longer each word of a reply waited (over a second at
+ * 40 MB, which a few long replies reach). Anton never resumes
+ * a Cursor agent (a new one is given the conversation so far), so nothing here
+ * needs to outlive it.
+ */
+export function memoryStore(sdk: Pick<CursorSdk, 'paginateAgentDocuments' | 'paginateRunDocuments' | 'paginateCheckpointBlobIds'>): LocalAgentStore {
+	const agents = new Map<string, LocalAgentDocument>();
+	const runs = new Map<string, LocalAgentRunDocument>();
+	const blobs = new Map<string, Uint8Array>();
+	const events = new Map<string, LocalAgentRunEventDocument[]>();
+	const blobKey = (agentId: string, blobId: string) => `${agentId}\n${blobId}`;
+	const runMatches = (run: LocalAgentRunDocument, filter?: { agentIds?: readonly string[]; runIds?: readonly string[] }) =>
+		(!filter?.agentIds?.length || filter.agentIds.includes(run.agentId)) && (!filter?.runIds?.length || filter.runIds.includes(run.runId));
+	const blobMatches = (key: string, filter?: { agentIds?: readonly string[]; blobIds?: readonly string[] }) => {
+		const [agentId, blobId] = key.split('\n');
+		return (!filter?.agentIds?.length || filter.agentIds.includes(agentId)) && (!filter?.blobIds?.length || filter.blobIds.includes(blobId));
+	};
+	return {
+		agents: {
+			get: async ({ agentId }) => agents.get(agentId) ?? null,
+			create: async ({ agent }) => {
+				if (agents.has(agent.agentId)) throw new Error(`Agent ${agent.agentId} already exists`);
+				agents.set(agent.agentId, agent);
+				return agent;
+			},
+			update: async ({ agent }) => {
+				if (!agents.has(agent.agentId)) throw new Error(`Agent ${agent.agentId} not found`);
+				agents.set(agent.agentId, agent);
+				return agent;
+			},
+			delete: async ({ filter }) => {
+				for (const agent of [...agents.values()])
+					if ((!filter.agentIds?.length || filter.agentIds.includes(agent.agentId)) && (filter.cwd === undefined || filter.cwd === agent.cwd)) agents.delete(agent.agentId);
+			},
+			list: async (input) => sdk.paginateAgentDocuments([...agents.values()], input?.filter),
+		},
+		runs: {
+			get: async ({ agentId, runId }) => {
+				const run = runs.get(runId);
+				return run?.agentId === agentId ? run : null;
+			},
+			create: async ({ run }) => {
+				if (runs.has(run.runId)) throw new Error(`Run ${run.runId} already exists`);
+				runs.set(run.runId, run);
+				return run;
+			},
+			update: async ({ run }) => {
+				if (runs.get(run.runId)?.agentId !== run.agentId) throw new Error(`Run ${run.runId} not found for agent ${run.agentId}`);
+				runs.set(run.runId, run);
+				return run;
+			},
+			delete: async ({ filter }) => {
+				for (const run of [...runs.values()]) if (runMatches(run, filter)) runs.delete(run.runId);
+			},
+			list: async (input) => sdk.paginateRunDocuments([...runs.values()].filter((run) => runMatches(run, input?.filter)), input?.filter),
+		},
+		checkpoints: {
+			get: async ({ agentId, blobId }) => blobs.get(blobKey(agentId, blobId)) ?? null,
+			create: async ({ agentId, blobId, data }) => {
+				if (blobs.has(blobKey(agentId, blobId))) throw new Error(`Checkpoint blob ${blobId} already exists for agent ${agentId}`);
+				blobs.set(blobKey(agentId, blobId), data);
+			},
+			update: async ({ agentId, blobId, data }) => {
+				if (!blobs.has(blobKey(agentId, blobId))) throw new Error(`Checkpoint blob ${blobId} not found for agent ${agentId}`);
+				blobs.set(blobKey(agentId, blobId), data);
+			},
+			delete: async ({ filter }) => {
+				for (const key of [...blobs.keys()]) if (blobMatches(key, filter)) blobs.delete(key);
+			},
+			list: async (input) =>
+				sdk.paginateCheckpointBlobIds(
+					[...blobs.keys()].filter((key) => blobMatches(key, input?.filter)).map((key) => key.split('\n')[1]),
+					input?.filter,
+				),
+		},
+		runEvents: {
+			append: async ({ runId, eventType, payload, payloadRef, idempotencyKey }) => {
+				let list = events.get(runId);
+				if (!list) events.set(runId, (list = []));
+				const seq = list.length ? list[list.length - 1].seq + 1 : 1;
+				const event = { runId, seq, offset: String(seq), eventType, payload, payloadRef: payloadRef ?? null, idempotencyKey: idempotencyKey ?? null, createdAt: Date.now() };
+				list.push(event);
+				return event;
+			},
+			list: async ({ runId, afterOffset, limit }) => {
+				const after = Number(afterOffset ?? 0) || 0;
+				const rest = (events.get(runId) ?? []).filter((event) => event.seq > after);
+				const items = limit && limit > 0 ? rest.slice(0, limit) : rest;
+				return items.length < rest.length ? { items, nextOffset: items.at(-1)!.offset } : { items };
+			},
+			delete: async ({ filter }) => {
+				if (!filter.runIds?.length) events.clear();
+				else for (const runId of filter.runIds) events.delete(runId);
+			},
+		},
+	};
+}
+
+type Start = { sdk: CursorSdk; key: string; workDir: string; model: (id: string) => Promise<ModelListItem | undefined> };
 
 /**
  * One Cursor agent behind one Flue conversation. Cursor streams text and
@@ -254,6 +360,7 @@ type Start = { sdk: CursorSdk; key: string; store: LocalAgentStore; workDir: str
  */
 export function cursorConversation(start: Start, options: RuntimeConversationOptions): RuntimeConversation {
 	const events = channel<RuntimeEvent>();
+	const store = memoryStore(start.sdk);
 	let agent: Promise<SDKAgent> | null = null;
 	let run: Run | null = null;
 	let busy = false;
@@ -376,7 +483,7 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 			model: selectionFor(options.model, await start.model(options.model), options.effort),
 			// Only MCP, which carries Anton's tools: no shell, edits, reads or web on this server.
 			tools: ['mcp'],
-			local: { cwd: start.workDir, settingSources: [], customTools: tools, store: start.store },
+			local: { cwd: start.workDir, settingSources: [], customTools: tools, store },
 		});
 	}
 
@@ -395,6 +502,8 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 				run = current;
 				const result = await current.wait();
 				run = null;
+				// Its streamed updates are read back by nothing once it is done.
+				await store.runEvents.delete({ filter: { runIds: [current.id] } }).catch(() => {});
 				await Promise.allSettled(steering.splice(0));
 				if (closed) return;
 				if (result.status === 'error') {
@@ -458,7 +567,10 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 export function cursorPlan(options: CursorOptions): KeyPlan {
 	const load = options.sdk ?? (() => import('@cursor/sdk'));
 	const workDir = path.join(options.dir, 'work');
-	let store: LocalAgentStore | null = null;
+	// The JSONL run log earlier versions kept, which only grew: nothing reads it.
+	try {
+		rmSync(path.join(options.dir, 'agents'), { recursive: true, force: true });
+	} catch {}
 	/** The last listing per key, for each conversation's model parameters. */
 	let listed: { key: string; at: number; items: ModelListItem[] } | null = null;
 
@@ -483,10 +595,12 @@ export function cursorPlan(options: CursorOptions): KeyPlan {
 			return linkVariants((await list(key)).flatMap(toSubscriptionModels));
 		},
 		open(key, conversation) {
-			const ready = load().then((sdk) => {
-				store ??= new sdk.JsonlLocalAgentStore(path.join(options.dir, 'agents'));
-				return { sdk, key, store, workDir, model: async (id: string) => (await list(key).catch(() => [])).find((item) => item.id === parseVariant(id).base) };
-			});
+			const ready = load().then((sdk) => ({
+				sdk,
+				key,
+				workDir,
+				model: async (id: string) => (await list(key).catch(() => [])).find((item) => item.id === parseVariant(id).base),
+			}));
 			// The SDK loads on first use; until then messages wait in order.
 			let opened: RuntimeConversation | null = null;
 			const pending: RuntimeContent[][] = [];

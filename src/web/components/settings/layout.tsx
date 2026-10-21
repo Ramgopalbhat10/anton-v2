@@ -6,6 +6,7 @@ import { EmptyState, Icon, SectionLabel } from '@/components/signal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { GROUPS, SECTIONS, sectionById } from './sections';
+import { ConnectorCrumb } from './connectors';
 import { pickOf, usePreview } from './skill-detail';
 import type { ViewSearch } from './skills';
 
@@ -64,6 +65,7 @@ function Crumbs() {
 	const steps: ReactNode[] = [];
 	if (projectId) steps.push(<CrumbLink to="repos">Repositories</CrumbLink>, repo ?? 'Repository');
 	else if (path === '/settings/skills/view') steps.push(<CrumbLink to="skills">Skills</CrumbLink>, <PluginCrumb />);
+	else if (path === '/settings/connectors/view') steps.push(<CrumbLink to="connectors">Connectors</CrumbLink>, <ConnectorCrumb />);
 	else if (section) steps.push(sectionById(section)?.label ?? 'Not found');
 	return (
 		<div className="flex min-w-0 items-center gap-2">
@@ -90,8 +92,9 @@ function CrumbLink({ to, children }: { to: string; children: ReactNode }) {
 
 /** The settings frame: breadcrumbs, the grouped nav, and the page beside it. */
 export function SettingsLayout() {
-	// Skills lay plugins out as cards and files side by side, so they get more room.
-	const wide = usePath().startsWith('/settings/skills');
+	// Skills and Connectors lay cards out side by side, and a page beside its facts, so they get more room.
+	const path = usePath();
+	const wide = path.startsWith('/settings/skills') || path.startsWith('/settings/connectors');
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium md:pl-4">

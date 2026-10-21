@@ -8,9 +8,9 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { assertWithinBudget } from './budget.ts';
 import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent, type VisualReplies } from './general.ts';
-import { type MailboxAccess, mailboxAccess, mailboxes } from './connectors.ts';
+import { type SetUpConnector, setUpConnectors } from './connector-tools.ts';
 import { enabledMcpServers } from './mcp-servers.ts';
-import { warmServerTools } from './mcp-tools.ts';
+import { serverTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
 import { logProblem } from './log.ts';
@@ -20,41 +20,32 @@ import { getSpace } from '../db/spaces.ts';
 import { primeAllCoordinators, primeCoordinator } from './coordinator.ts';
 
 /**
- * The agent renders synchronously, so it reads each task's MCP servers from
- * here: the ones on in Settings › Connectors. Filled before every message, with the model.
+ * The agent renders synchronously, so it reads from here which connectors are set up in Settings › Connectors,
+ * on or off: its instructions name them, and its connector tools read whether each is on as they run, so
+ * turning one on or off never changes the prompt. Filled before every message, with the model.
  */
-const servers = new Map<string, McpServer[]>();
+const connectors = new Map<string, SetUpConnector[]>();
 
-/** Web search and fetch for every task, unless turned off or an added server already uses the name. */
-function webServer(added: McpServer[]): McpServer[] {
-	if (config.web.mcpUrl === 'off' || added.some((server) => server.name === WEB)) return [];
-	return [{ name: WEB, url: config.web.mcpUrl, auth: config.web.apiKey || null, tools: ['web_search', 'web_fetch'] }];
+export function connectorsFor(id: string): SetUpConnector[] {
+	return connectors.get(id) ?? [];
 }
 
 const WEB = 'web';
+
+/** Web search and fetch for every task, unless turned off or a connector already uses the name. */
+function webServer(id: string): McpServer[] {
+	if (config.web.mcpUrl === 'off' || connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.name === WEB)) return [];
+	return [{ name: WEB, url: config.web.mcpUrl, auth: config.web.apiKey || null, tools: ['web_search', 'web_fetch'] }];
+}
 
 /** The built-in web search server: cheap to list, so its two tools stay direct even with code mode on. */
 export function isWebServer(server: McpServer): boolean {
 	return server.name === WEB && server.url === config.web.mcpUrl;
 }
 
-/** The MCP servers a task's agent connects to: web search, then the ones added in Settings › Connectors. */
+/** The MCP servers a task's agent connects to itself: web search. Connectors' servers are reached on demand through its connector tools. */
 export function mcpServersFor(id: string): McpServer[] {
-	const added = servers.get(id) ?? [];
-	return [...webServer(added), ...added];
-}
-
-/** The mailboxes connected in Settings › Connectors and what the agent may do in each, read while it renders. */
-export type ConnectedMailbox = { id: string; name: string; access: MailboxAccess };
-const mail = new Map<string, ConnectedMailbox[]>();
-
-export function mailboxesFor(id: string): ConnectedMailbox[] {
-	return mail.get(id) ?? [];
-}
-
-async function connectedMailboxes(): Promise<ConnectedMailbox[]> {
-	const found = await Promise.all(mailboxes().map(async ({ id, name }) => ({ id, name, access: await mailboxAccess(id).catch(() => null) })));
-	return found.filter((mailbox): mailbox is ConnectedMailbox => mailbox.access !== null);
+	return webServer(id);
 }
 
 /** Each task's repo notes, read into the agent's instructions. */
@@ -120,27 +111,25 @@ async function primeAgentSettings(): Promise<void> {
 	agentSettings = { codeMode, visualReplies, pageNetwork, models: models as AgentSettings['models'] };
 }
 
-/** How long a message waits for the MCP servers to list their tools, so run_script can describe them. */
-const WARM_MS = 5000;
-
 /**
- * Loads what the agent reads while it renders: the task's model, the MCP servers that are on (and, with code mode on,
- * their tool lists), notes and skills, whether it has a machine and whether it is planning. The parts that do not
+ * Loads what the agent reads while it renders: the task's model, the connectors set up (and starts listing the tools
+ * of the MCP servers that are on), notes and skills, whether it has a machine and whether it is planning. The parts that do not
  * need each other are read at once, as a message waits for all of them before the agent starts.
  */
 export async function primeAgent(id: string, { warm = true }: { warm?: boolean } = {}): Promise<void> {
-	const [session, added, mailboxes] = await Promise.all([
+	const [session, setUp] = await Promise.all([
 		getSessionRecord(id),
-		enabledMcpServers(),
-		connectedMailboxes(),
+		setUpConnectors(),
 		primeModel(id),
 		primeAgentSettings(),
 		primeSkills(id),
 	]);
 	const [project, space] = await Promise.all([session && getProject(session.projectId), session?.spaceId ? getSpace(session.spaceId) : null]);
-	servers.set(id, added);
-	mail.set(id, mailboxes);
-	if (warm && agentSettings.codeMode) await warmServerTools(mcpServersFor(id).filter((server) => server.codeMode !== false && !isWebServer(server)), WARM_MS);
+	connectors.set(id, setUp);
+	// The servers that are on start listing their tools behind the message, so the agent's first look is quick; nothing waits for them.
+	if (warm && setUp.some((connector) => connector.kind === 'mcp')) void enabledMcpServers()
+			.then((servers) => servers.forEach((server) => void serverTools(server).catch(() => undefined)))
+			.catch(() => undefined);
 	memories.set(id, project?.memory ?? '');
 	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
 	else threadProjects.delete(id);
