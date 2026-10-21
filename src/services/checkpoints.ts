@@ -90,6 +90,12 @@ export async function readCheckpointPatch(id: string): Promise<string> {
 /** Identifies the files and commits a checkpoint holds, ignoring when it was taken. */
 const stateOf = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.files, checkpoint.log.map((entry) => entry.sha)]);
 
+/** Whether `next` would store exactly what `previous` holds: same files, commits, outputs and diff. */
+function sameSave(previous: Checkpoint, next: Checkpoint): boolean {
+	const rest = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.baseSha, checkpoint.branch, checkpoint.outputs, checkpoint.log, checkpoint.stats ?? null]);
+	return stateOf(previous) === stateOf(next) && rest(previous) === rest(next);
+}
+
 /** Checkpoints being written, and the blob sweep that holds new ones back while it runs. */
 let writing = 0;
 let sweep: Promise<unknown> | null = null;
@@ -145,6 +151,12 @@ async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint
 		outputs: await syncOutputs(id, store, machine, previous?.outputs ?? []),
 		stats: statsOf(diff.patch),
 	};
+	// Most replies leave the files as they were, and every upload is a billed
+	// request, so a save that would store the same thing again stores nothing.
+	if (previous && sameSave(previous, checkpoint)) {
+		await updateSession(id, { checkpointAt: checkpoint.at });
+		return previous;
+	}
 	const manifest = JSON.stringify(checkpoint);
 	await store.put(keys.patch(id), diff.patch, 'text/x-diff');
 	// The timeline keeps one entry per distinct state, not one per response.
