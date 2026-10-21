@@ -45,3 +45,15 @@ test('a file you add goes under uploads with a safe name, and a deleted one leav
 	assert.ok(!(await outputsView('ro')).outputs.some((output) => output.path === path));
 	await assert.rejects(removeOutput('ro', '../escape'));
 });
+
+test('a deleted file is listed as deleted, so replies can say so, until the agent saves it again', async () => {
+	await saveOutput('ro', 'renders/chart-1.html', new TextEncoder().encode('<p>hi</p>'), 'text/html');
+	assert.deepEqual((await outputsView('ro')).deleted.filter((path) => path.startsWith('renders/')), []);
+	await removeOutput('ro', 'renders/chart-1.html');
+	const view = await outputsView('ro');
+	assert.ok(!view.outputs.some((output) => output.path === 'renders/chart-1.html'));
+	assert.ok(view.deleted.includes('renders/chart-1.html'));
+	// Drawn again under the same path, it is back and no longer deleted.
+	await saveOutput('ro', 'renders/chart-1.html', new TextEncoder().encode('<p>again</p>'), 'text/html');
+	assert.ok(!(await outputsView('ro')).deleted.includes('renders/chart-1.html'));
+});

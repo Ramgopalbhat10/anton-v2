@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Artifact } from '@/lib/api';
@@ -9,6 +9,8 @@ const api = vi.hoisted(() => ({
 	artifacts: vi.fn(),
 	session: vi.fn(async () => ({ id: 's1', title: 'Budget task', spaceId: null })),
 	outputText: vi.fn(async () => '# Findings\n\nAll good.'),
+	outputs: vi.fn(async () => ({ source: 'saved', at: null, outputs: [], deleted: [] as string[] })),
+	deleteOutput: vi.fn(async () => undefined),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ArtifactsPage, ArtifactView } = await import('@/components/artifacts-page');
@@ -93,6 +95,32 @@ describe('Artifacts', () => {
 		expect(screen.getByRole('link', { name: /Budget task/ })).toBeTruthy();
 		await userEvent.click(screen.getByRole('radio', { name: 'Code' }));
 		expect(screen.queryByTitle('Budget planner')).toBeNull();
+	});
+
+	it('deletes an artifact from its menu, asking twice, and it leaves the page', async () => {
+		open('/artifacts');
+		const card = (await screen.findByText('findings.md')).closest('.in-card') as HTMLElement;
+		await userEvent.click(within(card).getByRole('button', { name: 'Actions for findings.md' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+		expect(api.deleteOutput).not.toHaveBeenCalled();
+		api.artifacts.mockResolvedValue({ artifacts: listed.filter((item) => item.path !== 'reports/findings.md') });
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Click again to delete' }));
+		expect(api.deleteOutput).toHaveBeenCalledWith('s1', 'reports/findings.md');
+		await waitFor(() => expect(screen.queryByText('findings.md')).toBeNull());
+	});
+
+	it('deletes the artifact it shows and goes back to them all; a deleted one says so', async () => {
+		const router = open('/artifacts/s1?path=reports%2Ffindings.md');
+		expect(await screen.findByRole('heading', { name: 'Findings' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+		expect(api.deleteOutput).toHaveBeenCalledWith('s1', 'reports/findings.md');
+		await waitFor(() => expect(router.state.location.pathname).toBe('/artifacts'));
+
+		api.outputs.mockResolvedValue({ source: 'saved', at: null, outputs: [], deleted: ['reports/old.md'] });
+		open('/artifacts/s1?path=reports%2Fold.md');
+		expect(await screen.findByText('This file was deleted')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Download' })).toBeNull();
 	});
 
 	it('renders a document, with its text a click away', async () => {

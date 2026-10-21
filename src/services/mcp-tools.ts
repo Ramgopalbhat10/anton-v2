@@ -109,10 +109,17 @@ export function knownServerTools(server: McpServer): McpTool[] | null {
 	return listings.get(listingKey(server))?.settled ?? null;
 }
 
-/** Reads the servers' tool lists ahead of the agent rendering, waiting at most `waitMs` for slow ones. */
+/**
+ * Reads the servers' tool lists ahead of the agent rendering, waiting at most `waitMs` for slow ones. Only a server
+ * never read is waited for: one read before keeps its list for this message while it is read again behind it.
+ */
 export async function warmServerTools(servers: McpServer[], waitMs: number): Promise<void> {
-	if (!servers.length) return;
-	const all = Promise.allSettled(servers.map((server) => serverTools(server)));
+	const unread = servers.flatMap((server) => {
+		const tools = serverTools(server).catch(() => []);
+		return knownServerTools(server) === null ? [tools] : [];
+	});
+	if (!unread.length) return;
+	const all = Promise.allSettled(unread);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	await Promise.race([all, new Promise<void>((resolve) => (timer = setTimeout(resolve, waitMs)))]);
 	clearTimeout(timer);

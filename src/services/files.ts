@@ -1,6 +1,6 @@
 import { readMachineFile } from '../core/machine-fs.ts';
 import { safeRelativePath, text } from '../core/shell.ts';
-import { deletePage } from '../db/pages.ts';
+import { deletedOutputs, deletePage, noteDeletedOutput } from '../db/pages.ts';
 import { getProject } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
@@ -22,7 +22,13 @@ export type Source = 'live' | 'saved' | 'base';
 
 export type FileTree = { source: Source; at: string | null; paths: string[]; changes: FileChange[] };
 export type ChangesView = { source: Source; at: string | null; branch: string; baseBranch: string; patch: string; log: LogEntry[] };
-export type OutputsView = { source: Source; at: string | null; outputs: Array<Omit<SavedOutput, 'key'>> };
+export type OutputsView = {
+	source: Source;
+	at: string | null;
+	outputs: Array<Omit<SavedOutput, 'key'>>;
+	/** Files you deleted that the Library no longer has, so a reply that showed one says so. */
+	deleted: string[];
+};
 
 type Context = {
 	id: string;
@@ -133,8 +139,11 @@ function library(checkpoint: Checkpoint | null, saved: SavedOutput[]): OutputsVi
 }
 
 export async function outputsView(id: string): Promise<OutputsView> {
-	const [ctx, saved] = await Promise.all([context(id), savedOutputs(id)]);
-	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs: library(ctx.checkpoint, saved) };
+	const [ctx, saved, removed] = await Promise.all([context(id), savedOutputs(id), deletedOutputs(id)]);
+	const outputs = library(ctx.checkpoint, saved);
+	// One the agent wrote again since is back, and no longer deleted.
+	const kept = new Set(outputs.map((output) => output.path));
+	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs, deleted: removed.filter((path) => !kept.has(path)) };
 }
 
 /** The task's Library as stored, without asking its machine: for the Artifacts page. */
@@ -175,6 +184,7 @@ export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	if (machine) await machine.exec(`rm -f ${quote(`${machine.root}/outputs/${path}`)}`);
 	await deleteOutput(id, path);
 	await deletePage(id, path);
+	await noteDeletedOutput(id, path);
 	announce({ kind: 'task', id, what: 'files' });
 }
 

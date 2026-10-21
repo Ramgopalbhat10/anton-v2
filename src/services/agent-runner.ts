@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { createClient } from '@libsql/client';
 import { config } from '../config.ts';
 import { ConflictError } from '../core/errors.ts';
 import type { McpServer } from '../core/types.ts';
@@ -10,6 +13,7 @@ import { enabledMcpServers } from './mcp-servers.ts';
 import { warmServerTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
+import { logProblem } from './log.ts';
 import { isRestoring } from './restore.ts';
 import { type ModelChoice, primeModel } from './sessions.ts';
 import { getSpace } from '../db/spaces.ts';
@@ -121,18 +125,23 @@ const WARM_MS = 5000;
 
 /**
  * Loads what the agent reads while it renders: the task's model, the MCP servers that are on (and, with code mode on,
- * their tool lists), notes and skills, whether it has a machine and whether it is planning.
+ * their tool lists), notes and skills, whether it has a machine and whether it is planning. The parts that do not
+ * need each other are read at once, as a message waits for all of them before the agent starts.
  */
 export async function primeAgent(id: string, { warm = true }: { warm?: boolean } = {}): Promise<void> {
-	await primeModel(id);
-	await primeAgentSettings();
-	const session = await getSessionRecord(id);
-	const project = session && (await getProject(session.projectId));
-	servers.set(id, await enabledMcpServers());
-	mail.set(id, await connectedMailboxes());
+	const [session, added, mailboxes] = await Promise.all([
+		getSessionRecord(id),
+		enabledMcpServers(),
+		connectedMailboxes(),
+		primeModel(id),
+		primeAgentSettings(),
+		primeSkills(id),
+	]);
+	const [project, space] = await Promise.all([session && getProject(session.projectId), session?.spaceId ? getSpace(session.spaceId) : null]);
+	servers.set(id, added);
+	mail.set(id, mailboxes);
 	if (warm && agentSettings.codeMode) await warmServerTools(mcpServersFor(id).filter((server) => server.codeMode !== false && !isWebServer(server)), WARM_MS);
 	memories.set(id, project?.memory ?? '');
-	const space = session?.spaceId ? await getSpace(session.spaceId) : null;
 	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
 	else threadProjects.delete(id);
 	if (session?.machineState) workspaces.add(id);
@@ -142,17 +151,45 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 	else planning.delete(id);
 	if (session?.review && session.prUrl) reviewTasks.set(id, { url: session.prUrl, number: session.review.number, author: session.review.author });
 	else reviewTasks.delete(id);
-	await primeSkills(id);
 }
 
+/** The tasks whose replies the runtime will pick up again: those with a message it has not settled. Null when its record cannot be read. */
+export async function unsettledTasks(file = path.join(config.dataDir, 'flue.db')): Promise<Set<string> | null> {
+	if (!existsSync(file)) return new Set();
+	const flue = createClient({ url: `file:${file}` });
+	try {
+		const rows = (await flue.execute("SELECT DISTINCT session_key FROM flue_agent_submissions WHERE status IN ('queued', 'running', 'terminalizing', 'joining', 'joined')")).rows;
+		// `agent-session:["Coder","<task id>","default","default"]`; the reviewer's are named by the task too.
+		return new Set(rows.map((row) => String((JSON.parse(String(row.session_key).replace(/^agent-session:/, '')) as string[])[1])));
+	} catch (error) {
+		logProblem('warn', 'Could not read which replies the runtime will resume', error);
+		return null;
+	} finally {
+		flue.close();
+	}
+}
+
+/** How many of the other tasks are primed at a time once startup is done. */
+const PRIME_AT_ONCE = 4;
+
 /**
- * Loads every task's model and MCP servers, for replies the runtime resumes
- * at startup, which reach the agent without passing through a prompt.
+ * Loads the model and MCP servers of each task the runtime will resume at startup, whose replies reach the agent
+ * without passing through a prompt; startup waits for only these. Every other task is primed by its next message,
+ * and also here behind startup, a few at a time, for anything that reads them sooner.
  */
-export async function primeAllAgents(): Promise<void> {
+export async function primeAllAgents(file?: string): Promise<void> {
+	const sessions = await listSessionRecords();
+	const resumed = await unsettledTasks(file);
+	const first = resumed ? sessions.filter((session) => resumed.has(session.id)) : sessions;
 	// Tool lists are read when a message needs them, not for every task at startup.
-	for (const session of await listSessionRecords()) await primeAgent(session.id, { warm: false }).catch(() => undefined);
+	await Promise.all(first.map((session) => primeAgent(session.id, { warm: false }).catch(() => undefined)));
 	await primeAllCoordinators().catch(() => undefined);
+	const rest = sessions.filter((session) => !first.includes(session));
+	void (async () => {
+		for (let at = 0; at < rest.length; at += PRIME_AT_ONCE) {
+			await Promise.all(rest.slice(at, at + PRIME_AT_ONCE).map((session) => primeAgent(session.id, { warm: false }).catch(() => undefined)));
+		}
+	})();
 }
 
 /** An image handed to the agent with a message, as the runtime takes it: a thread's brief carries the pictures attached to it. */

@@ -11,6 +11,7 @@ import { Btn, IconBtn } from '@/components/signal';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
 import { type PanelName, panels, VmPanel } from '@/components/vm-panel';
+import { PaneSlideContext, usePaneSlide } from '@/components/workspace-pane';
 import { api, isChat, type Session } from '@/lib/api';
 import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useLiveUpdates } from '@/lib/live-updates';
@@ -81,18 +82,20 @@ export function AppShell() {
 		<NavContext.Provider value={() => setNavOpen(true)}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
 			<div className="flex h-dvh overflow-hidden bg-(--bg-canvas) pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-[13px] leading-[18px] text-(--text-primary)">
-				{navOpen ? (
-					<button
-						type="button"
-						aria-label="Close sidebar"
-						className="fixed inset-0 z-20 bg-(--bg-scrim) md:hidden"
-						onClick={() => setNavOpen(false)}
-					/>
-				) : null}
-				{collapsed ? <SidebarRail onExpand={() => setCollapsed(false)} /> : null}
-				<div className={collapsed ? 'contents md:hidden' : 'contents'}>
+				<button
+					type="button"
+					aria-label="Close sidebar"
+					tabIndex={navOpen ? 0 : -1}
+					data-shown={navOpen}
+					className="sg-nav-scrim fixed inset-0 z-20 bg-(--bg-scrim) md:hidden"
+					onClick={() => setNavOpen(false)}
+				/>
+				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
+				<div className="sg-nav-column" data-collapsed={collapsed}>
+					<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} />
 					<ChatSidebar
 						open={navOpen}
+						collapsed={collapsed}
 						onNavigate={closeNav}
 						onCollapse={collapse}
 						onOpenPalette={openPalette}
@@ -318,6 +321,7 @@ export function TaskWorkspace({
 	}, [watching]);
 
 	const centerVisible = !(open && expanded);
+	const slide = usePaneSlide(open);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);
 	const sessionData = session.data;
 	const askForPullRequest = useCallback(() => {
@@ -343,17 +347,19 @@ export function TaskWorkspace({
 						/>
 						<Thread sessionId={sessionId} agent={agent} />
 					</div>
-					{open ? (
-						<VmPanel
-							sessionId={sessionId}
-							tabs={tabs}
-							active={active}
-							onTabsChange={changeTabs}
-							onActiveChange={changeActive}
-							expanded={expanded}
-							onToggleExpanded={toggleExpanded}
-							onClose={closeWorkspace}
-						/>
+					{slide ? (
+						<PaneSlideContext.Provider value={slide}>
+							<VmPanel
+								sessionId={sessionId}
+								tabs={tabs}
+								active={active}
+								onTabsChange={changeTabs}
+								onActiveChange={changeActive}
+								expanded={expanded}
+								onToggleExpanded={toggleExpanded}
+								onClose={closeWorkspace}
+							/>
+						</PaneSlideContext.Provider>
 					) : null}
 				</div>
 			</ShowPanel.Provider>

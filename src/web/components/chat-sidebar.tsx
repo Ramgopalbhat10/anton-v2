@@ -107,11 +107,14 @@ function SpentToday() {
 }
 
 /** Anton's mark: a lit cube, drawn in the same isometric projection as the illustrations. */
-/** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task. */
-export function SidebarRail({ onExpand }: { onExpand: () => void }) {
+/** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task, fading in as the sidebar slides away. */
+export function SidebarRail({ shown, onExpand }: { shown: boolean; onExpand: () => void }) {
 	const navigate = useNavigate();
 	return (
-		<nav className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-(--border-subtle) bg-(--bg-surface) py-2 md:flex">
+		<nav
+			data-shown={shown}
+			className="sg-nav-rail absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) bg-(--bg-surface) py-2 md:flex"
+		>
 			<div className="mb-2">
 				<Logo />
 			</div>
@@ -530,11 +533,15 @@ function Empty({ children }: { children: ReactNode }) {
 
 export function ChatSidebar({
 	open,
+	collapsed,
 	onNavigate,
 	onCollapse,
 	onOpenPalette,
 }: {
+	/** Shown as a sheet over the page, on a phone. */
 	open: boolean;
+	/** Slid away to the rail, on a wider screen. */
+	collapsed: boolean;
 	onNavigate: () => void;
 	onCollapse: () => void;
 	onOpenPalette: () => void;
@@ -565,10 +572,9 @@ export function ChatSidebar({
 
 	return (
 		<aside
-			className={cn(
-				'w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-[linear-gradient(180deg,var(--bg-surface),color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-canvas)))]',
-				open ? 'fixed inset-y-0 left-0 z-30 flex pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-(--shadow-modal) md:static md:p-0 md:shadow-none' : 'hidden md:flex',
-			)}
+			data-open={open}
+			data-collapsed={collapsed}
+			className="sg-nav flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-[linear-gradient(180deg,var(--bg-surface),color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-canvas)))]"
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-3.5">
 				<Logo size={22} />
