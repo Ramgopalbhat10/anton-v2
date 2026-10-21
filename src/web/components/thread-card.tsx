@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUpRight, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -13,6 +13,7 @@ import { categoryInfo, categoryOf, extensionOf, nameOf } from '@/lib/artifacts';
 import { age, elapsed, fileSize } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { useThreadOutputs } from '@/lib/thread-outputs';
+import { nowText } from '@/lib/now-text';
 import { cn } from '@/lib/utils';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
@@ -298,7 +299,8 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const state = stateOf(thread);
 	const now = useNow(state === 'working');
-	const line = threadLine(thread);
+	const live = useThreadNow(thread);
+	const line = live?.text ?? threadLine(thread);
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
 	const pr = prSummary(thread);
@@ -329,7 +331,14 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 						{line}
 					</div>
 				) : (
-					<p className={cn('m-0 line-clamp-3 text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', state === 'working' && 'agent-live-line')}>{line}</p>
+					<p className={cn('m-0 flex min-w-0 items-baseline gap-1.5 text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', live && 'agent-live-line')}>
+						{live?.total ? (
+							<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">
+								{live.done}/{live.total}
+							</span>
+						) : null}
+						<span className="line-clamp-3 min-w-0">{line}</span>
+					</p>
 				)
 			) : null}
 			{pr && thread.prUrl ? (
@@ -355,58 +364,121 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 	);
 }
 
+/** States that open a card out with its line and buttons: each asks something of you. */
+const CALLING = new Set<ThreadState>(['waiting', 'review', 'landing']);
+
+export type ThreadNow = { text: string; done: number; total: number };
+
 /**
- * A thread in a reply, on one line: its glyph, title and chips, and how long
- * ago or for how long; a thread that needs you adds what it asks underneath
- * and its next step. Resting on it shows the rest; clicking opens it.
- * `ThreadRows` stacks them in one card.
+ * What a working thread is on, live: the step of its todo list in hand and how
+ * far down the list it is, else what its agent does this moment, else its
+ * brief. Both follow the agent as it goes (`live-updates.ts`): a new list
+ * refetches its query, and the moment arrives whole. Null when it is not working.
+ */
+export function useThreadNow(thread: Session): ThreadNow | null {
+	const working = stateOf(thread) === 'working';
+	const todos = useQuery({ queryKey: ['todos', thread.id], queryFn: () => api.todos(thread.id), staleTime: Infinity, enabled: working });
+	const now = useQuery({ queryKey: ['now', thread.id], queryFn: () => api.now(thread.id), enabled: working }).data?.now ?? null;
+	if (!working) return null;
+	const list = todos.data?.list?.todos ?? [];
+	const step = list.find((todo) => todo.status === 'in_progress') ?? list.find((todo) => todo.status === 'pending');
+	if (step) return { text: step.content, done: list.filter((todo) => todo.status === 'completed').length, total: list.length };
+	return { text: now ? nowText(now, 'replying') : threadLine(thread) || nowText(null, 'replying'), done: 0, total: 0 };
+}
+
+/**
+ * A thread's line: what it works on while it works, shimmering, with how many
+ * of its steps are done; else what it last said. A new line rises into place,
+ * so a step ticking over reads as progress.
+ */
+function LiveLine({ text, live, className }: { text: string; live: ThreadNow | null; className?: string }) {
+	return (
+		<span className={cn('flex min-w-0 items-center gap-1.5 text-[12px] leading-[17px] text-(--text-tertiary)', className)}>
+			{live?.total ? (
+				<span className="in-num shrink-0 text-[10.5px] text-(--text-disabled)" title={`${live.done} of ${live.total} steps done`}>
+					{live.done}/{live.total}
+				</span>
+			) : null}
+			<span key={text} className={cn('min-w-0 duration-300 animate-in fade-in-0 slide-in-from-bottom-1', live && 'agent-live-line')}>
+				<span className="block truncate">{text}</span>
+			</span>
+		</span>
+	);
+}
+
+/** A thread's card in the feed: its own border, as wide as what it says. */
+export const THREAD_CARD = 'flex w-fit max-w-full min-w-0 flex-col rounded-[10px] border border-(--card-border) bg-(--card-bg) px-3 py-1.5';
+
+/**
+ * A thread in a reply, as a card that follows it live: its glyph, title and
+ * the step it is on while it works (else what it last said), then its pull
+ * request and files as chips. A thread that asks something of you (it waits
+ * on you, or its pull request is ready) opens out with that line and its next
+ * steps as buttons. Resting on it shows the rest; clicking opens it.
+ * `ThreadRows` stacks them.
  */
 export function ThreadRow({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const state = stateOf(thread);
-	const now = useNow(state === 'working');
-	const waiting = state === 'waiting';
-	const broken = waiting && failed(thread);
-	const line = waiting ? threadLine(thread) : '';
+	const live = useThreadNow(thread);
+	const broken = state === 'waiting' && failed(thread);
+	const calling = CALLING.has(state);
+	const line = live?.text ?? (state === 'queued' ? 'Starts when a slot frees' : threadLine(thread));
+	const steps = nextSteps(thread);
+	// Answer already opens the thread; anything else leaves it a button away.
+	const opens = steps.some((step) => 'open' in step && !step.panel);
 	const [peeking, setPeeking] = useState(false);
 	return (
 		<HoverPeek content={<ThreadPeek thread={thread} />} quiet={peeking}>
 			<article
 				aria-label={thread.title}
+				data-state={state}
 				onClick={() => open(thread)}
-				className="group/thread flex min-w-0 cursor-pointer flex-col justify-center gap-0.5 px-3 py-2 transition-colors duration-(--duration-micro) hover:bg-(--bg-hover)"
+				className={cn(
+					THREAD_CARD,
+					'group/thread cursor-pointer gap-1 transition-colors duration-(--duration-micro) hover:border-(--border-strong) hover:bg-(--bg-hover)',
+					calling && 'gap-1.5 border-(--border-default) py-2.5 sm:min-w-[360px]',
+				)}
 			>
-				<div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 sm:flex-nowrap">
+				<div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 sm:flex-nowrap">
 					<ThreadGlyph thread={thread} size={14} />
 					<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary) sm:flex-initial">{thread.title}</span>
-					{/* On a phone the chips take a line of their own under the title, so neither squeezes the other. */}
+					{/* On a phone the line and the chips take a row each under the title, so none squeezes the others. */}
+					{!calling && line ? <LiveLine text={line} live={live} className="order-last basis-full pl-[24px] sm:order-none sm:shrink-[4] sm:basis-auto sm:pl-0" /> : null}
 					<span className="order-last flex min-w-0 basis-full items-center gap-1 pl-[24px] empty:hidden sm:order-none sm:basis-auto sm:pl-0">
 						<ThreadChips thread={thread} />
 						<ThreadOutputChips thread={thread} onPeek={setPeeking} />
 					</span>
-					<span className="hidden flex-1 sm:block" />
-					<span className={cn('in-num shrink-0 text-[11px]', state === 'working' ? 'text-(--accent-text)' : 'text-(--text-disabled)', !waiting && nextSteps(thread).length && 'sm:group-focus-within/thread:hidden sm:group-hover/thread:hidden')}>
-						{state === 'queued' ? '' : phaseOf(thread, now)}
-					</span>
-					{waiting ? (
-						<NextSteps thread={thread} size="xs" />
-					) : (
-						// Its next steps take the place of its age on hover, so a row at rest says only what it is.
-						<span className="hidden sm:group-focus-within/thread:flex sm:group-hover/thread:flex">
-							<NextSteps thread={thread} size="xs" />
-						</span>
-					)}
 				</div>
-				{line ? <span className={cn('truncate pl-[24px] text-[12px] leading-[17px]', broken ? 'text-(--danger-text)' : 'text-(--warning-text)')}>{line}</span> : null}
+				{calling && line ? (
+					<span className={cn('line-clamp-2 pl-[24px] text-[12px] leading-[17px] text-pretty', broken ? 'text-(--danger-text)' : state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-secondary)')}>{line}</span>
+				) : null}
+				{calling ? (
+					<div className="flex flex-wrap items-center gap-1.5 pl-[24px]">
+						<NextSteps thread={thread} size="xs" />
+						{opens ? null : (
+							<Btn
+								size="xs"
+								variant="ghost"
+								onClick={(event) => {
+									event.stopPropagation();
+									open(thread);
+								}}
+							>
+								View thread
+							</Btn>
+						)}
+					</div>
+				) : null}
 			</article>
 		</HoverPeek>
 	);
 }
 
-/** Threads in a reply: one card, a line each. */
+/** Threads in a reply: a card each, stacked. */
 export function ThreadRows({ children, label }: { children: ReactNode; label?: string }) {
 	return (
-		<section aria-label={label} className="in-card flex flex-col divide-y divide-(--border-subtle) overflow-hidden">
+		<section aria-label={label} className="flex min-w-0 flex-col items-start gap-1.5">
 			{children}
 		</section>
 	);
