@@ -42,6 +42,8 @@ const TOOL_PREFIX = `mcp__${SERVER}__`;
 /** Claude Code stamps each tools/call with the tool_use block it came from, which pairs the call with its result. */
 const TOOL_USE_ID_META = 'claudecode/toolUseId';
 const STATUS_TTL_MS = 5 * 60_000;
+/** How old a probe may be for listing the models: the status read that just came before it is reused. */
+const LIST_REUSE_MS = 60_000;
 /** How long the status probe waits for the plan's limits before going on without them. */
 const USAGE_TIMEOUT_MS = 10_000;
 
@@ -398,8 +400,9 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		};
 	}
 
-	type Probe = { status: AgentRuntimeStatus; models: SubscriptionModel[]; windows: PlanWindow[] | null };
-	let probed: { at: number; result: Promise<Probe> } | null = null;
+	/** `windows` comes after the rest: the usage call can take seconds, and nothing that needs the sign-in waits for it. */
+	type Probe = { status: AgentRuntimeStatus; models: SubscriptionModel[]; windows: Promise<PlanWindow[] | null> };
+	let probed: { at: number; result: Promise<Probe>; settled: boolean } | null = null;
 
 	/** The plan's limits as `/usage` shows them, through a call the SDK marks experimental; null when it will not say. */
 	async function usageOf(session: Query): Promise<PlanWindow[] | null> {
@@ -409,29 +412,59 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		return Promise.race([read({ skipBehaviors: true }).then(toWindows, () => null), late]);
 	}
 
-	/** Starts Claude Code without sending anything, to read its sign-in, models and limits; no model call is made. */
+	/**
+	 * Starts Claude Code without sending anything, to read its sign-in, models and limits; no model call is made.
+	 * It closes once the limits are read, which the sign-in and models do not wait for.
+	 */
 	async function probe(): Promise<Probe> {
 		const idle = channel<SDKUserMessage>();
 		const session = query({ prompt: idle, options: baseOptions() });
+		const close = () => {
+			idle.close();
+			session.close();
+		};
 		try {
 			const [account, init] = await Promise.all([session.accountInfo(), session.initializationResult()]);
 			const status = statusFrom(account, init.claude_code_version ?? null);
-			if (!status.signedIn) return { status, models: [], windows: null };
-			const [models, windows] = await Promise.all([session.supportedModels(), usageOf(session)]);
-			return { status, models: toModels(models), windows };
-		} finally {
-			idle.close();
-			session.close();
+			if (!status.signedIn) {
+				close();
+				return { status, models: [], windows: Promise.resolve(null) };
+			}
+			const windows = usageOf(session).catch(() => null);
+			const models = toModels(await session.supportedModels());
+			void windows.finally(close);
+			return { status, models, windows };
+		} catch (error) {
+			close();
+			throw error;
 		}
 	}
 
-	function probeCached(fresh = false) {
-		if (fresh || !probed || Date.now() - probed.at > STATUS_TTL_MS) {
+	/**
+	 * The last probe, read again once it is a few minutes old. A stale one that answered is still served at once
+	 * while the next runs behind it, so a task's first message never waits for Claude Code to start; `fresh` waits.
+	 */
+	function probeCached(fresh = false): Promise<Probe> {
+		const current = probed;
+		if (!fresh && current && Date.now() - current.at <= STATUS_TTL_MS) return current.result;
+		if (!fresh && current?.settled) {
+			// Marked fresh while the next probe runs, so one starts; a failed one leaves this answer for another few minutes.
+			current.at = Date.now();
 			const result = probe();
-			probed = { at: Date.now(), result };
-			result.catch(() => probed?.result === result && (probed = null));
+			result.then(
+				() => probed === current && (probed = { at: Date.now(), result, settled: true }),
+				() => undefined,
+			);
+			return current.result;
 		}
-		return probed.result;
+		const result = probe();
+		const entry = { at: Date.now(), result, settled: false };
+		probed = entry;
+		result.then(
+			() => (entry.settled = true),
+			() => probed === entry && (probed = null),
+		);
+		return result;
 	}
 
 	return {
@@ -447,8 +480,9 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 				return { signedIn: false, email: null, plan: null, version: null, problem: `Claude Code did not start: ${message}` };
 			}
 		},
-		listModels: async () => (await probeCached(true)).models,
-		windows: async () => (await probeCached().catch(() => null))?.windows ?? null,
+		// The status read just before already listed them: reused when it is under a minute old.
+		listModels: async () => (await probeCached(probed !== null && Date.now() - probed.at > LIST_REUSE_MS)).models,
+		windows: async () => (await (await probeCached().catch(() => null))?.windows) ?? null,
 		open(conversation: RuntimeConversationOptions): RuntimeConversation {
 			const input = channel<SDKUserMessage>();
 			const effort = conversation.effort && conversation.effort !== 'off' ? (conversation.effort as Options['effort']) : undefined;

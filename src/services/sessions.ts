@@ -116,12 +116,16 @@ export async function createSession(input: {
 	/** The message to name the task from: a fast model gives it a short title in a moment, in place of `title`. */
 	titleFrom?: string;
 }): Promise<Session> {
-	const { projectId, baseBranch, baseSha } = await startingPoint(input.projectId, input.branch, input.baseSha);
+	// GitHub names the commit while the model is checked, rather than one after the other.
+	const [{ projectId, baseBranch, baseSha }, general, chosen] = await Promise.all([
+		startingPoint(input.projectId, input.branch, input.baseSha),
+		generalSettings(),
+		input.model ? knownModel(input.model) : null,
+	]);
 	const id = randomUUID();
 	const title = input.title?.trim() || (input.titleFrom && titleFrom(input.titleFrom)) || 'New task';
-	const general = await generalSettings();
 	// The default reasoning level belongs to the default model; another model starts at its own default.
-	const model = input.model ? await knownModel(input.model) : (general.model ?? config.model);
+	const model = chosen ?? general.model ?? config.model;
 	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
 	// Plan mode plans changes to code; a chat has none to plan.
 	const planMode = projectId ? (input.planMode ?? general.planMode) : false;

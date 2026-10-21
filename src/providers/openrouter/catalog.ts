@@ -87,18 +87,25 @@ export function toModelInfo(model: OpenRouterModel): ModelInfo {
 	};
 }
 
+/** After a refresh in the background fails, how long the last list is served before asking again. */
+const RETRY_MS = 5 * 60_000;
+
 /**
  * OpenRouter's model list, cached for `ttlMs`. With a key it is the models the
  * key's account may use (`/models/user`, after its provider preferences and
  * guardrails), else the public list, which also stands in when that call
- * fails. A failed refresh keeps serving the last good list, so a gateway
- * hiccup never empties the picker; a new key lists them again at once.
+ * fails. Once the hour is up the last list is still served at once while a
+ * new one is fetched behind it, so the picker never waits on OpenRouter; a
+ * failed refresh keeps serving the last good list, so a gateway hiccup never
+ * empties the picker; a new key lists them again at once.
  */
 export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRouterOptions): ModelCatalog {
-	let cached: { at: number; key: string | null; models: Promise<ModelInfo[]> } | undefined;
+	type Entry = { at: number; key: string | null; models: Promise<ModelInfo[]>; settled: boolean };
+	let cached: Entry | undefined;
+	let refreshing: Promise<unknown> | null = null;
 
 	async function fetchList(path: string, key: string | null): Promise<OpenRouterModel[]> {
-		// Bounded, as startup waits for it to load the tasks' models.
+		// Bounded, as a task's first list waits for it.
 		const response = await fetch(`${apiUrl}${path}`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(15_000) });
 		if (!response.ok) throw new Error(`OpenRouter ${path}: ${response.status}`);
 		return ((await response.json()) as { data: OpenRouterModel[] }).data;
@@ -109,17 +116,40 @@ export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRo
 		return data.filter(isAgentModel).map(toModelInfo);
 	}
 
+	/** The last good list stays served until a newer one is in hand. */
+	function refreshBehind(entry: Entry) {
+		if (refreshing) return;
+		refreshing = fetchModels(entry.key)
+			.then(
+				(models) => {
+					if (cached === entry) cached = { at: Date.now(), key: entry.key, models: Promise.resolve(models), settled: true };
+				},
+				() => {
+					if (cached === entry) entry.at = Date.now() - ttlMs + RETRY_MS;
+				},
+			)
+			.finally(() => (refreshing = null));
+	}
+
 	return {
 		name: 'openrouter',
 		list(fresh = false) {
 			const key = apiKey();
-			if (!fresh && cached && cached.key === key && Date.now() - cached.at < ttlMs) return cached.models;
+			const current = cached?.key === key ? cached : undefined;
+			if (!fresh && current && Date.now() - current.at < ttlMs) return current.models;
+			if (!fresh && current?.settled) {
+				refreshBehind(current);
+				return current.models;
+			}
 			const previous = cached?.models;
 			const models = fetchModels(key).catch((error: unknown) => (previous ? previous : Promise.reject(error)));
-			const entry = { at: Date.now(), key, models };
+			const entry: Entry = { at: Date.now(), key, models, settled: false };
 			cached = entry;
-			// A failure with nothing to fall back on is retried on the next call.
-			models.catch(() => cached === entry && (cached = undefined));
+			models.then(
+				() => (entry.settled = true),
+				// A failure with nothing to fall back on is retried on the next call.
+				() => cached === entry && (cached = undefined),
+			);
 			return models;
 		},
 	};
