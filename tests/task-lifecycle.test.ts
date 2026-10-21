@@ -544,8 +544,10 @@ test('the checkpoint timeline keeps distinct states, and restoring one puts its 
 	const machine = await machineFor(session.id);
 	await run(machine, 'echo one > a.txt');
 	const first = await saveCheckpoint(session.id, machine);
-	await saveCheckpoint(session.id, machine);
+	const again = await saveCheckpoint(session.id, machine);
 	assert.equal((await listCheckpoints(session.id)).length, 1, 'an unchanged state adds no entry');
+	assert.equal(again.at, first.at, 'an unchanged state uploads nothing');
+	assert.equal((await readCheckpoint(session.id))?.at, first.at);
 
 	await run(machine, 'echo two > a.txt && mkdir -p deep && echo new > deep/b.txt && rm README.md');
 	await saveCheckpoint(session.id, machine);

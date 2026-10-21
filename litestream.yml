@@ -2,8 +2,24 @@
 # up where the old one stopped. Used by scripts/start-with-backup.sh, which sets
 # ANTON_DATA_DIR and TIGRIS_ENDPOINT when they are not set.
 # The replicas live under db/; storage cleanup only touches sessions/ and blobs/.
+#
+# Tigris's free tier allows 10,000 PUT, COPY, POST and LIST requests a month,
+# and Litestream's defaults alone spend that in under a day:
+# - L0 retention lists two levels of both databases every 15 seconds, busy or
+#   idle, about 960 LISTs an hour. Once an hour is plenty, as nothing reads
+#   L0 files back once they are compacted.
+# - Each sync is a PUT. Every second turns a busy hour into ~1,000 uploads;
+#   30 seconds caps it at 240. A clean shutdown still uploads the last writes,
+#   so only a crash can lose them, and then at most 30 seconds.
+# - Each compaction is a LIST and a PUT. Compacting L1 every 15 minutes instead
+#   of 30 seconds, and the levels above it to match, cuts those by about 7x.
 access-key-id: ${TIGRIS_ACCESS_KEY_ID}
 secret-access-key: ${TIGRIS_SECRET_ACCESS_KEY}
+l0-retention-check-interval: 1h
+levels:
+  - interval: 15m
+  - interval: 3h
+  - interval: 12h
 dbs:
   - path: ${ANTON_DATA_DIR}/anton.db
     replica:
@@ -12,6 +28,7 @@ dbs:
       path: db/anton
       endpoint: ${TIGRIS_ENDPOINT}
       region: auto
+      sync-interval: 30s
   - path: ${ANTON_DATA_DIR}/flue.db
     replica:
       type: s3
@@ -19,3 +36,4 @@ dbs:
       path: db/flue
       endpoint: ${TIGRIS_ENDPOINT}
       region: auto
+      sync-interval: 30s
