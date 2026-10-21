@@ -5,6 +5,7 @@ import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
+import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
@@ -13,6 +14,7 @@ import { type ImageAttachment, imageFromBase64, MAX_IMAGES } from '@/lib/attachm
 import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { askToNotify } from '@/lib/notifications';
+import { stateOf } from '@/lib/spaces';
 import { withAttachments } from '../../core/attachments';
 
 /** Sent when a message is only images, since the agent always gets text. */
@@ -137,6 +139,7 @@ export const Composer = memo(function Composer({
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending;
+	const mood = useMascotMood({ busy: Boolean(busy), waiting: session.data ? stateOf(session.data) === 'waiting' : false, stir: text });
 
 	return (
 		<form
@@ -184,6 +187,7 @@ export const Composer = memo(function Composer({
 				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)"
 				{...attachments.dropZone}
 			>
+				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				{elements.length > 0 ? <ElementChips elements={elements} onRemove={(id) => setElements((current) => current.filter((item) => item.id !== id))} /> : null}
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput

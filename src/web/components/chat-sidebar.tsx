@@ -106,7 +106,6 @@ function SpentToday() {
 	);
 }
 
-/** Anton's mark: a lit cube, drawn in the same isometric projection as the illustrations. */
 /** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task, fading in as the sidebar slides away. */
 export function SidebarRail({ shown, onExpand }: { shown: boolean; onExpand: () => void }) {
 	const navigate = useNavigate();

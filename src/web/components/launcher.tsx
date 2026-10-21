@@ -8,6 +8,7 @@ import { Caption, Card } from '@/components/instrument';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
+import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
@@ -199,6 +200,7 @@ export function Launcher() {
 	const attachments = useAttachments();
 	const queryClient = useQueryClient();
 	const create = useCreateChat();
+	const mood = useMascotMood({ busy: create.isPending, waiting: false, stir: prompt });
 	const models = useModels();
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
@@ -262,6 +264,7 @@ export function Launcher() {
 						}}
 						{...attachments.dropZone}
 					>
+						<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 						<AttachmentTray attachments={attachments} className="px-4 pt-3.5" />
 						<ComposerInput
 							autoFocus

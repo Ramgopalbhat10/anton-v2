@@ -752,3 +752,288 @@
 		animation: none;
 	}
 }
+
+/* Anton's mascot (mascot.tsx): a pixel cube on the composer's edge. Lengths
+   in its transforms are grid pixels, since the SVG's user unit is one pixel.
+   Every loop moves whole pixels (steps), and a mood's pose holds without them. */
+.anton-mascot {
+	overflow: visible;
+	--am-led: var(--cyan-700);
+}
+.anton-mascot :is(.am-question, .am-zzz, .am-spark, .am-happy, .am-shut) {
+	display: none;
+}
+.anton-mascot .am-led {
+	fill: var(--am-led);
+}
+.anton-mascot .am-eyes {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+	animation: am-blink 5.2s steps(1, end) infinite;
+}
+.anton-mascot .am-upper {
+	animation: am-breathe 4.4s steps(1, end) infinite;
+}
+@keyframes am-blink {
+	0%,
+	100% {
+		transform: none;
+	}
+	93% {
+		transform: scaleY(0.5);
+	}
+	96% {
+		transform: none;
+	}
+}
+@keyframes am-breathe {
+	0%,
+	100% {
+		transform: none;
+	}
+	62% {
+		transform: translateY(1px);
+	}
+	80% {
+		transform: none;
+	}
+}
+
+/* Working: types with both hands, reads side to side, the antenna blinks. */
+.anton-mascot[data-mood='working'] {
+	--am-led: var(--cyan-200);
+}
+.anton-mascot[data-mood='working'] .am-upper {
+	animation: am-bob 0.56s steps(1, end) infinite;
+}
+.anton-mascot[data-mood='working'] .am-arm-l {
+	animation: am-tap 0.28s steps(1, end) infinite;
+}
+.anton-mascot[data-mood='working'] .am-arm-r {
+	animation: am-tap 0.28s steps(1, end) infinite reverse;
+}
+.anton-mascot[data-mood='working'] .am-eyes {
+	animation: am-read 2.4s steps(1, end) infinite;
+}
+.anton-mascot[data-mood='working'] .am-led {
+	animation: am-led 0.8s steps(1, end) infinite;
+}
+@keyframes am-bob {
+	50% {
+		transform: translateY(-1px);
+	}
+}
+@keyframes am-tap {
+	50% {
+		transform: translateY(-1px);
+	}
+}
+@keyframes am-read {
+	0%,
+	100% {
+		transform: translateX(-1px);
+	}
+	45% {
+		transform: none;
+	}
+	55% {
+		transform: translateX(1px);
+	}
+	90% {
+		transform: none;
+	}
+}
+@keyframes am-led {
+	50% {
+		fill: var(--cyan-600);
+	}
+}
+
+/* Waiting on you: looks up, with an amber question and light. */
+.anton-mascot[data-mood='waiting'] {
+	--am-led: var(--amber-400);
+}
+.anton-mascot[data-mood='waiting'] .am-question {
+	display: inline;
+	animation: am-bob 1.6s steps(1, end) infinite;
+}
+.anton-mascot[data-mood='waiting'] .am-eyes {
+	transform: translate(-1px, -1px);
+	animation: none;
+}
+.anton-mascot[data-mood='waiting'] .am-led {
+	animation: am-led-amber 1.6s steps(1, end) infinite;
+}
+@keyframes am-led-amber {
+	50% {
+		fill: var(--amber-500);
+	}
+}
+
+/* Done: one hop, pleased eyes and a spark. */
+.anton-mascot[data-mood='done'] {
+	--am-led: var(--cyan-200);
+}
+.anton-mascot[data-mood='done'] :is(.am-happy, .am-spark) {
+	display: inline;
+}
+.anton-mascot[data-mood='done'] .am-eyes {
+	display: none;
+}
+.anton-mascot[data-mood='done'] .am-body {
+	animation: am-hop 0.9s steps(1, end) 1 both;
+}
+.anton-mascot[data-mood='done'] .am-spark {
+	animation: am-twinkle 0.6s steps(1, end) 3;
+}
+@keyframes am-hop {
+	0% {
+		transform: none;
+	}
+	15% {
+		transform: translateY(-2px);
+	}
+	30% {
+		transform: translateY(-3px);
+	}
+	50% {
+		transform: translateY(-1px);
+	}
+	65%,
+	100% {
+		transform: none;
+	}
+}
+@keyframes am-twinkle {
+	50% {
+		opacity: 0;
+	}
+}
+
+/* Asleep: eyes shut, slumped, light off, and z's drifting up. */
+.anton-mascot[data-mood='sleeping'] {
+	--am-led: var(--neutral-600);
+}
+.anton-mascot[data-mood='sleeping'] :is(.am-shut, .am-zzz) {
+	display: inline;
+}
+.anton-mascot[data-mood='sleeping'] .am-eyes {
+	display: none;
+}
+.anton-mascot[data-mood='sleeping'] .am-upper {
+	transform: translateY(1px);
+	animation: none;
+}
+.anton-mascot[data-mood='sleeping'] .am-z {
+	opacity: 0;
+	animation: am-drift 3.6s steps(6, end) infinite;
+}
+.anton-mascot[data-mood='sleeping'] .am-z2 {
+	animation-delay: -1.8s;
+}
+@keyframes am-drift {
+	0% {
+		opacity: 0;
+		transform: translate(-1px, 2px);
+	}
+	20% {
+		opacity: 0.9;
+	}
+	100% {
+		opacity: 0;
+		transform: translate(1px, -2px);
+	}
+}
+
+/* A wave back when pointed at, unless asleep. */
+.anton-mascot:not([data-mood='sleeping']):hover .am-arm-r {
+	animation: am-wave 0.36s steps(1, end) infinite;
+}
+@keyframes am-wave {
+	0%,
+	100% {
+		transform: translateY(-2px);
+	}
+	50% {
+		transform: translateY(-1px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anton-mascot *,
+	.anton-mascot .am-z {
+		animation: none !important;
+	}
+	.anton-mascot[data-mood='sleeping'] .am-z {
+		opacity: 0.9;
+	}
+	.anton-mascot[data-mood='sleeping'] .am-z2 {
+		display: none;
+	}
+}
+
+/* Anton's mark (Logo in illustrations.tsx): pointed at, the cube crouches,
+   hops and lands, glancing along its face and blinking once. Lengths are the
+   mark's own units (a 17-unit square). */
+.anton-logo .al-cube {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+}
+.anton-logo .al-eye {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+}
+.anton-logo:hover .al-cube {
+	animation: al-hop 0.62s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.anton-logo:hover .al-eyes {
+	animation: al-glance 1.1s ease-in-out;
+}
+.anton-logo:hover .al-eye {
+	animation: al-blink 1.1s steps(1, end);
+}
+@keyframes al-hop {
+	0%,
+	100% {
+		transform: none;
+	}
+	16% {
+		transform: scale(1.06, 0.9);
+	}
+	42% {
+		transform: translateY(-2.2px) scale(0.97, 1.04);
+	}
+	68% {
+		transform: scale(1.05, 0.93);
+	}
+	84% {
+		transform: scale(0.99, 1.01);
+	}
+}
+@keyframes al-glance {
+	0%,
+	20%,
+	100% {
+		transform: none;
+	}
+	38%,
+	62% {
+		transform: translate(0.9px, 0.52px);
+	}
+}
+@keyframes al-blink {
+	0%,
+	76%,
+	100% {
+		transform: none;
+	}
+	70% {
+		transform: scaleY(0.15);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anton-logo * {
+		animation: none !important;
+	}
+}

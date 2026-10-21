@@ -7,6 +7,7 @@ import { ComposerPlus } from '@/components/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
+import { Mascot, useMascotMood } from '@/components/mascot';
 import { Caption } from '@/components/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { OutputCards } from '@/components/output-viewer';
@@ -592,6 +593,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 		onSuccess: (updated) => queryClient.setQueryData(['space', space.id], updated),
 	});
 	const paused = space.state !== 'active';
+	const mood = useMascotMood({ busy, waiting: false, stir: draft });
 	return (
 		<form
 			className="shrink-0 px-4 pt-1 pb-4"
@@ -622,6 +624,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 			}}
 		>
 			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)" {...attachments.dropZone}>
+				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput
 					value={draft}
