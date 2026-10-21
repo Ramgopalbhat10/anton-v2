@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useEffect, useMemo, useState } from 'react';
 import { FileIcon, FileIcons } from '@/components/file-icons';
-import { BranchArt } from '@/components/illustrations';
+import { ChangesArt } from '@/components/illustrations';
 import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, refreshFor } from '@/lib/api';
+import { api, isChat, refreshFor } from '@/lib/api';
 import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { type ReviewComment, reviewMessage, SendToAgent, useReviewComments } from '@/lib/review';
@@ -238,11 +238,16 @@ export function DiffList({
 	review,
 	empty,
 	sessionId,
+	branch,
+	base,
 }: {
 	files: FileDiff[];
 	review?: ReturnType<typeof useReviewComments>;
 	empty?: string;
 	sessionId?: string;
+	/** The task's branch and the one it came off, named in the empty drawing. */
+	branch?: string;
+	base?: string;
 }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	// A changed file a reply points at is picked here.
@@ -251,7 +256,7 @@ export function DiffList({
 		if (focus) setSelected(focus.path);
 	}, [focus?.at]);
 	if (files.length === 0) {
-		return <EmptyState art={<BranchArt className="w-full max-w-[380px]" />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
+		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
 	const current = files.find((file) => file.path === selected) ?? files[0];
 	return (
@@ -350,6 +355,10 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 	const [view, setView] = useState<'diff' | 'commits'>('diff');
 	const { changes, files } = useChanges(sessionId);
 	const review = useReviewComments(sessionId);
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data;
+	// A chat has no branch; a task names its own only once it has a workspace to make it in.
+	const branch = session && !isChat(session) && session.workspace ? session.branch : undefined;
+	const base = session && !isChat(session) ? session.baseBranch : undefined;
 
 	if (changes.isError) return <EmptyState title="Changes unavailable" body={changes.error.message} />;
 	if (!changes.data) {
@@ -385,7 +394,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 					</Segmented>
 				</div>
 			</div>
-			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} />}
+			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} branch={branch} base={base} />}
 			<ReviewBar review={review} />
 		</div>
 	);
