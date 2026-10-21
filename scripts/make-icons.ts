@@ -3,24 +3,30 @@ import { chromium } from 'playwright-core';
 
 /**
  * Draws the app's icons (favicon, home screen, splash, notification badge)
- * from Anton's mark, the prompt-faced machine in `Logo` (illustrations.tsx).
+ * from Anton's mark, the faceted bot head in `Logo` (illustrations.tsx).
  * Run after changing the mark: `node scripts/make-icons.ts`. Needs Chromium
  * (`ANTON_CHROMIUM` or Playwright's own).
  */
 
 const OUT = new URL('../src/web/public/icons/', import.meta.url);
-const CYAN = '#3FB6D8';
 const TILE = '#101517';
-const VIEW = 'viewBox="2.5 1 19 20.5"';
-/** The mark in `fill`, its prompt cut out so whatever is behind shows through. */
-const mark = (fill: string) =>
-	'<mask id="m"><rect width="24" height="24" fill="#fff"/><path d="M7.3 11.3 10.4 14 7.3 16.7M12.9 16.7h3.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></mask>' +
-	`<g fill="${fill}"><path mask="url(#m)" d="M7.4 7h9.2a4.4 4.4 0 0 1 4.4 4.4v5.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6v-5.2A4.4 4.4 0 0 1 7.4 7Z"/><rect x="15.35" y="3.4" width="1.5" height="4"/><circle cx="16.1" cy="3.1" r="1.75"/></g>`;
+const VIEW = 'viewBox="1.25 0.9 21.5 21.5"';
+/** The mark in its cyan facets, or all in `one` colour with the eyes cut out (the badge). */
+const mark = (one?: string) => {
+	const [top, left, right, led] = one ? [one, one, one, one] : ['#9EE1F3', '#3FB6D8', '#17627A', '#CBEEF8'];
+	const eyes = '<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" stroke-width="1.75" stroke-linecap="round"/>';
+	return (
+		(one ? '<mask id="m"><rect width="24" height="24" fill="#fff"/><path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#000" stroke-width="1.75" stroke-linecap="round"/></mask><g mask="url(#m)">' : '<g>') +
+		`<line x1="12" y1="6.6" x2="12" y2="2.4" stroke="${right}" stroke-width="1.15"/><circle cx="12" cy="2.4" r="1.5" fill="${led}"/>` +
+		`<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="${top}"/><polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="${left}"/><polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="${right}"/>` +
+		`</g>${one ? '' : eyes}`
+	);
+};
 /** The mark centred at `scale` of a 24-unit square. */
-const centred = (scale: number, fill = CYAN) => `<g transform="translate(12 12) scale(${scale}) translate(-12 -11.25)">${mark(fill)}</g>`;
+const centred = (scale: number) => `<g transform="translate(12 12) scale(${scale}) translate(-12 -11.65)">${mark()}</g>`;
 
 /** The bare mark, as the sidebar shows it: the favicon, legible on light and dark tabs alike. */
-const favicon = `<svg xmlns="http://www.w3.org/2000/svg" ${VIEW}>${mark(CYAN)}</svg>`;
+const favicon = `<svg xmlns="http://www.w3.org/2000/svg" ${VIEW}>${mark()}</svg>`;
 /** On a dark rounded tile with a hairline edge: the plain app icon. */
 const tile = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.5" fill="${TILE}"/><rect x=".25" y=".25" width="23.5" height="23.5" rx="5.25" fill="none" stroke="#ffffff" stroke-opacity=".08" stroke-width=".5"/>${centred(0.72)}</svg>`;
 /** Edge to edge, the mark well inside the middle 80%, for launchers that cut their own shape (maskable) and for iOS, which rounds the corners itself. */

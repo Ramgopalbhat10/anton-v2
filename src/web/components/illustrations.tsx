@@ -1600,24 +1600,20 @@ export function ProjectRouteArt({ className, active, waiting = true }: { classNa
 }
 
 /**
- * Anton's mark: a small machine with an antenna whose face is a terminal
- * prompt, the composer mascot's head in one flat colour. The prompt is cut
- * out, so the mark sits on any background. The favicon and app icons are
- * drawn from the same shapes (scripts/make-icons.ts); keep the two in step.
+ * Anton's mark: the composer mascot's head, its cube drawn in three flat
+ * facets, with two eyes on the lit face and the antenna light on top. The
+ * favicon and app icons are drawn from the same shapes (scripts/make-icons.ts);
+ * keep the two in step.
  */
 export function Logo({ size = 20 }: { size?: number }) {
-	const id = useSvgId('anton-mark');
 	return (
-		<svg aria-hidden width={size} height={size} viewBox="2.5 1 19 20.5" className="shrink-0">
-			<mask id={id}>
-				<rect x="0" y="0" width="24" height="24" fill="#fff" />
-				<path d="M7.3 11.3 10.4 14 7.3 16.7M12.9 16.7h3.6" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-			</mask>
-			<g fill="var(--cyan-400)">
-				<path mask={`url(#${id})`} d="M7.4 7h9.2a4.4 4.4 0 0 1 4.4 4.4v5.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6v-5.2A4.4 4.4 0 0 1 7.4 7Z" />
-				<rect x="15.35" y="3.4" width="1.5" height="4" />
-				<circle cx="16.1" cy="3.1" r="1.75" />
-			</g>
+		<svg aria-hidden width={size} height={size} viewBox="1.25 0.9 21.5 21.5" className="shrink-0">
+			<line x1="12" y1="6.6" x2="12" y2="2.4" stroke="var(--cyan-700)" strokeWidth="1.15" />
+			<circle cx="12" cy="2.4" r="1.5" fill="var(--cyan-100)" />
+			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="var(--cyan-200)" />
+			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="var(--cyan-400)" />
+			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="var(--cyan-700)" />
+			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round" />
 		</svg>
 	);
 }
