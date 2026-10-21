@@ -2,25 +2,37 @@
 
 Anton v2 is a personal coding agent in the browser. You pick a GitHub repo and branch, describe the outcome, and Anton works on its own branch in its own sandbox. The right panel shows the task as it goes: **Changes**, **Terminal**, **Files** and **Library**.
 
-## Requirements
+## Quick start
 
-- Node.js `>=22.19` (this repo pins `.nvmrc` to 22.22.2)
+Anton runs on your computer and needs Node.js 22.19 or newer (`.nvmrc` pins 22.22.2) and a GitHub fine-grained token with **Contents** and **Pull requests** read/write on the repos you want it to work on.
 
 ```sh
-nvm use
+git clone https://github.com/Ramgopalbhat10/anton-v2.git
+cd anton-v2
+nvm install && nvm use   # any Node 22.19 or newer will do
 npm install
 cp .env.example .env
+mkdir -p data            # SQLite files go here; without it the app starts but every API call fails
 ```
 
-## Run
+Set `ANTON_GITHUB_TOKEN` in `.env`; every other value can stay empty. Then start Anton:
 
 ```sh
-npm run dev          # UI on http://127.0.0.1:43127, API on :43128
-npm test
-npm run build && npm start   # production: one port (PORT, default 3000)
+npm run dev
 ```
 
-With no Modal or Tigris keys, Anton runs everything locally: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
+Open <http://127.0.0.1:43127>. The UI runs on port 43127 and the API on 43128, and `npm run dev` is the only mode that reads `.env`. Add a repository in the app (or set `ANTON_DEFAULT_REPO=owner/name`) and pick a model, pasting an OpenRouter key or signing in to a ChatGPT, Claude, OpenCode Go or Cursor plan in **Settings › Subscriptions**.
+
+With no Modal or Tigris keys everything stays on that computer: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
+
+Production serves the app on one port (`PORT`, default 3000):
+
+```sh
+npm run build
+npm start
+```
+
+`npm start` reads only the shell's environment, so export the variables first, or run `node --env-file=.env src/server.ts` after building.
 
 ## How a task runs
 
