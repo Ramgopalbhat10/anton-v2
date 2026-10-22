@@ -389,7 +389,7 @@ describe('response details', () => {
 		fireEvent.click(command);
 		expect(details?.getAttribute('aria-hidden')).toBe('true');
 	});
-	it('counts a reply with its subagents, says a plan paid, and breaks the count down on hover', () => {
+	it('counts a reply with its subagents, says a plan paid, and breaks the count down on hover', async () => {
 		show(
 			agent([
 				{
@@ -407,17 +407,40 @@ describe('response details', () => {
 			]),
 		);
 		const line = screen.getByText('17K tokens · plan');
-		expect(line.getAttribute('title')).toBe(
-			[
-				'16,695 tokens used by this reply: 16,419 in, 276 out.',
-				"6,000 of the input came from the provider's cache, which costs less.",
-				'The agent: 8.6K over 2 calls.',
-				'Its subagents: 8.1K over 4 calls.',
-				'Run on your plan: no charge per token.',
-			].join('\n'),
-		);
+		fireEvent.pointerEnter(line, { pointerType: 'mouse' });
+		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
+		expect(within(peek).getByRole('img', { name: '16,695 tokens: 16,419 in, 6,000 of them cached, and 276 out' })).toBeTruthy();
+		expect(within(peek).getByText('Your plan')).toBeTruthy();
+		// Who made the calls, without a cost column on a plan.
+		const rows = within(peek).getAllByRole('row').map((row) => row.textContent);
+		expect(rows).toEqual(['Made byCallsTokens', 'The agent28.6K', 'Subagents48.1K']);
+		expect(within(peek).getByText('Run on your plan: no charge per token.')).toBeTruthy();
 		// A reply from before the breakdown keeps its plain count and spend.
-		expect(screen.getByText('30 tokens · $0.010').getAttribute('title')).toContain('Charged: $0.010.');
+		expect(screen.getByText('30 tokens · $0.010')).toBeTruthy();
+	});
+
+	it('breaks down a per-token reply with what it was charged, leaving out a side that made no calls', async () => {
+		show(
+			agent([
+				{
+					...assistant('a1', [{ type: 'text', text: 'Done.' }]),
+					metadata: {
+						usage: { inputTokens: 40_000, outputTokens: 2_000, cost: 0.05, cachedTokens: 30_000 },
+						usageParts: {
+							main: { inputTokens: 30_000, outputTokens: 1_500, cost: 0.04, cachedTokens: 30_000, calls: 3 },
+							subagents: { inputTokens: 10_000, outputTokens: 500, cost: 0.01, cachedTokens: 0, calls: 0 },
+						},
+						billing: 'api',
+					},
+				},
+			]),
+		);
+		fireEvent.pointerEnter(screen.getByText('42K tokens · $0.050'), { pointerType: 'mouse' });
+		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
+		expect(within(peek).getByText('Charged')).toBeTruthy();
+		// A side with no calls is left out of the table.
+		expect(within(peek).getAllByRole('row').map((row) => row.textContent)).toEqual(['Made byCallsTokensCost', 'The agent332K$0.040']);
+		expect(within(peek).getByText("75% of the input came from the provider's cache, which costs less.")).toBeTruthy();
 	});
 
 	it('copies only the response text, including markdown, before its token count', async () => {
