@@ -464,6 +464,7 @@ describe('Plans used with a key', () => {
 		expect(screen.getByText('…a1b2', { selector: 'dd' })).toBeTruthy();
 		const limits = within(screen.getByRole('list', { name: 'Plan limits' })).getAllByRole('listitem');
 		expect(limits.map((row) => row.textContent)).toEqual(['5 hours13% used', 'WeekLimit reached']);
+		expect(within(limits[1]).getByRole('meter', { name: 'Week: 100% used' }).getAttribute('aria-valuenow')).toBe('100');
 		expect(screen.getByRole('switch', { name: 'Count toward the spending caps' })).toBeTruthy();
 	});
 
