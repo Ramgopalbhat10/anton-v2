@@ -66,7 +66,9 @@ const host: Pick<GitHost, 'getRepo' | 'resolveRef' | 'archive' | 'file' | 'searc
 };
 const { setProviders } = await import('../src/providers/index.ts');
 setProviders({ git: host as GitHost, sandbox: {} as SandboxProvider, store: {} as ObjectStore, models: {} as ModelCatalog });
-const { catalog, installPlugin, pluginFile, previewPlugin, searchGitHub } = await import('../src/services/plugins.ts');
+const { catalog, installPlugin, pluginFile, pluginSkillsFor, previewPlugin, primeSkills, searchGitHub } = await import('../src/services/plugins.ts');
+const { savePlugin } = await import('../src/db/plugins.ts');
+const { insertSession } = await import('../src/db/sessions.ts');
 
 test('concurrent external bundle browsing and cold-cache installation preserve the pinned single skill', async () => {
 	const initial = await catalog('acme/market');
@@ -150,4 +152,22 @@ test('GitHub search finds skills by their SKILL.md, keeps each search a while, a
 	searched.length = 0;
 	await searchGitHub('pdf');
 	assert.equal(searched.length, 2, 'a limited search is tried again');
+});
+
+test('a plugin packed before files were picked by importance is packed again from its commit, keeping that commit', async () => {
+	repos['acme/figures'] = repository('figures', {
+		'SKILL.md': `---\nname: figures\ndescription: Draws figures.\n---\nRead \`references/craft.md\` first.`,
+		'references/craft.md': '# Craft',
+	});
+	const installed = await installPlugin({ address: 'acme/figures' });
+	assert.deepEqual(installed.skills[0].omitted, []);
+	// As an older Anton saved it: no list of what was left out, and the reference lost.
+	const { omitted: _omitted, ...old } = installed.skills[0];
+	await savePlugin({ ...installed, skills: [{ ...old, files: {} }] });
+	await insertSession({ id: 'chat-figures', projectId: null as never, title: 'Figures', model: 'x', reasoning: null, branch: '', baseBranch: '', baseSha: '', planMode: false });
+	await primeSkills('chat-figures');
+	const figures = pluginSkillsFor('chat-figures').find((skill) => skill.name === 'figures')!;
+	assert.equal(figures.files['references/craft.md'], '# Craft');
+	const saved = (await previewPlugin({ plugin: installed.id })).installed;
+	assert.deepEqual(saved, { sha: installed.sha, enabled: true });
 });

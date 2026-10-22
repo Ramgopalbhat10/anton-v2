@@ -59,7 +59,8 @@ import { readOutputFile } from '../services/files.ts';
 import { pageGuide, saveRender } from '../services/renders.ts';
 import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
-import { repoInstructionsFor, skillsFor } from '../services/plugins.ts';
+import { pluginSkillsFor, repoInstructionsFor, skillsFor } from '../services/plugins.ts';
+import { copySkillFiles } from '../services/skill-files.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
@@ -242,6 +243,8 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 	useSandbox({
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
+			// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
+			await copySkillFiles(machine, pluginSkillsFor(id)).catch((error: unknown) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 		// `read` shows an image, as a picture or in the vision model's words.
@@ -1014,6 +1017,17 @@ const REMEMBER_HINT = 'When you learn something about this repository that a lat
 
 const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start.';
 
+/** Where the sandbox keeps the installed skills' files, which `copySkillFiles` puts there. */
+const SKILL_FILES_HINT =
+	"An installed skill's supporting files (its references, scripts and kits) are also in the sandbox at ../skills/<skill name>/, beside your working folder: " +
+	'run or import them from there, or copy what you need into your work. read_skill_resource reads the same files.';
+
+/** The skill hint, and where a skill's files are when the sandbox has a copy. */
+function skillHint(id: string, workspace: boolean): string {
+	const copied = workspace && pluginSkillsFor(id).some((skill) => Object.keys(skill.files).length > 0);
+	return copied ? `${SKILL_HINT} ${SKILL_FILES_HINT}` : SKILL_HINT;
+}
+
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
 
 /** How freely the agent draws its replies, by the Visual replies setting; off leaves only the ask card. */
@@ -1243,9 +1257,9 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${SKILL_HINT} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${SKILL_HINT} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }

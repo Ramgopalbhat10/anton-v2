@@ -188,3 +188,23 @@ test('duplicate names follow the bundle manifest order when selecting an individ
 		[['bundle/review', 'skills/b']],
 	);
 });
+
+test("a big skill keeps the files its instructions name, not whatever comes first by path", async () => {
+	const example = 'x'.repeat(250 * 1024);
+	const files: Record<string, string> = {
+		'SKILL.md': `---\nname: anatomy\ndescription: Builds figures. Use for figures.\n---\n\nRead \`references/craft.md\` first, then copy \`kit/\` into the project.\n`,
+		'.github/assets/demo.txt': example,
+		'CHANGELOG.md': example,
+		'references/craft.md': 'craft',
+		'references/kit.md': 'kit reference',
+		'kit/iso.mjs': 'export const iso = 1;',
+	};
+	// More examples than fit, all before references/ and kit/ by path.
+	for (let index = 0; index < 20; index += 1) files[`examples/figure-${String(index).padStart(2, '0')}/page.html`] = example;
+	const plugin = await readPlugin(repo(files), '');
+	const [anatomy] = plugin.skills;
+	for (const path of ['references/craft.md', 'references/kit.md', 'kit/iso.mjs']) assert.ok(path in anatomy.files, `${path} is kept`);
+	assert.ok(!('.github/assets/demo.txt' in anatomy.files) && !('CHANGELOG.md' in anatomy.files), "the repository's own files go last");
+	assert.ok(anatomy.omitted!.length > 0 && anatomy.omitted!.every((path) => path.startsWith('examples/')), 'only examples are left out, and listed');
+	assert.equal(Object.keys(anatomy.files).length + anatomy.omitted!.length, 23);
+});
