@@ -182,14 +182,36 @@ describe('Thread', () => {
 		expect(screen.getByRole('button', { name: 'Stop the browser agent' })).toBeTruthy();
 	});
 
-	it('says at its foot what the agent is doing between whole steps, and for how long', async () => {
+	it('says in the header of the live steps card what the agent is doing, and for how long, with no line below', async () => {
 		const since = new Date(Date.now() - 42_000).toISOString();
 		api.now.mockResolvedValue({ now: { what: 'writing', tool: 'write', detail: 'outputs/nourish/app.js', chars: 6200, since } });
 		show(agent([user('u1', 'Build it'), assistant('a1', [tool('write', { path: 'outputs/nourish/styles.css' }, { output: 'ok' })])], { status: 'streaming' }));
 		expect(await screen.findByText('Writing app.js · 6.1 KB')).toBeTruthy();
+		expect(screen.getAllByText('Writing app.js · 6.1 KB')).toHaveLength(1);
 		expect(screen.getByText('42s')).toBeTruthy();
-		// The reply being written is live: its steps read as working.
-		expect(screen.getByRole('button', { name: /Working/ })).toBeTruthy();
+		// The status is the header of the card, so it shows with the card closed too.
+		const header = screen.getByRole('button', { name: /Writing app\.js/ });
+		expect(header.getAttribute('aria-expanded')).toBe('true');
+		// One mark: the spinner, with the chevron kept for the pointer.
+		expect(within(header).getByRole('status')).toBeTruthy();
+		expect(header.querySelector('svg.lucide-chevron-down')?.getAttribute('class')).toContain('hidden');
+		fireEvent.click(header);
+		expect(screen.getByRole('button', { name: /Writing app\.js/ }).getAttribute('aria-expanded')).toBe('false');
+		expect(screen.queryByRole('button', { name: /Worked/ })).toBeNull();
+	});
+
+	it('says Worked once the answer starts streaming, with no line below it while the answer streams', async () => {
+		api.now.mockResolvedValue({ now: { what: 'replying', since: new Date().toISOString() } });
+		show(agent([user('u1', 'Build it'), assistant('a1', [tool('bash', { command: 'ls' }, { output: 'x' }), { type: 'text', text: 'Here is what I found.' }])], { status: 'streaming' }));
+		await waitFor(() => expect(api.now).toHaveBeenCalled());
+		expect(screen.getByRole('button', { name: /Worked/ })).toBeTruthy();
+		expect(screen.queryByText('Writing the reply')).toBeNull();
+	});
+
+	it('keeps the line at the foot when the agent works on after its text with no card to say so', async () => {
+		api.now.mockResolvedValue({ now: { what: 'writing', tool: 'bash', since: new Date().toISOString() } });
+		show(agent([user('u1', 'Build it'), assistant('a1', [tool('bash', { command: 'ls' }, { output: 'x' }), { type: 'text', text: 'Now the tests.' }])], { status: 'streaming' }));
+		expect(await screen.findByText('Writing a command')).toBeTruthy();
 	});
 
 	it('says the agent is starting before its reply begins, and keeps a finished reply finished', async () => {
@@ -198,7 +220,10 @@ describe('Thread', () => {
 		show(agent([user('u1', 'Go'), done, user('u2', 'Now the tests')], { status: 'streaming' }));
 		expect(await screen.findByText('Starting the agent')).toBeTruthy();
 		expect(screen.queryByText('Live')).toBeNull();
-		expect(screen.getByRole('button', { name: /Worked/ })).toBeTruthy();
+		const worked = screen.getByRole('button', { name: /Worked/ });
+		// Done, only the chevron.
+		expect(within(worked).queryByRole('status')).toBeNull();
+		expect(worked.querySelector('svg.lucide-chevron-down')?.getAttribute('class')).not.toContain('hidden');
 	});
 
 	it('counts a task working on the server as busy, though this page sent nothing', () => {

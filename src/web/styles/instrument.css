@@ -628,13 +628,31 @@
 .agent-live-line > span:last-child * {
 	color: inherit;
 }
+/* A folded message: its last lines fade out, so it reads as going on. */
+.in-fold-fade {
+	-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+	mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+/* What the agent does this moment, in a live steps card's header: the same slow light. */
+.in-shimmer {
+	background: linear-gradient(90deg, var(--text-secondary) 0%, var(--text-secondary) 40%, var(--text-primary) 50%, var(--text-secondary) 60%, var(--text-secondary) 100%);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: agent-live 2.4s linear infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
 	.in-pulse,
 	.in-sweep::after,
 	.agent-tile--running::after,
-	.agent-live-line > span:last-child {
+	.agent-live-line > span:last-child,
+	.in-shimmer {
 		animation: none;
+	}
+	.in-shimmer {
+		color: var(--text-secondary);
 	}
 	.agent-live-line > span:last-child {
 		color: var(--text-tertiary);
@@ -799,13 +817,20 @@
 	}
 }
 
-/* Working: paces a little left and right, types with both hands, reads side
-   to side, the antenna blinks. */
+/* Working: wanders along the composer's edge and hops now and then (the
+   walks and hops are picked at random in mascot.tsx), types with both hands,
+   reads side to side, the antenna blinks. */
 .anton-mascot[data-mood='working'] {
 	--am-led: var(--cyan-200);
 }
-.anton-mascot[data-mood='working'] .am-body {
-	animation: am-pace 3.2s steps(1, end) infinite;
+.anton-mascot .am-hopper {
+	animation: am-hop-small 0.5s steps(1, end) 1 both;
+}
+.anton-mascot .am-roam[data-walking] .am-leg-l {
+	animation: am-step 0.34s steps(1, end) infinite;
+}
+.anton-mascot .am-roam[data-walking] .am-leg-r {
+	animation: am-step 0.34s steps(1, end) infinite reverse;
 }
 .anton-mascot[data-mood='working'] .am-upper {
 	animation: am-bob 0.56s steps(1, end) infinite;
@@ -822,27 +847,24 @@
 .anton-mascot[data-mood='working'] .am-led {
 	animation: am-led 0.8s steps(1, end) infinite;
 }
-@keyframes am-pace {
+@keyframes am-hop-small {
 	0%,
-	50%,
 	100% {
 		transform: none;
 	}
-	10%,
+	20% {
+		transform: translateY(-1px);
+	}
 	40% {
-		transform: translateX(-1px);
+		transform: translateY(-2px);
 	}
-	20%,
-	30% {
-		transform: translateX(-2px);
+	70% {
+		transform: translateY(-1px);
 	}
-	60%,
-	90% {
-		transform: translateX(1px);
-	}
-	70%,
-	80% {
-		transform: translateX(2px);
+}
+@keyframes am-step {
+	50% {
+		transform: translateY(-1px);
 	}
 }
 @keyframes am-bob {
@@ -990,6 +1012,9 @@
 	.anton-mascot *,
 	.anton-mascot .am-z {
 		animation: none !important;
+	}
+	.anton-mascot .am-roam {
+		transition: none !important;
 	}
 	.anton-mascot[data-mood='sleeping'] .am-z {
 		opacity: 0.9;

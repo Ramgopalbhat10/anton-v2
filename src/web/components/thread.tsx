@@ -8,6 +8,7 @@ import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-mar
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
+import { SentText } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
@@ -390,7 +391,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 	const [open, setOpen] = useState(live);
 	const detailsId = useId();
 	useEffect(() => setOpen(live), [live]);
-	const label = live ? 'Working' : duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
+	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
 		<div className="overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
 			<button
@@ -398,14 +399,25 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 				aria-expanded={open}
 				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
-				className="flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
+				className="group/steps flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
 			>
-				<Icon
-					icon={ChevronRight}
-					className="text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)"
-					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
-				/>
-				<div className={cn('min-w-0 flex-auto truncate text-[12px]', live ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{label}</div>
+				{/* One mark: the spinner while it works, which gives way to the chevron under the pointer; the chevron alone once done. */}
+				<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+					{live ? (
+						<span className="inline-flex group-hover/steps:hidden group-focus-visible/steps:hidden">
+							<Spinner size={12} />
+						</span>
+					) : null}
+					<Icon
+						icon={ChevronDown}
+						className={cn(
+							'text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)',
+							live && 'hidden group-hover/steps:block group-focus-visible/steps:block',
+						)}
+						style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }}
+					/>
+				</span>
+				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-[12px] text-(--text-secondary)">{label}</div>}
 				<StepStrip steps={steps} live={live} />
 				<div className="in-caption shrink-0 whitespace-nowrap">
 					{steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}
@@ -505,11 +517,7 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 			) : null}
 			<SentAttachments files={files} />
 			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
-			{text ? (
-				<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
-					{text}
-				</div>
-			) : null}
+			{text ? <SentText text={text} className="max-w-[min(520px,100%)]" /> : null}
 			{note ? (
 				<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
 					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
@@ -815,14 +823,39 @@ function useSince(since: string | null): number {
 	return since ? Math.max(0, clock - new Date(since).getTime()) : 0;
 }
 
+/** What the agent is doing this moment and for how long, from the task's latest `now`. */
+function useNow(sessionId: string) {
+	const now = useQuery({ queryKey: ['now', sessionId], queryFn: () => api.now(sessionId) }).data?.now ?? null;
+	return { now, took: useSince(now?.since ?? null) };
+}
+
+/**
+ * The live steps card's header: what the agent is doing, catching a slow
+ * light, and for how long, so a closed card still says what is going on.
+ * Its own component, so the clock ticking re-renders it and not the card.
+ */
+function NowLabel() {
+	const { now, took } = useNow(useContext(SessionId));
+	return (
+		<div className="flex min-w-0 flex-auto items-center gap-2 text-[12px]">
+			<span className="in-shimmer min-w-0 truncate">{nowText(now, 'replying')}</span>
+			{now && took >= 1000 ? (
+				<span className="in-num shrink-0 text-(--text-disabled)" aria-hidden>
+					{elapsed(took)}
+				</span>
+			) : null}
+		</div>
+	);
+}
+
 /**
  * The line at the foot of a working thread: what the agent is doing this
  * moment and for how long. The thread shows a step only once it is whole, so
  * without it a file being written or a long think reads as nothing happening.
  */
-function NowLine({ sessionId, phase }: { sessionId: string; phase: ReplyPhase }) {
-	const now = useQuery({ queryKey: ['now', sessionId], queryFn: () => api.now(sessionId) }).data?.now ?? null;
-	const took = useSince(now?.since ?? null);
+function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyPhase; quiet: boolean }) {
+	const { now, took } = useNow(sessionId);
+	if (quiet && now?.what === 'replying') return null;
 	return (
 		<div className="flex min-w-0 items-center gap-2 text-[12px] text-(--text-secondary)">
 			<Spinner size={12} />
@@ -840,12 +873,13 @@ function NowLine({ sessionId, phase }: { sessionId: string; phase: ReplyPhase })
  * The foot of a working thread. A message sent while the agent works waits for
  * its next step; while a subagent runs, that step comes only when the subagent
  * finishes, so this says so and lets you stop it to have the message read now.
- * Otherwise it says what the agent is doing.
+ * Otherwise it says what the agent is doing, unless the live steps card's
+ * header already does, or the reply's text streaming does.
  */
-function Waiting({ sessionId, queued, phase }: { sessionId: string; queued: boolean; phase: ReplyPhase }) {
+function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
-	if (!queued || !running.length) return <NowLine sessionId={sessionId} phase={phase} />;
+	if (!queued || !running.length) return tail === 'steps' ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
@@ -910,6 +944,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
 	// A finished reply carries its usage; the latest one without it is the one being written.
 	const liveReply = busy && lastAssistant && !lastAssistant.metadata?.usage ? lastAssistant : undefined;
+	// What the reply being written ends on: a steps card's header says what the agent is doing, and streaming text shows itself.
+	const tail = useMemo(() => (liveReply ? (toBlocks(liveReply.parts).at(-1)?.kind ?? null) : null), [liveReply?.parts]);
 	const settlements = agent.settlements;
 	const joins = useQuery({ queryKey: ['joins', sessionId], queryFn: () => api.joins(sessionId) }).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
@@ -1037,7 +1073,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								/>
 							),
 						)}
-						{busy ? <Waiting sessionId={sessionId} queued={rows[rows.length - 1]?.message.role === 'user' && !rows[rows.length - 1]?.joined} phase={liveReply ? 'replying' : rows[rows.length - 1]?.message.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
+						{busy ? <Waiting sessionId={sessionId} tail={tail} queued={rows[rows.length - 1]?.message.role === 'user' && !rows[rows.length - 1]?.joined} phase={liveReply ? 'replying' : rows[rows.length - 1]?.message.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
 								{agent.error?.message

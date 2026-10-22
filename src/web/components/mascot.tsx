@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Anton's mascot: the sandbox cube from the app's drawings, in pixels, on
@@ -51,7 +51,57 @@ const QUESTION: Px[] = [[1, -6], [2, -6], [3, -6], [3, -5], [2, -4], [2, -2]];
 const ZZZ: Px[] = [[12, -6], [13, -6], [14, -6], [13, -5], [12, -4], [13, -4], [14, -4]];
 const SPARK: Px[] = [[1, -4], [0, -3], [1, -3], [2, -3], [1, -2]];
 
+/** How far it wanders while working, in grid pixels from where it stands: mostly left, along the composer. */
+const ROAM_LEFT = 48;
+const ROAM_RIGHT = 6;
+/** Each grid pixel of a walk takes this long, so a long walk takes longer. */
+const STEP_MS = 85;
+const between = (low: number, high: number) => low + Math.random() * (high - low);
+
+/**
+ * While working, it walks to a spot along the composer's edge, stands a
+ * while, and walks on, and now and then hops on the spot: chosen at random,
+ * so it never loops. Otherwise it walks back to where it stands. Reduced
+ * motion keeps it still.
+ */
+function useRoam(working: boolean) {
+	const [walk, setWalk] = useState({ x: 0, ms: 0, walking: false });
+	const [hop, setHop] = useState(0);
+	useEffect(() => {
+		if (!working || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			setWalk((current) => (current.x === 0 ? current : { x: 0, ms: Math.abs(current.x) * STEP_MS, walking: true }));
+			return;
+		}
+		let x = 0;
+		let timer: ReturnType<typeof setTimeout>;
+		const next = () => {
+			// A new spot at least a few pixels away, so every walk reads as one.
+			let to = x;
+			while (Math.abs(to - x) < 4) to = Math.round(between(-ROAM_LEFT, ROAM_RIGHT));
+			const ms = Math.abs(to - x) * STEP_MS;
+			x = to;
+			setWalk({ x, ms, walking: true });
+			timer = setTimeout(next, ms + between(900, 2600));
+		};
+		timer = setTimeout(next, between(400, 1200));
+		return () => clearTimeout(timer);
+	}, [working]);
+	useEffect(() => {
+		if (!working || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		let timer: ReturnType<typeof setTimeout>;
+		const next = () => {
+			setHop((count) => count + 1);
+			timer = setTimeout(next, between(1800, 5200));
+		};
+		timer = setTimeout(next, between(1200, 3000));
+		return () => clearTimeout(timer);
+	}, [working]);
+	const halt = useCallback(() => setWalk((current) => (current.walking ? { ...current, walking: false } : current)), []);
+	return { walk, halt, hop: working ? hop : 0 };
+}
+
 export function Mascot({ mood, className }: { mood: MascotMood; className?: string }) {
+	const { walk, halt, hop } = useRoam(mood === 'working');
 	return (
 		<svg
 			aria-hidden
@@ -62,27 +112,39 @@ export function Mascot({ mood, className }: { mood: MascotMood; className?: stri
 			data-mood={mood}
 			className={`anton-mascot ${className ?? ''}`}
 		>
-			<Pixels className="am-question" px={QUESTION} fill="var(--amber-400)" />
-			<g className="am-zzz">
-				<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
-				<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
-			</g>
-			<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
-			<g className="am-body">
-				<g className="am-upper">
-					<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
-					<rect className="am-led" x={10} y={-2} width={1.02} height={1.02} />
-					{torso.map(({ x, y, fill }) => (
-						<rect key={`${x},${y}`} x={x} y={y} width={1.02} height={1.02} fill={fill} />
-					))}
-					<Pixels className="am-eyes" px={EYES} fill={INK} />
-					<Pixels className="am-happy" px={HAPPY} fill={INK} />
-					<Pixels className="am-shut" px={SHUT} fill={INK} />
-					<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
-					<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
+			<g
+				className="am-roam"
+				data-walking={walk.walking || undefined}
+				style={{ transform: `translateX(${walk.x}px)`, transition: walk.ms ? `transform ${walk.ms}ms steps(${Math.round(walk.ms / STEP_MS)}, end)` : undefined }}
+				onTransitionEnd={(event) => {
+					if (event.target === event.currentTarget) halt();
+				}}
+			>
+				{/* Keyed by the hop, so each one plays its animation afresh. */}
+				<g key={hop} className={hop ? 'am-hopper' : undefined}>
+					<Pixels className="am-question" px={QUESTION} fill="var(--amber-400)" />
+					<g className="am-zzz">
+						<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
+						<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
+					</g>
+					<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
+					<g className="am-body">
+						<g className="am-upper">
+							<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
+							<rect className="am-led" x={10} y={-2} width={1.02} height={1.02} />
+							{torso.map(({ x, y, fill }) => (
+								<rect key={`${x},${y}`} x={x} y={y} width={1.02} height={1.02} fill={fill} />
+							))}
+							<Pixels className="am-eyes" px={EYES} fill={INK} />
+							<Pixels className="am-happy" px={HAPPY} fill={INK} />
+							<Pixels className="am-shut" px={SHUT} fill={INK} />
+							<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
+							<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
+						</g>
+						<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
+						<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
+					</g>
 				</g>
-				<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
-				<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
 			</g>
 		</svg>
 	);

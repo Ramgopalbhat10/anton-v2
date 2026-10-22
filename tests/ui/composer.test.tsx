@@ -269,4 +269,27 @@ describe('selected file references', () => {
 		await userEvent.keyboard('{Enter}');
 		expect(onSend).toHaveBeenCalledWith('Review @src/server.ts', []);
 	});
+
+	it('keeps a long draft to a few lines, with a chevron to open it out and fold it back', async () => {
+		// No layout here: a draft's height is its length, a line a line.
+		const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains('sg-draft') ? Math.max(1, (this.textContent ?? '').split('\n').length) * 22 : 0;
+		});
+		const { box } = setup();
+		expect(screen.queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+		box.textContent = Array.from({ length: 12 }, (_, line) => `Line ${line + 1}`).join('\n');
+		fireEvent.input(box);
+		const open = await screen.findByRole('button', { name: 'Show the whole message' });
+		expect(box.style.maxHeight).toBe('110px');
+		fireEvent.click(open);
+		expect(screen.getByRole('button', { name: 'Fold the message back' }).getAttribute('aria-expanded')).toBe('true');
+		expect(box.style.maxHeight).toBe(`${Math.min(12 * 22, Math.round(window.innerHeight * 0.6))}px`);
+		expect(box.style.transition).toContain('max-height');
+		// Cut back to a few lines, it folds, and the chevron goes.
+		box.textContent = 'Short';
+		fireEvent.input(box);
+		await waitFor(() => expect(screen.queryByRole('button', { name: /whole message|Fold the message/ })).toBeNull());
+		expect(box.style.maxHeight).toBe('110px');
+		height.mockRestore();
+	});
 });
