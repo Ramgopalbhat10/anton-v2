@@ -11,6 +11,7 @@ import {
 	readCatalogBundle,
 	readPlugin,
 	readRepoSkills,
+	readSkill,
 	type RepoFiles,
 } from '../core/plugins.ts';
 import { deletePlugin, getPlugin, type InstalledPlugin, listPlugins, savePlugin, setPluginEnabled } from '../db/plugins.ts';
@@ -316,11 +317,52 @@ export type MountedSkill = {
 	files: Record<string, string | Uint8Array>;
 };
 
+/** Left-out files a skill's instructions list by name; the rest are counted. */
+const LISTED_OMISSIONS = 20;
+
 function toMounted(skill: ParsedSkill): MountedSkill {
 	const files = Object.fromEntries(
 		Object.entries(skill.files).map(([path, file]) => [path, 'text' in file ? file.text : new Uint8Array(Buffer.from(file.base64, 'base64'))]),
 	);
-	return { name: skill.name, description: skill.description, instructions: skill.instructions, ...(skill.license ? { license: skill.license } : {}), files };
+	return { name: skill.name, description: skill.description, instructions: skill.instructions + omissionNote(skill.omitted ?? []), ...(skill.license ? { license: skill.license } : {}), files };
+}
+
+/** Says which files were left out, so the agent does not go looking for them. */
+function omissionNote(omitted: string[]): string {
+	if (omitted.length === 0) return '';
+	const listed = omitted.slice(0, LISTED_OMISSIONS).join(', ');
+	const more = omitted.length > LISTED_OMISSIONS ? ` and ${omitted.length - LISTED_OMISSIONS} more` : '';
+	return `\n\n(Anton left some of this skill's files out of its copy to keep it small, so they cannot be read: ${listed}${more}.)`;
+}
+
+const repacking = new Map<string, Promise<InstalledPlugin>>();
+
+/**
+ * Packs a plugin's skills again from the commit it was installed at, once per
+ * server (a failure is not retried until a restart). Skills packed before files were picked by importance could have
+ * lost the references their instructions name to examples and repository
+ * files that came first by path. Skills from before their folder was kept
+ * stay as they are.
+ */
+function repacked(plugin: InstalledPlugin): Promise<InstalledPlugin> {
+	if (plugin.skills.every((skill) => skill.omitted || skill.folder === undefined)) return Promise.resolve(plugin);
+	let pending = repacking.get(plugin.id);
+	if (!pending) {
+		pending = (async () => {
+			const files = await snapshotFiles(plugin.source.repo, plugin.sha);
+			const skills = [];
+			for (const skill of plugin.skills) {
+				const fresh = skill.omitted || skill.folder === undefined ? skill : await readSkill(files, skill.folder);
+				skills.push(typeof fresh === 'string' ? skill : fresh);
+			}
+			return savePlugin({ ...plugin, skills });
+		})().catch((error: unknown) => {
+			logProblem('warn', `Could not pack the skills of ${plugin.name} again; they keep the files they had`, error);
+			return plugin;
+		});
+		repacking.set(plugin.id, pending);
+	}
+	return pending;
 }
 
 /** A repo's skills and instructions at one commit, read from GitHub once. */
@@ -370,7 +412,8 @@ export async function primeSkills(id: string): Promise<void> {
 				logProblem('warn', "Could not read the repository's skills", error, id);
 				return NO_CONTEXT;
 			});
-	const installed = marked(await listPlugins())
+	const plugins = await Promise.all((await listPlugins()).map((plugin) => (plugin.enabled ? repacked(plugin) : plugin)));
+	const installed = marked(plugins)
 		.filter((item) => item.active)
 		.map((item) => toMounted(item.skill));
 	primed.set(id, { repo, plugins: installed });
@@ -386,6 +429,13 @@ export function skillsFor(id: string, workspace: boolean): MountedSkill[] {
 	const own = [...repo.agents, ...repo.claude];
 	const taken = new Set(own.map((skill) => skill.name));
 	return [...(workspace ? repo.claude : own), ...plugins.filter((skill) => !taken.has(skill.name))];
+}
+
+/** The installed plugins' skills a task mounts, whose files its sandbox gets a copy of; the repo's own are in its clone. */
+export function pluginSkillsFor(id: string): MountedSkill[] {
+	const { repo, plugins } = primed.get(id) ?? { repo: NO_CONTEXT, plugins: [] };
+	const taken = new Set([...repo.agents, ...repo.claude].map((skill) => skill.name));
+	return plugins.filter((skill) => !taken.has(skill.name));
 }
 
 /** The repo's AGENTS.md and CLAUDE.md, for a task without a sandbox; one with a sandbox reads them from its files. */

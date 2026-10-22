@@ -41,6 +41,8 @@ export type ParsedSkill = {
 	files: Record<string, SkillFile>;
 	/** Its folder in the repository; absent on skills installed before it was kept. */
 	folder?: string;
+	/** Files of its folder left out to keep it small; absent on skills packed before files were picked by importance. */
+	omitted?: string[];
 };
 
 export type ParsedPlugin = {
@@ -55,10 +57,12 @@ export type ParsedPlugin = {
 
 const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_DESCRIPTION = 1024;
-/** Supporting files beyond these are left out; instructions point at them, and a skill rarely needs big ones. */
+/** Supporting files beyond these are left out, the least needed first (see `importance`). */
 const MAX_FILE_BYTES = 256 * 1024;
-const MAX_SKILL_BYTES = 2 * 1024 * 1024;
-const MAX_FILES = 100;
+const MAX_SKILL_BYTES = 4 * 1024 * 1024;
+const MAX_FILES = 250;
+/** A repository's own housekeeping, which a skill never reads: dot files, changelogs and the like, its tests and evals. */
+const HOUSEKEEPING = /(^|\/)\.|^(changelog|contributing|code_of_conduct|security|license)(\.[a-z]+)?$|^(tests?|evals?)\//i;
 const MANIFESTS = ['.devin-plugin/plugin.json', '.claude-plugin/plugin.json', 'plugin.json'];
 const MARKETPLACES = ['.claude-plugin/marketplace.json', '.agents/plugins/marketplace.json', '.cursor-plugin/marketplace.json'];
 
@@ -126,15 +130,23 @@ export async function readSkill(files: RepoFiles, dir: string): Promise<ParsedSk
 	const description = str(data.description);
 	if (!SKILL_NAME.test(name) || name.length > 64) return `${name}: a skill name uses lowercase letters, digits and single dashes`;
 	if (!description || description.length > MAX_DESCRIPTION) return `${name}: needs a description of at most ${MAX_DESCRIPTION} characters`;
-	const out: Record<string, SkillFile> = {};
-	let total = 0;
 	const prefix = folder ? `${folder}/` : '';
+	const candidates: Array<{ relative: string; content: Uint8Array | null; rank: number }> = [];
 	for (const path of files.paths.filter((path) => path.startsWith(prefix) && path !== `${prefix}SKILL.md`)) {
-		if (Object.keys(out).length >= MAX_FILES) break;
-		const content = await files.read(path);
-		if (!content || content.length > MAX_FILE_BYTES || total + content.length > MAX_SKILL_BYTES) continue;
-		total += content.length;
 		const relative = path.slice(prefix.length);
+		candidates.push({ relative, content: await files.read(path), rank: importance(relative, body) });
+	}
+	// The files the instructions need come first, and smaller ones before bigger, so a big example cannot crowd out a reference.
+	candidates.sort((a, b) => a.rank - b.rank || (a.content?.length ?? 0) - (b.content?.length ?? 0) || (a.relative < b.relative ? -1 : 1));
+	const out: Record<string, SkillFile> = {};
+	const omitted: string[] = [];
+	let total = 0;
+	for (const { relative, content } of candidates) {
+		if (!content || Object.keys(out).length >= MAX_FILES || content.length > MAX_FILE_BYTES || total + content.length > MAX_SKILL_BYTES) {
+			if (!HOUSEKEEPING.test(relative)) omitted.push(relative);
+			continue;
+		}
+		total += content.length;
 		try {
 			out[relative] = { text: decoder.decode(content) };
 		} catch {
@@ -142,7 +154,23 @@ export async function readSkill(files: RepoFiles, dir: string): Promise<ParsedSk
 		}
 	}
 	const license = str(data.license);
-	return { name, description, instructions: body.trim(), ...(license ? { license } : {}), files: out, folder };
+	return { name, description, instructions: body.trim(), ...(license ? { license } : {}), files: out, folder, omitted: omitted.sort() };
+}
+
+/**
+ * How much a skill needs one of its files, lowest first: a file its
+ * instructions name, then its references, then its scripts and assets and
+ * anything in a folder the instructions name, then the rest, and last the
+ * repository's own housekeeping.
+ */
+function importance(relative: string, instructions: string): number {
+	if (HOUSEKEEPING.test(relative)) return 4;
+	if (instructions.includes(relative)) return 0;
+	if (relative.startsWith('references/')) return 1;
+	if (/^(scripts|assets)\//.test(relative)) return 2;
+	const parts = relative.split('/');
+	for (let depth = 1; depth < parts.length; depth += 1) if (instructions.includes(`${parts.slice(0, depth).join('/')}/`)) return 2;
+	return 3;
 }
 
 /** Folders holding a SKILL.md: `dir` itself, or its direct children. */
