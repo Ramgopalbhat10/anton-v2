@@ -8,6 +8,7 @@ import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Mascot, useMascotMood } from '@/components/mascot';
+import { SentText } from '@/components/sent-text';
 import { Caption } from '@/components/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { OutputCards } from '@/components/output-viewer';
@@ -70,11 +71,7 @@ function Bubble({ message }: { message: FlueConversationMessage }) {
 			) : null}
 			{/* Images sent with the message are saved to the Library too; their pictures above already show them. */}
 			<SentAttachments files={images.length ? files.filter((file) => !/ image$/.test(file.kind)) : files} />
-			{text ? (
-				<div className="max-w-[560px] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty shadow-(--card-highlight)">
-					{text}
-				</div>
-			) : null}
+			{text ? <SentText text={text} className="max-w-[min(560px,100%)]" /> : null}
 		</div>
 	);
 }

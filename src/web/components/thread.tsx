@@ -8,6 +8,7 @@ import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-mar
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
+import { SentText } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
@@ -398,13 +399,24 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 				aria-expanded={open}
 				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
-				className="flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
+				className="group/steps flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
 			>
-				<Icon
-					icon={ChevronRight}
-					className="text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)"
-					style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
-				/>
+				{/* One mark: the spinner while it works, which gives way to the chevron under the pointer; the chevron alone once done. */}
+				<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+					{live ? (
+						<span className="inline-flex group-hover/steps:hidden group-focus-visible/steps:hidden">
+							<Spinner size={12} />
+						</span>
+					) : null}
+					<Icon
+						icon={ChevronDown}
+						className={cn(
+							'text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)',
+							live && 'hidden group-hover/steps:block group-focus-visible/steps:block',
+						)}
+						style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }}
+					/>
+				</span>
 				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-[12px] text-(--text-secondary)">{label}</div>}
 				<StepStrip steps={steps} live={live} />
 				<div className="in-caption shrink-0 whitespace-nowrap">
@@ -505,11 +517,7 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 			) : null}
 			<SentAttachments files={files} />
 			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
-			{text ? (
-				<div className="max-w-[min(520px,100%)] rounded-[14px_14px_4px_14px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere] shadow-(--card-highlight)">
-					{text}
-				</div>
-			) : null}
+			{text ? <SentText text={text} className="max-w-[min(520px,100%)]" /> : null}
 			{note ? (
 				<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
 					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
@@ -830,7 +838,6 @@ function NowLabel() {
 	const { now, took } = useNow(useContext(SessionId));
 	return (
 		<div className="flex min-w-0 flex-auto items-center gap-2 text-[12px]">
-			<Spinner size={12} />
 			<span className="in-shimmer min-w-0 truncate">{nowText(now, 'replying')}</span>
 			{now && took >= 1000 ? (
 				<span className="in-num shrink-0 text-(--text-disabled)" aria-hidden>

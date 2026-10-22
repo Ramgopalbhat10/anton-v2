@@ -1,3 +1,4 @@
+import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
 import { cn } from '@/lib/utils';
 import { type ClipboardEvent, type CSSProperties, type KeyboardEvent, type Ref, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
@@ -70,6 +71,8 @@ function pointAt(root: HTMLElement, offset: number): [Node, number] {
 		const length = nodeText(node).length;
 		if (left <= length) {
 			if (node.nodeType === Node.TEXT_NODE) return [node, left];
+			// A styled link or reference is text inside a span: the caret goes within it. A chip is whole, so before or after it.
+			if (node instanceof HTMLElement && node.dataset.rich && length > 0) return pointAt(node, left);
 			return [root, index + (left > 0 ? 1 : 0)];
 		}
 		left -= length;
@@ -140,17 +143,26 @@ export function DraftInput({
 			if (history.current.length > 100) history.current.shift();
 			historyIndex.current = history.current.length - 1;
 		}
-		const children = segments(value, tokens).map((segment) => {
-			if (!segment.token) return document.createTextNode(segment.text);
+		const ranges = richRanges(value);
+		const children = segments(value, tokens).flatMap((segment): Node[] => {
+			if (!segment.token)
+				// Links, commands and references not known as chips still read as what they are, and stay plain text to edit.
+				return splitRich(value, segment.start, segment.end, ranges).map((piece) => {
+					if (!piece.kind) return document.createTextNode(piece.text);
+					const span = document.createElement('span');
+					span.dataset.rich = piece.kind;
+					span.className = RICH_CLASS[piece.kind];
+					span.textContent = piece.text;
+					return span;
+				});
 			const chip = document.createElement('span');
 			chip.contentEditable = 'false';
 			chip.dataset.value = segment.text;
 			chip.setAttribute('aria-label', `${segment.token.kind === 'file' ? 'File' : 'Command'} ${segment.token.title}`);
 			chip.title = segment.token.title;
-			chip.className =
-				'inline-block max-w-full rounded-md border border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 align-baseline font-mono text-[12px] leading-[18px] text-(--accent-text)';
+			chip.className = RICH_CLASS.chip;
 			chip.textContent = segment.token.label;
-			return chip;
+			return [chip];
 		});
 		// A trailing text node gives the caret a place after a final chip.
 		element.replaceChildren(...children, document.createTextNode(''));

@@ -628,6 +628,11 @@
 .agent-live-line > span:last-child * {
 	color: inherit;
 }
+/* A folded message: its last lines fade out, so it reads as going on. */
+.in-fold-fade {
+	-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+	mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
 /* What the agent does this moment, in a live steps card's header: the same slow light. */
 .in-shimmer {
 	background: linear-gradient(90deg, var(--text-secondary) 0%, var(--text-secondary) 40%, var(--text-primary) 50%, var(--text-secondary) 60%, var(--text-secondary) 100%);

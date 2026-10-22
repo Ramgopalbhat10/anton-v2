@@ -58,4 +58,23 @@ describe('draft editing', () => {
 		expect(box.textContent).toBe('<b>hello</b>\nsecond line');
 		expect(box.querySelector('b')).toBeNull();
 	});
+	it('marks links, a command and file references it does not know as chips, and keeps them editable text', async () => {
+		render(<Editor initial="/deploy see https://example.com/a and @docs/x.md" />);
+		const box = screen.getByRole('textbox');
+		const link = box.querySelector('[data-rich="link"]')!;
+		expect(link.textContent).toBe('https://example.com/a');
+		expect(box.querySelector('[data-rich="command"]')!.textContent).toBe('/deploy');
+		expect(box.querySelector('[data-rich="file"]')!.textContent).toBe('@docs/x.md');
+		// Typing inside a link edits it in place.
+		box.focus();
+		const range = document.createRange();
+		range.setStart(link.firstChild!, 'https://example.com/'.length);
+		range.collapse(true);
+		window.getSelection()?.removeAllRanges();
+		window.getSelection()?.addRange(range);
+		await userEvent.keyboard('b');
+		expect(screen.getByRole('status').textContent).toBe('/deploy see https://example.com/ba and @docs/x.md');
+		expect(box.querySelector('[data-rich="link"]')!.textContent).toBe('https://example.com/ba');
+	});
 });
+
