@@ -155,6 +155,11 @@ export function mockApi(): Plugin {
 		if (path === '/api/compute') return json(res, { provider: 'local', app: null, running: [], others: 0 });
 		if (path === '/api/projects') return json(res, { projects: [] });
 		if (path === '/api/reviews') return json(res, { reviews: [] });
+		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [] });
+		if (path === `${task}/todos`) return json(res, { list: null });
+		if (path === `${task}/joins`) return json(res, { joins: [] });
+		if (path === `${task}/now`) return json(res, { now: null });
+		if (path === '/api/push/presence') return json(res, { ok: true });
 		console.warn(`[perf] unmocked ${req.method} ${path}`);
 		return json(res, {});
 	};
