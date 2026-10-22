@@ -256,6 +256,8 @@ function useSignIn(server: McpServer) {
 function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<typeof useSignIn> }) {
 	const [clientId, setClientId] = useState(server.signIn.clientId ?? '');
 	const [secret, setSecret] = useState('');
+	// GitHub's MCP server signs in with GitHub, where the app is an OAuth app whose callback URL is this redirect URI.
+	const github = /(^|\.)githubcopilot\.com$/.test(hostOf(server.url));
 	return (
 		<form
 			className="flex flex-col gap-2 rounded-[10px] border border-(--border-subtle) px-3 py-2.5"
@@ -264,9 +266,17 @@ function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<t
 				signIn.mutate({ clientId: clientId.trim(), clientSecret: secret || null });
 			}}
 		>
-			<Note info="In the service's developer settings, create an OAuth app with this redirect URI, then paste its client id, and its secret if it has one.">
-				Create an OAuth app with this redirect URI.
-			</Note>
+			{github ? (
+				<Note info="The sign-in asks for the scopes GitHub's MCP server lists; a token works with the scopes you give it.">
+					In GitHub, <ConsoleLink href="https://github.com/settings/applications/new">register a new OAuth app</ConsoleLink> with this redirect URI as its authorization callback URL, then
+					paste its client id and a client secret you generate on its page. Or skip the app and paste a{' '}
+					<ConsoleLink href="https://github.com/settings/personal-access-tokens/new">personal access token</ConsoleLink> with Edit address and token.
+				</Note>
+			) : (
+				<Note info="In the service's developer settings, create an OAuth app with this redirect URI, then paste its client id, and its secret if it has one.">
+					Create an OAuth app with this redirect URI.
+				</Note>
+			)}
 			<CopyField value={`${window.location.origin}/api/mcp-servers/callback`} label="Redirect URI" />
 			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
 				<input value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Client id" aria-label="OAuth client id" className={cn(FIELD, 'font-mono')} />

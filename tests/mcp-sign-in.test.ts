@@ -197,3 +197,112 @@ test('a sign-in is only finished once, with its own state, and pointing the serv
 	assert.equal((await viewOf('moves'))?.signIn.state, 'none');
 	assert.equal((await servers.enabledMcpServers()).find((server) => server.name === 'moves')?.auth, null);
 });
+
+test("a refused code exchange says the server's reason, even with Hono's Response in place of the global one", async () => {
+	const { getRequestListener } = await import('@hono/node-server');
+	const NativeRequest = globalThis.Request;
+	const NativeResponse = globalThis.Response;
+	const json = (body: unknown, status = 200) => new NativeResponse(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+	globalThis.fetch = (async (input: string | URL | Request) => {
+		const url = String(input instanceof NativeRequest ? input.url : input);
+		if (url === 'https://deploys.test/.well-known/oauth-protected-resource') return json({ resource: 'https://deploys.test/', authorization_servers: ['https://login.deploys.test'] });
+		if (url === 'https://login.deploys.test/.well-known/oauth-authorization-server') {
+			return json({
+				issuer: 'https://login.deploys.test',
+				authorization_endpoint: 'https://login.deploys.test/authorize',
+				token_endpoint: 'https://login.deploys.test/token',
+				registration_endpoint: 'https://login.deploys.test/register',
+				response_types_supported: ['code'],
+				code_challenge_methods_supported: ['S256'],
+				token_endpoint_auth_methods_supported: ['none'],
+			});
+		}
+		if (url === 'https://login.deploys.test/register') return json({ client_id: 'cl_1', token_endpoint_auth_method: 'none', redirect_uris: [CALLBACK] }, 201);
+		if (url === 'https://login.deploys.test/token') return json({ error: 'invalid_grant', error_description: 'Invalid authorization code.' }, 400);
+		return new NativeResponse('not found', { status: 404 });
+	}) as typeof fetch;
+	getRequestListener(() => new Response('ok'));
+	try {
+		assert.notEqual(globalThis.Response, NativeResponse, "Hono's server has swapped the global Response");
+		await servers.addMcpServer({ name: 'deploys', url: 'https://deploys.test', tools: [] });
+		const { url } = await signIns.beginMcpSignIn('deploys', ANTON);
+		const state = new URL(url ?? '').searchParams.get('state') ?? '';
+		await assert.rejects(signIns.finishMcpSignIn(new URLSearchParams({ code: 'c', state })), (error: Error) => {
+			assert.match(error.message, /Invalid authorization code/);
+			assert.doesNotMatch(error.message, /object Response/);
+			return true;
+		});
+	} finally {
+		Object.defineProperty(globalThis, 'Request', { value: NativeRequest });
+		Object.defineProperty(globalThis, 'Response', { value: NativeResponse });
+	}
+});
+
+test("GitHub's MCP server signs in with an OAuth app you make, its secret sent in the form as GitHub documents", async () => {
+	const seen: Array<{ url: string; body: string; headers: Headers }> = [];
+	const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+		const url = String(input instanceof Request ? input.url : input);
+		seen.push({ url, body: init?.body ? String(init.body) : '', headers: new Headers(init?.headers) });
+		if (url === 'https://api.githubcopilot.com/.well-known/oauth-protected-resource/mcp') {
+			return json({ resource: 'https://api.githubcopilot.com/mcp', authorization_servers: ['https://github.com/login/oauth'], scopes_supported: ['repo', 'read:org'] });
+		}
+		if (url === 'https://github.com/.well-known/oauth-authorization-server/login/oauth') {
+			return json({
+				issuer: 'https://github.com/login/oauth',
+				authorization_endpoint: 'https://github.com/login/oauth/authorize',
+				token_endpoint: 'https://github.com/login/oauth/access_token',
+				response_types_supported: ['code'],
+				grant_types_supported: ['authorization_code', 'refresh_token'],
+				code_challenge_methods_supported: ['S256'],
+				scopes_supported: ['offline_access'],
+				authorization_response_iss_parameter_supported: true,
+			});
+		}
+		if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'gho_1', token_type: 'bearer', scope: 'repo,read:org' });
+		return new Response('not found', { status: 404 });
+	}) as typeof fetch;
+	await servers.addMcpServer({ name: 'github', url: 'https://api.githubcopilot.com/mcp/', tools: [] });
+	await assert.rejects(signIns.beginMcpSignIn('github', ANTON), /GitHub doesn't let apps register themselves.*personal access token/);
+
+	const { url } = await signIns.beginMcpSignIn('github', ANTON, { clientId: 'Ov23li', clientSecret: 'gh-secret' });
+	const at = new URL(url ?? '');
+	assert.equal(at.origin + at.pathname, 'https://github.com/login/oauth/authorize');
+	assert.equal(at.searchParams.get('client_id'), 'Ov23li');
+	assert.equal(at.searchParams.get('redirect_uri'), CALLBACK);
+	await signIns.finishMcpSignIn(new URLSearchParams({ code: 'c', state: at.searchParams.get('state') ?? '', iss: 'https://github.com/login/oauth' }));
+	const exchange = seen.find((request) => request.url === 'https://github.com/login/oauth/access_token');
+	const form = new URLSearchParams(exchange?.body);
+	assert.equal(form.get('client_id'), 'Ov23li');
+	assert.equal(form.get('client_secret'), 'gh-secret');
+	assert.equal(exchange?.headers.get('authorization'), null, 'the secret is not also sent in a Basic header');
+	assert.equal((await servers.enabledMcpServers()).find((server) => server.name === 'github')?.auth, 'gho_1');
+});
+
+test('a server that refuses to register Anton says why, rather than asking for a client it would not take', async () => {
+	const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+	globalThis.fetch = (async (input: string | URL | Request) => {
+		const url = String(input instanceof Request ? input.url : input);
+		if (url === 'https://approved.test/.well-known/oauth-protected-resource') return json({ resource: 'https://approved.test/', authorization_servers: ['https://approved.test'] });
+		if (url === 'https://approved.test/.well-known/oauth-authorization-server') {
+			return json({
+				issuer: 'https://approved.test',
+				authorization_endpoint: 'https://approved.test/authorize',
+				token_endpoint: 'https://approved.test/token',
+				registration_endpoint: 'https://approved.test/register',
+				response_types_supported: ['code'],
+				code_challenge_methods_supported: ['S256'],
+			});
+		}
+		if (url === 'https://approved.test/register') {
+			return json({ error: 'invalid_redirect_uri', error_description: 'The provided redirect URIs are not approved for use by this authorization server.' }, 400);
+		}
+		return new Response('not found', { status: 404 });
+	}) as typeof fetch;
+	await servers.addMcpServer({ name: 'approved', url: 'https://approved.test', tools: [] });
+	await assert.rejects(signIns.beginMcpSignIn('approved', ANTON), (error: Error) => {
+		assert.match(error.message, /refused to register Anton.*not approved for use/);
+		assert.doesNotMatch(error.message, /register themselves/);
+		return true;
+	});
+});
