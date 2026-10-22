@@ -147,16 +147,21 @@ function Summary({ items }: { items: ReviewItem[] }) {
 				<Figure value={String(openItems.length)} unit={`open of ${items.length}`} />
 				<SplitBar
 					label="Pull requests by what each waits on"
-					parts={(Object.keys(GROUPS) as ReviewGroup[]).map((group) => ({ key: group, label: SHORT[group], value: items.filter((item) => item.group === group).length, color: GROUP_COLOR[group] }))}
+					parts={(Object.keys(GROUPS) as ReviewGroup[])
+						.map((group) => ({ key: group, label: SHORT[group], value: items.filter((item) => item.group === group).length, color: GROUP_COLOR[group] }))
+						.filter((part) => part.value > 0)}
 				/>
 			</CardSection>
-			<StatRow
-				stats={[
-					{ label: 'checks passed', value: total('passed'), tone: 'success' },
-					{ label: 'checks failed', value: total('failed'), tone: total('failed') ? 'danger' : undefined },
-					{ label: 'checks running', value: total('pending'), tone: total('pending') ? 'warning' : undefined },
-				]}
-			/>
+			{/* Checks only matter on what is still open; with nothing open they would be a row of zeros. */}
+			{openItems.length ? (
+				<StatRow
+					stats={[
+						{ label: 'checks passed', value: total('passed'), tone: 'success' },
+						{ label: 'checks failed', value: total('failed'), tone: total('failed') ? 'danger' : undefined },
+						{ label: 'checks running', value: total('pending'), tone: total('pending') ? 'warning' : undefined },
+					]}
+				/>
+			) : null}
 		</Card>
 	);
 }

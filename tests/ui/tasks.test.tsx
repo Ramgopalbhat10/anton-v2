@@ -29,7 +29,7 @@ function open(path: string) {
 }
 
 describe('Tasks and Reviews', () => {
-	it('lists every task with its cost, and narrows by search and state', async () => {
+	it('lists every task with its cost and tokens, and narrows by search and state', async () => {
 		api.sessions.mockResolvedValue({
 			sessions: [
 				session({ id: 'a', title: 'Fix flaky upload retry', status: 'error', usage: { inputTokens: 1, outputTokens: 1, cost: 1.5 } }),
@@ -38,7 +38,11 @@ describe('Tasks and Reviews', () => {
 		});
 		open('/tasks');
 		expect(await screen.findByText('Fix flaky upload retry')).toBeTruthy();
-		expect(within(screen.getByText('Fix flaky upload retry').closest('a')!).getByText('$1.50')).toBeTruthy();
+		const failed = within(screen.getByText('Fix flaky upload retry').closest('a')!);
+		expect(failed.getByText('$1.50')).toBeTruthy();
+		expect(failed.getByText('2 tok')).toBeTruthy();
+		// A task that has not called a model yet has no usage to show.
+		expect(within(screen.getByText('Add a tasks page').closest('a')!).getByText('—')).toBeTruthy();
 		expect(screen.getAllByText('Failed')).toHaveLength(3); // the filter, the summary's legend and the task's state
 
 		fireEvent.click(screen.getByRole('button', { name: 'Pull request' }));
@@ -65,5 +69,20 @@ describe('Tasks and Reviews', () => {
 		expect(screen.getByText('3')).toBeTruthy();
 		expect(screen.getAllByText('Merged').length).toBeGreaterThan(0);
 		expect(screen.queryByText('Failing checks')).toBeNull();
+	});
+
+	it('leaves out what no pull request waits on, and the checks when none is open', async () => {
+		const item = { repo: 'acme/web', draft: false, reviewing: null, conflicts: false, comments: 0, createdAt: '2026-10-03T00:00:00Z', checks: { passed: 0, failed: 0, pending: 0 } };
+		api.reviews.mockResolvedValue({
+			reviews: [
+				{ ...item, sessionId: 'a', title: 'First', url: 'https://github.com/acme/web/pull/4', group: 'merged' },
+				{ ...item, sessionId: 'b', title: 'Second', url: 'https://github.com/acme/web/pull/3', group: 'merged' },
+			],
+		});
+		open('/reviews');
+		const bar = await screen.findByRole('img', { name: 'Pull requests by what each waits on' });
+		const legend = bar.nextElementSibling as HTMLElement;
+		expect(legend.textContent).toBe('Merged2');
+		expect(screen.queryByText('checks passed')).toBeNull();
 	});
 });

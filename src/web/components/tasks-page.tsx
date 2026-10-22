@@ -10,7 +10,7 @@ import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal'
 import { RackCard } from '@/components/task-rack';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
 import { api, branchLabel, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
-import { age, dollars } from '@/lib/format';
+import { age, dollars, tokens } from '@/lib/format';
 
 const FILTERS = {
 	live: { label: 'Running', test: isLive },
@@ -27,7 +27,9 @@ function matches(session: Session, query: string, filter: Filter | null): boolea
 	return text.includes(query.trim().toLowerCase()) && (!filter || FILTERS[filter].test(session));
 }
 
-const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,180px)_64px_56px]';
+const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,180px)_72px_56px]';
+
+const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
 
 const STATE_TONE = (session: Session): Tone => (isLive(session) ? 'accent' : session.status === 'error' ? 'danger' : 'neutral');
 
@@ -56,7 +58,10 @@ function Row({ session }: { session: Session }) {
 				{statusWord(session)}
 			</span>
 			<span className="hidden truncate text-[12px] text-(--text-secondary) md:block">{isChat(session) ? 'Chat' : session.repo}</span>
-			<span className="in-num hidden text-right text-[12px] text-(--text-secondary) md:block">{dollars(session.usage.cost)}</span>
+			<span className="in-num hidden flex-col items-end gap-0.5 md:flex">
+				<span className="text-[12px] text-(--text-secondary)">{used(session) ? dollars(session.usage.cost) : '—'}</span>
+				{used(session) ? <span className="text-[10.5px] text-(--text-disabled)">{tokens(used(session))} tok</span> : null}
+			</span>
 			<span className="in-num hidden text-right text-[12px] text-(--text-tertiary) md:block">{age(session.createdAt)}</span>
 		</Link>
 	);
@@ -80,6 +85,7 @@ function Summary({ sessions }: { sessions: Session[] }) {
 		return [...counts.values()];
 	}, [sessions]);
 	const cost = sessions.reduce((sum, session) => sum + session.usage.cost, 0);
+	const tokensUsed = sessions.reduce((sum, session) => sum + used(session), 0);
 	const parts: Part[] = [
 		{ key: 'live', label: 'Running', value: sessions.filter(isLive).length, color: 'var(--accent-base)' },
 		{ key: 'pr', label: 'With a pull request', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && session.prUrl).length, color: 'var(--data-2)' },
@@ -98,6 +104,7 @@ function Summary({ sessions }: { sessions: Session[] }) {
 					stats={[
 						{ label: 'spent on models', value: dollars(cost) },
 						{ label: 'per task', value: sessions.length ? dollars(cost / sessions.length) : '$0' },
+						{ label: 'tokens', value: tokens(tokensUsed) },
 					]}
 				/>
 			</Card>
@@ -178,7 +185,7 @@ export function TasksPage() {
 							<span>Task</span>
 							<span className="text-right md:text-left">Sandbox</span>
 							<span className="hidden md:block">Repository</span>
-							<span className="hidden text-right md:block">Cost</span>
+							<span className="hidden text-right md:block">Usage</span>
 							<span className="hidden text-right md:block">Started</span>
 						</div>
 						{shown.map((session) => (
