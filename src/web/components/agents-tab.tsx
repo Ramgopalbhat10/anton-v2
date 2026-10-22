@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { AgentsArt } from '@/components/illustrations';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { Caption, Status, type Tone } from '@/components/instrument';
+import { Caption, SplitBar, Status, type Tone } from '@/components/instrument';
 import { AgentTile, decisionsOf, lookOf, runElapsed, runEnd, runLine, spanOf, StatusGlyph, stepBody, StopRunButton, stepTone, titleOf, useNow, useSubagentRuns, WORK, type WorkKind, workKind } from '@/components/subagents';
 import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
 import { age, elapsed, fineDollars, tokens } from '@/lib/format';
@@ -54,9 +54,10 @@ export function workMix(runs: SubagentRun[]): Array<{ kind: WorkKind; count: num
 
 /**
  * The latest burst in a sentence: who ran, side by side or one after
- * another, for how long; then what the work mostly was.
+ * another, for how long; then what the work mostly was, which the work-mix
+ * bar draws and says to a screen reader; and how many failed.
  */
-export function burstLine(runs: SubagentRun[], now: number): { headline: string; why: string } {
+export function burstLine(runs: SubagentRun[], now: number): { headline: string; work: string; failed: number } {
 	const agents = new Set(runs.map((run) => run.agent));
 	const noun = (count: number) => plural(count, agents.size === 1 ? lookOf(runs[0]?.agent ?? 'agent').label.toLowerCase() : 'agent');
 	const working = runs.filter((run) => run.status === 'running').length;
@@ -77,7 +78,7 @@ export function burstLine(runs: SubagentRun[], now: number): { headline: string;
 	if (top && top.count === total) work = `All ${WORK[top.kind].doing}: ${plural(total, 'step')}.`;
 	else if (top && top.count / total > 0.5) work = `Mostly ${WORK[top.kind].doing}: ${top.count} of ${plural(total, 'step')}.`;
 	else if (top) work = `A mix of ${kinds} over ${plural(total, 'step')}.`;
-	return { headline, why: failed ? `${failed} failed. ${work}` : work };
+	return { headline, work, failed };
 }
 
 /** A duration, in milliseconds under a second so a quick step does not read "0s". */
@@ -126,39 +127,55 @@ function Phase({ step, run, next, from, span, now }: { step: SubagentStep; run: 
 	);
 }
 
+type Stat = { label: string; value: string; title?: string };
+
+/** Numbers side by side in a well, a mono caption over each: a run's or the task's. */
+function StatWell({ stats, label }: { stats: Stat[]; label: string }) {
+	return (
+		<dl aria-label={label} className="in-well m-0 grid divide-x divide-(--border-subtle)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
+			{stats.map((stat) => (
+				<div key={stat.label} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
+					<dt className="in-caption">{stat.label}</dt>
+					<dd className="in-num m-0 truncate text-[12px] text-(--text-primary)" title={stat.title ?? stat.value}>
+						{stat.value}
+					</dd>
+				</div>
+			))}
+		</dl>
+	);
+}
+
 /**
  * The panel's summary, said once: what the latest burst came to in a
- * sentence, what its steps mostly were, and what the task's subagents
- * spent together. The runs themselves are listed below it.
+ * sentence, its steps as one bar split by kind, and what the task's
+ * subagents spent together. The runs themselves are listed below it.
  */
 function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: SubagentRun[]; now: number }) {
 	const line = burstLine(latest, now);
 	const mix = workMix(latest);
 	const jev = runs.map(decisionsOf).reduce((sum, item) => ({ decisions: sum.decisions + item.decisions, cost: sum.cost + item.cost }), { decisions: 0, cost: 0 });
-	const totals = [
-		plural(runs.length, 'run'),
-		plural(runs.reduce((sum, run) => sum + run.steps.length, 0), 'step'),
-		`${tokens(runs.reduce((sum, run) => sum + run.tokens, 0))} tok`,
-		jev.decisions ? `Jev ${fineDollars(jev.cost)}` : null,
-	].filter(Boolean);
+	const totals: Stat[] = [
+		{ label: 'Runs', value: String(runs.length) },
+		{ label: 'Steps', value: String(runs.reduce((sum, run) => sum + run.steps.length, 0)) },
+		{ label: 'Tokens', value: tokens(runs.reduce((sum, run) => sum + run.tokens, 0)) },
+		...(jev.decisions ? [{ label: 'Jev', value: fineDollars(jev.cost), title: `${jev.decisions} decisions by Jev, the decision model that drives the browser` }] : []),
+	];
 	return (
-		<section aria-label="Agents overview" className="flex flex-col gap-2 px-0.5">
-			<div className="flex flex-col gap-0.5">
-				<span className="text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
-				<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{line.why}</span>
-			</div>
-			<div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-				{mix.map((item) => (
-					<span key={item.kind} className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
-						<span className="size-[7px] rounded-[2px]" style={{ background: WORK[item.kind].tone }} />
-						{WORK[item.kind].label}
-						<span className="in-num text-(--text-secondary)">{item.count}</span>
+		<section aria-label="Agents overview" className="flex flex-col gap-3 px-0.5">
+			<div className="flex items-start gap-3">
+				<span className="min-w-0 flex-1 text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
+				{line.failed ? (
+					<span className="pt-0.5">
+						<Status tone="danger">{line.failed} failed</Status>
 					</span>
-				))}
-				<span className="in-num ml-auto text-[11px] text-(--text-tertiary)" title={jev.decisions ? `${jev.decisions} decisions by Jev, the decision model that drives the browser` : undefined}>
-					{totals.join(' · ')}
-				</span>
+				) : null}
 			</div>
+			{mix.length ? (
+				<SplitBar label={line.work} parts={mix.map((item) => ({ key: item.kind, label: WORK[item.kind].label, value: item.count, color: WORK[item.kind].tone }))} />
+			) : (
+				<Caption className="tracking-normal normal-case">{line.work}</Caption>
+			)}
+			<StatWell stats={totals} label="Every run in this task" />
 		</section>
 	);
 }
@@ -343,12 +360,12 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 	const jev = decisionsOf(run);
 	const from = Date.parse(run.startedAt);
 	const to = Math.max(from + 1000, from + runElapsed(run, now));
-	const stats: Array<[string, string]> = [
-		['Time', elapsed(runElapsed(run, now))],
-		['Steps', String(run.steps.length)],
-		['Tokens', tokens(run.tokens)],
-		...(jev.decisions ? ([['Jev', fineDollars(jev.cost)]] as Array<[string, string]>) : []),
-		['Model', run.model?.split('/').pop() ?? '—'],
+	const stats: Stat[] = [
+		{ label: 'Time', value: elapsed(runElapsed(run, now)) },
+		{ label: 'Steps', value: String(run.steps.length) },
+		{ label: 'Tokens', value: tokens(run.tokens) },
+		...(jev.decisions ? [{ label: 'Jev', value: fineDollars(jev.cost) }] : []),
+		{ label: 'Model', value: run.model?.split('/').pop() ?? '—' },
 	];
 	return (
 		<div ref={root} className="flex min-h-0 flex-col gap-3">
@@ -373,16 +390,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				{live ? <StopRunButton sessionId={sessionId} run={run} /> : null}
 			</div>
 
-			<dl className="in-well m-0 grid divide-x divide-(--border-subtle)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
-				{stats.map(([label, value]) => (
-					<div key={label} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
-						<dt className="in-caption">{label}</dt>
-						<dd className="in-num m-0 truncate text-[12px] text-(--text-primary)" title={value}>
-							{value}
-						</dd>
-					</div>
-				))}
-			</dl>
+			<StatWell stats={stats} label="This run" />
 
 			<section aria-label="Brief" className="in-card overflow-hidden">
 				<button

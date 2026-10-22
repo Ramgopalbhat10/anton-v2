@@ -116,7 +116,7 @@ describe('Agents panel', () => {
 		expect(screen.getByRole('region', { name: 'Latest' })).toBeTruthy();
 	});
 
-	it('sums the task up in a sentence with its totals, and opens a step the decision model drove into its actions', () => {
+	it('sums the task up in a sentence, a work-mix bar and its totals, and opens a step the decision model drove into its actions', () => {
 		const driven = run({
 			id: 'run-2',
 			toolCallId: 'call-2',
@@ -135,9 +135,11 @@ describe('Agents panel', () => {
 		focusRun('s5', null);
 		renderWithQueries(<AgentsTab sessionId="s5" />, [[['subagents', 's5'], { runs: [driven, finished] }]]);
 		const overview = screen.getByLabelText('Agents overview');
-		expect(within(overview).getByText('2 runs · 2 steps · 17K tok · Jev $0.0004')).toBeTruthy();
+		const totals = within(overview).getByLabelText('Every run in this task');
+		expect([...totals.querySelectorAll('dt')].map((term) => `${term.textContent} ${term.nextSibling?.textContent}`)).toEqual(['Runs 2', 'Steps 2', 'Tokens 17K', 'Jev $0.0004']);
 		expect(within(overview).getByText('1 agent working, 1 finished')).toBeTruthy();
-		expect(within(overview).getByText('1 failed. A mix of running commands and browsing over 2 steps.')).toBeTruthy();
+		expect(within(overview).getByText('1 failed')).toBeTruthy();
+		expect(within(overview).getByRole('img', { name: 'A mix of running commands and browsing over 2 steps.' })).toBeTruthy();
 
 		fireEvent.click(screen.getAllByRole('button', { name: /Check top Hacker News stories/ })[0]);
 		const steps = screen.getByRole('region', { name: 'Steps' });
@@ -181,7 +183,7 @@ describe('Agents panel', () => {
 		// Newest first, as the server lists them.
 		renderWithQueries(<AgentsTab sessionId="s6" />, [[['subagents', 's6'], { runs: [started('c', 1000, 'Batch 3'), started('b', 2000, 'Batch 2'), started('a', 3000, 'Batch 1')] }]]);
 		expect(screen.getByText('3 browsers ran side by side for 6s')).toBeTruthy();
-		expect(screen.getByText('All reading: 3 steps.')).toBeTruthy();
+		expect(screen.getByRole('img', { name: 'All reading: 3 steps.' })).toBeTruthy();
 		const done = screen.getByRole('region', { name: 'Latest' });
 		expect(within(done).getAllByText(/^Batch/).map((item) => item.textContent)).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
 		fireEvent.click(within(done).getAllByRole('button')[0]);
