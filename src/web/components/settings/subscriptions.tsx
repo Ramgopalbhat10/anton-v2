@@ -7,7 +7,7 @@ import { EffortRange, useModels } from '@/components/model-picker';
 import { AREA } from '@/components/repo-settings';
 import { Btn, Icon, InfoTip, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';
-import { age, dollars, tokens } from '@/lib/format';
+import { age, dollars, tokens, until } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
@@ -18,12 +18,6 @@ const STATUS: Record<Subscription['state'], { tone: 'success' | 'danger' | 'neut
 	expired: { tone: 'danger', label: 'Sign in again' },
 	'signed-out': { tone: 'neutral', label: 'Not connected' },
 };
-
-/** "in 52m", "in 3h": how long until a time that is still ahead. */
-function until(iso: string, now = Date.now()): string {
-	const minutes = Math.max(0, Math.round((new Date(iso).getTime() - now) / 60_000));
-	return minutes < 60 ? `in ${minutes}m` : `in ${Math.round(minutes / 60)}h`;
-}
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' });
 

@@ -82,7 +82,7 @@ describe('Agents card in the thread', () => {
 		const open = await screen.findByRole('button', { name: 'Open in Agents' });
 		const peek = open.closest('.in-pop') as HTMLElement;
 		expect(within(peek).getByText('npm test exited 1')).toBeTruthy();
-		expect(within(peek).getByText('1 step · 9s · 2.0K tok · gpt-6-luna')).toBeTruthy();
+		expect(within(peek).getByText('1 step · 9s · 2K tok · gpt-6-luna')).toBeTruthy();
 		fireEvent.click(open);
 		expect(showPanel).toHaveBeenCalledWith('Agents');
 	});

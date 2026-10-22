@@ -23,11 +23,19 @@ export function clock(iso: string): string {
 	return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-/** Token counts at a glance: "840", "12.3K", "1.2M". */
+/** Token counts at a glance: "840", "12.3K", "2K", "1.2M", "100M"; a round count drops its ".0". */
 export function tokens(count: number): string {
 	if (count < 1000) return String(count);
-	if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}K`;
-	return `${(count / 1_000_000).toFixed(1)}M`;
+	const short = count < 1_000_000 ? `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}K` : `${(count / 1_000_000).toFixed(1)}M`;
+	return short.replace(/\.0(?=[KM]$)/, '');
+}
+
+/** "in 52m", "in 3h", "in 9d": how long until a time that is still ahead. */
+export function until(iso: string, now = Date.now()): string {
+	const minutes = Math.max(0, Math.round((new Date(iso).getTime() - now) / 60_000));
+	if (minutes < 60) return `in ${minutes}m`;
+	const hours = Math.round(minutes / 60);
+	return hours < 48 ? `in ${hours}h` : `in ${Math.round(hours / 24)}d`;
 }
 
 /** US dollars, with enough digits that small model costs do not read as zero. */
