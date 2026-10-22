@@ -1,4 +1,5 @@
 import type { PullRequestState, Reasoning } from './ports.ts';
+import type { ModelRoute } from './model-route.ts';
 import type { ThreadState } from './thread-state.ts';
 
 export type Project = {
@@ -49,6 +50,8 @@ export type Session = {
 	model: string;
 	/** Chosen reasoning level; null runs the model's default. */
 	reasoning: Reasoning | null;
+	/** Where the gateway sends the task's calls: one provider first, or a sort; null leaves it to the gateway. Only for a model on a gateway. */
+	route: ModelRoute | null;
 	/** The branch the task works on, created from `baseSha`. */
 	branch: string;
 	baseBranch: string;

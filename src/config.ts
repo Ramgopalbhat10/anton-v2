@@ -42,6 +42,12 @@ export const config = {
 		/** How long the model list is cached before it is fetched again. */
 		ttlMs: 60 * 60_000,
 	},
+	/** Vercel AI Gateway, a second gateway billed per token; off until a key is pasted in Settings › Subscriptions or set here. */
+	vercel: {
+		apiUrl: read('ANTON_VERCEL_API_URL', 'https://ai-gateway.vercel.sh'),
+		apiKey: read('AI_GATEWAY_API_KEY'),
+		ttlMs: 60 * 60_000,
+	},
 	/**
 	 * The System One decision model (TypeSafe's Jev) that decides which pull request
 	 * comments and pushes need an agent, and that run_script programs can ask. `off` turns it off.

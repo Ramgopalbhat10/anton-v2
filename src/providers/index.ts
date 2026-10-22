@@ -36,6 +36,10 @@ import { openRouterKey } from './openrouter/key.ts';
 import { openRouterText } from './openrouter/text.ts';
 import { openRouterVision } from './openrouter/vision.ts';
 import { openCodeGoPlan } from './opencode-go/plan.ts';
+import type { KeySlot } from './key-slot.ts';
+import { vercelAccount } from './vercel/account.ts';
+import { vercelCatalog } from './vercel/catalog.ts';
+import { vercelKeySlot } from './vercel/key.ts';
 import { s3Store } from './s3/store.ts';
 import { webPushSender } from './webpush/sender.ts';
 
@@ -57,7 +61,14 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 }
 
 /**
+ * A gateway besides OpenRouter that bills per token with a key pasted in Settings › Subscriptions (else its
+ * environment variable): its account, the models it offers, and where its key is kept for the calls.
+ */
+export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeySlot };
+
+/**
  * `gatewayAccount` is OpenRouter's, whose key is pasted in Settings › Subscriptions (else OPENROUTER_API_KEY); without the port the catalog is offered as it is.
+ * `gateways` are the other gateways billed per token (Vercel AI Gateway), each offered once it has a key.
  * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
  * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
  * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
@@ -75,6 +86,7 @@ export type Providers = {
 	git: GitHost;
 	models: ModelCatalog;
 	gatewayAccount?: GatewayAccount | null;
+	gateways?: Gateway[];
 	decisions?: DecisionModel | null;
 	subscriptions?: SubscriptionProvider[];
 	runtimes?: AgentRuntime[];
@@ -103,6 +115,13 @@ function production(): Providers {
 		git: githubHost(config.github),
 		models: openRouterCatalog({ apiUrl, ttlMs, apiKey: openRouterKey }),
 		gatewayAccount: openRouterAccount({ apiUrl }),
+		gateways: [
+			{
+				account: vercelAccount({ apiUrl: config.vercel.apiUrl }),
+				models: vercelCatalog({ apiUrl: config.vercel.apiUrl, ttlMs: config.vercel.ttlMs, apiKey: vercelKeySlot.get }),
+				key: vercelKeySlot,
+			},
+		],
 		get decisions() {
 			return openRouterKey() ? decisions : null;
 		},

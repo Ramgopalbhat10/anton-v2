@@ -2,7 +2,7 @@
 
 import { type AgentProps, setProvider, useModel, useSandbox, useTool } from '@flue/runtime';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
-import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -11,12 +11,13 @@ import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
-import { gatewayKey, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayKeyOf, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { secretsToHide } from '../services/secrets.ts';
-import { modelFor } from '../services/sessions.ts';
+import { modelFor, routedModels } from '../services/sessions.ts';
 import { machineFor } from '../services/workspace.ts';
 
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));

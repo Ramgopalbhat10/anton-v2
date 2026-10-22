@@ -1,4 +1,5 @@
 import type { Usage } from '../core/types.ts';
+import { unrouted } from '../core/model-route.ts';
 import { addSessionUsage, type SpendRow, spendBy, spendByMinute, spentSince } from '../db/sessions.ts';
 import { startOfToday } from './budget.ts';
 import { logProblem } from './log.ts';
@@ -33,7 +34,8 @@ type TurnEvent = {
 };
 
 /** `openrouter/<id>`, the way tasks name their model, so a subagent on another model is counted under it. */
-const modelOf = (request: TurnEvent['request']) => (request ? `${request.providerId}/${request.requestedModel}` : null);
+/** A task's route is no model of its own: its calls count under the model. */
+const modelOf = (request: TurnEvent['request']) => (request ? unrouted(`${request.providerId}/${request.requestedModel}`) : null);
 
 /**
  * Counts every model call as it ends: the agent's, its subagents' and

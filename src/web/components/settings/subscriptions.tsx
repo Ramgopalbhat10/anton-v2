@@ -853,11 +853,33 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 	);
 }
 
+/** What each gateway's tab says about it and its key. */
+const GATEWAY_COPY: Record<string, { howTo: string; placeholder: string; billed: string; pitch: string; uses: string; pricedAs: string }> = {
+	openrouter: {
+		howTo: "Make a key on OpenRouter's keys page and paste it here.",
+		placeholder: 'sk-or-v1-…',
+		billed: 'Billed per token to your OpenRouter account.',
+		pitch: 'Hundreds of models from every major lab through one key, billed per token.',
+		uses: "Anton lists the models your key may use, and the agents, the decision model and the computer's eyes call them with it.",
+		pricedAs: "OpenRouter's price",
+	},
+	vercel: {
+		howTo: 'Make a key under AI Gateway › API Keys in your Vercel dashboard and paste it here.',
+		placeholder: 'AI Gateway API key',
+		billed: 'Billed per token to your Vercel AI Gateway credits.',
+		pitch: "Models from every major lab through one key, paid from your team's AI Gateway credits.",
+		uses: "Anton lists the gateway's models in the picker and the agents call them with your key; the decision model, titles and the computer's eyes stay on OpenRouter.",
+		pricedAs: "Vercel's price",
+	},
+};
+
 /**
- * OpenRouter: no plan, but a key, pasted here or set on the server. Its
- * models bill per token and count toward the spending caps at their price.
+ * A gateway (OpenRouter, Vercel AI Gateway): no plan, but a key, pasted here or
+ * set on the server. Its models bill per token and count toward the spending
+ * caps at their price.
  */
 function GatewayPlan({ subscription }: { subscription: Subscription }) {
+	const copy = GATEWAY_COPY[subscription.gateway] ?? GATEWAY_COPY.openrouter;
 	const saved = useSaved();
 	const [confirming, setConfirming] = useState(false);
 	const [replacing, setReplacing] = useState(false);
@@ -890,18 +912,18 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} for your key`}
 					info={
 						<>
-							<Named gateway={subscription.gateway} /> Their calls count toward the spending caps at OpenRouter's price.
+							<Named gateway={subscription.gateway} /> Their calls count toward the spending caps at {copy.pricedAs}.
 						</>
 					}
 				>
-					Billed per token to your OpenRouter account.
+					{copy.billed}
 				</Lead>
 			) : (
 				<Lead
 					title={`Connect ${subscription.name}`}
-					info="Anton lists the models your key may use, and the agents, the decision model and the computer's eyes call them with it."
+					info={copy.uses}
 				>
-					Hundreds of models from every major lab through one key, billed per token.
+					{copy.pitch}
 				</Lead>
 			)}
 			{connected ? (
@@ -916,7 +938,7 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 							{ label: 'Connected', value: pasted && subscription.connectedAt ? day(subscription.connectedAt) : fromServer ? 'From the server' : '—' },
 							{ label: 'Models', value: enabled ? `${subscription.models.length} in the picker` : 'Switched off', tone: enabled ? undefined : 'warning' },
 							{ label: 'This month', value: `${tokens(subscription.monthTokens)} tokens`, tone: 'accent' },
-							{ label: 'Counted as', value: 'OpenRouter prices' },
+							{ label: 'Counted as', value: subscription.gateway === 'vercel' ? 'Vercel prices' : 'OpenRouter prices' },
 						]}
 					/>
 					{subscription.windows?.length ? <Windows windows={subscription.windows} label="Limits and credits" /> : null}
@@ -933,13 +955,13 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 						</CardSection>
 					) : null}
 					{fromServer && replacing ? (
-						<KeyForm subscription={subscription} howTo="Make a key on OpenRouter's keys page and paste it here." placeholder="sk-or-v1-…" />
+						<KeyForm subscription={subscription} howTo={copy.howTo} placeholder={copy.placeholder} />
 					) : null}
 					<GatewayModels subscription={subscription} />
 					<PlanSettings subscription={subscription} error={refresh.error ?? disconnect.error} pricedAs={null} />
 				</>
 			) : (
-				<KeyForm subscription={subscription} howTo="Make a key on OpenRouter's keys page and paste it here." placeholder="sk-or-v1-…" />
+				<KeyForm subscription={subscription} howTo={copy.howTo} placeholder={copy.placeholder} />
 			)}
 			<CardFooter caption={subscription.modelsAt ? `Models checked ${age(subscription.modelsAt)} ago` : undefined}>
 				{connected ? (
@@ -1004,7 +1026,7 @@ export function SubscriptionsPage() {
 		<>
 			<PageHeading
 				title="Subscriptions"
-				info="A connected plan gets its own tab in the model picker, its models are marked PLAN, and their calls count against the plan's own limits. OpenRouter's tab takes your key for the models it bills per token."
+				info="A connected plan gets its own tab in the model picker, its models are marked PLAN, and their calls count against the plan's own limits. The OpenRouter and Vercel AI Gateway tabs take your key for the models they bill per token."
 			>
 				Run tasks on a plan you already pay for.
 			</PageHeading>

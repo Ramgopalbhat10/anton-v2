@@ -9,6 +9,7 @@ import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { type ModelRoute, routable, routedId } from '../core/model-route.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { generalSettings } from './general.ts';
 import { closeBrowser } from './live-browser.ts';
@@ -51,11 +52,12 @@ export function present(record: SessionRecord, running: Set<string>): Session {
 	return { ...shown, threadState: threadState(shown) };
 }
 
-export type ModelChoice = { model: string; reasoning: Reasoning };
+/** `route` is where the gateway sends the calls, for a model on one; `model` is never routed itself. */
+export type ModelChoice = { model: string; reasoning: Reasoning; route?: ModelRoute | null };
 
 /**
  * The agent function renders synchronously, so it reads each session's
- * model and reasoning level from here. Filled before every prompt.
+ * model, reasoning level and route from here. Filled before every prompt.
  */
 const choices = new Map<string, ModelChoice>();
 
@@ -63,12 +65,24 @@ export function modelFor(id: string): ModelChoice {
 	return choices.get(id) ?? { model: config.model, reasoning: 'off' };
 }
 
+/** The model specifier the session's agent runs: its model, with its route when it has one (`routedId`). */
+export function agentModelFor(id: string): ModelChoice {
+	const choice = modelFor(id);
+	return { ...choice, model: routedId(choice.model, choice.route ?? null) };
+}
+
+/** Every routed specifier a session's agent may resolve, for the gateways' providers to list. */
+export function routedModels(): string[] {
+	return [...choices.values()].filter((choice) => choice.route).map((choice) => routedId(choice.model, choice.route ?? null));
+}
+
 /** Loads the session's choice and the model list the agent resolves it against. */
 export async function primeModel(id: string): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (!record) return;
 	const info = await findModel(record.model).catch(() => undefined);
-	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning) });
+	const route = routable(record.model) ? record.route : null;
+	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning), ...(route ? { route } : {}) });
 }
 
 async function knownModel(model: string): Promise<string> {
@@ -195,7 +209,26 @@ export async function isRunning(id: string): Promise<boolean> {
 	return (await runningKeys()).has(id);
 }
 
-export type SessionChange = { title?: string; model?: string; reasoning?: Reasoning | null; planMode?: boolean; pinned?: boolean; resolved?: boolean };
+export type SessionChange = {
+	title?: string;
+	model?: string;
+	reasoning?: Reasoning | null;
+	route?: ModelRoute | null;
+	planMode?: boolean;
+	pinned?: boolean;
+	resolved?: boolean;
+};
+
+/**
+ * The route a session keeps after a change: the one asked for, else its own. A provider belongs to its
+ * model, so another model leaves it to the gateway; a sort carries over to a model on a gateway.
+ */
+function routeAfter(record: SessionRecord | null, change: SessionChange, model: string | undefined): ModelRoute | null | undefined {
+	if ('route' in change) return change.route ?? null;
+	if (!model || !record || model === record.model) return undefined;
+	if (!record.route) return undefined;
+	return record.route.sort && routable(model) ? record.route : null;
+}
 
 /**
  * Renames the task, changes its model or reasoning level, turns plan mode on or off, pins it, or marks it
@@ -204,9 +237,13 @@ export type SessionChange = { title?: string; model?: string; reasoning?: Reason
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	const model = change.model && (await knownModel(change.model));
 	const title = change.title?.trim();
+	const record = 'route' in change || model ? await getSessionRecord(id) : null;
+	const route = routeAfter(record, change, model || undefined);
+	if (route && !routable(model || record?.model || '')) throw new InvalidInputError('Only a model on OpenRouter or Vercel AI Gateway takes a provider or sort.');
 	await updateSession(id, {
 		...(title ? { title } : {}),
 		...(model ? { model } : {}),
+		...(route !== undefined ? { routeJson: route ? JSON.stringify(route) : null } : {}),
 		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
 		// Turning plan mode on or off (approving the plan turns it off) leaves no plan waiting.
 		...(change.planMode !== undefined ? { planMode: change.planMode, plan: null } : {}),

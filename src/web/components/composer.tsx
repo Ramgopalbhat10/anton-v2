@@ -9,7 +9,7 @@ import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
-import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, isChat, type ModelRoute, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, imageFromBase64, MAX_IMAGES } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
@@ -134,6 +134,8 @@ export const Composer = memo(function Composer({
 		[queryClient, sessionId],
 	);
 	const togglePlan = useCallback((planMode: boolean) => edit({ planMode }), [edit]);
+	const route = session.data?.route ?? null;
+	const setRoute = useCallback((next: ModelRoute | null) => edit({ route: next }), [edit]);
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
@@ -204,7 +206,7 @@ export const Composer = memo(function Composer({
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<ComposerPlus attachments={attachments} />
-					<ModelPicker value={choice} onChange={edit} />
+					<ModelPicker value={choice} onChange={edit} route={route} onRoute={setRoute} />
 					{/* A chat has no code to plan changes to. */}
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}

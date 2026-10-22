@@ -4,7 +4,9 @@ import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, memo, type PointerEvent, useMemo, useRef, useState } from 'react';
 import { Count } from '@/components/instrument';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
-import { api, type ModelChoice, type ModelInfo, type Reasoning, REASONING_LEVELS } from '@/lib/api';
+import { api, type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api';
+import { RouteMenu } from '@/components/route-menu';
+import { routable } from '../../core/model-route';
 import {
 	dollars,
 	effectiveReasoning,
@@ -546,16 +548,21 @@ function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; n
  * (a plan you signed in to, or a gateway) as a section, and the chosen
  * model's effort along the bottom. Source, filters and sort sit in one menu.
  * Picking a model keeps the panel open so its effort can be set; Enter picks
- * and closes.
+ * and closes. With `onRoute` (a task's own composer), a model on a gateway
+ * gets a chip beside it for the provider or sort its calls are routed by.
  */
 export const ModelPicker = memo(function ModelPicker({
 	value,
 	onChange,
+	route = null,
+	onRoute,
 	side = 'top',
 	height = 26,
 }: {
 	value: ModelChoice;
 	onChange: (change: Partial<ModelChoice>) => void;
+	route?: ModelRoute | null;
+	onRoute?: (route: ModelRoute | null) => void;
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
 }) {
@@ -674,8 +681,9 @@ export const ModelPicker = memo(function ModelPicker({
 	}
 
 	let offset = 0;
+	const routed = onRoute && selected && !selected.subscription && routable(selected.id) ? selected : undefined;
 
-	return (
+	const picker = (
 		<PopoverPrimitive.Root
 			open={open}
 			onOpenChange={(next) => {
@@ -888,5 +896,12 @@ export const ModelPicker = memo(function ModelPicker({
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
+	);
+	if (!routed || !onRoute) return picker;
+	return (
+		<span className="flex min-w-0 shrink items-center gap-0.5">
+			{picker}
+			<RouteMenu model={routed} route={route} onChange={onRoute} height={height} />
+		</span>
 	);
 });

@@ -1,6 +1,8 @@
 import type { AgentNow } from '../../core/agent-now';
 import type { AttachedFile } from '../../core/attachments';
+import type { ModelRoute } from '../../core/model-route';
 import type { Schedule } from '../../core/schedule';
+export type { ModelRoute, RouteSort } from '../../core/model-route';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
 export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -25,6 +27,19 @@ export type ModelInfo = {
 	variant?: { of: string; context: string | null; fast: boolean };
 };
 
+/** One provider a gateway can send a model's calls to, which a task's route can name. */
+export type ModelEndpoint = {
+	slug: string;
+	name: string;
+	/** US dollars per million tokens through this provider. */
+	price: { input: number; output: number };
+	contextLength: number;
+	/** Median seconds to the first token, tokens a second and percent of calls answered, recently, where the gateway says. */
+	latency: number | null;
+	throughput: number | null;
+	uptime: number | null;
+};
+
 /** A task's model and reasoning level; null reasoning runs the model's default. */
 export type ModelChoice = { model: string; reasoning: Reasoning | null };
 
@@ -37,6 +52,8 @@ export type Session = {
 	title: string;
 	model: string;
 	reasoning: Reasoning | null;
+	/** Where the gateway sends the task's calls: one provider first, or a sort; null leaves it to the gateway. Missing from older servers. */
+	route?: ModelRoute | null;
 	branch: string;
 	baseBranch: string;
 	baseSha: string;
@@ -619,6 +636,7 @@ export const api = {
 	/** `pinned` are the models you pinned to the top of the picker, in the order you pinned them. */
 	models: () => json<{ models: ModelInfo[]; default: string; pinned?: string[] }>('/api/models'),
 	imageModels: () => json<{ models: ImageModelInfo[]; default: string; available: boolean }>('/api/image-models'),
+	modelEndpoints: (model: string) => json<{ endpoints: ModelEndpoint[] }>(`/api/models/endpoints?model=${encodeURIComponent(model)}`),
 	setPinnedModels: (pinned: string[]) => json<{ pinned: string[] }>('/api/models/pinned', { method: 'PUT', body: JSON.stringify({ pinned }) }),
 	subscriptions: () => json<{ subscriptions: Subscription[] }>('/api/subscriptions'),
 	setSubscriptionOptions: (id: string, options: SubscriptionOptions) =>
@@ -697,7 +715,7 @@ export const api = {
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
 	forkSession: (id: string) => post<Session>(`/api/sessions/${id}/fork`),
-	editSession: (id: string, change: Partial<ModelChoice> & { title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null }) =>
+	editSession: (id: string, change: Partial<ModelChoice> & { route?: ModelRoute | null; title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),

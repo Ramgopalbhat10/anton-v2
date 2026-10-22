@@ -180,6 +180,8 @@ export const migrations: string[][] = [
 			FROM (SELECT MAX(1, COALESCE(automations.every_hours, 24)) AS hours, COALESCE(automations.last_run_at, automations.created_at) AS anchor))
 		WHERE kind = 'schedule'`,
 	],
+	// 35: where a gateway sends a task's model calls (`src/core/model-route.ts`): one provider first, or a sort; null leaves it to the gateway.
+	[`ALTER TABLE sessions ADD COLUMN route_json TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */
