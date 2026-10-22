@@ -1,7 +1,8 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CalendarClock, Clock, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
-import { Caption, Card, CardFooter, Pips } from '@/components/instrument';
+import { Caption, Card, CardFooter, Chip, Pips } from '@/components/instrument';
+import { glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
@@ -14,7 +15,7 @@ import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOp
 import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
-import { age } from '@/lib/format';
+import { age, until } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -191,7 +192,37 @@ function PullRequests({ threads }: { threads: Session[] }) {
 /** Chats, for a routine without a repository: a Select item needs a value, and '' is its own. */
 const NO_REPO = 'none';
 
-function RoutineRow({ automation, space }: { automation: Automation; space: Space }) {
+/** The runs a strip shows, newest at the right. */
+const RUNS_SHOWN = 14;
+
+/** A routine's recent runs as cells in their thread's state colour, oldest first, each opening its thread. */
+function RunStrip({ runs }: { runs: Session[] }) {
+	const open = useOpenThread();
+	const shown = runs.slice(-RUNS_SHOWN);
+	return (
+		<span role="group" aria-label="Recent runs" className="flex h-3.5 items-stretch gap-[3px]">
+			{Array.from({ length: RUNS_SHOWN - shown.length }, (_, index) => (
+				<span key={`empty-${index}`} aria-hidden className="w-[7px] rounded-[2px] border border-dashed border-(--border-subtle)" />
+			))}
+			{shown.map((thread) => {
+				const kind = glyphKind(thread);
+				return (
+					<button
+						key={thread.id}
+						type="button"
+						onClick={() => open(thread)}
+						title={`${thread.title}: ${KIND_LABEL[kind]}`}
+						aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
+						className={cn('w-[7px] rounded-[2px] outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'resolved' && 'in-hatch text-(--neutral-500)', kind === 'working' && 'in-sweep')}
+						style={kind === 'resolved' ? { backgroundColor: 'var(--neutral-700)' } : { background: STATE_COLOR[kind] }}
+					/>
+				);
+			})}
+		</span>
+	);
+}
+
+function RoutineRow({ automation, space, runs }: { automation: Automation; space: Space; runs: Session[] }) {
 	const queryClient = useQueryClient();
 	const refresh = () => void queryClient.invalidateQueries({ queryKey: ['space-automations', space.id] });
 	const toggle = useMutation({ mutationFn: (enabled: boolean) => api.setAutomationEnabled(automation.id, enabled), onSettled: refresh });
@@ -199,6 +230,7 @@ function RoutineRow({ automation, space }: { automation: Automation; space: Spac
 	const remove = useMutation({ mutationFn: () => api.deleteAutomation(automation.id), onSettled: refresh });
 	const [editing, setEditing] = useState(false);
 	const repo = space.repos.find((item) => item.id === automation.projectId);
+	const next = automation.nextRunAt ?? null;
 	if (editing) return <RoutineForm space={space} automation={automation} onDone={() => setEditing(false)} />;
 	return (
 		<div className="flex flex-col gap-1.5 border-t border-(--border-subtle) px-4 py-2.5">
@@ -215,10 +247,24 @@ function RoutineRow({ automation, space }: { automation: Automation; space: Spac
 				<IconBtn icon={Trash2} size="xs" label="Delete routine" disabled={remove.isPending} onClick={() => remove.mutate()} />
 			</div>
 			{automation.prompt ? <p className="m-0 line-clamp-2 text-[12px] leading-[17px] text-(--text-secondary)">{automation.prompt}</p> : null}
-			<Caption>
-				{repo?.repoFullName.split('/').pop() ?? 'No repository'} · {automation.lastRunAt ? `ran ${age(automation.lastRunAt)} ago` : 'not run yet'}
-				{automation.enabled && automation.schedule ? ` · ${nextRunText(automation)}` : ''}
-			</Caption>
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
+				<Chip mono className={repo ? undefined : 'border-dashed bg-transparent text-(--text-tertiary)'}>
+					{repo?.repoFullName.split('/').pop() ?? 'no repository'}
+				</Chip>
+				<RunStrip runs={runs} />
+				<Caption>
+					{runs.length} run{runs.length === 1 ? '' : 's'} · {automation.lastRunAt ? `last ${age(automation.lastRunAt)} ago` : 'not run yet'}
+				</Caption>
+				{automation.enabled && automation.schedule ? (
+					<span className="ml-auto flex items-baseline gap-1.5" title={nextRunText(automation)}>
+						<Caption>Next</Caption>
+						{next ? <span className="in-num text-[12px] text-(--text-primary)">{until(next)}</span> : null}
+						<Caption className={cn('tracking-normal normal-case', next && 'hidden @min-[460px]/workspace:inline')}>{nextRunText(automation).replace(/^next /, '')}</Caption>
+					</span>
+				) : !automation.enabled ? (
+					<Caption className="ml-auto">Paused</Caption>
+				) : null}
+			</div>
 			{automation.lastError ? <div className="text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
 		</div>
 	);
@@ -318,7 +364,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 }
 
 /** Work that starts on its own as threads of this project: on a schedule, or from labeled issues. */
-function Routines({ space }: { space: Space }) {
+function Routines({ space, threads }: { space: Space; threads: Session[] }) {
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);
 	const list = routines.data?.automations ?? [];
@@ -338,7 +384,12 @@ function Routines({ space }: { space: Space }) {
 			}
 		>
 			{list.map((automation) => (
-				<RoutineRow key={automation.id} automation={automation} space={space} />
+				<RoutineRow
+					key={automation.id}
+					automation={automation}
+					space={space}
+					runs={threads.filter((thread) => thread.automationId === automation.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt))}
+				/>
 			))}
 			{list.length === 0 && !adding ? <div className="border-t border-(--border-subtle) px-4 py-3 text-[12px] text-(--text-disabled)">A nightly dependency check, a weekly cleanup, or every issue labeled for Anton.</div> : null}
 			{adding ? <RoutineForm space={space} onDone={() => setAdding(false)} /> : null}
@@ -398,7 +449,7 @@ export const ProjectPanel = memo(function ProjectPanel({
 				{tab === 'Overview' ? <Overview space={space} threads={threads} /> : null}
 				{tab === 'Library' ? <ProjectLibrary space={space} threads={threads} /> : null}
 				{tab === 'Pull requests' ? <PullRequests threads={threads} /> : null}
-				{tab === 'Routines' ? <Routines space={space} /> : null}
+				{tab === 'Routines' ? <Routines space={space} threads={threads} /> : null}
 			</div>
 		</WorkspacePane>
 	);
