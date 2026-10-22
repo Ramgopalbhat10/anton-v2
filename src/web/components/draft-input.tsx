@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { type ClipboardEvent, type KeyboardEvent, type Ref, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type CSSProperties, type KeyboardEvent, type Ref, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 
 export type DraftToken = { value: string; label: string; title: string; kind: 'file' | 'command' };
 export type DraftHandle = { focus(): void; setSelectionRange(start: number, end: number): void; readonly selectionStart: number };
@@ -97,6 +97,7 @@ export function DraftInput({
 	placeholder,
 	autoFocus,
 	className,
+	style,
 }: {
 	ref?: Ref<DraftHandle>;
 	value: string;
@@ -108,6 +109,7 @@ export function DraftInput({
 	placeholder: string;
 	autoFocus?: boolean;
 	className?: string;
+	style?: CSSProperties;
 }) {
 	const root = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
@@ -189,6 +191,7 @@ export function DraftInput({
 				'sg-draft min-h-[38px] max-h-52 w-full overflow-y-auto border-0 bg-transparent p-0 text-[13px] leading-[22px] whitespace-pre-wrap break-words text-(--text-primary) outline-none',
 				className,
 			)}
+			style={style}
 			onInput={update}
 			onMouseUp={track}
 			onKeyUp={track}
