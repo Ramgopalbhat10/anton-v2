@@ -148,7 +148,7 @@ export type SpaceUsage = {
 	month: number;
 	byThread: Array<{ id: string; title: string; tokens: number; cost: number }>;
 	byModel: Array<{ key: string | null; tokens: number; cost: number }>;
-	daily: Array<{ day: string; cost: number }>;
+	daily: Array<{ day: string; tokens: number; cost: number }>;
 };
 
 /** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */

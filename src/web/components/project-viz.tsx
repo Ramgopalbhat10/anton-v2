@@ -289,16 +289,37 @@ export function WaitTracks({ threads }: { threads: Session[] }) {
 	);
 }
 
-const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((minutes) => minutes * 60_000);
+const DAY = 24 * 3600_000;
+const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 4320, 10080, 20160].map((minutes) => minutes * 60_000);
 
-/** Round clock times across a stretch, aligned to the local clock. */
-function ticks(start: number, end: number): number[] {
+/** Round clock times across a stretch, aligned to the local clock: a step from a minute to two weeks, at most five ticks. */
+export function ticks(start: number, end: number): { steps: number[]; step: number } {
 	const step = STEPS.find((candidate) => (end - start) / candidate <= 5) ?? STEPS[STEPS.length - 1];
 	const offset = new Date(start).getTimezoneOffset() * 60_000;
 	const first = Math.ceil((start - offset) / step) * step + offset;
-	const out: number[] = [];
-	for (let at = first; at <= end; at += step) out.push(at);
-	return out;
+	const steps: number[] = [];
+	for (let at = first; at <= end; at += step) steps.push(at);
+	return { steps, step };
+}
+
+/** A tick's label: the day for a step of a day or more and at midnight, else the time. */
+export function tickLabel(at: number, step: number): string {
+	const date = new Date(at);
+	const midnight = date.getHours() === 0 && date.getMinutes() === 0;
+	return step >= DAY || midnight ? date.toLocaleDateString([], { month: 'short', day: 'numeric' }) : hhmm(at);
+}
+
+/** A title ending in a short " · Oct 22" keeps that end in view when the rest is cut: a routine's runs read apart. */
+function TitleWithTail({ title }: { title: string }) {
+	const cut = title.lastIndexOf(' · ');
+	const tail = cut > 0 ? title.slice(cut + 3) : '';
+	if (!tail || tail.length > 12) return <span className="min-w-0 truncate">{title}</span>;
+	return (
+		<>
+			<span className="min-w-0 truncate">{title.slice(0, cut)}</span>
+			<span className="shrink-0 text-(--text-tertiary)">· {tail}</span>
+		</>
+	);
 }
 
 /** A bar's label beside it: the side with room. */
@@ -343,6 +364,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 		if (state === 'queued') return sum;
 		return sum + Math.max(0, (state === 'working' ? now : ms(threadActiveAt(thread))) - ms(thread.createdAt));
 	}, 0);
+	const axis = ticks(start, end);
 	const left = [counts.working ? `${counts.working} running` : null, counts.failed ? `${counts.failed} failed` : null].filter(Boolean).join(' · ');
 	const right = [counts.queued ? `${counts.queued} queued` : null, counts.idle ? `${counts.idle} idle` : null, counts.resolved ? `${counts.resolved} done` : null, counts.review + counts.landing ? `${counts.review + counts.landing} ready` : null].filter(Boolean).join(' · ');
 	return (
@@ -362,12 +384,12 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 					<span className="text-(--text-tertiary)">{right}</span>
 				</div>
 			</div>
-			<div className="grid grid-cols-[minmax(72px,104px)_minmax(0,1fr)] gap-x-3 border-t border-(--border-subtle) px-4 pt-2.5 pb-3">
+			<div className="grid grid-cols-[minmax(88px,140px)_minmax(0,1fr)] gap-x-3 border-t border-(--border-subtle) px-4 pt-2.5 pb-3">
 				<span />
 				<div className="relative h-5">
-					{ticks(start, end).map((at) => (
-						<span key={at} className="in-num absolute top-0 -translate-x-1/2 text-[10px] text-(--text-disabled)" style={{ left: `${pct(at)}%` }}>
-							{hhmm(at)}
+					{axis.steps.map((at) => (
+						<span key={at} className="in-num absolute top-0 -translate-x-1/2 text-[10px] whitespace-nowrap text-(--text-disabled)" style={{ left: `${pct(at)}%` }}>
+							{tickLabel(at, axis.step)}
 						</span>
 					))}
 				</div>
@@ -380,15 +402,15 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 								type="button"
 								onClick={() => open(thread)}
 								title={thread.title}
-								className={cn('h-6 truncate text-left font-mono text-[11px] outline-none hover:text-(--text-primary)', state === 'resolved' || state === 'queued' ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}
+								className={cn('flex h-6 min-w-0 items-center gap-1 text-left font-mono text-[11px] whitespace-nowrap outline-none hover:text-(--text-primary)', state === 'resolved' || state === 'queued' ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}
 							>
-								{thread.title}
+								<TitleWithTail title={thread.title} />
 							</button>
 						);
 					})}
 				</div>
 				<div className="relative flex flex-col gap-1.5">
-					{ticks(start, end).map((at) => (
+					{axis.steps.map((at) => (
 						<span key={at} aria-hidden className="absolute -top-1 -bottom-1 border-l border-dashed border-(--border-subtle)" style={{ left: `${pct(at)}%` }} />
 					))}
 					<span aria-hidden className="absolute -top-1 -bottom-3 border-l border-dashed border-(--accent-base) opacity-70" style={{ left: `${nowAt}%` }} />
@@ -461,42 +483,62 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 
 const DATA = ['var(--data-1)', 'var(--data-2)', 'var(--data-3)', 'var(--data-4)', 'var(--data-5)', 'var(--data-6)'];
 
-/** What the project costs: the month's figure, the last two weeks as bars with the peak named, and the threads that spent most. */
+/** Below a cent a month the work ran on a plan or free models, so tokens say what it did and dollars do not. */
+const NEGLIGIBLE_USD = 0.01;
+
+/**
+ * What the project costs: the month's figure, the last two weeks as bars with
+ * the peak named, and the threads that did most. A project whose spend is
+ * negligible (its models on a plan) is measured in tokens instead.
+ */
 export function BurnCard({ space }: { space: Space }) {
 	const usage = useQuery({ queryKey: ['space-usage', space.id], queryFn: () => api.spaceUsage(space.id) });
 	const data = usage.data;
+	const spent = (data?.byThread ?? []).reduce((sum, item) => sum + item.tokens, 0);
+	const byTokens = (data?.month ?? 0) < NEGLIGIBLE_USD && spent > 0;
+	const measure = (item: { tokens: number; cost: number }) => (byTokens ? item.tokens : item.cost);
+	const format = byTokens ? tokens : dollars;
 	const days = Array.from({ length: 14 }, (_, index) => {
 		const date = new Date();
 		date.setDate(date.getDate() - (13 - index));
 		const key = date.toISOString().slice(0, 10);
-		return { key, cost: data?.daily.find((day) => day.day === key)?.cost ?? 0 };
+		const day = data?.daily.find((entry) => entry.day === key);
+		return { key, value: day ? measure({ tokens: day.tokens ?? 0, cost: day.cost }) : 0 };
 	});
-	const max = Math.max(...days.map((day) => day.cost), 0.0001);
-	const peak = days.reduce((best, day, index) => (day.cost > days[best].cost ? index : best), 0);
-	const byThread = [...(data?.byThread ?? [])].sort((a, b) => b.cost - a.cost).slice(0, 4);
-	const top = Math.max(...byThread.map((item) => item.cost), 0.0001);
-	const spent = (data?.byThread ?? []).reduce((sum, item) => sum + item.tokens, 0);
+	const max = Math.max(...days.map((day) => day.value), 0.0001);
+	const peak = days.reduce((best, day, index) => (day.value > days[best].value ? index : best), 0);
+	const byThread = [...(data?.byThread ?? [])].sort((a, b) => measure(b) - measure(a)).slice(0, 4);
+	const top = Math.max(...byThread.map(measure), 0.0001);
 	return (
 		<Card icon={Flame} title="Spend" sub="this month" status={<Caption>Today {dollars(data?.today ?? 0)}</Caption>}>
 			<div className="flex flex-col gap-3 px-4 pt-1 pb-4">
 				<div className="flex items-baseline gap-2">
-					<span className="in-figure text-[26px] leading-[30px]">{dollars(data?.month ?? 0)}</span>
-					<span className="in-num text-[11.5px] text-(--text-tertiary)">{tokens(spent)} tok</span>
+					{byTokens ? (
+						<>
+							<span className="in-figure text-[26px] leading-[30px]">{tokens(spent)}</span>
+							<span className="in-num text-[11.5px] text-(--text-tertiary)">tokens · {dollars(data?.month ?? 0)} spent</span>
+						</>
+					) : (
+						<>
+							<span className="in-figure text-[26px] leading-[30px]">{dollars(data?.month ?? 0)}</span>
+							<span className="in-num text-[11.5px] text-(--text-tertiary)">{tokens(spent)} tok</span>
+						</>
+					)}
 				</div>
-				<div role="img" aria-label="Spend over the last 14 days" className="relative flex h-16 items-end gap-[3px] pt-4">
+				<div role="img" aria-label={`${byTokens ? 'Tokens' : 'Spend'} over the last 14 days`} className="relative flex h-16 items-end gap-[3px] pt-4">
 					{days.map((day, index) => {
 						const today = index === days.length - 1;
 						return (
-							<span key={day.key} title={`${day.key}: ${dollars(day.cost)}`} className="relative flex h-full min-w-0 flex-1 items-end">
-								{index === peak && day.cost > 0 ? (
-									<span className="in-num absolute -top-4 left-1/2 -translate-x-1/2 text-[9.5px] whitespace-nowrap text-(--text-secondary)">{dollars(day.cost)}</span>
+							<span key={day.key} title={`${day.key}: ${format(day.value)}`} className="relative flex h-full min-w-0 flex-1 items-end">
+								{index === peak && day.value > 0 ? (
+									<span className="in-num absolute -top-4 left-1/2 -translate-x-1/2 text-[9.5px] whitespace-nowrap text-(--text-secondary)">{format(day.value)}</span>
 								) : null}
 								<span
 									className="w-full rounded-[2px]"
 									style={{
-										height: day.cost ? `${Math.max(8, (day.cost / max) * 100)}%` : 2,
-										background: today ? 'var(--accent-base)' : index === peak && day.cost ? 'var(--neutral-400)' : day.cost ? 'var(--neutral-600)' : 'var(--segment-off)',
-										boxShadow: today && day.cost ? '0 0 12px -2px var(--accent-base)' : undefined,
+										height: day.value ? `${Math.max(8, (day.value / max) * 100)}%` : 2,
+										background: today ? 'var(--accent-base)' : index === peak && day.value ? 'var(--neutral-400)' : day.value ? 'var(--neutral-600)' : 'var(--segment-off)',
+										boxShadow: today && day.value ? '0 0 12px -2px var(--accent-base)' : undefined,
 									}}
 								/>
 							</span>
@@ -509,10 +551,21 @@ export function BurnCard({ space }: { space: Space }) {
 				</div>
 			</div>
 			{byThread.length ? (
-				<CardSection label="By thread" hint="share of the top">
+				<CardSection label="By thread" hint={byTokens ? 'tokens, share of the top' : 'share of the top'}>
 					<div className="flex flex-col">
 						{byThread.map((item, index) => (
-							<ShareRow key={item.id} label={item.title} sub={`${tokens(item.tokens)} tok`} share={item.cost / top} value={dollars(item.cost)} color={DATA[index % DATA.length]} />
+							<ShareRow
+								key={item.id}
+								label={
+									<span className="flex min-w-0" title={item.title}>
+										<TitleWithTail title={item.title} />
+									</span>
+								}
+								sub={byTokens ? dollars(item.cost) : `${tokens(item.tokens)} tok`}
+								share={measure(item) / top}
+								value={format(measure(item))}
+								color={DATA[index % DATA.length]}
+							/>
 						))}
 					</div>
 				</CardSection>

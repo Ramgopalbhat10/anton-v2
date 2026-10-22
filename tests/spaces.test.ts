@@ -478,3 +478,25 @@ test('tasks and routines are named in a few words by the title model, unless ren
 		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
 	}
 });
+
+test('a project’s usage counts the month by thread, and its daily bars, with tokens, the last 14 days even across the month', async () => {
+	const { addSessionUsage } = await import('../src/db/sessions.ts');
+	const space = await spaces.createSpace({ name: 'Usage', repoIds: [] });
+	const thread = await spaces.startThread(space.id, { title: 'Counted', brief: 'Count this' });
+	await addSessionUsage(thread.id, { inputTokens: 900_000, outputTokens: 10_000, cost: 0 }, new Date('2026-09-28T12:00:00Z'));
+	await addSessionUsage(thread.id, { inputTokens: 40_000, outputTokens: 2_000, cost: 0.002 }, new Date('2026-10-04T12:00:00Z'));
+	const usage = await spaces.spaceUsage(space.id, new Date('2026-10-05T12:00:00Z'));
+	assert.deepEqual(
+		usage.byThread.map((row) => [row.title, row.tokens]),
+		[['Counted', 42_000]],
+		'the month starts on the 1st',
+	);
+	assert.deepEqual(
+		usage.daily.map((day) => [day.day, day.tokens]),
+		[
+			['2026-09-28', 910_000],
+			['2026-10-04', 42_000],
+		],
+		'the daily bars reach back into September',
+	);
+});

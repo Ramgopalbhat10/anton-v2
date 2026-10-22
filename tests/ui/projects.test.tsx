@@ -20,13 +20,16 @@ const api = vi.hoisted(() => ({
 	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
 	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
+	spaceUsage: vi.fn(),
+	spaceAutomations: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadChip, ThreadRow, nextSteps } = await import('@/components/thread-card');
 const { InlineLinks, Markdown } = await import('@/components/markdown');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
-const { StateSplit, countKinds, activity, ProjectPulse } = await import('@/components/project-viz');
+const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
+const { ProjectPanel } = await import('@/components/project-panel');
 const { ProjectRack, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
@@ -399,5 +402,84 @@ describe('threads', () => {
 		]);
 		expect(parseReports('Just a message')).toBeNull();
 		expect(groupByState(threads).map((group) => group.state)).toEqual(['waiting', 'working', 'review', 'resolved']);
+	});
+});
+
+describe('project overview numbers', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		api.sessions.mockResolvedValue({ sessions: threads });
+		api.spaces.mockResolvedValue({ spaces: [space] });
+	});
+
+	it('labels a schedule of days by date and one of hours by time', () => {
+		const start = new Date(2026, 9, 16, 9).getTime();
+		const week = ticks(start, start + 7 * 24 * 3600_000);
+		expect(week.steps.map((at) => tickLabel(at, week.step))).toEqual(['Oct 18', 'Oct 20', 'Oct 22']);
+		const hours = ticks(start, start + 3 * 3600_000);
+		expect(hours.steps.map((at) => tickLabel(at, hours.step))).toEqual(['09:00', '10:00', '11:00', '12:00']);
+		// A tick on midnight names the day it starts.
+		const night = ticks(new Date(2026, 9, 16, 21).getTime(), new Date(2026, 9, 17, 3).getTime());
+		expect(night.steps.map((at) => tickLabel(at, night.step))).toContain('Oct 17');
+	});
+
+	it('measures a project that spends next to nothing in tokens, and keeps each routine run’s day in view', async () => {
+		api.spaceUsage.mockResolvedValue({
+			today: 0,
+			month: 0.004,
+			byThread: [
+				{ id: 'a', title: 'Daily tech and AI news roundup · Oct 21', tokens: 820_000, cost: 0.0004 },
+				{ id: 'b', title: 'Daily tech and AI news roundup · Oct 22', tokens: 860_000, cost: 0.0004 },
+			],
+			byModel: [],
+			daily: [],
+		});
+		withRouter(() => <BurnCard space={space} />);
+		expect(await screen.findByText('1.7M')).toBeTruthy();
+		expect(screen.getByText('tokens · $0.004 spent')).toBeTruthy();
+		expect(screen.getByText('860K')).toBeTruthy();
+		// The newest roundup ranks first by tokens; each keeps its day beside the cut title.
+		expect(screen.getAllByText(/^· Oct 2[12]$/).map((day) => day.textContent)).toEqual(['· Oct 22', '· Oct 21']);
+	});
+
+	it('leads with dollars once a project spends real money', async () => {
+		api.spaceUsage.mockResolvedValue({ today: 0.5, month: 2.4, byThread: [{ id: 'a', title: 'Big refactor', tokens: 3_000_000, cost: 2.4 }], byModel: [], daily: [] });
+		withRouter(() => <BurnCard space={space} />);
+		expect(await screen.findByText('$2.40', { selector: '.in-figure' })).toBeTruthy();
+		expect(screen.getAllByText('3M tok')).toHaveLength(2);
+	});
+
+	it('shows each routine’s recent runs as a strip in their states, and when it runs next', async () => {
+		const day = 24 * 3600_000;
+		const runs = [0, 1, 2].map((index) =>
+			thread({ id: `run-${index}`, title: `Morning briefing · Oct ${20 + index}`, automationId: 'r1', createdAt: new Date(Date.now() - (3 - index) * day).toISOString(), threadState: index === 1 ? 'waiting' : 'resolved', status: index === 1 ? 'error' : 'stopped' }),
+		);
+		api.spaceAutomations.mockResolvedValue({
+			automations: [
+				{
+					id: 'r1',
+					projectId: '',
+					kind: 'schedule',
+					label: null,
+					schedule: { frequency: 'daily', time: '09:00', everyHours: 6, days: [1], dayOfMonth: 1, cron: '', timeZone: 'UTC' },
+					nextRunAt: new Date(Date.now() + 5 * 3600_000).toISOString(),
+					prompt: 'Brief me',
+					model: null,
+					reasoning: null,
+					planFirst: false,
+					enabled: true,
+					lastRunAt: new Date(Date.now() - 3600_000).toISOString(),
+					lastError: null,
+					seen: [],
+					createdAt: '2026-10-01T00:00:00Z',
+				},
+			],
+		});
+		withRouter(() => <ProjectPanel space={{ ...space, repos: [] }} threads={[...runs, ...threads]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		const strip = await screen.findByRole('group', { name: 'Recent runs' });
+		expect(within(strip).getAllByRole('button').map((cell) => cell.getAttribute('aria-label'))).toEqual(['Morning briefing · Oct 20: Done', 'Morning briefing · Oct 21: Failed', 'Morning briefing · Oct 22: Done']);
+		expect(screen.getByText('3 runs · last 1h ago')).toBeTruthy();
+		expect(screen.getByText('in 5h')).toBeTruthy();
+		expect(screen.getByText('no repository')).toBeTruthy();
 	});
 });
