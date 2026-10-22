@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { api, isChat, type Reasoning } from '@/lib/api';
+import { api, isChat, type ModelRoute, type Reasoning } from '@/lib/api';
 import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
 import { setPendingPrompt } from '@/lib/pending-prompt';
@@ -27,6 +27,7 @@ export function useCreateChat() {
 			branch?: string;
 			model?: string;
 			reasoning?: Reasoning;
+			route?: ModelRoute | null;
 			planMode?: boolean;
 			prompt?: string;
 			/** Sent with the first message, as the model sees images. */

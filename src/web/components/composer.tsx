@@ -135,7 +135,8 @@ export const Composer = memo(function Composer({
 	);
 	const togglePlan = useCallback((planMode: boolean) => edit({ planMode }), [edit]);
 	const route = session.data?.route ?? null;
-	const setRoute = useCallback((next: ModelRoute | null) => edit({ route: next }), [edit]);
+	// A route picked on another model's row picks that model too, in one change.
+	const setRoute = useCallback((next: ModelRoute | null, model?: string) => edit(model ? { model, reasoning: null, route: next } : { route: next }), [edit]);
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });

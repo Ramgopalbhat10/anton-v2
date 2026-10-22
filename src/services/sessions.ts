@@ -115,6 +115,8 @@ export async function createSession(input: {
 	branch?: string;
 	model?: string;
 	reasoning?: Reasoning;
+	/** Where a gateway sends the model's calls; kept only for a model on a gateway. */
+	route?: ModelRoute | null;
 	title?: string;
 	planMode?: boolean;
 	/** The project the task is a thread of. */
@@ -159,6 +161,7 @@ export async function createSession(input: {
 		review: input.review,
 		prUrl: input.prUrl,
 		automationId: input.automationId,
+		route: input.route && routable(model) ? input.route : null,
 	});
 	if (input.titleFrom) void nameTask(id, input.titleFrom);
 	return getSession(id);
@@ -180,8 +183,8 @@ export async function forkSession(id: string): Promise<Session> {
 	if (machine) await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before fork failed', error, id));
 	const forkId = randomUUID();
 	const title = `${source.title.slice(0, 190)} (fork)`;
-	const { projectId, model, reasoning, baseBranch, baseSha, planMode, spaceId } = source;
-	await insertSession({ id: forkId, projectId, title, model, reasoning, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId });
+	const { projectId, model, reasoning, route, baseBranch, baseSha, planMode, spaceId } = source;
+	await insertSession({ id: forkId, projectId, title, model, reasoning, route, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId });
 	if (await copyCheckpoint(id, forkId)) {
 		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
 	}

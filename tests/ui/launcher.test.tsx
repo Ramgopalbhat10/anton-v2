@@ -66,6 +66,23 @@ describe('new task composer', () => {
 			),
 		);
 	});
+	it('starts the task with the provider routing picked in the model picker', async () => {
+		const gateway = { id: 'openrouter/test/model', name: 'Test model', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: false, reasoning: [], defaultReasoning: 'off' };
+		renderWithQueries(<Launcher />, [
+			[['projects'], { projects: [] }],
+			[['sessions'], { sessions: [] }],
+			[['models'], { models: [gateway], default: gateway.id }],
+			[['general-settings'], { reasoning: null, planMode: false }],
+			[['commands'], { commands: [] }],
+		]);
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
+		await userEvent.keyboard('{Escape}');
+		await userEvent.type(screen.getByRole('textbox'), 'Hello');
+		await userEvent.keyboard('{Control>}{Enter}{/Control}');
+		await waitFor(() => expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ model: gateway.id, route: { sort: 'throughput' } })));
+	});
 	it('keeps Enter as a newline and submits only with the modifier shortcut', async () => {
 		setup();
 		await userEvent.type(screen.getByRole('textbox'), 'First line');

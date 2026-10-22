@@ -14,11 +14,12 @@ import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
-import { api, type ModelChoice, placeLabel, type Project } from '@/lib/api';
+import { api, type ModelChoice, type ModelRoute, placeLabel, type Project } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
+import { routable } from '../../core/model-route';
 
 /**
  * The repo a task works on, or No repository for a chat: a question, a job on
@@ -193,6 +194,7 @@ function RouteWell({ art, label, stages }: { art: ReactNode; label: string; stag
 export function Launcher() {
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
+	const [route, setRoute] = useState<ModelRoute | null>(null);
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [planChoice, setPlanMode] = useState<boolean | null>(null);
@@ -217,6 +219,17 @@ export function Launcher() {
 	const chosenModel = models.data?.models.find((item) => item.id === model);
 	const blind = attachments.images.length > 0 && chosenModel !== undefined && !chosenModel.vision;
 
+	function chooseModel(change: Partial<ModelChoice>) {
+		// As a task does: another model drops a provider, which belongs to the model, and keeps a sort while it is on a gateway.
+		if (change.model && change.model !== model) setRoute((current) => (current?.sort && routable(change.model!) ? current : null));
+		setChoice((current) => ({ ...current, ...change }));
+	}
+
+	function chooseRoute(next: ModelRoute | null, picked?: string) {
+		if (picked) setChoice((current) => ({ ...current, model: picked, reasoning: null }));
+		setRoute(next);
+	}
+
 	function pick(id: string) {
 		setProjectId(id);
 		setBranch('');
@@ -234,6 +247,7 @@ export function Launcher() {
 			branch: project ? chosenBranch || undefined : undefined,
 			model: model || undefined,
 			reasoning: reasoning ?? undefined,
+			route: route && routable(model) ? route : undefined,
 			planMode,
 		});
 	}
@@ -291,7 +305,7 @@ export function Launcher() {
 							<ComposerPlus attachments={attachments} side="bottom" />
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
-							<ModelPicker value={{ model, reasoning }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} height={28} side="bottom" />
+							<ModelPicker value={{ model, reasoning }} onChange={chooseModel} route={route} onRoute={chooseRoute} height={28} side="bottom" />
 							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 							<div className="min-w-0 flex-[1_1_8px]" />
 							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={create.isPending || !projects.isSuccess || blind}>
