@@ -1,4 +1,5 @@
 import { announce } from '../core/changes.ts';
+import { unrouted } from '../core/model-route.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { logProblem } from './log.ts';
 import { toUsage } from './usage.ts';
@@ -203,7 +204,7 @@ function apply(id: string, list: SubagentRun[], event: Event) {
 	if (!run) return;
 	switch (event.type) {
 		case 'turn_request':
-			run.model = event.request?.requestedModel ?? run.model;
+			run.model = event.request?.requestedModel ? unrouted(event.request.requestedModel) : run.model;
 			break;
 		case 'turn':
 			if (event.response?.usage) {

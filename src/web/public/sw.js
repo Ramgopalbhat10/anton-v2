@@ -29,8 +29,8 @@ self.addEventListener('push', (event) => {
 				tag: notice.tag,
 				// A task that needs you again sounds again; the same tag replaces its older notice.
 				renotify: notice.kind === 'needs-you' || notice.kind === 'plan' || notice.kind === 'failed',
-				icon: '/icons/icon-192.png',
-				badge: '/icons/badge-96.png',
+				icon: '/icons/icon-192.png?v=1df47b80',
+				badge: '/icons/badge-96.png?v=1df47b80',
 				data: { url: notice.url },
 			});
 		})(),

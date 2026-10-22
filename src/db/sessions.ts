@@ -1,3 +1,4 @@
+import { asRoute } from '../core/model-route.ts';
 import type { Reasoning } from '../core/ports.ts';
 import type { PullRequestStatus, ReviewOf, SessionRecord, Usage } from '../core/types.ts';
 import { announce } from '../core/changes.ts';
@@ -15,6 +16,7 @@ function toRecord(row: Row): SessionRecord {
 		title: String(row.title),
 		model: String(row.model),
 		reasoning: optional(row.reasoning) as Reasoning | null,
+		route: row.route_json == null ? null : asRoute(JSON.parse(String(row.route_json))),
 		branch: String(row.branch ?? ''),
 		baseBranch: String(row.base_branch ?? ''),
 		baseSha: String(row.base_sha ?? ''),
@@ -200,6 +202,7 @@ const columns = {
 	title: 'title',
 	model: 'model',
 	reasoning: 'reasoning',
+	routeJson: 'route_json',
 	prUrl: 'pr_url',
 	machineState: 'machine_state',
 	checkpointAt: 'checkpoint_at',

@@ -44,7 +44,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models/user` with a key, else `/models`, cached for an hour) | |
-| `GatewayAccount` | `openrouter` (the key's limits and credits from `GET /key` and `/credits`) | Settings › Subscriptions, with a key from OpenRouter, else `OPENROUTER_API_KEY` |
+| `GatewayAccount` | `openrouter` (the key's limits and credits from `GET /key` and `/credits`), `vercel` (the team's credits from `GET /v1/credits`) | Settings › Subscriptions, with a key from OpenRouter or Vercel AI Gateway, else `OPENROUTER_API_KEY` / `AI_GATEWAY_API_KEY` |
 | `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
 | `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
@@ -60,6 +60,10 @@ OpenCode Go and Cursor plans take a key instead of a sign-in: paste one made in 
 
 OpenRouter has a tab there too, though it is no plan: its models bill per token. Paste a key from openrouter.ai/settings/keys and Anton checks it with `GET /key` before keeping it on the server, then lists the models that key may use (`/models/user`, after your provider preferences and guardrails) a page at a time with a search, their prices and this month's tokens, beside the key's spending limits and the account's credits. The agents, the decision model and the computer's vision model all call OpenRouter with that key. `OPENROUTER_API_KEY` still works when no key is pasted; a pasted key wins, and disconnecting it hands back to the server's. Without either, OpenRouter models leave the model picker.
 
+Vercel AI Gateway has a tab of its own that works the same way: paste a key from your Vercel dashboard (AI Gateway › API Keys), or set `AI_GATEWAY_API_KEY`, and the gateway's tool-calling models join the picker as `vercel/<creator>/<model>`, paid from your team's AI Gateway credits (the tab shows what is left). Only the agents call it; the decision, title and vision models stay on OpenRouter.
+
+In a task's model picker, the chosen model on either gateway has two small menus beside its pin. They pick where that task's calls go: a provider to try first (each listed with its price and, where the gateway says, its speed), or a sort over all of them by price, throughput or latency. A provider and a sort exclude each other: once one is set only its icon stays (the provider's logo or the sort's icon), the picker's button shows it too, and the choice belongs to that task alone. The gateway falls back to its default routing when the chosen provider fails (OpenRouter's `provider.order` with `allow_fallbacks`, Vercel's `providerOptions.gateway.order`), and a provider is dropped when you switch models.
+
 ### On your phone
 
 Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add to Home Screen; on Android or in Chrome and Edge, use Install from the browser's menu or **Settings › Notifications**. Turn notifications on there, on each device, and Anton tells it when a task asks you something, has a plan waiting for approval, or fails (and when one finishes, if you switch that on), with what it asks. Tapping one opens the task on its conversation, ready to answer or approve. Nothing is sent while an Anton window is in front of you. iPhones and iPads get notifications only from the app on the home screen (iOS 16.4 or later). Notifications go through the browser's own push service (Google's, Apple's or Mozilla's), encrypted so it cannot read them.
@@ -69,6 +73,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | Variable | Purpose |
 | --- | --- |
 | `OPENROUTER_API_KEY` | Model gateway, used while no OpenRouter key is pasted in Settings › Subscriptions (optional) |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway, used while no key for it is pasted in Settings › Subscriptions (optional) |
 | `ANTON_GITHUB_TOKEN` | Fine-grained token with Contents and Pull requests read/write on your repos |
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |

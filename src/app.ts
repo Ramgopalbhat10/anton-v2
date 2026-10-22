@@ -13,12 +13,13 @@ import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
 import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
+import { ROUTE_SORTS } from './core/model-route.ts';
 import { FREQUENCIES } from './core/schedule.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
-import { listModels, pinnedModels, setPinnedModels } from './services/models.ts';
+import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
 import { pageFetch } from './services/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
@@ -113,6 +114,10 @@ import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sen
 const app = new Hono();
 
 const REASONING = v.picklist(REASONING_LEVELS);
+/** A task's route: one provider first (by the gateway's slug), or a sort; null leaves it to the gateway. */
+const ROUTE = v.nullable(
+	v.union([v.object({ provider: v.pipe(v.string(), v.regex(/^[\w.\-/:]{1,80}$/)) }), v.object({ sort: v.picklist(ROUTE_SORTS) })]),
+);
 const AGENT_MODEL = v.nullable(v.object({ model: v.pipe(v.string(), v.minLength(1)), reasoning: v.nullable(REASONING) }));
 /** Variables from the browser; null keeps a stored value. */
 const ENV = v.pipe(
@@ -416,6 +421,12 @@ app.get('/api/storage', async (c) => c.json(await storageView()));
 app.post('/api/storage/cleanup', async (c) => c.json(await cleanUpStorage()));
 
 app.get('/api/models', async (c) => c.json({ models: await listModels(), default: await defaultModel(), pinned: await pinnedModels() }));
+// The providers a gateway can send one model's calls to, for a task's route; empty for a model on a plan.
+app.get('/api/models/endpoints', async (c) => {
+	const model = c.req.query('model') ?? '';
+	if (!model) throw new InvalidInputError('Name a model.');
+	return c.json({ endpoints: await modelEndpoints(model) });
+});
 // What generate_image can draw with, for Settings › General; empty without an OpenRouter key.
 app.get('/api/image-models', async (c) => c.json({ models: await imageModels(), default: config.imageModel, available: imagesAvailable() }));
 app.put('/api/models/pinned', async (c) => {
@@ -752,6 +763,7 @@ app.patch('/api/sessions/:id', async (c) => {
 			title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
 			model: v.optional(v.string()),
 			reasoning: v.optional(v.nullable(REASONING)),
+			route: v.optional(ROUTE),
 			planMode: v.optional(v.boolean()),
 			pinned: v.optional(v.boolean()),
 			resolved: v.optional(v.boolean()),

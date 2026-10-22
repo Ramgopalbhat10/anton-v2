@@ -20,7 +20,7 @@ export const SORTS: Record<Sort, { label: string; compare: (a: ModelInfo, b: Mod
 export const NEXT_SORT: Record<Sort, Sort> = { newest: 'cheapest', cheapest: 'context', context: 'newest' };
 
 /** Gateways by the `<gateway>` a model id starts with. */
-const GATEWAYS: Record<string, string> = { openrouter: 'OpenRouter' };
+const GATEWAYS: Record<string, string> = { openrouter: 'OpenRouter', vercel: 'Vercel AI Gateway' };
 
 /** Where a model's calls go: the plan you signed in to, such as "ChatGPT", or the gateway that lists it. */
 export function sourceOf(model: ModelInfo): string {

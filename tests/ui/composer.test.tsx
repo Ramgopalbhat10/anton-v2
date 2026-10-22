@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueries, session } from './render';
@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
 	session: vi.fn(),
 	budget: vi.fn(),
 	models: vi.fn(),
+	modelEndpoints: vi.fn(),
 	files: vi.fn(),
 	commands: vi.fn(),
 	attachToTask: vi.fn(),
@@ -59,6 +60,46 @@ describe('Composer', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		api.editSession.mockImplementation(async (_id: string, change: object) => session(change));
+	});
+
+	it('routes the task by a provider or a sort from the menus beside the pin, never both', async () => {
+		api.modelEndpoints.mockResolvedValue({
+			endpoints: [
+				{ slug: 'groq', name: 'Groq', price: { input: 1, output: 3 }, contextLength: 128000, latency: 0.2, throughput: 400, uptime: 100 },
+				{ slug: 'deepinfra/fp8', name: 'DeepInfra', price: { input: 0.5, output: 1 }, contextLength: 128000, latency: null, throughput: null, uptime: 99 },
+			],
+		});
+		const { client } = setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		expect(screen.getByRole('button', { name: 'Provider: any' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
+		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { route: { sort: 'price' } }));
+
+		// With a sort, only its icon stays: the provider menu goes, and the picker's button shows the sort.
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy());
+		expect(screen.queryByRole('button', { name: /^Provider:/ })).toBeNull();
+		expect(within(screen.getByRole('button', { name: 'Model and reasoning' })).getByTitle('Sorted by price')).toBeTruthy();
+
+		// With a provider, only the provider's mark stays, and its menu says where calls fall back to.
+		client.setQueryData(['session', 's1'], session({ route: { provider: 'groq' } }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Provider: Groq' }));
+		expect(screen.queryByRole('button', { name: /^Sort providers:/ })).toBeNull();
+		expect(await screen.findByRole('menuitem', { name: /Groq/ })).toBeTruthy();
+		expect(screen.getByText(/If the provider you pick fails, OpenRouter falls back to its default routing/)).toBeTruthy();
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Any provider' }));
+		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { route: null }));
+	});
+
+	it('offers no routing for a model on a plan', async () => {
+		renderWithQueries(<Composer sessionId="s1" onSend={vi.fn()} onStop={vi.fn()} />, [
+			[['session', 's1'], session({ model: 'openai/gpt-5.5' })],
+			[['models'], { models: [{ ...model, id: 'openai/gpt-5.5', subscription: 'ChatGPT' }], default: model.id }],
+			[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
+			[['connectors'], CONNECTORS],
+		]);
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		expect(screen.queryByRole('button', { name: /^Provider:|^Sort providers:/ })).toBeNull();
 	});
 
 	it("turns connectors on and off from the + menu, for every task, without touching the task", async () => {

@@ -1,4 +1,5 @@
-import { type ModelCatalog, type ModelInfo, REASONING_LEVELS, type Reasoning } from '../../core/ports.ts';
+import { type ModelCatalog, type ModelEndpoint, type ModelInfo, REASONING_LEVELS, type Reasoning } from '../../core/ports.ts';
+import { cachedEndpoints, cachedList } from '../cached-list.ts';
 
 /** `apiKey` is read on each listing; with one, the list is the models the key may use. */
 export type OpenRouterOptions = { apiUrl: string; ttlMs: number; apiKey?: () => string | null };
@@ -87,23 +88,49 @@ export function toModelInfo(model: OpenRouterModel): ModelInfo {
 	};
 }
 
-/** After a refresh in the background fails, how long the last list is served before asking again. */
-const RETRY_MS = 5 * 60_000;
+/** The fields Anton reads from OpenRouter's `GET /models/{id}/endpoints`. */
+type OpenRouterEndpoint = {
+	provider_name?: string;
+	tag?: string;
+	context_length?: number | null;
+	pricing?: { prompt?: string; completion?: string };
+	status?: number;
+	supported_parameters?: string[];
+	uptime_last_30m?: number | null;
+	latency_last_30m?: { p50?: number } | number | null;
+	throughput_last_30m?: { p50?: number } | number | null;
+};
+
+const median = (value: { p50?: number } | number | null | undefined): number | null =>
+	typeof value === 'number' ? value : typeof value?.p50 === 'number' ? value.p50 : null;
+
+/** The providers that serve a model, by the tag OpenRouter's `provider.order` takes. Those that cannot call tools are left out. */
+export function toEndpoints(body: unknown): ModelEndpoint[] {
+	const endpoints = ((body as { data?: { endpoints?: OpenRouterEndpoint[] } } | null)?.data?.endpoints ?? []).filter(
+		(endpoint) => endpoint.tag && (!endpoint.supported_parameters || endpoint.supported_parameters.includes('tools')),
+	);
+	return endpoints.map((endpoint) => {
+		const latency = median(endpoint.latency_last_30m);
+		return {
+			slug: endpoint.tag!,
+			name: endpoint.provider_name ?? endpoint.tag!,
+			price: { input: perMillion(endpoint.pricing?.prompt), output: perMillion(endpoint.pricing?.completion) },
+			contextLength: endpoint.context_length ?? 0,
+			// OpenRouter reports latency in milliseconds.
+			latency: latency === null ? null : latency / 1000,
+			throughput: median(endpoint.throughput_last_30m),
+			uptime: typeof endpoint.uptime_last_30m === 'number' ? endpoint.uptime_last_30m : null,
+		};
+	});
+}
 
 /**
- * OpenRouter's model list, cached for `ttlMs`. With a key it is the models the
- * key's account may use (`/models/user`, after its provider preferences and
- * guardrails), else the public list, which also stands in when that call
- * fails. Once the hour is up the last list is still served at once while a
- * new one is fetched behind it, so the picker never waits on OpenRouter; a
- * failed refresh keeps serving the last good list, so a gateway hiccup never
- * empties the picker; a new key lists them again at once.
+ * OpenRouter's model list, cached for `ttlMs` (`cachedList`). With a key it is
+ * the models the key's account may use (`/models/user`, after its provider
+ * preferences and guardrails), else the public list, which also stands in when
+ * that call fails.
  */
 export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRouterOptions): ModelCatalog {
-	type Entry = { at: number; key: string | null; models: Promise<ModelInfo[]>; settled: boolean };
-	let cached: Entry | undefined;
-	let refreshing: Promise<unknown> | null = null;
-
 	async function fetchList(path: string, key: string | null): Promise<OpenRouterModel[]> {
 		// Bounded, as a task's first list waits for it.
 		const response = await fetch(`${apiUrl}${path}`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(15_000) });
@@ -116,41 +143,12 @@ export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRo
 		return data.filter(isAgentModel).map(toModelInfo);
 	}
 
-	/** The last good list stays served until a newer one is in hand. */
-	function refreshBehind(entry: Entry) {
-		if (refreshing) return;
-		refreshing = fetchModels(entry.key)
-			.then(
-				(models) => {
-					if (cached === entry) cached = { at: Date.now(), key: entry.key, models: Promise.resolve(models), settled: true };
-				},
-				() => {
-					if (cached === entry) entry.at = Date.now() - ttlMs + RETRY_MS;
-				},
-			)
-			.finally(() => (refreshing = null));
-	}
+	const endpoints = cachedEndpoints(async (model) => {
+		const id = model.slice('openrouter/'.length);
+		const response = await fetch(`${apiUrl}/models/${id}/endpoints`, { signal: AbortSignal.timeout(15_000) });
+		if (!response.ok) throw new Error(`OpenRouter ${id} endpoints: ${response.status}`);
+		return toEndpoints(await response.json());
+	});
 
-	return {
-		name: 'openrouter',
-		list(fresh = false) {
-			const key = apiKey();
-			const current = cached?.key === key ? cached : undefined;
-			if (!fresh && current && Date.now() - current.at < ttlMs) return current.models;
-			if (!fresh && current?.settled) {
-				refreshBehind(current);
-				return current.models;
-			}
-			const previous = cached?.models;
-			const models = fetchModels(key).catch((error: unknown) => (previous ? previous : Promise.reject(error)));
-			const entry: Entry = { at: Date.now(), key, models, settled: false };
-			cached = entry;
-			models.then(
-				() => (entry.settled = true),
-				// A failure with nothing to fall back on is retried on the next call.
-				() => cached === entry && (cached = undefined),
-			);
-			return models;
-		},
-	};
+	return { name: 'openrouter', list: cachedList({ ttlMs, apiKey, fetchModels }), endpoints };
 }

@@ -2,7 +2,7 @@
 
 import { type AgentProps, defineTool, setProvider, useDelivery, useModel, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -10,15 +10,16 @@ import { coordinatorBrief, threadLine } from '../services/coordinator.ts';
 import { rememberForSpace } from '../services/memory.ts';
 import { loadedModels } from '../services/models.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/spaces.ts';
-import { editSession, stopSession } from '../services/sessions.ts';
+import { editSession, routedModels, stopSession } from '../services/sessions.ts';
 import { readSpaceFileForAgent } from '../services/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/attachments.ts';
 import { withAttachments } from '../core/attachments.ts';
-import { gatewayKey, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { toUsage } from '../services/usage.ts';
 import { listProjects } from '../db/projects.ts';
 
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));

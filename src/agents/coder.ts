@@ -21,7 +21,7 @@ import {
 import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { sandboxTools } from '../flue/sandbox-tools.ts';
-import { liveOpenRouterProvider } from '../flue/live-models.ts';
+import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -31,7 +31,7 @@ import { browse, type BrowserInput, type BrowserState, takeScreenshot } from '..
 import { decide, hasDecisionModel, newTally, type Tally, yesOf } from '../services/decisions.ts';
 import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } from '../services/browser-autopilot.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
-import { modelFor } from '../services/sessions.ts';
+import { agentModelFor, modelFor, routedModels } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import {
 	agentSettingsNow,
@@ -64,7 +64,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
-import { gatewayKey, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
@@ -86,7 +86,10 @@ import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey));
+// A task's route (one provider first, or a sort) is part of the specifier its agent resolves; see src/core/model-route.ts.
+setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+// Every model in Vercel AI Gateway's live list, with the key pasted in Settings › Subscriptions.
+setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
 setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
@@ -1137,7 +1140,8 @@ function useLatestInput(id: string) {
 }
 
 export function Coder({ id }: AgentProps) {
-	const { model, reasoning } = modelFor(id);
+	// With a route, the gateway tries the task's provider first or ranks them by its sort.
+	const { model, reasoning } = agentModelFor(id);
 	useModel(model, { thinkingLevel: reasoning });
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);

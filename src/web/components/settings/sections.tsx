@@ -31,7 +31,7 @@ export type SettingsSection = { id: string; group: SectionGroup; label: string; 
 /** Every settings page, in nav order. A new page is one entry here. */
 export const SECTIONS: SettingsSection[] = [
 	{ id: 'general', group: 'anton', label: 'General', icon: Settings2, desc: 'The model and mode new tasks start with', Page: GeneralPage },
-	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Plans you already pay for, and your OpenRouter key', Page: SubscriptionsPage },
+	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Plans you already pay for, and your gateway keys', Page: SubscriptionsPage },
 	{ id: 'notifications', group: 'anton', label: 'Notifications', icon: BellRing, desc: 'Hear when a task needs you', Page: NotificationsPage },
 	{ id: 'connections', group: 'anton', label: 'Connections', icon: Link, desc: 'GitHub, Modal, storage and models, checked live', Page: ConnectionsPage },
 	{ id: 'usage', group: 'anton', label: 'Usage and limits', icon: Activity, desc: 'Model spend and the caps that stop it', Page: UsagePage },

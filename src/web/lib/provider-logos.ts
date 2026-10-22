@@ -43,6 +43,30 @@ import upstage from '@lobehub/icons-static-svg/icons/upstage-color.svg?raw';
 import xai from '@lobehub/icons-static-svg/icons/xai.svg?raw';
 import xiaomi from '@lobehub/icons-static-svg/icons/xiaomimimo.svg?raw';
 import zai from '@lobehub/icons-static-svg/icons/zai.svg?raw';
+import atlascloud from '@lobehub/icons-static-svg/icons/atlascloud.svg?raw';
+import azure from '@lobehub/icons-static-svg/icons/azure-color.svg?raw';
+import baseten from '@lobehub/icons-static-svg/icons/baseten.svg?raw';
+import bedrock from '@lobehub/icons-static-svg/icons/bedrock-color.svg?raw';
+import cerebras from '@lobehub/icons-static-svg/icons/cerebras-color.svg?raw';
+import chutes from '@lobehub/icons-static-svg/icons/chutes.svg?raw';
+import cloudflare from '@lobehub/icons-static-svg/icons/cloudflare-color.svg?raw';
+import crusoe from '@lobehub/icons-static-svg/icons/crusoe-color.svg?raw';
+import deepinfra from '@lobehub/icons-static-svg/icons/deepinfra-color.svg?raw';
+import featherless from '@lobehub/icons-static-svg/icons/featherless-color.svg?raw';
+import friendli from '@lobehub/icons-static-svg/icons/friendli.svg?raw';
+import gmicloud from '@lobehub/icons-static-svg/icons/gmicloud.svg?raw';
+import groq from '@lobehub/icons-static-svg/icons/groq.svg?raw';
+import hyperbolic from '@lobehub/icons-static-svg/icons/hyperbolic-color.svg?raw';
+import lambda from '@lobehub/icons-static-svg/icons/lambda.svg?raw';
+import nebius from '@lobehub/icons-static-svg/icons/nebius.svg?raw';
+import novita from '@lobehub/icons-static-svg/icons/novita-color.svg?raw';
+import parasail from '@lobehub/icons-static-svg/icons/parasail.svg?raw';
+import sambanova from '@lobehub/icons-static-svg/icons/sambanova-color.svg?raw';
+import siliconcloud from '@lobehub/icons-static-svg/icons/siliconcloud-color.svg?raw';
+import together from '@lobehub/icons-static-svg/icons/together-color.svg?raw';
+import vercel from '@lobehub/icons-static-svg/icons/vercel.svg?raw';
+import venice from '@lobehub/icons-static-svg/icons/venice-color.svg?raw';
+import vertex from '@lobehub/icons-static-svg/icons/vertexai-color.svg?raw';
 import type { ModelInfo } from './api';
 
 /** By the vendor part of a model id, as OpenRouter and the plans name vendors; aliases where those differ. */
@@ -69,6 +93,7 @@ const LOGOS: Record<string, string> = {
 	'meta-llama': meta,
 	microsoft,
 	minimax,
+	mistral,
 	mistralai: mistral,
 	moonshotai: moonshot,
 	nvidia,
@@ -83,21 +108,64 @@ const LOGOS: Record<string, string> = {
 	relace,
 	sakana,
 	stepfun,
+	spacexai: xai,
 	tencent,
 	upstage,
+	vercel,
 	'x-ai': xai,
+	xai,
 	xiaomi,
 	'z-ai': zai,
+	zai,
 };
 
+/** The companies that host models, as a gateway's routes name them, where they are not also a maker above. */
+const HOSTS: Record<string, string> = {
+	'atlas-cloud': atlascloud,
+	azure,
+	baseten,
+	bedrock,
+	'amazon-bedrock': bedrock,
+	cerebras,
+	chutes,
+	'claude-on-aws': aws,
+	claudeaws: aws,
+	cloudflare,
+	crusoe,
+	deepinfra,
+	featherless,
+	friendli,
+	gmicloud,
+	'google-vertex': vertex,
+	'google-ai-studio': google,
+	groq,
+	hyperbolic,
+	lambda,
+	nebius,
+	novita,
+	parasail,
+	sambanova,
+	siliconflow: siliconcloud,
+	together,
+	togetherai: together,
+	venice,
+	vertex,
+};
+
+/** A hosting provider's logo by the slug a route names it with (`deepinfra/fp4` is DeepInfra's), or undefined when the set has none. */
+export function hostLogo(slug: string): string | undefined {
+	const name = slug.split('/')[0].toLowerCase();
+	return HOSTS[name] ?? LOGOS[name] ?? LOGOS[name.replace(/ai$/, '')];
+}
+
 /**
- * The vendor a model id names: `openrouter/anthropic/…` is Anthropic's, `openai/…` (a ChatGPT plan's) is OpenAI's,
+ * The vendor a model id names: `openrouter/anthropic/…` and `vercel/anthropic/…` are Anthropic's, `openai/…` (a ChatGPT plan's) is OpenAI's,
  * and `claude-code/…` (a Claude plan's) is Anthropic's. `opencode-go/…` and `cursor/…` (key plans' models) take the plan's own logo.
  */
 export function vendorSlug(model: Pick<ModelInfo, 'id'>): string {
 	const [gateway, vendor] = model.id.split('/');
 	if (gateway === 'claude-code') return 'anthropic';
-	return (gateway === 'openrouter' ? (vendor ?? gateway) : gateway).replace(/^~/, '').toLowerCase();
+	return (gateway === 'openrouter' || gateway === 'vercel' ? vendor || gateway : gateway).replace(/^~/, '').toLowerCase();
 }
 
 /** The vendor's logo as SVG markup, or undefined when the set has none for it. */

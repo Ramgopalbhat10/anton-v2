@@ -275,6 +275,34 @@ test('the model and reasoning picker change what the agent reads', async () => {
 	await assert.rejects(() => sessions.editSession(session.id, { model: 'openrouter/made/up' }), /Unknown model/);
 });
 
+test('a route goes with the session to the agent, and a provider stays with its model', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, model: 'openrouter/moonshotai/kimi-k2.6' });
+
+	await sessions.editSession(session.id, { route: { provider: 'groq' } });
+	await sessions.primeModel(session.id);
+	assert.deepEqual(sessions.modelFor(session.id).route, { provider: 'groq' });
+	assert.equal(sessions.agentModelFor(session.id).model, 'openrouter/moonshotai/kimi-k2.6#via=groq');
+	assert.ok(sessions.routedModels().includes('openrouter/moonshotai/kimi-k2.6#via=groq'));
+	assert.deepEqual((await sessions.getSession(session.id)).route, { provider: 'groq' });
+
+	// Another model leaves a provider to the gateway.
+	await sessions.editSession(session.id, { model: 'openrouter/~deepseek/deepseek-flash-latest' });
+	await sessions.primeModel(session.id);
+	assert.equal(sessions.modelFor(session.id).route, undefined);
+	assert.equal(sessions.agentModelFor(session.id).model, 'openrouter/~deepseek/deepseek-flash-latest');
+
+	// A sort carries over to the next model on a gateway.
+	await sessions.editSession(session.id, { route: { sort: 'throughput' } });
+	await sessions.editSession(session.id, { model: 'openrouter/moonshotai/kimi-k2.6' });
+	await sessions.primeModel(session.id);
+	assert.equal(sessions.agentModelFor(session.id).model, 'openrouter/moonshotai/kimi-k2.6#sort=throughput');
+
+	await sessions.editSession(session.id, { route: null });
+	await sessions.primeModel(session.id);
+	assert.equal(sessions.agentModelFor(session.id).model, 'openrouter/moonshotai/kimi-k2.6');
+});
+
 test('setup that fails part way runs again on the next start', async () => {
 	// A repo with no warm image yet, so setup clones.
 	const project = await addProject('acme/fresh');

@@ -1,10 +1,12 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
 /**
  * Draws the app's icons (favicon, home screen, splash, notification badge)
- * from Anton's mark, the faceted bot head in `Logo` (illustrations.tsx).
- * Run after changing the mark: `node scripts/make-icons.ts`. Needs Chromium
+ * from Anton's mark, the faceted bot head in `Logo` (illustrations.tsx), and
+ * stamps their links with a hash of the mark (`?v=`), since browsers keep a
+ * favicon by its address long after the file changes. Run after changing the mark: `node scripts/make-icons.ts`. Needs Chromium
  * (`ANTON_CHROMIUM` or Playwright's own).
  */
 
@@ -53,4 +55,12 @@ try {
 	}
 } finally {
 	await browser.close();
+}
+
+/** Every link to an icon, in the page, the manifest and the service worker, names this mark's version. */
+const version = createHash('sha256').update(favicon + tile + fullBleed + badge).digest('hex').slice(0, 8);
+for (const file of ['../src/web/index.html', '../src/web/public/manifest.webmanifest', '../src/web/public/sw.js']) {
+	const url = new URL(file, import.meta.url);
+	const text = await readFile(url, 'utf8');
+	await writeFile(url, text.replace(/(\/icons\/[\w-]+\.(?:svg|png))(?:\?v=\w+)?/g, `$1?v=${version}`));
 }

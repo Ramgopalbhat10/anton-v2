@@ -298,17 +298,34 @@ export type ModelInfo = {
 	variant?: VariantOf;
 };
 
+/** One provider a gateway can send a model's calls to, as a task's route names it. */
+export type ModelEndpoint = {
+	/** What a route names it by, such as `anthropic` or `deepinfra/fp8`. */
+	slug: string;
+	name: string;
+	/** US dollars per million tokens through this provider. */
+	price: { input: number; output: number };
+	contextLength: number;
+	/** Median seconds to the first token and tokens a second, recently, where the gateway says. */
+	latency: number | null;
+	throughput: number | null;
+	/** Percent of recent calls it answered, where the gateway says. */
+	uptime: number | null;
+};
+
 /** The models an LLM gateway offers for agent work (tool calling, text out). */
 export type ModelCatalog = {
 	readonly name: string;
 	/** `fresh` lists them again rather than serving the cached list. */
 	list(fresh?: boolean): Promise<ModelInfo[]>;
+	/** The providers that serve one of its models (`<gateway>/<model>`), for a route; absent when the gateway routes on its own. */
+	endpoints?(model: string): Promise<ModelEndpoint[]>;
 };
 
 /**
- * The account behind the gateway Anton pays per token through (OpenRouter),
- * used with a key pasted in Settings › Subscriptions, or the server's own
- * when none is pasted. Its models are the `models` catalog's.
+ * The account behind a gateway Anton pays per token through (OpenRouter,
+ * Vercel AI Gateway), used with a key pasted in Settings › Subscriptions, or
+ * the server's own when none is pasted. Its models are its catalog's.
  */
 export type GatewayAccount = {
 	/** `openrouter`: how settings and routes name it. */

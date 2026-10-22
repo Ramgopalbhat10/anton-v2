@@ -1,4 +1,5 @@
 import { announce } from '../core/changes.ts';
+import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { logProblem } from './log.ts';
@@ -110,7 +111,7 @@ export async function recordContext(event: ContextEvent): Promise<void> {
 	if (!used) return;
 	// The reply joins the conversation, so it counts with the messages.
 	const snapshot: Snapshot = {
-		model: `${event.request?.providerId}/${event.request?.requestedModel}`,
+		model: unrouted(`${event.request?.providerId}/${event.request?.requestedModel}`),
 		used,
 		estimates: { ...estimates, messages: estimates.messages + (usage.output ?? 0) },
 		at: new Date().toISOString(),
