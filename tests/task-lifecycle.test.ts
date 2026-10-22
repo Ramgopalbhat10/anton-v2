@@ -301,6 +301,12 @@ test('a route goes with the session to the agent, and a provider stays with its 
 	await sessions.editSession(session.id, { route: null });
 	await sessions.primeModel(session.id);
 	assert.equal(sessions.agentModelFor(session.id).model, 'openrouter/moonshotai/kimi-k2.6');
+
+	// A task can start with a route, as New task gives one, and a fork keeps it.
+	const routed = await sessions.createSession({ projectId: project.id, model: 'openrouter/moonshotai/kimi-k2.6', route: { sort: 'price' } });
+	assert.deepEqual(routed.route, { sort: 'price' });
+	await sessions.primeModel(routed.id);
+	assert.equal(sessions.agentModelFor(routed.id).model, 'openrouter/moonshotai/kimi-k2.6#sort=price');
 });
 
 test('setup that fails part way runs again on the next start', async () => {

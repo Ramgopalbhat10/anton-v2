@@ -91,6 +91,23 @@ describe('Composer', () => {
 		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { route: null }));
 	});
 
+	it('routes another gateway model from its own row, picking that model in the same change', async () => {
+		const other = { ...model, id: 'openrouter/test/other', name: 'Other model' };
+		renderWithQueries(<Composer sessionId="s1" onSend={vi.fn()} onStop={vi.fn()} />, [
+			[['session', 's1'], session()],
+			[['models'], { models: [model, other], default: model.id }],
+			[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
+			[['connectors'], CONNECTORS],
+		]);
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		const row = screen.getByRole('option', { name: /Other model/ });
+		await userEvent.click(within(row).getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
+		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { model: 'openrouter/test/other', reasoning: null, route: { sort: 'latency' } }));
+		// The providers are asked for only when a provider menu opens.
+		expect(api.modelEndpoints).not.toHaveBeenCalled();
+	});
+
 	it('offers no routing for a model on a plan', async () => {
 		renderWithQueries(<Composer sessionId="s1" onSend={vi.fn()} onStop={vi.fn()} />, [
 			[['session', 's1'], session({ model: 'openai/gpt-5.5' })],

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ArrowDownWideNarrow, CircleDollarSign, Gauge, type LucideIcon, Server, Timer } from 'lucide-react';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelEndpoint, type ModelInfo, type ModelRoute, type RouteSort } from '@/lib/api';
@@ -58,25 +59,25 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 const CONTROL =
 	'inline-flex size-5 shrink-0 items-center justify-center rounded-[5px] text-(--icon-tertiary) outline-none hover:bg-(--alpha-white-6) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--alpha-white-6)';
 
-/** The providers the gateway lists for the model, shared by the menu and the mark on the picker's button. */
-function useEndpoints(model: ModelInfo) {
-	return useQuery({ queryKey: ['model-endpoints', model.id], queryFn: () => api.modelEndpoints(model.id), staleTime: 10 * 60_000 });
+/** The providers the gateway lists for the model, shared by the menu and the mark on the picker's button; asked for only once `enabled`. */
+function useEndpoints(model: ModelInfo, enabled = true) {
+	return useQuery({ queryKey: ['model-endpoints', model.id], queryFn: () => api.modelEndpoints(model.id), staleTime: 10 * 60_000, enabled });
 }
 
 type RouteProps = { route: ModelRoute | null; onChange: (route: ModelRoute | null) => void };
 
 /**
- * Where the gateway sends this task's calls, as two icon menus beside the
- * chosen model's pin in the picker: a provider to try first, and a sort over
+ * Where the gateway sends this task's calls, as two icon menus beside a
+ * gateway model's pin in the picker: a provider to try first, and a sort over
  * all of them. They exclude each other, so once one is set only its icon
  * stays: the provider's mark, or the sort's icon. The gateway falls back to
  * its own routing when the provider fails, so a route never stops a call that
  * would otherwise work.
  */
-export function RouteControls({ model, route, onChange }: RouteProps & { model: ModelInfo }) {
+export function RouteControls({ model, route, onChange, className }: RouteProps & { model: ModelInfo; className?: string }) {
 	return (
 		// Clicks in the menus reach the row through React's tree; they are not a pick.
-		<span className="flex shrink-0 items-center" onClick={(event) => event.stopPropagation()}>
+		<span className={cn('flex shrink-0 items-center', className)} onClick={(event) => event.stopPropagation()}>
 			{route?.sort ? null : <ProviderMenu model={model} route={route} onChange={onChange} />}
 			{route?.provider ? null : <SortMenu route={route} onChange={onChange} />}
 		</span>
@@ -84,11 +85,13 @@ export function RouteControls({ model, route, onChange }: RouteProps & { model: 
 }
 
 function ProviderMenu({ model, route, onChange }: RouteProps & { model: ModelInfo }) {
-	const endpoints = useEndpoints(model);
+	// Every gateway row has this menu; its providers are fetched when it opens, or to name the one that is set.
+	const [open, setOpen] = useState(false);
+	const endpoints = useEndpoints(model, open || Boolean(route?.provider));
 	const listed = endpoints.data?.endpoints ?? [];
 	const chosen = route?.provider ? listed.find((endpoint) => endpoint.slug === route.provider) : undefined;
 	return (
-		<Menu>
+		<Menu open={open} onOpenChange={setOpen}>
 			<MenuTrigger asChild>
 				<button
 					type="button"
@@ -180,7 +183,7 @@ function SortMenu({ route, onChange }: RouteProps) {
 
 /** The route on the picker's own button, so it shows with the panel closed: the provider's mark or the sort's icon. */
 export function RouteBadge({ model, route, size }: { model: ModelInfo; route: ModelRoute; size: number }) {
-	const listed = useEndpoints(model).data?.endpoints ?? [];
+	const listed = useEndpoints(model, Boolean(route.provider)).data?.endpoints ?? [];
 	const name = route.provider ? (listed.find((endpoint) => endpoint.slug === route.provider)?.name ?? route.provider) : '';
 	return (
 		<span className="flex shrink-0 items-center text-(--accent-text)" title={routeLabel(route, listed)}>

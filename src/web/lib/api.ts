@@ -709,7 +709,7 @@ export const api = {
 		json<{ paths: string[] }>(`/api/projects/${projectId}/files${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
 	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
 	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
-	createSession: (body: { projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; planMode?: boolean }) =>
+	createSession: (body: { projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),

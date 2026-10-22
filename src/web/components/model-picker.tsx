@@ -174,7 +174,8 @@ function about(model: ModelInfo): string {
  * hover), its name with a pin beside it, its context, and what it costs. The
  * pin shows on hover, and stays lit on a pinned model. In a section with no
  * prices (a plan's), the context sits at the right edge, where the prices would.
- * The chosen model on a gateway has its routing menus after the pin.
+ * A model on a gateway has its routing menus after the pin: on hover, and
+ * always on the chosen model.
  */
 function ModelRow({
 	model,
@@ -552,9 +553,10 @@ function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; n
  * (a plan you signed in to, or a gateway) as a section, and the chosen
  * model's effort along the bottom. Source, filters and sort sit in one menu.
  * Picking a model keeps the panel open so its effort can be set; Enter picks
- * and closes. With `onRoute` (a task's own composer), the chosen model on a
- * gateway gets menus beside its pin for the provider or sort its calls are
- * routed by, and the button shows the one that is set.
+ * and closes. With `onRoute`, each model on a gateway gets menus beside its
+ * pin for the provider or sort its calls are routed by (picking one on another
+ * model's row picks that model too, `onRoute`'s `model`), and the button shows
+ * the one that is set.
  */
 export const ModelPicker = memo(function ModelPicker({
 	value,
@@ -567,7 +569,7 @@ export const ModelPicker = memo(function ModelPicker({
 	value: ModelChoice;
 	onChange: (change: Partial<ModelChoice>) => void;
 	route?: ModelRoute | null;
-	onRoute?: (route: ModelRoute | null) => void;
+	onRoute?: (route: ModelRoute | null, model?: string) => void;
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
 }) {
@@ -687,6 +689,22 @@ export const ModelPicker = memo(function ModelPicker({
 
 	let offset = 0;
 	const routed = onRoute && selected && !selected.subscription && routable(selected.id) ? selected : undefined;
+
+	/** A gateway row's routing menus: the task's route on the chosen model, kept in view; on any other, shown on hover, and a pick there picks the model too. */
+	function routingFor(model: ModelInfo) {
+		if (model.id === shown?.id && routed) return <RouteControls model={routed} route={route} onChange={(next) => onRoute?.(next)} />;
+		return (
+			<RouteControls
+				model={model}
+				route={null}
+				onChange={(next) => {
+					rememberModel(model.id);
+					onRoute?.(next, model.id);
+				}}
+				className="hidden group-hover/row:flex group-data-active/row:flex has-data-[state=open]:flex"
+			/>
+		);
+	}
 
 	return (
 		<PopoverPrimitive.Root
@@ -882,7 +900,7 @@ export const ModelPicker = memo(function ModelPicker({
 												onPick={() => pick(model, false)}
 												onHover={() => setCursor(start + index)}
 												onPin={() => togglePin(model)}
-												routing={routed && onRoute && model.id === shown?.id ? <RouteControls model={routed} route={route} onChange={onRoute} /> : undefined}
+												routing={onRoute && !model.subscription && routable(model.id) ? routingFor(model) : undefined}
 											/>
 										))}
 									</div>

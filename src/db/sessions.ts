@@ -146,7 +146,7 @@ export async function spendByMinute(since: Date): Promise<Array<{ minute: string
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'> &
-	Partial<Pick<SessionRecord, 'spaceId' | 'brief' | 'review' | 'automationId'>> & { prUrl?: string };
+	Partial<Pick<SessionRecord, 'spaceId' | 'brief' | 'review' | 'automationId' | 'route'>> & { prUrl?: string };
 
 /** A task's repository joined in; a chat has none, and a task whose repository is gone is left out as before. */
 const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN projects p ON p.id = s.project_id WHERE (s.project_id = '' OR p.id IS NOT NULL)";
@@ -154,8 +154,8 @@ const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN p
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief, review_json, pr_url, automation_id)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief, review_json, pr_url, automation_id, route_json)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId ?? '',
@@ -173,6 +173,7 @@ export async function insertSession(session: NewSession): Promise<void> {
 			session.review ? JSON.stringify(session.review) : null,
 			session.prUrl ?? null,
 			session.automationId ?? null,
+			session.route ? JSON.stringify(session.route) : null,
 		],
 	});
 	announce({ kind: 'sessions' });
