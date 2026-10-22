@@ -1,12 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import {
 	auth,
+	type AuthorizationServerMetadata,
+	type FetchLike,
 	type OAuthClientInformationMixed,
 	type OAuthClientMetadata,
 	type OAuthClientProvider,
 	type OAuthDiscoveryState,
 	OAuthError,
 	OAuthErrorCode,
+	RegistrationRejectedError,
 	refreshAuthorization,
 	type StoredOAuthClientInformation,
 	type StoredOAuthTokens,
@@ -50,6 +53,28 @@ export const MCP_CALLBACK_PATH = '/api/mcp-servers/callback';
 const LOGIN_TTL_MS = 10 * 60_000;
 /** A token this close to expiring is renewed first, so a call the agent makes with it does not fail halfway. */
 const RENEW_EARLY_MS = 5 * 60_000;
+
+/**
+ * fetch for the SDK's sign-in. Hono's Node server swaps the global Response
+ * for its own once it serves a request, so fetch's answers stop being
+ * `instanceof Response`; the SDK checks that to read a server's refusal, and
+ * would report "[object Response]" in place of the server's reason.
+ */
+const signInFetch: FetchLike = async (url, init) => {
+	const response = await fetch(url, init);
+	if ((response as unknown) instanceof Response) return response;
+	return new Response(response.body, { status: response.status, statusText: response.statusText, headers: response.headers });
+};
+
+/**
+ * A client you pasted, as the SDK should send it. A server that lists no ways
+ * to send the secret gets it in the form, as GitHub's documents, rather than
+ * the SDK's Basic header.
+ */
+function pastedClient(client: StoredOAuthClientInformation, metadata: AuthorizationServerMetadata | undefined): StoredOAuthClientInformation {
+	if (!client.client_secret || metadata?.token_endpoint_auth_methods_supported?.length) return client;
+	return { ...client, token_endpoint_auth_method: 'client_secret_post' };
+}
 
 /** The server's sign-in needs you: it was refused, or it has run out with nothing to renew it. */
 export class McpSignInNeeded extends Error {
@@ -107,7 +132,7 @@ class ServerSignIn implements OAuthClientProvider {
 		if (!this.data.client) return undefined;
 		// Registered for another of Anton's addresses: the server would refuse this redirect, so register again.
 		if (!this.data.pasted && this.data.clientRedirect !== this.redirect) return undefined;
-		return this.data.client;
+		return this.data.pasted ? pastedClient(this.data.client, this.data.discovery?.authorizationServerMetadata) : this.data.client;
 	}
 
 	saveClientInformation(client: StoredOAuthClientInformation) {
@@ -175,10 +200,25 @@ async function existingServer(name: string) {
 
 const UNREACHABLE = /fetch failed|ENOTFOUND|ECONNREFUSED|timed out/i;
 
+/** The server signs in with GitHub, which lets no app register itself. */
+const signsInWithGitHub = (data: SignIn) => URL.canParse(data.discovery?.authorizationServerUrl ?? '') && new URL(data.discovery?.authorizationServerUrl ?? '').hostname === 'github.com';
+
 /** What went wrong, in words you can act on. */
-function explain(error: unknown): string {
+function explain(error: unknown, data: SignIn = {}): string {
 	const message = error instanceof Error ? error.message : String(error);
+	if (error instanceof RegistrationRejectedError) {
+		// Such as Vercel's, which registers only the apps it has approved, and other apps only at a local address.
+		let reason = error.body;
+		try {
+			const body = JSON.parse(error.body) as { error?: string; error_description?: string };
+			reason = body.error_description || body.error || reason;
+		} catch {}
+		return `The server refused to register Anton as an app (HTTP ${error.status}: ${reason}). It may let only apps it has approved sign in; if it takes a token instead, add one with Edit address and token.`;
+	}
 	if (/dynamic client registration|registration_endpoint/i.test(message)) {
+		if (signsInWithGitHub(data)) {
+			return "GitHub doesn't let apps register themselves. Create an OAuth app in GitHub's developer settings with the redirect URI shown here as its callback URL, then paste its client id and a client secret. Or paste a personal access token with Edit address and token.";
+		}
 		return "This server doesn't let apps register themselves. Create an OAuth app in the service's settings with the redirect URI shown here, then paste its client id.";
 	}
 	if (error instanceof OAuthError && error.code === OAuthErrorCode.InvalidClient) return 'The server refused the client id. Check it, and that its redirect URI matches.';
@@ -209,11 +249,11 @@ export async function beginMcpSignIn(name: string, origin: string, client?: { cl
 	const provider = new ServerSignIn(data, redirect);
 	let result: Awaited<ReturnType<typeof auth>>;
 	try {
-		result = await auth(provider, { serverUrl: server.url });
+		result = await auth(provider, { serverUrl: server.url, fetchFn: signInFetch });
 	} catch (error) {
 		// Nothing told Anton where the server signs in: it takes a token, or nothing at all.
 		const discovered = provider.data.discovery?.resourceMetadata || provider.data.discovery?.authorizationServerMetadata;
-		throw new InvalidInputError(discovered || UNREACHABLE.test(String(error)) ? explain(error) : `${name} doesn't offer an OAuth sign-in. If it needs a token, add it with Edit.`);
+		throw new InvalidInputError(discovered || UNREACHABLE.test(String(error)) ? explain(error, provider.data) : `${name} doesn't offer an OAuth sign-in. If it needs a token, add it with Edit.`);
 	}
 	if (result === 'AUTHORIZED') {
 		// A server that needs no browser step (a client credentials grant) is signed in already.
@@ -244,9 +284,9 @@ export async function finishMcpSignIn(query: URLSearchParams): Promise<string> {
 	if (server.url !== login.url) throw new InvalidInputError(`${login.name} changed address during the sign-in. Sign in again.`);
 	const provider = new ServerSignIn(login.data, login.redirect, login.verifier);
 	try {
-		await auth(provider, { serverUrl: server.url, authorizationCode: code, iss: query.get('iss') ?? undefined });
+		await auth(provider, { serverUrl: server.url, authorizationCode: code, iss: query.get('iss') ?? undefined, fetchFn: signInFetch });
 	} catch (error) {
-		throw new InvalidInputError(explain(error));
+		throw new InvalidInputError(explain(error, provider.data));
 	}
 	await setMcpSignIn(login.name, { ...provider.data, signedInAt: new Date().toISOString(), problem: null });
 	announce({ kind: 'connectors' });
@@ -296,9 +336,10 @@ export async function mcpAccessToken(name: string, url: string): Promise<string 
 			try {
 				const next = await refreshAuthorization(data.discovery.authorizationServerUrl, {
 					metadata: data.discovery.authorizationServerMetadata,
-					clientInformation: data.client as OAuthClientInformationMixed,
+					clientInformation: (data.pasted ? pastedClient(data.client, data.discovery.authorizationServerMetadata) : data.client) as OAuthClientInformationMixed,
 					refreshToken: tokens.refresh_token,
 					resource: data.resource ? new URL(data.resource) : undefined,
+					fetchFn: signInFetch,
 				});
 				// Saved only if the server still has this address, so a sign-in for an old one is not brought back.
 				if ((await getMcpServer(name))?.url === url) await setMcpSignIn(name, { ...data, tokens: { ...next, obtainedAt: Date.now() }, problem: null });
