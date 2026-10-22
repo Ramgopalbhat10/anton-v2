@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownWideNarrow, CircleDollarSign, Gauge, type LucideIcon, Route, Timer } from 'lucide-react';
+import { ArrowDownWideNarrow, CircleDollarSign, Gauge, type LucideIcon, Server, Timer } from 'lucide-react';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelEndpoint, type ModelInfo, type ModelRoute, type RouteSort } from '@/lib/api';
 import { dollars, sourceOf, tokens, vendorHue } from '@/lib/model-catalog';
@@ -39,8 +39,6 @@ export function HostMark({ slug, name, size = 14 }: { slug: string; name: string
 	);
 }
 
-const DISABLED = 'data-disabled:pointer-events-none data-disabled:text-(--text-disabled) data-disabled:opacity-60';
-
 /** One provider's line: its mark and name, then its price per million tokens and, where known, its speed. */
 function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 	const speed = endpoint.throughput ? `${Math.round(endpoint.throughput)} tok/s` : endpoint.latency ? `${endpoint.latency.toFixed(1)}s` : null;
@@ -56,66 +54,61 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 	);
 }
 
+/** The routing buttons: as small as the pin beside them, lit once one is set. */
+const CONTROL =
+	'inline-flex size-5 shrink-0 items-center justify-center rounded-[5px] text-(--icon-tertiary) outline-none hover:bg-(--alpha-white-6) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--alpha-white-6)';
+
+/** The providers the gateway lists for the model, shared by the menu and the mark on the picker's button. */
+function useEndpoints(model: ModelInfo) {
+	return useQuery({ queryKey: ['model-endpoints', model.id], queryFn: () => api.modelEndpoints(model.id), staleTime: 10 * 60_000 });
+}
+
+type RouteProps = { route: ModelRoute | null; onChange: (route: ModelRoute | null) => void };
+
 /**
- * Where the gateway sends this task's calls, beside the model's name: a
- * provider to try first, or a sort over all of them, never both, so picking
- * one greys out the other. The chip shows the provider's mark or the sort's
- * icon once one is picked. The gateway falls back to its own routing when the
- * provider fails, so a route never stops a call that would otherwise work.
+ * Where the gateway sends this task's calls, as two icon menus beside the
+ * chosen model's pin in the picker: a provider to try first, and a sort over
+ * all of them. They exclude each other, so once one is set only its icon
+ * stays: the provider's mark, or the sort's icon. The gateway falls back to
+ * its own routing when the provider fails, so a route never stops a call that
+ * would otherwise work.
  */
-export function RouteMenu({ model, route, onChange, height = 26 }: { model: ModelInfo; route: ModelRoute | null; onChange: (route: ModelRoute | null) => void; height?: 26 | 28 }) {
-	const endpoints = useQuery({ queryKey: ['model-endpoints', model.id], queryFn: () => api.modelEndpoints(model.id), staleTime: 10 * 60_000 });
+export function RouteControls({ model, route, onChange }: RouteProps & { model: ModelInfo }) {
+	return (
+		// Clicks in the menus reach the row through React's tree; they are not a pick.
+		<span className="flex shrink-0 items-center" onClick={(event) => event.stopPropagation()}>
+			{route?.sort ? null : <ProviderMenu model={model} route={route} onChange={onChange} />}
+			{route?.provider ? null : <SortMenu route={route} onChange={onChange} />}
+		</span>
+	);
+}
+
+function ProviderMenu({ model, route, onChange }: RouteProps & { model: ModelInfo }) {
+	const endpoints = useEndpoints(model);
 	const listed = endpoints.data?.endpoints ?? [];
 	const chosen = route?.provider ? listed.find((endpoint) => endpoint.slug === route.provider) : undefined;
-	const label = routeLabel(route, listed);
-	const sortIcon = route?.sort ? ROUTE_SORT[route.sort].icon : null;
 	return (
 		<Menu>
 			<MenuTrigger asChild>
 				<button
 					type="button"
-					aria-label={`Provider routing: ${label}`}
-					title={`${label} on ${sourceOf(model)}`}
-					className={cn(
-						'inline-flex shrink-0 items-center justify-center rounded-lg bg-(--bg-overlay) text-(--icon-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--neutral-700)',
-						height === 28 ? 'h-7 min-w-7' : 'h-[26px] min-w-[26px]',
-						route && 'text-(--accent-text) hover:text-(--accent-text)',
-					)}
+					aria-label={`Provider: ${route?.provider ? (chosen?.name ?? route.provider) : 'any'}`}
+					title={route?.provider ? `${routeLabel(route, listed)}, then ${sourceOf(model)}'s default` : 'Try a provider first'}
+					className={cn(CONTROL, route?.provider && 'text-(--accent-text)')}
 				>
-					{route?.provider ? (
-						<HostMark slug={route.provider} name={chosen?.name ?? route.provider} size={height - 12} />
-					) : sortIcon ? (
-						<Icon icon={sortIcon} size={13} />
-					) : (
-						<Icon icon={Route} size={13} />
-					)}
+					{route?.provider ? <HostMark slug={route.provider} name={chosen?.name ?? route.provider} size={14} /> : <Icon icon={Server} size={11} />}
 				</button>
 			</MenuTrigger>
-			<MenuContent align="start" collisionPadding={8} className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] w-[min(300px,calc(100vw-24px))] overflow-y-auto">
-				<MenuItem checked={!route} onSelect={() => onChange(null)} icon={ArrowDownWideNarrow}>
-					Default routing
+			<MenuContent align="start" collisionPadding={8} className="max-h-[min(380px,var(--radix-dropdown-menu-content-available-height))] w-[min(300px,calc(100vw-24px))] overflow-y-auto">
+				<MenuItem checked={!route?.provider} onSelect={() => onChange(null)}>
+					Any provider
 				</MenuItem>
 				<p className="m-0 px-2 pt-0.5 pb-1.5 text-[11px] leading-[15px] text-(--text-tertiary)">
 					For this task only. If the provider you pick fails, {sourceOf(model)} falls back to its default routing.
 				</p>
 				<MenuSeparator />
-				<MenuLabel>Sort providers by</MenuLabel>
-				{(Object.keys(ROUTE_SORT) as RouteSort[]).map((sort) => (
-					<MenuItem
-						key={sort}
-						icon={ROUTE_SORT[sort].icon}
-						checked={route?.sort === sort}
-						disabled={Boolean(route?.provider)}
-						hint={ROUTE_SORT[sort].hint}
-						className={DISABLED}
-						onSelect={() => onChange(route?.sort === sort ? null : { sort })}
-					>
-						{ROUTE_SORT[sort].label}
-					</MenuItem>
-				))}
-				<MenuSeparator />
 				<div className="flex items-center justify-between pr-2">
-					<MenuLabel>Provider</MenuLabel>
+					<MenuLabel>Try first</MenuLabel>
 					<span className="in-caption text-(--text-disabled)" title="US dollars per million input / output tokens">
 						in/out
 					</span>
@@ -133,8 +126,7 @@ export function RouteMenu({ model, route, onChange, height = 26 }: { model: Mode
 						<MenuItem
 							key={endpoint.slug}
 							checked={route?.provider === endpoint.slug}
-							disabled={Boolean(route?.sort)}
-							className={cn(DISABLED, '[&_.sg-menu-item__label]:flex [&_.sg-menu-item__label]:min-w-0 [&_.sg-menu-item__label]:flex-1')}
+							className="[&_.sg-menu-item__label]:flex [&_.sg-menu-item__label]:min-w-0 [&_.sg-menu-item__label]:flex-1"
 							title={[
 								endpoint.name,
 								`${tokens(endpoint.contextLength)} context`,
@@ -154,5 +146,45 @@ export function RouteMenu({ model, route, onChange, height = 26 }: { model: Mode
 				) : null}
 			</MenuContent>
 		</Menu>
+	);
+}
+
+function SortMenu({ route, onChange }: RouteProps) {
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<button
+					type="button"
+					aria-label={`Sort providers: ${route?.sort ? ROUTE_SORT[route.sort].label : 'default'}`}
+					title={route?.sort ? routeLabel(route) : 'Sort providers by'}
+					className={cn(CONTROL, route?.sort && 'text-(--accent-text)')}
+				>
+					<Icon icon={route?.sort ? ROUTE_SORT[route.sort].icon : ArrowDownWideNarrow} size={11} />
+				</button>
+			</MenuTrigger>
+			<MenuContent align="start" collisionPadding={8} className="w-[min(260px,calc(100vw-24px))]">
+				<MenuLabel>Sort providers by</MenuLabel>
+				<MenuItem checked={!route?.sort} hint="gateway's pick" onSelect={() => onChange(null)}>
+					Default
+				</MenuItem>
+				{(Object.keys(ROUTE_SORT) as RouteSort[]).map((sort) => (
+					<MenuItem key={sort} icon={ROUTE_SORT[sort].icon} checked={route?.sort === sort} hint={ROUTE_SORT[sort].hint} onSelect={() => onChange(route?.sort === sort ? null : { sort })}>
+						{ROUTE_SORT[sort].label}
+					</MenuItem>
+				))}
+				<p className="m-0 px-2 pt-1 pb-1.5 text-[11px] leading-[15px] text-(--text-tertiary)">For this task only.</p>
+			</MenuContent>
+		</Menu>
+	);
+}
+
+/** The route on the picker's own button, so it shows with the panel closed: the provider's mark or the sort's icon. */
+export function RouteBadge({ model, route, size }: { model: ModelInfo; route: ModelRoute; size: number }) {
+	const listed = useEndpoints(model).data?.endpoints ?? [];
+	const name = route.provider ? (listed.find((endpoint) => endpoint.slug === route.provider)?.name ?? route.provider) : '';
+	return (
+		<span className="flex shrink-0 items-center text-(--accent-text)" title={routeLabel(route, listed)}>
+			{route.provider ? <HostMark slug={route.provider} name={name} size={size} /> : <Icon icon={ROUTE_SORT[route.sort!].icon} size={11} />}
+		</span>
 	);
 }
