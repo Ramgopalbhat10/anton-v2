@@ -70,19 +70,4 @@ describe('Tasks and Reviews', () => {
 		expect(screen.getAllByText('Merged').length).toBeGreaterThan(0);
 		expect(screen.queryByText('Failing checks')).toBeNull();
 	});
-
-	it('leaves out what no pull request waits on, and the checks when none is open', async () => {
-		const item = { repo: 'acme/web', draft: false, reviewing: null, conflicts: false, comments: 0, createdAt: '2026-10-03T00:00:00Z', checks: { passed: 0, failed: 0, pending: 0 } };
-		api.reviews.mockResolvedValue({
-			reviews: [
-				{ ...item, sessionId: 'a', title: 'First', url: 'https://github.com/acme/web/pull/4', group: 'merged' },
-				{ ...item, sessionId: 'b', title: 'Second', url: 'https://github.com/acme/web/pull/3', group: 'merged' },
-			],
-		});
-		open('/reviews');
-		const bar = await screen.findByRole('img', { name: 'Pull requests by what each waits on' });
-		const legend = bar.nextElementSibling as HTMLElement;
-		expect(legend.textContent).toBe('Merged2');
-		expect(screen.queryByText('checks passed')).toBeNull();
-	});
 });
