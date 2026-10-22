@@ -4,6 +4,7 @@ import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, useState } from 'react';
 import { DATA_COLORS } from '@/components/charts';
 import { useModels } from '@/components/model-picker';
+import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Icon } from '@/components/signal';
 import { api, type ContextPart, type ContextView, type PlanUsage } from '@/lib/api';
 import { tokens as windowSize } from '@/lib/model-catalog';
@@ -118,26 +119,23 @@ function SpendSection({ sessionId }: { sessionId: string }) {
 	if (!budget.data) return null;
 	const { today, task, limits } = budget.data;
 	const cap = limits.dailyUsd;
-	const share = cap ? Math.min(1, today / cap) : 0;
+	const share = cap ? today / cap : 0;
 	return (
 		<section className="flex flex-col gap-2 border-t border-(--border-subtle) px-3.5 py-3">
-			<div className="flex items-center gap-2 text-[12px]">
-				<span className="in-caption flex-1">Spend</span>
-				<span className="text-(--text-tertiary)">this task</span>
-				<span className="in-num text-(--text-primary)">{dollars(task ?? 0)}</span>
+			<span className="in-caption">Spend</span>
+			<div className="grid grid-cols-3 gap-2">
+				{[
+					['This task', dollars(task ?? 0)],
+					['Today, all tasks', dollars(today)],
+					['Daily cap', cap ? `$${cap}` : 'None'],
+				].map(([label, value]) => (
+					<div key={label} className="flex flex-col gap-0.5">
+						<span className="in-num text-[13px] text-(--text-primary)">{value}</span>
+						<span className="text-[10.5px] text-(--text-disabled)">{label}</span>
+					</div>
+				))}
 			</div>
-			<div className="flex items-center gap-2 text-[12px]">
-				<span className="flex-1 text-(--text-secondary)">Today, all tasks</span>
-				<span className="in-num text-(--text-primary)">
-					{dollars(today)}
-					{cap ? <span className="text-(--text-disabled)"> / ${cap}</span> : null}
-				</span>
-			</div>
-			{cap ? (
-				<div className="h-1.5 overflow-hidden rounded-full bg-(--segment-off)">
-					<div className="h-full rounded-full" style={{ width: `${Math.max(1, share * 100)}%`, background: toneOf(share) }} />
-				</div>
-			) : null}
+			{cap ? <SegmentMeter value={share} segments={32} height={6} tone={usedTone(share)} label={`Today's spend: ${Math.round(share * 100)}% of the daily cap`} /> : null}
 		</section>
 	);
 }

@@ -16,6 +16,8 @@ import { approvalOf, MailSendCard, MAIL_SEND_TOOLS } from '@/components/mail-car
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { HoverPeek } from '@/components/hover-peek';
+import { Caption, Chip, Figure, SplitBar } from '@/components/instrument';
 import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
@@ -548,23 +550,78 @@ function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
 	return { ...usage, parts: parts?.main ? parts : null, billing: billing === 'plan' || billing === 'api' ? billing : null };
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+/** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
+const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
-/** The reply's tokens, every model call it made counted, and what it cost; the tooltip breaks it down. */
-function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
+/** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
+function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 	const total = usage.inputTokens + usage.outputTokens;
-	const lines = [`${total.toLocaleString()} tokens used by this reply: ${usage.inputTokens.toLocaleString()} in, ${usage.outputTokens.toLocaleString()} out.`];
-	if (usage.cachedTokens) lines.push(`${usage.cachedTokens.toLocaleString()} of the input came from the provider's cache, which costs less.`);
-	if (usage.parts) {
-		const { main, subagents } = usage.parts;
-		lines.push(`The agent: ${tokens(main.inputTokens + main.outputTokens)} over ${plural(main.calls, 'call')}.`);
-		if (subagents.calls) lines.push(`Its subagents: ${tokens(subagents.inputTokens + subagents.outputTokens)} over ${plural(subagents.calls, 'call')}.`);
-	}
-	lines.push(usage.billing === 'plan' ? 'Run on your plan: no charge per token.' : `Charged: ${dollars(usage.cost)}.`);
+	const cached = Math.min(usage.cachedTokens ?? 0, usage.inputTokens);
+	const plan = usage.billing === 'plan';
+	const who = usage.parts ? [{ label: 'The agent', part: usage.parts.main }, ...(usage.parts.subagents.calls ? [{ label: 'Subagents', part: usage.parts.subagents }] : [])] : [];
 	return (
-		<div className="in-num text-[11px] text-(--text-disabled)" title={lines.join('\n')}>
-			{tokens(total)} tokens · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
-		</div>
+		<>
+			<div className="flex items-end justify-between gap-3">
+				<div className="flex min-w-0 flex-col gap-1">
+					<Caption>This reply</Caption>
+					<Figure size="md" value={tokens(total)} unit="tokens" />
+				</div>
+				<div className="flex flex-col items-end gap-1">
+					<Caption>{plan ? 'Billed to' : 'Charged'}</Caption>
+					{plan ? <Chip tone="accent">Your plan</Chip> : <span className="in-figure text-[18px] leading-[24px]">{dollars(usage.cost)}</span>}
+				</div>
+			</div>
+			<SplitBar
+				label={`${total.toLocaleString()} tokens: ${usage.inputTokens.toLocaleString()} in, ${cached.toLocaleString()} of them cached, and ${usage.outputTokens.toLocaleString()} out`}
+				format={(part) => tokens(part.value)}
+				parts={[
+					...(cached ? [{ key: 'cached', label: 'Cached', value: cached, color: USAGE_COLORS.cached }] : []),
+					{ key: 'input', label: cached ? 'New input' : 'Input', value: usage.inputTokens - cached, color: USAGE_COLORS.input },
+					{ key: 'output', label: 'Output', value: usage.outputTokens, color: USAGE_COLORS.output },
+				]}
+			/>
+			{who.length ? (
+				<table className="w-full border-collapse text-[12px]">
+					<thead>
+						<tr className="in-caption text-left">
+							<th className="pb-1 font-medium">Made by</th>
+							<th className="pb-1 text-right font-medium">Calls</th>
+							<th className="pb-1 text-right font-medium">Tokens</th>
+							{plan ? null : <th className="pb-1 text-right font-medium">Cost</th>}
+						</tr>
+					</thead>
+					<tbody>
+						{who.map(({ label, part }) => (
+							<tr key={label} className="border-t border-(--border-subtle)">
+								<td className="py-1.5 text-(--text-secondary)">{label}</td>
+								<td className="in-num py-1.5 pl-3 text-right text-(--text-tertiary)">{part.calls}</td>
+								<td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{tokens(part.inputTokens + part.outputTokens)}</td>
+								{plan ? null : <td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{dollars(part.cost)}</td>}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			) : null}
+			{plan || cached ? (
+				<p className="m-0 border-t border-(--border-subtle) pt-2 text-[11.5px] leading-4 text-(--text-tertiary)">
+					{plan ? 'Run on your plan: no charge per token.' : `${Math.round((cached / usage.inputTokens) * 100)}% of the input came from the provider's cache, which costs less.`}
+				</p>
+			) : null}
+		</>
+	);
+}
+
+/** The reply's tokens, every model call it made counted, and what it cost; resting on it breaks it down. */
+function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
+	return (
+		<HoverPeek content={<ReplyUsagePeek usage={usage} />} width={300} openDelay={200}>
+			<div
+				tabIndex={0}
+				className="in-num rounded-sm text-[11px] text-(--text-disabled) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-tertiary) hover:underline focus-visible:shadow-(--focus-ring)"
+			>
+				{tokens(usage.inputTokens + usage.outputTokens)} tokens · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
+			</div>
+		</HoverPeek>
 	);
 }
 

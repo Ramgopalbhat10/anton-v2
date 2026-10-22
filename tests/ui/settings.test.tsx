@@ -81,4 +81,37 @@ describe('Settings', () => {
 		await waitFor(() => expect((api.removePushDevice.mock.calls[0] as unknown[] | undefined)?.[0]).toBe('d1'));
 		expect(await screen.findByText(/None yet/)).toBeTruthy();
 	});
+
+	it('folds a breakdown’s long tail under 1% into one row that opens it', async () => {
+		const row = (key: string, tokens: number, cost = 0) => ({ key, tokens, cost });
+		api.usage.mockResolvedValueOnce({
+			since: '2026-10-01T00:00:00Z',
+			today: 0,
+			month: 0.4,
+			byRepo: [],
+			byModel: [row('a', 40_000_000), row('b', 20_000_000), row('c', 15_000_000), row('d', 10_000_000), row('e', 5_000_000), row('f', 300_000, 0.006), row('g', 200_000), row('h', 100_000, 0.001)],
+			daily: [],
+		} as never);
+		open('/settings/usage');
+		const more = await screen.findByRole('button', { name: /3 more under 1% each/ });
+		expect(more.textContent).toContain('600K tokens · $0.007');
+		expect(screen.queryByText(/^300K tokens/)).toBeNull();
+		fireEvent.click(more);
+		expect(screen.getByText(/^300K tokens/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Show fewer' }).getAttribute('aria-expanded')).toBe('true');
+	});
+
+	it('lists repositories with their branch, task count and whether an image is prepared', async () => {
+		const repo = (id: string, repoFullName: string, warmedAt: string | null) => ({ id, repoFullName, defaultBranch: 'main', memory: '', warmedAt, baseImage: null, env: {}, envKeys: [], setup: '', ports: [], fullVm: false });
+		api.projects.mockResolvedValueOnce({ projects: [repo('p1', 'acme/web', new Date(Date.now() - 3 * 3600_000).toISOString()), repo('p2', 'acme/api', null)] } as never);
+		api.sessions.mockResolvedValueOnce({ sessions: [{ id: 's1', projectId: 'p1' }, { id: 's2', projectId: 'p1' }] } as never);
+		open('/settings/repos');
+		const web = (await screen.findByText('web')).closest('a') as HTMLElement;
+		expect(web.getAttribute('href')).toBe('/settings/repos/p1');
+		expect(within(web).getByText('acme/')).toBeTruthy();
+		expect(within(web).getByText('2').nextSibling?.textContent).toBe('tasks');
+		expect(within(web).getByText('image · 3h old')).toBeTruthy();
+		const api_ = screen.getByText('api').closest('a') as HTMLElement;
+		expect(within(api_).getByText('no prepared image')).toBeTruthy();
+	});
 });

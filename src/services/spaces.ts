@@ -339,7 +339,7 @@ export type SpaceUsage = {
 	/** Each thread's spend this month; the coordinator's under the project's own id. */
 	byThread: Array<{ id: string; title: string; tokens: number; cost: number }>;
 	byModel: Array<{ key: string | null; tokens: number; cost: number }>;
-	daily: Array<{ day: string; cost: number }>;
+	daily: Array<{ day: string; tokens: number; cost: number }>;
 };
 
 /** What the project has spent this month, by thread and model, and each day. */
@@ -347,7 +347,10 @@ export async function spaceUsage(id: string, now = new Date()): Promise<SpaceUsa
 	await existing(id);
 	const month = startOfToday(now);
 	month.setDate(1);
-	const [spend, threads] = await Promise.all([spaceSpend(id, month), listThreads(id)]);
+	// The daily bars cover the last 14 days, which may start last month.
+	const fortnight = startOfToday(now);
+	fortnight.setDate(fortnight.getDate() - 13);
+	const [spend, threads] = await Promise.all([spaceSpend(id, month, fortnight < month ? fortnight : month), listThreads(id)]);
 	const titles = new Map(threads.map((thread) => [thread.id, thread.title]));
 	const todayKey = startOfToday(now).toISOString().slice(0, 10);
 	return {

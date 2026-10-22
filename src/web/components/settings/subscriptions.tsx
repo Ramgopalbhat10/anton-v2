@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
-import { Caption, Card, CardFooter, CardSection, SpecGrid, Status, Well } from '@/components/instrument';
+import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, usedTone, Well } from '@/components/instrument';
 import { EffortRange, useModels } from '@/components/model-picker';
 import { AREA } from '@/components/repo-settings';
 import { Btn, Icon, InfoTip, InlineCode, Spinner, Switch } from '@/components/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';
-import { age, dollars, tokens } from '@/lib/format';
+import { age, dollars, tokens, until } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 import { useGeneralSettings } from './general';
@@ -18,12 +18,6 @@ const STATUS: Record<Subscription['state'], { tone: 'success' | 'danger' | 'neut
 	expired: { tone: 'danger', label: 'Sign in again' },
 	'signed-out': { tone: 'neutral', label: 'Not connected' },
 };
-
-/** "in 52m", "in 3h": how long until a time that is still ahead. */
-function until(iso: string, now = Date.now()): string {
-	const minutes = Math.max(0, Math.round((new Date(iso).getTime() - now) / 60_000));
-	return minutes < 60 ? `in ${minutes}m` : `in ${Math.round(minutes / 60)}h`;
-}
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' });
 
@@ -567,24 +561,31 @@ const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; 
 function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; label?: string }) {
 	return (
 		<CardSection label={label} hint="As the vendor reports them">
-			<ul aria-label={label} className="m-0 flex list-none flex-col gap-2 p-0">
-				{windows.map((window) => (
-					<li key={window.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
-						<span className="truncate text-(--text-secondary)" title={window.label}>
-							{window.label}
-						</span>
-						<div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-(--segment-off)">
-							<div
-								className={cn('h-full rounded-full', window.limited || window.usedPercent >= 90 ? 'bg-(--danger-base)' : 'bg-(--accent-base)')}
-								style={{ width: `${window.usedPercent}%` }}
-							/>
-						</div>
-						<span className="in-num text-right text-[11px] text-(--text-tertiary)">
-							{window.limited ? 'Limit reached' : `${Math.round(window.usedPercent)}% used`}
-							{window.resetsAt ? ` · resets ${until(window.resetsAt)}` : ''}
-						</span>
-					</li>
-				))}
+			<ul aria-label={label} className="m-0 grid list-none gap-x-6 gap-y-3.5 p-0 sm:grid-cols-2">
+				{windows.map((window) => {
+					const tone = window.limited || window.usedPercent >= 90 ? 'danger' : usedTone(window.usedPercent / 100);
+					return (
+						<li key={window.label} className="flex min-w-0 flex-col gap-1.5">
+							<div className="flex min-w-0 items-baseline gap-2 text-[12px]">
+								<span className="min-w-0 flex-1 truncate text-(--text-secondary)" title={window.label}>
+									{window.label}
+								</span>
+								{window.resetsAt ? <Caption className="shrink-0 tracking-normal normal-case">resets {until(window.resetsAt)}</Caption> : null}
+								{window.limited ? (
+									<span className="in-num shrink-0 text-[12px] text-(--danger-text)">Limit reached</span>
+								) : (
+									<span className="in-num shrink-0">
+										<span className={cn('text-[13px]', tone === 'accent' ? 'text-(--text-primary)' : tone === 'warning' ? 'text-(--warning-text)' : 'text-(--danger-text)')}>
+											{Math.round(window.usedPercent)}%
+										</span>
+										<span className="text-[11px] text-(--text-tertiary)"> used</span>
+									</span>
+								)}
+							</div>
+							<SegmentMeter value={window.limited ? 1 : window.usedPercent / 100} segments={30} height={8} tone={tone} label={`${window.label}: ${Math.round(window.usedPercent)}% used`} />
+						</li>
+					);
+				})}
 			</ul>
 		</CardSection>
 	);

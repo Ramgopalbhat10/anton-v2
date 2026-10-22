@@ -180,18 +180,19 @@ export async function deleteSpaceRecord(id: string): Promise<void> {
 }
 
 /** Dollars and tokens the project has spent since `since`, by thread (the coordinator under the project's own id) and by model. */
-export async function spaceSpend(id: string, since: Date): Promise<{ byThread: Array<{ key: string; tokens: number; cost: number }>; byModel: Array<{ key: string | null; tokens: number; cost: number }>; daily: Array<{ day: string; cost: number }> }> {
+/** Spend since `since` by thread and model; by day since `dailySince`, which may reach further back. */
+export async function spaceSpend(id: string, since: Date, dailySince = since): Promise<{ byThread: Array<{ key: string; tokens: number; cost: number }>; byModel: Array<{ key: string | null; tokens: number; cost: number }>; daily: Array<{ day: string; tokens: number; cost: number }> }> {
 	const db = await appDb();
 	const args = [id, since.toISOString()];
 	const [threads, models, days] = await Promise.all([
 		db.execute({ sql: 'SELECT session_id AS key, SUM(input_tokens + output_tokens) AS tokens, SUM(cost_usd) AS cost FROM usage_log WHERE space_id = ? AND at >= ? GROUP BY 1 ORDER BY cost DESC', args }),
 		db.execute({ sql: 'SELECT model AS key, SUM(input_tokens + output_tokens) AS tokens, SUM(cost_usd) AS cost FROM usage_log WHERE space_id = ? AND at >= ? GROUP BY 1 ORDER BY cost DESC', args }),
-		db.execute({ sql: 'SELECT substr(at, 1, 10) AS day, SUM(cost_usd) AS cost FROM usage_log WHERE space_id = ? AND at >= ? GROUP BY 1 ORDER BY 1', args }),
+		db.execute({ sql: 'SELECT substr(at, 1, 10) AS day, SUM(input_tokens + output_tokens) AS tokens, SUM(cost_usd) AS cost FROM usage_log WHERE space_id = ? AND at >= ? GROUP BY 1 ORDER BY 1', args: [id, dailySince.toISOString()] }),
 	]);
 	const row = (r: Row) => ({ tokens: Number(r.tokens ?? 0), cost: Number(r.cost ?? 0) });
 	return {
 		byThread: threads.rows.map((r) => ({ key: String(r.key), ...row(r as Row) })),
 		byModel: models.rows.map((r) => ({ key: r.key == null ? null : String(r.key), ...row(r as Row) })),
-		daily: days.rows.map((r) => ({ day: String(r.day), cost: Number(r.cost ?? 0) })),
+		daily: days.rows.map((r) => ({ day: String(r.day), ...row(r as Row) })),
 	};
 }

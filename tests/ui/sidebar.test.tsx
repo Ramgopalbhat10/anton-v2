@@ -200,7 +200,9 @@ describe('sidebar', () => {
 		await screen.findByText('Red checks');
 		await userEvent.hover(screen.getByRole('link', { name: /Red checks/ }));
 		const card = await screen.findByText('Pull request', {}, { timeout: 2000 });
-		expect(card.parentElement?.textContent).toMatch(/#7 · Open, checks failing/);
+		const pull = within(card.parentElement as HTMLElement).getByRole('link', { name: /#7/ });
+		expect(pull.getAttribute('title')).toBe('Open, checks failing');
+		expect(within(pull).getByText('Open')).toBeTruthy();
 		expect(screen.getByText('acme/demo')).toBeTruthy();
 	});
 

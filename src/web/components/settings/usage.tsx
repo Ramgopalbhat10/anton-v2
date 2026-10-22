@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, ArrowUpRight, CalendarDays, Coins, CreditCard, Folder, Gauge } from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarDays, ChevronDown, Coins, CreditCard, Folder, Gauge } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DATA_COLORS, dayKey, lastDays, shortDay, StackedDaysChart, type StackRow } from '@/components/charts';
 import { Card, CardFooter, CardSection, Figure, Segmented, SegmentedItem, ShareRow, SplitBar, StatRow, Status, TickGauge, usedTone } from '@/components/instrument';
@@ -8,12 +8,16 @@ import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type Budget, type Limits, type PlanUsage, type SpendRow, type UsageView } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { FIELD, Note, PageHeading, SaveState } from './parts';
+import { cn } from '@/lib/utils';
 
 const toInput = (value: number | null) => (value === null ? '' : String(value));
 const fromInput = (value: string) => (value.trim() === '' ? null : Math.max(0, Number(value)));
 
 /** The series the daily chart stacks: the biggest models, then everything else as one. */
 const CHART_SERIES = 4;
+
+/** How many rows of a breakdown always show before its long tail folds. */
+const TAIL_FROM = 5;
 
 function Caps({ limits }: { limits: Limits }) {
 	const queryClient = useQueryClient();
@@ -342,6 +346,11 @@ function Breakdown({
 	// Ranked by tokens, so models on a plan, which cost nothing per token, still show what they did.
 	const ranked = [...rows].sort((a, b) => b.tokens - a.tokens || b.cost - a.cost);
 	const top = ranked[0]?.tokens || 1;
+	const [showAll, setShowAll] = useState(false);
+	// The first few rows always show; past them, rows under 1% of the tokens fold into one, unless that would hide a single row.
+	const folded = ranked.filter((row, index) => index >= TAIL_FROM && totalTokens > 0 && row.tokens / totalTokens < 0.01);
+	const tail = folded.length > 1 ? folded : [];
+	const shown = ranked.filter((row) => !tail.includes(row));
 	return (
 		<Card
 			icon={icon}
@@ -368,7 +377,7 @@ function Breakdown({
 						/>
 					</CardSection>
 					<CardSection className="gap-0 py-1.5">
-						{ranked.map((row, index) => (
+						{(showAll ? ranked : shown).map((row, index) => (
 							<ShareRow
 								key={String(row.key)}
 								label={label(row.key)}
@@ -378,6 +387,22 @@ function Breakdown({
 								value={row.cost > 0 || !planOf?.(row.key) ? dollars(row.cost) : <span className="font-mono text-[10px] tracking-[0.06em] text-(--accent-text)">PLAN</span>}
 							/>
 						))}
+						{tail.length ? (
+							<button
+								type="button"
+								aria-expanded={showAll}
+								onClick={() => setShowAll(!showAll)}
+								className="-mx-2 mt-1 flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[12px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+							>
+								<Icon icon={ChevronDown} size={12} className={cn('transition-transform', showAll && 'rotate-180')} />
+								<span className="flex-1">{showAll ? 'Show fewer' : `${tail.length} more under 1% each`}</span>
+								{showAll ? null : (
+									<span className="in-num text-[11px]">
+										{tokens(tail.reduce((sum, row) => sum + row.tokens, 0))} tokens · {dollars(tail.reduce((sum, row) => sum + row.cost, 0))}
+									</span>
+								)}
+							</button>
+						) : null}
 					</CardSection>
 				</>
 			)}

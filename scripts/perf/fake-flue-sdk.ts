@@ -34,7 +34,15 @@ function historyTurn(index: number): Message[] {
 			display: 'visible',
 			submissionId: `s${index}`,
 			parts: [{ type: 'reasoning', text: LOREM, state: 'done' }, ...tools, { type: 'text', text: answerText(1800), state: 'done' }],
-			metadata: { durationMs: 42_000, usage: { inputTokens: 52_000, outputTokens: 2400, cost: 0.03 } },
+			metadata: {
+				durationMs: 42_000,
+				usage: { inputTokens: 52_000, outputTokens: 2400, cost: 0.03, cachedTokens: 38_000 },
+				usageParts: {
+					main: { inputTokens: 34_000, outputTokens: 1500, cost: 0.019, cachedTokens: 28_000, calls: 14 },
+					subagents: { inputTokens: 18_000, outputTokens: 900, cost: 0.011, cachedTokens: 10_000, calls: 9 },
+				},
+				billing: 'api',
+			},
 		},
 	];
 }
@@ -124,7 +132,15 @@ function script(): Array<[number, (state: Conversation) => Conversation]> {
 			updateMessage(state, id, (message) => ({
 				...message,
 				parts: message.parts.map((part) => (part.type === 'text' || part.type === 'reasoning' ? { ...part, state: 'done' } : part)),
-				metadata: { durationMs: 26_000, usage: { inputTokens: 80_000, outputTokens: 5200, cost: 0.05 } },
+				metadata: {
+					durationMs: 26_000,
+					usage: { inputTokens: 80_000, outputTokens: 5200, cost: 0.05, cachedTokens: 52_000 },
+					usageParts: {
+						main: { inputTokens: 48_000, outputTokens: 3400, cost: 0.03, cachedTokens: 36_000, calls: 6 },
+						subagents: { inputTokens: 32_000, outputTokens: 1800, cost: 0.02, cachedTokens: 16_000, calls: 41 },
+					},
+					billing: 'api',
+				},
 			})),
 	]);
 	steps.push([PHASES.end, (state) => ({ ...state, settlements: [...state.settlements, { submissionId: 'live', outcome: 'completed' }] })]);
