@@ -9,6 +9,7 @@ import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { agentSettingsNow } from '../services/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { compactionFor } from '../services/context-usage.ts';
+import { fullResultTool } from '../services/tool-results.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
@@ -46,5 +47,6 @@ export function Reviewer({ id }: AgentProps) {
 		},
 	});
 	useTool(postReviewTool(id));
+	useTool(fullResultTool(id));
 	return PROMPT;
 }

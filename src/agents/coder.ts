@@ -68,6 +68,7 @@ import { findModel, loadedModels } from '../services/models.ts';
 import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
 import { compactionFor } from '../services/context-usage.ts';
+import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -1184,6 +1185,8 @@ export function Coder({ id }: AgentProps) {
 	useRemember(id, project, chat);
 	useTodos(id);
 	useAgentRuns(id);
+	// Results past 50KB are cut where they join the conversation (src/flue/tool-result-cut.ts); this reads on.
+	useTool(fullResultTool(id));
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
 	const drawing = imagesAvailable();

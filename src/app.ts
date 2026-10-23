@@ -66,6 +66,7 @@ import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
 import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/subagent-runs.ts';
 import { installSubagentStop } from './flue/subagent-stop.ts';
+import { installToolResultCut } from './flue/tool-result-cut.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
 import { joinsFor, recordJoinEvent } from './services/joins.ts';
@@ -127,6 +128,7 @@ const ENV = v.pipe(
 
 publishUpgradeHandler(handleTerminalUpgrade);
 installSubagentStop();
+installToolResultCut();
 observeRuntime((event) => {
 	recordAgentEvent(event);
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
