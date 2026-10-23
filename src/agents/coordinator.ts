@@ -7,6 +7,7 @@ import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.t
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { compactionFor } from '../services/context-usage.ts';
+import { fullResultTool } from '../services/tool-results.ts';
 import { coordinatorBrief, threadLine } from '../services/coordinator.ts';
 import { rememberForSpace } from '../services/memory.ts';
 import { loadedModels } from '../services/models.ts';
@@ -202,6 +203,7 @@ export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
 	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: compactionFor(brief.model) });
 	useCoordinatorTools(id);
+	useTool(fullResultTool(id));
 	useResponseStart(() => ({ startedAt: Date.now() }));
 	useResponseFinish(({ response, metadata }) => {
 		const completedAt = Date.now();
