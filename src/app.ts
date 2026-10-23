@@ -28,7 +28,7 @@ import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
-import { defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
+import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
@@ -343,6 +343,7 @@ app.put('/api/settings/general', async (c) => {
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			pageNetwork: v.optional(v.boolean(), true),
 			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
+			compactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);

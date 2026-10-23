@@ -8,6 +8,7 @@ import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { agentSettingsNow } from '../services/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
+import { compactionFor } from '../services/context-usage.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
 import { loadedModels } from '../services/models.ts';
@@ -37,7 +38,7 @@ const PROMPT = [
 export function Reviewer({ id }: AgentProps) {
 	// Its own model from Settings, or the task's.
 	const { model, reasoning } = agentSettingsNow().models.reviewer ?? modelFor(id);
-	useModel(model, { thinkingLevel: reasoning });
+	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	useSandbox({
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);

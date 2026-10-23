@@ -28,6 +28,13 @@ const VISUAL_LEVELS: Array<{ value: GeneralSettings['visualReplies']; label: str
 	{ value: 'more', label: 'More' },
 ];
 
+const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string }> = [
+	{ value: 100_000, label: '100K' },
+	{ value: 200_000, label: '200K' },
+	{ value: 400_000, label: '400K' },
+	{ value: null, label: 'Full' },
+];
+
 /** One helper agent: the task's model, or its own when switched on. */
 function HelperModel({
 	title,
@@ -175,6 +182,19 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						onChange={(codeMode) => edit({ codeMode })}
 						label={<span className="sr-only">Code mode</span>}
 					/>
+				</SettingRow>
+				<SettingRow
+					title="Compact at"
+					help="Summarizes older turns past this context."
+					info="Every model call sends the whole conversation again, tool results included, so a long thread on a 1M-token model can send hundreds of thousands of tokens a call. Past this size the agent folds older turns into a summary and keeps the latest work word for word. Full waits until the model's window is nearly full. A model with a smaller window compacts before it fills either way."
+				>
+					<Segmented label="Compact at" role="radiogroup">
+						{COMPACT_POINTS.map((point) => (
+							<SegmentedItem key={point.label} role="radio" on={settings.compactAt === point.value} onClick={() => edit({ compactAt: point.value })}>
+								{point.label}
+							</SegmentedItem>
+						))}
+					</Segmented>
 				</SettingRow>
 			</Block>
 			<Block title="Replies" icon={LayoutPanelTop}>

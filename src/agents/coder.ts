@@ -66,7 +66,8 @@ import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapsh
 import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
 import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
-import { finishReply, replyTotal, startReply } from '../services/response-usage.ts';
+import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
+import { compactionFor } from '../services/context-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -1156,7 +1157,8 @@ function useLatestInput(id: string) {
 export function Coder({ id }: AgentProps) {
 	// With a route, the gateway tries the task's provider first or ranks them by its sort.
 	const { model, reasoning } = agentModelFor(id);
-	useModel(model, { thinkingLevel: reasoning });
+	// A long conversation compacts at the ceiling from Settings › General, not only once the window is nearly full.
+	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);
 	// A chat has no repository: no snapshot to read, notes to keep or pull request to open.
@@ -1250,7 +1252,7 @@ export function Coder({ id }: AgentProps) {
 		const reply = finishReply(id);
 		return {
 			usage: reply ? replyTotal(reply) : toUsage(response.usage),
-			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents } } : {}),
+			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : {}),
 			billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};

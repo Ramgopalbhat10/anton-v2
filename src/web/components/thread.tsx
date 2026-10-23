@@ -539,16 +539,39 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 	);
 }
 
-/** The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them, and whether a plan paid. */
-type ReplyUsageView = Usage & { parts: { main: UsagePart; subagents: UsagePart } | null; billing: 'plan' | 'api' | null };
+/**
+ * The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them,
+ * and whether a plan paid. Every call sends the conversation again, so the tokens add up each call's context; `context` is
+ * the largest one call held, against the model's window (0 when not known). Older replies have no `context`.
+ */
+type ReplyUsageView = Usage & {
+	parts: { main: UsagePart; subagents: UsagePart } | null;
+	billing: 'plan' | 'api' | null;
+	context: { peak: number; window: number } | null;
+	compactions: number;
+	/** Counted from the text sent, as the provider (Cursor) reports no one call's tokens or cache. */
+	estimated: boolean;
+};
 
 function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
-	const usage = message.metadata?.usage as Usage | undefined;
+	const metadata = message.metadata;
+	const usage = metadata?.usage as Usage | undefined;
 	if (!usage || typeof usage.inputTokens !== 'number') return null;
-	const parts = message.metadata?.usageParts as ReplyUsageView['parts'] | undefined;
-	const billing = message.metadata?.billing;
-	return { ...usage, parts: parts?.main ? parts : null, billing: billing === 'plan' || billing === 'api' ? billing : null };
+	const parts = metadata?.usageParts as ReplyUsageView['parts'] | undefined;
+	const billing = metadata?.billing;
+	const context = metadata?.context as ReplyUsageView['context'] | undefined;
+	return {
+		...usage,
+		parts: parts?.main ? parts : null,
+		billing: billing === 'plan' || billing === 'api' ? billing : null,
+		context: typeof context?.peak === 'number' && context.peak > 0 ? context : null,
+		compactions: typeof metadata?.compactions === 'number' ? metadata.compactions : 0,
+		estimated: metadata?.estimated === true,
+	};
 }
+
+const callsOf = (usage: ReplyUsageView) => (usage.parts ? usage.parts.main.calls + usage.parts.subagents.calls : 0);
+const times = (count: number) => (count === 1 ? 'once' : count === 2 ? 'twice' : `${count} times`);
 
 /** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
 const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
@@ -559,12 +582,18 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 	const cached = Math.min(usage.cachedTokens ?? 0, usage.inputTokens);
 	const plan = usage.billing === 'plan';
 	const who = usage.parts ? [{ label: 'The agent', part: usage.parts.main }, ...(usage.parts.subagents.calls ? [{ label: 'Subagents', part: usage.parts.subagents }] : [])] : [];
+	const calls = callsOf(usage);
+	const notes = [
+		...(usage.compactions ? [`Compacted the conversation ${times(usage.compactions)}: older turns were summarized to make room.`] : []),
+		...(usage.estimated ? ["Cursor reports tokens only for a whole run, so each call is estimated from the text it was sent, and its cache isn't shown."] : []),
+		...(plan ? ['Run on your plan: no charge per token.'] : cached ? [`${Math.round((cached / usage.inputTokens) * 100)}% of the input came from the provider's cache, which costs less.`] : []),
+	];
 	return (
 		<>
 			<div className="flex items-end justify-between gap-3">
 				<div className="flex min-w-0 flex-col gap-1">
 					<Caption>This reply</Caption>
-					<Figure size="md" value={tokens(total)} unit="tokens" />
+					<Figure size="md" value={`${usage.estimated ? '~' : ''}${tokens(total)}`} unit="tokens" />
 				</div>
 				<div className="flex flex-col items-end gap-1">
 					<Caption>{plan ? 'Billed to' : 'Charged'}</Caption>
@@ -580,6 +609,27 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 					{ key: 'output', label: 'Output', value: usage.outputTokens, color: USAGE_COLORS.output },
 				]}
 			/>
+			{usage.context ? (
+				<div className="flex flex-col gap-1 border-t border-(--border-subtle) pt-2">
+					<div className="flex items-baseline justify-between gap-3 text-[12px]">
+						<span className="text-(--text-secondary)">Largest context</span>
+						<span className="in-num text-(--text-primary)">
+							{tokens(usage.context.peak)}
+							{usage.context.window ? (
+								<span className="text-(--text-tertiary)">
+									{' '}
+									of {tokens(usage.context.window)} · {Math.round((usage.context.peak / usage.context.window) * 100)}%
+								</span>
+							) : null}
+						</span>
+					</div>
+					{calls > 1 ? (
+						<p className="m-0 text-[11.5px] leading-4 text-(--text-tertiary)">
+							Each of its {calls} calls sends the conversation again, so the total counts it once per call.
+						</p>
+					) : null}
+				</div>
+			) : null}
 			{who.length ? (
 				<table className="w-full border-collapse text-[12px]">
 					<thead>
@@ -602,24 +652,31 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 					</tbody>
 				</table>
 			) : null}
-			{plan || cached ? (
-				<p className="m-0 border-t border-(--border-subtle) pt-2 text-[11.5px] leading-4 text-(--text-tertiary)">
-					{plan ? 'Run on your plan: no charge per token.' : `${Math.round((cached / usage.inputTokens) * 100)}% of the input came from the provider's cache, which costs less.`}
-				</p>
+			{notes.length ? (
+				<div className="flex flex-col gap-1 border-t border-(--border-subtle) pt-2">
+					{notes.map((note) => (
+						<p key={note} className="m-0 text-[11.5px] leading-4 text-(--text-tertiary)">
+							{note}
+						</p>
+					))}
+				</div>
 			) : null}
 		</>
 	);
 }
 
-/** The reply's tokens, every model call it made counted, and what it cost; resting on it breaks it down. */
+/** The reply's tokens, every model call it made counted, how many calls, and what it cost; resting on it breaks it down. */
 function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
+	const calls = callsOf(usage);
 	return (
 		<HoverPeek content={<ReplyUsagePeek usage={usage} />} width={300} openDelay={200}>
 			<div
 				tabIndex={0}
 				className="in-num rounded-sm text-[11px] text-(--text-disabled) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-tertiary) hover:underline focus-visible:shadow-(--focus-ring)"
 			>
-				{tokens(usage.inputTokens + usage.outputTokens)} tokens · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
+				{usage.estimated ? '~' : ''}
+				{tokens(usage.inputTokens + usage.outputTokens)} tokens{calls > 1 ? ` · ${calls} calls` : ''}
+				{usage.compactions ? ' · compacted' : ''} · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
 			</div>
 		</HoverPeek>
 	);
