@@ -406,7 +406,7 @@ describe('response details', () => {
 				{ ...assistant('a2', [{ type: 'text', text: 'Older reply.' }]), metadata: { usage: { inputTokens: 20, outputTokens: 10, cost: 0.01 } } },
 			]),
 		);
-		// Every call it made counted, and how many: each sends the conversation again.
+		// Every call it made counted, and how many: each sends the conversation again. A reply from before plans were named says only that a plan paid.
 		const line = screen.getByText('17K tokens · 6 calls · plan');
 		fireEvent.pointerEnter(line, { pointerType: 'mouse' });
 		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
@@ -444,7 +444,7 @@ describe('response details', () => {
 		expect(within(peek).getByText("75% of the input came from the provider's cache, which costs less.")).toBeTruthy();
 	});
 
-	it('sets the largest context against the window apart from the total, and says when it compacted or estimated', async () => {
+	it('names the plan that ran a reply, sets the largest context against the window, marks where it compacted, and says when it estimated', async () => {
 		show(
 			agent([
 				{
@@ -457,19 +457,24 @@ describe('response details', () => {
 						},
 						billing: 'plan',
 						context: { peak: 380_000, window: 1_000_000 },
-						compactions: 1,
+						plan: { gateway: 'opencode-go', name: 'OpenCode Go' },
+						compactions: [{ at: '2026-10-23T08:00:00.000Z', before: 382_000, after: 14_000 }],
 						estimated: true,
 					},
 				},
 			]),
 		);
-		const line = screen.getByText('~3.3M tokens · 50 calls · compacted · plan');
+		// The compaction shows in the conversation, where it happened.
+		expect(screen.getByRole('separator', { name: 'Conversation compacted' }).textContent).toBe('Conversation compacted382K → 14K tokens');
+		const line = screen.getByText('~3.3M tokens · 50 calls · OpenCode Go');
 		fireEvent.pointerEnter(line, { pointerType: 'mouse' });
 		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
+		expect(within(peek).getByText('OpenCode Go')).toBeTruthy();
+		expect(within(peek).queryByText('Your plan')).toBeNull();
 		expect(within(peek).getByText('Largest context').nextElementSibling?.textContent).toBe('380K of 1M · 38%');
-		expect(within(peek).getByText('Each of its 50 calls sends the conversation again, so the total counts it once per call.')).toBeTruthy();
-		expect(within(peek).getByText('Compacted the conversation once: older turns were summarized to make room.')).toBeTruthy();
+		expect(within(peek).queryByText(/Compacted|sends the conversation again/)).toBeNull();
 		expect(within(peek).getByText(/Cursor reports tokens only for a whole run/)).toBeTruthy();
+		expect(within(peek).getByText('Run on your OpenCode Go plan: no charge per token.')).toBeTruthy();
 	});
 
 	it('copies only the response text, including markdown, before its token count', async () => {

@@ -65,7 +65,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
-import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
@@ -1252,7 +1252,7 @@ export function Coder({ id }: AgentProps) {
 		const reply = finishReply(id);
 		return {
 			usage: reply ? replyTotal(reply) : toUsage(response.usage),
-			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : {}),
+			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
 			billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};

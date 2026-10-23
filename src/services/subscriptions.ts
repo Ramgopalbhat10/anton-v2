@@ -147,6 +147,12 @@ const isGateway = (id: string): Gateway | undefined => gateways().find((gateway)
 export const onPlan = (model: string): boolean =>
 	[...subscriptionProviders(), ...agentRuntimes(), ...keyPlans()].some((plan) => model.startsWith(`${plan.gateway}/`));
 
+/** The plan a model (`<gateway>/<model>`) runs on, by its gateway and the name Settings › Subscriptions gives it; null off a plan. */
+export function planOf(model: string): { gateway: string; name: string } | null {
+	const plan = [...subscriptionProviders(), ...agentRuntimes(), ...keyPlans()].find((candidate) => model.startsWith(`${candidate.gateway}/`));
+	return plan ? { gateway: plan.gateway, name: plan.name } : null;
+}
+
 /** The program that runs the models named under `gateway`, for the agents. */
 export const runtimeFor = (gateway: string): AgentRuntime | undefined => agentRuntimes().find((runtime) => runtime.gateway === gateway);
 

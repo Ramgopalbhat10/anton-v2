@@ -40,7 +40,7 @@ test('a reply is on the plan only when every call ran on it; a subagent on a pai
 	assert.equal(finishReply('mixed')?.billing, 'api');
 });
 
-test('a reply keeps the largest context one of its agent’s calls held, apart from the tokens all its calls read', () => {
+test('a reply keeps the largest context one of its agent’s calls held, and where its conversation was compacted', () => {
 	const request = { providerId: 'opencode-go', requestedModel: 'deepseek-v4-pro' };
 	startReply('long');
 	countReplyCall(turn({ instanceId: 'long', purpose: 'agent', request }, usage(356_000, 900)));
@@ -48,19 +48,38 @@ test('a reply keeps the largest context one of its agent’s calls held, apart f
 	countReplyCall(turn({ instanceId: 'long', purpose: 'agent', request }, usage(800, 400, 358_500)));
 	// A subagent's own conversation and compaction's summaries are billed, but are not the window.
 	countReplyCall(turn({ instanceId: 'long', taskId: 'browser-1', session: 'long:default:browser-1', request }, usage(500_000, 10)));
+	countReplyCall({ type: 'compaction_start', instanceId: 'long', agentName: 'Coder', session: 'default', estimatedTokens: 362_000 });
 	countReplyCall(turn({ instanceId: 'long', purpose: 'compaction', request }, usage(400_000, 3000)));
 	countReplyCall({ type: 'compaction', instanceId: 'long', agentName: 'Coder', session: 'default' });
 	countReplyCall({ type: 'compaction', instanceId: 'long', taskId: 'browser-1', session: 'long:default:browser-1' });
 	countReplyCall({ type: 'compaction', instanceId: 'long', agentName: 'Coder', session: 'default', isError: true });
+	countReplyCall(turn({ instanceId: 'long', purpose: 'agent', request }, usage(14_000, 600)));
 	const reply = finishReply('long')!;
 	assert.equal(reply.peak, 359_700);
 	assert.equal(reply.model, 'opencode-go/deepseek-v4-pro');
-	assert.equal(reply.compactions, 1, 'only the agent’s own compactions that worked');
-	assert.equal(reply.main.calls, 4);
-	assert.equal(replyTotal(reply).inputTokens, 356_000 + 358_200 + 359_300 + 500_000 + 400_000);
+	assert.deepEqual(
+		reply.compactions.map(({ before, after }) => ({ before, after })),
+		[{ before: 362_000, after: 14_600 }],
+		'only the agent’s own compactions that worked, with the size the next call held',
+	);
+	assert.equal(reply.main.calls, 5);
+	assert.equal(replyTotal(reply).inputTokens, 356_000 + 358_200 + 359_300 + 500_000 + 400_000 + 14_000);
 	const models = [{ id: 'opencode-go/deepseek-v4-pro', contextLength: 1_000_000 }] as unknown as Parameters<typeof replyFacts>[1];
-	assert.deepEqual(replyFacts(reply, models), { context: { peak: 359_700, window: 1_000_000 }, compactions: 1, estimated: false });
+	const facts = replyFacts(reply, models);
+	assert.deepEqual(facts.context, { peak: 359_700, window: 1_000_000 });
+	assert.equal(facts.compactions.length, 1);
+	assert.equal(facts.estimated, false);
 	assert.deepEqual(replyFacts(reply, []).context, { peak: 359_700, window: 0 }, 'a model not listed has no window to show');
+});
+
+test('a compaction that ends the reply has no size after it, and one with no size given takes the last call’s', () => {
+	startReply('end');
+	countReplyCall(turn({ instanceId: 'end', purpose: 'agent' }, usage(250_000, 500)));
+	countReplyCall({ type: 'compaction', instanceId: 'end', agentName: 'Coder', session: 'default' });
+	assert.deepEqual(
+		finishReply('end')!.compactions.map(({ before, after }) => ({ before, after })),
+		[{ before: 250_500, after: null }],
+	);
 });
 
 test('Cursor’s calls are counted from their text, and the reply says so', () => {

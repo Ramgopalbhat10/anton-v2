@@ -1,6 +1,6 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
@@ -26,6 +26,7 @@ import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
+import { logoFor } from '@/lib/provider-logos';
 import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { focusFile, ShowPanel } from '@/lib/workspace';
@@ -542,13 +543,14 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 /**
  * The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them,
  * and whether a plan paid. Every call sends the conversation again, so the tokens add up each call's context; `context` is
- * the largest one call held, against the model's window (0 when not known). Older replies have no `context`.
+ * the largest one call held, against the model's window (0 when not known). Older replies have no `context` or `plan`.
  */
 type ReplyUsageView = Usage & {
 	parts: { main: UsagePart; subagents: UsagePart } | null;
 	billing: 'plan' | 'api' | null;
 	context: { peak: number; window: number } | null;
-	compactions: number;
+	/** The plan that ran the reply, by its gateway and name. */
+	plan: { gateway: string; name: string } | null;
 	/** Counted from the text sent, as the provider (Cursor) reports no one call's tokens or cache. */
 	estimated: boolean;
 };
@@ -560,18 +562,57 @@ function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
 	const parts = metadata?.usageParts as ReplyUsageView['parts'] | undefined;
 	const billing = metadata?.billing;
 	const context = metadata?.context as ReplyUsageView['context'] | undefined;
+	const plan = metadata?.plan as ReplyUsageView['plan'] | undefined;
 	return {
 		...usage,
 		parts: parts?.main ? parts : null,
 		billing: billing === 'plan' || billing === 'api' ? billing : null,
 		context: typeof context?.peak === 'number' && context.peak > 0 ? context : null,
-		compactions: typeof metadata?.compactions === 'number' ? metadata.compactions : 0,
+		plan: typeof plan?.gateway === 'string' && typeof plan.name === 'string' ? plan : null,
 		estimated: metadata?.estimated === true,
 	};
 }
 
 const callsOf = (usage: ReplyUsageView) => (usage.parts ? usage.parts.main.calls + usage.parts.subagents.calls : 0);
-const times = (count: number) => (count === 1 ? 'once' : count === 2 ? 'twice' : `${count} times`);
+
+/** Where the conversation was compacted during a reply: the context it summarized, and what the next call held. */
+type CompactionView = { at: string; before: number; after: number | null };
+
+function compactionsOf(message: FlueConversationMessage): CompactionView[] {
+	const list = message.metadata?.compactions;
+	return Array.isArray(list) ? list.filter((entry): entry is CompactionView => typeof entry?.before === 'number') : [];
+}
+
+/** A compaction, in the conversation where it happened: older turns from here up are summarized for the agent. */
+function CompactionMark({ compaction }: { compaction: CompactionView }) {
+	return (
+		<div role="separator" aria-label="Conversation compacted" className="flex items-center gap-3 py-1 text-[11px] text-(--text-tertiary)">
+			<span className="h-px flex-1 bg-(--border-subtle)" />
+			<span className="inline-flex items-center gap-1.5">
+				<Icon icon={FoldVertical} size={12} />
+				<span>Conversation compacted</span>
+				{compaction.before ? (
+					<span className="in-num text-(--text-disabled)">
+						{tokens(compaction.before)}
+						{compaction.after ? ` → ${tokens(compaction.after)}` : ''} tokens
+					</span>
+				) : null}
+			</span>
+			<span className="h-px flex-1 bg-(--border-subtle)" />
+		</div>
+	);
+}
+
+/** The plan a reply ran on: its vendor's logo and name. */
+function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
+	const logo = plan ? logoFor({ id: `${plan.gateway}/` }) : undefined;
+	return (
+		<Chip tone="accent">
+			{logo ? <span aria-hidden className="flex text-[12px]" dangerouslySetInnerHTML={{ __html: logo }} /> : null}
+			{plan?.name ?? 'Your plan'}
+		</Chip>
+	);
+}
 
 /** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
 const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
@@ -582,11 +623,13 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 	const cached = Math.min(usage.cachedTokens ?? 0, usage.inputTokens);
 	const plan = usage.billing === 'plan';
 	const who = usage.parts ? [{ label: 'The agent', part: usage.parts.main }, ...(usage.parts.subagents.calls ? [{ label: 'Subagents', part: usage.parts.subagents }] : [])] : [];
-	const calls = callsOf(usage);
 	const notes = [
-		...(usage.compactions ? [`Compacted the conversation ${times(usage.compactions)}: older turns were summarized to make room.`] : []),
 		...(usage.estimated ? ["Cursor reports tokens only for a whole run, so each call is estimated from the text it was sent, and its cache isn't shown."] : []),
-		...(plan ? ['Run on your plan: no charge per token.'] : cached ? [`${Math.round((cached / usage.inputTokens) * 100)}% of the input came from the provider's cache, which costs less.`] : []),
+		...(plan
+			? [`Run on your ${usage.plan ? `${usage.plan.name} ` : ''}plan: no charge per token.`]
+			: cached
+				? [`${Math.round((cached / usage.inputTokens) * 100)}% of the input came from the provider's cache, which costs less.`]
+				: []),
 	];
 	return (
 		<>
@@ -597,7 +640,7 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 				</div>
 				<div className="flex flex-col items-end gap-1">
 					<Caption>{plan ? 'Billed to' : 'Charged'}</Caption>
-					{plan ? <Chip tone="accent">Your plan</Chip> : <span className="in-figure text-[18px] leading-[24px]">{dollars(usage.cost)}</span>}
+					{plan ? <PlanChip plan={usage.plan} /> : <span className="in-figure text-[18px] leading-[24px]">{dollars(usage.cost)}</span>}
 				</div>
 			</div>
 			<SplitBar
@@ -610,24 +653,17 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 				]}
 			/>
 			{usage.context ? (
-				<div className="flex flex-col gap-1 border-t border-(--border-subtle) pt-2">
-					<div className="flex items-baseline justify-between gap-3 text-[12px]">
-						<span className="text-(--text-secondary)">Largest context</span>
-						<span className="in-num text-(--text-primary)">
-							{tokens(usage.context.peak)}
-							{usage.context.window ? (
-								<span className="text-(--text-tertiary)">
-									{' '}
-									of {tokens(usage.context.window)} · {Math.round((usage.context.peak / usage.context.window) * 100)}%
-								</span>
-							) : null}
-						</span>
-					</div>
-					{calls > 1 ? (
-						<p className="m-0 text-[11.5px] leading-4 text-(--text-tertiary)">
-							Each of its {calls} calls sends the conversation again, so the total counts it once per call.
-						</p>
-					) : null}
+				<div className="flex items-baseline justify-between gap-3 border-t border-(--border-subtle) pt-2 text-[12px]">
+					<span className="text-(--text-secondary)">Largest context</span>
+					<span className="in-num text-(--text-primary)">
+						{tokens(usage.context.peak)}
+						{usage.context.window ? (
+							<span className="text-(--text-tertiary)">
+								{' '}
+								of {tokens(usage.context.window)} · {Math.round((usage.context.peak / usage.context.window) * 100)}%
+							</span>
+						) : null}
+					</span>
 				</div>
 			) : null}
 			{who.length ? (
@@ -675,8 +711,8 @@ function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
 				className="in-num rounded-sm text-[11px] text-(--text-disabled) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-tertiary) hover:underline focus-visible:shadow-(--focus-ring)"
 			>
 				{usage.estimated ? '~' : ''}
-				{tokens(usage.inputTokens + usage.outputTokens)} tokens{calls > 1 ? ` · ${calls} calls` : ''}
-				{usage.compactions ? ' · compacted' : ''} · {usage.billing === 'plan' ? 'plan' : dollars(usage.cost)}
+				{tokens(usage.inputTokens + usage.outputTokens)} tokens{calls > 1 ? ` · ${calls} calls` : ''} ·{' '}
+				{usage.billing === 'plan' ? (usage.plan?.name ?? 'plan') : dollars(usage.cost)}
 			</div>
 		</HoverPeek>
 	);
@@ -746,6 +782,7 @@ const AssistantMessage = memo(function AssistantMessage({
 		[made, sessionId],
 	);
 	const usage = usageOf(message);
+	const compactions = foot ? compactionsOf(message) : [];
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
 	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
@@ -801,6 +838,9 @@ const AssistantMessage = memo(function AssistantMessage({
 					{usage ? <ReplyUsageLine usage={usage} /> : null}
 				</div>
 			) : null}
+			{compactions.map((compaction) => (
+				<CompactionMark key={compaction.at} compaction={compaction} />
+			))}
 		</div>
 		</OutputLinks.Provider>
 	);
