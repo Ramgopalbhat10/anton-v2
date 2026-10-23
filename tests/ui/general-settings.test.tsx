@@ -11,6 +11,7 @@ const general = {
 	visualReplies: 'some',
 	pageNetwork: true,
 	imageModel: null,
+	compactAt: 200_000,
 	agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
 };
 
@@ -52,11 +53,13 @@ describe('General settings', () => {
 
 		fireEvent.click(planMode);
 		fireEvent.click(screen.getByRole('radio', { name: 'More' }));
+		expect(screen.getByRole('radio', { name: '200K' }).getAttribute('aria-checked')).toBe('true');
+		fireEvent.click(screen.getByRole('radio', { name: 'Full' }));
 		expect(api.saveGeneralSettings).not.toHaveBeenCalled();
 		expect(screen.getByText('Unsaved changes')).toBeTruthy();
 
 		fireEvent.click(save);
-		await waitFor(() => expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...general, planMode: true, visualReplies: 'more' }));
+		await waitFor(() => expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...general, planMode: true, visualReplies: 'more', compactAt: null }));
 		expect(await screen.findByText('Saved.')).toBeTruthy();
 		expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
 	});

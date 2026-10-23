@@ -6,6 +6,7 @@ import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
+import { compactionFor } from '../services/context-usage.ts';
 import { coordinatorBrief, threadLine } from '../services/coordinator.ts';
 import { rememberForSpace } from '../services/memory.ts';
 import { loadedModels } from '../services/models.ts';
@@ -199,7 +200,7 @@ function useCoordinatorTools(spaceId: string) {
  */
 export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
-	useModel(brief.model, { thinkingLevel: brief.reasoning });
+	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: compactionFor(brief.model) });
 	useCoordinatorTools(id);
 	useResponseStart(() => ({ startedAt: Date.now() }));
 	useResponseFinish(({ response, metadata }) => {

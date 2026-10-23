@@ -462,6 +462,8 @@ export type GeneralSettings = {
 	imageModel: string | null;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
+	/** The context in tokens past which a conversation is compacted, if the window has not filled first; null waits for the window. */
+	compactAt: 100_000 | 200_000 | 400_000 | null;
 };
 /** A model the agent's generate_image tool can draw with. */
 export type ImageModelInfo = { id: string; name: string; vendor: string; description: string; references: number; aspectRatios: string[]; transparent: boolean };

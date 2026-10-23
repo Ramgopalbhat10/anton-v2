@@ -2,8 +2,9 @@ import { announce } from '../core/changes.ts';
 import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
+import { compactionCeiling, generalSettings } from './general.ts';
 import { logProblem } from './log.ts';
-import { findModel } from './models.ts';
+import { findModel, loadedModels } from './models.ts';
 
 /**
  * How full each task's context window is, and with what. The runtime tells
@@ -30,7 +31,7 @@ export type ContextView = {
 	/** The model's context window in tokens; 0 when unknown. */
 	window: number;
 	used: number;
-	/** Where the runtime compacts the conversation: the window less room kept for the next reply. */
+	/** Where the runtime compacts the conversation: the window less room kept for the next reply, or the ceiling from Settings › General. */
 	autocompactAt: number;
 	parts: Array<{ key: ContextPart; tokens: number }>;
 	at: string | null;
@@ -120,11 +121,27 @@ export async function recordContext(event: ContextEvent): Promise<void> {
 	announce({ kind: 'task', id, what: 'state' });
 }
 
-/** The runtime keeps room for the next reply: up to 20K tokens, no more than the model can write, and a third of a small window. */
-export function compactionReserve(window: number, maxOutput: number | null): number {
+/**
+ * The runtime keeps room for the next reply: up to 20K tokens, no more than the model can write, and a third of a small window.
+ * With a ceiling (Settings › General) that comes first, the rest of the window is kept too, so it compacts there.
+ */
+export function compactionReserve(window: number, maxOutput: number | null, ceiling: number | null = null): number {
 	let reserve = Math.min(20_000, maxOutput && maxOutput > 0 ? maxOutput : 20_000);
 	if (window > 0 && reserve * 2 >= window) reserve = Math.max(1024, Math.floor(window / 3));
+	if (ceiling && window - reserve > ceiling) reserve = window - ceiling;
 	return reserve;
+}
+
+/**
+ * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
+ * comes before the window fills, else (undefined) the runtime's own point. Read while the agent renders,
+ * from the model list last fetched.
+ */
+export function compactionFor(model: string, ceiling = compactionCeiling(), models = loadedModels()): { reserveTokens: number } | undefined {
+	const info = models.find((entry) => entry.id === unrouted(model));
+	if (!ceiling || !info?.contextLength) return undefined;
+	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
+	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? undefined : { reserveTokens: reserve };
 }
 
 /** Shares `total` across the parts by their estimated sizes, in whole tokens that add up exactly. */
@@ -140,13 +157,13 @@ export function scaleParts(estimates: Record<ContextPart, number>, total: number
 export async function contextView(id: string): Promise<ContextView> {
 	const [snapshot, task] = await Promise.all([getSetting<Snapshot | null>(key(id), null), sessionCalls(id)]);
 	if (!snapshot) return { model: null, window: 0, used: 0, autocompactAt: 0, parts: [], at: null, task };
-	const info = await findModel(snapshot.model).catch(() => undefined);
+	const [info, { compactAt }] = await Promise.all([findModel(snapshot.model).catch(() => undefined), generalSettings()]);
 	const window = info?.contextLength ?? 0;
 	return {
 		model: snapshot.model,
 		window,
 		used: snapshot.used,
-		autocompactAt: window ? window - compactionReserve(window, info?.maxOutput ?? null) : 0,
+		autocompactAt: window ? window - compactionReserve(window, info?.maxOutput ?? null, compactAt) : 0,
 		parts: scaleParts(snapshot.estimates, snapshot.used),
 		at: snapshot.at,
 		task,

@@ -24,7 +24,17 @@ export type GeneralSettings = {
 	imageModel: string | null;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
+	/**
+	 * The context, in tokens, past which a conversation is compacted, when that comes before the model's
+	 * window fills; null waits for the window. Every call sends the whole conversation, so a long thread
+	 * on a 1M model otherwise sends up to a million tokens a call.
+	 */
+	compactAt: CompactAt;
 };
+
+export const COMPACT_AT = [100_000, 200_000, 400_000] as const;
+export type CompactAt = (typeof COMPACT_AT)[number] | null;
+export const DEFAULT_COMPACT_AT: CompactAt = 200_000;
 
 export const VISUAL_REPLIES = ['off', 'some', 'more'] as const;
 export type VisualReplies = (typeof VISUAL_REPLIES)[number];
@@ -37,10 +47,28 @@ export type AgentModel = { model: string; reasoning: Reasoning | null };
 
 const KEY = 'general';
 
+/** The agents render synchronously, so they read the compaction point from the settings last read; each message reads them first. */
+let compactAtNow: CompactAt = DEFAULT_COMPACT_AT;
+export const compactionCeiling = (): CompactAt => compactAtNow;
+
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
 	const agentModels = { explorer: null, tester: null, browser: null, computer: null, reviewer: null, ...stored.agentModels };
-	return { model: null, reasoning: null, planMode: false, reviewPullRequests: true, codeMode: true, visualReplies: 'some', pageNetwork: true, imageModel: null, ...stored, agentModels };
+	const settings: GeneralSettings = {
+		model: null,
+		reasoning: null,
+		planMode: false,
+		reviewPullRequests: true,
+		codeMode: true,
+		visualReplies: 'some',
+		pageNetwork: true,
+		imageModel: null,
+		compactAt: DEFAULT_COMPACT_AT,
+		...stored,
+		agentModels,
+	};
+	compactAtNow = settings.compactAt;
+	return settings;
 }
 
 export async function setGeneralSettings(next: GeneralSettings): Promise<GeneralSettings> {
@@ -52,6 +80,7 @@ export async function setGeneralSettings(next: GeneralSettings): Promise<General
 		throw new InvalidInputError(`Unknown image model: ${next.imageModel}`);
 	}
 	await setSetting(KEY, next);
+	compactAtNow = next.compactAt;
 	return next;
 }
 

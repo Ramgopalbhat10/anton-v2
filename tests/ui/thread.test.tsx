@@ -406,7 +406,8 @@ describe('response details', () => {
 				{ ...assistant('a2', [{ type: 'text', text: 'Older reply.' }]), metadata: { usage: { inputTokens: 20, outputTokens: 10, cost: 0.01 } } },
 			]),
 		);
-		const line = screen.getByText('17K tokens · plan');
+		// Every call it made counted, and how many: each sends the conversation again. A reply from before plans were named says only that a plan paid.
+		const line = screen.getByText('17K tokens · 6 calls · plan');
 		fireEvent.pointerEnter(line, { pointerType: 'mouse' });
 		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
 		expect(within(peek).getByRole('img', { name: '16,695 tokens: 16,419 in, 6,000 of them cached, and 276 out' })).toBeTruthy();
@@ -435,12 +436,45 @@ describe('response details', () => {
 				},
 			]),
 		);
-		fireEvent.pointerEnter(screen.getByText('42K tokens · $0.050'), { pointerType: 'mouse' });
+		fireEvent.pointerEnter(screen.getByText('42K tokens · 3 calls · $0.050'), { pointerType: 'mouse' });
 		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
 		expect(within(peek).getByText('Charged')).toBeTruthy();
 		// A side with no calls is left out of the table.
 		expect(within(peek).getAllByRole('row').map((row) => row.textContent)).toEqual(['Made byCallsTokensCost', 'The agent332K$0.040']);
 		expect(within(peek).getByText("75% of the input came from the provider's cache, which costs less.")).toBeTruthy();
+	});
+
+	it('names the plan that ran a reply, sets the largest context against the window, marks where it compacted, and says when it estimated', async () => {
+		show(
+			agent([
+				{
+					...assistant('a1', [{ type: 'text', text: 'Done.' }]),
+					metadata: {
+						usage: { inputTokens: 3_300_000, outputTokens: 23_000, cost: 0 },
+						usageParts: {
+							main: { inputTokens: 650_000, outputTokens: 11_000, cost: 0, cachedTokens: 0, calls: 10 },
+							subagents: { inputTokens: 2_650_000, outputTokens: 12_000, cost: 0, cachedTokens: 0, calls: 40 },
+						},
+						billing: 'plan',
+						context: { peak: 380_000, window: 1_000_000 },
+						plan: { gateway: 'opencode-go', name: 'OpenCode Go' },
+						compactions: [{ at: '2026-10-23T08:00:00.000Z', before: 382_000, after: 14_000 }],
+						estimated: true,
+					},
+				},
+			]),
+		);
+		// The compaction shows in the conversation, where it happened.
+		expect(screen.getByRole('separator', { name: 'Conversation compacted' }).textContent).toBe('Conversation compacted382K → 14K tokens');
+		const line = screen.getByText('~3.3M tokens · 50 calls · OpenCode Go');
+		fireEvent.pointerEnter(line, { pointerType: 'mouse' });
+		const peek = (await screen.findByText('This reply')).closest('.in-pop') as HTMLElement;
+		expect(within(peek).getByText('OpenCode Go')).toBeTruthy();
+		expect(within(peek).queryByText('Your plan')).toBeNull();
+		expect(within(peek).getByText('Largest context').nextElementSibling?.textContent).toBe('380K of 1M · 38%');
+		expect(within(peek).queryByText(/Compacted|sends the conversation again/)).toBeNull();
+		expect(within(peek).getByText(/Cursor reports tokens only for a whole run/)).toBeTruthy();
+		expect(within(peek).getByText('Run on your OpenCode Go plan: no charge per token.')).toBeTruthy();
 	});
 
 	it('copies only the response text, including markdown, before its token count', async () => {
