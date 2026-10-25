@@ -36,6 +36,9 @@ type Content = { type: string; text?: string };
 type ToolResult = { content: Content[] };
 
 const kept = new Map<string, Map<string, string>>();
+/** Old results cleared from what model calls send (src/services/context-prune.ts), by call id, the least recently cleared dropped first. */
+const cleared = new Map<string, string>();
+const KEEP_CLEARED = 500;
 
 /** The text from `offset` that fits in `bytes`, cut on a character and never through a surrogate pair. */
 export function partAt(text: string, offset: number, bytes = MAX_RESULT_BYTES): string {
@@ -61,6 +64,13 @@ export function keepResult(conversation: string, toolCallId: string, text: strin
 	if (kept.size > KEEP_CONVERSATIONS) kept.delete(kept.keys().next().value!);
 	results.set(toolCallId, text);
 	if (results.size > KEEP) results.delete(results.keys().next().value!);
+}
+
+/** Keeps an old result that a model call no longer sends, for `read_full_result`. Call ids are unique, so one map serves every conversation. */
+export function keepCleared(toolCallId: string, text: string): void {
+	cleared.delete(toolCallId);
+	cleared.set(toolCallId, text);
+	if (cleared.size > KEEP_CLEARED) cleared.delete(cleared.keys().next().value!);
 }
 
 /** The text parts of a tool result, joined; null for anything that is not one. */
@@ -107,7 +117,7 @@ export function cutResult<T>(conversation: string, toolCallId: string, toolName:
 
 /** More of a cut result, from `offset`, up to 50KB at a time. */
 export function readFullResult(conversation: string, id: string, offset: number): string {
-	const text = kept.get(conversation)?.get(id);
+	const text = kept.get(conversation)?.get(id) ?? cleared.get(id);
 	if (text === undefined) return `No result "${id}" is kept (only the latest ${KEEP} long ones are, until Anton restarts). Call the tool again, asking for less.`;
 	const from = Math.max(0, Math.min(text.length, Math.floor(offset)));
 	const part = partAt(text, from);

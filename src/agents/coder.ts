@@ -22,6 +22,7 @@ import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { sandboxTools } from '../flue/sandbox-tools.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
+import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -90,16 +91,17 @@ import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
+// Calls through the gateways and ChatGPT and OpenCode plans send old tool results cleared once a conversation grows (withPruning).
 // A task's route (one provider first, or a sort) is part of the specifier its agent resolves; see src/core/model-route.ts.
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
 // Every model in Vercel AI Gateway's live list, with the key pasted in Settings › Subscriptions.
-setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
+setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
-setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
+setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 // Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
-setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));
+setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
