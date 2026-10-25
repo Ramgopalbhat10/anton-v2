@@ -759,6 +759,13 @@ test('General settings decide how a new task starts when the launcher does not s
 	// Another model starts at its own default level; an explicit choice wins over the defaults.
 	const other = await sessions.createSession({ projectId: project.id, title: 'Other', model: 'openrouter/plain/no-reasoning', planMode: false });
 	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
+	// A failed reply on another model can be sent again on the default one, at its default level; one already on it has nothing to switch to.
+	assert.equal(await sessions.fallbackModel(plain.id), null);
+	await assert.rejects(() => sessions.switchToFallbackModel(plain.id), /already runs on the default model/);
+	assert.equal((await sessions.fallbackModel(other.id))?.model, 'openrouter/moonshotai/kimi-k2.6');
+	const moved = await sessions.switchToFallbackModel(other.id);
+	assert.deepEqual([moved.model, moved.reasoning], ['openrouter/moonshotai/kimi-k2.6', 'low']);
+	assert.equal(await sessions.fallbackModel(other.id), null);
 	await sessions.deleteSession(plain.id);
 	await sessions.deleteSession(other.id);
 
@@ -1627,6 +1634,17 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 	assert.equal(await searchRepo(session.id, { pattern: 'ANSWER\\)', ignoreCase: true }), 'src/app.ts:2: console.log(Answer);');
 	assert.match(await searchRepo(session.id, { pattern: '(' }), /Invalid pattern/);
 	assert.equal(archives.length, before + 1, 'downloaded once, then read from disk');
+
+	// Another GitHub repository, named by repo, is read the same way, from its own download; a chat reads one too.
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/other@snapshot-test', glob: '*.ts' }), `src/app.ts\n${deep}`);
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 1, 1, 'acme/other@snapshot-test'), /^1\timport \{ answer \}/);
+	assert.equal(await searchRepo(session.id, { pattern: 'answer =', repo: 'acme/other@snapshot-test' }), `${deep}:1: export const answer = 42;`);
+	assert.equal(archives.length, before + 2, 'one more download for the other repository, then its reads come from disk');
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/demo', glob: 'app.*' }), 'src/app.ts', "the task's own repository by name is its own snapshot");
+	assert.equal(archives.length, before + 2);
+	const chat = await sessions.createSession({ title: 'How does acme/other start?' });
+	assert.match(await listRepoFiles(chat.id, { repo: 'https://github.com/acme/other' }), /^README\.md$/m, 'a chat reads a repository at its default branch');
+	await assert.rejects(() => listRepoFiles(chat.id, { repo: 'not a repo' }), /owner\/name/);
 
 	const record = (await sessions.getSession(session.id))!;
 	assert.equal(record.workspace, false, 'no workspace, so no branch');

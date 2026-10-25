@@ -8,6 +8,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { applyFiles, copyLibrary, readCheckpoint } from './checkpoints.ts';
 import { checkoutTaskBranch, cloneRepo, initScratch, repoDir } from './git.ts';
+import { isWorking } from './activity.ts';
 import { logProblem } from './log.ts';
 import { copySpaceFiles } from './space-files.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
@@ -172,16 +173,21 @@ async function provision(id: string): Promise<Machine> {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
 	}
-	// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
-	if (session.spaceId) await copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id));
-	// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
-	await copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id));
+	await Promise.all([
+		// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
+		session.spaceId ? copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id)) : null,
+		// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
+		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
+	]);
 	return machine;
 }
 
 const machines = new Map<string, Promise<Machine>>();
 const starting = new Set<string>();
-/** Machines stay cached briefly so a burst of UI requests resolves one sandbox. */
+/**
+ * Machines stay cached briefly so a burst of UI requests resolves one sandbox, and for as long as the task's
+ * agent works and the machine runs, since each of its computer steps and messages asks for it again.
+ */
 const CACHE_MS = 20_000;
 
 /** The task's machine, started or resumed if it is not running. */
@@ -194,11 +200,15 @@ export function machineFor(id: string): Promise<Machine> {
 	announce({ kind: 'task', id, what: 'state' });
 	// Only this start's own entry is cleared: after Stop and Resume a newer start may own the id.
 	const current = () => machines.get(id) === pending;
+	const expire = (): void => {
+		setTimeout(async () => {
+			if (!current()) return;
+			if (isWorking(id) && (await getProviders().sandbox.find(id).catch(() => null))) return expire();
+			if (current()) machines.delete(id);
+		}, CACHE_MS).unref();
+	};
 	pending
-		.then(
-			() => setTimeout(() => current() && machines.delete(id), CACHE_MS).unref(),
-			() => current() && machines.delete(id),
-		)
+		.then(expire, () => current() && machines.delete(id))
 		.finally(() => {
 			if (current() || !machines.has(id)) starting.delete(id);
 			announce({ kind: 'task', id, what: 'state' });

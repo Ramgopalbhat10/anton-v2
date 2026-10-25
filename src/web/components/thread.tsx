@@ -22,6 +22,7 @@ import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type Scr
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
 import { splitAttachments } from '../../core/attachments';
+import { isPlanRefusal } from '../../core/model-refusal';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
@@ -948,7 +949,39 @@ function Notice({ children }: { children: ReactNode }) {
 	);
 }
 
-const SettlementNotice = memo(function SettlementNotice({ message }: { message: FlueConversationMessage }) {
+/**
+ * Under the latest failed reply of a task not on the default model: one tap moves it there and sends it on.
+ * A plan that turns its model away (a free plan without it, a quota used up) fails the same way however
+ * often it is sent again, so it says so; nothing switches by itself, since another model may bill another account.
+ */
+function RetryOnDefault({ refused, onRetry }: { refused: boolean; onRetry: (text: string) => void }) {
+	const sessionId = useContext(SessionId);
+	const queryClient = useQueryClient();
+	const fallback = useQuery({ queryKey: ['fallback', sessionId], queryFn: () => api.fallbackModel(sessionId) }).data?.fallback ?? null;
+	const [switching, setSwitching] = useState(false);
+	if (!fallback) return null;
+	const retry = async () => {
+		setSwitching(true);
+		try {
+			const session = await api.switchToFallbackModel(sessionId);
+			queryClient.setQueryData(['session', sessionId], session);
+			void queryClient.invalidateQueries({ queryKey: ['fallback', sessionId] });
+			onRetry('Continue');
+		} finally {
+			setSwitching(false);
+		}
+	};
+	return (
+		<div className="mt-2 flex flex-wrap items-center gap-2">
+			<span>{refused ? `Its model's plan turned this reply away, so sending it again will fail the same way.` : 'Sending it again may fail the same way.'}</span>
+			<Btn size="sm" variant="secondary" disabled={switching} onClick={() => void retry()}>
+				Retry on {fallback.name}
+			</Btn>
+		</div>
+	);
+}
+
+const SettlementNotice = memo(function SettlementNotice({ message, retry }: { message: FlueConversationMessage; retry?: (text: string) => void }) {
 	// Stopping is something you did, not a failure: one quiet line, however many messages it stopped.
 	if (message.settlement?.outcome === 'aborted') {
 		return (
@@ -962,7 +995,12 @@ const SettlementNotice = memo(function SettlementNotice({ message }: { message: 
 		.map((part) => (part.type === 'text' ? part.text : ''))
 		.join('')
 		.trim();
-	return <Notice>{text || 'The agent turn failed. Send the message again to retry.'}</Notice>;
+	return (
+		<Notice>
+			{text || 'The agent turn failed. Send the message again to retry.'}
+			{retry ? <RetryOnDefault refused={isPlanRefusal(text)} onRetry={retry} /> : null}
+		</Notice>
+	);
 });
 
 /** Milliseconds since a moment, ticking each second while shown. */
@@ -1213,7 +1251,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 						{rows.map((row) =>
 							row.message.settlement ? (
-								<SettlementNotice key={row.message.id} message={row.message} />
+								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
 								<UserMessage key={row.message.id} message={row.message} meta={meta} note={notes.get(row.message.id)} />
 							) : (

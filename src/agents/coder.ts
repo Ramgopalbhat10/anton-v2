@@ -77,7 +77,7 @@ import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from
 import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, withinDeadline } from '../services/step-deadline.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
-import { isLocalAddress } from '../services/browser-step.ts';
+import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
@@ -144,11 +144,25 @@ function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester
 	return choice ? { ...subagent, model: choice.model, thinkingLevel: choice.reasoning } : subagent;
 }
 
-/** Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch. */
-function useRepoSnapshot(id: string) {
+/**
+ * Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch; given `repo`,
+ * from any GitHub repository instead, which is how a chat reads code at all.
+ */
+function useRepoSnapshot(id: string, chat: boolean) {
+	const repo = v.optional(
+		v.pipe(
+			v.string(),
+			v.description(
+				chat
+					? 'The GitHub repository to read, as owner/name, optionally @branch, tag or commit (its default branch otherwise)'
+					: "Another GitHub repository to read instead of this task's, as owner/name, optionally @branch, tag or commit",
+			),
+		),
+	);
 	const filter = {
 		path: v.optional(v.pipe(v.string(), v.description('Only under this folder, relative to the repo root'))),
 		glob: v.optional(v.pipe(v.string(), v.description('Only paths matching this glob, such as **/*.ts or package.json'))),
+		repo,
 	};
 	useTool(
 		defineTool({
@@ -166,8 +180,9 @@ function useRepoSnapshot(id: string) {
 				path: v.pipe(v.string(), v.minLength(1), v.description('Path relative to the repo root')),
 				offset: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.description('First line to show'))),
 				limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(2000))),
+				repo,
 			}),
-			run: async ({ data }) => ({ output: await readRepoFile(id, data.path, data.offset, data.limit) }),
+			run: async ({ data }) => ({ output: await readRepoFile(id, data.path, data.offset, data.limit, data.repo) }),
 		}),
 	);
 	useTool(
@@ -184,10 +199,12 @@ function useRepoSnapshot(id: string) {
 	);
 }
 
-function SnapshotExplorer(scripts: boolean) {
+function SnapshotExplorer(scripts: boolean, chat: boolean) {
 	return [
 		'You are the explorer specialist.',
-		'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from; you change nothing.',
+		chat
+			? 'Investigate the GitHub repositories your brief names with list_files, search_code and read_file, passing each call the repository as repo; you change nothing.'
+			: 'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from (or, given repo, another GitHub repository); you change nothing.',
 		'Read as much as the brief needs, searching before reading whole files.',
 		...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
 		'Finish with a concise findings report: what you found, with files and lines, and anything you could not tell.',
@@ -200,16 +217,18 @@ function SnapshotExplorer(scripts: boolean) {
  * without starting a machine. With a sandbox, `useWorkspace` mounts the
  * explorer that works there instead.
  */
-function useSnapshotExplorer(id: string) {
+function useSnapshotExplorer(id: string, chat: boolean) {
 	const subagent = defineSubagent({
 		name: 'explorer',
-		description: 'Read-only investigation of the repository as the task started, reporting its findings with files and lines. Use it for questions that need many files read.',
+		description: chat
+			? 'Read-only investigation of GitHub repositories (name each as owner/name in the brief), reporting its findings with files and lines. Use it for questions that need many files read.'
+			: 'Read-only investigation of the repository as the task started, or of another GitHub repository the brief names as owner/name, reporting its findings with files and lines. Use it for questions that need many files read.',
 		agent: () => {
-			useRepoSnapshot(id);
+			useRepoSnapshot(id, chat);
 			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
 			const scripts = agentSettingsNow().codeMode;
 			if (scripts) useRunScript(id, { repo: true, mcp: false });
-			return SnapshotExplorer(scripts);
+			return SnapshotExplorer(scripts, chat);
 		},
 	});
 	useSubagent(withSettingsModel(subagent, 'explorer'));
@@ -355,6 +374,9 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const place: BrowserPlace = chosen ?? (local && places.includes('sandbox') ? 'sandbox' : opens ? places[0] : (lastPlace.get(id) ?? places[0]));
 			if (place === 'panel' && local) {
 				return { output: { problem: `The Browser panel cannot reach the sandbox's ${rest.url}. ${places.includes('sandbox') ? 'Use "in": "sandbox" for it.' : 'The sandbox is not running; ask the coding agent to start it and run the dev server.'}` } };
+			}
+			if (opens && isRawFile(rest.url)) {
+				return { output: { problem: `Not opened: ${rest.url} is a plain file with nothing to act on. Read it with web_fetch, or report back that it should be read that way.` } };
 			}
 			lastPlace.set(id, place);
 			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
@@ -1077,11 +1099,16 @@ const COMPUTER_HINT =
 
 /** Another repository's code reads best file by file, not as rendered GitHub pages. */
 const OTHER_REPO_HINT =
-	"To read another repository's code, use a GitHub connector's tools when there is one, else web_fetch its files from raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>; never the browser.";
+	"To read another GitHub repository's code, pass it as repo (owner/name, optionally @branch, tag or commit) to list_files, search_code and read_file, or to the explorer's brief: one download, then each read is local. Never the browser.";
+const WORKSPACE_OTHER_REPO_HINT =
+	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-const WEB_HINT = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${OTHER_REPO_HINT}`;
-
-const CHAT_WEB_HINT = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${OTHER_REPO_HINT}`;
+const WEB = 'When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch.';
+const CHAT_WEB = 'For current facts, documentation or anything you are unsure of, use web_search and web_fetch.';
+const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
+const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
+const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
+const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
 const SCRATCH_HINT =
@@ -1096,7 +1123,7 @@ const READ_ONLY_PROMPT = [
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
 	'When the task needs more (editing files, running commands or tests, installing anything, or opening a pull request), call start_workspace first, then carry on.',
 	'Do not start a workspace for questions you can answer by reading.',
-	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small.',
+	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small. Build on its report and its file and line references; read a file again yourself only for the lines you must quote or check.',
 	WEB_HINT,
 	'Be concise, and point to files and lines.',
 ].join(' ');
@@ -1112,7 +1139,7 @@ const WORKSPACE_PROMPT = [
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	'Check UI changes with the browser subagent: brief it with the dev server URL (http://localhost:<port>), what to click and type through, and what to report; use the screenshot tool for a quick full-page capture yourself.',
-	WEB_HINT,
+	WORKSPACE_WEB_HINT,
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
@@ -1132,7 +1159,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
-	CHAT_WEB_HINT,
+	CHAT_WORKSPACE_WEB_HINT,
 	'Be concise.',
 ].join(' ');
 
@@ -1209,15 +1236,14 @@ export function Coder({ id }: AgentProps) {
 	const review = reviewTaskFor(id);
 	if (workspace) useWorkspace(id, planning, chat, review);
 	else {
-		if (!chat) {
-			useRepoSnapshot(id);
-			useSnapshotExplorer(id);
-		}
+		// A chat reads other repositories with the same tools, named by repo.
+		useRepoSnapshot(id, chat);
+		useSnapshotExplorer(id, chat);
 		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
 	if (planning) useProposePlan(id);
-	// Code mode's repo tools read the snapshot, which a chat or a workspace does not use; both still get MCP servers and decide().
-	const scope: ScriptScope = { repo: !workspace && !chat, mcp: true };
+	// Code mode's repo tools read the snapshots, which a workspace does not use; it still gets MCP servers and decide().
+	const scope: ScriptScope = { repo: !workspace, mcp: true };
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);
 	if (scripts) useRunScript(id, scope);
 	const connectors = connectorsFor(id);
