@@ -2,7 +2,7 @@ import { announce } from '../core/changes.ts';
 import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { compactionCeiling, generalSettings } from './general.ts';
+import { backgroundModel, compactionCeiling, generalSettings } from './general.ts';
 import { logProblem } from './log.ts';
 import { findModel, loadedModels } from './models.ts';
 
@@ -134,14 +134,21 @@ export function compactionReserve(window: number, maxOutput: number | null, ceil
 
 /**
  * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
- * comes before the window fills, else (undefined) the runtime's own point. Read while the agent renders,
- * from the model list last fetched.
+ * comes before the window fills, else the runtime's own point; and the summary written by the compaction
+ * model chosen there (a faster one makes compacting quicker), else by the agent's own. Undefined leaves
+ * both to the runtime. Read while the agent renders, from the model list last fetched.
  */
-export function compactionFor(model: string, ceiling = compactionCeiling(), models = loadedModels()): { reserveTokens: number } | undefined {
+export function compactionFor(
+	model: string,
+	ceiling = compactionCeiling(),
+	models = loadedModels(),
+	summarizer = backgroundModel('compaction'),
+): { reserveTokens?: number; model?: string } | undefined {
 	const info = models.find((entry) => entry.id === unrouted(model));
-	if (!ceiling || !info?.contextLength) return undefined;
-	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
-	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? undefined : { reserveTokens: reserve };
+	const reserve = ceiling && info?.contextLength ? compactionReserve(info.contextLength, info.maxOutput, ceiling) : null;
+	const own = info && reserve !== null && reserve !== compactionReserve(info.contextLength, info.maxOutput) ? { reserveTokens: reserve } : {};
+	const chosen = { ...own, ...(summarizer ? { model: summarizer } : {}) };
+	return Object.keys(chosen).length ? chosen : undefined;
 }
 
 /** Shares `total` across the parts by their estimated sizes, in whole tokens that add up exactly. */

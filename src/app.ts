@@ -28,7 +28,7 @@ import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
-import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
+import { backgroundDefaults, COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
@@ -152,6 +152,8 @@ observeRuntime((event) => {
 // Migrate at boot, so a broken database shows in the log now rather than on the first request.
 appDb()
 	.then(() => backfillLatestInputs())
+	// Background work (titles, web digests, compaction) reads Settings › General's models without waiting on the database.
+	.then(() => generalSettings())
 	.catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 // A message with pictures (a thread's brief with images attached) goes as a user message carrying them.
@@ -336,6 +338,8 @@ app.put('/api/settings/sandbox', async (c) => {
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
 });
+/** A background model in Settings › General; null uses its default. */
+const BACKGROUND_MODEL = v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null);
 app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
 app.put('/api/settings/general', async (c) => {
 	const next = await body(
@@ -351,10 +355,16 @@ app.put('/api/settings/general', async (c) => {
 			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			compactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
+			backgroundModels: v.optional(
+				v.object({ title: BACKGROUND_MODEL, webDigest: BACKGROUND_MODEL, vision: BACKGROUND_MODEL, compaction: BACKGROUND_MODEL }),
+				{ title: null, webDigest: null, vision: null, compaction: null },
+			),
 		}),
 	);
 	return c.json(await setGeneralSettings(next));
 });
+// What each kind of background work runs on when Settings › General names no model for it.
+app.get('/api/settings/background-models', (c) => c.json({ defaults: backgroundDefaults() }));
 app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
 app.put('/api/settings/marketplaces', async (c) => {
 	const input = await body(c, v.object({ marketplaces: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), v.maxLength(20)) }));

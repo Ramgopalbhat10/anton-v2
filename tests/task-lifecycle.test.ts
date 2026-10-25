@@ -752,7 +752,28 @@ test('General settings decide how a new task starts when the launcher does not s
 	assert.equal(before.imageModel, null, 'images use ANTON_IMAGE_MODEL unless one is chosen');
 	assert.equal(before.compactAt, 200_000, 'long conversations compact at 200K unless set otherwise');
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', pageNetwork: true, imageModel: null, compactAt: null, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
+	assert.deepEqual(before.backgroundModels, { title: null, webDigest: null, vision: null, compaction: null }, 'background work uses its defaults unless a model is chosen');
+	await assert.rejects(() => setGeneralSettings({ ...before, backgroundModels: { ...before.backgroundModels, vision: 'openrouter/plain/no-reasoning' } }), /does not read images/);
+	await assert.rejects(() => setGeneralSettings({ ...before, backgroundModels: { ...before.backgroundModels, title: 'openrouter/nobody/unknown' } }), /Unknown model/);
+	await setGeneralSettings({
+		model: 'openrouter/moonshotai/kimi-k2.6',
+		reasoning: 'low',
+		planMode: true,
+		reviewPullRequests: true,
+		codeMode: false,
+		visualReplies: 'some',
+		pageNetwork: true,
+		imageModel: null,
+		compactAt: null,
+		agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
+		backgroundModels: { title: 'openrouter/plain/no-reasoning', webDigest: null, vision: null, compaction: 'openrouter/plain/no-reasoning' },
+	});
+	const { backgroundModel } = await import('../src/services/general.ts');
+	const { config } = await import('../src/config.ts');
+	const { compactionFor } = await import('../src/services/context-usage.ts');
+	assert.equal(backgroundModel('title'), 'openrouter/plain/no-reasoning', 'a chosen background model is used at once');
+	assert.equal(backgroundModel('webDigest'), config.webDigestModel, 'the rest keep their defaults');
+	assert.deepEqual(compactionFor('openrouter/moonshotai/kimi-k2.6'), { model: 'openrouter/plain/no-reasoning' }, 'compaction summaries come from the chosen model');
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);

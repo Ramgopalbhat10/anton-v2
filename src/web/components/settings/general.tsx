@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks } from 'lucide-react';
+import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Workflow } from 'lucide-react';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
-import { api, type GeneralSettings, type HelperAgent, type ImageModelInfo, type Reasoning } from '@/lib/api';
+import { api, type BackgroundTask, type GeneralSettings, type HelperAgent, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
 import { Block, PageHeading, SaveState, SettingRow } from './parts';
 
 const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: string }> = [
@@ -21,6 +21,73 @@ const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: s
 ];
 
 type AgentModel = { model: string; reasoning: Reasoning | null };
+
+/** Titles, web reading and screen reading go through Anton's OpenRouter ports; a compaction summary can come from any model. */
+const onOpenRouter = (model: ModelInfo) => model.id.startsWith('openrouter/');
+const seesOnOpenRouter = (model: ModelInfo) => onOpenRouter(model) && model.vision;
+
+const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; info: string; only?: (model: ModelInfo) => boolean }> = [
+	{ task: 'title', title: 'Task titles', help: 'Names each task from its first message.', info: 'A few words for the task list. A fast, cheap model is best.', only: onOpenRouter },
+	{
+		task: 'webDigest',
+		title: 'Web results',
+		help: 'Reads long web results for the agent.',
+		info: "A long web search or page is read against what the agent asked for, and the agent gets only what bears on it; the whole stays readable. It runs only when it costs less than the tokens it saves on the task's model, so never for cheap or plan models, which get the result cut instead.",
+		only: onOpenRouter,
+	},
+	{
+		task: 'vision',
+		title: 'Screen reading',
+		help: "Sees the screen when the task's model cannot.",
+		info: "For the computer helper: its own model reads the screen when it can see images, else the task's, else this one.",
+		only: seesOnOpenRouter,
+	},
+	{
+		task: 'compaction',
+		title: 'Compaction summaries',
+		help: 'Summarizes older turns when a conversation compacts.',
+		info: "Off, each task's own model writes its summary. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
+	},
+];
+
+/** One kind of background work: its default model, or one picked for it. */
+function BackgroundModel({
+	title,
+	help,
+	info,
+	only,
+	value,
+	fallback,
+	fallbackLabel,
+	disabled,
+	onChange,
+}: {
+	title: string;
+	help: string;
+	info: string;
+	only?: (model: ModelInfo) => boolean;
+	value: string | null;
+	fallback: string;
+	fallbackLabel: string;
+	disabled: boolean;
+	onChange: (value: string | null) => void;
+}) {
+	return (
+		<SettingRow title={title} help={help} info={info}>
+			{value ? (
+				<ModelPicker value={{ model: value, reasoning: null }} onChange={(change) => onChange(change.model ?? value)} height={28} side="bottom" only={only} />
+			) : (
+				<span className="text-[12px] text-(--text-tertiary)">{fallbackLabel}</span>
+			)}
+			<Switch
+				checked={value !== null}
+				disabled={disabled || !fallback}
+				onChange={(on) => onChange(on ? fallback : null)}
+				label={<span className="sr-only">{title} uses a model picked here</span>}
+			/>
+		</SettingRow>
+	);
+}
 
 const VISUAL_LEVELS: Array<{ value: GeneralSettings['visualReplies']; label: string }> = [
 	{ value: 'off', label: 'Off' },
@@ -139,6 +206,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 		return () => window.removeEventListener('beforeunload', warn);
 	}, [dirty]);
 	const model = settings.model ?? models.data?.default ?? '';
+	const background = useQuery({ queryKey: ['background-models'], queryFn: api.backgroundModelDefaults, staleTime: 5 * 60_000 });
+	const nameOf = (id: string) => models.data?.models.find((info) => info.id === id)?.name ?? id.replace(/^openrouter\//, '');
 	return (
 		<div className="flex flex-col gap-6">
 			<Block
@@ -249,6 +318,30 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						onChange={(choice) => edit({ agentModels: { ...settings.agentModels, [helper.agent]: choice } })}
 					/>
 				))}
+			</Block>
+			<Block
+				title="Background models"
+				icon={Workflow}
+				help="What Anton's own work behind the agents runs on."
+				info="Each call counts in its task's spend. Off, each uses its default, set on the server."
+			>
+				{BACKGROUND.map((row) => {
+					const fallback = background.data?.defaults[row.task] ?? null;
+					return (
+						<BackgroundModel
+							key={row.task}
+							title={row.title}
+							help={row.help}
+							info={row.info}
+							only={row.only}
+							value={settings.backgroundModels?.[row.task] ?? null}
+							fallback={fallback && fallback !== 'off' ? fallback : model}
+							fallbackLabel={fallback === 'off' ? 'Off' : fallback ? `Default · ${nameOf(fallback)}` : "Task's model"}
+							disabled={save.isPending}
+							onChange={(choice) => edit({ backgroundModels: { ...{ title: null, webDigest: null, vision: null, compaction: null }, ...settings.backgroundModels, [row.task]: choice } })}
+						/>
+					);
+				})}
 			</Block>
 			<Block title="Pull requests" icon={GitPullRequest}>
 				<SettingRow
