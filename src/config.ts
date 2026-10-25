@@ -91,6 +91,11 @@ export const config = {
 	/** The fast OpenRouter model that names tasks: a few words from the first message, in place of the message itself. */
 	titleModel: read('ANTON_TITLE_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/**
+	 * The fast OpenRouter model that reads a long web search or fetch for the agent and gives back only what bears
+	 * on the call's objective, as Claude Code's fetch does; `off` cuts such results instead.
+	 */
+	webDigestModel: read('ANTON_WEB_DIGEST_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
+	/**
 	 * The OpenRouter image model generate_image draws with when Settings › General names none and the task's own
 	 * model is not one: GPT Image 2.5's speed tier, which edits images and leaves backgrounds transparent.
 	 */

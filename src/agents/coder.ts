@@ -1103,8 +1103,10 @@ const OTHER_REPO_HINT =
 const WORKSPACE_OTHER_REPO_HINT =
 	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-const WEB = 'When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch.';
-const CHAT_WEB = 'For current facts, documentation or anything you are unsure of, use web_search and web_fetch.';
+/** A long web result comes back as what bears on the call's objective (src/services/web-digest.ts), so the objective decides what the agent gets. */
+const WEB_OBJECTIVE = 'Give each call an objective naming exactly what you need; leave full_content off unless you need a page whole.';
+const WEB = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
+const CHAT_WEB = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
 const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
 const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;

@@ -112,6 +112,7 @@ import {
 import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
+import { recordWebCall } from './services/web-digest.ts';
 import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sendTest, setPushOptions } from './services/push.ts';
 
 const app = new Hono();
@@ -136,6 +137,7 @@ observeRuntime((event) => {
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
+	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
 	recordJoinEvent(event as Parameters<typeof recordJoinEvent>[0]);
 	recordAgentNow(event as Parameters<typeof recordAgentNow>[0]);
