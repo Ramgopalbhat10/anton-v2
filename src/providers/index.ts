@@ -48,7 +48,7 @@ import { webPushSender } from './webpush/sender.ts';
 const sandboxes: Record<string, () => SandboxProvider> = {
 	modal: () => modalSandboxProvider({ ...config.modal, browserPackage: config.browserPackage }),
 	local: () => localSandboxProvider(config.dataDir),
-	docker: () => dockerSandboxProvider({ baseImage: config.modal.baseImage }),
+	docker: () => dockerSandboxProvider({ baseImage: config.modal.baseImage, network: config.dockerNetwork }),
 };
 
 const stores: Record<string, () => ObjectStore> = {

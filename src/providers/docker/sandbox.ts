@@ -7,7 +7,8 @@ import type { Acquired, ExecOptions, ExecResult, Machine, Pty, SandboxProvider, 
 import { quote } from '../../core/shell.ts';
 import { runProcess } from '../shell-process.ts';
 
-export type DockerOptions = { baseImage: string; docker?: string };
+/** `network` is the Docker network tasks join (`none` keeps them offline); Docker's default bridge without one. */
+export type DockerOptions = { baseImage: string; network?: string; docker?: string };
 
 type State = { key: string };
 
@@ -52,6 +53,7 @@ export function dockerSandboxProvider(options: DockerOptions): SandboxProvider {
 			'run', '-d', '--name', nameFor(key), '--label', `${LABEL}=${key}`, '-w', ROOT,
 			'--cpus', String(resources.cpu), '--memory', `${resources.memoryMiB}m`,
 			...ports.flatMap((port) => ['-p', `127.0.0.1::${port}`]),
+			...(options.network ? ['--network', options.network] : []),
 			'--entrypoint', 'sleep', image, 'infinity',
 		]);
 	}

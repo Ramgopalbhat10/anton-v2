@@ -90,6 +90,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
 | `ANTON_IDLE_MINUTES` | Stop a sandbox this many minutes after its agent finishes (default 5) |
+| `ANTON_DOCKER_NETWORK` | The Docker network the `docker` sandbox's tasks join; `none` keeps them offline (default: Docker's bridge) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
 | `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |

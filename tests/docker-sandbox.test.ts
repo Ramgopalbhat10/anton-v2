@@ -53,3 +53,8 @@ test('a command returns when it leaves a process running in the background', { s
 	assert.equal(out(result), 'started');
 	assert.ok(Date.now() - started < 5000, 'did not wait for the background job');
 });
+
+test('a task on the none network is offline', { skip: noDocker }, async () => {
+	const { machine } = await dockerSandboxProvider({ baseImage: IMAGE, network: 'none' }).acquire({ key: keyFor('offline'), state: null, image: null, baseImage: null, ports: [], resources });
+	assert.equal(out(await machine.exec('ls /sys/class/net')), 'lo');
+});
