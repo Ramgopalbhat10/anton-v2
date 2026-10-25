@@ -20,6 +20,15 @@ npm test
 npm run build && npm start   # production: one port (PORT, default 3000)
 ```
 
+To run tasks without the UI, as for a small benchmark or to compare a change before and after on the same tasks, point `npm run anton:run` at a running Anton. Each task is a new task you can open in the UI, and each gives one JSON line with how it ended, its reply, how long it took, its tokens, its cost, its model calls and its largest context:
+
+```sh
+npm run anton:run -- --model openrouter/deepseek/deepseek-v4.1-flash "Fix the failing test in src/date.ts"
+npm run anton:run -- --url http://127.0.0.1:43128 --project <id> --tasks tasks.jsonl --out runs.jsonl --timeout 30m
+```
+
+A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` object per line. Only `prompt` is required.
+
 With no Modal or Tigris keys, Anton runs everything locally: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
 
 ## How a task runs
