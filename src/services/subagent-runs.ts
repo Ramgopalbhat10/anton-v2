@@ -321,6 +321,25 @@ export async function stopSubagent(id: string, runId: string): Promise<boolean> 
 	return true;
 }
 
+/**
+ * Ends a subagent that has run past its time, as a stop does: its task call answers with what it had done,
+ * and the agent carries on. False when it is not running here.
+ */
+export async function endOverTime(id: string, runId: string, budgetMs: number): Promise<boolean> {
+	const run = (await runsOf(id)).find((entry) => entry.id === runId);
+	const stop = stoppers.get(runId);
+	if (!run || run.status !== 'running' || !stop) return false;
+	stoppers.delete(runId);
+	stopping.add(runId);
+	stop(
+		[
+			`This subagent ran past its ${Math.round(budgetMs / 60_000)} minutes and was ended. Use what it found; if more is needed, brief a narrower job, or read pages yourself with web_fetch.`,
+			runReport(run, Date.now(), 'ended'),
+		].join('\n'),
+	);
+	return true;
+}
+
 /** The whole reply is being stopped: its running subagents end as stopped, not failed. */
 export function noteRepliesStopping(id: string): void {
 	for (const run of runs.get(id) ?? []) if (run.status === 'running') stopping.add(run.id);
@@ -338,7 +357,8 @@ export function stepLine(step: SubagentStep): string {
 	return `${cut}${step.state === 'failed' ? ' (failed)' : step.state === 'running' ? ' (running)' : ''}`;
 }
 
-const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`);
+/** A duration as the agent reads it: 45s, or 3m 20s. */
+export const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`);
 
 /** What a run did, for the agent: how long, how many steps, the latest of them, and what it wrote last. */
 export function runReport(run: SubagentRun, now = Date.now(), status: string = run.status): string {

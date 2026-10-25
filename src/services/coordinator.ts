@@ -6,6 +6,8 @@ import { getSpace, listSpaces } from '../db/spaces.ts';
 import { generalSettings } from './general.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { type ModelChoice, listThreads } from './sessions.ts';
+import { agentNow } from './agent-now.ts';
+import { minutes, runReport, subagentRuns } from './subagent-runs.ts';
 
 /**
  * What a project's coordinator knows each turn. It never reads a thread's
@@ -41,6 +43,25 @@ export function threadLine(thread: Session): string {
 	else if (thread.brief) parts.push(`brief: "${clip(thread.brief, 160)}"`);
 	else if (thread.lastReply) parts.push(`last said: "${clip(thread.lastReply, 200)}"`);
 	return `- ${parts.join(' · ')}`;
+}
+
+/**
+ * What a working thread is doing this moment and for how long, and its running subagents' latest steps:
+ * enough for the coordinator to say where a quiet thread is, or that it is stuck on one step.
+ */
+export async function threadActivity(threadId: string, now = Date.now()): Promise<string> {
+	const lines: string[] = [];
+	const live = agentNow(threadId);
+	if (live) {
+		const what = [live.what, live.tool, live.detail ? `(${clip(live.detail, 120)})` : ''].filter(Boolean).join(' ');
+		lines.push(`Doing now: ${what}, for ${minutes(Math.max(0, now - Date.parse(live.since)))}.`);
+	}
+	for (const run of (await subagentRuns(threadId).catch(() => [])).filter((entry) => entry.status === 'running')) {
+		lines.push(runReport(run, now));
+		const step = run.steps.at(-1);
+		if (step?.state === 'running') lines.push(`Its current step has run for ${minutes(Math.max(0, now - Date.parse(step.at)))}.`);
+	}
+	return lines.join('\n');
 }
 
 /** Open threads all, and the latest few resolved, so a long-lived project's block stays short. */
