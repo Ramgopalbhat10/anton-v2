@@ -8,26 +8,28 @@ import { keepCleared, MORE_TOOL } from './tool-results.ts';
  * grows, so compaction (a summary that loses detail) comes much later. Every
  * call sends the whole conversation, and a page read an hour ago still costs
  * its tokens on each one. Past half of where the agent compacts, the oldest
- * results beyond the newest 40K tokens of them give way to a one-line stub,
+ * results beyond the newest 20K tokens of them give way to a one-line stub,
  * down to 30%, and the agent can read one again with `read_full_result`.
  *
  * Clearing changes the conversation from the first result cleared, so the
  * provider's prompt cache misses once, on that call. So it clears in batches
  * (never one result at a time), and while the cache is warm it waits until
- * the conversation is well past the mark; after five minutes idle, when the
- * cache has expired anyway, it clears as soon as it passes. What was cleared
+ * compaction is near (85%), where it saves a summary call and its detail
+ * lost; after five minutes idle, when the cache has expired anyway, it
+ * clears as soon as it passes the mark. Replayed on real tasks, clearing
+ * sooner with a warm cache cost more in misses than it saved. What was cleared
  * stays cleared on every later call, so the cache holds between batches. The
  * runtime keeps the conversation itself whole: this only changes what is sent.
  */
 
 /** Clearing starts past this share of where the agent compacts, */
 const START = 0.5;
-/** at once past this share while the provider's cache is warm, */
-const URGENT = 0.65;
+/** and while the provider's cache is warm, only past this share, in place of compacting soon, */
+const URGENT = 0.85;
 /** and stops at this share. */
 const TARGET = 0.3;
 /** The newest tool results the agent is likely still working from, which are never cleared. */
-const PROTECT_TOKENS = 40_000;
+const PROTECT_TOKENS = 20_000;
 /** A result this small costs little more than its stub. */
 const MIN_CHARS = 2_000;
 /** Providers keep a prompt cache about this long after its last use. */

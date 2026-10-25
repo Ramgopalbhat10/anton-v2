@@ -21,7 +21,7 @@ const MAX_READ = 120_000;
 /** About 6KB of digest: enough for the facts, quotes and code a call was after. */
 const MAX_TOKENS = 1_500;
 /** Past this the agent is better off with the cut result than waiting. */
-const DIGEST_MS = 20_000;
+const DIGEST_MS = 8_000;
 /** Calls whose objective is waiting for their result; a call that never ends is dropped with the oldest. */
 const KEEP_CALLS = 200;
 
@@ -49,7 +49,7 @@ export function recordWebCall(event: Event): void {
 	if (objectives.size > KEEP_CALLS) objectives.delete(objectives.keys().next().value!);
 }
 
-const prompt = (toolName: string, objective: string, text: string) =>
+export const digestPrompt = (toolName: string, objective: string, text: string) =>
 	[
 		`An agent made a web ${toolName.endsWith('search') ? 'search' : 'fetch'} and you read its result for it. What the agent asked:`,
 		'',
@@ -81,7 +81,7 @@ export async function digestResult<T>(conversation: string, toolCallId: string, 
 	const model = config.webDigestModel;
 	if (text === null || Buffer.byteLength(text) <= limitFor(toolName) || !objective || !writer?.runs(model)) return cut();
 	try {
-		const answer = await writer.write({ model, prompt: prompt(toolName, objective, text), maxTokens: MAX_TOKENS }, AbortSignal.timeout(DIGEST_MS));
+		const answer = await writer.write({ model, prompt: digestPrompt(toolName, objective, text), maxTokens: MAX_TOKENS }, AbortSignal.timeout(DIGEST_MS));
 		void recordUsage(conversation, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 		const digest = answer.text.trim();
 		if (!digest) return cut();

@@ -92,9 +92,10 @@ export const config = {
 	titleModel: read('ANTON_TITLE_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/**
 	 * The fast OpenRouter model that reads a long web search or fetch for the agent and gives back only what bears
-	 * on the call's objective, as Claude Code's fetch does; `off` cuts such results instead.
+	 * on the call's objective, as Claude Code's fetch does; `off` cuts such results instead. Gemini Flash Lite
+	 * answers in 2 to 3 seconds on real results, where Haiku took 5 to 7 and at times answered nothing.
 	 */
-	webDigestModel: read('ANTON_WEB_DIGEST_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
+	webDigestModel: read('ANTON_WEB_DIGEST_MODEL', 'openrouter/google/gemini-3.1-flash-lite'),
 	/**
 	 * The OpenRouter image model generate_image draws with when Settings › General names none and the task's own
 	 * model is not one: GPT Image 2.5's speed tier, which edits images and leaves backgrounds transparent.

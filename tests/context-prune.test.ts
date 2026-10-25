@@ -30,12 +30,12 @@ test('below half of the compaction point nothing is cleared', () => {
 	assert.equal(pruned.cleared, 0);
 });
 
-test('past it, the oldest results are cleared in one batch down to 30%, the newest 40K tokens kept', () => {
+test('past it, the oldest results are cleared in one batch down to 30%, the newest 20K tokens kept', () => {
 	const context = conversation(30, 16_000); // about 120K tokens
 	const pruned = pruneContext('a', context, POINT, 0);
 	assert.ok(pruned.tokens <= POINT * 0.3, `${pruned.tokens} tokens left`);
 	assert.match(resultText(pruned.context, 'c0'), /^\[Cleared to keep the conversation small: this web_fetch result ran to 16,000 characters\. Call read_full_result with id "c0" and offset 0 if you need it again\.\]$/);
-	for (const id of ['c29', 'c28', 'c27', 'c26', 'c25', 'c24', 'c23', 'c22', 'c21', 'c20']) assert.equal(resultText(pruned.context, id), resultText(context, id), `${id} is among the newest`);
+	for (const id of ['c29', 'c28', 'c27', 'c26', 'c25']) assert.equal(resultText(pruned.context, id), resultText(context, id), `${id} is among the newest`);
 	assert.equal(resultText(context, 'c0'), '0'.repeat(16_000), 'the conversation itself is left whole');
 	assert.equal(readFullResult('task', 'c0', 0), '0'.repeat(16_000), 'and the agent can read a cleared one again');
 });
@@ -47,12 +47,12 @@ test('what was cleared stays cleared, so the calls between batches send the same
 	assert.deepEqual(later.context.messages.slice(0, first.context.messages.length), first.context.messages);
 });
 
-test('while the cache is warm it waits for 65%; once it has gone cold, it clears at 50%', () => {
+test('while the cache is warm it waits until compaction is near (85%); once it has gone cold, it clears at 50%', () => {
 	pruneContext('warm', conversation(2, 1_000), POINT, 0);
-	assert.equal(pruneContext('warm', conversation(28, 16_000), POINT, MINUTE).cleared, 0, 'about 112K tokens, under 65%');
+	assert.equal(pruneContext('warm', conversation(28, 16_000), POINT, MINUTE).cleared, 0, 'about 112K tokens, under 85%');
 	assert.ok(pruneContext('warm', conversation(28, 16_000), POINT, 7 * MINUTE).cleared > 0, 'the same, after the cache expired');
 	pruneContext('urgent', conversation(2, 1_000), POINT, 0);
-	assert.ok(pruneContext('urgent', conversation(36, 16_000), POINT, MINUTE).cleared > 0, 'about 144K tokens, past 65%');
+	assert.ok(pruneContext('urgent', conversation(45, 16_000), POINT, MINUTE).cleared > 0, 'about 180K tokens, past 85%');
 });
 
 test('small results stay, and an agent without read_full_result is told to call the tool again', () => {
