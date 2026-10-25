@@ -24,7 +24,7 @@ To run tasks without the UI, as for a small benchmark or to compare a change bef
 
 ```sh
 npm run anton:run -- --model openrouter/deepseek/deepseek-v4.1-flash "Fix the failing test in src/date.ts"
-npm run anton:run -- --url http://127.0.0.1:43128 --project <id> --tasks tasks.jsonl --out runs.jsonl --timeout 30m
+npm run anton:run -- --url http://127.0.0.1:43128 --project <id> --tasks tasks.jsonl --out runs.jsonl --timeout 30m --budget 2.50
 ```
 
 A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` object per line. Only `prompt` is required.

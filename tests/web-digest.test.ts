@@ -109,4 +109,6 @@ test('a digest is written only when it costs less than the tokens it saves on th
 	assert.equal(prompts.length, 0);
 	assert.equal(digestPays(sonnet, flashLite, 60_000, 22_000), true);
 	assert.equal(digestPays(sonnet, flashLite, 120_000, 1_000), false, 'too little saved');
+	const gemini = priced(config.model, 0.825, 4.125, 0.083, 0.042);
+	assert.equal(digestPays(gemini, flashLite, 40_000, 22_000), true, 'a cache write listed below input counts as input');
 });

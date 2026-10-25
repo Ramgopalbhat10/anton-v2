@@ -55,7 +55,7 @@ import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
-import { checkImages, checkSpec, shownNote } from '../services/show.ts';
+import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
 import { pageGuide, saveRender } from '../services/renders.ts';
 import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
@@ -819,10 +819,6 @@ function useAsk(id: string) {
 	);
 }
 
-const SHOW_TYPES = [
-	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
-	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
-] as const;
 
 /** The catalog, as the agent reads it; src/core/ui-spec.ts has the types. */
 const SHOW_DESCRIPTION = [
@@ -843,10 +839,7 @@ function useShow(id: string) {
 		defineTool({
 			name: 'show',
 			description: SHOW_DESCRIPTION,
-			input: v.object({
-				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
-				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
-			}),
+			input: SHOW_INPUT,
 			run: async ({ data }) => {
 				const spec = checkSpec(data);
 				await checkImages(spec, async (path) => (await readOutputFile(id, path)) !== null);

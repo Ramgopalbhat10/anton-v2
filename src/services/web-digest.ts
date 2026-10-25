@@ -76,13 +76,14 @@ export const digestPrompt = (toolName: string, objective: string, text: string) 
 /**
  * Whether reading a result out costs less than the task's model sending its cut form: what the digest model charges to
  * read it and write about 1K tokens, against the tokens it saves at the task model's price, first written to the prompt
- * cache and then read from it. On a model as cheap as the digest model, or one with no price (a plan), it never pays,
+ * cache and then read from it. A cache write never counts for less than input: Gemini lists its cache's storage
+ * there, below its input price. On a model as cheap as the digest model, or one with no price (a plan), it never pays,
  * and the cut result costs no extra seconds either.
  */
 export function digestPays(task: Pick<ModelInfo, 'price'> | undefined, digest: Pick<ModelInfo, 'price'> | undefined, readChars: number, savedChars: number): boolean {
 	if (!task || !digest || savedChars <= 0) return false;
 	const dollars = (perMillion: number, chars: number) => ((perMillion || 0) * chars) / 4 / 1e6;
-	const saved = dollars(task.price.cacheWrite || task.price.input, savedChars) + LATER_CALLS * dollars(task.price.cacheRead || task.price.input, savedChars);
+	const saved = dollars(Math.max(task.price.cacheWrite, task.price.input), savedChars) + LATER_CALLS * dollars(task.price.cacheRead || task.price.input, savedChars);
 	const spent = dollars(digest.price.input, Math.min(readChars, MAX_READ)) + dollars(digest.price.output, 4_000);
 	return saved > spent;
 }
