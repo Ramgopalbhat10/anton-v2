@@ -73,7 +73,8 @@ import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
-import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
+import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from '../services/live-browser.ts';
+import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, withinDeadline } from '../services/step-deadline.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
 import { isLocalAddress } from '../services/browser-step.ts';
@@ -356,7 +357,16 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				return { output: { problem: `The Browser panel cannot reach the sandbox's ${rest.url}. ${places.includes('sandbox') ? 'Use "in": "sandbox" for it.' : 'The sandbox is not running; ask the coding agent to start it and run the dev server.'}` } };
 			}
 			lastPlace.set(id, place);
-			const go = async (command: BrowserInput) => (place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command));
+			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
+			const go = async (command: BrowserInput): Promise<BrowserState> => {
+				try {
+					return await withinDeadline(place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command), STEP_MS, signal, place === 'panel' ? () => dropAgentDriver(id) : undefined);
+				} catch (error) {
+					if (!(error instanceof StepGivenUp)) throw error;
+					const problem = error.reason === 'stopped' ? error.message : `${error.message} The page may be slow or very large: try a narrower step, or report back, since a page only to be read is quicker with web_fetch.`;
+					return { url: command.url ?? '', title: '', status: null, problem, errors: [], screenshot: null, snapshot: '' };
+				}
+			};
 			let state: BrowserState;
 			let report: Record<string, unknown> = {};
 			// What do drove, then every other call the decision model made in this step, for the Agents panel to show under it.
@@ -455,7 +465,8 @@ function useBrowserSubagent(id: string, places: BrowserPlace[]) {
 	const subagent = defineSubagent({
 		name: 'browser',
 		description:
-			'Does a job on web pages in a real browser and reports back: browse and read sites, click through flows, fill forms, check a web app. ' +
+			'Does a job on web pages in a real browser and reports back: click through flows, fill forms, pages that show their content only after scripts run or a click, and checking a web app. ' +
+				'Not for reading: web_fetch reads a page in a second or two, and the repository tools read code. ' +
 			`It works in ${places.map((place) => PLACES[place]).join(', or in ')}. Give it a complete brief: the URL, what to do, and what to report.`,
 		agent: () => {
 			useTool(browserTool(id, places));
@@ -509,7 +520,8 @@ function computerTool(id: string) {
 		async run({ data, toolCallId, signal }) {
 			const { target, to, question, confirm, screenshot, ...step } = data;
 			const machine = await machineFor(id);
-			return asAgentStep(id, async () => {
+			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
+			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
 				if (userHasControl(id)) {
 					return { output: { problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.' } };
@@ -572,7 +584,13 @@ function computerTool(id: string) {
 						...(saved ? { screenshot: saved } : {}),
 					},
 				};
-			});
+			};
+			return asAgentStep(id, () =>
+				withinDeadline(takeStep(), COMPUTER_STEP_MS, signal).catch((error: unknown) => {
+					if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
+					throw error;
+				}),
+			);
 		},
 	});
 }
@@ -907,8 +925,8 @@ function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 		defineTool({
 			name: 'connector_tools',
 			description:
-				`The tools of the user's connectors (${connectors.map((connector) => connector.name).join(', ')}) that are on right now, each with its arguments in full, and which connectors are off. ` +
-				'Look here before using a connector; the user turns them on and off, so look again when they say they changed one. Give words to narrow a long list.',
+				`The tools of the user's connectors (${connectors.map((connector) => connector.name).join(', ')}) that are on right now, the best matches with their arguments in full and the rest a line each, and which connectors are off. ` +
+				'Look here before using a connector; the user turns them on and off, so look again when they say they changed one. Give words to narrow a long list, or a tool\'s name for its arguments. What it listed earlier in this conversation still holds unless the user changed a connector.',
 			input: v.object({ query: v.optional(v.pipe(v.string(), v.maxLength(200), v.description('Words to match in tool names and descriptions; empty lists every tool'))) }),
 			run: async ({ data, signal }) => ({ output: await connectorToolsText(data.query ?? '', signal) }),
 		}),
@@ -1004,8 +1022,8 @@ function useProposePlan(id: string) {
 }
 
 const TODO_HINT =
-	'For work of three or more steps, write a todo list with update_todos before you start. The user follows it as your progress, so call update_todos again the moment a step finishes, ' +
-	'marking it completed and the next one in_progress, before you go on; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.';
+	'For work of three or more steps, write a todo list with update_todos as you start, in the same step as your first other tool call. The user follows it as your progress: once a step finishes, ' +
+	"mark it completed and the next one in_progress with update_todos alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
 
 const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
 
@@ -1049,16 +1067,21 @@ const SCRIPT_HINT =
 const SCRIPTED_MCP_HINT = "A connector's MCP tools can also be called from run_script, which suits several calls whose results you only need part of.";
 
 const BROWSER_HINT =
-	'For anything done on web pages (browsing and reading sites, clicking through flows, filling forms), delegate to the browser subagent with a complete brief, so the pages stay out of your context. ' +
+	'To read the web, find pages with web_search and read them with web_fetch (several URLs in one call): that takes seconds, where the browser takes a minute or more a page. ' +
+	'Delegate to the browser subagent, with a complete brief, only to act on pages (click through a flow, fill a form, check a web app) or for a page web_fetch returns empty, cut short or blocked. ' +
 	'It works in the Browser panel, which the user can watch and take over, for example to sign in.';
 
 const COMPUTER_HINT =
 	'For work that needs a screen (a desktop or GUI program, a native dialog, or a page that must be seen and used as a person would), delegate to the computer subagent with a complete brief; ' +
 	'it uses the sandbox\'s own desktop, which the user watches in the Computer panel. For ordinary web pages, prefer the browser subagent.';
 
-const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
+/** Another repository's code reads best file by file, not as rendered GitHub pages. */
+const OTHER_REPO_HINT =
+	"To read another repository's code, use a GitHub connector's tools when there is one, else web_fetch its files from raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>; never the browser.";
 
-const CHAT_WEB_HINT = 'For current facts, documentation or anything you are unsure of, use the web_search and web_fetch tools if you have them.';
+const WEB_HINT = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${OTHER_REPO_HINT}`;
+
+const CHAT_WEB_HINT = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${OTHER_REPO_HINT}`;
 
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
 const SCRATCH_HINT =
@@ -1155,6 +1178,24 @@ function useLatestInput(id: string) {
 	});
 }
 
+/** Each task's latest checkpoint write: the next one waits for it, so two never read and write the same checkpoint at once. */
+const checkpoints = new Map<string, Promise<void>>();
+
+function queueCheckpoint(id: string): void {
+	const next = (checkpoints.get(id) ?? Promise.resolve()).then(async () => {
+		try {
+			const machine = await liveMachine(id);
+			if (machine) await saveCheckpoint(id, machine);
+		} catch (error) {
+			logProblem('warn', 'Checkpoint failed', error, id);
+		}
+	});
+	checkpoints.set(id, next);
+	void next.then(() => {
+		if (checkpoints.get(id) === next) checkpoints.delete(id);
+	});
+}
+
 export function Coder({ id }: AgentProps) {
 	// With a route, the gateway tries the task's provider first or ranks them by its sort.
 	const { model, reasoning } = agentModelFor(id);
@@ -1227,15 +1268,9 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: reminder });
 			return;
 		}
-		const checkpoint = (async () => {
-			try {
-				const machine = await liveMachine(id);
-				if (machine) await saveCheckpoint(id, machine);
-			} catch (error) {
-				logProblem('warn', 'Checkpoint failed', error, id);
-			}
-		})();
-		const [, reply] = await Promise.all([checkpoint, checkReply(id)]);
+		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
+		queueCheckpoint(id);
+		const reply = await checkReply(id);
 		// A project's thread frees its slot and tells its coordinator what changed.
 		await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
 		// Your phone hears of a task that waits on you, so it is answered without a tab open.

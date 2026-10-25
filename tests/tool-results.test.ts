@@ -57,3 +57,14 @@ test('only the agents’ own conversations are cut: a subagent’s calls and oth
 	assert.equal(await run({ type: 'task', taskId: 'browser-1' }, { instanceId: 'task' }), long);
 	assert.equal(await run(tool, {}), long);
 });
+
+test('web search and fetch results are cut sooner: a search at 12KB, a page at 24KB', () => {
+	forgetResults('task');
+	const text = page(60_000);
+	const [search] = cutResult('task', 'call-s', 'mcp__web__web_search', result(text)).content as Array<{ text: string }>;
+	assert.ok(search.text.startsWith(text.slice(0, 12_288)));
+	assert.match(search.text, /\[Result cut at 12KB: characters up to 12,288 of 60,000 shown\. Call read_full_result with id "call-s" and offset 12288/);
+	const [fetched] = cutResult('task', 'call-f', 'mcp__web__web_fetch', result(text)).content as Array<{ text: string }>;
+	assert.match(fetched.text, /\[Result cut at 24KB: characters up to 24,576 of 60,000/);
+	assert.equal(readFullResult('task', 'call-s', 12_288), text.slice(12_288), 'reading on, asked for, goes in the usual parts');
+});

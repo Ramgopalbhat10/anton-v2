@@ -1438,6 +1438,12 @@ test('an MCP connector is found and called on demand, from connector tools and p
 		assert.match(listed, /### mcp__tracker__find_issues\nFind issues whose title matches words\.\nLonger help\.\nArguments: .*Words to match/);
 		assert.match(listed, /## docs: on, 3 tools/);
 		assert.match(await connectorToolsText('picture'), /## tracker: on, 3 tools, 1 matching\n\n### mcp__tracker__issue_picture/);
+		// Past eight tools the rest come a line each, without their arguments, until asked for by name.
+		await addMcpServer({ name: 'wiki', url: `${url}?wiki`, auth: null, tools: [], codeMode: false });
+		const long = await connectorToolsText('');
+		assert.match(long, /## wiki: on, 3 tools\n\n### mcp__wiki__find_issues\n[\s\S]*\n\n- mcp__wiki__broken: Always fails\.\n\nThe tools listed in a line each come without their arguments/);
+		assert.match(await connectorToolsText('mcp__wiki__broken'), /### mcp__wiki__broken\nAlways fails\.\nArguments:/);
+		await removeMcpServer('wiki');
 		assert.equal((await callConnectorTool(session.id, 'mcp__docs__find_issues', { query: 'direct' })).output, 'issue 7: direct', 'a server out of code mode is called the same way');
 		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__broken', {}), /tracker is down/);
 		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__missing', {}), /No connector that is on has a tool named/);
@@ -1488,6 +1494,7 @@ test('an MCP connector is found and called on demand, from connector tools and p
 		if (sessionId) await forgetScriptCalls(sessionId);
 		await removeMcpServer('tracker').catch(() => undefined);
 		await removeMcpServer('docs').catch(() => undefined);
+		await removeMcpServer('wiki').catch(() => undefined);
 		await resetMcpToolsForTests();
 		await new Promise((resolve) => http.close(resolve));
 	}

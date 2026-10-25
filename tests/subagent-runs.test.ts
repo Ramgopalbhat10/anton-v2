@@ -158,3 +158,20 @@ test("the agent reads its subagents' runs as a short report", async () => {
 	assert.match(report, /^explorer subagent, done: "Map it"\. 14 steps over 2m 5s\.\nIts last 12 steps:\n- read src\/2\.ts/);
 	assert.match(report, /Its answer: It is a Hono app\.$/);
 });
+
+test('a subagent past its time budget ends as a stop does, with what it had done and why it ended', async () => {
+	resetSubagentRunsForTests();
+	const { subagentStopInterceptor } = await import('../src/flue/subagent-stop.ts');
+	const at = { instanceId: 'task-o', taskId: 'sub-o' };
+	recordSubagentEvent({ type: 'task_start', ...at, agent: 'browser', prompt: 'Read the sign-in docs' });
+	recordSubagentEvent({ type: 'tool_start', ...at, toolName: 'browser', toolCallId: 'o1', args: { action: 'open', url: 'github.com/acme/app' } });
+	await settle();
+	const work = new Promise<{ text: string }>(() => undefined);
+	const answer = (await subagentStopInterceptor({ type: 'task', taskId: 'sub-o' }, { instanceId: 'task-o' }, () => work, 60)) as { text: string };
+	assert.match(answer.text, /^This subagent ran past its 0 minutes and was ended\. Use what it found/);
+	assert.match(answer.text, /browser github\.com\/acme\/app \(running\)/);
+	recordSubagentEvent({ type: 'task', ...at, isError: true, result: 'This operation was aborted' });
+	await settle();
+	const [run] = await subagentRuns('task-o');
+	assert.equal(run.status, 'stopped', 'ended over time is not a failure');
+});
