@@ -26,6 +26,7 @@ import { githubHost } from './github/host.ts';
 import { gmailMailbox } from './google/gmail.ts';
 import { googleSignIn } from './google/sign-in.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
+import { dockerSandboxProvider } from './docker/sandbox.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
 import { openRouterAccount } from './openrouter/account.ts';
@@ -47,6 +48,7 @@ import { webPushSender } from './webpush/sender.ts';
 const sandboxes: Record<string, () => SandboxProvider> = {
 	modal: () => modalSandboxProvider({ ...config.modal, browserPackage: config.browserPackage }),
 	local: () => localSandboxProvider(config.dataDir),
+	docker: () => dockerSandboxProvider({ baseImage: config.modal.baseImage }),
 };
 
 const stores: Record<string, () => ObjectStore> = {

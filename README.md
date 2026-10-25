@@ -49,7 +49,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 
 | Port | Implementations | Chosen by |
 | --- | --- | --- |
-| `SandboxProvider` | `modal`, `local` | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set) |
+| `SandboxProvider` | `modal`, `docker` (a container per task on this computer, from the task's base image), `local` (a folder, no isolation) | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set, else `local`) |
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models/user` with a key, else `/models`, cached for an hour) | |
