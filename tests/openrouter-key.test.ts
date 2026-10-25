@@ -243,3 +243,13 @@ test('an OpenRouter call goes with the key in use at the time', async () => {
 	await models.completeSimple(model, context);
 	assert.equal(seen[1].headers.get('authorization'), 'Bearer sk-or-second', 'a key pasted later needs no restart');
 });
+
+test("a model pi knows is priced from OpenRouter's live list, keeping pi's wire settings", () => {
+	const models = createModels();
+	const live = { ...routed, id: 'openrouter/openai/gpt-5.6-luna', price: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 } };
+	models.setProvider(liveOpenRouterProvider(() => [live], async () => 'sk-or-key'));
+	const model = models.getModel('openrouter', 'openai/gpt-5.6-luna');
+	assert.ok(model, 'pi knows the model');
+	assert.deepEqual(model.cost, live.price);
+	assert.equal(model.contextWindow, 1_050_000, "pi's own entry, not the live one's");
+});
