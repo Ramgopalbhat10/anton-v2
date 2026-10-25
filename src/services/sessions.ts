@@ -257,6 +257,23 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 	return getSession(id);
 }
 
+/** The default model a failed reply can be sent again on, when the task runs on another one; null when it already runs on it. */
+export async function fallbackModel(id: string): Promise<{ model: string; name: string } | null> {
+	const [record, general] = await Promise.all([getSessionRecord(id), generalSettings()]);
+	if (!record) throw new NotFoundError('Session not found');
+	const model = general.model ?? config.model;
+	if (model === record.model) return null;
+	const info = await findModel(model).catch(() => undefined);
+	return info ? { model, name: info.name } : null;
+}
+
+/** Moves the task to the default model, at the default reasoning level as a new task would start, so its next message runs there. */
+export async function switchToFallbackModel(id: string): Promise<Session> {
+	const fallback = await fallbackModel(id);
+	if (!fallback) throw new InvalidInputError('This task already runs on the default model.');
+	return editSession(id, { model: fallback.model, reasoning: (await generalSettings()).reasoning });
+}
+
 /** Starts or resumes the task's machine. */
 export async function resumeSession(id: string): Promise<Session> {
 	await machineFor(id);

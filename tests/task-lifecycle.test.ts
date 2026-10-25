@@ -759,6 +759,13 @@ test('General settings decide how a new task starts when the launcher does not s
 	// Another model starts at its own default level; an explicit choice wins over the defaults.
 	const other = await sessions.createSession({ projectId: project.id, title: 'Other', model: 'openrouter/plain/no-reasoning', planMode: false });
 	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
+	// A failed reply on another model can be sent again on the default one, at its default level; one already on it has nothing to switch to.
+	assert.equal(await sessions.fallbackModel(plain.id), null);
+	await assert.rejects(() => sessions.switchToFallbackModel(plain.id), /already runs on the default model/);
+	assert.equal((await sessions.fallbackModel(other.id))?.model, 'openrouter/moonshotai/kimi-k2.6');
+	const moved = await sessions.switchToFallbackModel(other.id);
+	assert.deepEqual([moved.model, moved.reasoning], ['openrouter/moonshotai/kimi-k2.6', 'low']);
+	assert.equal(await sessions.fallbackModel(other.id), null);
 	await sessions.deleteSession(plain.id);
 	await sessions.deleteSession(other.id);
 

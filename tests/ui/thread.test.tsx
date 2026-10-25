@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 	now: vi.fn(async (): Promise<{ now: unknown }> => ({ now: null })),
 	joins: vi.fn(async (): Promise<{ joins: unknown[] }> => ({ joins: [] })),
+	fallbackModel: vi.fn(async (): Promise<{ fallback: { model: string; name: string } | null }> => ({ fallback: null })),
+	switchToFallbackModel: vi.fn(async () => ({})),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -168,6 +170,17 @@ describe('Thread', () => {
 		show(agent([user('u1', 'Go'), stopped('x'), stopped('y')]));
 		expect(screen.getAllByText('Stopped')).toHaveLength(1);
 		expect(screen.queryByText('Submission was aborted.')).toBeNull();
+	});
+
+	it('offers a failed reply again on the default model, and says when its plan turned it away', async () => {
+		api.fallbackModel.mockResolvedValue({ fallback: { model: 'openrouter/moonshotai/kimi-k2.6', name: 'Kimi K2.6' } });
+		const failed = { id: 'f1', role: 'system', purpose: 'advisory', display: 'visible', parts: [{ type: 'text', text: 'Cloud Agent is not available for free users' }], settlement: { outcome: 'failed' } };
+		const flue = agent([user('u1', 'Study t3code'), failed]);
+		show(flue);
+		expect(await screen.findByText(/plan turned this reply away/)).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Retry on Kimi K2.6' }));
+		await waitFor(() => expect(flue.sendMessage).toHaveBeenCalledWith('Continue'));
+		expect(api.switchToFallbackModel).toHaveBeenCalledWith('s1');
 	});
 
 	it('says a message waits for a running subagent, and stops it to have the message read now', async () => {
