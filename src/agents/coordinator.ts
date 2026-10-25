@@ -1,6 +1,6 @@
 'use agent';
 
-import { type AgentProps, defineTool, setProvider, useDelivery, useModel, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
+import { type AgentProps, defineTool, setProvider, useAgentStart, useDelivery, useModel, usePersistentState, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
@@ -34,7 +34,7 @@ const PROMPT = [
 	'Route every message:',
 	'New work becomes a thread with start_thread, one per independent task. Split a message into several threads only when its asks have separate results that need nothing from each other; when the answer combines its parts (how another project does something and how this one could, two codebases compared, research and the plan it informs), it is one thread with the whole question. Start several independent threads in the same step, one start_thread call each.',
 	'A follow-up about work a thread already has goes to that thread with message_thread, never a new thread. A follow-up that bears on several threads goes to the one best placed to answer, with what the others found (from read_thread) in the message, not to each of them.',
-	'A quick question about the project (what is running, what a thread is waiting on, which pull requests are open) you answer yourself from the project state below, starting no thread.',
+	'A quick question about the project (what is running, what a thread is waiting on, which pull requests are open) you answer yourself from the project state, starting no thread.',
 	'A brief is the whole ask for the thread, which sees nothing of this conversation: say what to do and why, what "done" means, which repository, and any decision already made. Keep it short and specific; do not add work the user did not ask for.',
 	"Thread titles are a few plain words in the user's own vocabulary.",
 	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show. A line with started="routine" is a thread one of the project\'s routines started on its own, not you: note it in a few words; it reports again when its state changes. A line with started="you" is a thread the user started themselves, its text the brief they gave it: the feed already shows it as a live row, so end your turn with no text at all (no acknowledgement, no restating what it does) unless it bears on other work (it duplicates or overlaps another thread, say), and then say that in one sentence; it reports again when its state changes.',
@@ -198,8 +198,8 @@ function useCoordinatorTools(spaceId: string) {
 /**
  * A project's coordinator: one conversation per project (the instance id is
  * the project's id) that answers, routes and starts threads, and hears back
- * from them. It has no sandbox. Its picture of the project is the state
- * block loaded before each message, not its history.
+ * from them. It has no sandbox. Its picture of the project is the latest
+ * state block in its conversation (`useProjectState`), not its history.
  */
 export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
@@ -216,7 +216,28 @@ export function Coordinator({ id }: AgentProps) {
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};
 	});
-	// The date only: a time to the minute would change the instructions, and so miss the prompt cache, on every message.
-	const today = new Date().toISOString().slice(0, 10);
-	return `${PROMPT}${brief.propose ? ` ${PROPOSE}` : ''}\n\nThe project now (${today}):\n${brief.state || `Project: ${brief.name}`}`;
+	useProjectState(id);
+	return `${PROMPT}${brief.propose ? ` ${PROPOSE}` : ''} ${STATE_NOTE}`;
+}
+
+const STATE_NOTE =
+	'The project as it stands (its threads, their states and ids, its repositories) arrives as a <signal type="project-state"> block after a message whenever it has changed: the latest one is the project now.';
+/** The state goes again after this many messages even unchanged, so compaction never leaves the coordinator without it. */
+const STATE_EVERY = 10;
+
+/**
+ * Puts the project's state in the conversation, after each message it has changed for, rather than in the
+ * instructions: instructions that changed with every thread's state missed the prompt cache on every message.
+ */
+function useProjectState(id: string) {
+	const [, setShown] = usePersistentState<{ body: string; since: number } | null>('project-state', null);
+	useAgentStart(({ append }) => {
+		const brief = coordinatorBrief(id);
+		const body = `The project now (${new Date().toISOString().slice(0, 10)}):\n${brief.state || `Project: ${brief.name}`}`;
+		setShown((shown) => {
+			if (shown?.body === body && shown.since < STATE_EVERY) return { body, since: shown.since + 1 };
+			append({ kind: 'signal', type: 'project-state', body });
+			return { body, since: 1 };
+		});
+	});
 }

@@ -120,11 +120,48 @@ export async function snapshotFiles(repo: string, sha: string): Promise<RepoFile
 	};
 }
 
-async function snapshotFor(id: string): Promise<Snapshot> {
+/** How long a branch or tag of another repository stays resolved to one commit, so follow-ups read the same files without asking GitHub again. */
+const REF_MS = 10 * 60_000;
+const refs = new Map<string, { sha: string; at: number }>();
+
+/** `owner/name`, optionally `@` a branch, tag or commit; the default branch when none is given. */
+export function parseRepo(text: string): { fullName: string; ref: string | null } {
+	const match = /^(?:https?:\/\/github\.com\/)?([\w.-]+\/[\w.-]+?)(?:\.git)?(?:@(.+))?\/?$/.exec(text.trim());
+	if (!match) throw new InvalidInputError(`"${text}" is not a repository: give it as owner/name, optionally @branch, tag or commit.`);
+	return { fullName: match[1], ref: match[2]?.trim() || null };
+}
+
+async function commitOf(fullName: string, ref: string | null): Promise<string> {
+	if (ref && /^[0-9a-f]{40}$/i.test(ref)) return ref.toLowerCase();
+	const key = `${fullName.toLowerCase()}@${ref ?? ''}`;
+	const known = refs.get(key);
+	if (known && Date.now() - known.at < REF_MS) return known.sha;
+	const { git } = getProviders();
+	let sha: string;
+	try {
+		sha = await git.resolveRef(fullName, ref ?? (await git.getRepo(fullName)).defaultBranch);
+	} catch (error) {
+		throw new NotFoundError(`Could not read ${fullName}${ref ? `@${ref}` : ''}: ${error instanceof Error ? error.message : String(error)}. Check the name, or that GitHub access covers it.`);
+	}
+	refs.set(key, { sha, at: Date.now() });
+	return sha;
+}
+
+/**
+ * The snapshot the repo tools read: the task's repository at its base commit, or, given `repo`, any GitHub
+ * repository the token can read, so studying another codebase is one download and then local reads.
+ */
+async function snapshotFor(id: string, repo?: string): Promise<Snapshot> {
 	const session = await getSessionRecord(id);
-	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to read.');
-	const project = session && (await getProject(session.projectId));
-	if (!session || !project) throw new NotFoundError('Session not found');
+	if (!session) throw new NotFoundError('Session not found');
+	const project = session.projectId ? await getProject(session.projectId) : null;
+	if (repo?.trim()) {
+		const { fullName, ref } = parseRepo(repo);
+		if (!ref && project && fullName.toLowerCase() === project.repoFullName.toLowerCase()) return snapshot(project.repoFullName, session.baseSha);
+		return snapshot(fullName, await commitOf(fullName, ref));
+	}
+	if (!session.projectId) throw new InvalidInputError('A chat has no repository to read: give repo as owner/name to read a GitHub repository.');
+	if (!project) throw new NotFoundError('Session not found');
 	return snapshot(project.repoFullName, session.baseSha);
 }
 
@@ -147,7 +184,7 @@ export function globToRegExp(glob: string): RegExp {
 	return new RegExp(glob.includes('/') ? `^${out}$` : `(?:^|/)${out}$`);
 }
 
-type Filter = { path?: string; glob?: string };
+type Filter = { path?: string; glob?: string; repo?: string };
 
 function select(entries: Entry[], { path: folder, glob }: Filter): Entry[] {
 	const prefix = folder ? `${safeRelativePath(folder)}/` : '';
@@ -157,7 +194,7 @@ function select(entries: Entry[], { path: folder, glob }: Filter): Entry[] {
 
 /** Paths in the repo at the task's base commit, optionally under a folder or matching a glob. */
 export async function listRepoFiles(id: string, filter: Filter): Promise<string> {
-	const picked = select((await snapshotFor(id)).entries, filter);
+	const picked = select((await snapshotFor(id, filter.repo)).entries, filter);
 	if (picked.length === 0) return 'No files match.';
 	const lines = picked.slice(0, MAX_LISTED).map((entry) => (entry.kind === 'symlink' ? `${entry.path} -> ${entry.target}` : entry.path));
 	const more = picked.length - MAX_LISTED;
@@ -165,8 +202,8 @@ export async function listRepoFiles(id: string, filter: Filter): Promise<string>
 }
 
 /** A file's whole text, or why it cannot be read. */
-async function fileText(id: string, file: string): Promise<{ text: string } | { problem: string }> {
-	const { dir, entries } = await snapshotFor(id);
+async function fileText(id: string, file: string, repo?: string): Promise<{ text: string } | { problem: string }> {
+	const { dir, entries } = await snapshotFor(id, repo);
 	const wanted = safeRelativePath(file);
 	const entry = entries.find((item) => item.path === wanted);
 	if (!entry) return { problem: `${wanted} does not exist. List files to find the right path.` };
@@ -178,19 +215,19 @@ async function fileText(id: string, file: string): Promise<{ text: string } | { 
 
 /** For run_script programs: every matching path, as a list. */
 export async function repoPaths(id: string, filter: Filter): Promise<string[]> {
-	return select((await snapshotFor(id)).entries, filter).map((entry) => entry.path);
+	return select((await snapshotFor(id, filter.repo)).entries, filter).map((entry) => entry.path);
 }
 
 /** For run_script programs: a file's whole text; throws when it cannot be read. */
-export async function repoText(id: string, file: string): Promise<string> {
-	const read = await fileText(id, file);
+export async function repoText(id: string, file: string, repo?: string): Promise<string> {
+	const read = await fileText(id, file, repo);
 	if ('problem' in read) throw new Error(read.problem);
 	return read.text;
 }
 
 /** A file's lines, numbered from `offset`. */
-export async function readRepoFile(id: string, file: string, offset = 1, limit = 400): Promise<string> {
-	const read = await fileText(id, file);
+export async function readRepoFile(id: string, file: string, offset = 1, limit = 400, repo?: string): Promise<string> {
+	const read = await fileText(id, file, repo);
 	if ('problem' in read) return read.problem;
 	const lines = read.text.split('\n');
 	const start = Math.max(1, offset);
@@ -229,7 +266,7 @@ parentPort.postMessage({ matches, more });
 
 /** Lines matching a regular expression, as `path:line: text`. */
 export async function searchRepo(id: string, input: Filter & { pattern: string; ignoreCase?: boolean }): Promise<string> {
-	const { dir, entries } = await snapshotFor(id);
+	const { dir, entries } = await snapshotFor(id, input.repo);
 	const flags = input.ignoreCase ? 'i' : '';
 	try {
 		new RegExp(input.pattern, flags);

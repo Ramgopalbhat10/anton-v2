@@ -1628,6 +1628,17 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 	assert.match(await searchRepo(session.id, { pattern: '(' }), /Invalid pattern/);
 	assert.equal(archives.length, before + 1, 'downloaded once, then read from disk');
 
+	// Another GitHub repository, named by repo, is read the same way, from its own download; a chat reads one too.
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/other@snapshot-test', glob: '*.ts' }), `src/app.ts\n${deep}`);
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 1, 1, 'acme/other@snapshot-test'), /^1\timport \{ answer \}/);
+	assert.equal(await searchRepo(session.id, { pattern: 'answer =', repo: 'acme/other@snapshot-test' }), `${deep}:1: export const answer = 42;`);
+	assert.equal(archives.length, before + 2, 'one more download for the other repository, then its reads come from disk');
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/demo', glob: 'app.*' }), 'src/app.ts', "the task's own repository by name is its own snapshot");
+	assert.equal(archives.length, before + 2);
+	const chat = await sessions.createSession({ title: 'How does acme/other start?' });
+	assert.match(await listRepoFiles(chat.id, { repo: 'https://github.com/acme/other' }), /^README\.md$/m, 'a chat reads a repository at its default branch');
+	await assert.rejects(() => listRepoFiles(chat.id, { repo: 'not a repo' }), /owner\/name/);
+
 	const record = (await sessions.getSession(session.id))!;
 	assert.equal(record.workspace, false, 'no workspace, so no branch');
 	assert.ok(!(await local.running()).has(session.id), 'no sandbox was started');

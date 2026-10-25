@@ -19,6 +19,12 @@ export const screenshotFile = (name: string) => `screenshots/${slug(name) || 'pa
 /** The local machine's own addresses, which only a browser inside the sandbox can reach. */
 export const isLocalAddress = (url: string | undefined) => Boolean(url && /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(url.trim()));
 
+/**
+ * A raw file on GitHub's file hosts: plain text with nothing to act on, which web_fetch reads in a second and a
+ * browser renders as one long page (one such step once hung for 22 minutes). The browser tool sends it to web_fetch.
+ */
+export const isRawFile = (url: string | undefined) => Boolean(url && /^(https?:\/\/)?(raw\.githubusercontent\.com|gist\.githubusercontent\.com)\//i.test(url.trim()));
+
 /** What was typed as an address as a URL: a host gets https, a local one http, anything else is searched for. */
 export function addressToUrl(input: string): string {
 	const text = input.trim();

@@ -48,3 +48,21 @@ test('Coder makes images through the image port whatever its model, with the too
 	assert.match(tool, /name: 'generate_image'/);
 	assert.match(tool, /generateImage\(id, data, signal\)/);
 });
+
+test('Coordinator keeps its instructions fixed and gives the project state as a signal, only when it has changed', () => {
+	const source = readFileSync(new URL('../src/agents/coordinator.ts', import.meta.url), 'utf8');
+	const render = source.slice(source.indexOf('export function Coordinator'), source.indexOf('const STATE_NOTE'));
+	assert.match(render, /useProjectState\(id\);\n\treturn `\$\{PROMPT\}\$\{brief\.propose \? ` \$\{PROPOSE\}` : ''\} \$\{STATE_NOTE\}`;/);
+	assert.doesNotMatch(render, /brief\.state|new Date/, 'nothing that changes between messages is in the instructions');
+	const hook = source.slice(source.indexOf('function useProjectState'));
+	assert.match(hook, /shown\?\.body === body && shown\.since < STATE_EVERY/);
+	assert.match(hook, /append\(\{ kind: 'signal', type: 'project-state', body \}\)/);
+});
+
+test('the browser turns away raw GitHub files, which web_fetch reads in a second', async () => {
+	const { isRawFile } = await import('../src/services/browser-step.ts');
+	assert.ok(isRawFile('https://raw.githubusercontent.com/acme/app/main/src/driver.ts'));
+	assert.ok(isRawFile('gist.githubusercontent.com/ada/1/raw/notes.md'));
+	assert.ok(!isRawFile('https://github.com/acme/app/pulls'));
+	assert.ok(!isRawFile(undefined));
+});
