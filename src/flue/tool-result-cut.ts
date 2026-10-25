@@ -1,5 +1,6 @@
 import { type FlueExecutionContext, type FlueExecutionOperation, instrument } from '@flue/runtime';
 import { cutHeadAndTail, cutResult } from '../services/tool-results.ts';
+import { skillInParts } from '../services/skill-parts.ts';
 import { digestResult, WEB_TOOLS } from '../services/web-digest.ts';
 
 /**
@@ -9,12 +10,16 @@ import { digestResult, WEB_TOOLS } from '../services/web-digest.ts';
 const isOwnConversation = (ctx: FlueExecutionContext) =>
 	Boolean(ctx.instanceId) && !ctx.taskId && (ctx.session === undefined || ctx.session === 'default') && (ctx.harness === undefined || ctx.harness === 'default');
 
+/** The runtime's tool that hands the agent a skill's instructions. */
+const SKILL_TOOL = 'activate_skill';
+
 /**
  * Cuts a long tool result before the runtime keeps it in the conversation
  * (src/services/tool-results.ts). Every tool call passes through the runtime's
  * execution interceptors with what it returned, so this sees web fetches,
  * connectors, scripts and subagents' answers alike. A long web search or fetch
- * is read out against its objective instead (src/services/web-digest.ts). A
+ * is read out against its objective instead (src/services/web-digest.ts), and
+ * an activated skill comes in parts (src/services/skill-parts.ts). A
  * subagent's own calls carry its task id; it has no `read_full_result`, so its
  * other long results keep their start and end.
  */
@@ -24,6 +29,8 @@ export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, c
 	const subagent = Boolean(ctx.instanceId && ctx.taskId);
 	if (!subagent && !isOwnConversation(ctx)) return next();
 	if (WEB_TOOLS.has(toolName)) return next().then((result) => digestResult(ctx.instanceId!, toolCallId, toolName, result, subagent));
+	// A skill comes whole but for its file list, or in sections to read on from; a subagent's is never cut.
+	if (toolName === SKILL_TOOL) return next().then((result) => skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!));
 	if (subagent) return next().then((result) => cutHeadAndTail(toolName, result));
 	return next().then((result) => cutResult(ctx.instanceId!, toolCallId, toolName, result));
 }
