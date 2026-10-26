@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type AntonApi, parseDuration, parseTasks, runTask, summary } from '../scripts/anton-run.ts';
+import { type AntonApi, httpApi, parseDuration, parseTasks, runTask, summary } from '../scripts/anton-run.ts';
 
 const usage = { inputTokens: 120_000, cachedTokens: 90_000, outputTokens: 4_000, cost: 0.0421 };
 function fakeApi(send: AntonApi['send']): AntonApi & { stopped: string[]; created: unknown[] } {
@@ -61,4 +61,11 @@ test('tasks come one JSON object a line, and durations in s, m or h', () => {
 	assert.equal(parseDuration('30'), 1_800_000);
 	assert.equal(parseDuration('2h'), 7_200_000);
 	assert.throws(() => parseDuration('soon'));
+});
+
+test("a task's route goes with it when the task is made", async () => {
+	const bodies: unknown[] = [];
+	const fetcher = (async (_url: string, init?: RequestInit) => (bodies.push(JSON.parse(String(init?.body))), new Response(JSON.stringify({ id: 't' })))) as typeof fetch;
+	await httpApi('http://anton', fetcher).createTask({ prompt: 'Fix it', model: 'openrouter/deepseek/deepseek-v4.1-flash', route: { provider: 'together' } });
+	assert.deepEqual((bodies[0] as { route: unknown }).route, { provider: 'together' });
 });

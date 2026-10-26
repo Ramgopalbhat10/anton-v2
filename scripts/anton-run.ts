@@ -1,6 +1,7 @@
 import { readFile, appendFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createFlueClient } from '@flue/sdk';
+import type { ModelRoute } from '../src/core/model-route.ts';
 
 /**
  * Runs tasks on a running Anton without the UI, one at a time, and records what
@@ -10,6 +11,7 @@ import { createFlueClient } from '@flue/sdk';
  *   npm run anton:run -- "Fix the failing test in src/date.ts"
  *   npm run anton:run -- --tasks tasks.jsonl --project <id> --model openrouter/z-ai/glm-5 --out runs.jsonl
  *   npm run anton:run -- --tasks tasks.jsonl --budget 2.50   # starts no task once the runs have cost $2.50
+ *   npm run anton:run -- --tasks tasks.jsonl --provider together   # or --sort throughput: the gateway's route for each task
  *
  * It talks to Anton at --url (or ANTON_URL; `npm start` serves http://127.0.0.1:3000, `npm run dev` the API at :43128).
  * A tasks file has one JSON object a line: `{"name": "...", "prompt": "...", "project": "...", "model": "..."}`,
@@ -17,7 +19,7 @@ import { createFlueClient } from '@flue/sdk';
  * JSON line: how it ended, its reply, how long it took, and its tokens, cost, model calls and largest context.
  */
 
-export type RunTask = { name?: string; prompt: string; project?: string; model?: string; reasoning?: string };
+export type RunTask = { name?: string; prompt: string; project?: string; model?: string; reasoning?: string; route?: ModelRoute };
 export type RunResult = {
 	name: string;
 	task: string;
@@ -54,7 +56,7 @@ export function httpApi(base: string, fetcher: typeof fetch = fetch): AntonApi {
 	const client = (id: string) => createFlueClient({ url: `${base}/api/agents/coder/${encodeURIComponent(id)}`, fetch: fetcher });
 	return {
 		createTask: async (task) => {
-			const body = { projectId: task.project, model: task.model, reasoning: task.reasoning, titleFrom: task.prompt.slice(0, 40_000), ...(task.name ? { title: task.name } : {}) };
+			const body = { projectId: task.project, model: task.model, reasoning: task.reasoning, route: task.route, titleFrom: task.prompt.slice(0, 40_000), ...(task.name ? { title: task.name } : {}) };
 			return (await json<{ id: string }>('/api/sessions', { method: 'POST', body: JSON.stringify(body) })).id;
 		},
 		send: async (id, prompt, signal) => {
@@ -147,6 +149,8 @@ async function main(): Promise<void> {
 			project: { type: 'string' },
 			model: { type: 'string' },
 			reasoning: { type: 'string' },
+			provider: { type: 'string' },
+			sort: { type: 'string' },
 			timeout: { type: 'string', default: '30m' },
 			budget: { type: 'string' },
 			out: { type: 'string' },
@@ -157,6 +161,8 @@ async function main(): Promise<void> {
 	const api = httpApi(values.url!.replace(/\/$/, ''));
 	const budget = values.budget === undefined ? Infinity : Number(values.budget);
 	if (Number.isNaN(budget)) throw new Error(`Not a dollar amount: ${values.budget}`);
+	if (values.provider && values.sort) throw new Error('A route is a provider or a sort, not both.');
+	const route = values.provider ? { provider: values.provider } : values.sort ? ({ sort: values.sort } as ModelRoute) : undefined;
 	const results: RunResult[] = [];
 	for (const task of tasks) {
 		const spent = results.reduce((total, result) => total + result.cost, 0);
@@ -164,7 +170,7 @@ async function main(): Promise<void> {
 			console.error(`Stopped with ${tasks.length - results.length} tasks left: the runs have cost $${spent.toFixed(4)} of the $${budget} budget.`);
 			break;
 		}
-		const run = { ...task, project: task.project ?? values.project, model: task.model ?? values.model, reasoning: task.reasoning ?? values.reasoning };
+		const run = { ...task, project: task.project ?? values.project, model: task.model ?? values.model, reasoning: task.reasoning ?? values.reasoning, route: task.route ?? route };
 		console.error(`→ ${run.name ?? run.prompt.split('\n')[0].slice(0, 60)}`);
 		const result = await runTask(api, run, parseDuration(values.timeout!));
 		results.push(result);
