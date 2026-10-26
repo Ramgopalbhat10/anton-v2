@@ -66,3 +66,8 @@ test('the browser turns away raw GitHub files, which web_fetch reads in a second
 	assert.ok(!isRawFile('https://github.com/acme/app/pulls'));
 	assert.ok(!isRawFile(undefined));
 });
+
+test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /Coder\.durability = \{ timeoutMs: 4 \* 3_600_000 \};/);
+});

@@ -1326,3 +1326,6 @@ export function Coder({ id }: AgentProps) {
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
 	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
+
+/** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */
+Coder.durability = { timeoutMs: 4 * 3_600_000 };
