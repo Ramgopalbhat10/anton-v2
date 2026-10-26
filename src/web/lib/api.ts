@@ -2,6 +2,7 @@ import type { AgentNow } from '../../core/agent-now';
 import type { AttachedFile } from '../../core/attachments';
 import type { ModelRoute } from '../../core/model-route';
 import type { Schedule } from '../../core/schedule';
+import type { Trace } from '../../core/trace';
 export type { ModelRoute, RouteSort } from '../../core/model-route';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
@@ -728,6 +729,8 @@ export const api = {
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
+	/** A reply's trace, by the id its metadata carries. */
+	trace: (id: string, traceId: string) => json<Trace>(`/api/sessions/${id}/traces/${encodeURIComponent(traceId)}`),
 	/** Stops one running subagent; the agent is told what it had done and carries on. */
 	stopSubagent: async (id: string, runId: string) => void (await post(`/api/sessions/${id}/subagents/${encodeURIComponent(runId)}/stop`)),
 	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),

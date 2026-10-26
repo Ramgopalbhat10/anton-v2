@@ -67,6 +67,8 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
 import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
+import { finishTrace, startTrace } from '../services/response-trace.ts';
+import { saveTrace } from '../db/traces.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
@@ -1245,6 +1247,7 @@ export function Coder({ id }: AgentProps) {
 	// The persisted start survives resumed responses; usage totals are still counted per model call.
 	useResponseStart(() => {
 		startReply(id);
+		startTrace(id);
 		startTodoReply(id);
 		return { startedAt: Date.now() };
 	});
@@ -1253,7 +1256,11 @@ export function Coder({ id }: AgentProps) {
 		const startedAt = metadata.startedAt;
 		// The runtime's usage covers this conversation only; the reply's subagents are billed too.
 		const reply = finishReply(id);
+		// Its trace is saved behind the reply; the thread asks for it only when opened.
+		const trace = finishTrace(id);
+		if (trace) void saveTrace(trace).catch((error: unknown) => logProblem('warn', 'Trace not kept', error, id));
 		return {
+			...(trace ? { traceId: trace.id } : {}),
 			usage: reply ? replyTotal(reply) : toUsage(response.usage),
 			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
 			billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
