@@ -4,7 +4,7 @@ import type { ModelSpan, Trace } from '../../src/core/trace';
 import { renderWithQueries } from './render';
 
 const { TraceModal } = await import('@/components/trace-modal');
-const { traceRows, traceStats, traceTree } = await import('@/lib/trace-view');
+const { autoZoom, modelChanges, modelsUsed, traceRows, traceStats, traceTree } = await import('@/lib/trace-view');
 
 const usage = (input: number, cacheRead: number, cacheWrite = 0) => ({ input, output: 50, cacheRead, cacheWrite, cost: 0.002 });
 const model = (id: string, lane: string, start: number, patch: Partial<ModelSpan> = {}): ModelSpan => ({
@@ -16,6 +16,7 @@ const model = (id: string, lane: string, start: number, patch: Partial<ModelSpan
 	error: null,
 	purpose: 'agent',
 	model: 'openrouter/anthropic/claude-sonnet-5.5',
+	served: null,
 	usage: usage(200, 4000),
 	parts: { systemPrompt: 1000, skills: 0, tools: 2000, mcpTools: 0, messages: 1200 },
 	messages: 3,
@@ -69,5 +70,27 @@ describe('a reply’s trace', () => {
 		expect(within(card).getByText(/system prompt changed since the previous call/)).toBeTruthy();
 		fireEvent.click(within(dialog).getAllByRole('treeitem')[2]);
 		expect(within(screen.getByRole('complementary', { name: 'Step details' })).getByText('export function login() {}')).toBeTruthy();
+	});
+
+	it('marks where a conversation’s model changed, and stretches a long reply so its calls read', () => {
+		const switched: Trace = {
+			...trace,
+			spans: [...trace.spans, model('m3', 'main', 5000, { model: 'openrouter/google/gemini-3.1-pro', served: 'google/gemini-3.1-pro', usage: usage(300, 4000) })],
+		};
+		expect(modelChanges(trace)).toEqual([]);
+		const [change] = modelChanges(switched);
+		expect([change.span, change.from.id, change.to.id, change.lane]).toEqual(['m3', 'm2', 'm3', 'main']);
+		expect(modelsUsed(switched).map((use) => `${use.model}:${use.calls}`)).toEqual(['openrouter/anthropic/claude-sonnet-5.5:3', 'openrouter/google/gemini-3.1-pro:1']);
+		// A 6s reply fits; a 10 minute one of 800ms calls is stretched, but not past its cap.
+		expect(autoZoom(trace, 900).zoom).toBe(1);
+		const long = autoZoom({ ...trace, durationMs: 600_000 }, 900);
+		expect(long.zoom).toBeGreaterThan(10);
+		expect(long.zoom).toBeLessThanOrEqual(long.most);
+
+		renderWithQueries(<TraceModal sessionId="s1" traceId="trace-1" onClose={() => {}} />, [[['trace', 's1', 'trace-1'], switched]]);
+		const dialog = screen.getByRole('dialog', { name: 'Reply trace' });
+		fireEvent.click(within(dialog).getAllByRole('treeitem')[7]);
+		expect(within(screen.getByRole('complementary', { name: 'Step details' })).getByText(/Changed from .* on the call before/)).toBeTruthy();
+		expect(within(dialog).getByRole('slider', { name: 'Timeline width' })).toBeTruthy();
 	});
 });

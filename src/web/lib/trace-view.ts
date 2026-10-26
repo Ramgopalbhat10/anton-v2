@@ -181,3 +181,66 @@ export function timeTicks(total: number, most = 7): number[] {
 	for (let at = 0; at <= total; at += step) ticks.push(at);
 	return ticks;
 }
+
+/** The gateway a model id runs through: `openrouter/~deepseek/…` runs through OpenRouter. */
+export const gatewayOf = (model: string) => model.split('/')[0] ?? '';
+
+const GATEWAYS: Record<string, string> = {
+	openrouter: 'OpenRouter',
+	vercel: 'Vercel AI Gateway',
+	openai: 'ChatGPT plan',
+	'claude-code': 'Claude plan',
+	'opencode-go': 'OpenCode Go',
+	cursor: 'Cursor plan',
+};
+
+/** A gateway's name as Settings names it. */
+export const gatewayName = (gateway: string) => GATEWAYS[gateway] ?? gateway;
+
+/** What a call ran on: the model asked for, and the one that answered when the provider names another (an alias resolved, a fallback). */
+const ranOn = (span: ModelSpan) => `${span.model}|${span.served ?? ''}`;
+
+export type ModelChange = { at: number; lane: string; span: string; from: ModelSpan; to: ModelSpan };
+
+/** Where a conversation's model changed from one call to the next: a fallback after a failed call, a model switched mid-run. */
+export function modelChanges(trace: Trace): ModelChange[] {
+	const last = new Map<string, ModelSpan>();
+	const changes: ModelChange[] = [];
+	for (const span of trace.spans) {
+		if (span.kind !== 'model' || span.purpose !== 'agent') continue;
+		const before = last.get(span.lane);
+		if (before && ranOn(before) !== ranOn(span)) changes.push({ at: span.start, lane: span.lane, span: span.id, from: before, to: span });
+		last.set(span.lane, span);
+	}
+	return changes;
+}
+
+export type ModelUse = { model: string; served: string[]; gateway: string; calls: number; tokens: number; cost: number; first: number };
+
+/** Every model the reply ran on, in the order it first did, with what each did. */
+export function modelsUsed(trace: Trace): ModelUse[] {
+	const uses = new Map<string, ModelUse>();
+	for (const span of trace.spans) {
+		if (span.kind !== 'model') continue;
+		const use = uses.get(span.model) ?? { model: span.model, served: [], gateway: gatewayOf(span.model), calls: 0, tokens: 0, cost: 0, first: span.start };
+		use.calls++;
+		use.tokens += span.usage ? span.usage.input + span.usage.cacheRead + span.usage.cacheWrite + span.usage.output : 0;
+		use.cost += span.usage?.cost ?? 0;
+		if (span.served && !use.served.includes(span.served)) use.served.push(span.served);
+		uses.set(span.model, use);
+	}
+	return [...uses.values()].sort((a, b) => a.first - b.first);
+}
+
+/**
+ * How far to stretch the timeline past fitting its width so a typical model call reads: its median
+ * call about 28px wide, never past where a second takes 400px, and not at all for a short reply.
+ */
+export function autoZoom(trace: Trace, fit: number): { zoom: number; most: number } {
+	const total = Math.max(trace.durationMs, 1);
+	const most = Math.max(2, Math.min(80, (total / 1000) * (400 / Math.max(fit, 1))));
+	const calls = trace.spans.filter((span) => span.kind === 'model' && span.durationMs > 0).map((span) => span.durationMs).sort((a, b) => a - b);
+	const median = calls.length ? calls[Math.floor(calls.length / 2)] : total;
+	const zoom = Math.max(1, Math.min(most, 28 / ((median / total) * Math.max(fit, 1))));
+	return { zoom: zoom < 1.25 ? 1 : zoom, most };
+}

@@ -29,7 +29,9 @@ export type ModelSpan = SpanBase & {
 	kind: 'model';
 	/** `agent`, or one of compaction's summaries. */
 	purpose: string;
+	/** `<gateway>/<model>` as the task names it, and the model the provider says answered (an alias's model, a fallback's). */
 	model: string;
+	served: string | null;
 	usage: TraceUsage | null;
 	/** The request's parts in estimated tokens, scaled to what the provider counted. */
 	parts: Record<TracePart, number>;

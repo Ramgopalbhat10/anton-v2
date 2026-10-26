@@ -48,7 +48,7 @@ type TraceEvent = {
 	messagesAfter?: number;
 	error?: unknown;
 	request?: { providerId?: string; requestedModel?: string; input?: { systemPrompt?: string; messages?: LlmMessage[]; tools?: Array<{ name?: string }> } };
-	response?: { usage?: Usage; output?: { content?: LlmContent[] }; finishReason?: string; error?: { message?: string } };
+	response?: { usage?: Usage; output?: { content?: LlmContent[] }; finishReason?: string; responseModel?: string; error?: { message?: string } };
 };
 
 type Request = { parts: Record<TracePart, number>; messages: number; added: TraceMessage[]; addedMore: number; prompt: string; toolset: string };
@@ -207,6 +207,7 @@ export function recordTraceEvent(event: TraceEvent): void {
 				error: event.isError ? (event.response?.error?.message ?? 'The call failed') : null,
 				purpose: event.purpose ?? 'agent',
 				model,
+				served: event.response?.responseModel || null,
 				usage: traced,
 				parts,
 				messages: request?.messages ?? 0,
