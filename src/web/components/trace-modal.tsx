@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowLeftRight, ChartGantt, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';
 import { HoverPeek } from '@/components/hover-peek';
 import { ModelLogo, useModels } from '@/components/model-picker';
@@ -113,7 +114,7 @@ export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string;
 function TraceHeader({ sub, children, onClose }: { sub: ReactNode; children?: ReactNode; onClose: () => void }) {
 	return (
 		<header className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-(--border-subtle) px-4">
-			<IconTile icon={ChartGantt} tone="accent" />
+			<IconTile icon={TraceIcon} tone="accent" />
 			<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
 				<h2 className="m-0 shrink-0 text-[13.5px] font-medium text-(--text-primary)">Trace</h2>
 				{sub ? (
@@ -1250,5 +1251,5 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 
 /** The footer's action: opens the reply's trace. */
 export function TraceButton({ onOpen }: { onOpen: () => void }) {
-	return <IconBtn size="xs" icon={ChartGantt} label="Trace this reply" onClick={onOpen} />;
+	return <IconBtn size="xs" icon={TraceIcon} label="Trace this reply" onClick={onOpen} />;
 }

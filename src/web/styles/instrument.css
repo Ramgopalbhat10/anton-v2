@@ -1091,90 +1091,101 @@
 }
 
 /*
- * The loader: a shape that never settles. A filled form turns and morphs
- * from a circle to a squircle, a leaf and a diamond, and a hollow outline
- * turns the other way a beat behind it, so the two keep crossing.
- * `--loader` and `--loader-soft` set its colours.
+ * The loader: Anton's cube, its faces taking turns. Each face lifts out
+ * along its own edge and lights up, top, left, then right, and settles
+ * back, so the cube seems to turn over while it waits; its eyes blink now
+ * and then. `--lt`, `--ll` and `--lr` colour the top, left and right faces.
  */
 .sg-spinner {
-	--loader: var(--accent-base);
-	--loader-soft: color-mix(in oklab, var(--accent-base) 45%, transparent);
-	position: relative;
-	display: inline-block;
+	--lt: var(--cyan-200);
+	--ll: var(--cyan-400);
+	--lr: var(--cyan-700);
+	display: inline-flex;
 	flex: 0 0 auto;
 }
-.sg-spinner::before,
-.sg-spinner::after {
-	content: '';
-	position: absolute;
-	inset: 18%;
-	border-radius: 50%;
-	animation: sg-morph 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-.sg-spinner::before {
-	background: conic-gradient(from 0deg, var(--loader), var(--loader-soft), var(--loader));
-}
-.sg-spinner::after {
-	inset: 0;
-	border: 1.5px solid var(--loader-soft);
-	animation-direction: reverse;
-	animation-delay: -0.55s;
-}
 .sg-spinner--neutral {
-	--loader: var(--text-secondary);
-	--loader-soft: var(--alpha-white-14);
+	--lt: var(--neutral-300);
+	--ll: var(--neutral-500);
+	--lr: var(--neutral-700);
 }
 .sg-spinner--onAccent {
-	--loader: var(--accent-fg);
-	--loader-soft: rgba(6, 24, 31, 0.32);
+	--lt: rgba(6, 24, 31, 0.5);
+	--ll: rgba(6, 24, 31, 0.8);
+	--lr: rgba(6, 24, 31, 0.95);
 }
-@keyframes sg-morph {
-	0% {
-		border-radius: 50%;
-		transform: rotate(0deg) scale(0.9);
-	}
-	25% {
-		border-radius: 26%;
-		transform: rotate(90deg) scale(1);
-	}
-	50% {
-		border-radius: 50% 6% 50% 6%;
-		transform: rotate(180deg) scale(0.78);
-	}
-	75% {
-		border-radius: 12%;
-		transform: rotate(315deg) scale(0.95);
-	}
-	100% {
-		border-radius: 50%;
-		transform: rotate(360deg) scale(0.9);
-	}
+.sg-spinner .sl-face {
+	transform-box: view-box;
+	animation: 1.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
 }
-
-/* A working glyph's core: a square that turns into a diamond and back, breathing. */
-@keyframes glyph-morph {
-	0%,
-	100% {
-		transform: rotate(0deg) scale(0.75);
-		rx: 2.5px;
-	}
-	50% {
-		transform: rotate(135deg) scale(1);
-		rx: 0.6px;
-	}
+.sg-spinner .sl-top {
+	fill: var(--lt);
+	animation-name: sl-top;
 }
-.glyph-morph {
+.sg-spinner .sl-left {
+	fill: var(--ll);
+	animation-name: sl-left;
+	animation-delay: 0.25s;
+}
+.sg-spinner .sl-right {
+	fill: var(--lr);
+	animation-name: sl-right;
+	animation-delay: 0.5s;
+}
+.sg-spinner .sl-eyes {
 	transform-box: fill-box;
-	transform-origin: center;
-	animation: glyph-morph 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+	transform-origin: 50% 50%;
+	animation: sl-blink 3s steps(1, end) infinite;
+	animation-delay: 0.25s;
 }
-
-@media (prefers-reduced-motion: reduce) {
-	.sg-spinner::before,
-	.sg-spinner::after {
-		animation-duration: 6s;
+@keyframes sl-top {
+	0%,
+	45%,
+	100% {
+		transform: none;
+		filter: none;
 	}
-	.glyph-morph {
-		animation: none;
+	18% {
+		transform: translateY(-1.7px);
+		filter: brightness(1.18);
+	}
+}
+@keyframes sl-left {
+	0%,
+	45%,
+	100% {
+		transform: none;
+		filter: none;
+	}
+	18% {
+		transform: translate(-1.45px, 0.85px);
+		filter: brightness(1.3);
+	}
+}
+@keyframes sl-right {
+	0%,
+	45%,
+	100% {
+		transform: none;
+		filter: none;
+	}
+	18% {
+		transform: translate(1.45px, 0.85px);
+		filter: brightness(1.6);
+	}
+}
+@keyframes sl-blink {
+	0%,
+	90%,
+	100% {
+		transform: none;
+	}
+	94% {
+		transform: scaleY(0.15);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.sg-spinner .sl-face,
+	.sg-spinner .sl-eyes {
+		animation-duration: 4s;
 	}
 }

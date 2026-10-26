@@ -62,7 +62,7 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 				<>
 					<circle cx="8" cy="8" r="6" stroke={color} strokeOpacity="0.28" strokeWidth="1.5" />
 					<circle className="glyph-spin" cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="9 28.7" />
-					<rect className="glyph-morph" x="5.6" y="5.6" width="4.8" height="4.8" rx="1.6" fill={color} />
+					<circle className="in-pulse" cx="8" cy="8" r="2" fill={color} />
 				</>
 			) : kind === 'waiting' ? (
 				<>

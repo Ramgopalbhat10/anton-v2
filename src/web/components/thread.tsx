@@ -1,7 +1,8 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChartGantt, Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
@@ -700,7 +701,7 @@ function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: (
 				</div>
 			) : null}
 			{onTrace ? (
-				<Btn size="sm" variant="secondary" icon={ChartGantt} block onClick={onTrace}>
+				<Btn size="sm" variant="secondary" icon={TraceIcon} block onClick={onTrace}>
 					Open the trace
 				</Btn>
 			) : null}

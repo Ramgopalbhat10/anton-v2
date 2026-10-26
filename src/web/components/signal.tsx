@@ -57,14 +57,27 @@ export function IconBtn({
 	);
 }
 
+/**
+ * Waiting, drawn as Anton's cube: its faces lift out and light up in turn
+ * (`.sg-spinner` in instrument.css); from 16px it has the mascot's eyes.
+ */
 export function Spinner({ size = 14, tone = 'accent' }: { size?: number; tone?: 'accent' | 'neutral' | 'onAccent' }) {
 	return (
-		<span
-			role="status"
-			aria-label="Loading"
-			className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`)}
-			style={{ width: size, height: size }}
-		/>
+		<span role="status" aria-label="Loading" className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`)} style={{ width: size, height: size }}>
+			<svg aria-hidden width={size} height={size} viewBox="3.5 5.2 17 17.8" className="overflow-visible">
+				<polygon className="sl-face sl-top" points="12,6 19.1,10.1 12,14.2 4.9,10.1" />
+				<polygon className="sl-face sl-left" points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" />
+				<polygon className="sl-face sl-right" points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" />
+				{size >= 16 ? (
+					<g className="sl-face sl-left">
+						<g className="sl-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+							<path d="M7.03 14.28v2.13" />
+							<path d="M9.87 15.92v2.13" />
+						</g>
+					</g>
+				) : null}
+			</svg>
+		</span>
 	);
 }
 
