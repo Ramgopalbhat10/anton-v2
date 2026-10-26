@@ -71,3 +71,15 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /Coder\.durability = \{ timeoutMs: 4 \* 3_600_000 \};/);
 });
+
+test('Coder asks for fuller steps, and sends a reply that stops at an announced step back to work', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /const BATCH_HINT =/);
+	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+		const start = source.indexOf(prompt);
+		assert.ok(start >= 0, prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /BATCH_HINT/, prompt);
+	}
+	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
+	assert.match(source, /startStallCheck\(id\);/);
+});

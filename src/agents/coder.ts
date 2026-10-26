@@ -83,7 +83,7 @@ import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
-import { checkReply } from '../services/reply-check.ts';
+import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
@@ -1108,6 +1108,10 @@ const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
 const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
+/** Each model call sends the whole conversation again, so a step that does several things saves a call's worth of it. */
+const BATCH_HINT =
+	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, rather than one at a time.';
+
 const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
@@ -1131,6 +1135,7 @@ const WORKSPACE_PROMPT = [
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
+	BATCH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
@@ -1154,6 +1159,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
+	BATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
 	CHAT_WORKSPACE_WEB_HINT,
@@ -1291,6 +1297,12 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: reminder });
 			return;
 		}
+		// A reply that ends by announcing a step it never took is sent back to take it, once.
+		const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
+		if (stalled) {
+			append({ kind: 'signal', type: 'reminder', body: stalled });
+			return;
+		}
 		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 		queueCheckpoint(id);
 		const reply = await checkReply(id);
@@ -1304,6 +1316,7 @@ export function Coder({ id }: AgentProps) {
 	useResponseStart(() => {
 		startReply(id);
 		startTodoReply(id);
+		startStallCheck(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
