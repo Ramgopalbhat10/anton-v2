@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
-import { NextSteps, prNumber, prSummary, ThreadStateIcon, ThreadStatePill, useOpenThread } from '@/components/thread-card';
+import { NextSteps, prNumber, prSummary, ThreadStateIcon, useOpenThread } from '@/components/thread-card';
 import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
@@ -179,7 +179,6 @@ function PullRequests({ threads }: { threads: Session[] }) {
 									) : null}
 								</span>
 							</button>
-							<ThreadStatePill thread={thread} compact />
 							<NextSteps thread={thread} size="xs" />
 						</div>
 					);

@@ -41,14 +41,15 @@ describe('Tasks and Reviews', () => {
 		const failed = within(screen.getByText('Fix flaky upload retry').closest('a')!);
 		expect(failed.getByText('$1.50')).toBeTruthy();
 		expect(failed.getByText('2 tok')).toBeTruthy();
-		expect(failed.getByText('Failed')).toBeTruthy();
+		expect(failed.getByRole('img', { name: 'Failed' })).toBeTruthy();
 		expect(failed.getByText('Sandbox ran out of memory')).toBeTruthy();
 		const merged = within(screen.getByText('Add a tasks page').closest('a')!);
 		// A task that has not called a model yet has no usage to show.
 		expect(merged.getByText('—')).toBeTruthy();
 		expect(merged.getByText('acme/web')).toBeTruthy();
 		expect(merged.getByText('claude-sonnet-4.5')).toBeTruthy();
-		expect(merged.getByText(/#7/).textContent).toBe('#7 merged');
+		// The pull request's colour says it merged; no word repeats it.
+		expect(merged.getByText(/#7/).textContent).toBe('#7');
 
 		const tabs = screen.getByRole('tablist', { name: 'Tasks by state' });
 		expect(within(tabs).getByRole('tab', { name: 'Pull requests 1' })).toBeTruthy();

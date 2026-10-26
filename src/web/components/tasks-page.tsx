@@ -1,19 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { CalendarDays, ChevronLeft, ChevronRight, GitBranch, Github, GitPullRequest, List as ListIcon, type LucideIcon, MessageSquare, Plus, Search } from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon, Plus, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
-import { Caption, Card, CardSection, Chip, Figure, type Part, Pips, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
-import { ModelLogo, useModelName } from '@/components/model-picker';
+import { Caption, Card, CardSection, Figure, type Part, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
+import { useModelName } from '@/components/model-picker';
 import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
-import { isLive, TaskStatusIcon } from '@/components/task-status';
-import { prNumber, prTone, ThreadStatePill } from '@/components/thread-card';
+import { TaskRow, used } from '@/components/task-row';
+import { isLive } from '@/components/task-status';
 import { glyphKind } from '@/components/thread-glyph';
-import { api, branchLabel, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
-import { age, dollars, tokens } from '@/lib/format';
+import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const TABS = {
@@ -31,91 +31,6 @@ export const PAGE_SIZE = 20;
 function matches(session: Session, query: string): boolean {
 	const text = `${session.title} ${isChat(session) ? 'chat' : `${session.repo} ${session.branch}`} ${session.model}`.toLowerCase();
 	return text.includes(query.trim().toLowerCase());
-}
-
-const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
-
-/** A fact on the row's middle line: an icon and a few words. */
-function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
-	return (
-		<span title={title} className={cn('inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)', mono && 'font-mono text-[11px]')}>
-			{icon ? <Icon icon={icon} size={12} className="text-(--icon-tertiary)" /> : null}
-			<span className="truncate">{children}</span>
-		</span>
-	);
-}
-
-function Row({ session, modelName }: { session: Session; modelName: (model: string) => string }) {
-	const pr = session.prUrl ? prTone(session) : null;
-	const runs = session.pullRequest?.runs ?? [];
-	const tokensUsed = used(session);
-	const chat = isChat(session);
-	return (
-		<Link
-			to="/agents/$sessionId"
-			params={{ sessionId: session.id }}
-			search={{ app: 'code' }}
-			className="flex min-w-0 gap-3 rounded-[10px] px-3 py-2.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-		>
-			<span className="mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg)">
-				<TaskStatusIcon session={session} size={13} />
-			</span>
-			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<div className="flex min-w-0 items-baseline gap-3">
-					<span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
-					<span className="in-num shrink-0 text-[11px] text-(--text-disabled)" title={new Date(session.createdAt).toLocaleString()}>
-						{age(session.createdAt)}
-					</span>
-				</div>
-				<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-					<Fact icon={chat ? MessageSquare : Github} title={chat ? undefined : session.repo}>
-						{chat ? 'Chat' : session.repo}
-					</Fact>
-					{!chat || session.workspace ? (
-						<Fact icon={GitBranch} mono>
-							{branchLabel(session)}
-						</Fact>
-					) : null}
-					{session.model ? (
-						<span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)" title={session.model}>
-							<ModelLogo model={session.model} size={13} />
-							<span className="truncate">{modelName(session.model)}</span>
-						</span>
-					) : null}
-				</div>
-				<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-					<ThreadStatePill thread={session} compact />
-					{pr ? (
-						<Chip icon={GitPullRequest} mono tone={pr.tone} color={pr.color} title={pr.title}>
-							#{prNumber(session.prUrl) ?? '?'}
-							{session.pullRequest?.state === 'merged' ? ' merged' : session.pullRequest?.state === 'closed' ? ' closed' : session.pullRequest?.state === 'draft' ? ' draft' : ''}
-						</Chip>
-					) : null}
-					{runs.length ? (
-						<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
-					) : null}
-					{isLive(session) && !session.working ? (
-						<Chip tone="accent" title="Its sandbox is up">
-							<span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" />
-							{session.status === 'starting' ? 'Sandbox starting' : 'Sandbox on'}
-						</Chip>
-					) : null}
-					{session.status === 'error' && session.errorMessage ? <span className="min-w-0 flex-1 truncate text-[11.5px] text-(--danger-text)">{session.errorMessage}</span> : <span className="flex-1" />}
-					<span className="in-num flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
-						{tokensUsed ? (
-							<>
-								<span className="text-(--text-secondary)">{dollars(session.usage.cost)}</span>
-								<span className="text-(--text-disabled)">·</span>
-								<span>{tokens(tokensUsed)} tok</span>
-							</>
-						) : (
-							'—'
-						)}
-					</span>
-				</div>
-			</div>
-		</Link>
-	);
 }
 
 /** The pages to offer by number: the first, the last and those around the one shown, gaps as ellipses. */
@@ -299,7 +214,7 @@ export function TasksPage() {
 					<>
 						<div className="flex flex-col gap-0.5 p-1.5">
 							{shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((session) => (
-								<Row key={session.id} session={session} modelName={modelName} />
+								<TaskRow key={session.id} session={session} modelName={modelName} />
 							))}
 						</div>
 						<Pager page={page} pages={pages} total={shown.length} onPage={setPage} />

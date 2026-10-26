@@ -4,10 +4,10 @@ import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCi
 import { type ReactNode, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
-import { Chip, type Tone } from '@/components/instrument';
+import { Chip } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
-import { Glyph, type GlyphKind, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
+import { Glyph, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
 import { api, isChat, outputUrl, repoShort, type Session, type ThreadState } from '@/lib/api';
 import { categoryInfo, categoryOf, extensionOf, nameOf } from '@/lib/artifacts';
 import { age, elapsed } from '@/lib/format';
@@ -17,33 +17,6 @@ import { nowText } from '@/lib/now-text';
 import { cn } from '@/lib/utils';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
-
-/** A state's chip tone: amber needs you, red failed, cyan works, green ready or done. */
-const KIND_CHIP: Record<GlyphKind, Tone> = {
-	failed: 'danger',
-	waiting: 'warning',
-	working: 'accent',
-	queued: 'neutral',
-	review: 'success',
-	landing: 'success',
-	idle: 'neutral',
-	resolved: 'success',
-};
-
-/** The state as a chip: its glyph and a word, as on a card or a row. */
-export function ThreadStatePill({ thread, compact }: { thread: Session; compact?: boolean }) {
-	const state = stateOf(thread);
-	const kind = glyphKind(thread);
-	const look = STATE_LOOK[state];
-	const broken = kind === 'failed' || (state === 'waiting' && failed(thread));
-	const label = broken ? (thread.status === 'error' ? 'Failed' : 'Checks failing') : compact ? look.short : look.label;
-	return (
-		<Chip tone={broken ? 'danger' : KIND_CHIP[kind]}>
-			<Glyph kind={kind} size={11} />
-			{label}
-		</Chip>
-	);
-}
 
 /** The state as a drawn glyph, for list rows: a turning ring while it works, a calling dot while it waits on you. */
 export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
@@ -363,12 +336,11 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 		<>
 			<div className="flex items-start gap-2">
 				<span className="mt-[2px] inline-flex shrink-0">
-					<ThreadGlyph thread={thread} size={14} />
+					<Glyph kind={glyphKind(thread)} size={14} title={broken ? (thread.status === 'error' ? 'Failed' : 'Checks failing') : STATE_LOOK[state].label} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{thread.title}</span>
 					<span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-						<ThreadStatePill thread={thread} />
 						<span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)">
 							<Icon icon={isChat(thread) ? MessageSquare : Github} size={11} className="text-(--icon-tertiary)" />
 							<span className="truncate">{repoShort(thread)}</span>

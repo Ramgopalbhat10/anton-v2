@@ -190,7 +190,8 @@ describe('threads', () => {
 		fireEvent.pointerEnter(row, { pointerType: 'mouse' });
 		const peek = await screen.findByRole('button', { name: 'Open thread' });
 		const card = peek.closest('.in-pop') as HTMLElement;
-		expect(within(card).getByText('Waiting on you')).toBeTruthy();
+		// The glyph says the state; no chip repeats it.
+		expect(within(card).getByRole('img', { name: 'Waiting on you' })).toBeTruthy();
 		expect(within(card).getByText('demo')).toBeTruthy();
 		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
 		expect(within(card).getByRole('link', { name: /#9 · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
