@@ -58,7 +58,7 @@ export function IconBtn({
 }
 
 /** How long the cube rests between turns, at random within this span. */
-const TURN_GAP_MS = [2600, 6500] as const;
+const TURN_GAP_MS = [1800, 4500] as const;
 
 /** A turn now and then, at random: a spin a third round, or a hop and a roll two thirds over; none with reduced motion. */
 function useTurns(): ['spin' | 'roll' | null, () => void] {

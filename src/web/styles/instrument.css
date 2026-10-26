@@ -1123,7 +1123,7 @@
 }
 .sg-spinner .sl-face {
 	transform-box: view-box;
-	animation: 2.1s var(--ease-sine) infinite;
+	animation: 1.3s var(--ease-sine) infinite;
 }
 .sg-spinner .sl-top {
 	fill: var(--lt);
@@ -1132,17 +1132,17 @@
 .sg-spinner .sl-left {
 	fill: var(--ll);
 	animation-name: sl-left;
-	animation-delay: 0.35s;
+	animation-delay: 0.22s;
 }
 .sg-spinner .sl-right {
 	fill: var(--lr);
 	animation-name: sl-right;
-	animation-delay: 0.7s;
+	animation-delay: 0.44s;
 }
 .sg-spinner .sl-eyes {
 	transform-box: fill-box;
 	transform-origin: 50% 50%;
-	animation: sl-blink 3.7s steps(1, end) infinite;
+	animation: sl-blink 2.8s steps(1, end) infinite;
 	transition: opacity 160ms var(--ease-sine);
 }
 @keyframes sl-top {
@@ -1194,10 +1194,10 @@
 
 /* A turn: the faces stop breathing and trade colours as they go round, so the light stays on top; a roll passes through a third of a turn's colours on its way. */
 .sg-spinner.is-spin .sl-cube {
-	animation: sl-spin 0.95s cubic-bezier(0.65, 0, 0.35, 1);
+	animation: sl-spin 0.62s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .sg-spinner.is-roll .sl-cube {
-	animation: sl-roll 1.25s cubic-bezier(0.55, 0, 0.3, 1);
+	animation: sl-roll 0.85s cubic-bezier(0.55, 0, 0.3, 1);
 }
 .sg-spinner:is(.is-spin, .is-roll) .sl-face {
 	animation-delay: 0s;
@@ -1205,11 +1205,11 @@
 	animation-fill-mode: both;
 }
 .sg-spinner.is-spin .sl-face {
-	animation-duration: 0.95s;
+	animation-duration: 0.62s;
 	animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
 }
 .sg-spinner.is-roll .sl-face {
-	animation-duration: 1.25s;
+	animation-duration: 0.85s;
 	animation-timing-function: cubic-bezier(0.55, 0, 0.3, 1);
 }
 .sg-spinner.is-spin .sl-top {
