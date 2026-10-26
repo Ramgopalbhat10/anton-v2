@@ -66,6 +66,8 @@ import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
+import { recordTraceEvent } from './services/response-trace.ts';
+import { getTrace } from './db/traces.ts';
 import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/subagent-runs.ts';
 import { installSubagentStop } from './flue/subagent-stop.ts';
 import { installToolResultCut } from './flue/tool-result-cut.ts';
@@ -135,6 +137,7 @@ observeRuntime((event) => {
 	recordAgentEvent(event);
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
+	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
 	recordJoinEvent(event as Parameters<typeof recordJoinEvent>[0]);
@@ -839,6 +842,13 @@ app.post('/api/sessions/:id/computer/control', async (c) => {
 	return c.json(await setComputerControl(c.req.param('id'), driver));
 });
 app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await computerScreenshot(c.req.param('id'))));
+// A reply's trace: its model and tool calls on one clock, what went into each call's context, and the cache.
+app.get('/api/sessions/:id/traces/:trace', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const trace = await getTrace(id, c.req.param('trace'));
+	if (!trace) throw new NotFoundError('That reply has no trace kept');
+	return c.json(trace);
+});
 app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
