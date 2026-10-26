@@ -191,10 +191,12 @@ describe('threads', () => {
 		const peek = await screen.findByRole('button', { name: 'Open thread' });
 		const card = peek.closest('.in-pop') as HTMLElement;
 		expect(within(card).getByText('Waiting on you')).toBeTruthy();
-		expect(within(card).getByText(/demo ·/)).toBeTruthy();
+		expect(within(card).getByText('demo')).toBeTruthy();
 		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
 		expect(within(card).getByRole('link', { name: /#9 · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
 		expect(within(card).getByRole('button', { name: 'Answer' })).toBeTruthy();
+		// Opening the thread is the peek's primary button.
+		expect(peek.className).toContain('sg-btn--primary');
 	});
 
 	it('shows what a thread made as chips: its newest file with a peek, and +N listing the rest, each opening beside the chat', async () => {
@@ -223,14 +225,38 @@ describe('threads', () => {
 		expect(more.textContent).toBe('+2');
 		expect(screen.getByText('#12')).toBeTruthy();
 		fireEvent.pointerEnter(more, { pointerType: 'mouse' });
-		expect(await screen.findByText('2 more files from this thread')).toBeTruthy();
-		expect(screen.getByText('stream-architecture.svg')).toBeTruthy();
+		expect(await screen.findByText('stream-architecture.svg')).toBeTruthy();
 		expect(screen.getByText('notes.md')).toBeTruthy();
+		// Just the files: no sizes, no counts, no directions.
+		expect(screen.queryByText(/KB|from this thread/)).toBeNull();
 		await userEvent.click(chip);
 		const viewer = await screen.findByRole('complementary', { name: 'Viewing home-1.png' });
 		expect(within(viewer).getByText('1 of 3')).toBeTruthy();
 		// The row stays where it is: the file opens beside the chat.
 		expect(router.state.location.pathname).toBe('/projects/space_1');
+	});
+
+	it('lists what a thread made in its peek, beside the button that opens it', async () => {
+		api.outputs.mockImplementation(async (id: string) => ({
+			source: 'saved',
+			at: null,
+			outputs: id === 'pr' ? ['a.png', 'b.md', 'c.svg', 'd.csv', 'e.txt', 'f.json'].map((path, index) => ({ path, size: 10, mtimeMs: 10 - index })) : [],
+		}));
+		withRouter(() => (
+			<>
+				<ThreadRow thread={threads[2]} />
+				<OutputViewerHost />
+			</>
+		));
+		const row = await screen.findByRole('article', { name: 'Add the endpoint' });
+		fireEvent.pointerEnter(row, { pointerType: 'mouse' });
+		const files = await screen.findByRole('list', { name: 'Files' });
+		const card = files.closest('.in-pop') as HTMLElement;
+		// Next steps take some of the room: a tile for the newest, then the rest as +N.
+		await waitFor(() => expect(within(files).getAllByRole('button').map((tile) => tile.getAttribute('aria-label'))).toEqual(['Open a.png', '5 more files']));
+		expect(within(card).getByRole('button', { name: 'Open thread' }).className).toContain('sg-btn--primary');
+		await userEvent.click(within(files).getByRole('button', { name: '5 more files' }));
+		expect(await screen.findByRole('complementary', { name: 'Viewing b.md' })).toBeTruthy();
 	});
 
 	it('opens a file the coordinator passes on from a thread, by the thread or by the path the thread gave', async () => {
@@ -478,8 +504,13 @@ describe('project overview numbers', () => {
 		withRouter(() => <ProjectPanel space={{ ...space, repos: [] }} threads={[...runs, ...threads]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
 		const strip = await screen.findByRole('group', { name: 'Recent runs' });
 		expect(within(strip).getAllByRole('button').map((cell) => cell.getAttribute('aria-label'))).toEqual(['Morning briefing · Oct 20: Done', 'Morning briefing · Oct 21: Failed', 'Morning briefing · Oct 22: Done']);
-		expect(screen.getByText('3 runs · last 1h ago')).toBeTruthy();
+		expect(screen.getByText('1h ago')).toBeTruthy();
 		expect(screen.getByText('in 5h')).toBeTruthy();
 		expect(screen.getByText('no repository')).toBeTruthy();
+		expect(screen.getByText('Daily')).toBeTruthy();
+		// Named by its runs' title once it has one, else by what it does; the instructions fold open under it.
+		expect(screen.getByRole('button', { name: 'Brief me' }).getAttribute('aria-expanded')).toBe('false');
+		await userEvent.click(screen.getByRole('button', { name: 'Brief me' }));
+		expect(screen.getAllByText('Brief me')).toHaveLength(2);
 	});
 });

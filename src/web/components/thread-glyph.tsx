@@ -42,7 +42,7 @@ const CHECK = 'M5.4 8.3l1.8 1.8 3.5-3.8';
  * A state as a small drawn mark, so a list reads at a glance without words:
  * a turning dashed ring while it works, an amber dot that calls out while it
  * waits on you, red with a bang when it failed, dotted while queued, a green
- * check when ready, filled when approved, and a faint check once done.
+ * check when ready, filled when approved, and a green check on a soft disc once done.
  */
 export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; size?: number; className?: string; title?: string }) {
 	const color = STATE_COLOR[kind];
@@ -95,8 +95,8 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 				</>
 			) : (
 				<>
-					<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-					<path d={CHECK} stroke="var(--neutral-500)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="6.75" fill="color-mix(in oklab, var(--success-base) 20%, transparent)" />
+					<path d={CHECK} stroke="var(--success-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
 				</>
 			)}
 		</svg>

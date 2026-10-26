@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowLeftRight, ChartGantt, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';
 import { HoverPeek } from '@/components/hover-peek';
-import { useModels } from '@/components/model-picker';
+import { ModelLogo, useModels } from '@/components/model-picker';
 import { Logo } from '@/components/illustrations';
 import { Caption, Chip, Count, IconTile, Segmented, SegmentedItem, SplitBar, Status, type Tone } from '@/components/instrument';
 import { Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
@@ -13,8 +14,7 @@ import { AgentTile, lookOf, titleOf } from '@/components/subagents';
 import { describeTool } from '@/components/tool-describe';
 import { api } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
-import { vendorHue } from '@/lib/model-catalog';
-import { logoFor, vendorSlug } from '@/lib/provider-logos';
+import { logoFor } from '@/lib/provider-logos';
 import {
 	autoZoom,
 	callNumber,
@@ -114,7 +114,7 @@ export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string;
 function TraceHeader({ sub, children, onClose }: { sub: ReactNode; children?: ReactNode; onClose: () => void }) {
 	return (
 		<header className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-(--border-subtle) px-4">
-			<IconTile icon={ChartGantt} tone="accent" />
+			<IconTile icon={TraceIcon} tone="accent" />
 			<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
 				<h2 className="m-0 shrink-0 text-[13.5px] font-medium text-(--text-primary)">Trace</h2>
 				{sub ? (
@@ -535,27 +535,6 @@ function useModelNames(): ModelNames {
 			short: (span) => served(span) ?? shortModel(span.model),
 		};
 	}, [models.data]);
-}
-
-/** A model's vendor logo on a small tile, or its initials when the set has no logo. */
-function ModelLogo({ model, size = 16, title }: { model: string; size?: number; title?: string }) {
-	const logo = logoFor({ id: model });
-	const vendor = vendorSlug({ id: model });
-	const hue = vendorHue(vendor);
-	return (
-		<span
-			aria-hidden={title ? undefined : true}
-			title={title}
-			className="inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
-			style={
-				logo
-					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
-					: { width: size, height: size, fontSize: size * 0.45, color: hue, background: `${hue}1f`, boxShadow: `inset 0 0 0 1px ${hue}33` }
-			}
-		>
-			{logo ? <span className="flex text-(--text-primary)" dangerouslySetInnerHTML={{ __html: logo }} /> : vendor.replace(/[^a-z0-9]/gi, '').slice(0, 2)}
-		</span>
-	);
 }
 
 /** A gateway's logo and name: OpenRouter, a ChatGPT plan, Claude Code. */
@@ -1272,5 +1251,5 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 
 /** The footer's action: opens the reply's trace. */
 export function TraceButton({ onOpen }: { onOpen: () => void }) {
-	return <IconBtn size="xs" icon={ChartGantt} label="Trace this reply" onClick={onOpen} />;
+	return <IconBtn size="xs" icon={TraceIcon} label="Trace this reply" onClick={onOpen} />;
 }

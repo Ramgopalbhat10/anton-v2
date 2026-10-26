@@ -1,16 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, GitPullRequest, type LucideIcon, MessageCircleReply, Play, RotateCcw, Square, Wrench } from 'lucide-react';
+import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
-import { Caption, Chip, Status } from '@/components/instrument';
+import { Chip, type Tone } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
-import { ThreadGlyph } from '@/components/thread-glyph';
-import { api, type Output, outputUrl, repoShort, type Session, type ThreadState } from '@/lib/api';
+import { Glyph, type GlyphKind, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
+import { api, isChat, outputUrl, repoShort, type Session, type ThreadState } from '@/lib/api';
 import { categoryInfo, categoryOf, extensionOf, nameOf } from '@/lib/artifacts';
-import { age, elapsed, fileSize } from '@/lib/format';
+import { age, elapsed } from '@/lib/format';
 import { failed, STATE_LOOK, stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { useThreadOutputs } from '@/lib/thread-outputs';
 import { nowText } from '@/lib/now-text';
@@ -18,16 +18,30 @@ import { cn } from '@/lib/utils';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
 
-/** The state in a word with its dot, as on a card or a row: amber needs you, cyan works, emerald is ready. */
+/** A state's chip tone: amber needs you, red failed, cyan works, green ready or done. */
+const KIND_CHIP: Record<GlyphKind, Tone> = {
+	failed: 'danger',
+	waiting: 'warning',
+	working: 'accent',
+	queued: 'neutral',
+	review: 'success',
+	landing: 'success',
+	idle: 'neutral',
+	resolved: 'success',
+};
+
+/** The state as a chip: its glyph and a word, as on a card or a row. */
 export function ThreadStatePill({ thread, compact }: { thread: Session; compact?: boolean }) {
 	const state = stateOf(thread);
+	const kind = glyphKind(thread);
 	const look = STATE_LOOK[state];
-	const broken = state === 'waiting' && failed(thread);
+	const broken = kind === 'failed' || (state === 'waiting' && failed(thread));
 	const label = broken ? (thread.status === 'error' ? 'Failed' : 'Checks failing') : compact ? look.short : look.label;
 	return (
-		<Status tone={broken ? 'danger' : look.tone === 'neutral' ? 'neutral' : look.tone} pulse={state === 'working'}>
+		<Chip tone={broken ? 'danger' : KIND_CHIP[kind]}>
+			<Glyph kind={kind} size={11} />
 			{label}
-		</Status>
+		</Chip>
 	);
 }
 
@@ -122,7 +136,7 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 }
 
 /** A pull request's state as a chip colour: merged violet, failing red, conflicted amber, open green. */
-function prTone(thread: Session): { tone?: 'success' | 'danger' | 'warning'; color?: string; title: string } {
+export function prTone(thread: Session): { tone?: 'success' | 'danger' | 'warning'; color?: string; title: string } {
 	const pr = thread.pullRequest;
 	const title = prSummary(thread) ?? '';
 	if (!pr) return { title };
@@ -161,6 +175,14 @@ export function ThreadChips({ thread }: { thread: Session }) {
 	);
 }
 
+/** A pull request icon's colour by its chip's tone. */
+const PR_ICON: Record<'success' | 'danger' | 'warning' | 'none', string> = {
+	success: 'var(--success-text)',
+	danger: 'var(--danger-text)',
+	warning: 'var(--warning-text)',
+	none: 'var(--icon-tertiary)',
+};
+
 /** A chip that does something: the look of a Chip, with a hover and a click of its own. */
 const CHIP_BUTTON =
 	'inline-flex h-5 max-w-[168px] shrink-0 items-center gap-1 rounded-[6px] border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-[11px] leading-none whitespace-nowrap text-(--text-secondary) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) hover:bg-(--alpha-white-7) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
@@ -183,28 +205,54 @@ function FileMark({ item }: { item: ViewerItem }) {
 	return <Icon icon={info.icon} size={11} className={cn('shrink-0', info.tone)} />;
 }
 
-/** The file larger, with its name, size and when it was saved: what a file chip shows on hover. */
-function FilePeek({ item, output }: { item: ViewerItem; output: Output }) {
+/** The file larger, with its name: what a file chip shows on hover. */
+function FilePeek({ item }: { item: ViewerItem }) {
 	return (
 		<>
 			<div className="relative h-[148px] overflow-hidden rounded-[8px] border border-(--border-subtle) bg-(--bg-inset)">
 				{isImagePath(item.path) ? <OutputThumb item={item} fit="contain" /> : <FileFace path={item.path} size={24} />}
 			</div>
-			<div className="flex min-w-0 items-baseline gap-2">
+			<div className="flex min-w-0 items-center gap-2">
+				<FileMark item={item} />
 				<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)" title={item.path}>
 					{nameOf(item.path)}
 				</span>
-				<Caption className="shrink-0">
-					{extensionOf(item.path)} · {fileSize(output.size)}
-				</Caption>
+				<Chip mono className="shrink-0">
+					{extensionOf(item.path)}
+				</Chip>
 			</div>
-			<Caption>Saved {age(new Date(output.mtimeMs).toISOString())} ago · click to open</Caption>
 		</>
 	);
 }
 
-/** How many files the +N chip's list shows before it points to the Library. */
+/** How many files the +N chip's list shows before its last row opens the rest. */
 const LISTED_FILES = 8;
+
+/** Files as rows of a thumbnail and a name, each opening in the viewer; past `LISTED_FILES`, a last row opens the rest. */
+function FileList({ items, open }: { items: ViewerItem[]; open: (item: ViewerItem) => void }) {
+	const more = items.length - LISTED_FILES;
+	const row = 'flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	return (
+		<div className="-m-1.5 flex flex-col">
+			{items.slice(0, LISTED_FILES).map((item) => (
+				<button key={item.path} type="button" onClick={() => open(item)} className={row}>
+					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-(--border-subtle) bg-(--bg-inset)">
+						{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
+					</span>
+					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>
+						{nameOf(item.path)}
+					</span>
+				</button>
+			))}
+			{more > 0 ? (
+				<button type="button" onClick={() => open(items[LISTED_FILES])} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-primary)')}>
+					<span className="in-num inline-flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-dashed border-(--border-strong) text-[10px]">+{more}</span>
+					<span className="text-[12px]">More</span>
+				</button>
+			) : null}
+		</div>
+	);
+}
 
 /**
  * What a thread made, as chips after its pull request: its newest file, a
@@ -220,7 +268,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 	const [first, ...rest] = items;
 	return (
 		<span className="flex min-w-0 items-center gap-1" onPointerEnter={() => onPeek?.(true)} onPointerLeave={() => onPeek?.(false)}>
-			<HoverPeek content={<FilePeek item={first} output={outputs[0]} />} width={268} openDelay={200}>
+			<HoverPeek content={<FilePeek item={first} />} width={268} openDelay={200}>
 				<button
 					type="button"
 					aria-label={`Open ${nameOf(first.path)}`}
@@ -238,32 +286,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 				<HoverPeek
 					width={268}
 					openDelay={200}
-					content={
-						<>
-							<Caption>
-								{rest.length} more {rest.length === 1 ? 'file' : 'files'} from this thread
-							</Caption>
-							<div className="-mx-1.5 flex flex-col">
-								{rest.slice(0, LISTED_FILES).map((item, index) => (
-									<button
-										key={item.path}
-										type="button"
-										onClick={() => open(item)}
-										className="flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-									>
-										<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-(--border-subtle) bg-(--bg-inset)">
-											{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
-										</span>
-										<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>
-											{nameOf(item.path)}
-										</span>
-										<span className="in-num shrink-0 text-[10.5px] text-(--text-disabled)">{fileSize(outputs[index + 1].size)}</span>
-									</button>
-								))}
-							</div>
-							{rest.length > LISTED_FILES ? <Caption>and {rest.length - LISTED_FILES} more in the thread's Library</Caption> : null}
-						</>
-					}
+					content={<FileList items={rest} open={open} />}
 				>
 					<button
 						type="button"
@@ -292,6 +315,38 @@ function phaseOf(thread: Session, now: number): string {
 }
 
 /**
+ * What a thread made, in its peek's footer: a tile for each of its newest
+ * files, as many as there is `room` for, then +N; each opens in the viewer.
+ */
+function PeekFiles({ thread, room }: { thread: Session; room: number }) {
+	const outputs = useThreadOutputs(thread.id);
+	const items: ViewerItem[] = outputs.map((output) => ({ sessionId: thread.id, path: output.path }));
+	const open = (item: ViewerItem) => openViewer(item, items, thread.spaceId ?? null);
+	const shown = items.length > room ? items.slice(0, room - 1) : items;
+	const more = items.length - shown.length;
+	const tile =
+		'inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--bg-inset) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)';
+	return (
+		<span role="list" aria-label="Files" className="flex min-w-0 flex-1 items-center gap-1">
+			{shown.map((item) => (
+				<span role="listitem" key={item.path} className="inline-flex">
+					<button type="button" title={nameOf(item.path)} aria-label={`Open ${nameOf(item.path)}`} onClick={() => open(item)} className={tile}>
+						{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
+					</button>
+				</span>
+			))}
+			{more > 0 ? (
+				<span role="listitem" className="inline-flex">
+					<button type="button" aria-label={`${more} more files`} onClick={() => open(items[shown.length])} className={cn(tile, 'in-num border-dashed text-[10.5px] text-(--text-tertiary) hover:text-(--text-primary)')}>
+						+{more}
+					</button>
+				</span>
+			) : null}
+		</span>
+	);
+}
+
+/**
  * Everything a row leaves out, on hover: its state, where it works and for
  * how long, what it last said or asks, its pull request, and its next steps.
  */
@@ -312,11 +367,16 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{thread.title}</span>
-					<span className="flex min-w-0 items-center gap-2">
+					<span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
 						<ThreadStatePill thread={thread} />
-						<Caption className="truncate">
-							{repoShort(thread)} · {phaseOf(thread, now)}
-						</Caption>
+						<span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)">
+							<Icon icon={isChat(thread) ? MessageSquare : Github} size={11} className="text-(--icon-tertiary)" />
+							<span className="truncate">{repoShort(thread)}</span>
+						</span>
+						<span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)">
+							<Icon icon={Clock} size={11} className="text-(--icon-tertiary)" />
+							{phaseOf(thread, now)}
+						</span>
 					</span>
 				</div>
 			</div>
@@ -342,21 +402,16 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 				)
 			) : null}
 			{pr && thread.prUrl ? (
-				<a
-					href={thread.prUrl}
-					target="_blank"
-					rel="noreferrer"
-					className="flex min-w-0 items-center gap-1.5 self-start text-[12px] text-(--text-secondary) outline-none hover:text-(--text-primary) hover:underline focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={GitPullRequest} size={12} className={thread.pullRequest?.checks === 'failed' ? 'text-(--danger-text)' : 'text-(--icon-tertiary)'} />
+				<a href={thread.prUrl} target="_blank" rel="noreferrer" className={cn(CHIP_BUTTON, 'max-w-full self-start')}>
+					<Icon icon={GitPullRequest} size={11} style={{ color: prTone(thread).color ?? PR_ICON[prTone(thread).tone ?? 'none'] }} />
 					<span className="truncate">{pr}</span>
 					<Icon icon={ArrowUpRight} size={11} className="text-(--icon-tertiary)" />
 				</a>
 			) : null}
-			<div className="flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />
-				<span className="flex-1" />
-				<Btn size="xs" variant="ghost" icon={Play} onClick={() => open(thread)}>
+				<Btn size="xs" variant="primary" onClick={() => open(thread)}>
 					Open thread
 				</Btn>
 			</div>

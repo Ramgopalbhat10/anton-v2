@@ -317,6 +317,8 @@ export type Automation = {
 	seen: number[];
 	/** The project its tasks start in, as threads. */
 	spaceId?: string | null;
+	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
+	title?: string | null;
 	createdAt: string;
 };
 
