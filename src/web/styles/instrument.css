@@ -1092,14 +1092,18 @@
 
 /*
  * The loader: Anton's cube, its faces taking turns. Each face lifts out
- * along its own edge and lights up, top, left, then right, and settles
- * back, so the cube seems to turn over while it waits; its eyes blink now
- * and then. `--lt`, `--ll` and `--lr` colour the top, left and right faces.
+ * along its own edge and brightens, top, left, then right, and eases back,
+ * so the cube seems to breathe while it waits; its eyes blink now and then.
+ * Now and again (`Spinner` picks when) it spins a third of a turn in place
+ * or hops and rolls two thirds over. Its outline is the same at every third
+ * of a turn, so the faces trade colours as they go and it lands looking as
+ * it started. `--lt`, `--ll` and `--lr` colour the top, left and right faces.
  */
 .sg-spinner {
 	--lt: var(--cyan-200);
 	--ll: var(--cyan-400);
 	--lr: var(--cyan-700);
+	--ease-sine: cubic-bezier(0.37, 0, 0.63, 1);
 	display: inline-flex;
 	flex: 0 0 auto;
 }
@@ -1113,9 +1117,13 @@
 	--ll: rgba(6, 24, 31, 0.8);
 	--lr: rgba(6, 24, 31, 0.95);
 }
+.sg-spinner .sl-cube {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+}
 .sg-spinner .sl-face {
 	transform-box: view-box;
-	animation: 1.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+	animation: 2.1s var(--ease-sine) infinite;
 }
 .sg-spinner .sl-top {
 	fill: var(--lt);
@@ -1124,63 +1132,190 @@
 .sg-spinner .sl-left {
 	fill: var(--ll);
 	animation-name: sl-left;
-	animation-delay: 0.25s;
+	animation-delay: 0.35s;
 }
 .sg-spinner .sl-right {
 	fill: var(--lr);
 	animation-name: sl-right;
-	animation-delay: 0.5s;
+	animation-delay: 0.7s;
 }
 .sg-spinner .sl-eyes {
 	transform-box: fill-box;
 	transform-origin: 50% 50%;
-	animation: sl-blink 3s steps(1, end) infinite;
-	animation-delay: 0.25s;
+	animation: sl-blink 3.7s steps(1, end) infinite;
+	transition: opacity 160ms var(--ease-sine);
 }
 @keyframes sl-top {
 	0%,
-	45%,
+	50%,
 	100% {
 		transform: none;
-		filter: none;
+		fill: var(--lt);
 	}
-	18% {
-		transform: translateY(-1.7px);
-		filter: brightness(1.18);
+	25% {
+		transform: translateY(-1.5px);
+		fill: color-mix(in oklab, var(--lt) 82%, white);
 	}
 }
 @keyframes sl-left {
 	0%,
-	45%,
+	50%,
 	100% {
 		transform: none;
-		filter: none;
+		fill: var(--ll);
 	}
-	18% {
-		transform: translate(-1.45px, 0.85px);
-		filter: brightness(1.3);
+	25% {
+		transform: translate(-1.3px, 0.75px);
+		fill: color-mix(in oklab, var(--ll) 78%, white);
 	}
 }
 @keyframes sl-right {
 	0%,
-	45%,
+	50%,
 	100% {
 		transform: none;
-		filter: none;
+		fill: var(--lr);
 	}
-	18% {
-		transform: translate(1.45px, 0.85px);
-		filter: brightness(1.6);
+	25% {
+		transform: translate(1.3px, 0.75px);
+		fill: color-mix(in oklab, var(--lr) 70%, var(--ll));
 	}
 }
 @keyframes sl-blink {
 	0%,
-	90%,
+	92%,
 	100% {
 		transform: none;
 	}
-	94% {
+	95% {
 		transform: scaleY(0.15);
+	}
+}
+
+/* A turn: the faces stop breathing and trade colours as they go round, so the light stays on top; a roll passes through a third of a turn's colours on its way. */
+.sg-spinner.is-spin .sl-cube {
+	animation: sl-spin 0.95s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.sg-spinner.is-roll .sl-cube {
+	animation: sl-roll 1.25s cubic-bezier(0.55, 0, 0.3, 1);
+}
+.sg-spinner:is(.is-spin, .is-roll) .sl-face {
+	animation-delay: 0s;
+	animation-iteration-count: 1;
+	animation-fill-mode: both;
+}
+.sg-spinner.is-spin .sl-face {
+	animation-duration: 0.95s;
+	animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+}
+.sg-spinner.is-roll .sl-face {
+	animation-duration: 1.25s;
+	animation-timing-function: cubic-bezier(0.55, 0, 0.3, 1);
+}
+.sg-spinner.is-spin .sl-top {
+	animation-name: sl-top-to-right;
+}
+.sg-spinner.is-spin .sl-right {
+	animation-name: sl-right-to-left;
+}
+.sg-spinner.is-spin .sl-left {
+	animation-name: sl-left-to-top;
+}
+.sg-spinner.is-roll .sl-top {
+	animation-name: sl-top-to-left;
+}
+.sg-spinner.is-roll .sl-right {
+	animation-name: sl-right-to-top;
+}
+.sg-spinner.is-roll .sl-left {
+	animation-name: sl-left-to-right;
+}
+.sg-spinner:is(.is-spin, .is-roll) .sl-eyes {
+	opacity: 0;
+}
+@keyframes sl-spin {
+	from {
+		transform: none;
+	}
+	to {
+		transform: rotate(120deg);
+	}
+}
+@keyframes sl-roll {
+	0% {
+		transform: none;
+	}
+	14% {
+		transform: translateY(0.6px) scale(1.06, 0.9);
+	}
+	55% {
+		transform: translateY(-3px) rotate(180deg);
+	}
+	86% {
+		transform: translateY(0.4px) rotate(240deg) scale(1.05, 0.93);
+	}
+	100% {
+		transform: rotate(240deg);
+	}
+}
+@keyframes sl-top-to-right {
+	from {
+		fill: var(--lt);
+	}
+	to {
+		fill: var(--lr);
+	}
+}
+@keyframes sl-right-to-left {
+	from {
+		fill: var(--lr);
+	}
+	to {
+		fill: var(--ll);
+	}
+}
+@keyframes sl-left-to-top {
+	from {
+		fill: var(--ll);
+	}
+	to {
+		fill: var(--lt);
+	}
+}
+@keyframes sl-top-to-left {
+	0% {
+		fill: var(--lt);
+	}
+	40% {
+		fill: var(--lr);
+	}
+	86%,
+	100% {
+		fill: var(--ll);
+	}
+}
+@keyframes sl-right-to-top {
+	0% {
+		fill: var(--lr);
+	}
+	40% {
+		fill: var(--ll);
+	}
+	86%,
+	100% {
+		fill: var(--lt);
+	}
+}
+@keyframes sl-left-to-right {
+	0% {
+		fill: var(--ll);
+	}
+	40% {
+		fill: var(--lt);
+	}
+	86%,
+	100% {
+		fill: var(--lr);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
