@@ -58,3 +58,15 @@ test('a task on the none network is offline', { skip: noDocker }, async () => {
 	const { machine } = await dockerSandboxProvider({ baseImage: IMAGE, network: 'none' }).acquire({ key: keyFor('offline'), state: null, image: null, baseImage: null, ports: [], resources });
 	assert.equal(out(await machine.exec('ls /sys/class/net')), 'lo');
 });
+
+test('a command past its timeout is stopped inside the container too', { skip: noDocker }, async () => {
+	const { machine } = await dockerSandboxProvider({ baseImage: IMAGE }).acquire({ key: keyFor('timeout'), state: null, image: null, baseImage: null, ports: [], resources });
+	const started = Date.now();
+	const result = await machine.exec('echo begun; sleep 300', { timeoutMs: 2000 });
+	assert.equal(result.exitCode, 124);
+	assert.equal(out(result), 'begun');
+	assert.ok(Date.now() - started < 15_000, 'returned at the timeout');
+	const left = out(await machine.exec('cat /proc/[0-9]*/cmdline 2>/dev/null | tr "\\0" " "'));
+	assert.ok(!left.includes('sleep 300'), 'nothing left running');
+	assert.equal(out(await machine.exec('echo $((1 + 1))', { timeoutMs: 10_000 })), '2', 'a quick command is unchanged');
+});

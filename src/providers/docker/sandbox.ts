@@ -94,6 +94,15 @@ export function dockerSandboxProvider(options: DockerOptions): SandboxProvider {
 	};
 }
 
+const KILL_GRACE_S = 5;
+
+/** The command under the image's `timeout`, which exits 124 when it stops it; as it is in an image without one. */
+function timed(command: string, timeoutMs: number): string[] {
+	const seconds = String(Math.ceil(timeoutMs / 1000));
+	const script = `command -v timeout >/dev/null && exec timeout -k ${KILL_GRACE_S} "$1" bash -lc "$0"; exec bash -lc "$0"`;
+	return ['bash', '-c', script, command, seconds];
+}
+
 function dockerMachine(bin: string, container: string): Machine {
 	const envArgs = (env: Record<string, string>) => Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]);
 	const published = async (port: number) => {
@@ -106,8 +115,11 @@ function dockerMachine(bin: string, container: string): Machine {
 		root: ROOT,
 		exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 			const env = { TERM: 'xterm-256color', ...UNSIGNED, ...options.env };
-			const args = ['exec', '-i', '-w', options.cwd ?? ROOT, ...envArgs(env), container, 'bash', '-lc', command];
-			return runProcess(bin, args, { env: process.env as Record<string, string>, stdin: options.stdin, signal: options.signal, timeoutMs: options.timeoutMs });
+			const args = ['exec', '-i', '-w', options.cwd ?? ROOT, ...envArgs(env), container, ...(options.timeoutMs ? timed(command, options.timeoutMs) : ['bash', '-lc', command])];
+			// Stopping `docker exec` leaves the command running in the container, so the container stops it at the
+			// timeout and the client waits a little longer for that.
+			const timeoutMs = options.timeoutMs && options.timeoutMs + KILL_GRACE_S * 1000 + 5000;
+			return runProcess(bin, args, { env: process.env as Record<string, string>, stdin: options.stdin, signal: options.signal, timeoutMs });
 		},
 		previewUrl: async (port) => {
 			const host = await published(port);
