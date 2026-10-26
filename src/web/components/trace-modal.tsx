@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowLeftRight, ChartGantt, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Pause, Play, Plus, RotateCcw, Search, Sparkles, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, ChartGantt, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Disclosure } from '@/components/disclosure';
@@ -8,7 +8,7 @@ import { HoverPeek } from '@/components/hover-peek';
 import { useModels } from '@/components/model-picker';
 import { Logo } from '@/components/illustrations';
 import { Caption, Chip, Count, IconTile, Segmented, SegmentedItem, SplitBar, Status, type Tone } from '@/components/instrument';
-import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
 import { AgentTile, lookOf, titleOf } from '@/components/subagents';
 import { describeTool } from '@/components/tool-describe';
 import { api } from '@/lib/api';
@@ -43,7 +43,7 @@ import { type AgentSpan, cacheShare, cacheVerdict, type CompactionSpan, type Mod
  * model call and tool call it made on one clock, each subagent's calls under
  * the call that started it, and the step picked in a card beside them: what
  * went into a model call's context, whether the provider's cache held and
- * why, and each tool call's input and output. It can be replayed.
+ * why, and each tool call's input and output.
  */
 
 const PART_COLORS: Record<TracePart, string> = {
@@ -69,8 +69,6 @@ const TONE_TEXT: Record<Tone, string> = {
 	warning: 'text-(--warning-text)',
 	danger: 'text-(--danger-text)',
 };
-
-const SPEEDS = [1, 2, 5, 10, 25, 50];
 
 /** Waiting on others, as the hatching under a group's own calls. */
 const hatch = (hue: string): CSSProperties => ({
@@ -216,7 +214,6 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	const picked = useMemo(() => (selected ? findNode(tree, selected) : null), [tree, selected]);
 	const search = useRef<HTMLInputElement>(null);
-	const replay = useReplay(trace.durationMs);
 	const line = useTimeline(trace);
 	const total = line.total;
 
@@ -267,14 +264,11 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 			} else if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && index >= 0 && rows[index].children.length) {
 				event.preventDefault();
 				if ((event.key === 'ArrowLeft') !== rows[index].folded) toggle(rows[index].key);
-			} else if (event.key === ' ' && !(event.target instanceof HTMLButtonElement)) {
-				event.preventDefault();
-				replay.toggle();
 			}
 		};
 		window.addEventListener('keydown', onKey, true);
 		return () => window.removeEventListener('keydown', onKey, true);
-	}, [rows, selected, query, onClose, select, toggle, replay, line]);
+	}, [rows, selected, query, onClose, select, toggle, line]);
 
 	// Pinch or Ctrl/⌘ and the wheel stretch the timeline about the pointer; the wheel alone scrolls as usual.
 	useEffect(() => {
@@ -291,15 +285,6 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 		element.addEventListener('wheel', onWheel, { passive: false });
 		return () => element.removeEventListener('wheel', onWheel);
 	}, [line]);
-
-	// While it replays, the view follows the playhead.
-	useEffect(() => {
-		const element = line.scroller.current;
-		if (!element || replay.head === null || !replay.playing) return;
-		const x = line.tree + LEAD + (replay.head / total) * line.width;
-		const view = element.clientWidth;
-		if (x < element.scrollLeft + line.tree + 40 || x > element.scrollLeft + view - 60) element.scrollLeft = x - line.tree - (view - line.tree) * 0.3;
-	}, [replay.head, replay.playing, line.tree, line.width, total, line.scroller]);
 
 	// As many time marks as fit their labels, about one per 80px of track.
 	const ticks = useMemo(() => timeTicks(total, Math.max(2, Math.floor(line.width / 80))), [total, line.width]);
@@ -325,9 +310,9 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 			<div className="relative flex min-h-0 flex-1 flex-col">
 				<div ref={line.bind} role="tree" aria-label="Steps" className="trace-scroll relative min-h-0 flex-1 overflow-auto overscroll-contain">
 					<div className="relative min-h-full" style={{ width: line.tree + line.outer }}>
-						<TimeAxis line={line} ticks={ticks} head={replay.head} changes={changes} names={names} count={trace.spans.length} onScrub={replay.scrub} />
+						<TimeAxis line={line} ticks={ticks} changes={changes} names={names} count={trace.spans.length} />
 						<div className="relative">
-							<GridLines line={line} ticks={ticks} head={replay.head} changes={changes} />
+							<GridLines line={line} ticks={ticks} changes={changes} />
 							{rows.map((row) => (
 								<StepRow
 									key={row.key}
@@ -335,7 +320,6 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 									trace={trace}
 									line={line}
 									names={names}
-									head={replay.head}
 									slowest={stats.slowest}
 									switched={changes.find((change) => change.span === row.span?.id) ?? null}
 									selected={row.key === selected}
@@ -358,7 +342,7 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 				</div>
 				{picked ? <StepCard node={picked} trace={trace} names={names} onClose={() => setSelected(null)} onSelect={select} /> : null}
 			</div>
-			<TraceFooter replay={replay} line={line} />
+			<TraceFooter line={line} />
 		</>
 	);
 }
@@ -444,26 +428,17 @@ function ColumnGrip({ line }: { line: Timeline }) {
 function TimeAxis({
 	line,
 	ticks,
-	head,
 	changes,
 	names,
 	count,
-	onScrub,
 }: {
 	line: Timeline;
 	ticks: number[];
-	head: number | null;
 	changes: ModelChange[];
 	names: ModelNames;
 	count: number;
-	onScrub: (ms: number) => void;
 }) {
-	const track = useRef<HTMLDivElement>(null);
 	const total = line.total;
-	const scrubAt = (clientX: number) => {
-		const box = track.current?.getBoundingClientRect();
-		if (box) onScrub(Math.max(0, Math.min(1, (clientX - box.left) / box.width)) * total);
-	};
 	return (
 		<div className="sticky top-0 z-[4] flex h-8 border-b border-(--border-subtle) bg-(--pop-bg)">
 			<div className={cn(STICKY, 'z-[2] flex shrink-0 items-center gap-1.5 px-4 text-(--text-tertiary)')} style={{ width: line.tree }}>
@@ -472,17 +447,8 @@ function TimeAxis({
 				<Count>{count}</Count>
 				<ColumnGrip line={line} />
 			</div>
-			<div
-				className="relative shrink-0 cursor-col-resize"
-				style={{ width: line.outer }}
-				onPointerDown={(event) => {
-					event.currentTarget.setPointerCapture(event.pointerId);
-					scrubAt(event.clientX);
-				}}
-				onPointerMove={(event) => event.buttons === 1 && scrubAt(event.clientX)}
-				title="Drag to scrub through the reply"
-			>
-				<div ref={track} className="absolute inset-y-0" style={{ left: LEAD, width: line.width }}>
+			<div className="relative shrink-0" style={{ width: line.outer }}>
+				<div className="absolute inset-y-0" style={{ left: LEAD, width: line.width }}>
 					{ticks.map((tick) => (
 						<span key={tick} className="in-num absolute top-1/2 -translate-y-1/2 pl-1.5 text-[10.5px] whitespace-nowrap text-(--text-disabled)" style={{ left: pos(tick, total) }}>
 							{seconds(tick)}
@@ -499,9 +465,6 @@ function TimeAxis({
 							{names.short(change.to)}
 						</span>
 					))}
-					{head !== null ? (
-						<span className="absolute top-1/2 z-[2] size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--text-primary) shadow-[0_0_0_3px_var(--bg-overlay)]" style={{ left: pos(head, total) }} />
-					) : null}
 				</div>
 				<StretchGrip line={line} />
 			</div>
@@ -542,7 +505,7 @@ function StretchGrip({ line }: { line: Timeline }) {
 	);
 }
 
-function GridLines({ line, ticks, head, changes }: { line: Timeline; ticks: number[]; head: number | null; changes: ModelChange[] }) {
+function GridLines({ line, ticks, changes }: { line: Timeline; ticks: number[]; changes: ModelChange[] }) {
 	const total = line.total;
 	return (
 		<div aria-hidden className="pointer-events-none absolute inset-y-0" style={{ left: line.tree + LEAD, width: line.width }}>
@@ -552,7 +515,6 @@ function GridLines({ line, ticks, head, changes }: { line: Timeline; ticks: numb
 			{changes.map((change) => (
 				<span key={change.span} className="absolute inset-y-0 w-0 border-l border-dashed border-(--warning-border)" style={{ left: pos(change.at, total) }} />
 			))}
-			{head !== null ? <span className="absolute inset-y-0 z-[1] w-px bg-(--text-secondary) opacity-70" style={{ left: pos(head, total) }} /> : null}
 		</div>
 	);
 }
@@ -704,7 +666,6 @@ function StepRow({
 	trace,
 	line,
 	names,
-	head,
 	slowest,
 	switched,
 	selected,
@@ -715,7 +676,6 @@ function StepRow({
 	trace: Trace;
 	line: Timeline;
 	names: ModelNames;
-	head: number | null;
 	slowest: string | null;
 	switched: ModelChange | null;
 	selected: boolean;
@@ -775,20 +735,16 @@ function StepRow({
 			</div>
 			<div className="relative h-full shrink-0" style={{ width: line.outer }}>
 				<div className="absolute inset-y-0" style={{ left: LEAD, width: line.width }}>
-					<Bar row={row} trace={trace} total={line.total} head={head} slowest={slowest === row.span?.id} />
+					<Bar row={row} trace={trace} total={line.total} slowest={slowest === row.span?.id} />
 				</div>
 			</div>
 		</div>
 	);
 }
 
-/** How much of a span the replay has reached: 0 before it starts, 1 once it ends. */
-const reached = (start: number, duration: number, head: number | null) => (head === null ? 1 : duration <= 0 ? (head >= start ? 1 : 0) : Math.max(0, Math.min(1, (head - start) / duration)));
-
-function Bar({ row, trace, total, head, slowest }: { row: TraceRow; trace: Trace; total: number; head: number | null; slowest: boolean }) {
+function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; total: number; slowest: boolean }) {
 	const span = row.span;
 	const duration = Math.max(0, row.end - row.start);
-	const shown = reached(row.start, duration, head);
 	const end = row.start + duration;
 	// The label goes after the bar, into the room kept right of the track, unless a long one would run off it.
 	const nearEnd = end / total > 0.9 && row.start / total > 0.35;
@@ -801,147 +757,53 @@ function Bar({ row, trace, total, head, slowest }: { row: TraceRow; trace: Trace
 	const cost = span?.kind === 'model' ? (span.usage?.cost ?? 0) : row.group ? traceStats(trace, row.group === 'main' ? undefined : row.group).cost : 0;
 	return (
 		<>
-			{shown > 0 ? (
-				row.group ? (
-					<div className="absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-[4px]" style={{ left: pos(row.start, total), width: width(duration * shown), ...hatch(row.hue) }}>
-						{own.map((call) => {
-							const part = reached(call.start, call.durationMs, head);
-							if (part <= 0) return null;
-							return (
-								<span
-									key={call.id}
-									className="absolute inset-y-0 rounded-[3px]"
-									style={{
-										left: `${((call.start - row.start) / Math.max(duration * shown, 1)) * 100}%`,
-										width: `max(3px, ${((call.durationMs * part) / Math.max(duration * shown, 1)) * 100}%)`,
-										background: call.error ? 'var(--danger-base)' : row.hue,
-									}}
-								/>
-							);
-						})}
-					</div>
-				) : (
-					<div
-						className={cn('absolute top-1/2 flex h-3.5 -translate-y-1/2 items-center justify-center rounded-[4px]', span?.kind === 'compaction' && 'opacity-80')}
-						style={{ left: pos(row.start, total), width: width(duration * shown), background: fill }}
-					>
-						{failed && duration / total > 0.02 ? <Icon icon={X} size={10} className="text-(--danger-fg)" /> : null}
-					</div>
-				)
+			{row.group ? (
+				<div className="absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-[4px]" style={{ left: pos(row.start, total), width: width(duration), ...hatch(row.hue) }}>
+					{own.map((call) => (
+						<span
+							key={call.id}
+							className="absolute inset-y-0 rounded-[3px]"
+							style={{
+								left: `${((call.start - row.start) / Math.max(duration, 1)) * 100}%`,
+								width: `max(3px, ${(call.durationMs / Math.max(duration, 1)) * 100}%)`,
+								background: call.error ? 'var(--danger-base)' : row.hue,
+							}}
+						/>
+					))}
+				</div>
 			) : (
-				<div className="absolute top-1/2 h-3.5 -translate-y-1/2 rounded-[4px] border border-dashed border-(--border-default)" style={{ left: pos(row.start, total), width: width(duration) }} />
-			)}
-			{shown >= 1 ? (
-				<span
-					className="in-num absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-[10.5px] whitespace-nowrap text-(--text-tertiary)"
-					style={nearEnd ? { right: `calc(${100 - (row.start / total) * 100}% + 6px)` } : { left: `calc(${pos(end, total)} + 6px)` }}
+				<div
+					className={cn('absolute top-1/2 flex h-3.5 -translate-y-1/2 items-center justify-center rounded-[4px]', span?.kind === 'compaction' && 'opacity-80')}
+					style={{ left: pos(row.start, total), width: width(duration), background: fill }}
 				>
-					<span>
-						{seconds(duration)}
-						{cost > 0 ? ` · ${dollars(cost)}` : ''}
-					</span>
-					{verdict && verdict.tone !== 'neutral' ? (
-						<span className="inline-flex items-center gap-1" style={{ color: TONE_FILL[verdict.tone] }} title={verdict.why}>
-							<Icon icon={Zap} size={10} />
-							{verdict.label.replace(/^Partial · /, '').replace(/^Hit · /, '')}
-						</span>
-					) : null}
-					{slowest ? <Status tone="warning">Slowest</Status> : null}
+					{failed && duration / total > 0.02 ? <Icon icon={X} size={10} className="text-(--danger-fg)" /> : null}
+				</div>
+			)}
+			<span
+				className="in-num absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-[10.5px] whitespace-nowrap text-(--text-tertiary)"
+				style={nearEnd ? { right: `calc(${100 - (row.start / total) * 100}% + 6px)` } : { left: `calc(${pos(end, total)} + 6px)` }}
+			>
+				<span>
+					{seconds(duration)}
+					{cost > 0 ? ` · ${dollars(cost)}` : ''}
 				</span>
-			) : null}
+				{verdict && verdict.tone !== 'neutral' ? (
+					<span className="inline-flex items-center gap-1" style={{ color: TONE_FILL[verdict.tone] }} title={verdict.why}>
+						<Icon icon={Zap} size={10} />
+						{verdict.label.replace(/^Partial · /, '').replace(/^Hit · /, '')}
+					</span>
+				) : null}
+				{slowest ? <Status tone="warning">Slowest</Status> : null}
+			</span>
 		</>
 	);
 }
 
-type Replay = { head: number | null; playing: boolean; speed: number; setSpeed: (speed: number) => void; toggle: () => void; restart: () => void; scrub: (ms: number) => void; clear: () => void };
-
-/** Replaying the reply: a playhead that runs along the timeline at a chosen speed, revealing each step as it happened. */
-function useReplay(total: number): Replay {
-	const [head, setHead] = useState<number | null>(null);
-	const [playing, setPlaying] = useState(false);
-	// The slowest speed that replays the reply in under 15 seconds.
-	const [speed, setSpeed] = useState(() => SPEEDS.find((value) => total / value <= 15_000) ?? SPEEDS.at(-1)!);
-	const frame = useRef(0);
-	useEffect(() => {
-		if (!playing) return;
-		let last = performance.now();
-		const step = (now: number) => {
-			const delta = (now - last) * speed;
-			last = now;
-			let done = false;
-			setHead((current) => {
-				const next = Math.min(total, (current ?? 0) + delta);
-				done = next >= total;
-				return next;
-			});
-			if (done) setPlaying(false);
-			else frame.current = requestAnimationFrame(step);
-		};
-		frame.current = requestAnimationFrame(step);
-		return () => cancelAnimationFrame(frame.current);
-	}, [playing, speed, total]);
-	return useMemo(
-		() => ({
-			head,
-			playing,
-			speed,
-			setSpeed,
-			toggle: () => {
-				if (playing) return setPlaying(false);
-				if (head === null || head >= total) setHead(0);
-				setPlaying(true);
-			},
-			restart: () => {
-				setHead(0);
-				setPlaying(true);
-			},
-			scrub: (ms: number) => {
-				setPlaying(false);
-				setHead(ms);
-			},
-			clear: () => {
-				setPlaying(false);
-				setHead(null);
-			},
-		}),
-		[head, playing, speed, total],
-	);
-}
-
-function TraceFooter({ replay, line }: { replay: Replay; line: Timeline }) {
-	const total = line.total;
+function TraceFooter({ line }: { line: Timeline }) {
 	// The slider moves on a log scale, so each step stretches by the same factor.
 	const step = (zoom: number) => Math.round((Math.log(zoom) / Math.log(line.most)) * 1000);
 	return (
 		<footer className="flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-(--border-subtle) px-3">
-			<IconBtn icon={replay.playing ? Pause : Play} size="sm" variant="secondary" className="sg-btn--round" label={replay.playing ? 'Pause' : 'Replay the reply'} onClick={replay.toggle} />
-			<IconBtn icon={RotateCcw} size="sm" label="Replay from the start" onClick={replay.restart} />
-			<Menu>
-				<MenuTrigger asChild>
-					<Btn size="sm" variant="ghost" className="in-num gap-1 px-2 text-[11.5px]" aria-label="Replay speed">
-						{replay.speed}×
-						<Icon icon={ChevronDown} size={11} className="text-(--icon-tertiary)" />
-					</Btn>
-				</MenuTrigger>
-				<MenuContent align="start" side="top" className="min-w-[120px]">
-					{SPEEDS.map((speed) => (
-						<MenuItem key={speed} checked={speed === replay.speed} onSelect={() => replay.setSpeed(speed)}>
-							{speed}×
-						</MenuItem>
-					))}
-				</MenuContent>
-			</Menu>
-			{replay.head !== null ? (
-				<>
-					<span className="in-num shrink-0 text-[11px] text-(--text-tertiary)">
-						{seconds(replay.head)} <span className="text-(--text-disabled)">/ {seconds(total)}</span>
-					</span>
-					<Btn size="sm" variant="ghost" className="px-2 text-[11.5px] text-(--text-tertiary)" onClick={replay.clear}>
-						Show all
-					</Btn>
-				</>
-			) : null}
-			<span className="mx-1.5 h-4 w-px shrink-0 bg-(--border-default)" />
 			<Segmented label="Timeline width" role="radiogroup" className="shrink-0">
 				<SegmentedItem size="sm" role="radio" on={line.zoomPref === 'fit'} onClick={() => line.stretch('fit')} title="Fit the whole reply in view (0)">
 					Fit
@@ -966,7 +828,7 @@ function TraceFooter({ replay, line }: { replay: Replay; line: Timeline }) {
 				{line.zoom < 9.95 ? line.zoom.toFixed(1) : Math.round(line.zoom)}×
 			</span>
 			<span className="flex-1" />
-			<div className={cn('hidden shrink-0 items-center gap-3.5 text-[11px] text-(--text-tertiary)', replay.head === null && 'xl:flex')}>
+			<div className="hidden shrink-0 items-center gap-3.5 text-[11px] text-(--text-tertiary) lg:flex">
 				<Legend swatch={{ background: 'var(--data-1)' }}>Model call</Legend>
 				<Legend swatch={{ background: toolFill('var(--data-1)') }}>Tool call</Legend>
 				<Legend swatch={hatch('var(--neutral-300)')}>Waiting</Legend>
