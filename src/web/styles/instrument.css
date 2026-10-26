@@ -1089,3 +1089,92 @@
 		animation: none !important;
 	}
 }
+
+/*
+ * The loader: a shape that never settles. A filled form turns and morphs
+ * from a circle to a squircle, a leaf and a diamond, and a hollow outline
+ * turns the other way a beat behind it, so the two keep crossing.
+ * `--loader` and `--loader-soft` set its colours.
+ */
+.sg-spinner {
+	--loader: var(--accent-base);
+	--loader-soft: color-mix(in oklab, var(--accent-base) 45%, transparent);
+	position: relative;
+	display: inline-block;
+	flex: 0 0 auto;
+}
+.sg-spinner::before,
+.sg-spinner::after {
+	content: '';
+	position: absolute;
+	inset: 18%;
+	border-radius: 50%;
+	animation: sg-morph 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.sg-spinner::before {
+	background: conic-gradient(from 0deg, var(--loader), var(--loader-soft), var(--loader));
+}
+.sg-spinner::after {
+	inset: 0;
+	border: 1.5px solid var(--loader-soft);
+	animation-direction: reverse;
+	animation-delay: -0.55s;
+}
+.sg-spinner--neutral {
+	--loader: var(--text-secondary);
+	--loader-soft: var(--alpha-white-14);
+}
+.sg-spinner--onAccent {
+	--loader: var(--accent-fg);
+	--loader-soft: rgba(6, 24, 31, 0.32);
+}
+@keyframes sg-morph {
+	0% {
+		border-radius: 50%;
+		transform: rotate(0deg) scale(0.9);
+	}
+	25% {
+		border-radius: 26%;
+		transform: rotate(90deg) scale(1);
+	}
+	50% {
+		border-radius: 50% 6% 50% 6%;
+		transform: rotate(180deg) scale(0.78);
+	}
+	75% {
+		border-radius: 12%;
+		transform: rotate(315deg) scale(0.95);
+	}
+	100% {
+		border-radius: 50%;
+		transform: rotate(360deg) scale(0.9);
+	}
+}
+
+/* A working glyph's core: a square that turns into a diamond and back, breathing. */
+@keyframes glyph-morph {
+	0%,
+	100% {
+		transform: rotate(0deg) scale(0.75);
+		rx: 2.5px;
+	}
+	50% {
+		transform: rotate(135deg) scale(1);
+		rx: 0.6px;
+	}
+}
+.glyph-morph {
+	transform-box: fill-box;
+	transform-origin: center;
+	animation: glyph-morph 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sg-spinner::before,
+	.sg-spinner::after {
+		animation-duration: 6s;
+	}
+	.glyph-morph {
+		animation: none;
+	}
+}

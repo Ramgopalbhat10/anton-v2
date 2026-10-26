@@ -10,8 +10,8 @@ import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
 import { isLive, TaskStatusIcon } from '@/components/task-status';
-import { prNumber, prTone } from '@/components/thread-card';
-import { type GlyphKind, glyphKind, KIND_LABEL } from '@/components/thread-glyph';
+import { prNumber, prTone, ThreadStatePill } from '@/components/thread-card';
+import { glyphKind } from '@/components/thread-glyph';
 import { api, branchLabel, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -35,18 +35,6 @@ function matches(session: Session, query: string): boolean {
 
 const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
 
-/** A state's word in its colour: amber needs you, red failed, cyan works, green ready. */
-const KIND_TONE: Record<GlyphKind, string> = {
-	failed: 'text-(--danger-text)',
-	waiting: 'text-(--warning-text)',
-	working: 'text-(--accent-text)',
-	queued: 'text-(--text-tertiary)',
-	review: 'text-(--success-text)',
-	landing: 'text-(--success-text)',
-	idle: 'text-(--text-secondary)',
-	resolved: 'text-(--text-tertiary)',
-};
-
 /** A fact on the row's middle line: an icon and a few words. */
 function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
 	return (
@@ -58,7 +46,6 @@ function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boole
 }
 
 function Row({ session, modelName }: { session: Session; modelName: (model: string) => string }) {
-	const kind = glyphKind(session);
 	const pr = session.prUrl ? prTone(session) : null;
 	const runs = session.pullRequest?.runs ?? [];
 	const tokensUsed = used(session);
@@ -97,7 +84,7 @@ function Row({ session, modelName }: { session: Session; modelName: (model: stri
 					) : null}
 				</div>
 				<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-					<span className={cn('text-[12px]', KIND_TONE[kind])}>{KIND_LABEL[kind]}</span>
+					<ThreadStatePill thread={session} compact />
 					{pr ? (
 						<Chip icon={GitPullRequest} mono tone={pr.tone} color={pr.color} title={pr.title}>
 							#{prNumber(session.prUrl) ?? '?'}

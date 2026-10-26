@@ -4,10 +4,10 @@ import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCi
 import { type ReactNode, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
-import { Chip, Status } from '@/components/instrument';
+import { Chip, type Tone } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
-import { ThreadGlyph } from '@/components/thread-glyph';
+import { Glyph, type GlyphKind, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
 import { api, isChat, outputUrl, repoShort, type Session, type ThreadState } from '@/lib/api';
 import { categoryInfo, categoryOf, extensionOf, nameOf } from '@/lib/artifacts';
 import { age, elapsed } from '@/lib/format';
@@ -18,16 +18,30 @@ import { cn } from '@/lib/utils';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
 
-/** The state in a word with its dot, as on a card or a row: amber needs you, cyan works, emerald is ready. */
+/** A state's chip tone: amber needs you, red failed, cyan works, green ready or done. */
+const KIND_CHIP: Record<GlyphKind, Tone> = {
+	failed: 'danger',
+	waiting: 'warning',
+	working: 'accent',
+	queued: 'neutral',
+	review: 'success',
+	landing: 'success',
+	idle: 'neutral',
+	resolved: 'success',
+};
+
+/** The state as a chip: its glyph and a word, as on a card or a row. */
 export function ThreadStatePill({ thread, compact }: { thread: Session; compact?: boolean }) {
 	const state = stateOf(thread);
+	const kind = glyphKind(thread);
 	const look = STATE_LOOK[state];
-	const broken = state === 'waiting' && failed(thread);
+	const broken = kind === 'failed' || (state === 'waiting' && failed(thread));
 	const label = broken ? (thread.status === 'error' ? 'Failed' : 'Checks failing') : compact ? look.short : look.label;
 	return (
-		<Status tone={broken ? 'danger' : look.tone === 'neutral' ? 'neutral' : look.tone} pulse={state === 'working'}>
+		<Chip tone={broken ? 'danger' : KIND_CHIP[kind]}>
+			<Glyph kind={kind} size={11} />
 			{label}
-		</Status>
+		</Chip>
 	);
 }
 
