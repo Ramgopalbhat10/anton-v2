@@ -53,6 +53,8 @@ import {
 	listSessions,
 	listThreads,
 	editSession,
+	fallbackModel,
+	switchToFallbackModel,
 	forkSession,
 	resumeSession,
 	stopSession,
@@ -781,6 +783,8 @@ app.patch('/api/sessions/:id', async (c) => {
 	if (spaceId !== undefined) await moveToSpace(c.req.param('id'), spaceId);
 	return c.json(await editSession(c.req.param('id'), rest));
 });
+app.get('/api/sessions/:id/fallback', async (c) => c.json({ fallback: await fallbackModel(c.req.param('id')) }));
+app.post('/api/sessions/:id/fallback', async (c) => c.json(await switchToFallbackModel(c.req.param('id'))));
 app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
 // A project's thread keeps the files it saved, as project files; the answer says where.
 app.delete('/api/sessions/:id', async (c) => c.json(await deleteTask(c.req.param('id'))));

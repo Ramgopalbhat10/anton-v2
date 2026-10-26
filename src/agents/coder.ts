@@ -75,10 +75,11 @@ import { liveMachine, machineFor } from '../services/workspace.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
-import { agentBrowse, askTheUser, sharedBrowserAvailable } from '../services/live-browser.ts';
+import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from '../services/live-browser.ts';
+import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, withinDeadline } from '../services/step-deadline.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
-import { isLocalAddress } from '../services/browser-step.ts';
+import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
@@ -145,11 +146,25 @@ function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester
 	return choice ? { ...subagent, model: choice.model, thinkingLevel: choice.reasoning } : subagent;
 }
 
-/** Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch. */
-function useRepoSnapshot(id: string) {
+/**
+ * Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch; given `repo`,
+ * from any GitHub repository instead, which is how a chat reads code at all.
+ */
+function useRepoSnapshot(id: string, chat: boolean) {
+	const repo = v.optional(
+		v.pipe(
+			v.string(),
+			v.description(
+				chat
+					? 'The GitHub repository to read, as owner/name, optionally @branch, tag or commit (its default branch otherwise)'
+					: "Another GitHub repository to read instead of this task's, as owner/name, optionally @branch, tag or commit",
+			),
+		),
+	);
 	const filter = {
 		path: v.optional(v.pipe(v.string(), v.description('Only under this folder, relative to the repo root'))),
 		glob: v.optional(v.pipe(v.string(), v.description('Only paths matching this glob, such as **/*.ts or package.json'))),
+		repo,
 	};
 	useTool(
 		defineTool({
@@ -167,8 +182,9 @@ function useRepoSnapshot(id: string) {
 				path: v.pipe(v.string(), v.minLength(1), v.description('Path relative to the repo root')),
 				offset: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.description('First line to show'))),
 				limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(2000))),
+				repo,
 			}),
-			run: async ({ data }) => ({ output: await readRepoFile(id, data.path, data.offset, data.limit) }),
+			run: async ({ data }) => ({ output: await readRepoFile(id, data.path, data.offset, data.limit, data.repo) }),
 		}),
 	);
 	useTool(
@@ -185,10 +201,12 @@ function useRepoSnapshot(id: string) {
 	);
 }
 
-function SnapshotExplorer(scripts: boolean) {
+function SnapshotExplorer(scripts: boolean, chat: boolean) {
 	return [
 		'You are the explorer specialist.',
-		'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from; you change nothing.',
+		chat
+			? 'Investigate the GitHub repositories your brief names with list_files, search_code and read_file, passing each call the repository as repo; you change nothing.'
+			: 'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from (or, given repo, another GitHub repository); you change nothing.',
 		'Read as much as the brief needs, searching before reading whole files.',
 		...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
 		'Finish with a concise findings report: what you found, with files and lines, and anything you could not tell.',
@@ -201,16 +219,18 @@ function SnapshotExplorer(scripts: boolean) {
  * without starting a machine. With a sandbox, `useWorkspace` mounts the
  * explorer that works there instead.
  */
-function useSnapshotExplorer(id: string) {
+function useSnapshotExplorer(id: string, chat: boolean) {
 	const subagent = defineSubagent({
 		name: 'explorer',
-		description: 'Read-only investigation of the repository as the task started, reporting its findings with files and lines. Use it for questions that need many files read.',
+		description: chat
+			? 'Read-only investigation of GitHub repositories (name each as owner/name in the brief), reporting its findings with files and lines. Use it for questions that need many files read.'
+			: 'Read-only investigation of the repository as the task started, or of another GitHub repository the brief names as owner/name, reporting its findings with files and lines. Use it for questions that need many files read.',
 		agent: () => {
-			useRepoSnapshot(id);
+			useRepoSnapshot(id, chat);
 			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
 			const scripts = agentSettingsNow().codeMode;
 			if (scripts) useRunScript(id, { repo: true, mcp: false });
-			return SnapshotExplorer(scripts);
+			return SnapshotExplorer(scripts, chat);
 		},
 	});
 	useSubagent(withSettingsModel(subagent, 'explorer'));
@@ -357,8 +377,20 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			if (place === 'panel' && local) {
 				return { output: { problem: `The Browser panel cannot reach the sandbox's ${rest.url}. ${places.includes('sandbox') ? 'Use "in": "sandbox" for it.' : 'The sandbox is not running; ask the coding agent to start it and run the dev server.'}` } };
 			}
+			if (opens && isRawFile(rest.url)) {
+				return { output: { problem: `Not opened: ${rest.url} is a plain file with nothing to act on. Read it with web_fetch, or report back that it should be read that way.` } };
+			}
 			lastPlace.set(id, place);
-			const go = async (command: BrowserInput) => (place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command));
+			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
+			const go = async (command: BrowserInput): Promise<BrowserState> => {
+				try {
+					return await withinDeadline(place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command), STEP_MS, signal, place === 'panel' ? () => dropAgentDriver(id) : undefined);
+				} catch (error) {
+					if (!(error instanceof StepGivenUp)) throw error;
+					const problem = error.reason === 'stopped' ? error.message : `${error.message} The page may be slow or very large: try a narrower step, or report back, since a page only to be read is quicker with web_fetch.`;
+					return { url: command.url ?? '', title: '', status: null, problem, errors: [], screenshot: null, snapshot: '' };
+				}
+			};
 			let state: BrowserState;
 			let report: Record<string, unknown> = {};
 			// What do drove, then every other call the decision model made in this step, for the Agents panel to show under it.
@@ -457,7 +489,8 @@ function useBrowserSubagent(id: string, places: BrowserPlace[]) {
 	const subagent = defineSubagent({
 		name: 'browser',
 		description:
-			'Does a job on web pages in a real browser and reports back: browse and read sites, click through flows, fill forms, check a web app. ' +
+			'Does a job on web pages in a real browser and reports back: click through flows, fill forms, pages that show their content only after scripts run or a click, and checking a web app. ' +
+				'Not for reading: web_fetch reads a page in a second or two, and the repository tools read code. ' +
 			`It works in ${places.map((place) => PLACES[place]).join(', or in ')}. Give it a complete brief: the URL, what to do, and what to report.`,
 		agent: () => {
 			useTool(browserTool(id, places));
@@ -511,7 +544,8 @@ function computerTool(id: string) {
 		async run({ data, toolCallId, signal }) {
 			const { target, to, question, confirm, screenshot, ...step } = data;
 			const machine = await machineFor(id);
-			return asAgentStep(id, async () => {
+			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
+			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
 				if (userHasControl(id)) {
 					return { output: { problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.' } };
@@ -574,7 +608,13 @@ function computerTool(id: string) {
 						...(saved ? { screenshot: saved } : {}),
 					},
 				};
-			});
+			};
+			return asAgentStep(id, () =>
+				withinDeadline(takeStep(), COMPUTER_STEP_MS, signal).catch((error: unknown) => {
+					if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
+					throw error;
+				}),
+			);
 		},
 	});
 }
@@ -909,8 +949,8 @@ function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 		defineTool({
 			name: 'connector_tools',
 			description:
-				`The tools of the user's connectors (${connectors.map((connector) => connector.name).join(', ')}) that are on right now, each with its arguments in full, and which connectors are off. ` +
-				'Look here before using a connector; the user turns them on and off, so look again when they say they changed one. Give words to narrow a long list.',
+				`The tools of the user's connectors (${connectors.map((connector) => connector.name).join(', ')}) that are on right now, the best matches with their arguments in full and the rest a line each, and which connectors are off. ` +
+				'Look here before using a connector; the user turns them on and off, so look again when they say they changed one. Give words to narrow a long list, or a tool\'s name for its arguments. What it listed earlier in this conversation still holds unless the user changed a connector.',
 			input: v.object({ query: v.optional(v.pipe(v.string(), v.maxLength(200), v.description('Words to match in tool names and descriptions; empty lists every tool'))) }),
 			run: async ({ data, signal }) => ({ output: await connectorToolsText(data.query ?? '', signal) }),
 		}),
@@ -1006,8 +1046,8 @@ function useProposePlan(id: string) {
 }
 
 const TODO_HINT =
-	'For work of three or more steps, write a todo list with update_todos before you start. The user follows it as your progress, so call update_todos again the moment a step finishes, ' +
-	'marking it completed and the next one in_progress, before you go on; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.';
+	'For work of three or more steps, write a todo list with update_todos as you start, in the same step as your first other tool call. The user follows it as your progress: once a step finishes, ' +
+	"mark it completed and the next one in_progress with update_todos alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
 
 const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
 
@@ -1051,16 +1091,26 @@ const SCRIPT_HINT =
 const SCRIPTED_MCP_HINT = "A connector's MCP tools can also be called from run_script, which suits several calls whose results you only need part of.";
 
 const BROWSER_HINT =
-	'For anything done on web pages (browsing and reading sites, clicking through flows, filling forms), delegate to the browser subagent with a complete brief, so the pages stay out of your context. ' +
+	'To read the web, find pages with web_search and read them with web_fetch (several URLs in one call): that takes seconds, where the browser takes a minute or more a page. ' +
+	'Delegate to the browser subagent, with a complete brief, only to act on pages (click through a flow, fill a form, check a web app) or for a page web_fetch returns empty, cut short or blocked. ' +
 	'It works in the Browser panel, which the user can watch and take over, for example to sign in.';
 
 const COMPUTER_HINT =
 	'For work that needs a screen (a desktop or GUI program, a native dialog, or a page that must be seen and used as a person would), delegate to the computer subagent with a complete brief; ' +
 	'it uses the sandbox\'s own desktop, which the user watches in the Computer panel. For ordinary web pages, prefer the browser subagent.';
 
-const WEB_HINT = 'When you need documentation, an error message explained or anything outside the repo, use the web_search and web_fetch tools if you have them.';
+/** Another repository's code reads best file by file, not as rendered GitHub pages. */
+const OTHER_REPO_HINT =
+	"To read another GitHub repository's code, pass it as repo (owner/name, optionally @branch, tag or commit) to list_files, search_code and read_file, or to the explorer's brief: one download, then each read is local. Never the browser.";
+const WORKSPACE_OTHER_REPO_HINT =
+	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-const CHAT_WEB_HINT = 'For current facts, documentation or anything you are unsure of, use the web_search and web_fetch tools if you have them.';
+const WEB = 'When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch.';
+const CHAT_WEB = 'For current facts, documentation or anything you are unsure of, use web_search and web_fetch.';
+const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
+const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
+const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
+const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
 const SCRATCH_HINT =
@@ -1075,7 +1125,7 @@ const READ_ONLY_PROMPT = [
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
 	'When the task needs more (editing files, running commands or tests, installing anything, or opening a pull request), call start_workspace first, then carry on.',
 	'Do not start a workspace for questions you can answer by reading.',
-	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small.',
+	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small. Build on its report and its file and line references; read a file again yourself only for the lines you must quote or check.',
 	WEB_HINT,
 	'Be concise, and point to files and lines.',
 ].join(' ');
@@ -1091,7 +1141,7 @@ const WORKSPACE_PROMPT = [
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	'Check UI changes with the browser subagent: brief it with the dev server URL (http://localhost:<port>), what to click and type through, and what to report; use the screenshot tool for a quick full-page capture yourself.',
-	WEB_HINT,
+	WORKSPACE_WEB_HINT,
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
@@ -1111,7 +1161,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
-	CHAT_WEB_HINT,
+	CHAT_WORKSPACE_WEB_HINT,
 	'Be concise.',
 ].join(' ');
 
@@ -1157,6 +1207,24 @@ function useLatestInput(id: string) {
 	});
 }
 
+/** Each task's latest checkpoint write: the next one waits for it, so two never read and write the same checkpoint at once. */
+const checkpoints = new Map<string, Promise<void>>();
+
+function queueCheckpoint(id: string): void {
+	const next = (checkpoints.get(id) ?? Promise.resolve()).then(async () => {
+		try {
+			const machine = await liveMachine(id);
+			if (machine) await saveCheckpoint(id, machine);
+		} catch (error) {
+			logProblem('warn', 'Checkpoint failed', error, id);
+		}
+	});
+	checkpoints.set(id, next);
+	void next.then(() => {
+		if (checkpoints.get(id) === next) checkpoints.delete(id);
+	});
+}
+
 export function Coder({ id }: AgentProps) {
 	// With a route, the gateway tries the task's provider first or ranks them by its sort.
 	const { model, reasoning } = agentModelFor(id);
@@ -1170,15 +1238,14 @@ export function Coder({ id }: AgentProps) {
 	const review = reviewTaskFor(id);
 	if (workspace) useWorkspace(id, planning, chat, review);
 	else {
-		if (!chat) {
-			useRepoSnapshot(id);
-			useSnapshotExplorer(id);
-		}
+		// A chat reads other repositories with the same tools, named by repo.
+		useRepoSnapshot(id, chat);
+		useSnapshotExplorer(id, chat);
 		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
 	if (planning) useProposePlan(id);
-	// Code mode's repo tools read the snapshot, which a chat or a workspace does not use; both still get MCP servers and decide().
-	const scope: ScriptScope = { repo: !workspace && !chat, mcp: true };
+	// Code mode's repo tools read the snapshots, which a workspace does not use; it still gets MCP servers and decide().
+	const scope: ScriptScope = { repo: !workspace, mcp: true };
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);
 	if (scripts) useRunScript(id, scope);
 	const connectors = connectorsFor(id);
@@ -1229,15 +1296,9 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: reminder });
 			return;
 		}
-		const checkpoint = (async () => {
-			try {
-				const machine = await liveMachine(id);
-				if (machine) await saveCheckpoint(id, machine);
-			} catch (error) {
-				logProblem('warn', 'Checkpoint failed', error, id);
-			}
-		})();
-		const [, reply] = await Promise.all([checkpoint, checkReply(id)]);
+		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
+		queueCheckpoint(id);
+		const reply = await checkReply(id);
 		// A project's thread frees its slot and tells its coordinator what changed.
 		await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
 		// Your phone hears of a task that waits on you, so it is answered without a tab open.

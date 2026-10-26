@@ -15,6 +15,13 @@ import * as v from 'valibot';
 
 /** The runtime's limit for read and bash, kept for every other tool. */
 export const MAX_RESULT_BYTES = 51_200;
+/**
+ * Lower limits for tools whose results run long and are mostly skimmed: a web search answers with
+ * several pages' excerpts (37KB on average), a fetch with whole pages (43KB). The agent reads on
+ * with `read_full_result` when the start was not enough.
+ */
+const LIMITS: Record<string, number> = { mcp__web__web_search: 12_288, mcp__web__web_fetch: 24_576 };
+export const limitFor = (toolName: string): number => LIMITS[toolName] ?? MAX_RESULT_BYTES;
 export const MORE_TOOL = 'read_full_result';
 /** The runtime's tools that cut their own output, with notes of their own on reading the rest. */
 const CUT_BY_RUNTIME = new Set(['read', 'bash', 'grep', 'glob']);
@@ -36,22 +43,23 @@ export function partAt(text: string, offset: number, bytes = MAX_RESULT_BYTES): 
 	return part;
 }
 
-const note = (id: string, total: number, end: number) =>
+const note = (id: string, total: number, end: number, bytes = MAX_RESULT_BYTES) =>
 	end < total
-		? `\n\n[Result cut at 50KB: characters up to ${end.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} shown. Call ${MORE_TOOL} with id "${id}" and offset ${end} for more, or ask the tool for less.]`
+		? `\n\n[Result cut at ${Math.round(bytes / 1024)}KB: characters up to ${end.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} shown. Call ${MORE_TOOL} with id "${id}" and offset ${end} for more, or ask the tool for less.]`
 		: '';
 
 const isResult = (value: unknown): value is ToolResult => Boolean(value) && Array.isArray((value as ToolResult).content);
 
 /**
- * The result as the agent's conversation takes it: whole up to 50KB of text, else its first 50KB and a
+ * The result as the agent's conversation takes it: whole up to its tool's limit (50KB, less for web search and fetch), else its start and a
  * note, with the whole kept under the call's id for `read_full_result`. Images pass as they are.
  */
 export function cutResult<T>(conversation: string, toolCallId: string, toolName: string, result: T): T {
 	if (!isResult(result) || CUT_BY_RUNTIME.has(toolName) || toolName === MORE_TOOL) return result;
 	const texts = result.content.filter((part) => part.type === 'text' && typeof part.text === 'string');
 	const text = texts.map((part) => part.text).join('\n\n');
-	if (Buffer.byteLength(text) <= MAX_RESULT_BYTES) return result;
+	const limit = limitFor(toolName);
+	if (Buffer.byteLength(text) <= limit) return result;
 	const results = kept.get(conversation) ?? new Map<string, string>();
 	// The conversation moves to the back, so the ones dropped are those cut from longest ago.
 	kept.delete(conversation);
@@ -59,9 +67,9 @@ export function cutResult<T>(conversation: string, toolCallId: string, toolName:
 	if (kept.size > KEEP_CONVERSATIONS) kept.delete(kept.keys().next().value!);
 	results.set(toolCallId, text);
 	if (results.size > KEEP) results.delete(results.keys().next().value!);
-	const head = partAt(text, 0);
+	const head = partAt(text, 0, limit);
 	const others = result.content.filter((part) => !texts.includes(part));
-	return { ...result, content: [{ type: 'text', text: head + note(toolCallId, text.length, head.length) }, ...others] };
+	return { ...result, content: [{ type: 'text', text: head + note(toolCallId, text.length, head.length, limit) }, ...others] };
 }
 
 /** More of a cut result, from `offset`, up to 50KB at a time. */
@@ -82,7 +90,7 @@ export function forgetResults(conversation: string): void {
 export function fullResultTool(conversation: string) {
 	return defineTool({
 		name: MORE_TOOL,
-		description: 'Reads more of a tool result that was cut at 50KB, from the id and offset its note gives. Read on only as far as the work needs.',
+		description: 'Reads more of a tool result that was cut, from the id and offset its note gives. Read on only as far as the work needs.',
 		input: v.object({
 			id: v.pipe(v.string(), v.minLength(1), v.description('The id the note gives.')),
 			offset: v.pipe(v.number(), v.integer(), v.minValue(0), v.description('The character to start from.')),

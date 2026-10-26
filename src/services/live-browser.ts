@@ -457,6 +457,17 @@ async function driver(id: string, browser: Stored): Promise<Driver> {
 	return made;
 }
 
+/**
+ * Lets go of the agent's connection to the task's browser, as after a step that never returned: the next
+ * step connects again. The browser itself, its pages and sign-ins stay.
+ */
+export function dropAgentDriver(id: string): void {
+	const current = drivers.get(id);
+	if (!current) return;
+	drivers.delete(id);
+	void current.browser.close().catch(() => undefined);
+}
+
 /** Each page's tab id, read once per page. */
 async function targetOf(current: Driver, page: Page): Promise<string> {
 	const known = current.targets.get(page);

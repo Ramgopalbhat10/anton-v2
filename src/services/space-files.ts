@@ -1,6 +1,6 @@
 import { announce } from '../core/changes.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
-import { writeMachineFile } from '../core/machine-fs.ts';
+import { listMachineFiles, writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, safeRelativePath } from '../core/shell.ts';
 import { getSessionRecord, listThreadRecords } from '../db/sessions.ts';
@@ -104,11 +104,19 @@ export async function keepThreadFiles(spaceId: string, title: string, files: Arr
 	return kept;
 }
 
-/** Puts a project's files into a thread's machine; run each time the machine is set up or resumed. */
+/**
+ * Puts a project's files into a thread's machine; run each time the machine is set up or resumed, which is
+ * every message to a thread with a sandbox. A file the machine already holds, as large and written since the
+ * Library's copy changed, is left as it is, so a running machine costs one listing rather than a copy of every file.
+ */
 export async function copySpaceFiles(machine: Machine, sessionId: string): Promise<void> {
 	const session = await getSessionRecord(sessionId);
 	if (!session?.spaceId) return;
-	for (const file of await listSpaceFiles(session.spaceId)) {
+	const [files, present] = await Promise.all([listSpaceFiles(session.spaceId), listMachineFiles(machine, `${machine.root}/${PROJECT_FILES}`)]);
+	const there = new Map(present.map((file) => [file.path, file]));
+	for (const file of files) {
+		const copy = there.get(file.path);
+		if (copy && copy.size === file.size && copy.mtimeMs >= Date.parse(file.modifiedAt)) continue;
 		const bytes = await readSpaceFile(session.spaceId, file.path);
 		if (bytes) await writeInto(machine, file.path, bytes);
 	}

@@ -718,6 +718,9 @@ export const api = {
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
 	resumeSession: (id: string) => post<Session>(`/api/sessions/${id}/resume`),
 	forkSession: (id: string) => post<Session>(`/api/sessions/${id}/fork`),
+	/** The default model a failed reply can run again on; null when the task already runs on it. */
+	fallbackModel: (id: string) => json<{ fallback: { model: string; name: string } | null }>(`/api/sessions/${id}/fallback`),
+	switchToFallbackModel: (id: string) => post<Session>(`/api/sessions/${id}/fallback`),
 	editSession: (id: string, change: Partial<ModelChoice> & { route?: ModelRoute | null; title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),

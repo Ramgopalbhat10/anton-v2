@@ -41,12 +41,14 @@ const SEARCH_RESULTS = 8;
 /** Where a program runs: before a workspace it can read the repo; a subagent may have no MCP servers. */
 export type ScriptScope = { repo: boolean; mcp: boolean };
 
+const REPO = { type: 'string', description: "Another GitHub repository to read (a chat's only one), as owner/name, optionally @branch, tag or commit" };
 const FILTER = {
 	path: { type: 'string', description: 'Only under this folder, relative to the repo root' },
 	glob: { type: 'string', description: 'Only paths matching this glob, such as **/*.ts' },
+	repo: REPO,
 };
 
-/** The repository at the task's base commit, the same files list_files, read_file and search_code read. */
+/** The repository at the task's base commit, or another named by repo: the same files list_files, read_file and search_code read. */
 function repoTools(id: string): CodemodeTool[] {
 	return [
 		{
@@ -54,21 +56,21 @@ function repoTools(id: string): CodemodeTool[] {
 			description: 'Every file path in the repository, optionally under a folder or matching a glob.',
 			inputSchema: { type: 'object', properties: FILTER },
 			outputSchema: { type: 'array', items: { type: 'string' } },
-			execute: (args) => repoPaths(id, (args ?? {}) as { path?: string; glob?: string }),
+			execute: (args) => repoPaths(id, (args ?? {}) as { path?: string; glob?: string; repo?: string }),
 		},
 		{
 			name: 'read_file',
 			description: "A file's whole text. Throws when it does not exist, is binary or is too large.",
-			inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+			inputSchema: { type: 'object', properties: { path: { type: 'string' }, repo: REPO }, required: ['path'] },
 			outputSchema: { type: 'string' },
-			execute: (args) => repoText(id, (args as { path: string }).path),
+			execute: (args) => repoText(id, (args as { path: string }).path, (args as { repo?: string }).repo),
 		},
 		{
 			name: 'search_code',
 			description: 'Lines matching a JavaScript regular expression, as "path:line: text" lines, the same as the search_code tool.',
 			inputSchema: { type: 'object', properties: { pattern: { type: 'string' }, ignoreCase: { type: 'boolean' }, ...FILTER }, required: ['pattern'] },
 			outputSchema: { type: 'string' },
-			execute: (args) => searchRepo(id, args as { pattern: string; ignoreCase?: boolean; path?: string; glob?: string }),
+			execute: (args) => searchRepo(id, args as { pattern: string; ignoreCase?: boolean; path?: string; glob?: string; repo?: string }),
 		},
 	];
 }

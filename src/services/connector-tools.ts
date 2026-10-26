@@ -185,17 +185,32 @@ async function connectorsNow(): Promise<Connector[]> {
 }
 
 const OFF = "it is off. If the work needs it, ask the user to turn it on from the composer's + menu, under Connectors; it works from your next call after that.";
-/** At most this many tools are given in full at once; a query narrows a longer list. */
+/** At most this many tools are listed at once; a query narrows a longer list. */
 const MAX_LISTED = 30;
+/**
+ * Tools listed with their arguments in full, the best matches first; the rest get a line each. A big
+ * server's whole schema (GitHub's is over 40KB) would otherwise sit in every later call of the conversation.
+ */
+const MAX_DETAILED = 8;
 
-/** What connector_tools answers: each connector's state, and the matching tools of those that are on, each with its arguments in full. */
+/** A tool's description to its first sentence or line, for a listing that gives it a line. */
+function firstLine(description: string): string {
+	const line = description.trim().split('\n')[0] ?? '';
+	const sentence = /^.*?[.!?](?=\s|$)/.exec(line)?.[0] ?? line;
+	return sentence.length > 160 ? `${sentence.slice(0, 159)}…` : sentence;
+}
+
+/** What connector_tools answers: each connector's state, and the matching tools of those that are on, the best matches with their arguments in full. */
 export async function connectorToolsText(query: string, signal?: AbortSignal): Promise<string> {
 	const connectors = await connectorsNow();
 	if (!connectors.length) return 'No connectors are set up. The user adds them in Settings › Connectors.';
-	const words = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+	// Every tool's name starts mcp__, so that word tells nothing; the rest of a tool's name finds it.
+	const words = query.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word && word !== 'mcp');
 	const sections: string[] = [];
 	let listed = 0;
 	let unlisted = 0;
+	let detailed = 0;
+	let brief = 0;
 	for (const connector of connectors) {
 		if (signal?.aborted) break;
 		if (connector.state === 'off') {
@@ -225,10 +240,19 @@ export async function connectorToolsText(query: string, signal?: AbortSignal): P
 		const shown = scored.slice(0, Math.max(0, MAX_LISTED - listed));
 		listed += shown.length;
 		unlisted += scored.length - shown.length;
-		const body = shown.map(({ tool }) => `### ${tool.name}\n${tool.description.trim()}\nArguments: ${JSON.stringify(tool.inputSchema)}`);
+		const body = shown.map(({ tool }) => {
+			if (detailed < MAX_DETAILED) {
+				detailed += 1;
+				return `### ${tool.name}\n${tool.description.trim()}\nArguments: ${JSON.stringify(tool.inputSchema)}`;
+			}
+			brief += 1;
+			return `- ${tool.name}: ${firstLine(tool.description)}`;
+		});
 		sections.push([`## ${connector.name}: on, ${tools.length} tool${tools.length === 1 ? '' : 's'}${words.length ? `, ${scored.length} matching` : ''}`, ...body].join('\n\n'));
 	}
-	const more = unlisted ? `\n\n${unlisted} more tools match; search with fewer, more specific words to see them.` : '';
+	const more =
+		(brief ? `\n\nThe tools listed in a line each come without their arguments: ask again with a tool's name to see them.` : '') +
+		(unlisted ? `\n\n${unlisted} more tools match; search with fewer, more specific words to see them.` : '');
 	return `Call a tool with connector_call, giving its name and arguments.\n\n${sections.join('\n\n')}${more}`;
 }
 

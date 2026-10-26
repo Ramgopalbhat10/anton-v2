@@ -759,6 +759,13 @@ test('General settings decide how a new task starts when the launcher does not s
 	// Another model starts at its own default level; an explicit choice wins over the defaults.
 	const other = await sessions.createSession({ projectId: project.id, title: 'Other', model: 'openrouter/plain/no-reasoning', planMode: false });
 	assert.deepEqual([other.model, other.reasoning, other.planMode], ['openrouter/plain/no-reasoning', null, false]);
+	// A failed reply on another model can be sent again on the default one, at its default level; one already on it has nothing to switch to.
+	assert.equal(await sessions.fallbackModel(plain.id), null);
+	await assert.rejects(() => sessions.switchToFallbackModel(plain.id), /already runs on the default model/);
+	assert.equal((await sessions.fallbackModel(other.id))?.model, 'openrouter/moonshotai/kimi-k2.6');
+	const moved = await sessions.switchToFallbackModel(other.id);
+	assert.deepEqual([moved.model, moved.reasoning], ['openrouter/moonshotai/kimi-k2.6', 'low']);
+	assert.equal(await sessions.fallbackModel(other.id), null);
 	await sessions.deleteSession(plain.id);
 	await sessions.deleteSession(other.id);
 
@@ -1438,6 +1445,12 @@ test('an MCP connector is found and called on demand, from connector tools and p
 		assert.match(listed, /### mcp__tracker__find_issues\nFind issues whose title matches words\.\nLonger help\.\nArguments: .*Words to match/);
 		assert.match(listed, /## docs: on, 3 tools/);
 		assert.match(await connectorToolsText('picture'), /## tracker: on, 3 tools, 1 matching\n\n### mcp__tracker__issue_picture/);
+		// Past eight tools the rest come a line each, without their arguments, until asked for by name.
+		await addMcpServer({ name: 'wiki', url: `${url}?wiki`, auth: null, tools: [], codeMode: false });
+		const long = await connectorToolsText('');
+		assert.match(long, /## wiki: on, 3 tools\n\n### mcp__wiki__find_issues\n[\s\S]*\n\n- mcp__wiki__broken: Always fails\.\n\nThe tools listed in a line each come without their arguments/);
+		assert.match(await connectorToolsText('mcp__wiki__broken'), /### mcp__wiki__broken\nAlways fails\.\nArguments:/);
+		await removeMcpServer('wiki');
 		assert.equal((await callConnectorTool(session.id, 'mcp__docs__find_issues', { query: 'direct' })).output, 'issue 7: direct', 'a server out of code mode is called the same way');
 		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__broken', {}), /tracker is down/);
 		await assert.rejects(callConnectorTool(session.id, 'mcp__tracker__missing', {}), /No connector that is on has a tool named/);
@@ -1488,6 +1501,7 @@ test('an MCP connector is found and called on demand, from connector tools and p
 		if (sessionId) await forgetScriptCalls(sessionId);
 		await removeMcpServer('tracker').catch(() => undefined);
 		await removeMcpServer('docs').catch(() => undefined);
+		await removeMcpServer('wiki').catch(() => undefined);
 		await resetMcpToolsForTests();
 		await new Promise((resolve) => http.close(resolve));
 	}
@@ -1620,6 +1634,17 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 	assert.equal(await searchRepo(session.id, { pattern: 'ANSWER\\)', ignoreCase: true }), 'src/app.ts:2: console.log(Answer);');
 	assert.match(await searchRepo(session.id, { pattern: '(' }), /Invalid pattern/);
 	assert.equal(archives.length, before + 1, 'downloaded once, then read from disk');
+
+	// Another GitHub repository, named by repo, is read the same way, from its own download; a chat reads one too.
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/other@snapshot-test', glob: '*.ts' }), `src/app.ts\n${deep}`);
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 1, 1, 'acme/other@snapshot-test'), /^1\timport \{ answer \}/);
+	assert.equal(await searchRepo(session.id, { pattern: 'answer =', repo: 'acme/other@snapshot-test' }), `${deep}:1: export const answer = 42;`);
+	assert.equal(archives.length, before + 2, 'one more download for the other repository, then its reads come from disk');
+	assert.equal(await listRepoFiles(session.id, { repo: 'acme/demo', glob: 'app.*' }), 'src/app.ts', "the task's own repository by name is its own snapshot");
+	assert.equal(archives.length, before + 2);
+	const chat = await sessions.createSession({ title: 'How does acme/other start?' });
+	assert.match(await listRepoFiles(chat.id, { repo: 'https://github.com/acme/other' }), /^README\.md$/m, 'a chat reads a repository at its default branch');
+	await assert.rejects(() => listRepoFiles(chat.id, { repo: 'not a repo' }), /owner\/name/);
 
 	const record = (await sessions.getSession(session.id))!;
 	assert.equal(record.workspace, false, 'no workspace, so no branch');
