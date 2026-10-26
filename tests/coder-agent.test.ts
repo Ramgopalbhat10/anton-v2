@@ -82,4 +82,6 @@ test('Coder asks for fuller steps, and sends a reply that stops at an announced 
 	}
 	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
 	assert.match(source, /startStallCheck\(id\);/);
+	const workspace = source.slice(source.indexOf('const WORKSPACE_PROMPT'), source.indexOf('const CHAT_PROMPT'));
+	assert.match(workspace, /FINISH_HINT/, 'a change is checked against the request and its nearest tests before the reply ends');
 });

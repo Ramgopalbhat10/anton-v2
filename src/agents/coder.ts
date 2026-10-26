@@ -1112,6 +1112,10 @@ const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 const BATCH_HINT =
 	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, rather than one at a time.';
 
+/** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
+const FINISH_HINT =
+	'Before you finish a change, read the request again and check each thing it names (functions, options, messages, edge cases) against what you did, and run the existing tests closest to the code you changed, so the change does all it was asked and breaks nothing near it.';
+
 const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
@@ -1136,6 +1140,7 @@ const WORKSPACE_PROMPT = [
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	BATCH_HINT,
+	FINISH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
