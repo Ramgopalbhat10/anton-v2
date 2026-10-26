@@ -1,9 +1,9 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CalendarClock, Clock, GitPullRequest, LayoutDashboard, Library, Maximize2, Minimize2, PanelRight, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
-import { Caption, Card, CardFooter, Chip, Pips } from '@/components/instrument';
-import { glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
-import { ModelPicker, useModels } from '@/components/model-picker';
+import { Caption, Card, Chip, Pips } from '@/components/instrument';
+import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
+import { ModelLogo, ModelPicker, useModelName, useModels } from '@/components/model-picker';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
 import { Btn, EmptyState, Icon, IconBtn, Switch } from '@/components/signal';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,7 @@ import { age, until } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
-import { defaultSchedule, type Schedule, scheduleProblem } from '../../core/schedule';
+import { defaultSchedule, type Frequency, type Schedule, scheduleProblem } from '../../core/schedule';
 
 export const PROJECT_TABS = [
 	{ name: 'Overview', icon: LayoutDashboard },
@@ -195,14 +195,21 @@ const NO_REPO = 'none';
 /** The runs a strip shows, newest at the right. */
 const RUNS_SHOWN = 14;
 
-/** A routine's recent runs as cells in their thread's state colour, oldest first, each opening its thread. */
+/** A run's bar: green once it delivered, red when it failed, amber while it asks, cyan while it works. */
+const RUN_COLOR: Record<GlyphKind, string> = {
+	...STATE_COLOR,
+	resolved: 'color-mix(in oklab, var(--success-base) 62%, var(--neutral-800))',
+	idle: 'color-mix(in oklab, var(--success-base) 40%, var(--neutral-700))',
+};
+
+/** A routine's recent runs as bars in their thread's state colour, oldest first, each opening its thread. */
 function RunStrip({ runs }: { runs: Session[] }) {
 	const open = useOpenThread();
 	const shown = runs.slice(-RUNS_SHOWN);
 	return (
-		<span role="group" aria-label="Recent runs" className="flex h-3.5 items-stretch gap-[3px]">
+		<span role="group" aria-label="Recent runs" className="flex h-3.5 items-stretch gap-[2px]">
 			{Array.from({ length: RUNS_SHOWN - shown.length }, (_, index) => (
-				<span key={`empty-${index}`} aria-hidden className="w-[7px] rounded-[2px] border border-dashed border-(--border-subtle)" />
+				<span key={`empty-${index}`} aria-hidden className="w-1 rounded-[1.5px] bg-(--segment-off)" />
 			))}
 			{shown.map((thread) => {
 				const kind = glyphKind(thread);
@@ -213,8 +220,8 @@ function RunStrip({ runs }: { runs: Session[] }) {
 						onClick={() => open(thread)}
 						title={`${thread.title}: ${KIND_LABEL[kind]}`}
 						aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
-						className={cn('w-[7px] rounded-[2px] outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'resolved' && 'in-hatch text-(--neutral-500)', kind === 'working' && 'in-sweep')}
-						style={kind === 'resolved' ? { backgroundColor: 'var(--neutral-700)' } : { background: STATE_COLOR[kind] }}
+						className={cn('w-1 rounded-[1.5px] outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'working' && 'in-sweep')}
+						style={{ background: RUN_COLOR[kind] }}
 					/>
 				);
 			})}
@@ -222,50 +229,122 @@ function RunStrip({ runs }: { runs: Session[] }) {
 	);
 }
 
+const FREQUENCY_WORD: Record<Frequency, string> = { hourly: 'Hourly', daily: 'Daily', weekdays: 'Weekdays', weekly: 'Weekly', monthly: 'Monthly', cron: 'Cron' };
+
+/** What a routine is called: the name its first run gave it, else the start of what it does. */
+function routineName(automation: Automation): string {
+	if (automation.title) return automation.title;
+	if (automation.kind === 'issues') return `Issues labeled “${automation.label}”`;
+	return automation.prompt.split('\n')[0].trim() || whenItRuns(automation);
+}
+
+/** A small arrow between what starts a routine and where its threads work. */
+const Flow = () => <Icon icon={ArrowRight} size={11} className="text-(--icon-tertiary)" />;
+
 function RoutineRow({ automation, space, runs }: { automation: Automation; space: Space; runs: Session[] }) {
 	const queryClient = useQueryClient();
+	const modelName = useModelName();
+	const models = useModels();
 	const refresh = () => void queryClient.invalidateQueries({ queryKey: ['space-automations', space.id] });
 	const toggle = useMutation({ mutationFn: (enabled: boolean) => api.setAutomationEnabled(automation.id, enabled), onSettled: refresh });
 	const run = useMutation({ mutationFn: () => api.runAutomation(automation.id), onSettled: refresh });
 	const remove = useMutation({ mutationFn: () => api.deleteAutomation(automation.id), onSettled: refresh });
 	const [editing, setEditing] = useState(false);
+	const [open, setOpen] = useState(false);
 	const repo = space.repos.find((item) => item.id === automation.projectId);
+	const model = automation.model ?? space.threadModel ?? models.data?.default ?? null;
 	const next = automation.nextRunAt ?? null;
+	const last = runs.at(-1);
+	const on = automation.enabled;
 	if (editing) return <RoutineForm space={space} automation={automation} onDone={() => setEditing(false)} />;
 	return (
-		<div className="flex flex-col gap-1.5 border-t border-(--border-subtle) px-4 py-2.5">
-			<div className="flex items-center gap-2">
-				<Icon icon={Clock} size={13} className="text-(--icon-tertiary)" />
-				<span className={cn('line-clamp-2 min-w-0 flex-1 text-[13px] leading-[18px]', automation.enabled ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>
-					{automation.kind === 'issues' ? `Issues labeled “${automation.label}”` : whenItRuns(automation)}
+		<div className="group/routine flex flex-col gap-2 border-t border-(--border-subtle) px-4 py-3">
+			<div className="flex min-w-0 items-start gap-3">
+				<span
+					className={cn(
+						'mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border',
+						on ? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)' : 'border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary)',
+					)}
+				>
+					<Icon icon={automation.kind === 'issues' ? CircleDot : CalendarClock} size={13} />
 				</span>
-				<Switch checked={automation.enabled} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Enabled</span>} />
-				<Btn size="xs" variant="ghost" icon={Play} disabled={run.isPending} onClick={() => run.mutate()}>
-					Run now
-				</Btn>
-				<IconBtn icon={Pencil} size="xs" label="Edit routine" onClick={() => setEditing(true)} />
-				<IconBtn icon={Trash2} size="xs" label="Delete routine" disabled={remove.isPending} onClick={() => remove.mutate()} />
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<div className="flex min-w-0 items-center gap-1">
+						<button
+							type="button"
+							aria-expanded={open}
+							onClick={() => setOpen(!open)}
+							className="flex min-w-0 items-center gap-1 rounded-[5px] text-left outline-none focus-visible:shadow-(--focus-ring)"
+						>
+							<span className={cn('min-w-0 truncate text-[13px] leading-[18px] font-medium', on ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>{routineName(automation)}</span>
+							<Icon icon={ChevronDown} size={12} className={cn('text-(--icon-tertiary) transition-transform duration-(--duration-micro)', open && 'rotate-180')} />
+						</button>
+						<span className="flex-1" />
+						<span className="hidden shrink-0 items-center gap-0.5 group-focus-within/routine:flex group-hover/routine:flex pointer-coarse:flex">
+							<Btn size="xs" variant="ghost" icon={Play} disabled={run.isPending} onClick={() => run.mutate()}>
+								Run now
+							</Btn>
+							<IconBtn icon={Pencil} size="xs" label="Edit routine" onClick={() => setEditing(true)} />
+							<IconBtn icon={Trash2} size="xs" label="Delete routine" disabled={remove.isPending} onClick={() => remove.mutate()} />
+						</span>
+						<Switch checked={on} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Enabled</span>} className="ml-1" />
+					</div>
+					<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-[17px] text-(--text-tertiary)">
+						<span className="truncate">{automation.kind === 'issues' ? 'Checks every 5 minutes' : whenItRuns(automation)}</span>
+						<span className="text-(--text-disabled)">·</span>
+						{!on ? (
+							<span>Paused</span>
+						) : automation.schedule && next ? (
+							<span title={nextRunText(automation)}>
+								Next <span className="in-num text-(--text-primary)">{until(next)}</span>
+							</span>
+						) : (
+							<span>
+								{automation.seen.length} {automation.seen.length === 1 ? 'issue' : 'issues'}
+							</span>
+						)}
+					</div>
+				</div>
 			</div>
-			{automation.prompt ? <p className="m-0 line-clamp-2 text-[12px] leading-[17px] text-(--text-secondary)">{automation.prompt}</p> : null}
-			<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
-				<Chip mono className={repo ? undefined : 'border-dashed bg-transparent text-(--text-tertiary)'}>
-					{repo?.repoFullName.split('/').pop() ?? 'no repository'}
-				</Chip>
-				<RunStrip runs={runs} />
-				<Caption>
-					{runs.length} run{runs.length === 1 ? '' : 's'} · {automation.lastRunAt ? `last ${age(automation.lastRunAt)} ago` : 'not run yet'}
-				</Caption>
-				{automation.enabled && automation.schedule ? (
-					<span className="ml-auto flex items-baseline gap-1.5" title={nextRunText(automation)}>
-						<Caption>Next</Caption>
-						{next ? <span className="in-num text-[12px] text-(--text-primary)">{until(next)}</span> : null}
-						<Caption className={cn('tracking-normal normal-case', next && 'hidden @min-[460px]/workspace:inline')}>{nextRunText(automation).replace(/^next /, '')}</Caption>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 pl-10">
+				<span className="flex min-w-0 flex-wrap items-center gap-1">
+					{automation.kind === 'issues' ? (
+						<Chip icon={Tag} mono>
+							{automation.label}
+						</Chip>
+					) : (
+						<Chip icon={Clock}>{automation.schedule ? FREQUENCY_WORD[automation.schedule.frequency] : 'Schedule'}</Chip>
+					)}
+					<Flow />
+					{repo ? (
+						<Chip icon={Github} mono>
+							{repo.repoFullName.split('/').pop()}
+						</Chip>
+					) : (
+						<Chip icon={MessageSquare} className="border-dashed bg-transparent text-(--text-tertiary)">
+							no repository
+						</Chip>
+					)}
+					{model ? (
+						<span className="inline-flex h-5 min-w-0 items-center gap-1 text-[11px] text-(--text-secondary)" title={model}>
+							<span aria-hidden className="mr-1 h-3 w-px bg-(--border-subtle)" />
+							<ModelLogo model={model} size={14} />
+							<span className="truncate">{modelName(model)}</span>
+						</span>
+					) : null}
+					{automation.planFirst ? <Chip icon={ListChecks}>Plans first</Chip> : null}
+				</span>
+				<span className="ml-auto flex shrink-0 items-center gap-2.5">
+					<span className="flex items-center gap-1.5 text-[11px] text-(--text-tertiary)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
+						{last ? <Glyph kind={glyphKind(last)} size={12} /> : null}
+						{automation.lastRunAt ? `${age(automation.lastRunAt) === 'now' ? 'just now' : `${age(automation.lastRunAt)} ago`}` : 'Not run yet'}
 					</span>
-				) : !automation.enabled ? (
-					<Caption className="ml-auto">Paused</Caption>
-				) : null}
+					<RunStrip runs={runs} />
+				</span>
 			</div>
-			{automation.lastError ? <div className="text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
+			{open && automation.prompt ? <p className="m-0 ml-10 rounded-[8px] bg-(--well-bg) px-2.5 py-2 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
+			{automation.lastError ? <div className="ml-10 text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
+			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-[12px] text-(--danger-text)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
 		</div>
 	);
 }
@@ -368,18 +447,17 @@ function Routines({ space, threads }: { space: Space; threads: Session[] }) {
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);
 	const list = routines.data?.automations ?? [];
+	const on = list.filter((automation) => automation.enabled).length;
 	return (
 		<Card
 			icon={CalendarClock}
 			title="Routines"
-			sub="start threads on their own"
-			footer={
+			sub={list.length ? `${on} of ${list.length} on` : undefined}
+			status={
 				adding ? null : (
-					<CardFooter caption={`${list.length} routine${list.length === 1 ? '' : 's'} · threads respect the limit of ${space.maxParallel}`}>
-						<Btn size="sm" variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
-							Add routine
-						</Btn>
-					</CardFooter>
+					<Btn size="xs" variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
+						New routine
+					</Btn>
 				)
 			}
 		>
@@ -391,7 +469,11 @@ function Routines({ space, threads }: { space: Space; threads: Session[] }) {
 					runs={threads.filter((thread) => thread.automationId === automation.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt))}
 				/>
 			))}
-			{list.length === 0 && !adding ? <div className="border-t border-(--border-subtle) px-4 py-3 text-[12px] text-(--text-disabled)">A nightly dependency check, a weekly cleanup, or every issue labeled for Anton.</div> : null}
+			{list.length === 0 && !adding && routines.isSuccess ? (
+				<div className="flex items-center gap-2 border-t border-(--border-subtle) px-4 py-3">
+					<Caption>No routines yet</Caption>
+				</div>
+			) : null}
 			{adding ? <RoutineForm space={space} onDone={() => setAdding(false)} /> : null}
 		</Card>
 	);

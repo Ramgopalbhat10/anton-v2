@@ -1,69 +1,179 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { CalendarDays, GitPullRequest, List as ListIcon, Plus, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, GitBranch, Github, GitPullRequest, List as ListIcon, type LucideIcon, MessageSquare, Plus, Search } from 'lucide-react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
-import { Card, CardSection, Figure, type Part, SplitBar, StatRow, Status, type Tone, toneFill } from '@/components/instrument';
+import { Caption, Card, CardSection, Chip, Figure, type Part, Pips, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
+import { ModelLogo, useModelName } from '@/components/model-picker';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, FilterChip, Icon, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
-import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
+import { isLive, TaskStatusIcon } from '@/components/task-status';
+import { prNumber, prTone } from '@/components/thread-card';
+import { type GlyphKind, glyphKind, KIND_LABEL } from '@/components/thread-glyph';
 import { api, branchLabel, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
-const FILTERS = {
+const TABS = {
+	all: { label: 'All', test: () => true },
 	live: { label: 'Running', test: isLive },
-	stopped: { label: 'Stopped', test: (session: Session) => !isLive(session) && session.status !== 'error' },
-	failed: { label: 'Failed', test: (session: Session) => session.status === 'error' },
-	pr: { label: 'Pull request', test: (session: Session) => Boolean(session.prUrl) },
+	attention: { label: 'Needs you', test: (session: Session) => ['waiting', 'failed'].includes(glyphKind(session)) },
+	pr: { label: 'Pull requests', test: (session: Session) => Boolean(session.prUrl) },
+	done: { label: 'Done', test: (session: Session) => glyphKind(session) === 'resolved' },
 } satisfies Record<string, { label: string; test: (session: Session) => boolean }>;
-type Filter = keyof typeof FILTERS;
+type TabKey = keyof typeof TABS;
 
-const statusWord = (session: Session) => (isLive(session) ? liveLabel(session) : session.status === 'error' ? 'Failed' : 'Stopped');
+/** Tasks a page of the list shows. */
+export const PAGE_SIZE = 20;
 
-function matches(session: Session, query: string, filter: Filter | null): boolean {
-	const text = `${session.title} ${isChat(session) ? 'chat' : `${session.repo} ${session.branch}`}`.toLowerCase();
-	return text.includes(query.trim().toLowerCase()) && (!filter || FILTERS[filter].test(session));
+function matches(session: Session, query: string): boolean {
+	const text = `${session.title} ${isChat(session) ? 'chat' : `${session.repo} ${session.branch}`} ${session.model}`.toLowerCase();
+	return text.includes(query.trim().toLowerCase());
 }
-
-const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,180px)_72px_56px]';
 
 const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
 
-const STATE_TONE = (session: Session): Tone => (isLive(session) ? 'accent' : session.status === 'error' ? 'danger' : 'neutral');
+/** A state's word in its colour: amber needs you, red failed, cyan works, green ready. */
+const KIND_TONE: Record<GlyphKind, string> = {
+	failed: 'text-(--danger-text)',
+	waiting: 'text-(--warning-text)',
+	working: 'text-(--accent-text)',
+	queued: 'text-(--text-tertiary)',
+	review: 'text-(--success-text)',
+	landing: 'text-(--success-text)',
+	idle: 'text-(--text-secondary)',
+	resolved: 'text-(--text-tertiary)',
+};
 
-function Row({ session }: { session: Session }) {
+/** A fact on the row's middle line: an icon and a few words. */
+function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
+	return (
+		<span title={title} className={cn('inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)', mono && 'font-mono text-[11px]')}>
+			{icon ? <Icon icon={icon} size={12} className="text-(--icon-tertiary)" /> : null}
+			<span className="truncate">{children}</span>
+		</span>
+	);
+}
+
+function Row({ session, modelName }: { session: Session; modelName: (model: string) => string }) {
+	const kind = glyphKind(session);
+	const pr = session.prUrl ? prTone(session) : null;
+	const runs = session.pullRequest?.runs ?? [];
+	const tokensUsed = used(session);
+	const chat = isChat(session);
 	return (
 		<Link
 			to="/agents/$sessionId"
 			params={{ sessionId: session.id }}
 			search={{ app: 'code' }}
-			className={`${COLUMNS} min-h-[52px] rounded-[10px] px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)`}
+			className="flex min-w-0 gap-3 rounded-[10px] px-3 py-2.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
-			<div className="flex min-w-0 items-center gap-2.5">
-				<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg)">
-					<TaskStatusIcon session={session} size={13} />
-				</span>
-				<div className="flex min-w-0 flex-col gap-0.5">
-					<div className="truncate text-[13px] font-medium">{session.title}</div>
-					<div className="flex min-w-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
-						{session.prUrl ? <Icon icon={GitPullRequest} size={11} className="shrink-0 text-(--accent-text)" /> : null}
-						<span className="truncate font-mono">{branchLabel(session)}</span>
-					</div>
+			<span className="mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg)">
+				<TaskStatusIcon session={session} size={13} />
+			</span>
+			<div className="flex min-w-0 flex-1 flex-col gap-1">
+				<div className="flex min-w-0 items-baseline gap-3">
+					<span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
+					<span className="in-num shrink-0 text-[11px] text-(--text-disabled)" title={new Date(session.createdAt).toLocaleString()}>
+						{age(session.createdAt)}
+					</span>
+				</div>
+				<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+					<Fact icon={chat ? MessageSquare : Github} title={chat ? undefined : session.repo}>
+						{chat ? 'Chat' : session.repo}
+					</Fact>
+					{!chat || session.workspace ? (
+						<Fact icon={GitBranch} mono>
+							{branchLabel(session)}
+						</Fact>
+					) : null}
+					{session.model ? (
+						<span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] text-(--text-tertiary)" title={session.model}>
+							<ModelLogo model={session.model} size={13} />
+							<span className="truncate">{modelName(session.model)}</span>
+						</span>
+					) : null}
+				</div>
+				<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+					<span className={cn('text-[12px]', KIND_TONE[kind])}>{KIND_LABEL[kind]}</span>
+					{pr ? (
+						<Chip icon={GitPullRequest} mono tone={pr.tone} color={pr.color} title={pr.title}>
+							#{prNumber(session.prUrl) ?? '?'}
+							{session.pullRequest?.state === 'merged' ? ' merged' : session.pullRequest?.state === 'closed' ? ' closed' : session.pullRequest?.state === 'draft' ? ' draft' : ''}
+						</Chip>
+					) : null}
+					{runs.length ? (
+						<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
+					) : null}
+					{isLive(session) && !session.working ? (
+						<Chip tone="accent" title="Its sandbox is up">
+							<span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" />
+							{session.status === 'starting' ? 'Sandbox starting' : 'Sandbox on'}
+						</Chip>
+					) : null}
+					{session.status === 'error' && session.errorMessage ? <span className="min-w-0 flex-1 truncate text-[11.5px] text-(--danger-text)">{session.errorMessage}</span> : <span className="flex-1" />}
+					<span className="in-num flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
+						{tokensUsed ? (
+							<>
+								<span className="text-(--text-secondary)">{dollars(session.usage.cost)}</span>
+								<span className="text-(--text-disabled)">·</span>
+								<span>{tokens(tokensUsed)} tok</span>
+							</>
+						) : (
+							'—'
+						)}
+					</span>
 				</div>
 			</div>
-			<span className={`flex items-center justify-end gap-1.5 text-[12px] md:justify-start ${STATE_TONE(session) === 'danger' ? 'text-(--danger-text)' : STATE_TONE(session) === 'accent' ? 'text-(--accent-text)' : 'text-(--text-secondary)'}`}>
-				<span className="size-1.5 shrink-0 rounded-full" style={{ background: toneFill(STATE_TONE(session)) }} />
-				{statusWord(session)}
-			</span>
-			<span className="hidden truncate text-[12px] text-(--text-secondary) md:block">{isChat(session) ? 'Chat' : session.repo}</span>
-			<span className="in-num hidden flex-col items-end gap-0.5 md:flex">
-				<span className="text-[12px] text-(--text-secondary)">{used(session) ? dollars(session.usage.cost) : '—'}</span>
-				{used(session) ? <span className="text-[10.5px] text-(--text-disabled)">{tokens(used(session))} tok</span> : null}
-			</span>
-			<span className="in-num hidden text-right text-[12px] text-(--text-tertiary) md:block">{age(session.createdAt)}</span>
 		</Link>
+	);
+}
+
+/** The pages to offer by number: the first, the last and those around the one shown, gaps as ellipses. */
+export function pageNumbers(page: number, pages: number): Array<number | null> {
+	const wanted = new Set([0, pages - 1, page - 1, page, page + 1].filter((index) => index >= 0 && index < pages));
+	const sorted = [...wanted].sort((a, b) => a - b);
+	return sorted.flatMap((index, at) => (at > 0 && index - sorted[at - 1] > 1 ? [null, index] : [index]));
+}
+
+function Pager({ page, pages, total, onPage }: { page: number; pages: number; total: number; onPage: (page: number) => void }) {
+	const first = page * PAGE_SIZE + 1;
+	const last = Math.min(total, (page + 1) * PAGE_SIZE);
+	return (
+		<nav aria-label="Pages" className="flex flex-wrap items-center gap-2 border-t border-(--border-subtle) px-3 py-2">
+			<Caption className="flex-1">
+				{first}–{last} of {total}
+			</Caption>
+			{pages > 1 ? (
+				<div className="flex items-center gap-0.5">
+					<IconBtn icon={ChevronLeft} size="xs" label="Previous page" disabled={page === 0} onClick={() => onPage(page - 1)} />
+					{pageNumbers(page, pages).map((index, at) =>
+						index === null ? (
+							<span key={`gap-${at}`} className="w-5 text-center text-[11px] text-(--text-disabled)">
+								…
+							</span>
+						) : (
+							<button
+								key={index}
+								type="button"
+								aria-current={index === page ? 'page' : undefined}
+								aria-label={`Page ${index + 1}`}
+								onClick={() => onPage(index)}
+								className={cn(
+									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1.5 text-[11px] outline-none focus-visible:shadow-(--focus-ring)',
+									index === page ? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-(--text-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
+								)}
+							>
+								{index + 1}
+							</button>
+						),
+					)}
+					<IconBtn icon={ChevronRight} size="xs" label="Next page" disabled={page >= pages - 1} onClick={() => onPage(page + 1)} />
+				</div>
+			) : null}
+		</nav>
 	);
 }
 
@@ -130,14 +240,19 @@ function Summary({ sessions }: { sessions: Session[] }) {
 const SERIES = ['Running', 'Pull request', 'Stopped', 'Failed'];
 const SERIES_COLORS = ['var(--accent-base)', 'var(--data-2)', 'var(--neutral-500)', 'var(--danger-base)'];
 
-/** Every task, searchable and filtered by state, newest first. */
+/** Every task, searchable and filtered by state, newest first, a page at a time. */
 export function TasksPage() {
 	const navigate = useNavigate();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
+	const modelName = useModelName();
 	const [query, setQuery] = useState('');
-	const [filter, setFilter] = useState<Filter | null>(null);
+	const [tab, setTab] = useState<TabKey>('all');
+	const [wantedPage, setPage] = useState(0);
 	const all = sessions.data?.sessions ?? [];
-	const shown = all.filter((session) => matches(session, query, filter));
+	const searched = all.filter((session) => matches(session, query));
+	const shown = searched.filter(TABS[tab].test);
+	const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+	const page = Math.min(wantedPage, pages - 1);
 	return (
 		<PageFrame
 			title="Tasks"
@@ -151,20 +266,34 @@ export function TasksPage() {
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">
 				<div className="flex flex-wrap items-center gap-2 border-b border-(--border-subtle) p-2.5">
-					<div className="flex h-8 min-w-[200px] flex-1 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--well-bg) px-3 focus-within:shadow-(--focus-ring)">
+					<Segmented label="Tasks by state" className="max-w-full overflow-x-auto">
+						{(Object.keys(TABS) as TabKey[]).map((key) => (
+							<SegmentedItem
+								key={key}
+								on={tab === key}
+								size="sm"
+								onClick={() => {
+									setTab(key);
+									setPage(0);
+								}}
+							>
+								{TABS[key].label}
+								<span className="in-num text-[10.5px] text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
+							</SegmentedItem>
+						))}
+					</Segmented>
+					<div className="flex h-8 min-w-[180px] flex-1 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--well-bg) px-3 focus-within:shadow-(--focus-ring)">
 						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 						<input
 							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Search by title, repository or branch"
+							onChange={(event) => {
+								setQuery(event.target.value);
+								setPage(0);
+							}}
+							placeholder="Search tasks"
 							aria-label="Search tasks"
 							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
 						/>
-					</div>
-					<div className="flex items-center gap-1">
-						{(Object.keys(FILTERS) as Filter[]).map((key) => (
-							<FilterChip key={key} label={FILTERS[key].label} on={filter === key} onToggle={() => setFilter(filter === key ? null : key)} />
-						))}
 					</div>
 				</div>
 				{sessions.isPending ? (
@@ -173,25 +302,21 @@ export function TasksPage() {
 					</div>
 				) : shown.length === 0 ? (
 					all.length ? (
-						<EmptyState title="No tasks match" body="Try another search or filter." />
+						<EmptyState title="No tasks match" />
 					) : (
 						<div className="p-1.5">
-							<EmptyState art={<TasksArt className="w-full max-w-[320px]" />} title="No tasks yet" body="Start one from New task." />
+							<EmptyState art={<TasksArt className="w-full max-w-[320px]" />} title="No tasks yet" />
 						</div>
 					)
 				) : (
-					<div className="flex flex-col gap-0.5 p-1.5">
-						<div className={`${COLUMNS} in-caption px-2.5 pt-1 pb-1.5`}>
-							<span>Task</span>
-							<span className="text-right md:text-left">Sandbox</span>
-							<span className="hidden md:block">Repository</span>
-							<span className="hidden text-right md:block">Usage</span>
-							<span className="hidden text-right md:block">Started</span>
+					<>
+						<div className="flex flex-col gap-0.5 p-1.5">
+							{shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((session) => (
+								<Row key={session.id} session={session} modelName={modelName} />
+							))}
 						</div>
-						{shown.map((session) => (
-							<Row key={session.id} session={session} />
-						))}
-					</div>
+						<Pager page={page} pages={pages} total={shown.length} onPage={setPage} />
+					</>
 				)}
 			</Card>
 		</PageFrame>

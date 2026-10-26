@@ -5,7 +5,7 @@ import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEf
 import { createPortal } from 'react-dom';
 import { Disclosure } from '@/components/disclosure';
 import { HoverPeek } from '@/components/hover-peek';
-import { useModels } from '@/components/model-picker';
+import { ModelLogo, useModels } from '@/components/model-picker';
 import { Logo } from '@/components/illustrations';
 import { Caption, Chip, Count, IconTile, Segmented, SegmentedItem, SplitBar, Status, type Tone } from '@/components/instrument';
 import { Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
@@ -13,8 +13,7 @@ import { AgentTile, lookOf, titleOf } from '@/components/subagents';
 import { describeTool } from '@/components/tool-describe';
 import { api } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
-import { vendorHue } from '@/lib/model-catalog';
-import { logoFor, vendorSlug } from '@/lib/provider-logos';
+import { logoFor } from '@/lib/provider-logos';
 import {
 	autoZoom,
 	callNumber,
@@ -535,27 +534,6 @@ function useModelNames(): ModelNames {
 			short: (span) => served(span) ?? shortModel(span.model),
 		};
 	}, [models.data]);
-}
-
-/** A model's vendor logo on a small tile, or its initials when the set has no logo. */
-function ModelLogo({ model, size = 16, title }: { model: string; size?: number; title?: string }) {
-	const logo = logoFor({ id: model });
-	const vendor = vendorSlug({ id: model });
-	const hue = vendorHue(vendor);
-	return (
-		<span
-			aria-hidden={title ? undefined : true}
-			title={title}
-			className="inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
-			style={
-				logo
-					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
-					: { width: size, height: size, fontSize: size * 0.45, color: hue, background: `${hue}1f`, boxShadow: `inset 0 0 0 1px ${hue}33` }
-			}
-		>
-			{logo ? <span className="flex text-(--text-primary)" dangerouslySetInnerHTML={{ __html: logo }} /> : vendor.replace(/[^a-z0-9]/gi, '').slice(0, 2)}
-		</span>
-	);
 }
 
 /** A gateway's logo and name: OpenRouter, a ChatGPT plan, Claude Code. */
