@@ -29,16 +29,44 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 	const [following, setFollowing] = useState(true);
 	const pinned = useRef(true);
 	const scroller = useRef<HTMLElement | null>(null);
+	const navigating = useRef(false);
+	const navigationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pin = useCallback((on: boolean) => {
 		pinned.current = on;
 		setFollowing(on);
 	}, []);
 
+	const cancelNavigation = useCallback(() => {
+		navigating.current = false;
+		if (navigationTimer.current !== null) clearTimeout(navigationTimer.current);
+		navigationTimer.current = null;
+	}, []);
+
+	const finishNavigation = useCallback(() => {
+		if (!navigating.current) return;
+		cancelNavigation();
+		if (scroller.current && atBottom(scroller.current)) pin(true);
+	}, [cancelNavigation, pin]);
+
+	// scrollend is not available everywhere, and an interrupted/no-op animation
+	// may never emit it. Finish after scrolling has been quiet as a fallback.
+	const waitForNavigation = useCallback(() => {
+		if (navigationTimer.current !== null) clearTimeout(navigationTimer.current);
+		navigationTimer.current = setTimeout(finishNavigation, 200);
+	}, [finishNavigation]);
+
+	const release = useCallback(() => {
+		navigating.current = true;
+		pin(false);
+		waitForNavigation();
+	}, [pin, waitForNavigation]);
+
 	const follow = useCallback(() => {
+		cancelNavigation();
 		pin(true);
 		const el = scroller.current;
 		if (el) el.scrollTop = el.scrollHeight;
-	}, [pin]);
+	}, [cancelNavigation, pin]);
 
 	useEffect(() => {
 		const target = ref.current;
@@ -56,6 +84,13 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 		};
 		const onScroll = () => {
 			const top = el.scrollTop;
+			// Smooth navigation starts within the bottom slack: do not repin while
+			// its intermediate scroll events are arriving.
+			if (navigating.current) {
+				last = top;
+				waitForNavigation();
+				return;
+			}
 			// Growth below never moves scrollTop, so only the reader's own scroll up lets go.
 			if (atBottom(el)) {
 				if (!pinned.current) pin(true);
@@ -63,9 +98,11 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 			last = top;
 		};
 		const onWheel = (event: WheelEvent) => {
+			cancelNavigation();
 			if (event.deltaY < 0 && pinned.current && el.scrollHeight > el.clientHeight) pin(false);
 		};
 		const onTouchStart = () => {
+			cancelNavigation();
 			touching = true;
 		};
 		const onTouchEnd = () => {
@@ -73,6 +110,7 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 			if (atBottom(el)) pin(true);
 		};
 		el.addEventListener('scroll', onScroll, { passive: true });
+		el.addEventListener('scrollend', finishNavigation);
 		el.addEventListener('wheel', onWheel, { passive: true });
 		el.addEventListener('touchstart', onTouchStart, { passive: true });
 		el.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -83,15 +121,15 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 		for (const child of el.children) observer?.observe(child);
 		return () => {
 			observer?.disconnect();
+			cancelNavigation();
 			el.removeEventListener('scroll', onScroll);
+			el.removeEventListener('scrollend', finishNavigation);
 			el.removeEventListener('wheel', onWheel);
 			el.removeEventListener('touchstart', onTouchStart);
 			el.removeEventListener('touchend', onTouchEnd);
 			el.removeEventListener('touchcancel', onTouchEnd);
 		};
-	}, [ref, enabled, reset, pin]);
-
-	const release = useCallback(() => pin(false), [pin]);
+	}, [ref, enabled, reset, pin, cancelNavigation, finishNavigation, waitForNavigation]);
 
 	return { following: following || !enabled, follow, release };
 }
