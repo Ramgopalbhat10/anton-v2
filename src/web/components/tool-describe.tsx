@@ -177,13 +177,18 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				),
 			};
 		case 'edit': {
-			const added = lineCount(field(input, 'newText'));
-			const removed = lineCount(field(input, 'oldText'));
+			// One call can make several edits (`more`), in other files too.
+			const more = input && typeof input === 'object' && Array.isArray((input as { more?: unknown }).more) ? (input as { more: unknown[] }).more : [];
+			const edits = [input, ...more];
+			const added = edits.reduce<number>((sum, next) => sum + lineCount(field(next, 'newText')), 0);
+			const removed = edits.reduce<number>((sum, next) => sum + lineCount(field(next, 'oldText')), 0);
+			const others = new Set(more.map((next) => field(next, 'path')).filter((path) => path && path !== field(input, 'path'))).size;
 			return {
 				icon: Pencil,
 				body: (
 					<>
-						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--success-text)">+{added}</span>{' '}
+						Edited <Em>{field(input, 'path')}</Em>
+						{others ? ` and ${others} more file${others === 1 ? '' : 's'}` : ''} <span className="text-(--success-text)">+{added}</span>{' '}
 						<span className="text-(--danger-text)">-{removed}</span>
 					</>
 				),

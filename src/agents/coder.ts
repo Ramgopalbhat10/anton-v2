@@ -1113,7 +1113,7 @@ const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
 /** Each model call sends the whole conversation again, so a step that does several things saves a call's worth of it. */
 const BATCH_HINT =
-	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, rather than one at a time.';
+	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, and make the edits you have planned in one edit call (its `more`), rather than one at a time.';
 
 /** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
 /** A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). */

@@ -41,3 +41,39 @@ test('read describes an image in words for a model that cannot see', async () =>
 	assert.match((image.content[0] as { text: string }).text, /a vision model described it:\n\nA diagram of three boxes\./);
 	assert.deepEqual(described, ['image/png']);
 });
+
+test('edit makes several replacements in one call, across files, all or none', async () => {
+	const disk: Record<string, string> = { 'a.ts': 'const a = 1;\nconst b = 2;\n', 'b.ts': 'export const c = 3;\n' };
+	const box = {
+		cwd: '/repo',
+		readFile: async (path: string) => {
+			if (!(path in disk)) throw new Error(`No such file: ${path}`);
+			return disk[path];
+		},
+		writeFile: async (path: string, content: string) => void (disk[path] = content),
+	} as unknown as Sandbox;
+	const edit = sandboxTools({ sees: async () => true, describe: async () => '' })(box, { subagents: {} }).find((tool) => tool.name === 'edit')!;
+	const textOf = (result: { content: unknown[] }) => (result.content[0] as { text: string }).text;
+
+	const many = await edit.execute('call', {
+		path: 'a.ts',
+		oldText: 'const a = 1;',
+		newText: 'const a = 10;',
+		more: [{ oldText: 'const b = 2;', newText: 'const b = 20;' }, { path: 'b.ts', oldText: '3', newText: '30' }],
+	});
+	assert.equal(textOf(many), 'Made 3 edits in 2 files: a.ts, b.ts.');
+	assert.deepEqual(disk, { 'a.ts': 'const a = 10;\nconst b = 20;\n', 'b.ts': 'export const c = 30;\n' });
+
+	// One that cannot be made changes nothing, and says which it was.
+	await assert.rejects(
+		edit.execute('call', { path: 'a.ts', oldText: 'const a = 10;', newText: 'const a = 0;', more: [{ path: 'b.ts', oldText: 'missing', newText: 'x' }] }),
+		/Edit 2 of 2: Could not find the exact text in b\.ts.*No file was changed\./,
+	);
+	assert.equal(disk['a.ts'], 'const a = 10;\nconst b = 20;\n');
+	// Later edits see the earlier ones; replaceAll works as Flue's.
+	await edit.execute('call', { path: 'a.ts', oldText: 'const', newText: 'let', replaceAll: true, more: [{ oldText: 'let a = 10', newText: 'let a = 11' }] });
+	assert.equal(disk['a.ts'], 'let a = 11;\nlet b = 20;\n');
+	// Without `more`, it is Flue's own edit.
+	assert.match(textOf(await edit.execute('call', { path: 'b.ts', oldText: '30', newText: '31' })), /Successfully edited b\.ts/);
+	assert.equal(disk['b.ts'], 'export const c = 31;\n');
+});

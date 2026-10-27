@@ -92,8 +92,13 @@ function changedPaths(parts: FlueConversationPart[]): string[] {
 	const paths: string[] = [];
 	for (const part of parts) {
 		if (part.type !== 'dynamic-tool' || part.state !== 'output-available' || (part.toolName !== 'edit' && part.toolName !== 'write')) continue;
-		const path = field(part.input, 'path').replace(/^\.\//, '');
-		if (path && !paths.includes(path)) paths.push(path);
+		const first = field(part.input, 'path');
+		// An edit can make several, in other files too (`more`).
+		const more = part.input && typeof part.input === 'object' && Array.isArray((part.input as { more?: unknown }).more) ? ((part.input as { more: unknown[] }).more) : [];
+		for (const raw of [first, ...more.map((next) => field(next, 'path') || first)]) {
+			const path = raw.replace(/^\.\//, '');
+			if (path && !paths.includes(path)) paths.push(path);
+		}
 	}
 	return paths;
 }
