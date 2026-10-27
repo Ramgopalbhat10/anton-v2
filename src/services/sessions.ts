@@ -281,19 +281,34 @@ export async function resumeSession(id: string): Promise<Session> {
 	return getSession(id);
 }
 
+/**
+ * Each task's stop in progress. Saving its files and stopping its sandbox can take a minute or two, so a
+ * second Stop, or a Delete pressed meanwhile, waits for that one rather than saving and stopping again.
+ */
+const stopping = new Map<string, Promise<void>>();
+
 /** Saves a checkpoint, then stops the machine. Never starts one. */
 export async function stopSession(id: string): Promise<Session> {
 	const record = await getSessionRecord(id);
 	if (!record) throw new NotFoundError('Session not found');
+	let stop = stopping.get(id);
+	if (!stop) {
+		stop = stopMachine(id, record.machineState).finally(() => stopping.delete(id));
+		stopping.set(id, stop);
+	}
+	await stop;
+	return getSession(id);
+}
+
+async function stopMachine(id: string, machineState: string | null): Promise<void> {
 	await stopAgent(id);
 	const machine = await liveMachine(id);
-	if (machine && record.machineState) {
+	if (machine && machineState) {
 		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
-		await getProviders().sandbox.stop(record.machineState);
+		await getProviders().sandbox.stop(machineState);
 	}
 	forgetMachine(id);
 	invalidateRunning();
-	return getSession(id);
 }
 
 /**

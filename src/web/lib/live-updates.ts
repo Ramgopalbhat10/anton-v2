@@ -69,6 +69,8 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 		// A pull request opened, or its checks or review moved.
 		['reviews'],
 		['session', change.id],
+		// A reply starting or ending reads the messages waiting for it, or drops them on a Stop.
+		['waiting', change.id],
 		['context', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],

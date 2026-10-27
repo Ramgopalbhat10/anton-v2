@@ -299,6 +299,9 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 	return getSession(threadId);
 }
 
+/** Each task's delete in progress, which a second press joins rather than keeping its files in the Library twice. */
+const deleting = new Map<string, Promise<{ kept: string[] }>>();
+
 /**
  * Deletes a task. A project's thread goes as in Claude's projects: a resolved
  * one is the project's record and is reopened before it can be deleted; any
@@ -308,7 +311,16 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
  * on and nothing else would bring them back; delete them from the Library.
  * Returns where they were kept.
  */
-export async function deleteTask(id: string): Promise<{ kept: string[] }> {
+export function deleteTask(id: string): Promise<{ kept: string[] }> {
+	let deletion = deleting.get(id);
+	if (!deletion) {
+		deletion = removeTask(id).finally(() => deleting.delete(id));
+		deleting.set(id, deletion);
+	}
+	return deletion;
+}
+
+async function removeTask(id: string): Promise<{ kept: string[] }> {
 	const record = await getSessionRecord(id);
 	if (!record) throw new NotFoundError('Session not found');
 	if (!record.spaceId) {

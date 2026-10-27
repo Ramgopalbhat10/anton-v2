@@ -20,7 +20,7 @@ import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { HoverPeek } from '@/components/hover-peek';
 import { TraceButton, TraceModal } from '@/components/trace-modal';
 import { Caption, Chip, Figure, SplitBar } from '@/components/instrument';
-import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
 import { splitAttachments } from '../../core/attachments';
@@ -1108,6 +1108,17 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
 const NO_JOINS: Join[] = [];
+const NO_WAITING: WaitingMessage[] = [];
+/** Ids for messages known only as waiting, apart from any the runtime gives. */
+const WAITING_PREFIX = 'waiting:';
+const waitingMessage = (message: WaitingMessage): FlueConversationMessage => ({
+	id: `${WAITING_PREFIX}${message.id}`,
+	role: 'user',
+	purpose: 'user',
+	display: 'visible',
+	submissionId: message.id,
+	parts: [{ type: 'text', text: message.text, state: 'done' }],
+});
 const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
 
 /** File references in replies link to the task's files, and open in the Files panel at their line. */
@@ -1134,14 +1145,19 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
-	const messages = useMemo(
-		() =>
-			conversation
-				.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
-				// One Stop settles the reply and every message queued behind it; it reads as one stop.
-				.filter((message, index, list) => !(message.settlement?.outcome === 'aborted' && list[index - 1]?.settlement?.outcome === 'aborted')),
-		[conversation],
-	);
+	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
+	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
+	const unreadByServer = useQuery({ queryKey: ['waiting', sessionId], queryFn: () => api.waiting(sessionId) }).data?.messages ?? NO_WAITING;
+	const messages = useMemo(() => {
+		const shown = conversation
+			.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
+			// One Stop settles the reply and every message queued behind it; it reads as one stop.
+			.filter((message, index, list) => !(message.settlement?.outcome === 'aborted' && list[index - 1]?.settlement?.outcome === 'aborted'));
+		// This page's own sends show until the runtime lists them, by their words before they have an id.
+		const listed = new Set(shown.flatMap((message) => (message.role !== 'user' ? [] : message.submissionId ? [message.submissionId] : [textOf(message)])));
+		const unread = unreadByServer.filter((message) => !listed.has(message.id) && !listed.has(message.text.trim()));
+		return unread.length ? [...shown, ...unread.map(waitingMessage)] : shown;
+	}, [conversation, unreadByServer]);
 	// A chat's messages carry no repository or branch under them.
 	const repo = session.data && !isChat(session.data) ? session.data.repo : undefined;
 	const branch = session.data ? branchLabel(session.data) : undefined;
@@ -1162,6 +1178,10 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		for (const row of rows) {
 			const message = row.message;
 			if (message.role !== 'user') continue;
+			if (message.id.startsWith(WAITING_PREFIX)) {
+				map.set(message.id, JOINING);
+				continue;
+			}
 			if (row.joined) {
 				map.set(message.id, JOINED_HERE);
 				continue;

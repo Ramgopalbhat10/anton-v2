@@ -12,6 +12,9 @@ export const skillsDir = (machine: Machine) => `${machine.root}/skills`;
 /** The copy's fingerprint, kept in the folder so an unchanged copy is not written again. */
 const MARKER = '.anton-skills';
 
+/** Long enough for the largest copy, which takes a few seconds; short enough not to hold a reply. */
+const COPY_MS = 60_000;
+
 const fingerprint = (skills: MountedSkill[]) => {
 	const hash = createHash('sha256');
 	for (const skill of skills)
@@ -28,6 +31,10 @@ const fingerprint = (skills: MountedSkill[]) => {
  * where the agent's shell can run its scripts and import its kits. The
  * `read_skill_resource` tool only reaches them through Anton, never from a
  * command. One script writes them all, each file as base64 in a heredoc.
+ * Bash reads a script piped to `bash -s` one byte at a time, which for a few
+ * MB of skills held a reply's sandbox start for minutes, so the script is
+ * saved to a file first and run from there. A copy still stuck after
+ * `COPY_MS` is given up: the skills stay readable through Anton.
  */
 export async function copySkillFiles(machine: Machine, skills: MountedSkill[]): Promise<void> {
 	const withFiles = skills.filter((skill) => Object.keys(skill.files).length > 0);
@@ -44,6 +51,10 @@ export async function copySkillFiles(machine: Machine, skills: MountedSkill[]): 
 			lines.push(`mkdir -p ${quote(target.slice(0, target.lastIndexOf('/')))}`, `base64 -d > ${quote(target)} <<'ANTON_SKILL_FILE'`, ...(bytes.toString('base64').match(/.{1,76}/g) ?? []), 'ANTON_SKILL_FILE');
 		}
 	lines.push(`printf %s ${quote(mark)} > ${quote(`${root}/${MARKER}`)}`, '');
-	const result = await machine.exec('bash -s', { stdin: new TextEncoder().encode(lines.join('\n')) });
+	const script = `${root}.sh`;
+	const result = await machine.exec(`cat > ${quote(script)} && bash ${quote(script)}; status=$?; rm -f ${quote(script)}; exit $status`, {
+		stdin: new TextEncoder().encode(lines.join('\n')),
+		timeoutMs: COPY_MS,
+	});
 	if (result.exitCode !== 0) throw new CommandError('copy the skills into the sandbox', result);
 }
