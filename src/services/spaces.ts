@@ -15,6 +15,7 @@ import { findModel } from './models.ts';
 import { readOutputFile, storedOutputs } from './files.ts';
 import { createSession, deleteSession, getSession, listThreads, stopSession } from './sessions.ts';
 import { keepThreadFiles } from './space-files.ts';
+import { deletedThreads, noteDeleted } from './deleted-threads.ts';
 
 /** Instructions every thread and the coordinator read; long enough for a real brief, short enough to send each turn. */
 export const MAX_INSTRUCTIONS = 16_000;
@@ -139,6 +140,8 @@ export async function findThread(spaceId: string, ref: string): Promise<Session>
 	if (matches.length === 1) return matches[0];
 	const titled = threads.filter((thread) => thread.title.toLowerCase() === wanted.toLowerCase());
 	if (titled.length === 1) return titled[0];
+	const deleted = (await deletedThreads(spaceId)).find((thread) => thread.id === wanted || (wanted.length >= 4 && thread.id.startsWith(wanted)) || thread.title.toLowerCase() === wanted.toLowerCase());
+	if (deleted) throw new NotFoundError(`"${deleted.title}" was deleted by the user and takes no messages. Start a new thread instead, with what the user asks and what that thread had found in its brief.`);
 	throw new NotFoundError(`No thread ${ref} in this project`);
 }
 
@@ -339,6 +342,10 @@ async function removeTask(id: string): Promise<{ kept: string[] }> {
 		files.flatMap((file) => (file.bytes ? [{ path: file.path, bytes: file.bytes }] : [])),
 	);
 	await deleteSession(id);
+	// Its coordinator started it or heard from it, and may still route a follow-up to it.
+	await noteDeleted(record.spaceId, { id, title: record.title, lastReply: record.lastReply, at: new Date().toISOString() }).catch((error: unknown) =>
+		logProblem('warn', 'Could not tell the coordinator a thread was deleted', error, id),
+	);
 	announce({ kind: 'space', id: record.spaceId, what: 'threads' });
 	// Its slot is free for a queued thread.
 	await drainQueue(record.spaceId);
