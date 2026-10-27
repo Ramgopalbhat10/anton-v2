@@ -26,6 +26,7 @@ import { useThreadFileResolver } from '@/lib/thread-outputs';
 import { openViewer, sameItem, type ViewerItem } from '@/lib/viewer';
 import { linkTargets } from '../../core/outputs';
 import { parseReports, type Report, threadsLoaded } from '@/lib/spaces';
+import { draftSession, madeAlready, newTaskId, startInBackground, titleFrom } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
@@ -255,12 +256,21 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 /** A thread the coordinator is starting, until the server has it: its title, or why it could not start. */
 function Starting({ part }: { part: ToolPart }) {
 	const failed = part.state === 'output-error';
+	// The title streams in with the coordinator's call; until it does, a bar stands in for it.
+	const title = field(part.input, 'title');
 	return (
-		<div className={cn(THREAD_CARD, 'min-h-9 flex-row items-center gap-2.5')}>
-			{failed ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
-			<span className={cn('min-w-0 truncate text-[13px]', failed ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>
-				{failed ? `Could not start “${field(part.input, 'title')}”` : field(part.input, 'title') || 'New thread'}
-			</span>
+		<div aria-busy={!failed} className={cn(THREAD_CARD, 'min-h-9 justify-center')}>
+			<div className="flex min-h-6 min-w-0 items-center gap-2.5">
+				{failed ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
+				{failed ? (
+					<span className="min-w-0 truncate text-[13px] text-(--danger-text)">Could not start “{title || 'a thread'}”</span>
+				) : title ? (
+					<span className="min-w-0 truncate text-[13px] text-(--text-primary)">{title}</span>
+				) : (
+					<span aria-hidden className="in-pulse h-2.5 w-[140px] rounded-full bg-(--bg-skeleton)" />
+				)}
+				{failed ? null : <span className="in-shimmer shrink-0 text-[12px]">Starting</span>}
+			</div>
 		</div>
 	);
 }
@@ -469,28 +479,30 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	const attachments = useAttachments({ imagesAsFiles: true });
 	const repo = repoId === null ? undefined : (space.repos.find((item) => item.id === repoId) ?? space.repos[0]);
 	const model = choice.model ?? space.threadModel ?? models.data?.default ?? '';
-	const start = useMutation({
-		mutationFn: async () =>
-			api.startThread(space.id, {
-				// Files go to the project's Library, where the thread reads them, and the brief carries what they say.
-				brief: withAttachments(brief, await Promise.all(attachments.files.map((file) => api.attachToProject(space.id, file.file))), 'project'),
-				projectId: repo?.id ?? null,
-				model: choice.model ?? undefined,
-				reasoning: choice.reasoning ?? undefined,
-				planMode: repo ? planMode : false,
-			}),
-		onSuccess: (thread) => {
-			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-			onDone();
-			void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: space.id, threadId: thread.id } });
-		},
-	});
+	// The thread opens at once, as a skeleton while the server makes it and gives it its slot.
+	function start() {
+		const id = newTaskId();
+		const files = attachments.files;
+		const input = { id, projectId: repo?.id ?? null, model: choice.model ?? undefined, reasoning: choice.reasoning ?? undefined, planMode: repo ? planMode : false };
+		const draft = draftSession({ id, title: titleFrom(brief.trim() || files[0]?.name || 'New thread'), prompt: brief, projectId: repo?.id, repo: repo?.repoFullName, model, reasoning: choice.reasoning, planMode, spaceId: space.id });
+		startInBackground(queryClient, draft, brief, async () =>
+			api
+				.startThread(space.id, {
+					...input,
+					// Files go to the project's Library, where the thread reads them, and the brief carries what they say.
+					brief: withAttachments(brief, await Promise.all(files.map((file) => api.attachToProject(space.id, file.file))), 'project'),
+				})
+				.catch((error: unknown) => madeAlready(id, error, api.session)),
+		);
+		onDone();
+		void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: space.id, threadId: id } });
+	}
 	return (
 		<form
 			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--border-strong)"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (brief.trim() || attachments.count) start.mutate();
+				if (brief.trim() || attachments.count) start();
 			}}
 			{...attachments.dropZone}
 		>
@@ -537,9 +549,8 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				{/* Plan mode plans changes to code; a thread with no repository has none to plan. */}
 				{repo ? <PlanToggle on={planMode} onChange={setPlanMode} /> : null}
 				<div className="min-w-0 flex-1" />
-				{start.isError ? <span className="text-[12px] text-(--danger-text)">{start.error.message}</span> : null}
-				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={(!brief.trim() && !attachments.count) || start.isPending}>
-					{start.isPending ? (attachments.count ? 'Attaching…' : 'Starting…') : 'Start thread'}
+				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!brief.trim() && !attachments.count}>
+					Start thread
 				</Btn>
 			</div>
 		</form>
@@ -609,7 +620,8 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
 					const attached = await Promise.all([...taken.images.map(imageFile), ...taken.files.map((file) => file.file)].map((file) => api.attachToProject(space.id, file)));
-					const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 });
+					// Saved commands are read only for a message that starts with one, so any other goes out without a round trip.
+					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
 					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
 				} catch (error) {

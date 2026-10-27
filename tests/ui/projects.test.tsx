@@ -304,8 +304,10 @@ describe('threads', () => {
 		expect(screen.queryByRole('button', { name: /Plan/ })).toBeNull();
 		await userEvent.type(screen.getByRole('textbox', { name: /works without a repository/ }), 'Compare the pricing pages');
 		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
-		await waitFor(() => expect(api.startThread).toHaveBeenCalledWith('space_1', expect.objectContaining({ brief: 'Compare the pricing pages', projectId: null, planMode: false })));
-		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/new'));
+		// It opens at once, by the id the page chose, while the server makes it.
+		await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/projects\/space_1\/threads\/[0-9a-f-]{36}$/));
+		const id = router.state.location.pathname.split('/').pop();
+		await waitFor(() => expect(api.startThread).toHaveBeenCalledWith('space_1', expect.objectContaining({ id, brief: 'Compare the pricing pages', projectId: null, planMode: false })));
 	});
 
 	it('attaches files to the coordinator: saved to the project Library and sent with what they say', async () => {

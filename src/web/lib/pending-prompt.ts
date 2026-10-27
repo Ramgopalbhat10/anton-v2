@@ -27,3 +27,12 @@ export function takePendingPrompt(sessionId: string): { prompt: string; images: 
 		return undefined;
 	}
 }
+
+/** The prompt waiting for the thread to send it, left in place: the thread shows it while its history loads. */
+export function peekPendingPrompt(sessionId: string): string | undefined {
+	try {
+		return sessionStorage.getItem(key(sessionId)) ?? undefined;
+	} catch {
+		return undefined;
+	}
+}

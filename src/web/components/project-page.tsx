@@ -12,6 +12,8 @@ import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/she
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
+import { useStarting } from '@/lib/starting';
+import { StartingTask } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
 
 type ProjectPanelState = { open: boolean; tab: ProjectTab };
@@ -163,6 +165,7 @@ export function ThreadPage() {
 	const search = useSearch({ from: '/projects/$spaceId/threads/$threadId' });
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
+	const starting = useStarting(threadId);
 	// Each time it opens, a thread shows the panels you pinned; whether its workspace was open is its own.
 	const [panels, setPanels] = useState<TaskPanels>(() => {
 		const start = startingPanels();
@@ -178,6 +181,24 @@ export function ThreadPage() {
 		return () => window.removeEventListener('keydown', onKey);
 	}, [spaceId]);
 
+	const leading = (
+		<>
+			<Link
+				to="/projects/$spaceId"
+				params={{ spaceId }}
+				title="Back to the coordinator (Esc)"
+				className="flex min-w-0 shrink items-center gap-1.5 rounded-md py-0.5 pr-1 text-[12.5px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+			>
+				{space.data ? <SpaceMark space={space.data} size={18} /> : null}
+				<span className="hidden max-w-[160px] truncate sm:inline">{space.data?.name ?? 'Project'}</span>
+			</Link>
+			<span aria-hidden className="text-(--text-disabled)">
+				/
+			</span>
+		</>
+	);
+	// A thread you just started opens at once, as a skeleton until the server has made it.
+	if (starting) return <StartingTask starting={starting} workspace={panels.open} leading={leading} onDiscard={() => void navigate({ to: '/projects/$spaceId', params: { spaceId } })} />;
 	return (
 		<TaskWorkspace
 			sessionId={threadId}
@@ -188,22 +209,7 @@ export function ThreadPage() {
 				if (search.panel) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId }, search: {}, replace: true });
 			}}
 			panelRequest={search.panel}
-			leading={
-				<>
-					<Link
-						to="/projects/$spaceId"
-						params={{ spaceId }}
-						title="Back to the coordinator (Esc)"
-						className="flex min-w-0 shrink items-center gap-1.5 rounded-md py-0.5 pr-1 text-[12.5px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
-					>
-						{space.data ? <SpaceMark space={space.data} size={18} /> : null}
-						<span className="hidden max-w-[160px] truncate sm:inline">{space.data?.name ?? 'Project'}</span>
-					</Link>
-					<span aria-hidden className="text-(--text-disabled)">
-						/
-					</span>
-				</>
-			}
+			leading={leading}
 		/>
 	);
 }

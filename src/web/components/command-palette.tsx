@@ -109,7 +109,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 	function start() {
 		onClose();
 		const prompt = query.trim();
-		if (prompt && projects.isSuccess) create.mutate({ prompt, projectId: project?.id });
+		if (prompt && projects.isSuccess) create({ prompt, projectId: project?.id, repo: project?.repoFullName });
 		else void navigate({ to: '/' });
 	}
 

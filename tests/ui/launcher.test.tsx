@@ -18,7 +18,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 vi.mock('@tanstack/react-router', async (original) => ({ ...(await original<typeof import('@tanstack/react-router')>()), useNavigate: () => mocks.navigate }));
-vi.mock('@/lib/create-chat', () => ({ useCreateChat: () => ({ mutate: mocks.mutate, isPending: false, isError: false }) }));
+vi.mock('@/lib/create-chat', () => ({ useCreateChat: () => mocks.mutate }));
 const { Launcher } = await import('@/components/launcher');
 
 function setup() {

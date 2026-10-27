@@ -201,7 +201,8 @@ export function Launcher() {
 	const attachments = useAttachments();
 	const queryClient = useQueryClient();
 	const create = useCreateChat();
-	const mood = useMascotMood({ busy: create.isPending, waiting: false, stir: prompt });
+	const [starting, setStarting] = useState(false);
+	const mood = useMascotMood({ busy: starting, waiting: false, stir: prompt });
 	const models = useModels();
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
@@ -236,14 +237,18 @@ export function Launcher() {
 	}
 
 	async function start() {
-		if (create.isPending || !projects.isSuccess) return;
-		const saved = await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] }));
+		if (starting || !projects.isSuccess) return;
+		setStarting(true);
+		// Saved commands are read only for a prompt that starts with one, so any other opens its task without a round trip.
+		const saved = prompt.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] })) : { commands: [] };
 		const { images, files } = attachments;
-		create.mutate({
+		// The task opens at once; it is made behind its page.
+		create({
 			prompt: expandCommand(prompt, saved.commands, true),
 			images,
 			files,
 			projectId: project?.id,
+			repo: project?.repoFullName,
 			branch: project ? chosenBranch || undefined : undefined,
 			model: model || undefined,
 			reasoning: reasoning ?? undefined,
@@ -308,8 +313,8 @@ export function Launcher() {
 							<ModelPicker value={{ model, reasoning }} onChange={chooseModel} route={route} onRoute={chooseRoute} height={28} side="bottom" />
 							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 							<div className="min-w-0 flex-[1_1_8px]" />
-							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={create.isPending || !projects.isSuccess || blind}>
-								{create.isPending ? (attachments.files.length ? 'Attaching…' : 'Starting…') : chat ? 'Start chat' : 'Start task'}
+							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={starting || !projects.isSuccess || blind}>
+								{chat ? 'Start chat' : 'Start task'}
 							</Btn>
 						</div>
 					</form>
@@ -322,7 +327,6 @@ export function Launcher() {
 							onCancel={() => setAdding(false)}
 						/>
 					) : null}
-					{create.isError ? <p className="m-0 text-[12px] text-(--danger-text)">Could not start the task: {create.error.message}</p> : null}
 					{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 
 					{recent.length > 0 ? (

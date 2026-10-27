@@ -6,7 +6,7 @@ import { THREAD_STATES, type ThreadState } from '../core/thread-state.ts';
 import { getProject, listProjects } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { type Autonomy, deleteSpaceRecord, getSpace, insertSpace, listSpaces, type Space, type SpaceState, setSpaceRepos, spaceSpend, touchSpace, updateSpace } from '../db/spaces.ts';
-import { stopAgent } from './activity.ts';
+import { noteSending, stopAgent } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { projectPictures } from './attachments.ts';
 import { startOfToday } from './budget.ts';
@@ -148,6 +148,8 @@ export async function findThread(spaceId: string, ref: string): Promise<Session>
 /** `projectId` null, or `repo` "none", starts a thread with no repository: a chat, as every thread of a project without repositories is. */
 /** Without a `title`, the thread is named from its brief by a fast model. `automationId` is the routine that starts it. */
 export type ThreadInput = {
+	/** Chosen by the page that starts it, so it can open the thread at once. */
+	id?: string;
 	title: string;
 	brief: string;
 	projectId?: string | null;
@@ -182,9 +184,11 @@ async function repoFor(space: Space, input: ThreadInput): Promise<string | undef
  * Starts a thread: a task on one of the project's repositories, or a chat
  * when it has none, given its brief as its first message. When the project already has as many threads
  * working as it allows, or is paused, the thread waits as queued and starts
- * when a slot frees.
+ * when a slot frees. Handing the brief over (the agent's model, skills and
+ * connectors loaded first) takes seconds; with `wait` false this returns once
+ * the thread has its slot, working or queued, and the brief follows behind.
  */
-export async function startThread(spaceId: string, input: ThreadInput): Promise<Session> {
+export async function startThread(spaceId: string, input: ThreadInput, { wait = true }: { wait?: boolean } = {}): Promise<Session> {
 	const space = await existing(spaceId);
 	if (space.state === 'archived') throw new ConflictError('The project is archived; restore it to start threads');
 	const brief = input.brief.trim();
@@ -192,6 +196,7 @@ export async function startThread(spaceId: string, input: ThreadInput): Promise<
 	const projectId = await repoFor(space, input);
 	const title = input.title.trim();
 	const thread = await createSession({
+		id: input.id,
 		projectId,
 		title,
 		...(title ? {} : { titleFrom: brief }),
@@ -205,7 +210,8 @@ export async function startThread(spaceId: string, input: ThreadInput): Promise<
 	await touchSpace(spaceId);
 	// Shown at once, even when it waits for a slot or cannot start yet.
 	announce({ kind: 'space', id: spaceId, what: 'threads' });
-	await drainQueue(spaceId);
+	const pass = drainPass(spaceId);
+	await (wait ? pass.started : pass.claimed);
 	return getSession(thread.id);
 }
 
@@ -228,22 +234,36 @@ async function sendWithPictures(spaceId: string, threadId: string, message: stri
 	await sendToAgent(threadId, note ? `${message}\n\n${note}` : message, 'coder', images);
 }
 
-const draining = new Map<string, Promise<void>>();
+const draining = new Map<string, Promise<unknown>>();
+
+/** The threads a pass gave a slot, each with its brief, and what to call when it is turned away. */
+type Claimed = { thread: Session; brief: string; turnedAway: () => void };
 
 /**
- * Starts queued threads, oldest first, while the project has free slots; one pass at a time per project.
+ * One pass over the project's queue: `claimed` once each free slot has its
+ * thread (shown as working from then on), `started` once each has its brief.
+ * Passes claim one at a time per project, so two never fill the same slot;
+ * handing briefs over runs behind, as it waits on the agent's setup.
+ */
+function drainPass(spaceId: string, finishing?: string): { claimed: Promise<void>; started: Promise<void> } {
+	const previous = draining.get(spaceId) ?? Promise.resolve();
+	const claimed = previous.then(() => claim(spaceId, finishing));
+	draining.set(spaceId, claimed.catch(() => undefined));
+	const started = claimed.then((threads) => handOver(spaceId, threads)).catch((error: unknown) => logProblem('warn', 'Could not start queued threads', error));
+	return { claimed: claimed.then(() => undefined, () => undefined), started };
+}
+
+/**
+ * Starts queued threads, oldest first, while the project has free slots.
  * `finishing` is a thread whose reply is ending: it still counts as working until its reply settles, but its slot is free.
  */
 export function drainQueue(spaceId: string, finishing?: string): Promise<void> {
-	const previous = draining.get(spaceId) ?? Promise.resolve();
-	const next = previous.then(() => drain(spaceId, finishing)).catch((error: unknown) => logProblem('warn', 'Could not start queued threads', error));
-	draining.set(spaceId, next);
-	return next;
+	return drainPass(spaceId, finishing).started;
 }
 
-async function drain(spaceId: string, finishing?: string): Promise<void> {
+async function claim(spaceId: string, finishing?: string): Promise<Claimed[]> {
 	const space = await getSpace(spaceId);
-	if (!space || space.state !== 'active') return;
+	if (!space || space.state !== 'active') return [];
 	const threads = await listThreads(spaceId);
 	const now = Date.now();
 	const busy = threads.filter((thread) => {
@@ -253,18 +273,30 @@ async function drain(spaceId: string, finishing?: string): Promise<void> {
 		return at !== undefined && now - at < LAUNCH_MS;
 	}).length;
 	const queued = threads.filter((thread) => thread.brief && !thread.resolvedAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+	const claimed: Claimed[] = [];
 	for (const thread of queued.slice(0, Math.max(0, space.maxParallel - busy))) {
-		const brief = thread.brief!;
 		launching.set(thread.id, now);
 		await updateSession(thread.id, { brief: null });
+		// Working from here, as a message you send is, while its agent is set up.
+		claimed.push({ thread, brief: thread.brief!, turnedAway: noteSending(thread.id) });
+	}
+	if (claimed.length) announce({ kind: 'space', id: spaceId, what: 'threads' });
+	return claimed;
+}
+
+/** Gives each claimed thread its brief, in order; one turned away puts its brief back with the rest, so they start once the reason (a spending cap, a restore) is gone. */
+async function handOver(spaceId: string, claimed: Claimed[]): Promise<void> {
+	for (const [index, { thread, brief }] of claimed.entries()) {
 		try {
 			await sendWithPictures(spaceId, thread.id, brief, thread.model);
 		} catch (error) {
-			// Put the brief back, so the thread starts once the reason (a spending cap, a restore) is gone.
-			launching.delete(thread.id);
-			await updateSession(thread.id, { brief });
+			for (const left of claimed.slice(index)) {
+				launching.delete(left.thread.id);
+				left.turnedAway();
+				await updateSession(left.thread.id, { brief: left.brief });
+			}
 			logProblem('warn', 'A queued thread could not start', error, thread.id);
-			return;
+			break;
 		}
 	}
 	announce({ kind: 'space', id: spaceId, what: 'threads' });

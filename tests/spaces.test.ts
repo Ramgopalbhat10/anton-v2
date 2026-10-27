@@ -46,6 +46,7 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
 const { addProject } = await import('../src/services/projects.ts');
 const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
+const { recordAgentEvent } = await import('../src/services/activity.ts');
 const spaces = await import('../src/services/spaces.ts');
 const reports = await import('../src/services/thread-reports.ts');
 const files = await import('../src/services/space-files.ts');
@@ -62,7 +63,16 @@ setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: dis
 /** Messages Anton sent to threads' agents, and to coordinators. */
 const toThreads: Array<{ id: string; text: string }> = [];
 const toCoordinator: Array<{ id: string; text: string }> = [];
-setAgentDelivery(async (id, text) => void toThreads.push({ id, text }));
+// The runtime picks each message up and settles its reply, as a thread is counted working until it does; the tests end replies with `threadFinished`.
+/** Set to hold every message at the runtime's door until it resolves, as an agent's setup can take seconds. */
+let holdDelivery: Promise<void> | null = null;
+setAgentDelivery(async (id, text) => {
+	await holdDelivery;
+	toThreads.push({ id, text });
+	const submissionId = `sub-${toThreads.length}`;
+	recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId });
+	recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId });
+});
 setAgentDelivery(async (id, text) => void toCoordinator.push({ id, text }), 'coordinator');
 
 beforeEach(() => {
@@ -142,6 +152,32 @@ test('threads beyond the limit queue, and start as others finish', async () => {
 	const started = await sessions.getSession(three.id);
 	assert.equal(started.brief, null);
 	assert.equal((await sessions.getSession(one.id)).lastReply, 'Added the table.');
+});
+
+test('a thread started without waiting has its slot at once, and its brief follows behind', async () => {
+	const space = await spaces.createSpace({ name: 'Snappy', repoIds: [api.id], maxParallel: 1 });
+	let release = () => {};
+	holdDelivery = new Promise((resolve) => (release = resolve));
+	try {
+		const id = crypto.randomUUID();
+		const first = await spaces.startThread(space.id, { id, title: 'First', brief: 'Do the first' }, { wait: false });
+		assert.equal(first.id, id, 'the page chose its id');
+		assert.equal(first.threadState, 'working', 'working while its agent is set up');
+		assert.equal(first.brief, null);
+		assert.equal(toThreads.length, 0, 'the brief is still on its way');
+		const second = await spaces.startThread(space.id, { title: 'Second', brief: 'Do the second' }, { wait: false });
+		assert.equal(second.threadState, 'queued', 'the slot is taken');
+		await assert.rejects(() => spaces.startThread(space.id, { id, title: 'Again', brief: 'Do it again' }), /already exists/);
+		release();
+		for (let tries = 0; toThreads.length === 0 && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+		assert.deepEqual(toThreads, [{ id, text: 'Do the first' }]);
+	} finally {
+		holdDelivery = null;
+	}
+	// An id once deleted is never given out again.
+	const gone = await sessions.createSession({ id: crypto.randomUUID(), title: 'Gone' });
+	await spaces.deleteTask(gone.id);
+	await assert.rejects(() => sessions.createSession({ id: gone.id, title: 'Back' }), /already exists/);
 });
 
 test('a paused project queues threads until it is active again', async () => {

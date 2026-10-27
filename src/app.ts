@@ -706,6 +706,8 @@ app.post('/api/spaces/:id/threads', async (c) => {
 	const input = await body(
 		c,
 		v.object({
+			// Chosen by the page, which opens the thread while it is made.
+			id: v.optional(v.pipe(v.string(), v.uuid())),
 			title: v.optional(v.pipe(v.string(), v.maxLength(200)), ''),
 			brief: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40_000)),
 			// null starts a thread with no repository, a chat.
@@ -716,7 +718,8 @@ app.post('/api/spaces/:id/threads', async (c) => {
 			planMode: v.optional(v.boolean()),
 		}),
 	);
-	const thread = await startThread(c.req.param('id'), input);
+	// Answered once the thread has its slot; its brief reaches it behind the answer.
+	const thread = await startThread(c.req.param('id'), input, { wait: false });
 	// You started it, not the coordinator: it hears of it, and its feed shows it as it starts.
 	await threadStarted(thread.id, { by: 'you', brief: input.brief });
 	return c.json(thread);
@@ -772,6 +775,8 @@ app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,
 		v.object({
+			// Chosen by the page, which opens the task while it is made.
+			id: v.optional(v.pipe(v.string(), v.uuid())),
 			// Left out for a chat, which has no repository.
 			projectId: v.optional(v.string()),
 			branch: v.optional(v.string()),
