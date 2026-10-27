@@ -1,4 +1,4 @@
-import { prColor } from '@/components/pr-status';
+import { PrStatus } from '@/components/pr-status';
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -7,7 +7,6 @@ import {
   CircleX,
   ExternalLink,
   FileDiff,
-  GitPullRequest,
   MessageCircleQuestion,
 } from "lucide-react";
 import { createContext, memo, useContext, useMemo } from "react";
@@ -321,13 +320,6 @@ const CHECKS = {
   },
 } as const;
 
-const STATES = {
-  open: "Open",
-  draft: "Draft",
-  merged: "Merged",
-  closed: "Closed",
-} as const;
-
 /** The pull request a turn opened: its number and title, and its state and checks as GitHub last reported them. */
 export const PullRequestCard = memo(function PullRequestCard({
   sessionId,
@@ -343,7 +335,6 @@ export const PullRequestCard = memo(function PullRequestCard({
     queryFn: () => api.session(sessionId),
   });
   const pull = session.data?.prUrl === url ? session.data.pullRequest : null;
-  const number = /\/pull\/(\d+)/.exec(url)?.[1];
   const checks = pull?.checks ? CHECKS[pull.checks] : null;
   const failing = pull?.runs.filter((run) => run.status === "failed") ?? [];
   // .in-card lays itself out as a column, so the row is a link inside it.
@@ -355,39 +346,11 @@ export const PullRequestCard = memo(function PullRequestCard({
         rel="noreferrer"
         className="group/pr flex items-center gap-3 rounded-[inherit] px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
       >
-        <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong)" style={{ color: prColor(pull?.state) }}>
-          <Icon icon={GitPullRequest} size={13} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">
-            {title || "Pull request"}
-            {number ? (
-              <span className="in-num ml-1.5 text-(--text-tertiary)">
-                #{number}
-              </span>
-            ) : null}
-          </span>
-          <span className="flex items-center gap-1.5 text-[11.5px] leading-[16px] text-(--text-tertiary)">
-            {pull ? (
-              <span style={{ color: prColor(pull.state) }}>{STATES[pull.state]}</span>
-            ) : (
-              <span>
-                {url
-                  .replace(/^https:\/\/github\.com\//, "")
-                  .replace(/\/pull\/\d+$/, "")}
-              </span>
-            )}
-            {checks ? (
-              <>
-                <span>·</span>
-                <span
-                  className={cn("inline-flex items-center gap-1", checks.tone)}
-                >
-                  <Icon icon={checks.icon} size={11} />
-                  {failing.length ? `${failing.length} failing` : checks.label}
-                </span>
-              </>
-            ) : null}
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
+          <span className="flex items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
+            <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
+            {checks ? <span className={cn("inline-flex items-center gap-1", checks.tone)}><Icon icon={checks.icon} size={11} />{failing.length ? `${failing.length} failing` : checks.label}</span> : null}
           </span>
         </span>
         <Icon

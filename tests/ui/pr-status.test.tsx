@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { PrStatus, prColor, prSummary } from '@/components/pr-status';
 import { session } from './render';
@@ -11,6 +11,15 @@ describe('pull request presentation', () => {
 		const link = screen.getByRole('link', { name: `Pull request #42 ${state}` });
 		expect(link.getAttribute('href')).toBe(url);
 		expect(link.getAttribute('style')).toContain(prColor(state));
+	});
+	it('renders a merged chip with its merge icon, but retains its accessible state', () => {
+		const thread = session({ prUrl: url, pullRequest: { state: 'merged', checks: null, runs: [] } });
+		render(<PrStatus thread={thread} link full />);
+		const chip = screen.getByRole('link', { name: 'Pull request #42 merged' });
+		expect(chip.textContent).toBe('#42');
+		expect(chip.querySelector('.lucide-git-merge')).toBeTruthy();
+		expect(chip.className).toContain('border');
+		expect(within(chip).queryByText(/merged/i)).toBeNull();
 	});
 	it('keeps state and attention details together, without treating unknown as open', () => {
 		expect(prSummary(session({ prUrl: url }))).toBe('#42 · status unknown');
