@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { ThreadRow } from '@/lib/joined';
 import { ChatNavigation, chatTurns } from '@/components/chat-navigation';
@@ -32,4 +33,36 @@ describe('chat navigation', () => {
 		fireEvent.keyDown(screen.getByRole('navigation'), { key: 'Escape' });
 		expect(screen.getByRole('button', { name: 'Show chat navigation' }).getAttribute('aria-expanded')).toBe('false');
 	});
+	it('has one collapsed tab stop and opens the turns only on activation', async () => {
+		const user = userEvent.setup();
+		const navigate = vi.fn();
+		const rows = Array.from({ length: 40 }, (_, index) => row(`u${index}`, 'user', `Message ${index}`));
+		render(<><button>Before</button><ChatNavigation rows={rows} onNavigate={navigate} /><button>After</button></>);
+		const trigger = screen.getByRole('button', { name: 'Show chat navigation' });
+		const turns = screen.getAllByRole('button', { name: /Go to input/ });
+		expect(turns.every((turn) => turn.tabIndex === -1)).toBe(true);
+		await user.tab();
+		expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Before' }));
+		await user.tab();
+		expect(document.activeElement).toBe(trigger);
+		expect(trigger.getAttribute('aria-expanded')).toBe('false');
+		await user.tab();
+		expect(document.activeElement).toBe(screen.getByRole('button', { name: 'After' }));
+		await user.tab({ shift: true });
+		await user.keyboard('{Enter}');
+		expect(trigger.getAttribute('aria-expanded')).toBe('true');
+		await user.tab();
+		expect(document.activeElement).toBe(turns[0]);
+		await user.keyboard('{Escape}');
+		expect(document.activeElement).toBe(trigger);
+		expect(trigger.getAttribute('aria-expanded')).toBe('false');
+		expect(turns.every((turn) => turn.tabIndex === -1)).toBe(true);
+		await user.keyboard('{Enter}');
+		await user.tab();
+		await user.keyboard('{Enter}');
+		expect(navigate).toHaveBeenCalledWith('u0');
+		expect(document.activeElement).toBe(trigger);
+		expect(trigger.getAttribute('aria-expanded')).toBe('false');
+	});
+
 });
