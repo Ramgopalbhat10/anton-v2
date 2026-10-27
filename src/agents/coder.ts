@@ -400,7 +400,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				if (!goal?.trim()) return { output: { problem: 'do needs a goal: the outcome the page should reach.' } };
 				if (rest.url) {
 					state = await go({ action: 'open', url: rest.url });
-					if (state.problem) return { output: { ...state, snapshot: pageForAgent(`${id}:${place}`, state.url, state.snapshot) } };
+					if (state.problem) return { output: { ...forAgent(state), snapshot: pageForAgent(`${id}:${place}`, state.url, state.snapshot) } };
 				}
 				const result = await autopilot(
 					id,
@@ -438,9 +438,14 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const seen = pageForAgent(`${id}:${place}`, state.url, state.snapshot, full);
 			const snapshot = seen === state.snapshot && !full ? await trimToJob(id, goal ?? (await currentBrief(id, 'browser')), state.url, seen, tally) : seen;
 			await noteJudgements(id, toolCallId, driven, tally);
-			return { output: { ...report, ...state, snapshot } };
+			return { output: { ...report, ...forAgent(state), snapshot } };
 		},
 	});
+}
+
+/** A step's state as the agent reads it: where the page is scrolled to is only for telling whether a step did anything. */
+function forAgent({ view: _view, ...state }: BrowserState): Omit<BrowserState, 'view'> {
+	return state;
 }
 
 /** Whether the decision model judges a click on `target` to be one that cannot be undone; without one, a click is let through as before. */

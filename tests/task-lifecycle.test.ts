@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -567,7 +568,8 @@ test('the browser keeps one tab open while the agent types and clicks through a 
 	const server = createServer((_request, response) => {
 		response.setHeader('Content-Type', 'text/html');
 		response.end(
-			'<title>Greeter</title><label>Name <input id="name"></label><button onclick="document.querySelector(\'p\').textContent = \'Hello, \' + document.querySelector(\'#name\').value">Greet</button><p></p>',
+			'<title>Greeter</title><label>Name <input id="name"></label><button onclick="document.querySelector(\'p\').textContent = \'Hello, \' + document.querySelector(\'#name\').value">Greet</button><p></p>' +
+				'<button onclick="window.scrollTo(0, 2000)">Jump</button><div style="height: 4000px"></div>',
 		);
 	});
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -587,6 +589,20 @@ test('the browser keeps one tab open while the agent types and clicks through a 
 	const missing = await browse(machine, { action: 'click', target: 'role=button[name="Nowhere"]' });
 	assert.ok(missing.problem, 'a step that fails says why');
 	assert.match(missing.snapshot, /Hello, Ada/, 'and still describes the page');
+
+	const jumped = await browse(machine, { action: 'click', target: 'role=button[name="Jump"]' });
+	assert.equal(jumped.snapshot, missing.snapshot, 'a click that only scrolls leaves the description as it was');
+	assert.notEqual(jumped.view, missing.view, 'but says where the page is scrolled to');
+
+	// The browser dies under the agent (out of memory, its desktop closed): the next step says so and the one after works.
+	const pid = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}.pid`;
+	await run(machine, `pkill -KILL -P "$(cat ${pid})"; sleep 0.5`);
+	const lost = await browse(machine, { action: 'look' });
+	assert.match(lost.problem ?? '', /closed or crashed/);
+	assert.equal(typeof lost.url, 'string');
+	const reopened = await browse(machine, { action: 'open', url: opened.url });
+	assert.equal(reopened.problem, null);
+	assert.match(reopened.snapshot, /button "Greet"/);
 });
 
 test('the checkpoint timeline keeps distinct states, and restoring one puts its files back', async () => {

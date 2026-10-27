@@ -35,8 +35,12 @@ export function addressToUrl(input: string): string {
 	return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
 
-/** What a step reports, before the caller adds console errors and a screenshot. */
-export type StepResult = { url: string; title: string; status: number | null; problem: string | null; snapshot: string };
+/**
+ * What a step reports, before the caller adds console errors and a screenshot. `view` is where the page and
+ * its scrolled areas are scrolled to: a click that only scrolls (a table of contents, a "go to" link) leaves
+ * the accessibility tree as it was, and this is how a caller still sees that it did something.
+ */
+export type StepResult = { url: string; title: string; status: number | null; problem: string | null; snapshot: string; view?: string };
 
 /**
  * One step on a Playwright page, as plain JavaScript source: `browserStep(page, command)`
@@ -59,7 +63,8 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 				break;
 			case 'select': await target().selectOption(command.text ?? '', { timeout: 10000 }); break;
 			case 'press': await (command.target ? target().press(command.key ?? 'Enter', { timeout: 10000 }) : page.keyboard.press(command.key ?? 'Enter')); break;
-			case 'hover': await target().hover({ timeout: 10000 }); break;
+			// From off the element first: a mouse already over it (after a click on it) fires no mouseenter, so nothing it reveals would show.
+			case 'hover': await page.mouse.move(0, 0); await target().hover({ timeout: 10000 }); break;
 			case 'scroll': await page.mouse.wheel(0, command.amount ?? 600); break;
 			// A page restored from the back-forward cache fires no load event, so only the commit is awaited; the settle below does the rest.
 			case 'back': await page.goBack({ waitUntil: 'commit', timeout: 10000 }); break;
@@ -71,5 +76,12 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 	// Only a step that can load a page waits for it to settle; scrolling, hovering, waiting and looking answer at once.
 	if (!['scroll', 'hover', 'wait', 'look'].includes(command.action)) await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 	const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '');
-	return { url: page.url(), title: await page.title().catch(() => ''), status, problem, snapshot };
+	const view = await page
+		.evaluate(() => {
+			const at = [scrollX + ',' + scrollY];
+			for (const element of document.querySelectorAll('*')) if (element.scrollTop || element.scrollLeft) at.push(element.scrollTop + ',' + element.scrollLeft);
+			return at.join(' ');
+		})
+		.catch(() => '');
+	return { url: page.url(), title: await page.title().catch(() => ''), status, problem, snapshot, view };
 }`;
