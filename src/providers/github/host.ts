@@ -20,6 +20,10 @@ const TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 /** Lists longer than this many pages are cut, oldest pages first kept. */
 const MAX_PAGES = 10;
+/** GET answers kept to ask GitHub whether they changed; the least recently used beyond this are dropped. */
+const MAX_SAVED = 500;
+/** A larger answer (a big repository's tree) is not kept. */
+const MAX_SAVED_CHARS = 1_000_000;
 
 const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
 
@@ -126,34 +130,70 @@ export type GitHubOptions = { token: string; apiUrl: string };
 
 /** GitHub over its REST API, authenticated with one token. */
 export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
+	const urlOf = (path: string) => (path.startsWith(apiUrl) ? path : `${apiUrl}${path}`);
+
 	/** `path` is under the API, or a full URL GitHub returned for a next page. */
-	async function call(path: string, init: RequestInit & { accept?: string } = {}): Promise<Response> {
-		const response = await fetch(path.startsWith(apiUrl) ? path : `${apiUrl}${path}`, {
+	async function call(path: string, init: RequestInit & { accept?: string; etag?: string } = {}): Promise<Response> {
+		const { accept, etag, ...request } = init;
+		const response = await fetch(urlOf(path), {
 			signal: AbortSignal.timeout(TIMEOUT_MS),
-			...init,
+			...request,
 			headers: {
-				Accept: init.accept ?? 'application/vnd.github+json',
+				Accept: accept ?? 'application/vnd.github+json',
 				'X-GitHub-Api-Version': '2022-11-28',
 				...(token ? { Authorization: `Bearer ${token}` } : {}),
-				...(init.body ? { 'Content-Type': 'application/json' } : {}),
+				...(request.body ? { 'Content-Type': 'application/json' } : {}),
+				...(etag ? { 'If-None-Match': etag } : {}),
 			},
 		});
-		if (!response.ok) {
+		if (!response.ok && !(etag && response.status === 304)) {
 			const body = await response.text();
 			throw new GitHubError(response.status, `GitHub ${path}: ${response.status} ${body.slice(0, 300)}`);
 		}
 		return response;
 	}
-	const json = async <T>(path: string, init?: RequestInit & { accept?: string }) => (await call(path, init)).json() as Promise<T>;
+
+	/**
+	 * GET answers by URL with their ETag. Asked again, GitHub answers 304 when
+	 * nothing changed, which costs nothing from the rate limit, so a pull request
+	 * can be read every few seconds while its checks run.
+	 */
+	const saved = new Map<string, { etag: string; text: string; next: string | null }>();
+
+	/** A GET of JSON, answered from `saved` when GitHub says it is unchanged; with the next page's URL, if any. */
+	async function cachedGet(path: string): Promise<{ text: string; next: string | null }> {
+		const url = urlOf(path);
+		const known = saved.get(url);
+		const response = await call(url, { etag: known?.etag });
+		if (known && response.status === 304) {
+			// Most recently used last, so the oldest is the one dropped.
+			saved.delete(url);
+			saved.set(url, known);
+			return known;
+		}
+		const fresh = { text: await response.text(), next: /<([^>]+)>;\s*rel="next"/.exec(response.headers.get('link') ?? '')?.[1] ?? null };
+		const etag = response.headers.get('etag');
+		saved.delete(url);
+		if (etag && fresh.text.length <= MAX_SAVED_CHARS) {
+			saved.set(url, { etag, ...fresh });
+			if (saved.size > MAX_SAVED) saved.delete(saved.keys().next().value!);
+		}
+		return fresh;
+	}
+
+	async function json<T>(path: string, init?: RequestInit & { accept?: string }): Promise<T> {
+		if (!init) return JSON.parse((await cachedGet(path)).text) as T;
+		return (await call(path, init)).json() as Promise<T>;
+	}
 
 	/** Every page of a list, following GitHub's `next` links. */
 	async function all<T>(path: string): Promise<T[]> {
 		const items: T[] = [];
 		let next: string | null = path;
 		for (let page = 0; next && page < MAX_PAGES; page += 1) {
-			const response = await call(next);
-			items.push(...((await response.json()) as T[]));
-			next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get('link') ?? '')?.[1] ?? null;
+			const answer = await cachedGet(next);
+			items.push(...(JSON.parse(answer.text) as T[]));
+			next = answer.next;
 		}
 		return items;
 	}

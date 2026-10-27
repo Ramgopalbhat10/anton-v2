@@ -97,6 +97,7 @@ import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
 import { pullRequestView } from './services/pull-requests.ts';
+import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
 import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
@@ -422,6 +423,25 @@ app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
 app.post('/api/reviews', async (c) => {
 	const { url } = await body(c, v.object({ url: v.pipe(v.string(), v.maxLength(500)) }));
 	return c.json(await reviewPullRequest(url), 201);
+});
+// GitHub's webhook, so a pull request's checks and comments reach its card and agent the moment they change.
+// Off without ANTON_GITHUB_WEBHOOK_SECRET; a delivery only says which pull requests to read again from GitHub.
+app.post('/api/github/webhook', async (c) => {
+	const secret = config.github.webhookSecret;
+	if (!secret) return c.json({ error: 'Webhooks are off: set ANTON_GITHUB_WEBHOOK_SECRET to the webhook secret.' }, 404);
+	const raw = await c.req.text();
+	if (!signedByGitHub(secret, raw, c.req.header('x-hub-signature-256'))) return c.json({ error: 'The signature does not match the secret.' }, 401);
+	const event = c.req.header('x-github-event') ?? '';
+	if (event === 'ping') return c.json({ ok: true });
+	// A webhook can be set to send its payload as a form field instead of JSON.
+	const form = c.req.header('content-type')?.startsWith('application/x-www-form-urlencoded');
+	let delivery: unknown;
+	try {
+		delivery = JSON.parse(form ? (new URLSearchParams(raw).get('payload') ?? '') : raw);
+	} catch {
+		throw new InvalidInputError('The payload is not JSON.');
+	}
+	return c.json({ ok: true, tasks: await gitHubDelivery(event, (delivery ?? {}) as Parameters<typeof gitHubDelivery>[1]) });
 });
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
 app.get('/api/compute', async (c) => c.json(await computeView()));
