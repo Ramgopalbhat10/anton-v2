@@ -83,7 +83,8 @@ function useCoordinatorTools(spaceId: string) {
 				files,
 			}),
 			async run({ data }) {
-				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files, answering), repo: data.repo });
+				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files, answering), repo: data.repo }, { wait: false });
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},

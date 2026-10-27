@@ -3,6 +3,7 @@ import type { AttachedFile } from '../../core/attachments';
 import type { ModelRoute } from '../../core/model-route';
 import type { Schedule } from '../../core/schedule';
 import type { Trace } from '../../core/trace';
+import { withStarting } from './starting';
 export type { ModelRoute, RouteSort } from '../../core/model-route';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
@@ -142,7 +143,7 @@ export type SpaceChange = Partial<
 	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
 >;
 /** `projectId` null starts a thread with no repository, a chat. */
-export type ThreadInput = { title?: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
+export type ThreadInput = { id?: string; title?: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
 export type SpaceFile = { path: string; size: number; modifiedAt: string };
 export type SpaceUsage = {
 	today: number;
@@ -725,9 +726,13 @@ export const api = {
 	branches: (projectId: string) => json<{ branches: string[] }>(`/api/projects/${projectId}/branches`),
 	projectFiles: (projectId: string, branch?: string) =>
 		json<{ paths: string[] }>(`/api/projects/${projectId}/files${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
-	sessions: () => json<{ sessions: Session[] }>('/api/sessions'),
+	// Tasks still being made are listed too, as the server lists them only once made.
+	sessions: async () => {
+		const data = await json<{ sessions: Session[] }>('/api/sessions');
+		return { ...data, sessions: withStarting(data.sessions) };
+	},
 	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
-	createSession: (body: { projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean }) =>
+	createSession: (body: { id?: string; projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),

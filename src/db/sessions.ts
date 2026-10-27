@@ -283,6 +283,12 @@ export async function deleteSessionRecord(id: string): Promise<void> {
 	announce({ kind: 'sessions' });
 }
 
+/** Whether this database deleted the task, so its id is never given to a new one: storage cleanup removes what is left under it. */
+export async function wasDeleted(id: string): Promise<boolean> {
+	const db = await appDb();
+	return (await db.execute({ sql: 'SELECT 1 FROM deleted_sessions WHERE session_id = ?', args: [id] })).rows.length > 0;
+}
+
 /** Tasks this database deleted. Storage cleanup removes what is left of these and of no others. */
 export async function deletedSessionIds(): Promise<Set<string>> {
 	const db = await appDb();

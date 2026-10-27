@@ -1,6 +1,6 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, Clock, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';
@@ -27,7 +27,8 @@ import { splitAttachments } from '../../core/attachments';
 import { isPlanRefusal } from '../../core/model-refusal';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
-import { takePendingPrompt } from '@/lib/pending-prompt';
+import { peekPendingPrompt, takePendingPrompt } from '@/lib/pending-prompt';
+import { HistorySkeleton, ReplySkeleton } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
 import { logoFor } from '@/lib/provider-logos';
 import { FOLLOW_SLACK, useFollowLatest } from '@/lib/use-follow-latest';
@@ -1235,6 +1236,8 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const fileLinks = useThreadFileLinks(sessionId);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
+	// Read as the page draws, so a task you just started never shows as empty before its prompt is sent.
+	const firstPrompt = messages.length === 0 && !busy ? peekPendingPrompt(sessionId) : undefined;
 	useEffect(() => {
 		if (!agent.historyReady) return;
 		const pending = takePendingPrompt(sessionId);
@@ -1289,7 +1292,30 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
 							</div>
 						) : null}
-						{messages.length === 0 && !busy ? (
+						{messages.length === 0 && !busy && (!agent.historyReady || firstPrompt) ? (
+							firstPrompt ? (
+								// A task you just started: what you asked, on its way to the agent.
+								<div className="flex flex-col gap-5">
+									<div className="flex flex-col items-end">
+										<SentText text={splitAttachments(firstPrompt).text || firstPrompt} className="max-w-[min(520px,100%)]" />
+									</div>
+									<ReplySkeleton />
+								</div>
+							) : (
+								<HistorySkeleton />
+							)
+						) : messages.length === 0 && !busy && session.data?.brief ? (
+							// A queued thread: its brief, which it is given once a slot frees.
+							<div className="flex flex-col gap-2.5">
+								<div className="flex flex-col items-end">
+									<SentText text={splitAttachments(session.data.brief).text || session.data.brief} className="max-w-[min(520px,100%)]" />
+								</div>
+								<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+									<Icon icon={Clock} size={12} className="text-(--icon-tertiary)" />
+									{session.data.threadState === 'queued' ? 'Queued: it starts when a slot frees.' : 'Starting'}
+								</div>
+							</div>
+						) : messages.length === 0 && !busy ? (
 							<EmptyState
 								art={<SandboxArt className="w-full max-w-[300px]" label="ready" />}
 								title={session.data && isChat(session.data) ? 'Ready to chat' : 'Workspace is ready'}

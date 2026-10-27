@@ -21,6 +21,8 @@ import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence }
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
 import { forgetWorking, showWorking, taskStatus } from '@/lib/working';
+import { useStarting } from '@/lib/starting';
+import { StartingTask } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -373,12 +375,15 @@ export function SessionPage() {
 	const navigate = useNavigate();
 	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(startingPanels);
 	const open = search.app !== 'closed';
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	// A task you just started opens at once, as a skeleton until the server has made it.
+	const starting = useStarting(sessionId);
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId), enabled: !starting });
 	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {
 		if (spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId: sessionId }, search: { panel: search.panel }, replace: true });
 	}, [spaceId]);
+	if (starting) return <StartingTask starting={starting} workspace={open} onDiscard={() => void navigate({ to: '/' })} />;
 	return (
 		<TaskWorkspace
 			sessionId={sessionId}

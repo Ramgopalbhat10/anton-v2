@@ -3,12 +3,12 @@ import type { ReviewOf, Session, SessionRecord, SessionStatus } from '../core/ty
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { getProject } from '../db/projects.ts';
-import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, listThreadRecords, updateSession } from '../db/sessions.ts';
+import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, listThreadRecords, updateSession, wasDeleted } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
-import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { type ModelRoute, routable, routedId } from '../core/model-route.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { generalSettings } from './general.ts';
@@ -112,6 +112,8 @@ async function startingPoint(projectId: string | undefined, branch: string | und
 
 /** A task on a repository, or without `projectId` a chat: no repository, and a scratch sandbox if it needs one. */
 export async function createSession(input: {
+	/** Chosen by the page that asks, so it can open the task before the task exists; a new one otherwise. */
+	id?: string;
 	projectId?: string;
 	branch?: string;
 	model?: string;
@@ -138,8 +140,9 @@ export async function createSession(input: {
 		startingPoint(input.projectId, input.branch, input.baseSha),
 		generalSettings(),
 		input.model ? knownModel(input.model) : null,
+		input.id ? freshId(input.id) : null,
 	]);
-	const id = randomUUID();
+	const id = input.id ?? randomUUID();
 	const title = input.title?.trim() || (input.titleFrom && titleFrom(input.titleFrom)) || 'New task';
 	// The default reasoning level belongs to the default model; another model starts at its own default.
 	const model = chosen ?? general.model ?? config.model;
@@ -166,6 +169,11 @@ export async function createSession(input: {
 	});
 	if (input.titleFrom) void nameTask(id, input.titleFrom);
 	return getSession(id);
+}
+
+/** An id a page chose is used once: never one a task has, or had, since storage cleanup removes what a deleted task left. */
+async function freshId(id: string): Promise<void> {
+	if ((await getSessionRecord(id)) || (await wasDeleted(id))) throw new ConflictError('A task with that id already exists');
 }
 
 const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
