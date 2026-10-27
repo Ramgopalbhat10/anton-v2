@@ -712,11 +712,11 @@ describe('chat navigation scrolling', () => {
 		expect(screen.queryByRole('button', { name: /Jump to latest/ })).toBeNull();
 	});
 
-	it('releases following when navigating to an older input and reserves a gutter', () => {
+	it('releases following when navigating to an older input without reserving a gutter', () => {
 		const { container } = show(agent([user('u1', 'Earlier input')]));
 		const target = container.querySelector<HTMLElement>('[data-chat-input="u1"]')!;
 		const scroller = target.parentElement!.parentElement!;
-		expect(scroller.className).toContain('pr-[52px]');
+		expect(scroller.className).not.toContain('pr-[52px]');
 		Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 500 });
 		Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 2000 });
 		scroller.scrollTop = 1500;
