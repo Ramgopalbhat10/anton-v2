@@ -1,4 +1,4 @@
-import { GitPullRequest } from 'lucide-react';
+import { GitMerge, GitPullRequest } from 'lucide-react';
 import { Icon } from '@/components/signal';
 import type { Session } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,8 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	const summary = prSummary(thread)!;
 	const pr = thread.pullRequest;
 	const active = pr && (pr.state === 'open' || pr.state === 'draft');
-	const content = <><Icon icon={GitPullRequest} size={12} /><span>{full ? summary : `#${prNumber(thread.prUrl) ?? '?'}`}</span>{!full && active && showConflicts && pr.conflicts ? <span className="text-(--warning-text)">Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span className="text-(--danger-text)">Checks failing</span> : null}</>;
-	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex shrink-0 items-center gap-1 text-[11px]', className), style: { color: prColor(thread.pullRequest?.state) } };
+	const visible = full && pr?.state !== 'merged' ? summary : `#${prNumber(thread.prUrl) ?? '?'}`;
+	const content = <><Icon icon={pr?.state === 'merged' ? GitMerge : GitPullRequest} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span className="text-(--warning-text)">Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span className="text-(--danger-text)">Checks failing</span> : null}</>;
+	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: { color: prColor(pr?.state), borderColor: `color-mix(in oklab, ${prColor(pr?.state)} 32%, transparent)`, background: `color-mix(in oklab, ${prColor(pr?.state)} 10%, transparent)` } };
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }

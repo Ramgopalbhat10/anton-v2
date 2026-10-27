@@ -333,7 +333,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					</p>
 				)
 			) : null}
-			{pr ? <PrStatus thread={thread} link full className={cn(CHIP_BUTTON, 'max-w-full self-start')} /> : null}
+			{pr ? <PrStatus thread={thread} link full className="max-w-full self-start" /> : null}
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />

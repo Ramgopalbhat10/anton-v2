@@ -1,4 +1,4 @@
-import { prColor } from '@/components/pr-status';
+import { PrStatus } from '@/components/pr-status';
 import { useQuery } from '@tanstack/react-query';
 import { HoverCard } from 'radix-ui';
 import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
@@ -7,7 +7,7 @@ import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instr
 import { ProjectRouteArt } from '@/components/illustrations';
 import { ProjectBay } from '@/components/project-rack';
 import { useNow } from '@/components/subagents';
-import { NextSteps, prNumber, useOpenThread } from '@/components/thread-card';
+import { NextSteps, useOpenThread } from '@/components/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
 import { api, repoShort, type Session, type Space } from '@/lib/api';
 import { age, dollars, elapsed, tokens } from '@/lib/format';
@@ -324,7 +324,7 @@ function TitleWithTail({ title }: { title: string }) {
 }
 
 /** A bar's label beside it: the side with room. */
-function Chip({ at, children, tone, color }: { at: number; children: ReactNode; tone?: 'danger' | 'success'; color?: string }) {
+function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: 'danger' | 'success' }) {
 	const right = at > 72;
 	return (
 		<span
@@ -332,7 +332,7 @@ function Chip({ at, children, tone, color }: { at: number; children: ReactNode; 
 				'in-caption absolute top-1/2 -translate-y-1/2 rounded-[4px] px-1 text-[9.5px] leading-[15px] whitespace-nowrap',
 				tone === 'danger' ? 'bg-(--danger-bg) text-(--danger-text)' : 'bg-(--success-bg) text-(--success-text)',
 			)}
-			style={{ ...(right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }), ...(color ? { color, background: 'var(--bg-raised)' } : {}) }}
+			style={right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }}
 		>
 			{children}
 		</span>
@@ -442,9 +442,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 									<>
 										<span className="absolute inset-y-[3px] rounded-[4px]" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--success-base) 50%, transparent)' }} />
 										{thread.prUrl ? (
-											<Chip at={Math.max(reply, from + 1)} color={prColor(thread.pullRequest?.state)}>
-												#{prNumber(thread.prUrl)}
-											</Chip>
+											<span className="absolute top-1/2 -translate-y-1/2" style={Math.max(reply, from + 1) > 72 ? { right: `calc(${100 - Math.max(reply, from + 1)}% + 6px)` } : { left: `calc(${Math.max(reply, from + 1)}% + 6px)` }}><PrStatus thread={thread} /></span>
 										) : null}
 									</>
 								) : (
