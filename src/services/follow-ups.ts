@@ -113,14 +113,17 @@ export function nextFollowUp(
 	};
 }
 
-/** Sends the agent anything new on its pull request: merge conflicts, failed checks on the latest commit, and new comments. */
-export async function followUp(session: SessionRecord): Promise<boolean> {
+/**
+ * Sends the agent anything new on its pull request: merge conflicts, failed checks on the latest commit, and new comments.
+ * `read` is the pull request as just read from the host, when the caller has it; otherwise it is read here.
+ */
+export async function followUp(session: SessionRecord, read?: PullRequestActivity): Promise<boolean> {
 	// A task reviewing someone else's pull request has nothing to fix there; its reviews follow pushes instead.
 	if (!session.prUrl || session.review || isWorking(session.id)) return false;
 	const project = await getProject(session.projectId);
 	const state = stateFor(session);
 	if (!project?.followUps || state.done || state.sent >= MAX_FOLLOW_UPS) return false;
-	const activity = await readPullRequest({ ...session, prUrl: session.prUrl });
+	const activity = read ?? (await readPullRequest({ ...session, prUrl: session.prUrl }));
 	const save = (next: FollowState) => updateSession(session.id, { followState: JSON.stringify({ ...next, url: session.prUrl }) });
 	if (activity.state === 'merged' || activity.state === 'closed') {
 		// Never looked at again, so finished tasks cost no requests on every poll.
