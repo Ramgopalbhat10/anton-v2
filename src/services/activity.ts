@@ -57,9 +57,20 @@ export function recordAgentEvent({ type, instanceId, submissionId }: AgentEvent)
 		inFlight.set(instanceId, (inFlight.get(instanceId) ?? new Set()).add(submissionId));
 	} else if (type === 'submission_settled') {
 		inFlight.get(instanceId)?.delete(submissionId);
-		if (inFlight.get(instanceId)?.size === 0) inFlight.delete(instanceId);
+		if (inFlight.get(instanceId)?.size === 0) {
+			inFlight.delete(instanceId);
+			for (const listener of idleListeners) listener(instanceId);
+		}
 	} else return;
 	announce({ kind: 'task', id: instanceId, what: 'state' });
+}
+
+const idleListeners = new Set<(id: string) => void>();
+
+/** Calls `listener` each time an agent finishes its last response for a task (or project), so work it held back can go now. */
+export function onIdle(listener: (id: string) => void): () => void {
+	idleListeners.add(listener);
+	return () => idleListeners.delete(listener);
 }
 
 type Abort = (id: string) => Promise<void>;

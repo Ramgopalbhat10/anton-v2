@@ -6,6 +6,7 @@ import { saveCheckpoint } from './checkpoints.ts';
 import { reviewAfterPush } from './code-review.ts';
 import { commitAndPush } from './git.ts';
 import { savePullRequestStatus } from './pr-status.ts';
+import { watchPullRequest } from './pr-watch.ts';
 import { machineFor } from './workspace.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { PullRequestState } from '../core/ports.ts';
@@ -14,7 +15,7 @@ import type { PullRequestState } from '../core/ports.ts';
  * Commits the task's work, sends its branch to the host and opens (or finds)
  * the pull request. Anton pushes through the host's API with its own
  * credentials, so they never enter the machine the agent works in. Each push
- * is then reviewed, when reviews are on.
+ * is then reviewed, when reviews are on, and its checks watched.
  */
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {
 	const session = await getSessionRecord(id);
@@ -42,6 +43,8 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 		body: input.body,
 	});
 	await updateSession(id, { prUrl: url, pullRequestJson: JSON.stringify({ url, state: 'open', checks: null, runs: [] }) });
+	// Its checks start now; the card follows them closely rather than on the next slow round.
+	watchPullRequest(id);
 	await saveCheckpoint(id, machine);
 	reviewAfterPush(id);
 	return url;

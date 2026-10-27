@@ -179,3 +179,24 @@ test('a review that GitHub cannot place on the diff is posted with its comments 
 	assert.deepEqual(bodies[0], { commit_id: 'abc', event: 'COMMENT', body: 'Summary', comments: [{ path: 'src/a.ts', line: 3, body: 'Off by one.\nUse <=.', side: 'RIGHT' }] });
 	assert.deepEqual(bodies[1], { commit_id: 'abc', event: 'COMMENT', body: 'Summary\n\n- `src/a.ts:3`: Off by one. Use <=.' });
 });
+
+test('a read GitHub says is unchanged is answered from the last one, so polling costs nothing from the rate limit', async () => {
+	const asked: Array<{ path: string; etag: string | null }> = [];
+	let version = 1;
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		const etag = new Headers(init?.headers).get('if-none-match');
+		asked.push({ path: String(input).slice(API.length), etag });
+		if (etag === `"v${version}"`) return new Response(null, { status: 304 });
+		return new Response(JSON.stringify({ full_name: 'acme/demo', default_branch: `main${version}`, private: false }), { status: 200, headers: { etag: `"v${version}"` } });
+	}) as typeof fetch;
+	const host = githubHost({ token: 't', apiUrl: API });
+	assert.equal((await host.getRepo('acme/demo')).defaultBranch, 'main1');
+	assert.equal((await host.getRepo('acme/demo')).defaultBranch, 'main1', 'a 304 gives back the saved answer');
+	version = 2;
+	assert.equal((await host.getRepo('acme/demo')).defaultBranch, 'main2', 'a change is read');
+	assert.deepEqual(
+		asked.map((ask) => ask.etag),
+		[null, '"v1"', '"v1"'],
+		'each read after the first asks whether it changed',
+	);
+});
