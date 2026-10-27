@@ -537,9 +537,9 @@ export type VisionModel = {
 export type TextModel = {
 	/** Whether it runs this `<gateway>/<model>` specifier. */
 	runs(model: string): boolean;
-	/** `reasoning` asks a reasoning model for that effort; `timeoutMs` allows a longer piece than the default few seconds. */
+	/** `reasoning` asks a reasoning model for that effort, or to answer without reasoning (`off`); `timeoutMs` allows a longer piece than the default few seconds. */
 	write(
-		input: { model: string; prompt: string; maxTokens: number; reasoning?: 'low' | 'medium' | 'high'; timeoutMs?: number },
+		input: { model: string; prompt: string; maxTokens: number; reasoning?: 'off' | 'low' | 'medium' | 'high'; timeoutMs?: number },
 		signal?: AbortSignal,
 	): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };

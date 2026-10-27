@@ -30,15 +30,16 @@ const edit = [{ tool: 'bash' }, { tool: 'edit' }];
 
 test('a change is read against the request alone, and what it misses goes back to the agent once a reply', async () => {
 	noteRequest('r', 'Add sortBy(keys) with a --reverse flag that sorts descending.');
-	answer = '- The request asks for a --reverse flag; the change adds none.';
+	answer = 'I compared the two.\nMISSING: the request asks for a --reverse flag; the change adds none.\nThe sortBy function is there.';
 	startFinishReview('r');
 	const reminder = await finishReview('r', edit, undefined, deps(DIFF));
-	assert.match(reminder ?? '', /--reverse flag; the change adds none/);
+	assert.match(reminder ?? '', /\n\n- the request asks for a --reverse flag; the change adds none\.\n\n/);
+	assert.doesNotMatch(reminder ?? '', /I compared|sortBy function is there/, 'only the MISSING lines go back');
 	assert.match(reminder ?? '', /Fix those that are real/);
 	assert.equal(asked.length, 1);
 	assert.match(asked[0].prompt, /<request>\nAdd sortBy\(keys\) with a --reverse flag/);
 	assert.match(asked[0].prompt, /export function sortBy/);
-	assert.equal(asked[0].reasoning, 'low');
+	assert.equal(asked[0].reasoning, 'off');
 	// Once a reply.
 	assert.equal(await finishReview('r', edit, undefined, deps(`${DIFF}+more\n`)), null);
 	assert.equal(asked.length, 1);
@@ -78,6 +79,6 @@ test('the reviewer reads binary files as one line and a long diff cut, and NONE 
 	const binary = 'diff --git a/logo.png b/logo.png\nGIT binary patch\nliteral 5\nabcde\n\ndiff --git a/a.ts b/a.ts\n+x\n';
 	assert.equal(reviewPatch(binary), 'diff --git a/logo.png b/logo.png\n[binary file]\ndiff --git a/a.ts b/a.ts\n+x\n');
 	assert.match(reviewPatch('+'.repeat(70_000)), /The diff goes on for 10,000 more characters/);
-	for (const none of ['NONE', 'None.', '**NONE**', 'none\n']) assert.equal(findingsOf(none), null, none);
-	assert.equal(findingsOf('- Missing the --reverse flag.'), '- Missing the --reverse flag.');
+	for (const none of ['NONE', 'None.', '**NONE**', 'none\n', '- sortBy: OK, the change does it.']) assert.equal(findingsOf(none), null, none);
+	assert.equal(findingsOf('MISSING: the --reverse flag.\n**MISSING:** a default of 10.\n- MISSING: the error message'), '- the --reverse flag.\n- a default of 10.\n- the error message');
 });

@@ -27,7 +27,7 @@ export function openRouterText({ apiUrl, apiKey }: TextOptions): TextModel {
 					model: model.slice('openrouter/'.length),
 					messages: [{ role: 'user', content: prompt }],
 					max_tokens: maxTokens,
-					...(reasoning ? { reasoning: { effort: reasoning } } : {}),
+					...(reasoning ? { reasoning: reasoning === 'off' ? { enabled: false } : { effort: reasoning } } : {}),
 					usage: { include: true },
 				}),
 			});

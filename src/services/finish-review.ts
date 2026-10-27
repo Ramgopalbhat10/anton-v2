@@ -15,15 +15,19 @@ import { liveMachine } from './workspace.ts';
  * request asks that the change does not do. When it finds something, the agent
  * is sent back once to check those points; when it finds nothing, the reply
  * ends as it would have. One short call, on a context of the request and the
- * diff, never the conversation.
+ * diff, never the conversation, and without reasoning, which on a long diff can
+ * use up any budget before the list is written.
  */
 
 /** A request is kept up to this long; a task's whole brief fits. */
 const MAX_REQUEST = 30_000;
 /** The diff the reviewer reads; past this its start is read, with a note. */
 const MAX_PATCH = 60_000;
-/** Room for the reviewer's reasoning and its list. */
-const MAX_TOKENS = 6_000;
+/**
+ * Room for the list. The reviewer answers without reasoning: at low effort DeepSeek still spent 6,000 tokens thinking
+ * on a real task and wrote nothing, while without it the same review took 33 seconds and half a cent.
+ */
+const MAX_TOKENS = 4_000;
 /** Past this the reply ends without the review rather than keep the user waiting. */
 const REVIEW_MS = 120_000;
 /** The list the agent is given back, at most. */
@@ -72,15 +76,20 @@ export const reviewPrompt = (request: string, patch: string) =>
 		patch,
 		'</diff>',
 		'',
-		'List each thing the request asks for that the change does not do, or does differently from what the request says: a named function, option, flag, field, message, output format, default or edge case.',
-		'Each as one short line saying what the request asks and what the change does instead. Only what the request itself asks: no style, naming, refactoring or extra features, and nothing you are unsure the request asks.',
-		'If the change does everything the request asks, answer with the single word NONE.',
+		'Find each thing the request asks for that the change does not do, or does differently from what the request says: a named function, option, flag, field, message, output format, default or edge case.',
+		'Write each as one line starting with MISSING: and saying what the request asks and what the change does instead. Only what the request itself asks: no style, naming, refactoring or extra features, and nothing you are unsure the request asks.',
+		'Do not list what the change already does. If it does everything the request asks, answer with the single word NONE.',
 	].join('\n');
 
-/** What the reviewer found, or null when it found nothing. */
+/** What the reviewer found, its MISSING: lines, or null when it found nothing. Anything else it wrote is left out. */
 export function findingsOf(answer: string): string | null {
-	const text = answer.trim();
-	if (!text || /^\W*none\W*$/i.test(text) || /^\W*none\b/i.test(text.split('\n')[0] ?? '')) return null;
+	const lines = answer
+		.split('\n')
+		.map((line) => /^\W*MISSING\W*:[\s*_]*(.+)$/i.exec(line.trim())?.[1]?.replace(/[*_]+$/, '').trim())
+		.filter((line): line is string => Boolean(line))
+		.map((line) => `- ${line}`);
+	if (!lines.length) return null;
+	const text = lines.join('\n');
 	return text.length > MAX_FINDINGS ? `${text.slice(0, MAX_FINDINGS)}…` : text;
 }
 
@@ -112,7 +121,7 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
 		if (lastPatch.get(id) === digest) return null;
 		remember(lastPatch, id, digest);
-		const answer = await writer.write({ model, prompt: reviewPrompt(request, reviewPatch(patch)), maxTokens: MAX_TOKENS, reasoning: 'low', timeoutMs: REVIEW_MS }, signal);
+		const answer = await writer.write({ model, prompt: reviewPrompt(request, reviewPatch(patch)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
 		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 		const findings = findingsOf(answer.text);
 		if (!findings) return null;

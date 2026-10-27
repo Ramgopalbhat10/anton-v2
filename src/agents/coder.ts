@@ -1116,7 +1116,10 @@ const BATCH_HINT =
 	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, and make the edits you have planned in one edit call (its `more`), rather than one at a time.';
 
 /** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
-/** A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). */
+/**
+ * A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). In every
+ * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
+ */
 const REQUIREMENTS_HINT =
 	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
 
@@ -1147,7 +1150,6 @@ const WORKSPACE_PROMPT = [
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	BATCH_HINT,
-	REQUIREMENTS_HINT,
 	FINISH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
@@ -1318,7 +1320,8 @@ export function Coder({ id }: AgentProps) {
 			return;
 		}
 		// A change is read once more against the request alone, and points it missed are sent back to check.
-		const missed = workspace && !chat && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+		// A task that started its workspace during this reply has one now, though this render began without it.
+		const missed = (workspace || hasWorkspace(id)) && !chat && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 		if (missed) {
 			append({ kind: 'signal', type: 'reminder', body: missed });
 			return;
@@ -1363,7 +1366,7 @@ export function Coder({ id }: AgentProps) {
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
 
 /** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */
