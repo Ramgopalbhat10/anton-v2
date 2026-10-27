@@ -30,8 +30,9 @@ import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { logoFor } from '@/lib/provider-logos';
-import { useFollowLatest } from '@/lib/use-follow-latest';
+import { FOLLOW_SLACK, useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
+import { ChatNavigation } from '@/components/chat-navigation';
 import { focusFile, ShowPanel } from '@/lib/workspace';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
@@ -1203,7 +1204,23 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		return map;
 	}, [rows]);
 	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
-	const { following, follow } = useFollowLatest(scroller, { reset: sessionId });
+	const { following, follow, release } = useFollowLatest(scroller, { reset: sessionId });
+	const navigateToInput = useCallback((id: string) => {
+		const el = scroller.current;
+		const target = el && Array.from(el.querySelectorAll<HTMLElement>('[data-chat-input]')).find((node) => node.dataset.chatInput === id);
+		if (!el || !target) return;
+		const top = el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+		const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
+		// A short conversation or a target near the end cannot move away from the
+		// bottom. Keep following even when no scroll event will be fired.
+		if (Math.max(0, Math.min(top, bottom)) >= bottom - FOLLOW_SLACK) {
+			follow();
+			return;
+		}
+		release();
+		const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		el.scrollTo({ top, behavior: reduced ? 'auto' : 'smooth' });
+	}, [follow, release]);
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(
 		() => ({
@@ -1263,7 +1280,9 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 			<ReplyActions.Provider value={actions}>
 			<FileLinks.Provider value={fileLinks}>
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-				<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
+				<div className="relative min-h-0 flex-1">
+				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
+				<div ref={scroller} className={cn("h-full overflow-y-auto px-4 pt-2 pb-1", rows.some((row) => row.message.role === 'user' && !row.message.settlement) && "pr-[52px]")}>
 					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
@@ -1286,7 +1305,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
-								<UserMessage key={row.message.id} message={row.message} meta={meta} note={notes.get(row.message.id)} />
+								<div key={row.message.id} data-chat-input={row.message.id}><UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} /></div>
 							) : (
 								<AssistantMessage
 									key={rowKey(row)}
@@ -1308,6 +1327,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						) : null}
 					</div>
 					<JumpToLatest show={!following} live={busy} onJump={follow} />
+				</div>
 				</div>
 				{planned ? (
 					<ApproveBar

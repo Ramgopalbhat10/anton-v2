@@ -1,15 +1,16 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { useFollowLatest } from '@/lib/use-follow-latest';
 
 function Feed() {
 	const ref = useRef<HTMLDivElement>(null);
-	const { following, follow } = useFollowLatest(ref);
+	const { following, follow, release } = useFollowLatest(ref);
 	return (
 		<div ref={ref} data-testid="scroller" style={{ overflowY: 'auto' }}>
 			<div>reply</div>
+			<button onClick={release}>Navigate</button>
 			<JumpToLatest show={!following} live onJump={follow} />
 		</div>
 	);
@@ -57,4 +58,43 @@ describe('useFollowLatest', () => {
 		});
 		expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
 	});
+	it('holds follow off through smooth scroll events near the bottom and a resize', () => {
+		vi.useFakeTimers();
+		let resize = () => {};
+		vi.stubGlobal('ResizeObserver', class {
+			constructor(callback: () => void) { resize = callback; }
+			observe() {}
+			disconnect() {}
+		});
+		try {
+			render(<Feed />);
+			const scroller = sized(screen.getByTestId('scroller'));
+			scrollTo(scroller, 1500);
+			fireEvent.click(screen.getByRole('button', { name: 'Navigate' }));
+			scrollTo(scroller, 1495); // Still within the 32px bottom slack.
+			act(() => resize()); // A streamed reply or another child grew.
+			expect(scroller.scrollTop).toBe(1495);
+			expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
+			scrollTo(scroller, 900);
+			fireEvent(scroller, new Event('scrollend'));
+			scrollTo(scroller, 1500);
+			expect(screen.queryByRole('button', { name: /Jump to latest/ })).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+			vi.useRealTimers();
+		}
+	});
+
+	it('recovers following if a navigation never moves', () => {
+		vi.useFakeTimers();
+		try {
+			render(<Feed />);
+			const scroller = sized(screen.getByTestId('scroller'));
+			scrollTo(scroller, 1500);
+			fireEvent.click(screen.getByRole('button', { name: 'Navigate' }));
+			act(() => vi.advanceTimersByTime(200));
+			expect(screen.queryByRole('button', { name: /Jump to latest/ })).toBeNull();
+		} finally { vi.useRealTimers(); }
+	});
+
 });
