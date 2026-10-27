@@ -121,7 +121,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 	const pullRequest = session.pullRequest;
 	if (session.prUrl) {
 		const number = `#${prNumber(session) ?? '?'}`;
-		cues.push(<PrStatus key="pr" thread={session} link className={CUE} />);
+		cues.push(<PrStatus key="pr" thread={session} link showConflicts={false} showFailing={false} className={CUE} />);
 		if (pullRequest?.conflicts) {
 			cues.push(
 				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={cn(CUE, 'text-(--danger-text)')}>

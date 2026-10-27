@@ -43,7 +43,7 @@ export function TaskRow({ session, modelName }: { session: Session; modelName: (
 			<div className="flex min-w-0 items-center gap-2">
 				<TaskStatusIcon session={session} size={14} />
 				<span className="min-w-0 truncate text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
-				<PrStatus thread={session} />
+				<PrStatus thread={session} showFailing={!runs.some((run) => run.status === 'failed')} />
 				{runs.length ? (
 					<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
 				) : null}

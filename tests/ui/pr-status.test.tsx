@@ -19,4 +19,19 @@ describe('pull request presentation', () => {
 		expect(prSummary(session({ prUrl: url, pullRequest: { state: 'merged', checks: 'failed', runs: [] } }))).toBe('#42 merged');
 		expect(prColor('open')).not.toBe(prColor('merged'));
 	});
+	it('shows compact attention cues alongside the open identity, even with no check runs', () => {
+		const thread = session({ prUrl: url, pullRequest: { state: 'open', checks: 'failed', conflicts: true, runs: [] } });
+		const { rerender } = render(<PrStatus thread={thread} />);
+		const status = screen.getByLabelText('Pull request #42 open · merge conflicts · checks failing');
+		expect(status.style.color).toBe(prColor('open'));
+		expect(screen.getByText('Conflicts')).toBeTruthy();
+		expect(screen.getByText('Checks failing')).toBeTruthy();
+		rerender(<PrStatus thread={thread} showConflicts={false} showFailing={false} />);
+		expect(screen.queryByText('Conflicts')).toBeNull();
+		expect(screen.queryByText('Checks failing')).toBeNull();
+		rerender(<PrStatus thread={{ ...thread, pullRequest: { ...thread.pullRequest!, state: 'merged' } }} />);
+		expect(screen.queryByText('Conflicts')).toBeNull();
+		expect(screen.queryByText('Checks failing')).toBeNull();
+	});
+
 });
