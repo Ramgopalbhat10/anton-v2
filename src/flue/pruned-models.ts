@@ -6,9 +6,17 @@ import { compactionPoint, pruneContext } from '../services/context-prune.ts';
  * The runtime names each conversation in the call's `sessionId`; a call without one is sent as it is. Not for the
  * plan runtimes (Claude Code, Cursor), which keep their own conversation and match what they are sent against it.
  */
+/** APIs that take a conversation whose older assistant messages leave their reasoning out; the Responses API wants each tool call's reasoning item. */
+const THINKING_OPTIONAL = new Set<string>(['openai-completions', 'anthropic-messages']);
+
 export function withPruning(provider: Provider): Provider {
 	const pruned = (model: Model<Api>, context: Context, options: StreamOptions | undefined): Context =>
-		options?.sessionId ? pruneContext(options.sessionId, context, compactionPoint(model)).context : context;
+		options?.sessionId
+			? pruneContext(options.sessionId, context, compactionPoint(model), Date.now(), {
+					price: model.cost,
+					dropThinking: THINKING_OPTIONAL.has(model.api),
+				}).context
+			: context;
 	return {
 		...provider,
 		stream: (model, context, options) => provider.stream(model, pruned(model, context, options), options),
