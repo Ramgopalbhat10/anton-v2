@@ -154,3 +154,43 @@ test('a run stops after its most actions, and when the model is sure the goal is
 	assert.equal(result.outcome, 'stuck');
 	assert.equal(result.actions.length, 0);
 });
+
+/** A chat with a rail of bars: clicking one scrolls the chat to that input, and hovering one shows its preview. */
+function chatRail() {
+	let scrolledTo = 0;
+	let hovered: string | null = null;
+	const commands: BrowserInput[] = [];
+	const step = async (command: BrowserInput): Promise<BrowserState> => {
+		commands.push(command);
+		const input = /Go to input (\d)/.exec(command.target ?? '')?.[1] ?? null;
+		if (command.action === 'click' && input) scrolledTo = Number(input) * 900;
+		if (command.action === 'hover') hovered = input;
+		const snapshot = [
+			'- navigation "Chat navigation":',
+			...(hovered ? [`  - tooltip "Earlier request number ${hovered}"`] : []),
+			'  - button "Go to input 1: tidy the panels"',
+			'  - button "Go to input 2: fix the tests"',
+			'- paragraph: The conversation',
+		].join('\n');
+		return { url: 'http://localhost:43127/agents/perf-task', title: 'Anton', status: null, problem: null, errors: [], screenshot: null, snapshot, view: `0,0 ${scrolledTo},0` };
+	};
+	return { step, commands };
+}
+
+test('a click that only scrolls the page counts as doing something, and hover is an action of its own', async () => {
+	const rail = chatRail();
+	rule = (_state, questions): Record<string, Answer> => (questions.risky ? { risky: no } : { done: no, stuck: no, action: pick('click'), click: pick(option(questions.click, 'Go to input 1')) });
+	let result = await autopilot('t1', rail.step, { goal: 'Go to the first input', maxActions: 2 });
+	assert.equal(result.outcome, 'max_actions', 'a scroll is a change, so it did not end as stuck after the first click');
+	assert.equal(result.actions[0].what, 'Clicked button "Go to input 1: tidy the panels" (the page scrolled)');
+	assert.equal(rail.commands.filter((command) => command.action === 'wait').length, 2, 'only the repeat, which scrolled nowhere new, waited for the page');
+
+	asked = [];
+	rule = (state, questions): Record<string, Answer> =>
+		String(state.page).includes('tooltip') ? { done: { yes: 0.95 }, stuck: no, action: pick('scroll') } : { done: no, stuck: no, action: pick('hover'), click: pick(option(questions.click, 'Go to input 2')) };
+	result = await autopilot('t1', chatRail().step, { goal: 'Hover over the second bar to show its preview' });
+	assert.equal(result.outcome, 'done');
+	assert.deepEqual(result.actions.map((action) => action.what), ['Hovered over button "Go to input 2: fix the tests"']);
+	assert.ok(asked.every((call) => !call.questions.risky), 'hovering is never checked as risky');
+	assert.match(String((asked[0].questions.action as { options: Record<string, string> }).options.hover), /tooltip, preview or menu/);
+});
