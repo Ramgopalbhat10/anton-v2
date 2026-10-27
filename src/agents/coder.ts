@@ -86,6 +86,7 @@ import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
+import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
@@ -1115,6 +1116,10 @@ const BATCH_HINT =
 	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, rather than one at a time.';
 
 /** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
+/** A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). */
+const REQUIREMENTS_HINT =
+	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
+
 const FINISH_HINT =
 	'Before you finish a change, read the request again and check each thing it names (functions, options, messages, edge cases) against what you did, and run the existing tests closest to the code you changed, so the change does all it was asked and breaks nothing near it.';
 
@@ -1142,6 +1147,7 @@ const WORKSPACE_PROMPT = [
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	BATCH_HINT,
+	REQUIREMENTS_HINT,
 	FINISH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
@@ -1211,6 +1217,7 @@ function useLatestInput(id: string) {
 	useAgentStart(async () => {
 		if (delivery.kind !== 'user') return;
 		await noteDelivery(id, delivery.body);
+		noteRequest(id, delivery.body);
 		await recordLatestInput(id, delivery.body);
 	});
 }
@@ -1310,6 +1317,12 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: stalled });
 			return;
 		}
+		// A change is read once more against the request alone, and points it missed are sent back to check.
+		const missed = workspace && !chat && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+		if (missed) {
+			append({ kind: 'signal', type: 'reminder', body: missed });
+			return;
+		}
 		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 		queueCheckpoint(id);
 		const reply = await checkReply(id);
@@ -1325,6 +1338,7 @@ export function Coder({ id }: AgentProps) {
 		startTrace(id);
 		startTodoReply(id);
 		startStallCheck(id);
+		startFinishReview(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {

@@ -15,10 +15,10 @@ type WireResponse = {
 export function openRouterText({ apiUrl, apiKey }: TextOptions): TextModel {
 	return {
 		runs: (model) => model.startsWith('openrouter/'),
-		async write({ model, prompt, maxTokens }, signal) {
+		async write({ model, prompt, maxTokens, reasoning, timeoutMs }, signal) {
 			const key = typeof apiKey === 'function' ? apiKey() : apiKey;
 			if (!key) throw new Error('Writing text needs an OpenRouter key. Add one under Settings › Subscriptions.');
-			const timeout = AbortSignal.timeout(TIMEOUT_MS);
+			const timeout = AbortSignal.timeout(timeoutMs ?? TIMEOUT_MS);
 			const response = await fetch(`${apiUrl}/chat/completions`, {
 				method: 'POST',
 				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
@@ -27,6 +27,7 @@ export function openRouterText({ apiUrl, apiKey }: TextOptions): TextModel {
 					model: model.slice('openrouter/'.length),
 					messages: [{ role: 'user', content: prompt }],
 					max_tokens: maxTokens,
+					...(reasoning ? { reasoning: { effort: reasoning } } : {}),
 					usage: { include: true },
 				}),
 			});

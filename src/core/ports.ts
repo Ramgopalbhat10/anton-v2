@@ -537,7 +537,11 @@ export type VisionModel = {
 export type TextModel = {
 	/** Whether it runs this `<gateway>/<model>` specifier. */
 	runs(model: string): boolean;
-	write(input: { model: string; prompt: string; maxTokens: number }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
+	/** `reasoning` asks a reasoning model for that effort; `timeoutMs` allows a longer piece than the default few seconds. */
+	write(
+		input: { model: string; prompt: string; maxTokens: number; reasoning?: 'low' | 'medium' | 'high'; timeoutMs?: number },
+		signal?: AbortSignal,
+	): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };
 
 /** An image model as the image port lists it: how many images it starts from, and the shapes it draws. */

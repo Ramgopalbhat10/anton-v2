@@ -85,3 +85,12 @@ test('Coder asks for fuller steps, and sends a reply that stops at an announced 
 	const workspace = source.slice(source.indexOf('const WORKSPACE_PROMPT'), source.indexOf('const CHAT_PROMPT'));
 	assert.match(workspace, /FINISH_HINT/, 'a change is checked against the request and its nearest tests before the reply ends');
 });
+
+test('Coder lists the request’s requirements as todos, and has a change read against the request before a coding reply ends', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const workspace = source.slice(source.indexOf('const WORKSPACE_PROMPT'), source.indexOf('const CHAT_PROMPT'));
+	assert.match(workspace, /REQUIREMENTS_HINT/);
+	assert.match(source, /noteRequest\(id, delivery\.body\);/);
+	assert.match(source, /workspace && !chat && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
+	assert.match(source, /startFinishReview\(id\);/);
+});
