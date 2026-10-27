@@ -125,9 +125,9 @@ describe('threads', () => {
 
 		// A pull request is a chip; its checks say themselves in its colour, not as another word.
 		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
-		expect(within(ready).getByTitle('#12 · checks pass').textContent).toBe('#12');
+		expect(within(ready).getByTitle('#12 open · checks pass').textContent).toBe('#12');
 		const failing = screen.getByRole('article', { name: 'Flaky' });
-		expect(within(failing).getByTitle('#3 · checks failing').className).toContain('--danger-text');
+		expect(within(failing).getByTitle('#3 open · checks failing').getAttribute('style')).toContain('--success-text');
 		expect(within(failing).queryByText('Needs you')).toBeNull();
 		await userEvent.click(within(failing).getByRole('button', { name: 'Fix CI' }));
 		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'fail', expect.stringContaining('Checks are failing'));
@@ -194,7 +194,7 @@ describe('threads', () => {
 		expect(within(card).getByRole('img', { name: 'Waiting on you' })).toBeTruthy();
 		expect(within(card).getByText('demo')).toBeTruthy();
 		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
-		expect(within(card).getByRole('link', { name: /#9 · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
+		expect(within(card).getByRole('link', { name: /#9 open · checks running/ }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/9');
 		expect(within(card).getByRole('button', { name: 'Answer' })).toBeTruthy();
 		// Opening the thread is the peek's primary button.
 		expect(peek.className).toContain('sg-btn--primary');

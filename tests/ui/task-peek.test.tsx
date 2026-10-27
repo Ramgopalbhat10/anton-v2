@@ -38,9 +38,9 @@ describe('Task peek', () => {
 		expect(within(peek).getByText('anton/task-s1')).toBeTruthy();
 		const pull = within(peek).getByRole('link', { name: /#42/ });
 		expect(pull.getAttribute('href')).toBe('https://github.com/acme/demo/pull/42');
-		expect(pull.getAttribute('title')).toBe('Open, checks failing');
-		expect(within(pull).getByText('Open')).toBeTruthy();
-		expect(within(pull).getByRole('img', { name: 'checks failing' }).children).toHaveLength(2);
+		expect(pull.getAttribute('title')).toBe('#42 open · checks failing');
+		expect(within(pull).getByText('#42 open · checks failing')).toBeTruthy();
+		expect(within(peek).getByRole('img', { name: 'checks failing' }).children).toHaveLength(2);
 	});
 
 	it('shows a dash for numbers a task has not run up yet', async () => {

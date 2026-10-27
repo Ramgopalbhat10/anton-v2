@@ -1,3 +1,4 @@
+import { prColor } from '@/components/pr-status';
 import { useQuery } from '@tanstack/react-query';
 import { HoverCard } from 'radix-ui';
 import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
@@ -323,7 +324,7 @@ function TitleWithTail({ title }: { title: string }) {
 }
 
 /** A bar's label beside it: the side with room. */
-function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: 'danger' | 'success' }) {
+function Chip({ at, children, tone, color }: { at: number; children: ReactNode; tone?: 'danger' | 'success'; color?: string }) {
 	const right = at > 72;
 	return (
 		<span
@@ -331,7 +332,7 @@ function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: '
 				'in-caption absolute top-1/2 -translate-y-1/2 rounded-[4px] px-1 text-[9.5px] leading-[15px] whitespace-nowrap',
 				tone === 'danger' ? 'bg-(--danger-bg) text-(--danger-text)' : 'bg-(--success-bg) text-(--success-text)',
 			)}
-			style={right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }}
+			style={{ ...(right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }), ...(color ? { color, background: 'var(--bg-raised)' } : {}) }}
 		>
 			{children}
 		</span>
@@ -441,7 +442,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 									<>
 										<span className="absolute inset-y-[3px] rounded-[4px]" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--success-base) 50%, transparent)' }} />
 										{thread.prUrl ? (
-											<Chip at={Math.max(reply, from + 1)} tone="success">
+											<Chip at={Math.max(reply, from + 1)} color={prColor(thread.pullRequest?.state)}>
 												#{prNumber(thread.prUrl)}
 											</Chip>
 										) : null}

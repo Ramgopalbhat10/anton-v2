@@ -1,3 +1,4 @@
+import { PrStatus } from '@/components/pr-status';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
-import { NextSteps, prNumber, prSummary, ThreadStateIcon, useOpenThread } from '@/components/thread-card';
+import { NextSteps, ThreadStateIcon, useOpenThread } from '@/components/thread-card';
 import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
@@ -81,7 +82,7 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 									<button type="button" onClick={() => openThread(thread, 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
 										<span className="truncate text-[13px] hover:underline">{thread.title}</span>
 										<span className="flex items-center gap-2">
-											<Caption>{prSummary(thread)}</Caption>
+											<PrStatus thread={thread} full />
 											{runs.length ? (
 												<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
 											) : null}
@@ -168,9 +169,7 @@ function PullRequests({ threads }: { threads: Session[] }) {
 							<button type="button" onClick={() => openThread(thread, 'Changes')} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
 								<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
 								<span className="flex items-center gap-2">
-									<Caption>
-										{repoShort(thread)} #{prNumber(thread.prUrl)}
-									</Caption>
+									<Caption>{repoShort(thread)}</Caption><PrStatus thread={thread} full />
 									{runs.length ? (
 										<Pips
 											label={`${runs.length} checks`}
