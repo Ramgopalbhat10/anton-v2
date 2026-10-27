@@ -1319,9 +1319,9 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: stalled });
 			return;
 		}
-		// A change is read once more against the request alone, and points it missed are sent back to check.
+		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed.
 		// A task that started its workspace during this reply has one now, though this render began without it.
-		const missed = (workspace || hasWorkspace(id)) && !chat && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 		if (missed) {
 			append({ kind: 'signal', type: 'reminder', body: missed });
 			return;
@@ -1362,7 +1362,7 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));

@@ -88,9 +88,9 @@ test('Coder asks for fuller steps, and sends a reply that stops at an announced 
 
 test('Coder lists the request’s requirements as todos, and has a change read against the request before a coding reply ends', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	// In every repository prompt: a coding task writes its list before it starts its workspace.
-	assert.match(source, /\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/);
+	// In every repository and chat prompt: a coding task writes its list before it starts its workspace.
+	assert.equal(source.match(/\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/g)?.length, 2);
 	assert.match(source, /noteRequest\(id, delivery\.body\);/);
-	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !chat && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
+	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
 	assert.match(source, /startFinishReview\(id\);/);
 });

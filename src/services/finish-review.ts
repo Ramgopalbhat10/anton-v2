@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { changesView } from './files.ts';
+import { otherRepoChanges } from './git.ts';
 import { logProblem } from './log.ts';
 import { modelFor } from './sessions.ts';
 import { recordUsage } from './usage.ts';
@@ -96,8 +98,15 @@ export function findingsOf(answer: string): string | null {
 type Call = { tool: string };
 type Deps = { patch: (id: string) => Promise<string | null> };
 
+/**
+ * A task's change; a chat's is what it changed in repositories it worked in, not the files it made in its scratch
+ * folder, which are its deliverables rather than a change to code.
+ */
 async function livePatch(id: string): Promise<string | null> {
-	if (!(await liveMachine(id))) return null;
+	const machine = await liveMachine(id);
+	if (!machine) return null;
+	const session = await getSessionRecord(id);
+	if (session && !session.projectId) return otherRepoChanges(machine, new Date(session.createdAt));
 	return (await changesView(id)).patch;
 }
 
