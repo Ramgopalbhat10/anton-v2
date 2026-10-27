@@ -41,7 +41,8 @@ export async function readPullRequest(session: SessionRecord & { prUrl: string }
 	return activity;
 }
 
-const finished = (session: SessionRecord) => session.pullRequest?.state === 'merged' || session.pullRequest?.state === 'closed';
+/** Merged and closed pull requests never change. */
+export const finished = (session: SessionRecord) => session.pullRequest?.state === 'merged' || session.pullRequest?.state === 'closed';
 
 /** Reads every open pull request not read lately; merged and closed ones never change, so they are left alone. */
 export async function refreshPullRequests(now = Date.now()): Promise<void> {

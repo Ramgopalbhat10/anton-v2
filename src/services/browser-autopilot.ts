@@ -138,14 +138,19 @@ export async function autopilot(
 	};
 	const end = (outcome: AutopilotOutcome, about: string | null = null): AutopilotResult => ({ outcome, actions, about, decisions, cost, state });
 
-	/** Acts, then waits for the page to show it: some sites change the page without loading a new one. */
-	const act = async (command: BrowserInput): Promise<boolean> => {
+	/**
+	 * Acts, then waits for the page to show it: some sites change the page without loading a new one. Says
+	 * whether the page changed, only scrolled (a "go to" link or a table of contents), or did neither.
+	 */
+	const act = async (command: BrowserInput): Promise<'changed' | 'scrolled' | null> => {
 		const before = state.snapshot;
+		const view = state.view;
+		const moved = () => state.snapshot !== before || state.view !== view;
 		state = await step(command);
-		for (let wait = 0; wait < 2 && !state.problem && state.snapshot === before && command.action !== 'type' && command.action !== 'select'; wait++) {
+		for (let wait = 0; wait < 2 && !state.problem && !moved() && command.action !== 'type' && command.action !== 'select'; wait++) {
 			state = await step({ action: 'wait', ms: 700 });
 		}
-		return state.snapshot !== before;
+		return state.snapshot !== before ? 'changed' : moved() ? 'scrolled' : null;
 	};
 
 	for (let round = 0; ; round++) {
@@ -157,6 +162,7 @@ export async function autopilot(
 		const left = values.filter(([name]) => !typed.has(name));
 		const kinds: Record<string, string> = {
 			...(clicks.length ? { click: 'Click a link, button, tab or option' } : {}),
+			...(clicks.length ? { hover: 'Hover over an element to show what it reveals, such as a tooltip, preview or menu' } : {}),
 			...(fields.length && left.length ? { type: 'Type the given values into their fields' } : {}),
 			scroll: 'Scroll down to find something not on the page yet',
 			...(actions.length ? { back: 'Go back to the previous page' } : {}),
@@ -166,7 +172,7 @@ export async function autopilot(
 			stuck: { type: 'yes-no', instructions: 'Is the goal out of reach from this page: it needs signing in, the control it needs is missing, or the page shows an error?' },
 			action: { type: 'choice', instructions: 'Which kind of action should come next toward the goal?', options: kinds },
 		};
-		if (clicks.length) questions.click = { type: 'choice', instructions: 'If clicking, which element moves toward the goal?', options: Object.fromEntries(clicks.map((candidate, index) => [`e${index}`, candidate.label])) };
+		if (clicks.length) questions.click = { type: 'choice', instructions: 'If clicking or hovering, which element moves toward the goal?', options: Object.fromEntries(clicks.map((candidate, index) => [`e${index}`, candidate.label])) };
 		if (fields.length) {
 			left.forEach(([name, value], index) => {
 				questions[`value${index}`] = {
@@ -208,10 +214,19 @@ export async function autopilot(
 			if (!filled) return end('unsure', 'none of the values left could be typed into a field it was sure of');
 			continue;
 		}
-		if (kind.choice === 'click') {
+		if (kind.choice === 'click' || kind.choice === 'hover') {
 			const pick = choiceOf(answers.click);
 			const element = pick ? clicks[Number(pick.choice.slice(1))] : undefined;
 			if (!pick || !element || pick.p < UNSURE) return end('unsure', weighed(answers.click, Object.fromEntries(clicks.map((candidate, index) => [`e${index}`, candidate.label]))));
+			// Hovering changes nothing that cannot be undone, so it needs no check.
+			if (kind.choice === 'hover') {
+				const changed = await act({ action: 'hover', target: element.selector });
+				const failed = Boolean(state.problem);
+				did({ what: `${failed ? 'Could not hover over' : 'Hovered over'} ${element.label}${failed ? `: ${state.problem}` : changed ? '' : ' (the page did not change)'}`, p: pick.p, failed });
+				unchanged = changed ? 0 : unchanged + 1;
+				if (unchanged >= 2) return end('stuck');
+				continue;
+			}
 			const confirmed = Boolean(input.confirm?.trim()) && element.label.toLowerCase().includes(input.confirm!.trim().toLowerCase());
 			if (!confirmed && (element.role !== 'link' || mayBeIrreversible(element.label))) {
 				const risky = await ask(
@@ -222,7 +237,8 @@ export async function autopilot(
 			}
 			const changed = await act({ action: 'click', target: element.selector });
 			const failed = Boolean(state.problem);
-			did({ what: `${failed ? 'Could not click' : 'Clicked'} ${element.label}${failed ? `: ${state.problem}` : changed ? '' : ' (the page did not change)'}`, p: pick.p, failed });
+			const note = failed ? `: ${state.problem}` : changed === 'scrolled' ? ' (the page scrolled)' : changed ? '' : ' (the page did not change)';
+			did({ what: `${failed ? 'Could not click' : 'Clicked'} ${element.label}${note}`, p: pick.p, failed });
 			unchanged = changed ? 0 : unchanged + 1;
 		} else if (kind.choice === 'scroll') {
 			const changed = await act({ action: 'scroll', amount: 800 });

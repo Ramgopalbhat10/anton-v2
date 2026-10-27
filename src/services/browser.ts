@@ -78,17 +78,43 @@ let page = null;
 const NO_GOOGLE_KEYS = { GOOGLE_API_KEY: 'no', GOOGLE_DEFAULT_CLIENT_ID: 'no', GOOGLE_DEFAULT_CLIENT_SECRET: 'no' };
 let errors = [];
 let quit = null;
+// Set when the tab the agent was on went away (its browser quit or crashed, or the page crashed), so the next step says so.
+let lost = false;
 const idle = () => { clearTimeout(quit); quit = setTimeout(async () => { await browser?.close().catch(() => {}); process.exit(0); }, IDLE_MS); };
 
 async function tab(width, height) {
-	// On the task's desktop when it has one, full screen, so you watch it in the Computer panel; else headless.
-	// Without Google's keys, and as a test browser, it shows no infobars about them or --no-sandbox.
-	browser ??= await chromium.launch(process.env.DISPLAY ? { headless: false, args: ['--kiosk', '--no-first-run', '--test-type'], env: { ...process.env, ...NO_GOOGLE_KEYS } } : {});
+	// A browser that quit or crashed is started again, rather than every later step failing on it.
+	if (browser && !browser.isConnected()) {
+		browser = null;
+		page = null;
+		lost = true;
+	}
+	if (!browser) {
+		// On the task's desktop when it has one, full screen, so you watch it in the Computer panel; else headless.
+		// Without Google's keys, and as a test browser, it shows no infobars about them or --no-sandbox.
+		const launched = await chromium.launch(process.env.DISPLAY ? { headless: false, args: ['--kiosk', '--no-first-run', '--test-type'], env: { ...process.env, ...NO_GOOGLE_KEYS } } : {});
+		launched.on('disconnected', () => {
+			if (browser !== launched) return;
+			browser = null;
+			page = null;
+			lost = true;
+		});
+		browser = launched;
+	}
 	if (!page || page.isClosed()) {
-		page = await browser.newPage({ viewport: { width, height } });
-		page.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
-		page.on('pageerror', (error) => errors.push(String(error)));
-	} else if (page.viewportSize().width !== width || page.viewportSize().height !== height) {
+		if (page) lost = true;
+		const opened = await browser.newPage({ viewport: { width, height } });
+		opened.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
+		opened.on('pageerror', (error) => errors.push(String(error)));
+		// A crashed tab answers every later action with an error; the next step opens a new one.
+		opened.on('crash', () => {
+			if (page !== opened) return;
+			page = null;
+			lost = true;
+			opened.close().catch(() => {});
+		});
+		page = opened;
+	} else if (page.viewportSize()?.width !== width || page.viewportSize()?.height !== height) {
 		await page.setViewportSize({ width, height });
 	}
 	return page;
@@ -98,14 +124,35 @@ ${BROWSER_STEP}
 
 async function act(command) {
 	const page = await tab(command.width ?? 1280, command.height ?? 800);
+	const reopened = lost;
+	lost = false;
 	const result = await browserStep(page, command);
+	if (reopened && command.action !== 'open') {
+		result.problem = 'The browser had closed or crashed, so this step ran in a new, blank tab. Open the page again.' + (result.problem ? ' ' + result.problem : '');
+	}
 	let screenshot = null;
 	if (command.screenshot) {
-		fs.mkdirSync(outputs + '/screenshots', { recursive: true });
-		screenshot = command.screenshot;
-		await page.screenshot({ path: outputs + '/' + screenshot, fullPage: Boolean(command.fullPage) });
+		try {
+			fs.mkdirSync(outputs + '/screenshots', { recursive: true });
+			await page.screenshot({ path: outputs + '/' + command.screenshot, fullPage: Boolean(command.fullPage) });
+			screenshot = command.screenshot;
+		} catch (error) {
+			result.problem = (result.problem ? result.problem + ' ' : '') + 'No screenshot: ' + String(error.message || error).split('\\n')[0];
+		}
 	}
 	return { ...result, errors: errors.splice(0).slice(0, 20), screenshot };
+}
+
+/** A step that failed before it acted, answered in the same shape as any other. */
+const failed = (error) => ({ url: page && !page.isClosed() ? page.url() : '', title: '', status: null, problem: 'The browser failed: ' + String((error && error.message) || error).split('\\n')[0], snapshot: '', errors: [], screenshot: null });
+
+/** Lets the browser go after a failure, so the next try starts a new one. */
+async function restart() {
+	const old = browser;
+	browser = null;
+	page = null;
+	lost = true;
+	await old?.close().catch(() => {});
 }
 
 let queue = Promise.resolve();
@@ -116,7 +163,12 @@ http.createServer((request, response) => {
 	request.on('data', (chunk) => (body += chunk));
 	request.on('end', () => {
 		queue = queue.then(async () => {
-			const result = await act(JSON.parse(body)).catch((error) => ({ problem: error.message }));
+			const command = JSON.parse(body);
+			// act only throws before its step acts (starting the browser or a tab), so one more try in a new browser is safe.
+			const result = await act(command).catch(async () => {
+				await restart();
+				return act(command);
+			}).catch(failed);
 			response.end(JSON.stringify(result));
 		});
 	});
@@ -168,6 +220,8 @@ export type BrowserState = {
 	screenshot: string | null;
 	/** The page's accessibility tree as YAML: roles, names and text, which is what the agent targets. */
 	snapshot: string;
+	/** Where the page is scrolled to (`StepResult.view`), for telling a step that only scrolled from one that did nothing. */
+	view?: string;
 };
 
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
@@ -207,6 +261,16 @@ export async function browse(machine: Machine, input: BrowserInput): Promise<Bro
 		result = await send();
 	}
 	if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
-	const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as BrowserState;
-	return { ...state, screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null, snapshot: clipSnapshot(state.snapshot ?? '') };
+	const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as Partial<BrowserState>;
+	// Every field filled, whatever the server answered, so a failed step reads as a problem rather than breaking the tool.
+	return {
+		url: state.url ?? input.url ?? '',
+		title: state.title ?? '',
+		status: state.status ?? null,
+		problem: state.problem ?? null,
+		errors: state.errors ?? [],
+		screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null,
+		snapshot: clipSnapshot(state.snapshot ?? ''),
+		view: state.view,
+	};
 }

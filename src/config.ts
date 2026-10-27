@@ -34,6 +34,8 @@ export const config = {
 	github: {
 		token: read('ANTON_GITHUB_TOKEN'),
 		apiUrl: read('ANTON_GITHUB_API_URL', 'https://api.github.com'),
+		/** The secret of a GitHub webhook pointed at `/api/github/webhook`; without it the route is off and Anton polls. */
+		webhookSecret: read('ANTON_GITHUB_WEBHOOK_SECRET'),
 	},
 	openrouter: {
 		apiUrl: read('ANTON_OPENROUTER_API_URL', 'https://openrouter.ai/api/v1'),

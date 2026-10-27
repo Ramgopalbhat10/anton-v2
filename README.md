@@ -75,6 +75,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `OPENROUTER_API_KEY` | Model gateway, used while no OpenRouter key is pasted in Settings › Subscriptions (optional) |
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway, used while no key for it is pasted in Settings › Subscriptions (optional) |
 | `ANTON_GITHUB_TOKEN` | Fine-grained token with Contents and Pull requests read/write on your repos |
+| `ANTON_GITHUB_WEBHOOK_SECRET` | Secret of a GitHub webhook pointed at `/api/github/webhook`, so pull request checks and comments arrive the moment they change (optional; see below) |
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |
 | `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
@@ -92,6 +93,12 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `ANTON_CLAUDE_CODE_MAX_OPEN` | Claude Code conversations kept open at once; the longest idle closes first (default 3) |
 | `ANTON_PUSH_CONTACT` | A `mailto:` or `https:` address push services can reach you at about Anton's notifications (default `mailto:anton@example.com`) |
 | `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
+
+## Pull request updates
+
+Anton reads its pull requests from GitHub. After each push it reads the pull request every 15 seconds until its checks finish, so the card and the agent hear about a pass or a failure within seconds, and it reads it again as soon as an agent finishes a turn, so review findings and failures that came in meanwhile go to the agent at once. Unchanged reads are conditional requests GitHub answers with a 304, which cost nothing from the rate limit. Everything else (comments from people and review bots, someone else's pushes) is picked up by a slower round every five minutes.
+
+To hear of everything the moment it happens, add a webhook on each repository (Settings › Webhooks › Add webhook): Payload URL `https://<your Anton>/api/github/webhook`, content type `application/json`, a secret of your choosing set as `ANTON_GITHUB_WEBHOOK_SECRET`, and these events: Pull requests, Pull request reviews, Pull request review comments, Issue comments, Check runs, Check suites and Statuses. Behind an access proxy, let that one path through without a sign-in (in Cloudflare Access, a Bypass policy on an application for `/api/github/webhook`): GitHub signs every delivery with the secret, Anton refuses any that is not signed, and a delivery only tells Anton which pull request to read again from GitHub.
 
 ## Backups
 

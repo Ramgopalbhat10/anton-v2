@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -567,7 +568,8 @@ test('the browser keeps one tab open while the agent types and clicks through a 
 	const server = createServer((_request, response) => {
 		response.setHeader('Content-Type', 'text/html');
 		response.end(
-			'<title>Greeter</title><label>Name <input id="name"></label><button onclick="document.querySelector(\'p\').textContent = \'Hello, \' + document.querySelector(\'#name\').value">Greet</button><p></p>',
+			'<title>Greeter</title><label>Name <input id="name"></label><button onclick="document.querySelector(\'p\').textContent = \'Hello, \' + document.querySelector(\'#name\').value">Greet</button><p></p>' +
+				'<button onclick="window.scrollTo(0, 2000)">Jump</button><div style="height: 4000px"></div>',
 		);
 	});
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -587,6 +589,20 @@ test('the browser keeps one tab open while the agent types and clicks through a 
 	const missing = await browse(machine, { action: 'click', target: 'role=button[name="Nowhere"]' });
 	assert.ok(missing.problem, 'a step that fails says why');
 	assert.match(missing.snapshot, /Hello, Ada/, 'and still describes the page');
+
+	const jumped = await browse(machine, { action: 'click', target: 'role=button[name="Jump"]' });
+	assert.equal(jumped.snapshot, missing.snapshot, 'a click that only scrolls leaves the description as it was');
+	assert.notEqual(jumped.view, missing.view, 'but says where the page is scrolled to');
+
+	// The browser dies under the agent (out of memory, its desktop closed): the next step says so and the one after works.
+	const pid = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}.pid`;
+	await run(machine, `pkill -KILL -P "$(cat ${pid})"; sleep 0.5`);
+	const lost = await browse(machine, { action: 'look' });
+	assert.match(lost.problem ?? '', /closed or crashed/);
+	assert.equal(typeof lost.url, 'string');
+	const reopened = await browse(machine, { action: 'open', url: opened.url });
+	assert.equal(reopened.problem, null);
+	assert.match(reopened.snapshot, /button "Greet"/);
 });
 
 test('the checkpoint timeline keeps distinct states, and restoring one puts its files back', async () => {
@@ -1074,6 +1090,65 @@ test('each task keeps its pull request state and checks, read in the background 
 	assert.deepEqual(await status(), { state: 'merged', checks: null, runs: [] }, 'a merged pull request is not read again');
 	await updateSession(session.id, { prUrl: 'https://example.test/pull/22' });
 	assert.equal(await status(), null, 'a new pull request starts unknown');
+	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+});
+
+test('a pull request whose checks run is read every few seconds until they finish, and a GitHub webhook has it read at once', async () => {
+	const { checkPullRequest, gitHubDelivery, isWatched, readWatchedPullRequests, signedByGitHub, watchPullRequest } = await import('../src/services/pr-watch.ts');
+	const project = await addProject('acme/watched');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Watched' });
+	const status = async () => (await sessions.getSession(session.id)).pullRequest;
+	await updateSession(session.id, { prUrl: 'https://github.com/acme/watched/pull/31' });
+	delivered.length = 0;
+	const now = Date.now();
+
+	watchPullRequest(session.id, now);
+	activity = { state: 'open', headSha: 'w-1', checks: [], comments: [] };
+	await readWatchedPullRequests(now + 60_000);
+	assert.equal(isWatched(session.id), true, 'checks may not have shown up yet');
+	activity = { ...activity, checks: [{ name: 'test', status: 'pending', summary: '', url: 'https://ci.test/w' }] };
+	await readWatchedPullRequests(now + 4 * 60_000);
+	assert.equal((await status())?.checks, 'pending');
+	assert.equal(isWatched(session.id), true, 'still running');
+	activity = { ...activity, checks: [{ name: 'test', status: 'failed', summary: '1 test failed', url: 'https://ci.test/w' }] };
+	await readWatchedPullRequests(now + 5 * 60_000);
+	assert.equal((await status())?.checks, 'failed', 'the card shows the result on the next quick read');
+	assert.equal(isWatched(session.id), false, 'done once the checks finish');
+	assert.equal(delivered.length, 1, 'the failure reaches the agent at once');
+	assert.match(delivered[0].text, /Checks failed[\s\S]*1 test failed/);
+
+	watchPullRequest(session.id, now);
+	activity = { ...activity, headSha: 'w-2', checks: [] };
+	await checkPullRequest(session.id, now + 60_000);
+	assert.equal(isWatched(session.id), true);
+	await checkPullRequest(session.id, now + 4 * 60_000);
+	assert.equal(isWatched(session.id), false, 'a repository with no CI is not read quickly for long');
+
+	// A webhook delivery names the pull request; Anton reads it from GitHub itself.
+	assert.equal(await gitHubDelivery('check_run', { repository: { full_name: 'Acme/Watched' }, check_run: { pull_requests: [{ number: 32 }] } }), 0, 'another pull request');
+	assert.equal(await gitHubDelivery('issue_comment', { repository: { full_name: 'acme/watched' }, issue: { number: 31 } }), 0, 'a comment on an issue');
+	assert.equal(await gitHubDelivery('push', { repository: { full_name: 'acme/watched' } }), 0, 'not about pull requests');
+	activity = { ...activity, checks: [{ name: 'test', status: 'passed', summary: '', url: 'https://ci.test/w2' }] };
+	assert.equal(await gitHubDelivery('check_run', { repository: { full_name: 'Acme/Watched' }, check_run: { pull_requests: [{ number: 31 }] } }), 1);
+	assert.equal(await gitHubDelivery('status', { repository: { full_name: 'acme/watched' } }), 1, 'a commit status names no pull request, so each open one is read');
+	for (let tries = 0; (await status())?.checks !== 'passed'; tries += 1) {
+		if (tries > 100) throw new Error('the delivery was not read');
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	assert.equal(await gitHubDelivery('pull_request', { action: 'synchronize', repository: { full_name: 'acme/watched' }, pull_request: { number: 31 } }), 1);
+	assert.equal(isWatched(session.id), true, 'a push is watched until its checks finish');
+
+	const body = JSON.stringify({ zen: 'Keep it logically awesome.' });
+	const { createHmac } = await import('node:crypto');
+	const signature = `sha256=${createHmac('sha256', 'shh').update(body).digest('hex')}`;
+	assert.equal(signedByGitHub('shh', body, signature), true);
+	assert.equal(signedByGitHub('other', body, signature), false);
+	assert.equal(signedByGitHub('shh', `${body} `, signature), false);
+	assert.equal(signedByGitHub('shh', body, undefined), false);
+
+	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: 'https://github.com/acme/watched/pull/31', state: 'merged', checks: null, runs: [] }) });
+	await readWatchedPullRequests();
+	assert.equal(isWatched(session.id), false, 'a merged pull request is left alone');
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 
