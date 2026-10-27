@@ -5,6 +5,8 @@ import { type ReactNode, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
 import { Chip } from '@/components/instrument';
+import { PrStatus, prSummary } from '@/components/pr-status';
+export { prNumber, prSummary } from '@/components/pr-status';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
 import { Glyph, glyphKind, ThreadGlyph } from '@/components/thread-glyph';
@@ -21,22 +23,6 @@ import { isImagePath } from '../../core/outputs';
 /** The state as a drawn glyph, for list rows: a turning ring while it works, a calling dot while it waits on you. */
 export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
 	return <ThreadGlyph thread={thread} size={size} />;
-}
-
-export const prNumber = (url: string | null) => (url ? (/\/pull\/(\d+)/.exec(url)?.[1] ?? null) : null);
-
-/** The pull request in a few words: number, state and checks. */
-export function prSummary(thread: Session): string | null {
-	if (!thread.prUrl) return null;
-	const pr = thread.pullRequest;
-	const name = `#${prNumber(thread.prUrl) ?? '?'}`;
-	if (!pr) return `${name} opened`;
-	if (pr.state === 'merged' || pr.state === 'closed') return `${name} ${pr.state}`;
-	if (pr.conflicts) return `${name} · merge conflicts`;
-	if (pr.checks === 'failed') return `${name} · checks failing`;
-	if (pr.checks === 'pending') return `${name} · checks running`;
-	if (pr.approved) return `${name} · approved`;
-	return `${name} · ${pr.state === 'draft' ? 'draft' : pr.checks === 'passed' ? 'checks pass' : 'open'}`;
 }
 
 type Step = { label: string; icon: LucideIcon; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' } | { stop: true } | { href: string });
@@ -108,18 +94,6 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 	);
 }
 
-/** A pull request's state as a chip colour: merged violet, failing red, conflicted amber, open green. */
-export function prTone(thread: Session): { tone?: 'success' | 'danger' | 'warning'; color?: string; title: string } {
-	const pr = thread.pullRequest;
-	const title = prSummary(thread) ?? '';
-	if (!pr) return { title };
-	if (pr.state === 'merged') return { color: 'var(--data-2)', title };
-	if (pr.state === 'closed') return { title };
-	if (pr.checks === 'failed') return { tone: 'danger', title };
-	if (pr.conflicts) return { tone: 'warning', title };
-	return { tone: pr.state === 'draft' ? undefined : 'success', title };
-}
-
 /**
  * What a row says beyond its glyph and title, as chips: its pull request,
  * and its state only where the glyph alone would not do (it needs you, it
@@ -127,16 +101,10 @@ export function prTone(thread: Session): { tone?: 'success' | 'danger' | 'warnin
  */
 export function ThreadChips({ thread }: { thread: Session }) {
 	const state = stateOf(thread);
-	const number = prNumber(thread.prUrl);
-	const pr = prTone(thread);
 	const checksFailing = thread.pullRequest?.checks === 'failed';
 	return (
 		<>
-			{thread.prUrl ? (
-				<Chip icon={GitPullRequest} mono tone={pr.tone} color={pr.color} title={pr.title}>
-					#{number ?? '?'}
-				</Chip>
-			) : null}
+			<PrStatus thread={thread} />
 			{thread.status === 'error' ? (
 				<Chip tone="danger">Failed</Chip>
 			) : state === 'waiting' && !checksFailing ? (
@@ -147,14 +115,6 @@ export function ThreadChips({ thread }: { thread: Session }) {
 		</>
 	);
 }
-
-/** A pull request icon's colour by its chip's tone. */
-const PR_ICON: Record<'success' | 'danger' | 'warning' | 'none', string> = {
-	success: 'var(--success-text)',
-	danger: 'var(--danger-text)',
-	warning: 'var(--warning-text)',
-	none: 'var(--icon-tertiary)',
-};
 
 /** A chip that does something: the look of a Chip, with a hover and a click of its own. */
 const CHIP_BUTTON =
@@ -373,13 +333,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					</p>
 				)
 			) : null}
-			{pr && thread.prUrl ? (
-				<a href={thread.prUrl} target="_blank" rel="noreferrer" className={cn(CHIP_BUTTON, 'max-w-full self-start')}>
-					<Icon icon={GitPullRequest} size={11} style={{ color: prTone(thread).color ?? PR_ICON[prTone(thread).tone ?? 'none'] }} />
-					<span className="truncate">{pr}</span>
-					<Icon icon={ArrowUpRight} size={11} className="text-(--icon-tertiary)" />
-				</a>
-			) : null}
+			{pr ? <PrStatus thread={thread} link full className={cn(CHIP_BUTTON, 'max-w-full self-start')} /> : null}
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />

@@ -1,3 +1,4 @@
+import { prColor } from '@/components/pr-status';
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -354,7 +355,7 @@ export const PullRequestCard = memo(function PullRequestCard({
         rel="noreferrer"
         className="group/pr flex items-center gap-3 rounded-[inherit] px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
       >
-        <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong) text-(--icon-secondary)">
+        <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong)" style={{ color: prColor(pull?.state) }}>
           <Icon icon={GitPullRequest} size={13} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
@@ -368,7 +369,7 @@ export const PullRequestCard = memo(function PullRequestCard({
           </span>
           <span className="flex items-center gap-1.5 text-[11.5px] leading-[16px] text-(--text-tertiary)">
             {pull ? (
-              <span>{STATES[pull.state]}</span>
+              <span style={{ color: prColor(pull.state) }}>{STATES[pull.state]}</span>
             ) : (
               <span>
                 {url

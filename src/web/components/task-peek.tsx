@@ -1,12 +1,13 @@
-import { ArrowUpRight, CircleAlert, ClipboardList } from 'lucide-react';
+import { CircleAlert, ClipboardList } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
-import { Chip, Pips } from '@/components/instrument';
+import { Pips } from '@/components/instrument';
 import { Icon } from '@/components/signal';
+import { PrStatus } from '@/components/pr-status';
 import { TaskStatusIcon } from '@/components/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
-import { activeAt, modelName, prNumber, taskNote, type Tone } from '@/lib/task-view';
+import { activeAt, modelName, taskNote, type Tone } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 export const TONE: Record<Tone, string> = {
@@ -17,8 +18,6 @@ export const TONE: Record<Tone, string> = {
 	muted: 'text-(--text-tertiary)',
 };
 
-const PR_STATE = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' } as const;
-const PR_TONE = { open: 'success', draft: 'neutral', merged: 'accent', closed: 'danger' } as const;
 const CHECKS = { passed: 'checks pass', failed: 'checks failing', pending: 'checks running' } as const;
 const CHECK_TONE = { passed: 'success', failed: 'danger', pending: 'warning' } as const;
 
@@ -53,7 +52,7 @@ function Peek({ session }: { session: Session }) {
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<div className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</div>
-					{note ? <div className={cn('text-[12px]', TONE[note.tone])}>{note.text}</div> : null}
+					{note && !note.pullRequest ? <div className={cn('text-[12px]', TONE[note.tone])}>{note.text}</div> : null}
 				</div>
 			</div>
 			{session.errorMessage ? (
@@ -89,18 +88,10 @@ function Peek({ session }: { session: Session }) {
 				</Fact>
 				{session.prUrl ? (
 					<Fact label="Pull request">
-						<a
-							href={session.prUrl}
-							target="_blank"
-							rel="noreferrer"
-							title={[pr ? PR_STATE[pr.state] : null, pr?.checks ? CHECKS[pr.checks] : null].filter(Boolean).join(', ') || undefined}
-							className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] outline-none hover:underline focus-visible:shadow-(--focus-ring)"
-						>
+						<span className="inline-flex items-center gap-1.5">
 							{pr?.runs.length ? <Pips items={pr.runs.map((run) => ({ tone: CHECK_TONE[run.status], title: run.name }))} label={pr.checks ? CHECKS[pr.checks] : 'Checks'} /> : null}
-							<span className="in-num text-[11.5px] text-(--text-primary)">#{prNumber(session) ?? '?'}</span>
-							{pr ? <Chip tone={PR_TONE[pr.state]}>{PR_STATE[pr.state]}</Chip> : null}
-							<Icon icon={ArrowUpRight} size={11} className="text-(--icon-tertiary)" />
-						</a>
+							<PrStatus thread={session} link full className="outline-none hover:underline focus-visible:shadow-(--focus-ring)" />
+						</span>
 					</Fact>
 				) : null}
 			</div>

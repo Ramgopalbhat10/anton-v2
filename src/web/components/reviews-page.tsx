@@ -1,3 +1,4 @@
+import { PrStatus, prColor } from '@/components/pr-status';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ExternalLink, GitMerge, GitPullRequest, MessageSquare, ShieldCheck } from 'lucide-react';
@@ -18,8 +19,6 @@ const GROUPS: Record<ReviewGroup, { label: string; help: string }> = {
 	merged: { label: 'Merged', help: '' },
 	closed: { label: 'Closed', help: '' },
 };
-
-const number = (url: string) => url.match(/\/pull\/(\d+)/)?.[1];
 
 function checksText({ passed, failed, pending }: ReviewItem['checks']): string {
 	const parts = [failed && `${failed} failed`, pending && `${pending} running`, passed && `${passed} passed`].filter(Boolean);
@@ -54,7 +53,7 @@ function Row({ item }: { item: ReviewItem }) {
 		<div className="flex min-h-[52px] items-center gap-3 rounded-[10px] px-2 py-1.5 hover:bg-(--bg-hover)">
 			<span
 				className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg)"
-				style={{ color: open ? GROUP_COLOR[item.group] : 'var(--icon-tertiary)' }}
+				style={{ color: prColor(item.group === 'unknown' ? null : item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open') }}
 			>
 				<Icon icon={item.group === 'merged' ? GitMerge : GitPullRequest} size={13} />
 			</span>
@@ -71,7 +70,7 @@ function Row({ item }: { item: ReviewItem }) {
 					{open && item.conflicts ? <Badge tone="danger">Conflicts</Badge> : null}
 				</div>
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
-					{item.repo} #{number(item.url)} · {age(item.createdAt)}
+					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: item.group === 'unknown' ? null : { state: item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open', checks: null, runs: [] } }} full /> · {age(item.createdAt)}
 					{open ? ` · ${checksText(item.checks)}` : ''}
 				</div>
 			</Link>

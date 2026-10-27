@@ -3,19 +3,13 @@ import { ArrowUpRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { Icon } from '@/components/signal';
+import { PrStatus } from '@/components/pr-status';
 import type { Session } from '@/lib/api';
 import { planReady, prNumber } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 type PullRequest = NonNullable<Session['pullRequest']>;
 type Checks = NonNullable<PullRequest['checks']>;
-
-const PR: Record<PullRequest['state'], { label: string; className: string }> = {
-	open: { label: 'open', className: 'text-(--text-secondary)' },
-	draft: { label: 'draft', className: 'text-(--text-tertiary)' },
-	merged: { label: 'merged', className: 'text-(--success-text)' },
-	closed: { label: 'closed', className: 'text-(--text-tertiary)' },
-};
 
 const DOT: Record<Checks, string> = { failed: 'bg-(--danger-base)', pending: 'bg-(--warning-base)', passed: 'bg-(--success-base)' };
 const CHECKS: Record<Checks, string> = { failed: 'failing', pending: 'running', passed: 'passing' };
@@ -127,12 +121,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 	const pullRequest = session.pullRequest;
 	if (session.prUrl) {
 		const number = `#${prNumber(session) ?? '?'}`;
-		const pr = PR[pullRequest?.state ?? 'open'];
-		cues.push(
-			<a key="pr" href={session.prUrl} target="_blank" rel="noreferrer" aria-label={`Pull request ${number}, ${pr.label}`} className={cn(CUE, pr.className)}>
-				<span className="tabular-nums">{number}</span>
-			</a>,
-		);
+		cues.push(<PrStatus key="pr" thread={session} link className={CUE} />);
 		if (pullRequest?.conflicts) {
 			cues.push(
 				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={cn(CUE, 'text-(--danger-text)')}>

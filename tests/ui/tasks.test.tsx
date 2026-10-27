@@ -97,7 +97,8 @@ describe('Tasks and Reviews', () => {
 		});
 		open('/reviews');
 		expect(await screen.findByText('Waiting on you')).toBeTruthy();
-		expect(screen.getByText(/acme\/web #7 · .* · 2 passed/)).toBeTruthy();
+		expect(screen.getByLabelText('Pull request #7 open')).toBeTruthy();
+		expect(screen.getByText(/2 passed/)).toBeTruthy();
 		expect(screen.getByText('3')).toBeTruthy();
 		expect(screen.getAllByText('Merged').length).toBeGreaterThan(0);
 		expect(screen.queryByText('Failing checks')).toBeNull();

@@ -1,48 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowUpRight, CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
+import { CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { isLive } from '@/components/task-status';
-import { api, branchLabel, isChat, type PullRequest, type Session } from '@/lib/api';
+import { api, branchLabel, isChat, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-const STATE: Record<NonNullable<PullRequest['state']>, { label: string; tone: string }> = {
-	open: { label: 'Open', tone: 'text-(--success-text)' },
-	draft: { label: 'Draft', tone: 'text-(--text-tertiary)' },
-	merged: { label: 'Merged', tone: 'text-(--accent-text)' },
-	closed: { label: 'Closed', tone: 'text-(--danger-text)' },
-};
-
-/** The task's pull request with its state on GitHub; nothing until one is opened. */
+/** The task's pull request, refreshed independently when the header is open. */
 export function PullRequestChip({ session }: { session: Session }) {
-	const pull = useQuery({
-		queryKey: ['pull-request', session.id, session.prUrl],
-		queryFn: () => api.pullRequest(session.id),
-		enabled: Boolean(session.prUrl),
-		staleTime: 60_000,
-	});
-	if (!session.prUrl) return null;
-	const state = pull.data?.state ? STATE[pull.data.state] : null;
-	const number = /\/pull\/(\d+)$/.exec(session.prUrl)?.[1];
-	return (
-		<a
-			href={session.prUrl}
-			target="_blank"
-			rel="noreferrer"
-			title={state ? `Pull request ${number ? `#${number} ` : ''}· ${state.label} on GitHub` : 'Pull request on GitHub'}
-			className="group/pr flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] whitespace-nowrap text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-		>
-			{/* Its state is the icon's colour; the word is in the tooltip. */}
-			<Icon icon={GitPullRequest} size={13} className={state?.tone ?? 'text-(--icon-tertiary)'} />
-			<span>{number ? `#${number}` : 'Pull request'}</span>
-			{state ? <span className="sr-only">{state.label}</span> : null}
-			<Icon icon={ArrowUpRight} size={12} className="hidden text-(--icon-tertiary) group-hover/pr:inline" />
-		</a>
-	);
+	const pull = useQuery({ queryKey: ['pull-request', session.id, session.prUrl], queryFn: () => api.pullRequest(session.id), enabled: Boolean(session.prUrl), staleTime: 60_000 });
+	const state = pull.data?.state;
+	const snapshot = session.pullRequest;
+	const pullRequest = state ? { ...(snapshot ?? { checks: null, runs: [] }), state } : snapshot;
+	return <PrStatus thread={{ prUrl: session.prUrl, pullRequest }} link full className="h-7 rounded-lg px-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" />;
 }
 
 /** Renames the task, showing the new title at once wherever the task is listed. */

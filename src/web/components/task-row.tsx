@@ -1,20 +1,17 @@
 import { Link } from '@tanstack/react-router';
-import { GitBranch, Github, GitPullRequest, type LucideIcon, MessageSquare } from 'lucide-react';
+import { GitBranch, Github, type LucideIcon, MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Pips } from '@/components/instrument';
 import { ModelLogo } from '@/components/model-picker';
 import { Icon } from '@/components/signal';
 import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
-import { prNumber, prTone } from '@/components/thread-card';
+import { PrStatus } from '@/components/pr-status';
 import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** Tokens a task's replies used, in and out. */
 export const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
-
-/** A pull request's icon colour by its state: merged violet, failing red, conflicted amber, open green. */
-const PR_TONE = { success: 'var(--success-text)', danger: 'var(--danger-text)', warning: 'var(--warning-text)' } as const;
 
 /** A fact on the row's second line: an icon and a few words. */
 function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
@@ -32,7 +29,6 @@ function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boole
  * and what it cost. The glyph says the state, so no word repeats it.
  */
 export function TaskRow({ session, modelName }: { session: Session; modelName: (model: string) => string }) {
-	const pr = session.prUrl ? prTone(session) : null;
 	const runs = session.pullRequest?.runs ?? [];
 	const tokensUsed = used(session);
 	const chat = isChat(session);
@@ -47,15 +43,7 @@ export function TaskRow({ session, modelName }: { session: Session; modelName: (
 			<div className="flex min-w-0 items-center gap-2">
 				<TaskStatusIcon session={session} size={14} />
 				<span className="min-w-0 truncate text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
-				{pr ? (
-					<span
-						title={pr.title}
-						className="in-num inline-flex shrink-0 items-center gap-0.5 text-[11px]"
-						style={{ color: pr.color ?? (pr.tone ? PR_TONE[pr.tone] : 'var(--text-tertiary)') }}
-					>
-						<Icon icon={GitPullRequest} size={12} />#{prNumber(session.prUrl) ?? '?'}
-					</span>
-				) : null}
+				<PrStatus thread={session} />
 				{runs.length ? (
 					<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
 				) : null}

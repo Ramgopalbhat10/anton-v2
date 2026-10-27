@@ -110,7 +110,7 @@ describe('sidebar', () => {
 	it('links each task to its pull request and CI, and lists the checks when resting on CI', async () => {
 		open();
 		await screen.findByText('Busy task');
-		const merged = within(row('New merged')).getByRole('link', { name: 'Pull request #12, merged' });
+		const merged = within(row('New merged')).getByRole('link', { name: 'Pull request #12 merged' });
 		expect(merged.getAttribute('href')).toBe('https://github.com/acme/demo/pull/12');
 		expect(within(row('Busy task')).queryByText('Working')).toBeNull();
 		expect(within(row('Idle task')).getByText(/web/)).toBeTruthy();
@@ -201,8 +201,8 @@ describe('sidebar', () => {
 		await userEvent.hover(screen.getByRole('link', { name: /Red checks/ }));
 		const card = await screen.findByText('Pull request', {}, { timeout: 2000 });
 		const pull = within(card.parentElement as HTMLElement).getByRole('link', { name: /#7/ });
-		expect(pull.getAttribute('title')).toBe('Open, checks failing');
-		expect(within(pull).getByText('Open')).toBeTruthy();
+		expect(pull.getAttribute('title')).toBe('#7 open · checks failing');
+		expect(within(pull).getByText('#7 open · checks failing')).toBeTruthy();
 		expect(screen.getByText('acme/demo')).toBeTruthy();
 	});
 
