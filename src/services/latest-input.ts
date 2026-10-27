@@ -27,7 +27,7 @@ export async function recordLatestInput(id: string, text: string, at = new Date(
 }
 
 /** The message in a stored submission: a bare string, or `{ kind: 'user', body }`. */
-function bodyOf(payload: string): string | null {
+export function bodyOf(payload: string): string | null {
 	const message = (JSON.parse(payload) as { message?: unknown }).message;
 	if (typeof message === 'string') return message;
 	const user = message as { kind?: string; body?: unknown } | undefined;

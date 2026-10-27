@@ -74,6 +74,8 @@ import { installToolResultCut } from './flue/tool-result-cut.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { todosFor } from './services/todos.ts';
 import { joinsFor, recordJoinEvent } from './services/joins.ts';
+import { answerWithin } from './services/answer-within.ts';
+import { waitingMessages } from './services/waiting.ts';
 import { agentNow, recordAgentNow } from './services/agent-now.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
@@ -787,9 +789,17 @@ app.get('/api/sessions/:id/fallback', async (c) => c.json({ fallback: await fall
 app.post('/api/sessions/:id/fallback', async (c) => c.json(await switchToFallbackModel(c.req.param('id'))));
 app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
 // A project's thread keeps the files it saved, as project files; the answer says where.
-app.delete('/api/sessions/:id', async (c) => c.json(await deleteTask(c.req.param('id'))));
+// Saving a task's files and stopping its sandbox can outlast the proxy's 100 seconds: past ANSWER_MS the
+// page hears it is under way, the work carries on, and the task list updates when it is done.
+app.delete('/api/sessions/:id', async (c) => {
+	const id = c.req.param('id');
+	return c.json(await answerWithin(deleteTask(id), () => ({ kept: [], pending: true }), 'Deleting the task', id));
+});
 app.post('/api/sessions/:id/review', async (c) => c.json({ started: await requestReview(c.req.param('id'), { automatic: false }) }));
-app.post('/api/sessions/:id/stop', async (c) => c.json(await stopSession(c.req.param('id'))));
+app.post('/api/sessions/:id/stop', async (c) => {
+	const id = c.req.param('id');
+	return c.json(await answerWithin(stopSession(id), () => getSession(id), 'Stopping the sandbox', id));
+});
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 app.get('/api/sessions/:id/checkpoints', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
@@ -881,6 +891,11 @@ app.get('/api/sessions/:id/todos', async (c) => {
 app.get('/api/sessions/:id/joins', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ joins: await joinsFor(id) });
+});
+// Messages the agent has not read yet, which no conversation the page loads holds until it does.
+app.get('/api/sessions/:id/waiting', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ messages: await waitingMessages(id) });
 });
 // What the agent is doing this moment; later changes come whole over /api/events.
 app.get('/api/sessions/:id/now', async (c) => {

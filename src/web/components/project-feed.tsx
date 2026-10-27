@@ -297,7 +297,8 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 		case 'message_thread':
 			return (
 				<ActionRow icon={Send} failed={failed}>
-					Sent to <span className="text-(--text-secondary)">{target?.title ?? 'a thread'}</span>: {field(part.input, 'message')}
+					{/* A thread deleted since is gone from the list; the coordinator then starts a new one. */}
+					{failed ? 'Not sent' : 'Sent'} to <span className="text-(--text-secondary)">{target?.title ?? (failed ? 'a deleted thread' : 'a thread')}</span>: {field(part.input, 'message')}
 				</ActionRow>
 			);
 		case 'remember':
