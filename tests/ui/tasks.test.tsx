@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { TasksPage } = await import('@/components/tasks-page');
+const { pageNumbers, TasksPage } = await import('@/components/tasks-page');
 const { ReviewsPage } = await import('@/components/reviews-page');
 
 function open(path: string) {
@@ -29,11 +29,11 @@ function open(path: string) {
 }
 
 describe('Tasks and Reviews', () => {
-	it('lists every task with its cost and tokens, and narrows by search and state', async () => {
+	it('lists every task with where it works, its model and usage, and narrows by search and state', async () => {
 		api.sessions.mockResolvedValue({
 			sessions: [
-				session({ id: 'a', title: 'Fix flaky upload retry', status: 'error', usage: { inputTokens: 1, outputTokens: 1, cost: 1.5 } }),
-				session({ id: 'b', title: 'Add a tasks page', repo: 'acme/web', prUrl: 'https://github.com/acme/web/pull/7' }),
+				session({ id: 'a', title: 'Fix flaky upload retry', status: 'error', errorMessage: 'Sandbox ran out of memory', usage: { inputTokens: 1, outputTokens: 1, cost: 1.5 } }),
+				session({ id: 'b', title: 'Add a tasks page', repo: 'acme/web', model: 'openrouter/anthropic/claude-sonnet-4.5', prUrl: 'https://github.com/acme/web/pull/7', pullRequest: { state: 'merged', checks: 'passed', runs: [] } }),
 			],
 		});
 		open('/tasks');
@@ -41,18 +41,50 @@ describe('Tasks and Reviews', () => {
 		const failed = within(screen.getByText('Fix flaky upload retry').closest('a')!);
 		expect(failed.getByText('$1.50')).toBeTruthy();
 		expect(failed.getByText('2 tok')).toBeTruthy();
+		expect(failed.getByRole('img', { name: 'Failed' })).toBeTruthy();
+		expect(failed.getByText('Sandbox ran out of memory')).toBeTruthy();
+		const merged = within(screen.getByText('Add a tasks page').closest('a')!);
 		// A task that has not called a model yet has no usage to show.
-		expect(within(screen.getByText('Add a tasks page').closest('a')!).getByText('—')).toBeTruthy();
-		expect(screen.getAllByText('Failed')).toHaveLength(3); // the filter, the summary's legend and the task's state
+		expect(merged.getByText('—')).toBeTruthy();
+		expect(merged.getByText('acme/web')).toBeTruthy();
+		expect(merged.getByText('claude-sonnet-4.5')).toBeTruthy();
+		// The pull request's colour says it merged; no word repeats it.
+		expect(merged.getByText(/#7/).textContent).toBe('#7');
 
-		fireEvent.click(screen.getByRole('button', { name: 'Pull request' }));
+		const tabs = screen.getByRole('tablist', { name: 'Tasks by state' });
+		expect(within(tabs).getByRole('tab', { name: 'Pull requests 1' })).toBeTruthy();
+		fireEvent.click(within(tabs).getByRole('tab', { name: 'Pull requests 1' }));
 		expect(screen.queryByText('Fix flaky upload retry')).toBeNull();
 		expect(screen.getByText('Add a tasks page')).toBeTruthy();
 
-		fireEvent.click(screen.getByRole('button', { name: 'Pull request' }));
+		fireEvent.click(within(tabs).getByRole('tab', { name: 'All 2' }));
 		fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'flaky' } });
 		expect(screen.getByText('Fix flaky upload retry')).toBeTruthy();
 		expect(screen.queryByText('Add a tasks page')).toBeNull();
+		expect(within(tabs).getByRole('tab', { name: 'Needs you 1' })).toBeTruthy();
+	});
+
+	it('shows the list a page at a time', async () => {
+		api.sessions.mockResolvedValue({ sessions: Array.from({ length: 45 }, (_, index) => session({ id: `t${index}`, title: `Task number ${index + 1}` })) });
+		open('/tasks');
+		expect(await screen.findByText('Task number 1')).toBeTruthy();
+		expect(screen.queryByText('Task number 21')).toBeNull();
+		const pages = screen.getByRole('navigation', { name: 'Pages' });
+		expect(within(pages).getByText('1–20 of 45')).toBeTruthy();
+		fireEvent.click(within(pages).getByRole('button', { name: 'Page 3' }));
+		expect(screen.getByText('Task number 45')).toBeTruthy();
+		expect(screen.queryByText('Task number 1')).toBeNull();
+		expect(within(pages).getByRole('button', { name: 'Next page' })).toHaveProperty('disabled', true);
+		fireEvent.click(within(pages).getByRole('button', { name: 'Previous page' }));
+		expect(within(pages).getByText('21–40 of 45')).toBeTruthy();
+		// A new search starts again from the first page.
+		fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'Task' } });
+		expect(within(pages).getByText('1–20 of 45')).toBeTruthy();
+	});
+
+	it('numbers the pages around the one shown', () => {
+		expect(pageNumbers(0, 3)).toEqual([0, 1, 2]);
+		expect(pageNumbers(5, 12)).toEqual([0, null, 4, 5, 6, null, 11]);
 	});
 
 	it('groups pull requests by what each waits on', async () => {

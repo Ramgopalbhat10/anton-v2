@@ -7,6 +7,7 @@ import { generalSettings } from './general.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { type ModelChoice, listThreads } from './sessions.ts';
 import { agentNow } from './agent-now.ts';
+import { deletedThreads } from './deleted-threads.ts';
 import { minutes, runReport, subagentRuns } from './subagent-runs.ts';
 
 /**
@@ -70,7 +71,7 @@ const RESOLVED_SHOWN = 5;
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);
 	if (!space) return '';
-	const [threads, repos] = await Promise.all([listThreads(spaceId), Promise.all(space.repoIds.map((id) => getProject(id)))]);
+	const [threads, repos, deleted] = await Promise.all([listThreads(spaceId), Promise.all(space.repoIds.map((id) => getProject(id))), deletedThreads(spaceId)]);
 	const open = threads.filter((thread) => thread.threadState !== 'resolved');
 	const resolved = threads.filter((thread) => thread.threadState === 'resolved').slice(0, RESOLVED_SHOWN);
 	const working = open.filter((thread) => thread.threadState === 'working').length;
@@ -85,6 +86,12 @@ export async function stateBlock(spaceId: string): Promise<string> {
 		`\nThreads, newest first (${open.length} open):`,
 		...(open.length ? open.map(threadLine) : ['- none yet']),
 		...(resolved.length ? [`Recently resolved:`, ...resolved.map(threadLine)] : []),
+		...(deleted.length
+			? [
+					`Deleted by the user (gone: they take no messages; a follow-up to one goes to a new thread whose brief carries what it found, and its saved files are in the Library under From threads/<its title>/):`,
+					...deleted.map((thread) => `- [${thread.id.slice(0, 8)}] "${thread.title}" · deleted ${thread.at.slice(0, 10)}${thread.lastReply ? ` · last said: "${clip(thread.lastReply, 200)}"` : ''}`),
+				]
+			: []),
 	];
 	return lines.filter(Boolean).join('\n');
 }

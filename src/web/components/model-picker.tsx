@@ -28,7 +28,7 @@ import {
 	vendorHue,
 	visibleModels,
 } from '@/lib/model-catalog';
-import { logoFor } from '@/lib/provider-logos';
+import { logoFor, vendorSlug } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 
 /** Rendering every match would be slow; search narrows the rest. */
@@ -92,6 +92,34 @@ export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: numbe
 			{model.subscription ? <span className="absolute -top-[2px] -right-[2px] size-[6px] rounded-full bg-(--accent-base) shadow-[0_0_0_1.5px_var(--bg-overlay)]" /> : null}
 		</span>
 	);
+}
+
+/** A model's vendor logo on a small tile by its id alone, or its initials when the set has no logo: for rows that name a model without its catalog entry. */
+export function ModelLogo({ model, size = 16, title }: { model: string; size?: number; title?: string }) {
+	const logo = logoFor({ id: model });
+	const vendor = vendorSlug({ id: model });
+	const hue = vendorHue(vendor);
+	return (
+		<span
+			aria-hidden={title ? undefined : true}
+			title={title}
+			className="inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
+			style={
+				logo
+					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
+					: { width: size, height: size, fontSize: size * 0.45, color: hue, background: `${hue}1f`, boxShadow: `inset 0 0 0 1px ${hue}33` }
+			}
+		>
+			{logo ? <span className="flex text-(--text-primary)" dangerouslySetInnerHTML={{ __html: logo }} /> : vendor.replace(/[^a-z0-9]/gi, '').slice(0, 2)}
+		</span>
+	);
+}
+
+/** A model's name as the catalog gives it, else the last part of its id. */
+export function useModelName(): (model: string) => string {
+	const models = useModels();
+	const byId = useMemo(() => new Map((models.data?.models ?? []).map((model) => [model.id, shortName(model)] as const)), [models.data]);
+	return (model) => byId.get(model) ?? (model.split('/').pop() ?? model).replace(/^~/, '');
 }
 
 /** Rising bars: how hard the model reasons, on its own scale. */

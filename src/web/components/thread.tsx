@@ -2,6 +2,7 @@ import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';
 import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
@@ -17,8 +18,9 @@ import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { HoverPeek } from '@/components/hover-peek';
+import { TraceButton, TraceModal } from '@/components/trace-modal';
 import { Caption, Chip, Figure, SplitBar } from '@/components/instrument';
-import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart } from '@/lib/api';
+import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
 import { splitAttachments } from '../../core/attachments';
@@ -619,7 +621,7 @@ function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
 /** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
-function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
+function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {
 	const total = usage.inputTokens + usage.outputTokens;
 	const cached = Math.min(usage.cachedTokens ?? 0, usage.inputTokens);
 	const plan = usage.billing === 'plan';
@@ -698,15 +700,20 @@ function ReplyUsagePeek({ usage }: { usage: ReplyUsageView }) {
 					))}
 				</div>
 			) : null}
+			{onTrace ? (
+				<Btn size="sm" variant="secondary" icon={TraceIcon} block onClick={onTrace}>
+					Open the trace
+				</Btn>
+			) : null}
 		</>
 	);
 }
 
 /** The reply's tokens, every model call it made counted, how many calls, and what it cost; resting on it breaks it down. */
-function ReplyUsageLine({ usage }: { usage: ReplyUsageView }) {
+function ReplyUsageLine({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {
 	const calls = callsOf(usage);
 	return (
-		<HoverPeek content={<ReplyUsagePeek usage={usage} />} width={300} openDelay={200}>
+		<HoverPeek content={<ReplyUsagePeek usage={usage} onTrace={onTrace} />} width={300} openDelay={200}>
 			<div
 				tabIndex={0}
 				className="in-num rounded-sm text-[11px] text-(--text-disabled) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-tertiary) hover:underline focus-visible:shadow-(--focus-ring)"
@@ -783,6 +790,10 @@ const AssistantMessage = memo(function AssistantMessage({
 		[made, sessionId],
 	);
 	const usage = usageOf(message);
+	// The reply's trace, when one was kept: its model and tool calls on one clock, opened from the footer.
+	const traceId = typeof message.metadata?.traceId === 'string' ? message.metadata.traceId : null;
+	const [tracing, setTracing] = useState(false);
+	const openTrace = useCallback(() => setTracing(true), []);
 	const compactions = foot ? compactionsOf(message) : [];
 	// This is the whole response's wall time, including model thinking, not tool execution time.
 	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
@@ -836,9 +847,11 @@ const AssistantMessage = memo(function AssistantMessage({
 				// Copy and usage stay on the latest reply; earlier ones show them on hover.
 				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
 					<CopyResponse text={copyText} />
-					{usage ? <ReplyUsageLine usage={usage} /> : null}
+					{traceId ? <TraceButton onOpen={openTrace} /> : null}
+					{usage ? <ReplyUsageLine usage={usage} onTrace={traceId ? openTrace : undefined} /> : null}
 				</div>
 			) : null}
+			{tracing && traceId ? <TraceModal sessionId={sessionId} traceId={traceId} onClose={() => setTracing(false)} /> : null}
 			{compactions.map((compaction) => (
 				<CompactionMark key={compaction.at} compaction={compaction} />
 			))}
@@ -1095,6 +1108,17 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
 const NO_JOINS: Join[] = [];
+const NO_WAITING: WaitingMessage[] = [];
+/** Ids for messages known only as waiting, apart from any the runtime gives. */
+const WAITING_PREFIX = 'waiting:';
+const waitingMessage = (message: WaitingMessage): FlueConversationMessage => ({
+	id: `${WAITING_PREFIX}${message.id}`,
+	role: 'user',
+	purpose: 'user',
+	display: 'visible',
+	submissionId: message.id,
+	parts: [{ type: 'text', text: message.text, state: 'done' }],
+});
 const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
 
 /** File references in replies link to the task's files, and open in the Files panel at their line. */
@@ -1121,14 +1145,19 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
-	const messages = useMemo(
-		() =>
-			conversation
-				.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
-				// One Stop settles the reply and every message queued behind it; it reads as one stop.
-				.filter((message, index, list) => !(message.settlement?.outcome === 'aborted' && list[index - 1]?.settlement?.outcome === 'aborted')),
-		[conversation],
-	);
+	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
+	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
+	const unreadByServer = useQuery({ queryKey: ['waiting', sessionId], queryFn: () => api.waiting(sessionId) }).data?.messages ?? NO_WAITING;
+	const messages = useMemo(() => {
+		const shown = conversation
+			.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
+			// One Stop settles the reply and every message queued behind it; it reads as one stop.
+			.filter((message, index, list) => !(message.settlement?.outcome === 'aborted' && list[index - 1]?.settlement?.outcome === 'aborted'));
+		// This page's own sends show until the runtime lists them, by their words before they have an id.
+		const listed = new Set(shown.flatMap((message) => (message.role !== 'user' ? [] : message.submissionId ? [message.submissionId] : [textOf(message)])));
+		const unread = unreadByServer.filter((message) => !listed.has(message.id) && !listed.has(message.text.trim()));
+		return unread.length ? [...shown, ...unread.map(waitingMessage)] : shown;
+	}, [conversation, unreadByServer]);
 	// A chat's messages carry no repository or branch under them.
 	const repo = session.data && !isChat(session.data) ? session.data.repo : undefined;
 	const branch = session.data ? branchLabel(session.data) : undefined;
@@ -1149,6 +1178,10 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		for (const row of rows) {
 			const message = row.message;
 			if (message.role !== 'user') continue;
+			if (message.id.startsWith(WAITING_PREFIX)) {
+				map.set(message.id, JOINING);
+				continue;
+			}
 			if (row.joined) {
 				map.set(message.id, JOINED_HERE);
 				continue;

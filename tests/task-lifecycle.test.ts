@@ -192,9 +192,15 @@ const countShells = (machine: Machine): Machine => ({
 });
 /** What the last machine start asked for. */
 let lastAcquire: AcquireRequest | undefined;
+/** Machines stopped, so a test can tell a stop ran once. */
+let machinesStopped = 0;
 setProviders({
 	sandbox: {
 		...local,
+		stop: async (state) => {
+			machinesStopped += 1;
+			await local.stop(state);
+		},
 		acquire: async (request) => {
 			lastAcquire = request;
 			const acquired = await local.acquire(request);
@@ -405,6 +411,17 @@ test('the terminal keeps what was typed while its machine was starting', async (
 	assert.match(output, /typed-42/);
 	assert.match(output, /45 123/);
 	await sessions.stopSession(session.id);
+});
+
+test('a second Stop while one is under way waits for it, rather than saving and stopping again', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id });
+	await machineFor(session.id);
+	const before = machinesStopped;
+	await Promise.all([sessions.stopSession(session.id), sessions.stopSession(session.id)]);
+	assert.equal(machinesStopped, before + 1);
+	sessions.invalidateRunning();
+	assert.ok(!(await local.running()).has(session.id));
 });
 
 test('a terminal closed while its machine starts opens no shell', async () => {

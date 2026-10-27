@@ -324,6 +324,9 @@ test('a deleted thread leaves the project and keeps its files as project files; 
 	assert.equal(await getSessionRecord(thread.id), null);
 	assert.equal((await spaces.spaceView(space.id)).threads, 0);
 	assert.equal(new TextDecoder().decode((await files.readSpaceFile(space.id, kept[0]))!), '<svg/>');
+	// Its coordinator learns it is gone, and a message for it says so rather than "no such thread".
+	assert.match(await stateBlock(space.id), new RegExp(`Deleted by the user[^\\n]*\\n- \\[${thread.id.slice(0, 8)}\\] "Draw the diagram" · deleted`));
+	await assert.rejects(() => spaces.findThread(space.id, thread.id.slice(0, 8)), /"Draw the diagram" was deleted by the user and takes no messages/);
 
 	// Another thread of the same name keeps its files beside the first's, not over them.
 	const again = await spaces.startThread(space.id, { title: 'Draw the diagram', brief: 'Draw it again' });

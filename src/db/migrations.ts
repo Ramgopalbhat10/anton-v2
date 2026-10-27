@@ -182,6 +182,11 @@ export const migrations: string[][] = [
 	],
 	// 35: where a gateway sends a task's model calls (`src/core/model-route.ts`): one provider first, or a sort; null leaves it to the gateway.
 	[`ALTER TABLE sessions ADD COLUMN route_json TEXT`],
+	// 36: each reply's trace (`src/services/response-trace.ts`): its model and tool calls on one clock, what went into each call's context, and the cache.
+	[
+		`CREATE TABLE IF NOT EXISTS response_traces (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at TEXT NOT NULL, trace_json TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS response_traces_session ON response_traces (session_id, created_at)`,
+	],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

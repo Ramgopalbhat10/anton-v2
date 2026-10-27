@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Check, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { DropdownMenu as MenuPrimitive, Popover } from 'radix-ui';
-import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from 'react';
+import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
@@ -57,14 +57,50 @@ export function IconBtn({
 	);
 }
 
+/** How long the cube rests between turns, at random within this span. */
+const TURN_GAP_MS = [1800, 4500] as const;
+
+/** A turn now and then, at random: a spin a third round, or a hop and a roll two thirds over; none with reduced motion. */
+function useTurns(): ['spin' | 'roll' | null, () => void] {
+	const [turn, setTurn] = useState<'spin' | 'roll' | null>(null);
+	useEffect(() => {
+		if (turn || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+		const timer = setTimeout(() => setTurn(Math.random() < 0.55 ? 'spin' : 'roll'), TURN_GAP_MS[0] + Math.random() * (TURN_GAP_MS[1] - TURN_GAP_MS[0]));
+		return () => clearTimeout(timer);
+	}, [turn]);
+	return [turn, () => setTurn(null)];
+}
+
+/**
+ * Waiting, drawn as Anton's cube: its faces lift out and brighten in turn,
+ * and now and then it spins or rolls over (`.sg-spinner` in instrument.css);
+ * from 16px it has the mascot's eyes.
+ */
 export function Spinner({ size = 14, tone = 'accent' }: { size?: number; tone?: 'accent' | 'neutral' | 'onAccent' }) {
+	const [turn, rest] = useTurns();
 	return (
-		<span
-			role="status"
-			aria-label="Loading"
-			className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`)}
-			style={{ width: size, height: size }}
-		/>
+		<span role="status" aria-label="Loading" className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`, turn && `is-${turn}`)} style={{ width: size, height: size }}>
+			<svg aria-hidden width={size} height={size} viewBox="3.5 5.2 17 17.8" className="overflow-visible">
+				<g
+					className="sl-cube"
+					onAnimationEnd={(event) => {
+						if (event.target === event.currentTarget) rest();
+					}}
+				>
+					<polygon className="sl-face sl-top" points="12,6 19.1,10.1 12,14.2 4.9,10.1" />
+					<polygon className="sl-face sl-left" points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" />
+					<polygon className="sl-face sl-right" points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" />
+					{size >= 16 ? (
+						<g className="sl-face sl-left">
+							<g className="sl-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+								<path d="M7.03 14.28v2.13" />
+								<path d="M9.87 15.92v2.13" />
+							</g>
+						</g>
+					) : null}
+				</g>
+			</svg>
+		</span>
 	);
 }
 

@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
 	scripts: vi.fn(async (): Promise<{ scripts: Record<string, unknown[]> }> => ({ scripts: {} })),
 	now: vi.fn(async (): Promise<{ now: unknown }> => ({ now: null })),
 	joins: vi.fn(async (): Promise<{ joins: unknown[] }> => ({ joins: [] })),
+	waiting: vi.fn(async (): Promise<{ messages: unknown[] }> => ({ messages: [] })),
 	fallbackModel: vi.fn(async (): Promise<{ fallback: { model: string; name: string } | null }> => ({ fallback: null })),
 	switchToFallbackModel: vi.fn(async () => ({})),
 }));
@@ -262,6 +263,20 @@ describe('Thread', () => {
 		// While the reply is still being written, it says when it will be read.
 		show(agent([sent('u1', 'Build it', 'sub-1'), assistant('a1', [tool('bash', { command: 'ls' })]), sent('u2', 'Why did you stop?', 'sub-2')], { status: 'streaming' }));
 		expect(screen.getByText('Anton reads this between its steps')).toBeTruthy();
+	});
+
+	it('still shows a message sent mid-reply after the thread is opened again, until Anton reads it', async () => {
+		const sent = (id: string, text: string, submissionId: string) => ({ ...user(id, text), submissionId });
+		api.waiting.mockResolvedValue({ messages: [{ id: 'sub-2', text: 'Are you stuck?', at: new Date().toISOString() }] });
+		// The page that sent it showed it as its own; one opened since knows it only from the server.
+		const view = show(agent([sent('u1', 'Run the app', 'sub-1'), assistant('a1', [tool('start_workspace', { reason: 'run it' })]), user('local-1', 'Are you stuck?')], { status: 'streaming' }));
+		await waitFor(() => expect(api.waiting).toHaveBeenCalled());
+		expect(screen.getAllByText('Are you stuck?')).toHaveLength(1);
+		view.unmount();
+		show(agent([sent('u1', 'Run the app', 'sub-1'), assistant('a1', [tool('start_workspace', { reason: 'run it' })])], { status: 'streaming' }));
+		expect(await screen.findByText('Are you stuck?')).toBeTruthy();
+		expect(screen.getByText('Anton reads this between its steps')).toBeTruthy();
+		api.waiting.mockResolvedValue({ messages: [] });
 	});
 
 	it('puts a message read mid-reply where Anton read it: the steps before it, the message, then the answer', async () => {

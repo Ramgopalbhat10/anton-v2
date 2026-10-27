@@ -2,6 +2,7 @@ import type { AgentNow } from '../../core/agent-now';
 import type { AttachedFile } from '../../core/attachments';
 import type { ModelRoute } from '../../core/model-route';
 import type { Schedule } from '../../core/schedule';
+import type { Trace } from '../../core/trace';
 export type { ModelRoute, RouteSort } from '../../core/model-route';
 export type SessionStatus = 'starting' | 'running' | 'stopped' | 'error';
 
@@ -316,6 +317,8 @@ export type Automation = {
 	seen: number[];
 	/** The project its tasks start in, as threads. */
 	spaceId?: string | null;
+	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
+	title?: string | null;
 	createdAt: string;
 };
 
@@ -554,6 +557,8 @@ export type TodoList = { todos: Todo[]; updatedAt: string };
 
 /** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/joins.ts). */
 export type Join = { text: string; afterTool: string; final: boolean; at: string };
+/** A message the agent has not read yet (src/services/waiting.ts), by the runtime's submission id. */
+export type WaitingMessage = { id: string; text: string; at: string };
 /** What the agent is doing this moment (src/services/agent-now.ts). */
 export type { AgentNow };
 
@@ -586,22 +591,33 @@ export type Output = { path: string; size: number; mtimeMs: number };
 export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean } };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[]; /** Files you deleted from the Library, which replies show as deleted. */ deleted: string[] };
 
+/** Statuses a proxy in front of Anton answers with when Anton took too long or could not be reached. */
+const GATEWAY = new Set([502, 503, 504, 522, 524]);
+
+/**
+ * What a failed request says, in words a menu or toast can show. Anton answers errors as JSON; a proxy in
+ * front of it (Cloudflare closes a request at 100 seconds) answers with a whole HTML page, never shown as is.
+ */
+export function errorMessage(status: number, statusText: string, body: string): string {
+	try {
+		const error = (JSON.parse(body) as { error?: unknown }).error;
+		if (typeof error === 'string' && error) return error;
+	} catch {
+		// Not JSON: a proxy's page, or plain text.
+	}
+	const page = /^\s*</.test(body);
+	if (GATEWAY.has(status)) return `Anton took too long to answer (${status}). It may still finish; check again in a moment.`;
+	if (page || !body.trim()) return `Request failed (${status}${statusText ? ` ${statusText}` : ''}).`;
+	const text = body.trim();
+	return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+}
+
 async function request(input: string, init?: RequestInit): Promise<Response> {
 	const response = await fetch(input, {
 		...init,
 		headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
 	});
-	if (!response.ok) {
-		const body = await response.text();
-		const message = (() => {
-			try {
-				return (JSON.parse(body) as { error?: string }).error;
-			} catch {
-				return undefined;
-			}
-		})();
-		throw new Error(message || body || response.statusText);
-	}
+	if (!response.ok) throw new Error(errorMessage(response.status, response.statusText, await response.text()));
 	return response;
 }
 
@@ -736,11 +752,15 @@ export const api = {
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
+	/** A reply's trace, by the id its metadata carries. */
+	trace: (id: string, traceId: string) => json<Trace>(`/api/sessions/${id}/traces/${encodeURIComponent(traceId)}`),
 	/** Stops one running subagent; the agent is told what it had done and carries on. */
 	stopSubagent: async (id: string, runId: string) => void (await post(`/api/sessions/${id}/subagents/${encodeURIComponent(runId)}/stop`)),
 	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),
 	todos: (id: string) => json<{ list: TodoList | null }>(`/api/sessions/${id}/todos`),
 	joins: (id: string) => json<{ joins: Join[] }>(`/api/sessions/${id}/joins`),
+	/** Messages sent while the agent worked that it has not read yet. */
+	waiting: (id: string) => json<{ messages: WaitingMessage[] }>(`/api/sessions/${id}/waiting`),
 	now: (id: string) => json<{ now: AgentNow | null }>(`/api/sessions/${id}/now`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
 	openBrowser: (id: string, url?: string) => post<BrowserView>(`/api/sessions/${id}/browser`, { url }),

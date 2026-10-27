@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { Clock, Folder, GitBranch, MessageSquare, Play, Plus, Settings } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
@@ -9,14 +9,13 @@ import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { Mascot, useMascotMood } from '@/components/mascot';
-import { ModelPicker, useModels } from '@/components/model-picker';
+import { ModelPicker, useModelName, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
-import { TaskStatusIcon } from '@/components/task-status';
-import { api, type ModelChoice, type ModelRoute, placeLabel, type Project } from '@/lib/api';
+import { TaskRow } from '@/components/task-row';
+import { api, type ModelChoice, type ModelRoute, type Project } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
-import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
 import { routable } from '../../core/model-route';
@@ -216,6 +215,7 @@ export function Launcher() {
 	const planMode = !chat && (planChoice ?? general.data?.planMode ?? false);
 	const chosenBranch = branch || project?.defaultBranch || '';
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
+	const modelName = useModelName();
 	const chosenModel = models.data?.models.find((item) => item.id === model);
 	const blind = attachments.images.length > 0 && chosenModel !== undefined && !chosenModel.vision;
 
@@ -329,27 +329,7 @@ export function Launcher() {
 						<Card icon={Clock} title="Recent tasks" sub={`latest ${recent.length}`}>
 							<div className="flex flex-col gap-px px-1.5 pb-1.5">
 								{recent.map((session) => (
-									<Link
-										key={session.id}
-										to="/agents/$sessionId"
-										params={{ sessionId: session.id }}
-										search={{ app: 'code' }}
-										className="flex h-12 items-center gap-3 rounded-[10px] px-2.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-									>
-										<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary)">
-											<TaskStatusIcon session={session} />
-										</span>
-										<div className="flex min-w-0 flex-1 flex-col gap-px">
-											<div className="truncate text-[13px] text-(--text-primary)">{session.title}</div>
-											<div className="truncate font-mono text-[11px] text-(--text-disabled)">
-												{placeLabel(session)}
-											</div>
-										</div>
-										<div className="text-[11px] whitespace-nowrap text-(--text-tertiary)">
-											{age(session.createdAt)}
-											{session.status === 'error' ? ' · failed' : session.prUrl ? ' · PR opened' : ''}
-										</div>
-									</Link>
+									<TaskRow key={session.id} session={session} modelName={modelName} />
 								))}
 							</div>
 						</Card>
