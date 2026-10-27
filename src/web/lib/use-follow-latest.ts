@@ -91,5 +91,7 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 		};
 	}, [ref, enabled, reset, pin]);
 
-	return { following: following || !enabled, follow };
+	const release = useCallback(() => pin(false), [pin]);
+
+	return { following: following || !enabled, follow, release };
 }
