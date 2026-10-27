@@ -694,3 +694,37 @@ describe('response details', () => {
 		expect(cards.every((card) => card.tagName === 'DIV')).toBe(true);
 	});
 });
+
+describe('chat navigation scrolling', () => {
+	it('keeps following for a short conversation and a target clamped to the bottom', () => {
+		const { container } = show(agent([user('u1', 'Latest input')]));
+		const target = container.querySelector<HTMLElement>('[data-chat-input="u1"]')!;
+		const scroller = target.parentElement!.parentElement!;
+		Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 500 });
+		Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 400 });
+		fireEvent.click(screen.getByRole('button', { name: /Go to input 1/ }));
+		expect(screen.queryByRole('button', { name: /Jump to latest/ })).toBeNull();
+		Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 2000 });
+		scroller.scrollTop = 1500;
+		vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 600 } as DOMRect);
+		vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+		fireEvent.click(screen.getByRole('button', { name: /Go to input 1/ }));
+		expect(screen.queryByRole('button', { name: /Jump to latest/ })).toBeNull();
+	});
+
+	it('releases following when navigating to an older input and reserves a gutter', () => {
+		const { container } = show(agent([user('u1', 'Earlier input')]));
+		const target = container.querySelector<HTMLElement>('[data-chat-input="u1"]')!;
+		const scroller = target.parentElement!.parentElement!;
+		expect(scroller.className).toContain('pr-[52px]');
+		Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 500 });
+		Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 2000 });
+		scroller.scrollTop = 1500;
+		vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: -1000 } as DOMRect);
+		vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+		const scroll = vi.spyOn(scroller, 'scrollTo').mockImplementation(() => {});
+		fireEvent.click(screen.getByRole('button', { name: /Go to input 1/ }));
+		expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
+		expect(scroll).toHaveBeenCalledWith({ top: 488, behavior: 'smooth' });
+	});
+});

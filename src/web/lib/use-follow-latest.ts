@@ -1,7 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 /** Closer to the bottom than this counts as at it: a line of slack for rounding and a nudge of the wheel. */
-const SLACK = 32;
+export const FOLLOW_SLACK = 32;
 
 /** The element that scrolls `el`: `el` itself when it scrolls, else its nearest ancestor that does. */
 function scrollerOf(el: HTMLElement): HTMLElement | null {
@@ -13,7 +13,7 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
 }
 
 function atBottom(el: HTMLElement) {
-	return el.scrollHeight - el.scrollTop - el.clientHeight <= SLACK;
+	return el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK;
 }
 
 /**

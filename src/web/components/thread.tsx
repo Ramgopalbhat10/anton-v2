@@ -30,7 +30,7 @@ import { addToComposer } from '@/lib/composer-inbox';
 import { takePendingPrompt } from '@/lib/pending-prompt';
 import { cn } from '@/lib/utils';
 import { logoFor } from '@/lib/provider-logos';
-import { useFollowLatest } from '@/lib/use-follow-latest';
+import { FOLLOW_SLACK, useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { ChatNavigation } from '@/components/chat-navigation';
 import { focusFile, ShowPanel } from '@/lib/workspace';
@@ -1209,11 +1209,18 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 		const el = scroller.current;
 		const target = el && Array.from(el.querySelectorAll<HTMLElement>('[data-chat-input]')).find((node) => node.dataset.chatInput === id);
 		if (!el || !target) return;
-		release();
 		const top = el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+		const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
+		// A short conversation or a target near the end cannot move away from the
+		// bottom. Keep following even when no scroll event will be fired.
+		if (Math.max(0, Math.min(top, bottom)) >= bottom - FOLLOW_SLACK) {
+			follow();
+			return;
+		}
+		release();
 		const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 		el.scrollTo({ top, behavior: reduced ? 'auto' : 'smooth' });
-	}, [release]);
+	}, [follow, release]);
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(
 		() => ({
@@ -1275,7 +1282,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<div className="relative min-h-0 flex-1">
 				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
-				<div ref={scroller} className="h-full overflow-y-auto px-4 pt-2 pb-1">
+				<div ref={scroller} className={cn("h-full overflow-y-auto px-4 pt-2 pb-1", rows.some((row) => row.message.role === 'user' && !row.message.settlement) && "pr-[52px]")}>
 					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-lg border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-[12px] leading-[18px] text-(--warning-text)">
