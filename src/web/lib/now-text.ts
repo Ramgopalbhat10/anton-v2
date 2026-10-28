@@ -16,7 +16,7 @@ export type ReplyPhase = 'starting' | 'replying' | 'finishing';
 
 /** What the agent is doing this moment, in a few words. */
 export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
-	if (!now) return phase === 'replying' ? 'Working' : phase === 'finishing' ? 'Wrapping up' : 'Starting the agent';
+	if (!now) return phase === 'replying' ? 'Working' : phase === 'finishing' ? 'Wrapping up' : 'Preparing the response';
 	const file = now.detail ? baseName(now.detail) : null;
 	const agent = now.detail ? `the ${now.detail} agent` : 'a subagent';
 	switch (now.what) {

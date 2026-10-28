@@ -17,7 +17,7 @@ export function PullRequestChip({ session }: { session: Session }) {
 	const state = pull.data?.state;
 	const snapshot = session.pullRequest;
 	const pullRequest = state ? { ...(snapshot ?? { checks: null, runs: [] }), state } : snapshot;
-	return <PrStatus thread={{ prUrl: session.prUrl, pullRequest }} link full />;
+	return <PrStatus thread={{ prUrl: session.prUrl, pullRequest }} link showConflicts={false} showFailing={false} />;
 }
 
 /** Renames the task, showing the new title at once wherever the task is listed. */
