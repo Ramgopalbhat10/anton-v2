@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal, X } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
@@ -9,6 +9,7 @@ import { FilesTab } from '@/components/files-tab';
 import { HistoryTab } from '@/components/history-tab';
 import { GitTab, useChanges } from '@/components/git-tab';
 import { LibraryTab } from '@/components/library-tab';
+import { PrTab } from '@/components/pr-tab';
 import { PreviewTab } from '@/components/preview-tab';
 import { useResume } from '@/components/source-bar';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
@@ -19,7 +20,8 @@ import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 
 export const panels = [
-	{ name: 'Changes', icon: FileDiff, desc: 'Every file the agent edited, as a diff' },
+	{ name: 'Changes', icon: FileDiff, desc: 'What the agent changed that GitHub does not have yet, as a diff' },
+	{ name: 'PR', icon: GitPullRequest, desc: "The thread's pull requests: checks, discussion, diff, and Merge" },
 	{ name: 'Agents', icon: Bot, desc: 'The subagents the agent hands work to, live, step by step' },
 	{ name: 'Terminal', icon: SquareTerminal, desc: 'The sandbox shell and its command output' },
 	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
@@ -39,6 +41,7 @@ export type PanelName = (typeof panels)[number]['name'];
  */
 const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	Changes: memo(GitTab),
+	PR: memo(PrTab),
 	Agents: memo(AgentsTab),
 	Terminal: memo(TerminalTab),
 	Files: memo(FilesTab),
@@ -234,7 +237,7 @@ export const VmPanel = memo(function VmPanel({
 			<div
 				className={cn(
 					'min-h-0 flex-1',
-					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
+					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' || current === 'Changes' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
 				)}
 			>
 				{current === null ? (

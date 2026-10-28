@@ -332,13 +332,78 @@ export type FileChange = { path: string; status: 'A' | 'M' | 'D' };
 
 export type FilesPayload = { source: Source; at: string | null; paths: string[]; changes: FileChange[] };
 
+/** `unpushed`: what GitHub does not have yet; `branch`: everything since the task began. */
+export type ChangesScope = 'unpushed' | 'branch';
+
 export type ChangesPayload = {
 	source: Source;
 	at: string | null;
 	branch: string;
 	baseBranch: string;
+	/** Missing from older servers, which always sent the whole branch. */
+	scope?: ChangesScope;
+	/** The commit the unpushed diff starts from; null before anything was pushed. */
+	pushedSha?: string | null;
 	patch: string;
-	log: Array<{ sha: string; subject: string; at: string }>;
+	/** `pushed` once anything was: whether GitHub has the commit. */
+	log: Array<{ sha: string; subject: string; at: string; pushed?: boolean }>;
+};
+
+export type PullRequestState = 'open' | 'draft' | 'merged' | 'closed';
+
+/** A pull request the task opened; `current` is the one it works on now. */
+export type PullRequestItem = {
+	url: string;
+	repo: string;
+	number: number;
+	title: string;
+	head: string;
+	base: string;
+	state: PullRequestState | null;
+	openedAt: string;
+	mergedAt: string | null;
+	current: boolean;
+};
+
+export type CheckRun = { name: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; summary: string; url: string };
+
+export type DiscussionEntry = {
+	id: string;
+	kind: 'comment' | 'review' | 'line';
+	author: string;
+	body: string;
+	path: string | null;
+	line: number | null;
+	at: string;
+	/** A review's verdict in words: approved, changes requested. */
+	verdict: string | null;
+};
+
+/** A pull request as GitHub's page shows it. `mergeable` is null while GitHub works it out. */
+export type PullRequestDetail = {
+	url: string;
+	number: number;
+	repo: string;
+	title: string;
+	body: string;
+	author: string;
+	state: PullRequestState;
+	draft: boolean;
+	headBranch: string;
+	headSha: string;
+	baseBranch: string;
+	createdAt: string;
+	mergedAt: string | null;
+	mergedBy: string | null;
+	closedAt: string | null;
+	additions: number;
+	deletions: number;
+	changedFiles: number;
+	mergeable: boolean | null;
+	approved: boolean;
+	commits: Array<{ sha: string; subject: string }>;
+	checks: CheckRun[];
+	discussion: DiscussionEntry[];
 };
 
 export type PullRequest = { url: string; state: 'open' | 'draft' | 'merged' | 'closed' | null };
@@ -746,7 +811,8 @@ export const api = {
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
 	checkpoint: (id: string, at: string) => json<{ at: string; patch: string | null }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}`),
-	revertFile: async (id: string, path: string) => void (await post(`/api/sessions/${id}/revert`, { path })),
+	/** `to: 'pushed'` keeps what was pushed and drops only the edits since. */
+	revertFile: async (id: string, path: string, to: 'base' | 'pushed' = 'base') => void (await post(`/api/sessions/${id}/revert`, { path, to })),
 	restoreCheckpoint: (id: string, at: string) =>
 		post<{ at: string; skipped: string[] }>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/restore`),
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
@@ -782,7 +848,13 @@ export const api = {
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	/** Stops the agent's current turn and anything queued behind it. */
 	stopAgent: async (id: string) => void (await request(`/api/agents/coder/${id}/abort`, { method: 'POST' })),
-	changes: (id: string) => json<ChangesPayload>(`/api/sessions/${id}/changes`),
+	changes: (id: string, scope: ChangesScope = 'unpushed') => json<ChangesPayload>(`/api/sessions/${id}/changes${scope === 'branch' ? '?scope=branch' : ''}`),
+	pulls: (id: string) => json<{ pulls: PullRequestItem[] }>(`/api/sessions/${id}/pulls`),
+	pull: (id: string, number: number) => json<PullRequestDetail>(`/api/sessions/${id}/pulls/${number}`),
+	pullDiff: (id: string, number: number) => json<{ patch: string }>(`/api/sessions/${id}/pulls/${number}/diff`),
+	/** Squashes by default; `sha` refuses the merge when the head moved since you looked. */
+	mergePull: (id: string, number: number, input: { method?: 'squash' | 'merge' | 'rebase'; sha?: string } = {}) =>
+		post<PullRequestDetail>(`/api/sessions/${id}/pulls/${number}/merge`, input),
 	files: (id: string) => json<FilesPayload>(`/api/sessions/${id}/files`),
 	file: async (id: string, path: string) =>
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),

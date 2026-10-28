@@ -189,9 +189,9 @@ const TaskHeader = memo(function TaskHeader({
 			) : null}
 			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
 			{session ? <PullRequestChip session={session} /> : null}
-			{/* The workspace has its own Changes tab, so Review only shows while it is closed; a chat has no code to review. */}
+			{/* The workspace has its own Changes and PR tabs, so Review only shows while it is closed; a chat has no code to review. */}
 			{!workspaceOpen && session && !isChat(session) ? (
-				<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => onShowPanel('Changes')}>
+				<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => onShowPanel(session.prUrl ? 'PR' : 'Changes')}>
 					<span className="hidden sm:inline">Review</span>
 				</Btn>
 			) : null}

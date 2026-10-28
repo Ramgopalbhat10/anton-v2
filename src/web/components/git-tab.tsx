@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, GitCommitHorizontal, MessageSquare, Plus, Send, Undo2, X } from 'lucide-react';
+import { CloudCheck, Copy, GitCommitHorizontal, MessageSquare, Plus, Search, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useEffect, useMemo, useState } from 'react';
+import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { FileIcon, FileIcons } from '@/components/file-icons';
+import { Branch, buildTree } from '@/components/file-view';
 import { ChangesArt } from '@/components/illustrations';
 import { Count, DiffBars, Figure, PathName, Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, isChat, refreshFor } from '@/lib/api';
+import { api, type ChangesPayload, type ChangesScope, isChat, refreshFor } from '@/lib/api';
 import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { type ReviewComment, reviewMessage, SendToAgent, useReviewComments } from '@/lib/review';
@@ -100,12 +102,12 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 	);
 }
 
-/** Puts the file back as it is on the base branch, after a second click. */
-function RevertButton({ sessionId, path }: { sessionId: string; path: string }) {
+/** Puts the file back as it is on the base branch, or as it was at the last push, after a second click. */
+function RevertButton({ sessionId, path, to }: { sessionId: string; path: string; to: 'base' | 'pushed' }) {
 	const queryClient = useQueryClient();
 	const [confirming, setConfirming] = useState(false);
 	const revert = useMutation({
-		mutationFn: () => api.revertFile(sessionId, path),
+		mutationFn: () => api.revertFile(sessionId, path, to),
 		onSuccess: () => {
 			setConfirming(false);
 			void queryClient.invalidateQueries({ queryKey: ['changes', sessionId] });
@@ -122,7 +124,7 @@ function RevertButton({ sessionId, path }: { sessionId: string; path: string }) 
 				disabled={revert.isPending}
 				onClick={() => (confirming ? revert.mutate() : setConfirming(true))}
 				onBlur={() => setConfirming(false)}
-				title="Put this file back as it is on the base branch"
+				title={to === 'pushed' ? 'Drop the edits to this file since the last push' : 'Put this file back as it is on the base branch'}
 			>
 				{revert.isPending ? 'Reverting…' : confirming ? 'Click again to revert' : 'Revert'}
 			</Btn>
@@ -130,7 +132,7 @@ function RevertButton({ sessionId, path }: { sessionId: string; path: string }) 
 	);
 }
 
-export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; commenting?: Commenting; sessionId?: string }) {
+export function DiffBlock({ file, commenting, sessionId, revertTo = 'base' }: { file: FileDiff; commenting?: Commenting; sessionId?: string; revertTo?: 'base' | 'pushed' }) {
 	const [copied, setCopied] = useState(false);
 	// The line being commented on, by its number, so a refetch that shifts the diff keeps the form on its line.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
@@ -150,7 +152,7 @@ export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; com
 				<span className="in-num shrink-0">
 					<DiffStat added={file.added} removed={file.removed} />
 				</span>
-				{sessionId ? <RevertButton key={file.path} sessionId={sessionId} path={file.path} /> : null}
+				{sessionId ? <RevertButton key={file.path} sessionId={sessionId} path={file.path} to={revertTo} /> : null}
 				<IconBtn
 					icon={Copy}
 					size="xs"
@@ -199,23 +201,27 @@ export function DiffBlock({ file, commenting, sessionId }: { file: FileDiff; com
 	);
 }
 
-/** The diff and commits of a task, kept in one query so the tab count and the panel agree. */
-export function useChanges(sessionId: string) {
+/**
+ * The diff and commits of a task, kept in one query per scope so the tab
+ * count and the panel agree. The count is always the unpushed work: what
+ * GitHub does not have yet, so it reads 0 once a pull request has it all.
+ */
+export function useChanges(sessionId: string, scope: ChangesScope = 'unpushed') {
 	const changes = useQuery({
-		queryKey: ['changes', sessionId],
-		queryFn: () => api.changes(sessionId),
+		queryKey: ['changes', sessionId, scope],
+		queryFn: () => api.changes(sessionId, scope),
 		refetchInterval: (query) => refreshFor(query.state.data?.source),
 	});
 	const files = useMemo(() => (changes.data ? parsePatch(changes.data.patch) : []), [changes.data]);
 	return { changes, files };
 }
 
-function CommitList({ log }: { log: Array<{ sha: string; subject: string; at: string }> }) {
+function CommitList({ log }: { log: ChangesPayload['log'] }) {
 	if (log.length === 0) {
 		return <EmptyState icon={GitCommitHorizontal} title="No commits yet" body="Commits on the task branch show up here." />;
 	}
 	return (
-		<ol className="in-card m-0 list-none p-1.5">
+		<ol className="m-0 list-none overflow-y-auto p-1.5">
 			{log.map((entry, index) => (
 				<li key={entry.sha} className="relative flex min-h-11 items-center gap-3 rounded-lg px-2.5 hover:bg-(--bg-hover)">
 					{/* The branch line runs through every commit's node. */}
@@ -224,6 +230,7 @@ function CommitList({ log }: { log: Array<{ sha: string; subject: string; at: st
 						<span className={cn('relative mt-auto mb-auto size-2.5 rounded-full border-2', index === 0 ? 'border-(--accent-base) bg-(--accent-bg-subtle)' : 'border-(--text-disabled) bg-(--card-bg)')} />
 					</span>
 					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{entry.subject}</span>
+					{entry.pushed === false ? <span className="shrink-0 rounded-md bg-(--warning-bg) px-1.5 py-px text-[10.5px] text-(--warning-text)">Not pushed</span> : null}
 					<span className="in-num shrink-0 rounded-md bg-(--alpha-white-6) px-1.5 py-px text-[10.5px] text-(--text-tertiary)">{entry.sha.slice(0, 7)}</span>
 					<span className="in-num w-8 shrink-0 text-right text-[11px] text-(--text-disabled)">{age(entry.at)}</span>
 				</li>
@@ -351,15 +358,61 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	);
 }
 
+const SCOPES: Array<{ scope: ChangesScope; label: string; title: string }> = [
+	{ scope: 'unpushed', label: 'Not pushed', title: 'What GitHub does not have yet: edits since the last push' },
+	{ scope: 'branch', label: 'Whole branch', title: 'Everything the task changed since it began, pushed or not' },
+];
+
+/** Every folder above the changed files, so the Changes tree opens with all of them in view. */
+function foldersOf(paths: string[]): Set<string> {
+	const folders = new Set<string>();
+	for (const path of paths) {
+		const parts = path.split('/');
+		for (let end = 1; end < parts.length; end += 1) folders.add(parts.slice(0, end).join('/'));
+	}
+	return folders;
+}
+
+/**
+ * The Changes panel: the files that changed on the left as a tree, the chosen
+ * one's diff on the right, in the editor layout Files uses too. It shows the
+ * work GitHub does not have yet by default, so a merged pull request leaves
+ * it empty; Whole branch shows everything since the task began.
+ */
 export function GitTab({ sessionId }: { sessionId: string }) {
 	const [view, setView] = useState<'diff' | 'commits'>('diff');
-	const { changes, files } = useChanges(sessionId);
+	const [scope, setScope] = useState<ChangesScope>('unpushed');
+	const { changes, files } = useChanges(sessionId, scope);
 	const review = useReviewComments(sessionId);
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data;
+	const [selected, setSelected] = useState<string | null>(null);
+	const [query, setQuery] = useState('');
+	const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+	// A changed file a reply points at is picked here, from the whole branch when the unpushed work lacks it.
+	const focus = useFocusedChange(sessionId);
+	useEffect(() => {
+		if (!focus) return;
+		setView('diff');
+		setSelected(focus.path);
+	}, [focus?.at]);
+	useEffect(() => {
+		if (focus && changes.data && !files.some((file) => file.path === focus.path) && scope === 'unpushed') setScope('branch');
+	}, [focus?.at, changes.data]);
+	const shown = useMemo(() => {
+		const words = query.trim().toLowerCase();
+		return words ? files.filter((file) => file.path.toLowerCase().includes(words)) : files;
+	}, [files, query]);
+	const tree = useMemo(() => buildTree(shown.map((file) => file.path)), [shown]);
+	const expanded = useMemo(() => {
+		const all = foldersOf(shown.map((file) => file.path));
+		for (const folder of collapsed) all.delete(folder);
+		return all;
+	}, [shown, collapsed]);
+	const statuses = useMemo(() => new Map(files.map((file) => [file.path, file.status])), [files]);
+
 	// A chat has no branch; a task names its own only once it has a workspace to make it in.
 	const branch = session && !isChat(session) && session.workspace ? session.branch : undefined;
 	const base = session && !isChat(session) ? session.baseBranch : undefined;
-
 	if (changes.isError) return <EmptyState title="Changes unavailable" body={changes.error.message} />;
 	if (!changes.data) {
 		return (
@@ -369,33 +422,143 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 			</div>
 		);
 	}
-
-	const { log } = changes.data;
+	const { log, pushedSha } = changes.data;
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
+	const current = files.find((file) => file.path === selected) ?? files[0] ?? null;
+
+	const scopePicker = (
+		<Segmented label="Show changes">
+			{SCOPES.map((item) => (
+				<SegmentedItem key={item.scope} size="sm" on={scope === item.scope} onClick={() => setScope(item.scope)} title={item.title}>
+					{item.label}
+				</SegmentedItem>
+			))}
+		</Segmented>
+	);
+	const viewPicker = (
+		<Segmented label="Show">
+			<SegmentedItem size="sm" on={view === 'diff'} onClick={() => setView('diff')}>
+				Diff
+			</SegmentedItem>
+			<SegmentedItem size="sm" on={view === 'commits'} onClick={() => setView('commits')}>
+				Commits
+				<Count className="h-4 min-w-4 px-1">{log.length}</Count>
+			</SegmentedItem>
+		</Segmented>
+	);
+
+	if (files.length === 0 && view === 'diff') {
+		// Pushed work is on GitHub: the PR panel shows it; nothing is waiting here.
+		const pushed = scope === 'unpushed' && pushedSha;
+		return (
+			<div className="flex flex-col gap-2.5">
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					{scopePicker}
+					{viewPicker}
+				</div>
+				{pushed ? (
+					<EmptyState
+						icon={CloudCheck}
+						title="Nothing unpushed"
+						body={
+							<>
+								Everything the agent changed is on GitHub. New edits show up here.{' '}
+								<button type="button" onClick={() => setScope('branch')} className="text-(--accent-text) underline-offset-2 outline-none hover:underline focus-visible:shadow-(--focus-ring)">
+									Show the whole branch
+								</button>
+							</>
+						}
+					/>
+				) : (
+					<EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body="Files the agent edits show up here as a diff." />
+				)}
+			</div>
+		);
+	}
 
 	return (
-		<div className="flex flex-col gap-2.5">
-			<div className="in-card px-3.5 py-3">
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-					<Figure value={String(files.length)} unit={files.length === 1 ? 'file changed' : 'files changed'} size="md" />
-					<span className="in-num text-[12px]">
-						<span className="text-(--success-text)">+{added}</span> <span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
-					</span>
-					<span className="flex-1" />
-					<Segmented label="Show">
-						<SegmentedItem size="sm" on={view === 'diff'} onClick={() => setView('diff')}>
-							Diff
-						</SegmentedItem>
-						<SegmentedItem size="sm" on={view === 'commits'} onClick={() => setView('commits')}>
-							Commits
-							<Count className="h-4 min-w-4 px-1">{log.length}</Count>
-						</SegmentedItem>
-					</Segmented>
-				</div>
+		<FileIcons>
+			<div className="flex min-h-0 flex-1 flex-col gap-2">
+				<EditorPane
+					name="changes"
+					sideLabel="Changed files"
+					opened={view === 'diff' ? (current?.path ?? null) : 'commits'}
+					side={
+						<>
+							<div className="mb-1.5 flex shrink-0 items-baseline gap-2 px-1">
+								<Figure value={String(files.length)} unit={files.length === 1 ? 'file changed' : 'files changed'} size="md" />
+								<span className="in-num text-[12px]">
+									<span className="text-(--success-text)">+{added}</span> <span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
+								</span>
+							</div>
+							<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
+								<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+								<input
+									value={query}
+									onChange={(event) => setQuery(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === 'Escape') setQuery('');
+									}}
+									placeholder="Find a changed file"
+									aria-label="Find a changed file"
+									className="min-w-0 flex-1 bg-transparent text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+								/>
+							</label>
+							{shown.length === 0 ? (
+								<div className="px-2 py-1.5 text-[12px] text-(--text-tertiary)">No changed files match.</div>
+							) : (
+								<Branch
+									selected={view === 'diff' ? (current?.path ?? null) : null}
+									node={tree}
+									depth={0}
+									expanded={expanded}
+									onToggle={(path) =>
+										setCollapsed((now) => {
+											const next = new Set(now);
+											if (next.has(path)) next.delete(path);
+											else next.add(path);
+											return next;
+										})
+									}
+									onOpen={(path) => {
+										setView('diff');
+										setSelected(path);
+									}}
+									statusOf={(path, folder) => (folder ? undefined : statuses.get(path))}
+								/>
+							)}
+						</>
+					}
+					main={(sideToggle) => (
+						<>
+							<EditorBar sideToggle={sideToggle} className="flex-wrap">
+								{scopePicker}
+								<span className="flex-1" />
+								{viewPicker}
+							</EditorBar>
+							<div className="min-h-0 flex-1 overflow-auto">
+								{view === 'commits' ? (
+									<CommitList log={log} />
+								) : current ? (
+									<DiffBlock
+										key={current.path}
+										file={current}
+										sessionId={sessionId}
+										revertTo={scope === 'unpushed' && pushedSha ? 'pushed' : 'base'}
+										commenting={{
+											comments: review.comments.filter((comment) => comment.path === current.path),
+											onAdd: review.add,
+											onRemove: review.remove,
+										}}
+									/>
+								) : null}
+							</div>
+						</>
+					)}
+				/>
+				<ReviewBar review={review} />
 			</div>
-			{view === 'commits' ? <CommitList log={log} /> : <DiffList files={files} review={review} sessionId={sessionId} branch={branch} base={base} />}
-			<ReviewBar review={review} />
-		</div>
+		</FileIcons>
 	);
 }

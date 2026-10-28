@@ -6,6 +6,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { forgetOutputIndex } from '../db/pages.ts';
 import { getProviders } from '../providers/index.ts';
 import { type FileChange, type LogEntry, changes, repoDir } from './git.ts';
+import { hasCommit } from './host-commits.ts';
 
 /** Larger files are listed but not copied. */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -24,6 +25,12 @@ export type Checkpoint = {
 	outputs: SavedOutput[];
 	/** Lines added and removed against the base; absent on checkpoints saved before it was kept. */
 	stats?: { added: number; removed: number };
+	/**
+	 * The work the host lacks: what changed since `pushedSha`, the commit last pushed, whose patch is kept
+	 * beside the whole one. Null `pushedSha` means nothing was pushed, so it is all of `files`. Absent on
+	 * checkpoints saved before it was kept.
+	 */
+	unpushed?: { pushedSha: string | null; files: FileChange[]; stats: { added: number; removed: number } };
 };
 
 /** Counts a patch's added and removed lines, skipping the file headers. */
@@ -38,6 +45,7 @@ const keys = {
 	history: (id: string, at: string) => `sessions/${id}/checkpoints/${at}.json`,
 	historyPatch: (id: string, at: string) => `sessions/${id}/checkpoints/${at}.patch`,
 	patch: (id: string) => `sessions/${id}/checkpoint.patch`,
+	unpushedPatch: (id: string) => `sessions/${id}/checkpoint-unpushed.patch`,
 	output: (id: string, path: string) => `sessions/${id}/outputs/${path}`,
 	/** Outputs saved straight to storage, not through the machine's outputs folder. */
 	saved: (id: string) => `sessions/${id}/saved-outputs.json`,
@@ -87,12 +95,19 @@ export async function readCheckpointPatch(id: string): Promise<string> {
 	return bytes ? text(bytes) : '';
 }
 
+/** The checkpoint's unpushed work as a patch: the whole patch when nothing was pushed. */
+export async function readUnpushedPatch(id: string, checkpoint: Checkpoint): Promise<string> {
+	if (!checkpoint.unpushed?.pushedSha) return readCheckpointPatch(id);
+	const bytes = await getProviders().store.get(keys.unpushedPatch(id));
+	return bytes ? text(bytes) : '';
+}
+
 /** Identifies the files and commits a checkpoint holds, ignoring when it was taken. */
 const stateOf = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.files, checkpoint.log.map((entry) => entry.sha)]);
 
 /** Whether `next` would store exactly what `previous` holds: same files, commits, outputs and diff. */
 function sameSave(previous: Checkpoint, next: Checkpoint): boolean {
-	const rest = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.baseSha, checkpoint.branch, checkpoint.outputs, checkpoint.log, checkpoint.stats ?? null]);
+	const rest = (checkpoint: Checkpoint) => JSON.stringify([checkpoint.baseSha, checkpoint.branch, checkpoint.outputs, checkpoint.log, checkpoint.stats ?? null, checkpoint.unpushed ?? null]);
 	return stateOf(previous) === stateOf(next) && rest(previous) === rest(next);
 }
 
@@ -141,15 +156,20 @@ async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint
 	if (!session) throw new Error(`Session ${id} not found`);
 	const { store } = getProviders();
 	const previous = await readCheckpoint(id);
-	const diff = await changes(machine, session.baseSha);
+	const pushedSha = session.pushedSha && (await hasCommit(machine, session.pushedSha)) ? session.pushedSha : null;
+	const [whole, since] = await Promise.all([changes(machine, session.baseSha), pushedSha ? changes(machine, session.baseSha, pushedSha) : null]);
 	const checkpoint: Checkpoint = {
 		at: new Date().toISOString(),
 		baseSha: session.baseSha,
 		branch: session.branch,
-		files: await Promise.all(diff.files.map((change) => saveFile(store, machine, change))),
-		log: diff.log,
+		files: await Promise.all(whole.files.map((change) => saveFile(store, machine, change))),
+		// Each commit says whether it was pushed, once anything was.
+		log: (since ?? whole).log,
 		outputs: await syncOutputs(id, store, machine, previous?.outputs ?? []),
-		stats: statsOf(diff.patch),
+		stats: statsOf(whole.patch),
+		unpushed: since
+			? { pushedSha, files: since.files.map(({ path, status }) => ({ path, status })), stats: statsOf(since.patch) }
+			: { pushedSha: null, files: whole.files.map(({ path, status }) => ({ path, status })), stats: statsOf(whole.patch) },
 	};
 	// Most replies leave the files as they were, and every upload is a billed
 	// request, so a save that would store the same thing again stores nothing.
@@ -158,10 +178,11 @@ async function writeCheckpoint(id: string, machine: Machine): Promise<Checkpoint
 		return previous;
 	}
 	const manifest = JSON.stringify(checkpoint);
-	await store.put(keys.patch(id), diff.patch, 'text/x-diff');
+	await store.put(keys.patch(id), whole.patch, 'text/x-diff');
+	if (since) await store.put(keys.unpushedPatch(id), since.patch, 'text/x-diff');
 	// The timeline keeps one entry per distinct state, not one per response.
 	if (!previous || stateOf(previous) !== stateOf(checkpoint)) {
-		await store.put(keys.historyPatch(id, checkpoint.at), diff.patch, 'text/x-diff');
+		await store.put(keys.historyPatch(id, checkpoint.at), whole.patch, 'text/x-diff');
 		await store.put(keys.history(id, checkpoint.at), manifest, 'application/json');
 	}
 	await store.put(keys.latest(id), manifest, 'application/json');
@@ -183,9 +204,11 @@ async function writeCopy(from: string, to: string): Promise<Checkpoint | null> {
 	const [source, target] = await Promise.all([readCheckpoint(from), getSessionRecord(to)]);
 	if (!source || !target) return null;
 	const { store } = getProviders();
-	const copy: Checkpoint = { ...source, at: new Date().toISOString(), branch: target.branch, log: [], outputs: [] };
-	const manifest = JSON.stringify(copy);
 	const patch = await readCheckpointPatch(from);
+	// The fork has pushed nothing, so all its files are unpushed work.
+	const unpushed = { pushedSha: null, files: source.files.map(({ path, status }) => ({ path, status })), stats: source.stats ?? statsOf(patch) };
+	const copy: Checkpoint = { ...source, at: new Date().toISOString(), branch: target.branch, log: [], outputs: [], unpushed };
+	const manifest = JSON.stringify(copy);
 	await store.put(keys.patch(to), patch, 'text/x-diff');
 	await store.put(keys.historyPatch(to, copy.at), patch, 'text/x-diff');
 	await store.put(keys.history(to, copy.at), manifest, 'application/json');

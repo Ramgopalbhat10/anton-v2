@@ -56,6 +56,8 @@ export type Session = {
 	branch: string;
 	baseBranch: string;
 	baseSha: string;
+	/** The commit Anton last pushed to `branch`, which Changes measures unpushed work from; null before the first push. */
+	pushedSha: string | null;
 	status: SessionStatus;
 	/** The agent is working on a message right now. */
 	working: boolean;

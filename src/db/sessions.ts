@@ -20,6 +20,7 @@ function toRecord(row: Row): SessionRecord {
 		branch: String(row.branch ?? ''),
 		baseBranch: String(row.base_branch ?? ''),
 		baseSha: String(row.base_sha ?? ''),
+		pushedSha: optional(row.pushed_sha),
 		prUrl: optional(row.pr_url),
 		errorMessage: optional(row.error_message),
 		checkpointAt: optional(row.checkpoint_at),
@@ -221,6 +222,8 @@ const columns = {
 	brief: 'brief',
 	lastReply: 'last_reply',
 	baseSha: 'base_sha',
+	pushedSha: 'pushed_sha',
+	branch: 'branch',
 	reviewJson: 'review_json',
 } as const;
 
@@ -275,7 +278,7 @@ export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
 		[
-			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?', 'DELETE FROM deleted_outputs WHERE session_id = ?', 'DELETE FROM mail_approvals WHERE session_id = ?', 'DELETE FROM response_traces WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?', 'DELETE FROM deleted_outputs WHERE session_id = ?', 'DELETE FROM mail_approvals WHERE session_id = ?', 'DELETE FROM response_traces WHERE session_id = ?', 'DELETE FROM pull_requests WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
 			{ sql: 'INSERT OR REPLACE INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)', args: [id, new Date().toISOString()] },
 		],
 		'write',

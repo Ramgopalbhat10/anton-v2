@@ -25,7 +25,7 @@ export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?:
 	return <ThreadGlyph thread={thread} size={size} />;
 }
 
-type Step = { label: string; icon: LucideIcon; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' } | { stop: true } | { href: string });
+type Step = { label: string; icon: LucideIcon; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' | 'PR' } | { stop: true } | { href: string });
 
 /** The next steps a thread offers in its state; each sends that instruction to the thread, as if you typed it. */
 export function nextSteps(thread: Session): Step[] {
@@ -37,7 +37,7 @@ export function nextSteps(thread: Session): Step[] {
 	if (pr?.conflicts && !thread.review) return [{ label: 'Fix conflicts', icon: Wrench, send: 'The pull request has merge conflicts. Merge the latest base branch with merge_base_branch, resolve them, check the result and update the pull request.', primary: true }];
 	if (pr?.checks === 'failed') return [{ label: 'Fix CI', icon: Wrench, send: 'Checks are failing on the pull request. Find out why, fix it and push.', primary: true }];
 	if (state === 'waiting') return [{ label: 'Answer', icon: MessageCircleReply, open: true, primary: true }];
-	if (state === 'review') return [{ label: 'Review', icon: GitPullRequest, open: true, panel: 'Changes', primary: true }, ...(thread.prUrl ? [{ label: 'PR', icon: ArrowUpRight, href: thread.prUrl }] : [])];
+	if (state === 'review') return [{ label: 'Review', icon: GitPullRequest, open: true, panel: thread.prUrl ? 'PR' : 'Changes', primary: true }, ...(thread.prUrl ? [{ label: 'PR', icon: ArrowUpRight, href: thread.prUrl }] : [])];
 	if (state === 'landing' && thread.prUrl) return [{ label: 'Open PR', icon: ArrowUpRight, href: thread.prUrl, primary: true }];
 	if (state === 'idle' && thread.workspace && !thread.prUrl) return [{ label: 'Create PR', icon: GitPullRequest, send: 'Open a pull request with the changes on this branch. Write a clear title and a short description.' }];
 	return [];
@@ -46,7 +46,7 @@ export function nextSteps(thread: Session): Step[] {
 /** Opens a project's thread in the main view, with one of its panels when asked. */
 export function useOpenThread() {
 	const navigate = useNavigate();
-	return (thread: Session, panel?: 'Changes') => {
+	return (thread: Session, panel?: 'Changes' | 'PR') => {
 		if (!thread.spaceId) return void navigate({ to: '/agents/$sessionId', params: { sessionId: thread.id }, search: { app: 'code', panel } });
 		void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: thread.spaceId, threadId: thread.id }, search: { panel } });
 	};

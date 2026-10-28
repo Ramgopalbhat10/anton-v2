@@ -200,3 +200,58 @@ test('a read GitHub says is unchanged is answered from the last one, so polling 
 		'each read after the first asks whether it changed',
 	);
 });
+
+test("the PR panel reads a pull request whole, anyone's comments included, and merges it by squashing", async () => {
+	const pull = '/repos/acme/demo/pulls/9';
+	const sent: Array<{ url: string; method: string; body: string | null; accept: string | null }> = [];
+	const pages: Record<string, unknown> = {
+		[pull]: {
+			html_url: 'https://github.com/acme/demo/pull/9',
+			number: 9,
+			title: 'Ship it',
+			body: 'Why',
+			user: { login: 'anton-bot' },
+			state: 'open',
+			draft: false,
+			merged_at: null,
+			updated_at: '2026-10-03T00:00:00Z',
+			created_at: '2026-10-01T00:00:00Z',
+			mergeable: true,
+			additions: 12,
+			deletions: 3,
+			changed_files: 2,
+			head: { sha: 'h9', ref: 'anton/ship' },
+			base: { sha: 'b9', ref: 'main' },
+		},
+		[`${pull}/commits?per_page=100`]: [{ sha: 'h9', commit: { message: 'Ship it\n\nmore' } }],
+		'/repos/acme/demo/issues/9/comments?per_page=100': [note(1, 'stranger', 'NONE')],
+		[`${pull}/comments?per_page=100`]: [],
+		[`${pull}/reviews?per_page=100`]: [{ id: 2, user: { login: 'owner' }, author_association: 'OWNER', body: '', state: 'APPROVED', submitted_at: '2026-10-02T00:00:00Z' }],
+		'/repos/acme/demo/commits/h9/check-runs?per_page=100': { check_runs: [{ name: 'test', status: 'completed', conclusion: 'success', html_url: 'u' }] },
+		'/repos/acme/demo/commits/h9/status?per_page=100': { statuses: [] },
+	};
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		const url = String(input).slice(API.length);
+		const headers = new Headers(init?.headers);
+		sent.push({ url, method: init?.method ?? 'GET', body: init?.body ? String(init.body) : null, accept: headers.get('Accept') });
+		if (url === pull && headers.get('Accept') === 'application/vnd.github.diff') return new Response('diff --git a/x b/x\n', { status: 200 });
+		if (url === `${pull}/merge`) return new Response(JSON.stringify({ merged: true }), { status: 200 });
+		return url in pages ? new Response(JSON.stringify(pages[url]), { status: 200 }) : new Response('missing', { status: 404 });
+	}) as typeof fetch;
+	const host = githubHost({ token: 't', apiUrl: API });
+	const detail = await host.pullRequestDetail('https://github.com/acme/demo/pull/9');
+	assert.deepEqual(
+		{ state: detail.state, additions: detail.additions, changedFiles: detail.changedFiles, mergeable: detail.mergeable, approved: detail.approved, checks: detail.checks.map((check) => check.status) },
+		{ state: 'open', additions: 12, changedFiles: 2, mergeable: true, approved: true, checks: ['passed'] },
+	);
+	assert.deepEqual(
+		detail.discussion.map((entry) => [entry.author, entry.kind, entry.verdict]),
+		[['stranger', 'comment', null], ['owner', 'review', 'approved']],
+		'the panel shows everyone, and a review with only a verdict',
+	);
+	assert.equal(await host.pullRequestDiff('https://github.com/acme/demo/pull/9'), 'diff --git a/x b/x\n');
+	await host.mergePullRequest('https://github.com/acme/demo/pull/9', { method: 'squash', title: 'Ship it (#9)', sha: 'h9' });
+	const merge = sent.find((request) => request.url === `${pull}/merge`);
+	assert.equal(merge?.method, 'PUT');
+	assert.deepEqual(JSON.parse(merge?.body ?? '{}'), { merge_method: 'squash', commit_title: 'Ship it (#9)', sha: 'h9' });
+});

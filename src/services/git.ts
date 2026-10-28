@@ -3,7 +3,8 @@ import { quote, run } from '../core/shell.ts';
 
 /** `mode` is git's file mode in the working tree: 100755 for executables, 120000 for symlinks. */
 export type FileChange = { path: string; status: 'A' | 'M' | 'D'; mode?: string };
-export type LogEntry = { sha: string; subject: string; at: string };
+/** `pushed`: the host has it, as the last push carried it or one before; absent where that was not worked out. */
+export type LogEntry = { sha: string; subject: string; at: string; pushed?: boolean };
 export type Changes = { patch: string; files: FileChange[]; log: LogEntry[] };
 
 export const repoDir = (machine: Machine) => `${machine.root}/repo`;
@@ -60,16 +61,28 @@ export async function checkoutTaskBranch(machine: Machine, branch: string, sha: 
 	await run(machine, `git checkout -f -B ${quote(branch)} ${sha} && git clean -fd`, { cwd });
 }
 
-export async function changes(machine: Machine, baseSha: string): Promise<Changes> {
+/**
+ * What the task changed since `baseSha`: the working tree's diff, new files
+ * included, and the branch's commits. With `since` (the last commit pushed)
+ * the diff starts there instead, so it holds only work the host lacks, and
+ * each commit says whether it was pushed.
+ */
+export async function changes(machine: Machine, baseSha: string, since: string | null = null): Promise<Changes> {
 	const cwd = repoDir(machine);
 	if (baseSha === SCRATCH_BASE) await run(machine, IGNORE_IN_SCRATCH, { cwd });
-	const [names, patch, log] = await Promise.all([
-		run(machine, withScratchIndex(`git diff --cached --no-renames --raw -z ${baseSha}`), { cwd }),
-		run(machine, withScratchIndex(`git diff --cached --no-renames --binary ${baseSha}`), { cwd }),
+	const from = since ?? baseSha;
+	const [names, patch, log, pushed] = await Promise.all([
+		run(machine, withScratchIndex(`git diff --cached --no-renames --raw -z ${from}`), { cwd }),
+		run(machine, withScratchIndex(`git diff --cached --no-renames --binary ${from}`), { cwd }),
 		run(machine, `git log --format='%H%x09%s%x09%cI' ${baseSha}..HEAD`, { cwd }),
+		since ? run(machine, `git rev-list ${baseSha}..${since}`, { cwd }) : null,
 	]);
-	return { patch, files: parseRaw(names), log: parseLog(log) };
+	const host = pushed === null ? null : new Set(pushed.split('\n').filter(Boolean));
+	return { patch, files: parseRaw(names), log: parseLog(log).map((entry) => (host ? { ...entry, pushed: host.has(entry.sha) } : entry)) };
 }
+
+/** Prints the working tree's difference from `from`, new files and binaries included, as a patch `git apply` takes. */
+export const workingPatchCommand = (from: string) => `(${withScratchIndex(`git diff --cached --no-renames --binary ${from}`)})`;
 
 /** Tracked files plus new ones that are not ignored. */
 export async function listFiles(machine: Machine): Promise<string[]> {
@@ -77,17 +90,17 @@ export async function listFiles(machine: Machine): Promise<string[]> {
 	return out.split('\n').filter(Boolean);
 }
 
-/** Commits everything and sends the branch to the host; returns false when there was nothing to push. */
-export async function commitAndPush(machine: Machine, host: GitHost, input: { repo: string; branch: string; baseSha: string; message: string }): Promise<boolean> {
+/** Commits everything and sends the branch to the host; returns the commit pushed, or null when there was nothing to push. */
+export async function commitAndPush(machine: Machine, host: GitHost, input: { repo: string; branch: string; baseSha: string; message: string }): Promise<string | null> {
 	const cwd = repoDir(machine);
 	// Unsigned, as a signature the host cannot reproduce would change the commit's hash.
 	await run(machine, `git add -A && (git diff --cached --quiet || git -c commit.gpgsign=false commit -q -m ${quote(input.message)})`, { cwd });
 	const ahead = Number((await run(machine, `git rev-list --count ${input.baseSha}..HEAD`, { cwd })).trim());
-	if (ahead === 0) return false;
+	if (ahead === 0) return null;
 	const head = (await run(machine, 'git rev-parse HEAD', { cwd })).trim();
 	const commits = await unpushedCommits(machine, input.baseSha, await host.branchHead(input.repo, input.branch));
 	await host.pushCommits({ repo: input.repo, branch: input.branch, head, commits, source: commitSource(machine) });
-	return true;
+	return head;
 }
 
 const SHA = /^[0-9a-f]{40}$/;

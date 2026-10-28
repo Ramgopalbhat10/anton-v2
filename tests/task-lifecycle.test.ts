@@ -16,10 +16,12 @@ import type {
 	GitHost,
 	Issue,
 	Machine,
+	MergeInput,
 	ModelCatalog,
 	ModelInfo,
 	PullRequestActivity,
 	PullRequestInfo,
+	PullRequestState,
 	ReviewInput,
 	TreeEntry,
 } from '../src/core/ports.ts';
@@ -45,6 +47,11 @@ git(seed, 'commit', '-q', '-m', 'init');
 git(seed, 'push', '-q', remote, 'main');
 
 const pullRequests: string[] = [];
+const pullUrls = new Map<string, string>();
+/** What the fake GitHub says every pull request's state is; tests change it. */
+let pullState: PullRequestState = 'open';
+/** Merges asked of the fake GitHub. */
+const merges: Array<{ url: string } & MergeInput> = [];
 let cloneFrom = remote;
 const pushes = bareRemote(remote);
 /** Commits whose files were downloaded for read-only tasks. */
@@ -66,9 +73,32 @@ const fakeHost: GitHost = {
 	pushCommits: pushes.pushCommits,
 	openPullRequest: async (input) => {
 		pullRequests.push(input.head);
-		return 'https://example.test/pull/1';
+		// One pull request per branch, as GitHub finds the open one again.
+		const url = pullUrls.get(input.head) ?? `https://example.test/pull/${pullUrls.size + 1}`;
+		pullUrls.set(input.head, url);
+		return url;
 	},
-	pullRequestState: async () => 'open',
+	pullRequestState: async () => pullState,
+	pullRequestDetail: async (url) => ({
+		...(pulls.find((pull) => pull.url === url) ?? { url, number: Number(url.split('/').pop()), title: 'Ours', author: 'anton', trusted: true, draft: false, headBranch: 'b', headSha: 'sha-1', updatedAt: '', repo: 'acme/demo', body: '', baseBranch: 'main', commits: [] }),
+		state: pullState,
+		createdAt: '2026-10-01T00:00:00Z',
+		mergedAt: pullState === 'merged' ? '2026-10-02T00:00:00Z' : null,
+		mergedBy: pullState === 'merged' ? 'ada' : null,
+		closedAt: null,
+		additions: 1,
+		deletions: 0,
+		changedFiles: 1,
+		mergeable: true,
+		approved: false,
+		checks: [],
+		discussion: [],
+	}),
+	pullRequestDiff: async () => '',
+	mergePullRequest: async (url, input) => {
+		merges.push({ url, ...input });
+		pullState = 'merged';
+	},
 	listIssues: async () => issues,
 	pullRequestActivity: async () => activity,
 	changedFiles: async () => changed,
@@ -1262,8 +1292,9 @@ test('a pull request with merge conflicts: the agent hears of it, merges the new
 	assert.equal(git(remote, 'rev-parse', `${pushed}^2`), theirs, 'the merge names the real base commit');
 	assert.equal(git(remote, 'show', `${pushed}:docs/top.md`), 'top');
 	assert.equal((await record()).baseSha, theirs, 'changes are measured from the merged base');
-	const { patch } = await files.changesView(session.id);
+	const { patch } = await files.changesView(session.id, 'branch');
 	assert.deepEqual([...patch.matchAll(/^diff --git a\/(\S+)/gm)].map((match) => match[1]), ['README.md'], 'the diff leaves out what the base brought');
+	assert.equal((await files.changesView(session.id)).patch, '', 'and the push left nothing unpushed');
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 
@@ -1980,4 +2011,81 @@ test('one file goes back to the base branch, and the repo picker leaves out adde
 	const offered = await addableRepos();
 	assert.ok(!offered.includes('acme/demo'), 'an added repo is not offered again');
 	assert.ok(offered.includes('acme/other'));
+});
+
+/** The files a patch changes, in its order. */
+const pathsIn = (patch: string) => [...patch.matchAll(/^diff --git a\/(\S+)/gm)].map((match) => match[1]);
+
+test('Changes holds only what GitHub lacks, and after a squash merge the next pull request starts on a new branch with only the new work', async () => {
+	const { pullRequestsOf } = await import('../src/services/pull-requests.ts');
+	git(seed, 'branch', '-q', '-f', 'origin-squashed', 'main');
+	pushFromSeed('squashed', { 'start.txt': 'start\n' }, 'Start');
+	const project = await addProject('acme/squash');
+	const session = await sessions.createSession({ projectId: project.id, branch: 'squashed', title: 'Squash flow' });
+	const machine = await machineFor(session.id);
+	const record = async () => (await getSessionRecord(session.id))!;
+	await run(machine, "printf 'one\\n' > one.txt");
+	sessions.invalidateRunning();
+	assert.deepEqual(pathsIn((await files.changesView(session.id)).patch), ['one.txt'], 'before a push, all of it is unpushed');
+
+	const first = await openPullRequest(session.id, { title: 'One', body: '' });
+	assert.equal((await record()).pushedSha, git(remote, 'rev-parse', session.branch), 'what was pushed is kept');
+	assert.equal((await files.changesView(session.id)).patch, '', 'a push leaves nothing unpushed');
+	assert.deepEqual(pathsIn((await files.changesView(session.id, 'branch')).patch), ['one.txt'], 'the whole branch still shows it');
+
+	await run(machine, "printf 'two\\n' > two.txt && printf 'one, edited\\n' > one.txt");
+	const after = await files.changesView(session.id);
+	assert.deepEqual(pathsIn(after.patch), ['one.txt', 'two.txt']);
+	assert.deepEqual(after.log.map((entry) => entry.pushed), [true], 'the pushed commit says so');
+	const saved = await saveCheckpoint(session.id, machine);
+	assert.deepEqual(saved.unpushed?.files.map((file) => file.path), ['one.txt', 'two.txt'], 'a checkpoint keeps the unpushed work for when the sandbox stops');
+
+	// Reverting in the unpushed view drops only the edits since the push.
+	await (await import('../src/services/restore.ts')).revertFile(session.id, 'one.txt', 'pushed');
+	assert.equal((await run(machine, 'cat one.txt')).trim(), 'one', 'the pushed version stays');
+
+	// GitHub squashes the pull request into one new commit on the base.
+	const squashed = pushFromSeed('squashed', { 'one.txt': 'one\n' }, 'One (#1)');
+	pullState = 'merged';
+	try {
+		const second = await openPullRequest(session.id, { title: 'Two', body: '' });
+		const now = await record();
+		assert.equal(now.branch, `${session.branch}-v2`, 'the next pull request has a branch of its own');
+		assert.equal(now.baseSha, squashed, 'from the base as the merge left it');
+		assert.notEqual(second, first);
+		assert.deepEqual(git(remote, 'diff', '--name-only', `${squashed}...${now.branch}`).split('\n'), ['two.txt'], 'it holds only the work since the merge');
+		assert.equal((await files.changesView(session.id)).patch, '', 'and leaves nothing unpushed');
+		const listed = await pullRequestsOf(session.id);
+		assert.deepEqual(listed.map((pull) => [pull.url, pull.current]), [[second, true], [first, false]], 'both pull requests are listed, newest first');
+		assert.equal(listed[1].state, 'merged');
+
+		// Nothing new since a merge: no new branch.
+		pullState = 'merged';
+		await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: second, state: 'merged', checks: null, runs: [] }) });
+		await assert.rejects(() => openPullRequest(session.id, { title: 'Three', body: '' }), /no changes since the merged pull request/);
+		assert.equal((await record()).branch, now.branch);
+	} finally {
+		pullState = 'open';
+	}
+});
+
+test("a thread's own pull request merges from the PR panel by squashing", async () => {
+	const { mergePullRequest, pullRequestDetail } = await import('../src/services/pull-requests.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Merge me' });
+	const machine = await machineFor(session.id);
+	await run(machine, 'echo merge > merge.txt');
+	const url = await openPullRequest(session.id, { title: 'Merge me', body: '' });
+	const number = Number(url.split('/').pop());
+	assert.equal((await pullRequestDetail(session.id, number)).state, 'open');
+	await assert.rejects(() => pullRequestDetail(session.id, 999), /no such pull request/);
+	merges.length = 0;
+	try {
+		const merged = await mergePullRequest(session.id, number);
+		assert.equal(merged.state, 'merged');
+		assert.deepEqual(merges, [{ url, method: 'squash', title: `Merge me (#${number})`, sha: undefined }], 'squash is the default, titled as GitHub would');
+		assert.equal((await getSessionRecord(session.id))!.pullRequest?.state, 'merged', 'the thread counts it merged');
+	} finally {
+		pullState = 'open';
+	}
 });

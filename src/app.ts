@@ -96,7 +96,7 @@ import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMc
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
-import { pullRequestView } from './services/pull-requests.ts';
+import { mergePullRequest, pullRequestDetail, pullRequestDiff, pullRequestsOf, pullRequestView } from './services/pull-requests.ts';
 import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
 import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
@@ -837,8 +837,8 @@ app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
 });
 app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
 app.post('/api/sessions/:id/revert', async (c) => {
-	const { path } = await body(c, v.object({ path: v.pipe(v.string(), v.minLength(1)) }));
-	await revertFile(c.req.param('id'), path);
+	const { path, to } = await body(c, v.object({ path: v.pipe(v.string(), v.minLength(1)), to: v.optional(v.picklist(['base', 'pushed'])) }));
+	await revertFile(c.req.param('id'), path, to);
 	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
@@ -932,8 +932,21 @@ app.get('/api/sessions/:id/context', async (c) => {
 	return c.json(await contextView(id));
 });
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
+// The PR panel: every pull request the task opened, each read from GitHub whole, and merged from there.
+app.get('/api/sessions/:id/pulls', async (c) => c.json({ pulls: await pullRequestsOf(c.req.param('id')) }));
+const pullNumber = (c: { req: { param: (name: 'number') => string } }) => {
+	const number = Number(c.req.param('number'));
+	if (!Number.isInteger(number) || number <= 0) throw new InvalidInputError('Not a pull request number');
+	return number;
+};
+app.get('/api/sessions/:id/pulls/:number', async (c) => c.json(await pullRequestDetail(c.req.param('id'), pullNumber(c))));
+app.get('/api/sessions/:id/pulls/:number/diff', async (c) => c.json({ patch: await pullRequestDiff(c.req.param('id'), pullNumber(c)) }));
+app.post('/api/sessions/:id/pulls/:number/merge', async (c) => {
+	const input = await body(c, v.object({ method: v.optional(v.picklist(['squash', 'merge', 'rebase'])), sha: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/))) }));
+	return c.json(await mergePullRequest(c.req.param('id'), pullNumber(c), input));
+});
 
-app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'))));
+app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'), c.req.query('scope') === 'branch' ? 'branch' : 'unpushed')));
 app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));
 app.get('/api/sessions/:id/file', async (c) => bytes(c, await readFile(c.req.param('id'), c.req.query('path') ?? '')));
 app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req.param('id'))));

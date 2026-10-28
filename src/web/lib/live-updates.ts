@@ -74,6 +74,9 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 		['context', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],
+		// The PR panel: the task's pull requests, and the one open in it.
+		['pulls', change.id],
+		['pull', change.id],
 		// The sandbox starting or stopping starts or ends its desktop.
 		['computer', change.id],
 		...files,
