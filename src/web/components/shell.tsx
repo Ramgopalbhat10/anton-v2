@@ -20,7 +20,7 @@ import { useTaskNotifications } from '@/lib/notifications';
 import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence } from '@/lib/push';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
-import { readTaskAgain, showWorking, taskStatus } from '@/lib/working';
+import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
@@ -235,7 +235,9 @@ export function usePanelChange(
 function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const queryClient = useQueryClient();
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
-	const working = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data?.working ?? false;
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const working = session.data?.working ?? false;
+	useFollowOnceStarted(agent, working, session.dataUpdatedAt);
 	const status = taskStatus(agent.status, working);
 	const flueSend = agent.sendMessage;
 	const sendMessage = useCallback<UseFlueAgentResult['sendMessage']>(
