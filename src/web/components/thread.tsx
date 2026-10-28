@@ -1062,7 +1062,9 @@ function NowLabel() {
  * without it a file being written or a long think reads as nothing happening.
  */
 function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyPhase; quiet: boolean }) {
-	const { now, took } = useNow(sessionId);
+	const heard = useNow(sessionId);
+	// Text is written only into a reply still being written; once the reply is whole, the agent is wrapping up whatever was last heard.
+	const { now, took } = heard.now?.what === 'replying' && phase !== 'replying' ? { now: null, took: 0 } : heard;
 	if (quiet && now?.what === 'replying') return null;
 	return (
 		<div className="flex min-w-0 items-center gap-2 text-[12px] text-(--text-secondary)">

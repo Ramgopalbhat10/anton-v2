@@ -1,4 +1,5 @@
 import { updateSession } from '../db/sessions.ts';
+import { isWorking } from './activity.ts';
 import { takeAsk, takePlan } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { logProblem } from './log.ts';
@@ -126,7 +127,8 @@ export async function checkReply(id: string): Promise<string | null> {
 	try {
 		// A question asked with the ask tool waits on the user by its nature.
 		const asking = ask ? ask.slice(0, MAX_QUESTION) : reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
-		await updateSession(id, { asking, plan });
+		// A message sent while the reply was judged has the agent working on it; its own reply says what it waits on.
+		if (!isWorking(id)) await updateSession(id, { asking, plan });
 	} catch (error) {
 		logProblem('warn', 'Could not check whether the reply waits on you', error, id);
 	}

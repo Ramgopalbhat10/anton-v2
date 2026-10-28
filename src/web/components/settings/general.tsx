@@ -172,6 +172,20 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			</Block>
 			<Block title="Agent" icon={Braces}>
 				<SettingRow
+					title="Title model"
+					help="Names tasks and routines in a few words."
+					info="From the first message, in the background; until it answers, the title is the start of the message. Any OpenRouter model works; a fast, cheap one is best. Its few tokens count toward the task's spend."
+				>
+					<ModelPicker
+						value={{ model: settings.titleModel ?? settings.titleModelDefault ?? '', reasoning: null }}
+						onChange={(change) => {
+							if (change.model) edit({ titleModel: change.model === settings.titleModelDefault ? null : change.model });
+						}}
+						height={28}
+						side="bottom"
+					/>
+				</SettingRow>
+				<SettingRow
 					title="Code mode"
 					help="Calls many tools in one short program."
 					info="The agent writes one program that calls repo reads and searches, MCP servers and the decision model, and reads back only its result, which saves turns and tokens on jobs with many lookups. MCP servers are reached only this way unless a server opts out. Programs run on Anton, not in the sandbox, and can reach nothing else."

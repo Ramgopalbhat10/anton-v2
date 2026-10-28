@@ -529,6 +529,10 @@ export type GeneralSettings = {
 	pageNetwork: boolean;
 	/** The model generate_image draws with; null is the server's default. */
 	imageModel: string | null;
+	/** The OpenRouter model that names tasks and routines; null is the server's default. */
+	titleModel: string | null;
+	/** What an unset title model falls back to. */
+	titleModelDefault?: string;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 	/** The context in tokens past which a conversation is compacted, if the window has not filled first; null waits for the window. */

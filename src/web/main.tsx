@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
 	RouterProvider,
 	createRootRoute,
@@ -25,9 +25,10 @@ import { TasksPage } from '@/components/tasks-page';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/vm-panel';
 import { CATEGORIES } from '@/lib/artifacts';
+import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
-const queryClient = new QueryClient();
+const queryClient = appQueryClient();
 
 const rootRoute = createRootRoute({
 	component: () => (

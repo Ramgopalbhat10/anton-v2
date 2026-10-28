@@ -20,7 +20,7 @@ import { useTaskNotifications } from '@/lib/notifications';
 import { serviceWorker, turnOnIfAllowed, useOpenFromNotifications, usePresence } from '@/lib/push';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
-import { forgetWorking, showWorking, taskStatus } from '@/lib/working';
+import { readTaskAgain, showWorking, taskStatus } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
@@ -244,9 +244,11 @@ function useTaskAgent(sessionId: string): UseFlueAgentResult {
 			try {
 				await flueSend(...args);
 			} catch (error) {
-				forgetWorking(queryClient, sessionId);
+				readTaskAgain(queryClient, sessionId);
 				throw error;
 			}
+			// The server counts it working from here, so a fresh read agrees, and brings back what a dropped read carried.
+			readTaskAgain(queryClient, sessionId);
 		},
 		[flueSend, queryClient, sessionId],
 	);

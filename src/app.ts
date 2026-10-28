@@ -7,7 +7,6 @@ import { Coder } from './agents/coder.ts';
 import { Reviewer } from './agents/reviewer.ts';
 import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
-import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
@@ -28,7 +27,7 @@ import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
-import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
+import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
@@ -77,6 +76,7 @@ import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { answerWithin } from './services/answer-within.ts';
 import { waitingMessages } from './services/waiting.ts';
 import { agentNow, recordAgentNow } from './services/agent-now.ts';
+import { streamChanges } from './services/change-stream.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
@@ -263,33 +263,8 @@ setAgentAbort(async (id) => {
 	await Promise.all(routers.map((router) => router.request(path, { method: 'POST' })));
 });
 
-/** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
-const HEARTBEAT_MS = 25_000;
-
 // Open pages learn what changed from here and refetch just that, instead of polling.
-app.get('/api/events', (c) =>
-	streamSSE(c, async (stream) => {
-		const queue: Change[] = [];
-		let wake = () => {};
-		const stop = onChange((change) => {
-			queue.push(change);
-			wake();
-		});
-		stream.onAbort(stop);
-		while (!stream.aborted) {
-			for (const change of queue.splice(0)) await stream.writeSSE({ data: JSON.stringify(change) });
-			await new Promise<void>((resolve) => {
-				const timer = setTimeout(resolve, HEARTBEAT_MS);
-				wake = () => {
-					clearTimeout(timer);
-					resolve();
-				};
-			});
-			if (queue.length === 0 && !stream.aborted) await stream.write(': ping\n\n');
-		}
-		stop();
-	}),
-);
+app.get('/api/events', (c) => streamSSE(c, (stream) => streamChanges(stream)));
 
 app.get('/api/health', (c) =>
 	c.json({
@@ -340,7 +315,9 @@ app.put('/api/settings/sandbox', async (c) => {
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
 });
-app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
+/** The settings, with what an unset title model falls back to, so the page can show it. */
+const generalView = async (settings: GeneralSettings) => ({ ...settings, titleModelDefault: config.titleModel });
+app.get('/api/settings/general', async (c) => c.json(await generalView(await generalSettings())));
 app.put('/api/settings/general', async (c) => {
 	const next = await body(
 		c,
@@ -353,11 +330,12 @@ app.put('/api/settings/general', async (c) => {
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			pageNetwork: v.optional(v.boolean(), true),
 			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
+			titleModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			compactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
-	return c.json(await setGeneralSettings(next));
+	return c.json(await generalView(await setGeneralSettings(next)));
 });
 app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
 app.put('/api/settings/marketplaces', async (c) => {

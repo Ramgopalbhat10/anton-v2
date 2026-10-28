@@ -419,8 +419,8 @@ test('a thread whose reply delivers what was asked is done, an answer stays open
 	}
 });
 
-test('a reply is judged as it ends, while it still counts as working, and any task can be done, not only a thread', async () => {
-	const { recordAgentEvent } = await import('../src/services/activity.ts');
+test('a reply is judged once it has settled, and any task can be done, not only a thread, unless it was sent a message meanwhile', async () => {
+	const { noteSending, recordAgentEvent } = await import('../src/services/activity.ts');
 	setProviders({
 		sandbox: localSandboxProvider(path.join(dir, 'data')),
 		store: diskStore(path.join(dir, 'data', 'objects')),
@@ -435,15 +435,21 @@ test('a reply is judged as it ends, while it still counts as working, and any ta
 		const space = await spaces.createSpace({ name: 'In flight', repoIds: [] });
 		const thread = await spaces.startThread(space.id, { title: 'Report', brief: 'Write the report' });
 		const task = await sessions.createSession({ title: 'Loose report' });
-		for (const id of [thread.id, task.id]) {
-			// The finish hook runs inside the reply, before its submission settles.
+		const busy = await sessions.createSession({ title: 'Busy report' });
+		for (const id of [thread.id, task.id, busy.id]) {
+			// The reply settles first, so its page shows it finished at once; what it leaves is judged after.
 			recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId: 'reply' });
 			assert.equal((await sessions.getSession(id)).threadState, 'working');
-			await reports.threadFinished(id, 'Saved report.md.');
 			recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId: 'reply' });
-			assert.equal((await sessions.getSession(id)).threadState, 'resolved');
+			if (id === busy.id) noteSending(id);
+			await reports.threadFinished(id, 'Saved report.md.');
 		}
+		assert.equal((await sessions.getSession(thread.id)).threadState, 'resolved');
+		assert.equal((await sessions.getSession(task.id)).threadState, 'resolved');
 		assert.equal((await sessions.getSession(task.id)).lastReply, 'Saved report.md.');
+		assert.equal((await sessions.getSession(busy.id)).resolvedAt, null, 'a message sent meanwhile keeps it open');
+		recordAgentEvent({ type: 'submission_running', instanceId: busy.id, submissionId: 'next' });
+		recordAgentEvent({ type: 'submission_settled', instanceId: busy.id, submissionId: 'next' });
 	} finally {
 		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
 	}

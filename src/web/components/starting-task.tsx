@@ -1,10 +1,12 @@
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, Plus, Send, Square } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Mascot } from '@/components/mascot';
 import { MenuButton } from '@/components/nav';
 import { SentText } from '@/components/sent-text';
-import { Btn, Icon, Spinner } from '@/components/signal';
+import { ModelMark, useModels } from '@/components/model-picker';
+import { Btn, Icon, IconBtn, Spinner } from '@/components/signal';
 import { WorkspacePane } from '@/components/workspace-pane';
+import { shortName } from '@/lib/model-catalog';
 import { useOnePane } from '@/lib/one-pane';
 import type { Starting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
@@ -55,18 +57,26 @@ function WorkspaceSkeleton() {
 	);
 }
 
-/** The composer, waiting for the task to exist before it takes another message. */
-function ComposerSkeleton({ chat }: { chat: boolean }) {
+/**
+ * The composer as it will be once the task is made: the agent is working, so it reads as one you add to,
+ * with your model named, and only its buttons wait. Drawn the same, so nothing blinks out as the page fills in.
+ */
+function ComposerSkeleton({ model }: { model: string }) {
+	const info = useModels().data?.models.find((item) => item.id === model);
 	return (
 		<div className="shrink-0 px-4 pt-1 pb-4">
 			<div aria-hidden className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2">
 				<Mascot mood="working" className="absolute right-5 bottom-[calc(100%-1px)]" />
-				<div className="min-h-[36px] text-[13px] leading-[21px] text-(--text-disabled)">{chat ? 'Ask anything' : 'Ask Anton to change the workspace'}</div>
+				<div className="min-h-[38px] text-[13px] leading-[21px] text-(--text-placeholder)">Add to what the agent is doing</div>
 				<div className="flex items-center gap-1.5">
-					<div className="in-pulse size-7 rounded-[8px] bg-(--bg-skeleton)" />
-					<div className="in-pulse h-7 w-[132px] rounded-[8px] bg-(--bg-skeleton)" />
+					<IconBtn icon={Plus} size="sm" label="Attach files" tabIndex={-1} disabled />
+					<div className="flex h-[26px] max-w-[260px] min-w-0 items-center gap-1.5 rounded-lg bg-(--bg-overlay) pr-1.5 pl-1 text-(--text-secondary)">
+						{info ? <ModelMark model={info} size={16} /> : <Spinner size={12} tone="neutral" />}
+						<span className="min-w-0 truncate text-[12px]">{info ? shortName(info) : 'Model'}</span>
+					</div>
 					<div className="flex-1" />
-					<div className="in-pulse size-7 rounded-[8px] bg-(--bg-skeleton)" />
+					<IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" tabIndex={-1} disabled />
+					<IconBtn icon={Send} size="sm" variant="primary" label="Send message" tabIndex={-1} disabled />
 				</div>
 			</div>
 		</div>
@@ -154,7 +164,7 @@ export function StartingTask({
 						)}
 					</div>
 				</div>
-				<ComposerSkeleton chat={chat} />
+				<ComposerSkeleton model={session.model} />
 			</div>
 			{open ? <WorkspaceSkeleton /> : null}
 		</div>

@@ -4,6 +4,7 @@ import { getAutomation } from '../db/automations.ts';
 import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessions.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { type ThreadState, threadState } from '../core/thread-state.ts';
+import { isWorking } from './activity.ts';
 import { logProblem } from './log.ts';
 import { finishesWork } from './reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
@@ -143,9 +144,10 @@ export async function threadFinished(id: string, reply: string | null): Promise<
  */
 async function closeIfFinished(id: string, reply: string): Promise<void> {
 	const task = await getSession(id);
-	// This runs as the reply ends, before it settles, so the task still counts as working: it is judged as it is about to stand.
-	if (threadState({ ...task, working: false }) !== 'idle' || task.prUrl) return;
-	if ((await scheduledRun(task)) || (await finishesWork(id, task.lastInput, reply))) await updateSession(id, { resolvedAt: new Date().toISOString() });
+	// This runs once the reply has settled; a task working again was sent a message meanwhile, which reopens it anyway.
+	if (threadState(task) !== 'idle' || task.prUrl) return;
+	const done = (await scheduledRun(task)) || (await finishesWork(id, task.lastInput, reply));
+	if (done && !isWorking(id)) await updateSession(id, { resolvedAt: new Date().toISOString() });
 }
 
 /** A run of a scheduled routine; a labeled issue's task is there to open a pull request, so it is judged as any other. */

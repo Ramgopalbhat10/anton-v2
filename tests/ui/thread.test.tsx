@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { FlueConversationMessage, UseFlueAgentResult } from '@flue/react';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueries, session } from './render';
 
@@ -220,6 +220,17 @@ describe('Thread', () => {
 		await waitFor(() => expect(api.now).toHaveBeenCalled());
 		expect(screen.getByRole('button', { name: /Worked/ })).toBeTruthy();
 		expect(screen.queryByText('Writing the reply')).toBeNull();
+	});
+
+	it('never says the reply is being written once it is whole, while the task wraps up', async () => {
+		api.now.mockResolvedValue({ now: { what: 'replying', since: new Date(Date.now() - 23_000).toISOString() } });
+		const done = { ...assistant('a1', [{ type: 'text', text: 'ETH is at $3,900.' }]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		show(agent([user('u1', 'What is the ETH price today?'), done], { status: 'streaming' }));
+		await waitFor(() => expect(api.now).toHaveBeenCalled());
+		await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+		expect(screen.getByText('Wrapping up')).toBeTruthy();
+		expect(screen.queryByText('Writing the reply')).toBeNull();
+		expect(screen.queryByText('23s')).toBeNull();
 	});
 
 	it('keeps the line at the foot when the agent works on after its text with no card to say so', async () => {
