@@ -60,7 +60,7 @@ test('a reply that wrote a list and ends with steps open is reminded once to bri
 	startTodoReply('t');
 	const reminder = await todoReminder('t', calls);
 	assert.match(reminder ?? '', /still shows 2 of 3 steps not done: "Build the app", "Test it"/);
-	assert.match(reminder ?? '', /Call update_todos now/);
+	assert.match(reminder ?? '', /Do any of them you can still do without the user now. .*call update_todos/);
 	// Once per reply, so a list the agent leaves open on purpose does not hold the reply up.
 	assert.equal(await todoReminder('t', calls), null);
 	startTodoReply('t');

@@ -66,3 +66,31 @@ test('the browser turns away raw GitHub files, which web_fetch reads in a second
 	assert.ok(!isRawFile('https://github.com/acme/app/pulls'));
 	assert.ok(!isRawFile(undefined));
 });
+
+test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /Coder\.durability = \{ timeoutMs: 4 \* 3_600_000 \};/);
+});
+
+test('Coder asks for fuller steps, and sends a reply that stops at an announced step back to work', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /const BATCH_HINT =/);
+	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+		const start = source.indexOf(prompt);
+		assert.ok(start >= 0, prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /BATCH_HINT/, prompt);
+	}
+	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
+	assert.match(source, /startStallCheck\(id\);/);
+	const workspace = source.slice(source.indexOf('const WORKSPACE_PROMPT'), source.indexOf('const CHAT_PROMPT'));
+	assert.match(workspace, /FINISH_HINT/, 'a change is checked against the request and its nearest tests before the reply ends');
+});
+
+test('Coder lists the request’s requirements as todos, and has a change read against the request before a coding reply ends', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	// In every repository and chat prompt: a coding task writes its list before it starts its workspace.
+	assert.equal(source.match(/\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/g)?.length, 2);
+	assert.match(source, /noteRequest\(id, delivery\.body\);/);
+	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
+	assert.match(source, /startFinishReview\(id\);/);
+});

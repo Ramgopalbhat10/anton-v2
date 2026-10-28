@@ -468,7 +468,11 @@ export type GeneralSettings = {
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 	/** The context in tokens past which a conversation is compacted, if the window has not filled first; null waits for the window. */
 	compactAt: 100_000 | 200_000 | 400_000 | null;
+	/** The models Anton runs behind the agents for its own work; null uses each one's default. */
+	backgroundModels: Record<BackgroundTask, string | null>;
 };
+/** Work Anton has a model do behind the agents: naming tasks, reading long web results, seeing the screen, summarizing on compaction. */
+export type BackgroundTask = 'title' | 'webDigest' | 'vision' | 'compaction';
 /** A model the agent's generate_image tool can draw with. */
 export type ImageModelInfo = { id: string; name: string; vendor: string; description: string; references: number; aspectRatios: string[]; transparent: boolean };
 export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'reviewer';
@@ -635,6 +639,7 @@ export const api = {
 		json<SandboxView>('/api/settings/sandbox', { method: 'PUT', body: JSON.stringify(settings) }),
 	rebuildPreparedImage: (projectId: string) => post<Project>(`/api/projects/${projectId}/prepared-image/rebuild`),
 	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
+	backgroundModelDefaults: () => json<{ defaults: Record<BackgroundTask, string | null> }>('/api/settings/background-models'),
 	saveGeneralSettings: (settings: GeneralSettings) =>
 		json<GeneralSettings>('/api/settings/general', { method: 'PUT', body: JSON.stringify(settings) }),
 	push: () => json<PushView>('/api/push'),

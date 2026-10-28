@@ -22,6 +22,7 @@ import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { sandboxTools } from '../flue/sandbox-tools.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
+import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -54,7 +55,7 @@ import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
-import { checkImages, checkSpec, shownNote } from '../services/show.ts';
+import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
 import { pageGuide, saveRender } from '../services/renders.ts';
 import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
@@ -84,7 +85,8 @@ import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
-import { checkReply } from '../services/reply-check.ts';
+import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
+import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
@@ -92,16 +94,17 @@ import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
+// Calls through the gateways and ChatGPT and OpenCode plans send old tool results cleared once a conversation grows (withPruning).
 // A task's route (one provider first, or a sort) is part of the specifier its agent resolves; see src/core/model-route.ts.
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
 // Every model in Vercel AI Gateway's live list, with the key pasted in Settings › Subscriptions.
-setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
+setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
-setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
+setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 // Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
-setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));
+setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
@@ -824,10 +827,6 @@ function useAsk(id: string) {
 	);
 }
 
-const SHOW_TYPES = [
-	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
-	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
-] as const;
 
 /** The catalog, as the agent reads it; src/core/ui-spec.ts has the types. */
 const SHOW_DESCRIPTION = [
@@ -848,10 +847,7 @@ function useShow(id: string) {
 		defineTool({
 			name: 'show',
 			description: SHOW_DESCRIPTION,
-			input: v.object({
-				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
-				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
-			}),
+			input: SHOW_INPUT,
 			run: async ({ data }) => {
 				const spec = checkSpec(data);
 				await checkImages(spec, async (path) => (await readOutputFile(id, path)) !== null);
@@ -1110,14 +1106,31 @@ const OTHER_REPO_HINT =
 const WORKSPACE_OTHER_REPO_HINT =
 	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-const WEB = 'When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch.';
-const CHAT_WEB = 'For current facts, documentation or anything you are unsure of, use web_search and web_fetch.';
+/** A long web result comes back as what bears on the call's objective (src/services/web-digest.ts), so the objective decides what the agent gets. */
+const WEB_OBJECTIVE = 'Give each call an objective naming exactly what you need; leave full_content off unless you need a page whole.';
+const WEB = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
+const CHAT_WEB = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
 const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
 const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
 const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
 /** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
+/** Each model call sends the whole conversation again, so a step that does several things saves a call's worth of it. */
+const BATCH_HINT =
+	'Each step sends the whole conversation to the model again, so take fewer, fuller steps: read several files or run several searches in one command, or as several tool calls in the same step, and make the edits you have planned in one edit call (its `more`), rather than one at a time.';
+
+/** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
+/**
+ * A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). In every
+ * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
+ */
+const REQUIREMENTS_HINT =
+	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
+
+const FINISH_HINT =
+	'Before you finish a change, read the request again and check each thing it names (functions, options, messages, edge cases) against what you did, and run the existing tests closest to the code you changed, so the change does all it was asked and breaks nothing near it.';
+
 const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
@@ -1141,6 +1154,8 @@ const WORKSPACE_PROMPT = [
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
+	BATCH_HINT,
+	FINISH_HINT,
 	'Delegate read-heavy investigation to the explorer subagent and test runs to the tester subagent.',
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
@@ -1164,6 +1179,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
+	BATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
 	CHAT_WORKSPACE_WEB_HINT,
@@ -1208,6 +1224,7 @@ function useLatestInput(id: string) {
 	useAgentStart(async () => {
 		if (delivery.kind !== 'user') return;
 		await noteDelivery(id, delivery.body);
+		noteRequest(id, delivery.body);
 		await recordLatestInput(id, delivery.body);
 	});
 }
@@ -1301,6 +1318,19 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: reminder });
 			return;
 		}
+		// A reply that ends by announcing a step it never took is sent back to take it, once.
+		const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
+		if (stalled) {
+			append({ kind: 'signal', type: 'reminder', body: stalled });
+			return;
+		}
+		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed.
+		// A task that started its workspace during this reply has one now, though this render began without it.
+		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+		if (missed) {
+			append({ kind: 'signal', type: 'reminder', body: missed });
+			return;
+		}
 		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 		queueCheckpoint(id);
 		const reply = await checkReply(id);
@@ -1315,6 +1345,8 @@ export function Coder({ id }: AgentProps) {
 		startReply(id);
 		startTrace(id);
 		startTodoReply(id);
+		startStallCheck(id);
+		startFinishReview(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
@@ -1335,9 +1367,12 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
+
+/** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */
+Coder.durability = { timeoutMs: 4 * 3_600_000 };

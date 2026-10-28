@@ -13,6 +13,8 @@ export const config = {
 	databaseToken: read('TURSO_AUTH_TOKEN'),
 	/** Which provider backs each port; see src/providers/index.ts. */
 	sandbox: read('ANTON_SANDBOX', process.env.MODAL_TOKEN_ID ? 'modal' : 'local'),
+	/** The Docker network the docker sandbox's tasks join; `none` keeps them offline. */
+	dockerNetwork: read('ANTON_DOCKER_NETWORK') || undefined,
 	store: read('ANTON_STORE', process.env.TIGRIS_SECRET_ACCESS_KEY ? 's3' : 'disk'),
 	modal: {
 		app: read('ANTON_MODAL_APP', 'anton'),
@@ -92,6 +94,12 @@ export const config = {
 	visionModel: read('ANTON_VISION_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/** The fast OpenRouter model that names tasks: a few words from the first message, in place of the message itself. */
 	titleModel: read('ANTON_TITLE_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
+	/**
+	 * The fast OpenRouter model that reads a long web search or fetch for the agent and gives back only what bears
+	 * on the call's objective, as Claude Code's fetch does; `off` cuts such results instead. Gemini Flash Lite
+	 * answers in 2 to 3 seconds on real results, where Haiku took 5 to 7 and at times answered nothing.
+	 */
+	webDigestModel: read('ANTON_WEB_DIGEST_MODEL', 'openrouter/google/gemini-3.1-flash-lite'),
 	/**
 	 * The OpenRouter image model generate_image draws with when Settings › General names none and the task's own
 	 * model is not one: GPT Image 2.5's speed tier, which edits images and leaves backgrounds transparent.
