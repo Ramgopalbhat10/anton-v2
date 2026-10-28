@@ -22,6 +22,8 @@ export type GeneralSettings = {
 	pageNetwork: boolean;
 	/** The model generate_image draws with; null uses ANTON_IMAGE_MODEL. A task on an image model draws with its own. */
 	imageModel: string | null;
+	/** The OpenRouter model that names tasks and routines in a few words; null uses ANTON_TITLE_MODEL. */
+	titleModel: string | null;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
 	/**
@@ -63,6 +65,7 @@ export async function generalSettings(): Promise<GeneralSettings> {
 		visualReplies: 'some',
 		pageNetwork: true,
 		imageModel: null,
+		titleModel: null,
 		compactAt: DEFAULT_COMPACT_AT,
 		...stored,
 		agentModels,
@@ -79,9 +82,18 @@ export async function setGeneralSettings(next: GeneralSettings): Promise<General
 	if (next.imageModel && images && !(await images.list()).some((info) => info.id === next.imageModel)) {
 		throw new InvalidInputError(`Unknown image model: ${next.imageModel}`);
 	}
+	// Titles are written over OpenRouter's plain chat API (src/providers/openrouter/text.ts), so a plan's model cannot write them.
+	if (next.titleModel && !(next.titleModel.startsWith('openrouter/') && (await findModel(next.titleModel)))) {
+		throw new InvalidInputError(`Titles are written by an OpenRouter model; ${next.titleModel} is not one.`);
+	}
 	await setSetting(KEY, next);
 	compactAtNow = next.compactAt;
 	return next;
+}
+
+/** The model that names tasks and routines. */
+export async function titleModel(): Promise<string> {
+	return (await generalSettings()).titleModel ?? config.titleModel;
 }
 
 export async function defaultModel(): Promise<string> {

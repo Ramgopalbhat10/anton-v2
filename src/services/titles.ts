@@ -1,4 +1,4 @@
-import { config } from '../config.ts';
+import { titleModel } from './general.ts';
 import { splitAttachments } from '../core/attachments.ts';
 import type { Usage } from '../core/types.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
@@ -7,7 +7,7 @@ import { logProblem } from './log.ts';
 import { recordUsage } from './usage.ts';
 
 /*
- * A task's title is a few words on what it is about, written by a fast model
+ * (the TextModel port; Settings › General, else ANTON_TITLE_MODEL) from its first message, not the
  * (the TextModel port, ANTON_TITLE_MODEL) from its first message, not the
  * message itself. Until the model answers, and without an OpenRouter key, the
  * title is the start of the message, cut at a word.
@@ -55,7 +55,7 @@ export type ShortTitle = { title: string; usage: Usage; model: string };
 /** A few words on what the message asks, from the title model; null without one, or when the message has no words. */
 export async function shortTitle(text: string, signal?: AbortSignal): Promise<ShortTitle | null> {
 	const writer = getProviders().text;
-	const model = config.titleModel;
+	const model = await titleModel();
 	const message = splitAttachments(text).text.trim();
 	if (!writer?.runs(model) || !message) return null;
 	const answer = await writer.write({ model, prompt: prompt(message.slice(0, MAX_READ)), maxTokens: 30 }, signal);

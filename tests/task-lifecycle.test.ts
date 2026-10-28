@@ -814,8 +814,18 @@ test('General settings decide how a new task starts when the launcher does not s
 	assert.equal(before.pageNetwork, true, 'pages reach the web unless turned off');
 	assert.equal(before.imageModel, null, 'images use ANTON_IMAGE_MODEL unless one is chosen');
 	assert.equal(before.compactAt, 200_000, 'long conversations compact at 200K unless set otherwise');
+	// Titles are written by ANTON_TITLE_MODEL unless another OpenRouter model is chosen.
+	const { titleModel } = await import('../src/services/general.ts');
+	const { config } = await import('../src/config.ts');
+	assert.equal(before.titleModel, null);
+	assert.equal(await titleModel(), config.titleModel);
+	await setGeneralSettings({ ...before, titleModel: 'openrouter/plain/no-reasoning' });
+	assert.equal(await titleModel(), 'openrouter/plain/no-reasoning');
+	await assert.rejects(() => setGeneralSettings({ ...before, titleModel: 'openrouter/nobody/unknown' }), /not one/);
+	await assert.rejects(() => setGeneralSettings({ ...before, titleModel: 'vercel/plain/no-reasoning' }), /not one/);
+	await setGeneralSettings(before);
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', pageNetwork: true, imageModel: null, compactAt: null, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
+	await setGeneralSettings({ model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'low', planMode: true, reviewPullRequests: true, codeMode: false, visualReplies: 'some', pageNetwork: true, imageModel: null, titleModel: null, compactAt: null, agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null } });
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);

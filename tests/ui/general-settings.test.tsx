@@ -11,6 +11,7 @@ const general = {
 	visualReplies: 'some',
 	pageNetwork: true,
 	imageModel: null,
+	titleModel: null,
 	compactAt: 200_000,
 	agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
 };
@@ -50,6 +51,7 @@ describe('General settings', () => {
 		const planMode = await screen.findByRole('switch', { name: 'Start in plan mode' });
 		const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
 		expect(save.disabled).toBe(true);
+		expect(screen.getByText('Title model')).toBeTruthy();
 
 		fireEvent.click(planMode);
 		fireEvent.click(screen.getByRole('radio', { name: 'More' }));

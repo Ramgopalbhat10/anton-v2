@@ -27,7 +27,7 @@ import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
-import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
+import { COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
@@ -315,7 +315,9 @@ app.put('/api/settings/sandbox', async (c) => {
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
 });
-app.get('/api/settings/general', async (c) => c.json(await generalSettings()));
+/** The settings, with what an unset title model falls back to, so the page can show it. */
+const generalView = async (settings: GeneralSettings) => ({ ...settings, titleModelDefault: config.titleModel });
+app.get('/api/settings/general', async (c) => c.json(await generalView(await generalSettings())));
 app.put('/api/settings/general', async (c) => {
 	const next = await body(
 		c,
@@ -328,11 +330,12 @@ app.put('/api/settings/general', async (c) => {
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			pageNetwork: v.optional(v.boolean(), true),
 			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
+			titleModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			compactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 		}),
 	);
-	return c.json(await setGeneralSettings(next));
+	return c.json(await generalView(await setGeneralSettings(next)));
 });
 app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
 app.put('/api/settings/marketplaces', async (c) => {
