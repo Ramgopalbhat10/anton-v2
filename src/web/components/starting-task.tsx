@@ -100,7 +100,7 @@ export function StartingTask({
 	const kind = session.spaceId ? 'thread' : chat ? 'chat' : 'task';
 	return (
 		<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
-			<div className={cn('min-h-0 min-w-0 flex-1 flex-col', open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
+			<div className={cn('in-enter min-h-0 min-w-0 flex-1 flex-col', open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
 				<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 					<MenuButton />
 					{leading}
@@ -112,8 +112,12 @@ export function StartingTask({
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
 					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
-						<div className="flex flex-col items-end">
+						{/* Laid out as the message it becomes, its caption line included, so nothing moves when the page fills in. */}
+						<div className="in-sent flex flex-col items-end gap-1.5">
 							<SentText text={prompt || session.title} className="max-w-[min(520px,100%)]" />
+							<div aria-hidden className="in-caption opacity-0">
+								&nbsp;
+							</div>
 						</div>
 						{error ? (
 							<div role="alert" className="flex flex-col gap-2.5 rounded-[12px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--danger-text)">

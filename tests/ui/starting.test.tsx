@@ -1,10 +1,10 @@
 import { QueryClient } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api';
 import { StartingTask } from '@/components/starting-task';
-import { draftSession, newTaskId, startInBackground, useStarting, withStarting } from '@/lib/starting';
+import { draftSession, newTaskId, openingPrompt, startInBackground, useStarting, withStarting } from '@/lib/starting';
 import { session } from './render';
 
 /** A task's page while it is made, as SessionPage draws it. */
@@ -37,11 +37,15 @@ describe('starting a task', () => {
 
 		expect(screen.getByText('Fix the upload retries', { selector: 'span' })).toBeTruthy();
 		expect(screen.getByText('Starting the task')).toBeTruthy();
-		const listed = queryClient.getQueryData<{ sessions: Session[] }>(['sessions'])!.sessions;
-		expect(listed.map((item) => [item.id, item.threadState])).toEqual([
-			[id, 'working'],
-			['older', session({}).threadState],
-		]);
+		// The lists take it once the page has drawn.
+		const listed = () => queryClient.getQueryData<{ sessions: Session[] }>(['sessions'])!.sessions.map((item) => [item.id, item.threadState]);
+		expect(listed()).toEqual([['older', session({}).threadState]]);
+		await waitFor(() =>
+			expect(listed()).toEqual([
+				[id, 'working'],
+				['older', session({}).threadState],
+			]),
+		);
 		// A list read from the server before it is made still shows it.
 		expect(withStarting([session({ id: 'older' })]).map((item) => item.id)).toEqual([id, 'older']);
 
@@ -49,6 +53,9 @@ describe('starting a task', () => {
 		expect(await screen.findByText('The task')).toBeTruthy();
 		expect(queryClient.getQueryData<Session>(['session', id])?.working).toBe(true);
 		expect(withStarting([]).map((item) => item.id)).toEqual([]);
+		// Its page keeps showing what you asked until the conversation lists it.
+		expect(openingPrompt(id)).toBe('Fix the upload retries');
+		expect(openingPrompt(newTaskId())).toBeUndefined();
 	});
 
 	it('says why it could not start, and tries again or gives up', async () => {

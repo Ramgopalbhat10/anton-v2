@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Fragment, useCallback, useContext, useMemo, useRef } from 'react';
+import { Fragment, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { FileLinks, fileRef } from '@/components/markdown';
-import { IconBtn } from '@/components/signal';
+import { IconBtn, Spinner } from '@/components/signal';
 import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
@@ -69,6 +69,53 @@ export function SentText({ text, className }: { text: string; className?: string
 					onClick={fold.toggle}
 				/>
 			) : null}
+		</div>
+	);
+}
+
+/** A message you sent whose files are still on their way: it shows at once, where it will stay, and goes once the files are in. */
+export type PendingSend = { text: string; attaching: string };
+
+/** What a composer says of a message with files: on its way (`PendingSend`), sent now and shown by the conversation (`'sent'`), or neither. */
+export type PendingChange = PendingSend | 'sent' | null;
+
+/** The id the runtime's client gives a message this page sent, which it keeps once the conversation lists it. */
+const OWN_SEND = 'local:';
+
+/**
+ * A conversation's sends as they happen: the message waiting on its files, and which of
+ * the messages this page sent rise in as they appear. One that takes over from its waiting
+ * message is already in place, so it does not rise again; neither does the conversation's
+ * first message, which the page that opened it showed already.
+ */
+export function useSends() {
+	const [pending, setPending] = useState<PendingSend | null>(null);
+	const handedOver = useRef(false);
+	const decided = useRef(new Map<string, boolean>());
+	const onPending = useCallback((change: PendingChange) => {
+		if (change === 'sent') handedOver.current = true;
+		setPending(change === 'sent' ? null : change);
+	}, []);
+	const rises = useCallback((id: string, first: boolean): boolean => {
+		if (!id.startsWith(OWN_SEND)) return false;
+		const known = decided.current.get(id);
+		if (known !== undefined) return known;
+		const rise = !first && !handedOver.current;
+		handedOver.current = false;
+		decided.current.set(id, rise);
+		return rise;
+	}, []);
+	return { pending, onPending, rises };
+}
+
+export function PendingMessage({ pending }: { pending: PendingSend }) {
+	return (
+		<div className="in-sent flex flex-col items-end gap-1.5">
+			{pending.text ? <SentText text={pending.text} className="max-w-[min(520px,100%)]" /> : null}
+			<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+				<Spinner size={11} tone="neutral" />
+				Attaching {pending.attaching}
+			</div>
 		</div>
 	);
 }
