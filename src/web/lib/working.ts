@@ -1,4 +1,6 @@
+import type { UseFlueAgentResult } from '@flue/react';
 import type { QueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import type { Session } from '@/lib/api';
 
 /** The task as it reads once the agent has your message: working, so no longer waiting on you. */
@@ -42,4 +44,31 @@ type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error';
  */
 export function taskStatus<T extends AgentStatus>(local: T, working: boolean): T | 'streaming' {
 	return working && (local === 'idle' || local === 'connecting') ? 'streaming' : local;
+}
+
+/**
+ * A conversation read before its first message made it reads as absent, and
+ * Flue does not follow it until it is read again: a thread whose brief the
+ * server hands over once its agent is set up, or a routine's run, opened as it
+ * starts showed none of its reply until you sent it something. The server
+ * announces the task's state as the runtime starts and settles each reply
+ * (`recordAgentEvent` in activity.ts), which reads the task again; each such
+ * read (`changedAt`) reads an absent conversation again too.
+ */
+export function useFollowOnceStarted(agent: Pick<UseFlueAgentResult, 'historyReady' | 'messages' | 'refresh'>, changedAt: number) {
+	const absent = agent.historyReady && agent.messages.length === 0;
+	const refresh = agent.refresh;
+	// The read of the task it was found absent at, so it is read again only once the task is read again.
+	const seenAt = useRef<number | null>(null);
+	useEffect(() => {
+		if (!absent) {
+			seenAt.current = null;
+			return;
+		}
+		if (seenAt.current === null) seenAt.current = changedAt;
+		else if (seenAt.current !== changedAt) {
+			seenAt.current = changedAt;
+			refresh();
+		}
+	}, [absent, changedAt, refresh]);
 }
