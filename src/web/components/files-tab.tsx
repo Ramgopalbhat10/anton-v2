@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderOpen, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FileDiff, Folder, Search, X } from 'lucide-react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
-import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, isChat, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
-import { useFocusedFile } from '@/lib/workspace';
+import { ShowPanel, useFocusedFile } from '@/lib/workspace';
 
 /** Paths that match a search, as a flat list. */
 function Matches({
@@ -48,24 +48,54 @@ function Matches({
 }
 
 const MATCHES_SHOWN = 200;
+/** How many changed files the start page offers to open. */
+const CHANGED_SHOWN = 6;
 
-/** The file tree's width: remembered, and kept between these bounds; the viewer beside it takes the rest. */
-const TREE_DEFAULT = 220;
-const TREE_MIN = 140;
-/** The open file keeps at least this much room. */
-const VIEWER_MIN = 200;
-/** Below this the tree and the open file take turns at full width, as on a phone, rather than squeezing side by side. */
-const SIDE_BY_SIDE_MIN = 520;
+/** What Files shows with nothing open: the changed files to open, and where else to go. */
+function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
+	const showPanel = useContext(ShowPanel);
+	const row = 'flex h-7 items-center gap-2 rounded-[7px] px-2 text-left text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	return (
+		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
+			<div className="flex w-full max-w-[340px] flex-col gap-4">
+				{changed.length ? (
+					<div className="flex flex-col gap-px">
+						<span className="in-caption px-2 pb-1">Changed files</span>
+						{changed.slice(0, CHANGED_SHOWN).map(([path, status]) => {
+							const slash = path.lastIndexOf('/');
+							return (
+								<button type="button" key={path} onClick={() => onOpen(path)} title={path} className={row}>
+									<FileIcon path={path} />
+									<span className="shrink-0 text-(--text-secondary)">{path.slice(slash + 1)}</span>
+									<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+									<StatusChip status={status} />
+								</button>
+							);
+						})}
+					</div>
+				) : null}
+				<div className="flex flex-col gap-px">
+					<button type="button" onClick={onFind} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+						<Icon icon={Search} size={13} />
+						Find a file by name
+					</button>
+					<button type="button" onClick={() => showPanel('Changes')} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+						<Icon icon={FileDiff} size={13} />
+						Review what changed
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
 
 export function FilesTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	const [opened, setOpened] = useState<string[]>([]);
 	const viewerId = useId();
-	const [treeTurn, setTreeTurn] = useState(false);
 	const open = (path: string) => {
 		setOpened((current) => (current.includes(path) ? current : [...current, path]));
 		setSelected(path);
-		setTreeTurn(false);
 	};
 	const close = (path: string) => {
 		const next = opened.filter((item) => item !== path);
@@ -80,6 +110,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		if (focus.line && isMarkdown(focus.path)) setSourceShown((current) => new Set(current).add(focus.path));
 	}, [focus?.at]);
 	const [query, setQuery] = useState('');
+	const search = useRef<HTMLInputElement>(null);
 	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
 	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -100,165 +131,136 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 	}
 
 
-	// The tree has its own width, which you drag; beside an open file it can also be put away to read the file wide.
-	const [treeWidth, setTreeWidth] = useStoredState('anton.files.tree-width', TREE_DEFAULT);
-	const [treeHidden, setTreeHidden] = useStoredState('anton.files.tree-hidden', false);
-	const row = useRef<HTMLDivElement>(null);
-	const [rowWidth, setRowWidth] = useState(0);
-	useLayoutEffect(() => {
-		const element = row.current;
-		if (!element) return;
-		const measure = () => setRowWidth(Math.round(element.getBoundingClientRect().width));
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(element);
-		return () => observer.disconnect();
-	}, []);
-	const treeMax = Math.max(TREE_MIN, (rowWidth || 800) - VIEWER_MIN);
-	const width = Math.min(treeMax, Math.max(TREE_MIN, treeWidth));
-	const narrow = rowWidth > 0 && rowWidth < SIDE_BY_SIDE_MIN;
-	const showTree = narrow ? !selected || treeTurn : !selected || !treeHidden;
-	const showViewer = !narrow || !showTree;
-
 	return (
 		<FileIcons>
-			<div className="flex min-h-0 flex-1 flex-col gap-1">
-				<div ref={row} className="flex min-h-0 flex-1">
-					<div
-						aria-label="File tree"
-						hidden={!showTree}
-						className={cn('min-h-0 shrink-0 flex-col overflow-auto', showTree ? 'flex' : 'hidden', narrow && 'flex-1')}
-						style={narrow ? undefined : { width }}
-					>
-						<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
-							<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-							<input
-								value={query}
-								onChange={(event) => setQuery(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.key === 'Escape') setQuery('');
-								}}
-								placeholder="Find a file"
-								aria-label="Find a file"
-								className="min-w-0 flex-1 bg-transparent text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
-							/>
-						</label>
-						{listing.isError ? (
-							<EmptyState title="Files unavailable" body={listing.error.message} />
-						) : listing.isPending ? (
-							<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
-								<Spinner size={12} />
-								Listing files
-							</div>
-						) : query.trim() ? (
-							<Matches
-								selected={selected}
-								paths={matchPaths(listing.data.paths, query.trim(), MATCHES_SHOWN)}
-								onOpen={open}
-								statusOf={(path) => changes.get(path)}
-							/>
-						) : tree.children.size === 0 ? (
-							<EmptyState
-								icon={Folder}
-								title={chat ? 'No files yet' : 'Repository is empty'}
-								body={chat ? 'This chat has no repository. Files the agent makes in its scratch sandbox show up here.' : 'Files the agent creates show up here.'}
-							/>
-						) : (
-							<Branch
-								selected={selected}
-								node={tree}
-								depth={0}
-								expanded={expanded}
-								onToggle={(path) =>
-									setExpanded((current) => {
-										const next = new Set(current);
-										if (next.has(path)) next.delete(path);
-										else next.add(path);
-										return next;
-									})
-								}
-								onOpen={open}
-								statusOf={statusOf}
-							/>
-						)}
-					</div>
-					{showTree && !narrow ? (
-						<ResizeHandle label="Resize the file tree" width={width} min={TREE_MIN} max={treeMax} initial={TREE_DEFAULT} onResize={setTreeWidth} className="mx-0.5" />
-					) : null}
-					<div className={cn('in-well min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', showViewer ? 'flex' : 'hidden')}>
-						{opened.length ? (
-							<div className="flex shrink-0 items-center gap-1 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-1">
-								<IconBtn
-									icon={narrow || treeHidden ? PanelLeftOpen : PanelLeftClose}
-									size="xs"
-									label={narrow || treeHidden ? 'Show the file tree' : 'Hide the file tree'}
-									aria-pressed={!narrow && !treeHidden}
-									onClick={() => (narrow ? setTreeTurn(true) : setTreeHidden(!treeHidden))}
-									className="shrink-0"
-								/>
-								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
-								<div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-								{opened.map((path) => (
-									<div
-										key={path}
+			<EditorPane
+				name="files"
+				sessionId={sessionId}
+				mode="files"
+				sideLabel="File tree"
+				opened={selected}
+				side={
+					<>
+					<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[8px] border border-(--border-subtle) bg-(--bg-inset) px-2">
+						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+						<input
+							ref={search}
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === 'Escape') setQuery('');
+							}}
+							placeholder="Find a file"
+							aria-label="Find a file"
+							className="min-w-0 flex-1 bg-transparent text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+						/>
+					</label>
+					{listing.isError ? (
+						<EmptyState title="Files unavailable" body={listing.error.message} />
+					) : listing.isPending ? (
+						<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+							<Spinner size={12} />
+							Listing files
+						</div>
+					) : query.trim() ? (
+						<Matches
+							selected={selected}
+							paths={matchPaths(listing.data.paths, query.trim(), MATCHES_SHOWN)}
+							onOpen={open}
+							statusOf={(path) => changes.get(path)}
+						/>
+					) : tree.children.size === 0 ? (
+						<EmptyState
+							icon={Folder}
+							title={chat ? 'No files yet' : 'Repository is empty'}
+							body={chat ? 'This chat has no repository. Files the agent makes in its scratch sandbox show up here.' : 'Files the agent creates show up here.'}
+						/>
+					) : (
+						<Branch
+							selected={selected}
+							node={tree}
+							depth={0}
+							expanded={expanded}
+							onToggle={(path) =>
+								setExpanded((current) => {
+									const next = new Set(current);
+									if (next.has(path)) next.delete(path);
+									else next.add(path);
+									return next;
+								})
+							}
+							onOpen={open}
+							statusOf={statusOf}
+						/>
+					)}
+					</>
+				}
+				main={(sideToggle) => (
+					<>
+					{opened.length ? (
+						<EditorBar sideToggle={sideToggle}>
+							<div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+							{opened.map((path) => (
+								<div
+									key={path}
+									className={cn(
+										'group flex shrink-0 items-center gap-1 rounded-[7px] border',
+										selected === path ? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)' : 'border-transparent hover:bg-(--bg-hover)',
+									)}
+								>
+									<button
+										type="button"
+										role="tab"
+										id={`${viewerId}-${encodeURIComponent(path)}`}
+										aria-controls={viewerId}
+										aria-selected={selected === path}
+										title={path}
+										onClick={() => setSelected(path)}
 										className={cn(
-											'group flex shrink-0 items-center gap-1 rounded-[7px] border',
-											selected === path ? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)' : 'border-transparent hover:bg-(--bg-hover)',
+											'flex h-[26px] items-center gap-1.5 rounded-[7px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+											selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)',
 										)}
 									>
-										<button
-											type="button"
-											role="tab"
-											id={`${viewerId}-${encodeURIComponent(path)}`}
-											aria-controls={viewerId}
-											aria-selected={selected === path}
-											title={path}
-											onClick={() => setSelected(path)}
-											className={cn(
-												'flex h-[26px] items-center gap-1.5 rounded-[7px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
-												selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)',
-											)}
-										>
-											<FileIcon path={path} />
-											{path.split('/').pop()}
-										</button>
-										<IconBtn icon={X} size="xs" label={`Close ${path}`} onClick={() => close(path)} className="mr-1" />
-									</div>
-								))}
+										<FileIcon path={path} />
+										{path.split('/').pop()}
+									</button>
+									<IconBtn icon={X} size="xs" label={`Close ${path}`} onClick={() => close(path)} className="mr-1" />
 								</div>
-								{selected && isMarkdown(selected) ? (
-									<MarkdownToggle
-										preview={!sourceShown.has(selected)}
-										onChange={(preview) =>
-											setSourceShown((current) => {
-												const next = new Set(current);
-												if (preview) next.delete(selected);
-												else next.add(selected);
-												return next;
-											})
-										}
-										className="shrink-0"
-									/>
-								) : null}
+							))}
 							</div>
-						) : null}
-						{selected ? (
-							<div role="tabpanel" id={viewerId} aria-labelledby={`${viewerId}-${encodeURIComponent(selected)}`} className="flex min-h-0 flex-1 flex-col">
-								<FileView
-										key={selected}
-										path={selected}
-										queryKey={['file', sessionId, selected]}
-										read={() => api.file(sessionId, selected)}
-										preview={!sourceShown.has(selected)}
-										line={focus?.path === selected ? focus.line : undefined}
-									/>
-							</div>
-						) : (
-							<EmptyState icon={FolderOpen} title="Open a file" body="Select a file to view its contents." />
-						)}
-					</div>
-				</div>
-			</div>
+							{selected && isMarkdown(selected) ? (
+								<MarkdownToggle
+									preview={!sourceShown.has(selected)}
+									onChange={(preview) =>
+										setSourceShown((current) => {
+											const next = new Set(current);
+											if (preview) next.delete(selected);
+											else next.add(selected);
+											return next;
+										})
+									}
+									className="shrink-0"
+								/>
+							) : null}
+						</EditorBar>
+					) : null}
+					{selected ? (
+						<div role="tabpanel" id={viewerId} aria-labelledby={`${viewerId}-${encodeURIComponent(selected)}`} className="flex min-h-0 flex-1 flex-col">
+							<FileView
+									key={selected}
+									path={selected}
+									queryKey={['file', sessionId, selected]}
+									read={() => api.file(sessionId, selected)}
+									preview={!sourceShown.has(selected)}
+									line={focus?.path === selected ? focus.line : undefined}
+								/>
+						</div>
+					) : (
+						<StartPage changed={[...changes.entries()]} onOpen={open} onFind={() => search.current?.focus()} />
+					)}
+					</>
+				)}
+			/>
 		</FileIcons>
 	);
 }

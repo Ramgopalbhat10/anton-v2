@@ -2,7 +2,9 @@ import type {
 	CheckResult,
 	CommitData,
 	CommitSource,
+	DiscussionEntry,
 	GitHost,
+	PullRequestDetail,
 	PullRequestComment,
 	PullRequestInfo,
 	PullRequestInput,
@@ -42,6 +44,12 @@ type PullRequest = {
 	mergeable?: boolean | null;
 	head: { sha: string; ref: string };
 	base: { sha: string; ref: string };
+	created_at?: string;
+	closed_at?: string | null;
+	merged_by?: { login: string } | null;
+	additions?: number;
+	deletions?: number;
+	changed_files?: number;
 };
 type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
@@ -112,6 +120,12 @@ function commentOf(kind: string, comment: Comment): PullRequestComment {
 function foldComments(body: string, comments: ReviewComment[]): string {
 	const list = comments.map((comment) => `- \`${comment.path}:${comment.line}\`: ${comment.body.replace(/\n+/g, ' ')}`);
 	return [body, ...(list.length ? [list.join('\n')] : [])].join('\n\n');
+}
+
+/** Anyone's comment as the discussion shows it; a review without words but with a verdict still counts. */
+function discussionOf(kind: DiscussionEntry['kind'], comment: Comment): DiscussionEntry {
+	const verdict = kind === 'review' && comment.state && comment.state !== 'COMMENTED' ? comment.state.toLowerCase().replace(/_/g, ' ') : null;
+	return { ...commentOf(kind, comment), kind, verdict };
 }
 
 function pullOf(url: string): { repo: string; number: string } {
@@ -379,6 +393,57 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				baseBranch: pull.base.ref,
 				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
 			};
+		},
+		async pullRequestDetail(url): Promise<PullRequestDetail> {
+			const { repo, number } = pullOf(url);
+			const [pull, commits, notes, lineNotes, reviews] = await Promise.all([
+				json<PullRequest>(`/repos/${repo}/pulls/${number}`),
+				all<{ sha: string; commit: { message: string } }>(`/repos/${repo}/pulls/${number}/commits?per_page=100`),
+				all<Comment>(`/repos/${repo}/issues/${number}/comments?per_page=100`),
+				all<Comment>(`/repos/${repo}/pulls/${number}/comments?per_page=100`),
+				all<Comment>(`/repos/${repo}/pulls/${number}/reviews?per_page=100`),
+			]);
+			const [runs, statuses] = await Promise.all([
+				json<{ check_runs: CheckRun[] }>(`/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`),
+				json<{ statuses: CommitStatus[] }>(`/repos/${repo}/commits/${pull.head.sha}/status?per_page=100`),
+			]);
+			const discussion = [
+				...notes.map((comment) => discussionOf('comment', comment)),
+				...lineNotes.map((comment) => discussionOf('line', comment)),
+				...reviews.map((review) => discussionOf('review', review)),
+			]
+				.filter((entry) => entry.body || entry.verdict)
+				.sort((a, b) => a.at.localeCompare(b.at));
+			return {
+				...summaryOf(pull),
+				repo,
+				body: (pull.body ?? '').trim(),
+				state: stateOf(pull),
+				baseBranch: pull.base.ref,
+				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
+				createdAt: pull.created_at ?? pull.updated_at,
+				mergedAt: pull.merged_at,
+				mergedBy: pull.merged_by?.login ?? null,
+				closedAt: pull.closed_at ?? null,
+				additions: pull.additions ?? 0,
+				deletions: pull.deletions ?? 0,
+				changedFiles: pull.changed_files ?? 0,
+				mergeable: pull.mergeable ?? null,
+				approved: approvedBy(reviews),
+				checks: [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)],
+				discussion,
+			};
+		},
+		async pullRequestDiff(url) {
+			const { repo, number } = pullOf(url);
+			return (await call(`/repos/${repo}/pulls/${number}`, { accept: 'application/vnd.github.diff' })).text();
+		},
+		async mergePullRequest(url, { method, title, sha }) {
+			const { repo, number } = pullOf(url);
+			await json(`/repos/${repo}/pulls/${number}/merge`, {
+				method: 'PUT',
+				body: JSON.stringify({ merge_method: method, ...(title ? { commit_title: title } : {}), ...(sha ? { sha } : {}) }),
+			});
 		},
 		async listPullRequests(fullName) {
 			const pulls = await json<PullRequest[]>(`/repos/${fullName}/pulls?state=open&sort=updated&direction=desc&per_page=100`);

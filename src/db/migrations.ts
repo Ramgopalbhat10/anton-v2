@@ -187,6 +187,20 @@ export const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS response_traces (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at TEXT NOT NULL, trace_json TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS response_traces_session ON response_traces (session_id, created_at)`,
 	],
+	// 37: the commit Anton last pushed for a task, which Changes measures its unpushed work from; and every pull request a
+	// task opened, not only its latest, for the PR panel. Each task's current pull request starts the list, in its saved state.
+	[
+		`ALTER TABLE sessions ADD COLUMN pushed_sha TEXT`,
+		`CREATE TABLE IF NOT EXISTS pull_requests (url TEXT PRIMARY KEY, session_id TEXT NOT NULL, repo TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, head TEXT NOT NULL, base TEXT NOT NULL, state TEXT, opened_at TEXT NOT NULL, merged_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS pull_requests_session ON pull_requests (session_id, opened_at)`,
+		`INSERT OR IGNORE INTO pull_requests (url, session_id, repo, number, title, head, base, state, opened_at)
+			SELECT s.pr_url, s.id, COALESCE(p.repo_full_name, ''), CAST(substr(s.pr_url, instr(s.pr_url, '/pull/') + 6) AS INTEGER), s.title,
+				COALESCE(s.branch, ''), COALESCE(s.base_branch, ''),
+				CASE WHEN json_valid(s.pr_json) AND json_extract(s.pr_json, '$.url') = s.pr_url THEN json_extract(s.pr_json, '$.state') END,
+				s.created_at
+			FROM sessions s LEFT JOIN projects p ON p.id = s.project_id
+			WHERE s.pr_url IS NOT NULL AND instr(s.pr_url, '/pull/') > 0`,
+	],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

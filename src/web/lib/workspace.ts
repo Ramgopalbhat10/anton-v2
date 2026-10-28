@@ -1,5 +1,6 @@
 import { createContext, useSyncExternalStore } from 'react';
 import type { PanelName } from '@/components/vm-panel';
+import type { ChangesScope } from '@/lib/api';
 
 /** Shows one of the task's workspace panels, opening the workspace if it is closed. */
 export const ShowPanel = createContext<(name: PanelName) => void>(() => undefined);
@@ -52,5 +53,24 @@ export function useFocusedRun(sessionId: string): string | null {
 			return () => void listeners.delete(listener);
 		},
 		() => focused.get(sessionId) ?? null,
+	);
+}
+
+/** Which changes the Changes panel shows, per task: the unpushed work, or the whole branch. */
+const changesScope = new Map<string, ChangesScope>();
+const scopeListeners = new Set<() => void>();
+
+export function setChangesScope(sessionId: string, scope: ChangesScope): void {
+	changesScope.set(sessionId, scope);
+	for (const listener of scopeListeners) listener();
+}
+
+export function useChangesScope(sessionId: string): ChangesScope {
+	return useSyncExternalStore(
+		(listener) => {
+			scopeListeners.add(listener);
+			return () => void scopeListeners.delete(listener);
+		},
+		() => changesScope.get(sessionId) ?? 'unpushed',
 	);
 }

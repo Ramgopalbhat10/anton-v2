@@ -2,9 +2,12 @@ import { readMachineFile } from '../core/machine-fs.ts';
 import { safeRelativePath, text } from '../core/shell.ts';
 import { deletedOutputs, deletePage, noteDeletedOutput } from '../db/pages.ts';
 import { getProject } from '../db/projects.ts';
-import { getSessionRecord } from '../db/sessions.ts';
+import { getSessionRecord, updateSession } from '../db/sessions.ts';
+import type { SessionRecord } from '../core/types.ts';
+import { hasCommit } from './host-commits.ts';
+import { logProblem } from './log.ts';
 import { getProviders } from '../providers/index.ts';
-import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, saveOutput, savedOutputs } from './checkpoints.ts';
+import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, readUnpushedPatch, saveOutput, savedOutputs } from './checkpoints.ts';
 import { announce } from '../core/changes.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import { quote, run } from '../core/shell.ts';
@@ -21,7 +24,23 @@ import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 export type Source = 'live' | 'saved' | 'base';
 
 export type FileTree = { source: Source; at: string | null; paths: string[]; changes: FileChange[] };
-export type ChangesView = { source: Source; at: string | null; branch: string; baseBranch: string; patch: string; log: LogEntry[] };
+/**
+ * What Changes shows. `unpushed` (the default) is the work the host lacks: the diff from the commit Anton last
+ * pushed, or the whole branch before any push, so it empties once a pull request has everything. `branch` is
+ * everything since the task began, pushed or not.
+ */
+export type ChangesScope = 'unpushed' | 'branch';
+export type ChangesView = {
+	source: Source;
+	at: string | null;
+	branch: string;
+	baseBranch: string;
+	scope: ChangesScope;
+	/** The commit the unpushed diff starts from; null before anything was pushed. */
+	pushedSha: string | null;
+	patch: string;
+	log: LogEntry[];
+};
 export type OutputsView = {
 	source: Source;
 	at: string | null;
@@ -35,12 +54,34 @@ type Context = {
 	/** Empty for a chat, whose scratch folder starts empty. */
 	repo: string;
 	baseSha: string;
+	pushedSha: string | null;
 	branch: string;
 	baseBranch: string;
 	checkpoint: Checkpoint | null;
 	machine: Machine | null;
 	source: Source;
 };
+
+/** Tasks whose pushed commit was looked up on the host, so a task that has none is asked once. */
+const lookedUp = new Set<string>();
+
+/**
+ * Where the task's branch stands on the host, for a pull request opened before Anton kept what it pushed:
+ * the branch's head, or the pull request's once a merge deleted the branch. Kept, so it is asked once.
+ */
+async function pushedHead(session: SessionRecord, repo: string): Promise<string | null> {
+	if (!session.prUrl || session.review || !repo || lookedUp.has(session.id)) return null;
+	lookedUp.add(session.id);
+	const { git } = getProviders();
+	try {
+		const head = (await git.branchHead(repo, session.branch)) ?? (await git.pullRequest(session.prUrl)).headSha;
+		await updateSession(session.id, { pushedSha: head });
+		return head;
+	} catch (error) {
+		logProblem('warn', 'Could not read what was pushed', error, session.id);
+		return null;
+	}
+}
 
 async function context(id: string): Promise<Context> {
 	const session = await getSessionRecord(id);
@@ -52,6 +93,7 @@ async function context(id: string): Promise<Context> {
 		id,
 		repo: project?.repoFullName ?? '',
 		baseSha: session.baseSha,
+		pushedSha: session.pushedSha ?? (await pushedHead(session, project?.repoFullName ?? '')),
 		branch: session.branch,
 		baseBranch: session.baseBranch,
 		checkpoint,
@@ -120,14 +162,35 @@ export async function readFile(id: string, rawPath: string): Promise<Uint8Array>
 	return readMachineFile(ctx.machine, `${repoDir(ctx.machine)}/${path}`);
 }
 
-export async function changesView(id: string): Promise<ChangesView> {
+/** Marks the commits a checkpoint saved before it kept which were pushed: the pushed one and every one older. */
+function markPushed(log: LogEntry[], pushedSha: string | null): LogEntry[] {
+	if (!pushedSha || log.some((entry) => entry.pushed !== undefined)) return log;
+	const at = log.findIndex((entry) => entry.sha === pushedSha);
+	return at === -1 ? log : log.map((entry, index) => ({ ...entry, pushed: index >= at }));
+}
+
+/** The checkpoint's unpushed work, when it was saved knowing what was pushed. */
+async function savedUnpushed(ctx: Context): Promise<string> {
+	const checkpoint = ctx.checkpoint;
+	if (!checkpoint) return '';
+	if (checkpoint.unpushed && checkpoint.unpushed.pushedSha === ctx.pushedSha) return readUnpushedPatch(ctx.id, checkpoint);
+	// Saved before it kept unpushed work: a checkpoint whose branch ends at the pushed commit had nothing more, as
+	// a push commits everything first; otherwise there is no telling, so the whole branch shows.
+	if (ctx.pushedSha && checkpoint.log[0]?.sha === ctx.pushedSha) return '';
+	return readCheckpointPatch(ctx.id);
+}
+
+export async function changesView(id: string, scope: ChangesScope = 'unpushed'): Promise<ChangesView> {
 	const ctx = await context(id);
-	const header = { source: ctx.source, at: ctx.checkpoint?.at ?? null, branch: ctx.branch, baseBranch: ctx.baseBranch };
+	const header = { source: ctx.source, at: ctx.checkpoint?.at ?? null, branch: ctx.branch, baseBranch: ctx.baseBranch, scope };
 	if (ctx.machine) {
-		const diff = await changes(ctx.machine, ctx.baseSha);
-		return { ...header, patch: diff.patch, log: diff.log };
+		const pushedSha = ctx.pushedSha && (await hasCommit(ctx.machine, ctx.pushedSha)) ? ctx.pushedSha : null;
+		const diff = await changes(ctx.machine, ctx.baseSha, scope === 'unpushed' ? pushedSha : null);
+		const log = scope === 'unpushed' ? diff.log : (await changes(ctx.machine, ctx.baseSha, pushedSha)).log;
+		return { ...header, pushedSha, patch: diff.patch, log };
 	}
-	return { ...header, patch: await readCheckpointPatch(id), log: ctx.checkpoint?.log ?? [] };
+	const patch = scope === 'unpushed' ? await savedUnpushed(ctx) : await readCheckpointPatch(id);
+	return { ...header, pushedSha: ctx.pushedSha, patch, log: markPushed(ctx.checkpoint?.log ?? [], ctx.pushedSha) };
 }
 
 /** Outputs come from storage, so they are listed the same way whether or not the machine runs. */

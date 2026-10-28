@@ -1,5 +1,6 @@
 import type { CheckResult, PullRequestActivity } from '../core/ports.ts';
 import type { PullRequestStatus, SessionRecord } from '../core/types.ts';
+import { setPullRequestState } from '../db/pull-requests.ts';
 import { listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
@@ -21,6 +22,7 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 	if (!session.prUrl) return;
 	if (JSON.stringify(session.pullRequest) === JSON.stringify(status)) return;
 	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: session.prUrl, ...status }) });
+	if (status.state !== session.pullRequest?.state) await setPullRequestState(session.prUrl, status.state);
 	// A task is done once its pull request merges or closes; a project's thread also tells its coordinator.
 	await threadChanged(session.id).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, session.id));
 }
@@ -29,6 +31,8 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 export async function readPullRequest(session: SessionRecord & { prUrl: string }): Promise<PullRequestActivity> {
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
 	readAt.set(session.id, Date.now());
+	// A pull request opened before Anton kept what it pushed: its head is what the host has, so Changes can leave it out.
+	if (!session.pushedSha && !session.review && activity.headSha) await updateSession(session.id, { pushedSha: activity.headSha });
 	const open = activity.state === 'open' || activity.state === 'draft';
 	const runs = activity.checks.flatMap(({ name, status, url }) => (status === 'skipped' ? [] : [{ name, status, url }]));
 	await savePullRequestStatus(session, {

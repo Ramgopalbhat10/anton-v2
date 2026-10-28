@@ -186,6 +186,12 @@ export type GitHost = {
 	pullRequest(url: string): Promise<PullRequestInfo>;
 	/** A repository's open pull requests, most recently updated first. */
 	listPullRequests(fullName: string): Promise<PullRequestSummary[]>;
+	/** Everything the PR panel shows of a pull request, as its page on the host does: state, numbers, checks and discussion. */
+	pullRequestDetail(url: string): Promise<PullRequestDetail>;
+	/** A pull request's whole change as one unified diff. */
+	pullRequestDiff(url: string): Promise<string>;
+	/** Merges a pull request on the host; `sha` refuses the merge if its head moved since. Fails with the host's reason when it cannot merge. */
+	mergePullRequest(url: string, input: MergeInput): Promise<void>;
 	/** The newest commit both `a` and `b` contain. */
 	mergeBase(fullName: string, a: string, b: string): Promise<string>;
 	/** Every entry of a commit's tree, subtrees included, so a machine can rebuild it without fetching. */
@@ -251,6 +257,31 @@ export type PullRequestInfo = PullRequestSummary & {
 	state: PullRequestState;
 	baseBranch: string;
 	commits: Array<{ sha: string; subject: string }>;
+};
+
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
+export type MergeInput = { method: MergeMethod; title?: string; sha?: string };
+
+/** A comment, review or line comment in a pull request's discussion, from anyone; `verdict` is a review's (approved, changes requested). */
+export type DiscussionEntry = PullRequestComment & { kind: 'comment' | 'review' | 'line'; verdict: string | null };
+
+/**
+ * `mergeable` is null while the host is still working it out. `checks` are on the head commit. `discussion`
+ * holds every comment and review with a body, oldest first; unlike `PullRequestActivity`'s, it is never given to
+ * an agent, only shown.
+ */
+export type PullRequestDetail = PullRequestInfo & {
+	createdAt: string;
+	mergedAt: string | null;
+	mergedBy: string | null;
+	closedAt: string | null;
+	additions: number;
+	deletions: number;
+	changedFiles: number;
+	mergeable: boolean | null;
+	approved: boolean;
+	checks: CheckResult[];
+	discussion: DiscussionEntry[];
 };
 
 /** A tree entry as git lists it; `path` is from the root, `type` blob, tree or commit (a submodule). */

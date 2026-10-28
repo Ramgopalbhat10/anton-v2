@@ -94,3 +94,25 @@ test('routines that ran every few hours move to schedules on the UTC clock, at t
 	});
 	db.close();
 });
+
+test("each task's pull request starts its list of pull requests, in the state last read", async () => {
+	const db = createClient({ url: `file:${path.join(dir, 'pulls.db')}` });
+	const listed = migrations.findIndex((statements) => statements.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS pull_requests')));
+	await migrate(db, listed);
+	await db.execute(`INSERT INTO projects (id, user_id, repo_full_name, default_branch, workspace_path, updated_at) VALUES ('p1', 'me', 'acme/demo', 'main', '', '2026-10-01')`);
+	const add = (id: string, prUrl: string | null, prJson: string | null) =>
+		db.execute({
+			sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, title, created_at, branch, base_branch, pr_url, pr_json) VALUES (?, 'p1', ?, 'stopped', 'm', ?, '2026-10-02', 'anton/x', 'main', ?, ?)`,
+			args: [id, id, `Task ${id}`, prUrl, prJson],
+		});
+	await add('merged', 'https://github.com/acme/demo/pull/12', JSON.stringify({ url: 'https://github.com/acme/demo/pull/12', state: 'merged', checks: null, runs: [] }));
+	await add('stale', 'https://github.com/acme/demo/pull/13', JSON.stringify({ url: 'https://github.com/acme/demo/pull/7', state: 'open', checks: null, runs: [] }));
+	await add('none', null, null);
+	await migrate(db);
+	const rows = (await db.execute('SELECT session_id, repo, number, title, head, base, state FROM pull_requests ORDER BY number')).rows.map((row) => ({ ...row }));
+	assert.deepEqual(rows, [
+		{ session_id: 'merged', repo: 'acme/demo', number: 12, title: 'Task merged', head: 'anton/x', base: 'main', state: 'merged' },
+		{ session_id: 'stale', repo: 'acme/demo', number: 13, title: 'Task stale', head: 'anton/x', base: 'main', state: null },
+	]);
+	db.close();
+});

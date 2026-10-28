@@ -79,7 +79,7 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 							return (
 								<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2">
 									<ThreadStateIcon thread={thread} size={13} />
-									<button type="button" onClick={() => openThread(thread, 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
+									<button type="button" onClick={() => openThread(thread, thread.prUrl ? 'PR' : 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
 										<span className="truncate text-[13px] hover:underline">{thread.title}</span>
 										<span className="flex items-center gap-2">
 											<PrStatus thread={thread} full />
@@ -166,7 +166,7 @@ function PullRequests({ threads }: { threads: Session[] }) {
 					return (
 						<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2.5">
 							<ThreadStateIcon thread={thread} size={12} />
-							<button type="button" onClick={() => openThread(thread, 'Changes')} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
+							<button type="button" onClick={() => openThread(thread, 'PR')} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
 								<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
 								<span className="flex items-center gap-2">
 									<Caption>{repoShort(thread)}</Caption><PrStatus thread={thread} full />

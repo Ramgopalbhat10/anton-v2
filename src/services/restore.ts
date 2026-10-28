@@ -5,11 +5,12 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { applyFiles, eachBatch, readCheckpointAt, saveCheckpoint } from './checkpoints.ts';
 import { type FileChange, changes, repoDir } from './git.ts';
+import { hasCommit } from './host-commits.ts';
 import { machineFor } from './workspace.ts';
 
 export type RestoreResult = { at: string; skipped: string[] };
 
-/** Puts changed files back as they are at the base commit; files the task added are removed. */
+/** Puts changed files back as they are at `baseSha` (the base commit, or the last push); files added since are removed. */
 async function resetToBase(machine: Machine, baseSha: string, files: FileChange[]): Promise<void> {
 	const added = files.filter((file) => file.status === 'A').map((file) => file.path);
 	const existing = files.filter((file) => file.status !== 'A').map((file) => file.path);
@@ -53,9 +54,11 @@ export async function restoreCheckpoint(id: string, at: string): Promise<Restore
 
 /**
  * Puts one changed file back as it is at the base commit, removing it if the
- * task added it. Checkpointed before and after, so the timeline can undo it.
+ * task added it; with `to: 'pushed'`, as it was at the last push instead, so
+ * only the unpushed edits go. Checkpointed before and after, so the timeline
+ * can undo it.
  */
-export async function revertFile(id: string, rawPath: string): Promise<void> {
+export async function revertFile(id: string, rawPath: string, to: 'base' | 'pushed' = 'base'): Promise<void> {
 	const path = safeRelativePath(rawPath);
 	if (isWorking(id)) throw new ConflictError('Stop the agent before reverting a file');
 	if (restoring.has(id)) throw new ConflictError('A restore is already running');
@@ -64,10 +67,11 @@ export async function revertFile(id: string, rawPath: string): Promise<void> {
 		const session = await getSessionRecord(id);
 		if (!session) throw new NotFoundError('Task not found');
 		const machine = await machineFor(id);
-		const file = (await changes(machine, session.baseSha)).files.find((change) => change.path === path);
+		const since = to === 'pushed' && session.pushedSha && (await hasCommit(machine, session.pushedSha)) ? session.pushedSha : null;
+		const file = (await changes(machine, session.baseSha, since)).files.find((change) => change.path === path);
 		if (!file) throw new NotFoundError(`${path} has no changes to revert`);
 		await saveCheckpoint(id, machine);
-		await resetToBase(machine, session.baseSha, [file]);
+		await resetToBase(machine, since ?? session.baseSha, [file]);
 		await saveCheckpoint(id, machine);
 	} finally {
 		restoring.delete(id);
