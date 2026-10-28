@@ -237,7 +237,7 @@ function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const working = session.data?.working ?? false;
-	useFollowOnceStarted(agent, working, session.dataUpdatedAt);
+	useFollowOnceStarted(agent, session.dataUpdatedAt);
 	const status = taskStatus(agent.status, working);
 	const flueSend = agent.sendMessage;
 	const sendMessage = useCallback<UseFlueAgentResult['sendMessage']>(

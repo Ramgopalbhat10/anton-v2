@@ -46,21 +46,19 @@ export function taskStatus<T extends AgentStatus>(local: T, working: boolean): T
 	return working && (local === 'idle' || local === 'connecting') ? 'streaming' : local;
 }
 
-/** How often a conversation read as absent is read again while the server says its task works. */
-const ABSENT_RETRY_MS = 2000;
-
 /**
  * A conversation read before its first message made it reads as absent, and
  * Flue does not follow it until it is read again: a thread whose brief the
  * server hands over once its agent is set up, or a routine's run, opened as it
- * starts showed none of its reply until you sent it something. Read it again
- * when the task changes (it starts working, or finishes), and every two
- * seconds while it works.
+ * starts showed none of its reply until you sent it something. The server
+ * announces the task's state as the runtime starts and settles each reply
+ * (`recordAgentEvent` in activity.ts), which reads the task again; each such
+ * read (`changedAt`) reads an absent conversation again too.
  */
-export function useFollowOnceStarted(agent: Pick<UseFlueAgentResult, 'historyReady' | 'messages' | 'refresh'>, working: boolean, changedAt: number) {
+export function useFollowOnceStarted(agent: Pick<UseFlueAgentResult, 'historyReady' | 'messages' | 'refresh'>, changedAt: number) {
 	const absent = agent.historyReady && agent.messages.length === 0;
 	const refresh = agent.refresh;
-	// The change it was found absent at, so finding it absent reads it again only once the task changes.
+	// The read of the task it was found absent at, so it is read again only once the task is read again.
 	const seenAt = useRef<number | null>(null);
 	useEffect(() => {
 		if (!absent) {
@@ -73,9 +71,4 @@ export function useFollowOnceStarted(agent: Pick<UseFlueAgentResult, 'historyRea
 			refresh();
 		}
 	}, [absent, changedAt, refresh]);
-	useEffect(() => {
-		if (!absent || !working) return;
-		const timer = setInterval(refresh, ABSENT_RETRY_MS);
-		return () => clearInterval(timer);
-	}, [absent, working, refresh]);
 }
