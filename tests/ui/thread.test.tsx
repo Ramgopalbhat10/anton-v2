@@ -239,11 +239,11 @@ describe('Thread', () => {
 		expect(await screen.findByText('Writing a command')).toBeTruthy();
 	});
 
-	it('says the agent is starting before its reply begins, and keeps a finished reply finished', async () => {
+	it('says the response is being prepared before a follow-up begins, and keeps a finished reply finished', async () => {
 		api.now.mockResolvedValue({ now: null });
 		const done = { ...assistant('a1', [tool('bash', { command: 'ls' }, { output: 'x' })]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
 		show(agent([user('u1', 'Go'), done, user('u2', 'Now the tests')], { status: 'streaming' }));
-		expect(await screen.findByText('Starting the agent')).toBeTruthy();
+		expect(await screen.findByText('Preparing the response')).toBeTruthy();
 		expect(screen.queryByText('Live')).toBeNull();
 		const worked = screen.getByRole('button', { name: /Worked/ });
 		// Done, only the chevron.

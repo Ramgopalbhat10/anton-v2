@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { PullRequestChip } from '@/components/task-actions';
 import { PrStatus, prColor, prSummary } from '@/components/pr-status';
-import { session } from './render';
+import { renderWithQueries, session } from './render';
 
 const url = 'https://github.com/acme/demo/pull/42?x=1';
 describe('pull request presentation', () => {
@@ -11,6 +12,14 @@ describe('pull request presentation', () => {
 		const link = screen.getByRole('link', { name: `Pull request #42 ${state}` });
 		expect(link.getAttribute('href')).toBe(url);
 		expect(link.getAttribute('style')).toContain(prColor(state));
+	});
+	it('keeps the header chip short while retaining the full status for accessibility', () => {
+		const thread = session({ prUrl: url, pullRequest: { state: 'open', checks: 'failed', conflicts: true, runs: [] } });
+		renderWithQueries(<PullRequestChip session={thread} />, [[['pull-request', thread.id, url], { state: 'open' }]]);
+		const chip = screen.getByRole('link', { name: 'Pull request #42 open · merge conflicts · checks failing' });
+		expect(chip.textContent).toBe('#42');
+		expect(chip.title).toBe('#42 open · merge conflicts · checks failing');
+		expect(chip.getAttribute('href')).toBe(url);
 	});
 	it('renders a merged chip with its merge icon, but retains its accessible state', () => {
 		const thread = session({ prUrl: url, pullRequest: { state: 'merged', checks: null, runs: [] } });
