@@ -100,9 +100,13 @@ describe('sidebar', () => {
 		expect(titles('Recent')).not.toContain('Pinned oldest');
 		expect(titles('Running')).toEqual(['Busy task', 'Idle task']);
 
+		// A row's actions are made when the pointer first reaches it.
+		expect(within(row('Pinned oldest')).queryByRole('button', { name: 'Unpin' })).toBeNull();
+		await userEvent.hover(row('Pinned oldest'));
 		await userEvent.click(within(row('Pinned oldest')).getByRole('button', { name: 'Unpin' }));
 		expect(api.editSession).toHaveBeenCalledWith('pinned', { pinned: false });
 		expect(within(row('Pinned oldest')).queryByRole('button', { name: 'Pin to top' })).toBeNull();
+		await userEvent.hover(row('Old pricey'));
 		await userEvent.click(within(row('Old pricey')).getByRole('button', { name: 'Pin to top' }));
 		expect(api.editSession).toHaveBeenCalledWith('old', { pinned: true });
 	});
@@ -209,6 +213,7 @@ describe('sidebar', () => {
 	it('forks a running task into a new task', async () => {
 		const router = open();
 		await screen.findByText('Idle task');
+		await userEvent.hover(row('Idle task'));
 		await userEvent.click(within(row('Idle task')).getByRole('button', { name: 'Task actions' }));
 		expect(screen.getByRole('menuitem', { name: 'Copy task link' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('menuitem', { name: 'Fork into a new task' }));

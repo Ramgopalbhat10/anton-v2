@@ -8,7 +8,7 @@ import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@
 import { ComposerInput } from '@/components/composer-input';
 import { PlanToggle } from '@/components/composer';
 import { Mascot, useMascotMood } from '@/components/mascot';
-import { SentText } from '@/components/sent-text';
+import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/sent-text';
 import { Caption } from '@/components/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { OutputCards } from '@/components/output-viewer';
@@ -565,6 +565,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	draft,
 	onDraft,
 	onNewThread,
+	onPending,
 }: {
 	space: Space;
 	busy: boolean;
@@ -572,6 +573,8 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	draft: string;
 	onDraft: (text: string) => void;
 	onNewThread: () => void;
+	/** A message waiting on its files, for the feed to show as sent while they upload. */
+	onPending: (change: PendingChange) => void;
 }) {
 	const queryClient = useQueryClient();
 	const models = useModels();
@@ -615,7 +618,10 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				onDraft('');
 				setNotice(null);
 				const count = taken.images.length + taken.files.length;
-				setSending(count === 0 ? null : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`);
+				const attaching = count === 0 ? null : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`;
+				setSending(attaching);
+				// The message shows in the feed at once; it goes once its files are in the project's Library.
+				if (attaching) onPending({ text, attaching });
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
@@ -623,12 +629,14 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					// Saved commands are read only for a message that starts with one, so any other goes out without a round trip.
 					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
+					if (attaching) onPending('sent');
 					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
 				} catch (error) {
 					onDraft(text);
 					attachments.restore(taken);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
+					onPending(null);
 					setSending(null);
 				}
 			}}
@@ -646,8 +654,6 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					<div className="text-[12px] text-(--danger-text)">{blocked ?? notice}</div>
 				) : blind ? (
 					<div className="text-[12px] text-(--warning-text)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
-				) : sending ? (
-					<div className="text-[12px] text-(--text-tertiary)">{`Attaching ${sending}…`}</div>
 				) : attachments.notice || paused ? (
 					<div className="text-[12px] text-(--warning-text)">{attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
 				) : null}
@@ -697,6 +703,8 @@ export function ProjectFeed({
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const resolveFile = useThreadFileResolver(threads);
+	// A message you sent with files shows while they upload; the ones you send rise in.
+	const { pending, onPending, rises } = useSends();
 
 	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
 	const { following, follow } = useFollowLatest(scroller, { reset: space.id });
@@ -707,6 +715,13 @@ export function ProjectFeed({
 			return sendMessage(...args);
 		},
 		[sendMessage, follow],
+	);
+	const showPending = useCallback(
+		(change: PendingChange) => {
+			if (change && change !== 'sent') follow();
+			onPending(change);
+		},
+		[onPending, follow],
 	);
 	// A new thread's form opens at the bottom, in view.
 	useEffect(() => {
@@ -726,9 +741,17 @@ export function ProjectFeed({
 								</ActionRow>
 							);
 						}
-						if (message.role === 'user') return <UserEntry key={message.id} message={message} threads={threads} />;
+						if (message.role === 'user')
+							return rises(message.id, false) ? (
+								<div key={message.id} className="in-sent flex flex-col gap-5">
+									<UserEntry message={message} threads={threads} />
+								</div>
+							) : (
+								<UserEntry key={message.id} message={message} threads={threads} />
+							);
 						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
 					})}
+					{pending ? <PendingMessage pending={pending} /> : null}
 					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
 						<div className="flex items-center gap-2 text-[12px] text-(--text-secondary)">
 							<Spinner size={12} />
@@ -744,7 +767,7 @@ export function ProjectFeed({
 				</div>
 				<JumpToLatest show={!following} live={busy} onJump={follow} />
 			</div>
-			<CoordinatorComposer space={space} busy={busy} send={send} draft={draft} onDraft={setDraft} onNewThread={newThread} />
+			<CoordinatorComposer space={space} busy={busy} send={send} draft={draft} onDraft={setDraft} onNewThread={newThread} onPending={showPending} />
 		</div>
 	);
 }

@@ -21,6 +21,8 @@ export type Starting = {
 };
 
 const starting = new Map<string, Starting>();
+/** What you asked of each task or thread made in this page, which its page shows until its conversation lists it. */
+const opened = new Map<string, string>();
 const listeners = new Set<() => void>();
 
 function changed() {
@@ -35,6 +37,16 @@ function subscribe(listener: () => void) {
 /** The task or thread being made under this id; undefined once it is made, or for any other. */
 export function useStarting(id: string): Starting | undefined {
 	return useSyncExternalStore(subscribe, () => starting.get(id));
+}
+
+/** Whether this task or thread is being made, read once rather than followed. */
+export function isStarting(id: string): boolean {
+	return starting.has(id);
+}
+
+/** What you asked of a task or thread this page made, as its skeleton showed it; undefined for any other. */
+export function openingPrompt(id: string): string | undefined {
+	return opened.get(id);
 }
 
 /** A server's list of tasks with those still being made, which it does not list yet, first. */
@@ -127,17 +139,27 @@ export function startInBackground(queryClient: QueryClient, session: Session, pr
 	const attempt = () => {
 		starting.set(id, { session, prompt, error: null, retry: attempt, discard });
 		changed();
-		queryClient.setQueryData<List>(['sessions'], (data) => (data ? { ...data, sessions: withStarting(data.sessions.filter((item) => item.id !== id)) } : data));
+		// The lists take it a frame later: the page you are going to draws first, and the sidebar's row slides in after.
+		let listed = false;
+		const list = () => {
+			if (listed) return;
+			listed = true;
+			queryClient.setQueryData<List>(['sessions'], (data) => (data ? { ...data, sessions: withStarting(data.sessions.filter((item) => item.id !== id)) } : data));
+		};
+		afterPaint(list);
 		make().then(
 			(made) => {
+				list();
 				// It reads as working while its first message is on its way, unless it waits for a slot.
 				const shown: Session = made.threadState === 'queued' ? made : { ...made, working: true, threadState: 'working' };
 				queryClient.setQueryData(['session', id], shown);
 				queryClient.setQueryData<List>(['sessions'], (data) => (data ? { ...data, sessions: data.sessions.map((item) => (item.id === id ? shown : item)) } : data));
+				if (prompt) opened.set(id, prompt);
 				starting.delete(id);
 				changed();
 			},
 			(error: unknown) => {
+				listed = true;
 				starting.set(id, { session, prompt, error: error instanceof Error ? error.message : String(error), retry: attempt, discard });
 				changed();
 				queryClient.setQueryData<List>(['sessions'], (data) => (data ? { ...data, sessions: data.sessions.filter((item) => item.id !== id) } : data));
@@ -145,6 +167,12 @@ export function startInBackground(queryClient: QueryClient, session: Session, pr
 		);
 	};
 	attempt();
+}
+
+/** Runs once the next frame is on screen, so work that can wait does not hold up the one you asked for. */
+function afterPaint(run: () => void): void {
+	if (typeof requestAnimationFrame !== 'function' || document.visibilityState !== 'visible') return void setTimeout(run, 0);
+	requestAnimationFrame(() => setTimeout(run, 0));
 }
 
 /** Whatever a failed attempt left on the server under this id: made after all, when only its answer was lost. */

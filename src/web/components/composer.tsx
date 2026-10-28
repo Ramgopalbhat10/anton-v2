@@ -6,6 +6,7 @@ import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { ContextMeter } from '@/components/context-meter';
 import { Mascot, useMascotMood } from '@/components/mascot';
+import type { PendingChange } from '@/components/sent-text';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
@@ -85,11 +86,14 @@ export const Composer = memo(function Composer({
 	busy,
 	onSend,
 	onStop,
+	onPending,
 }: {
 	sessionId: string;
 	busy?: boolean;
 	onSend: (text: string, images: ImageAttachment[]) => Promise<void>;
 	onStop: () => Promise<void>;
+	/** A message waiting on its files, for the thread to show as sent while they upload. */
+	onPending?: (change: PendingChange) => void;
 }) {
 	const [text, setText] = useState('');
 	const attachments = useAttachments();
@@ -156,7 +160,10 @@ export const Composer = memo(function Composer({
 				askToNotify();
 				setText('');
 				setElements([]);
-				setSending(taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`);
+				const attaching = taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`;
+				setSending(attaching);
+				// The message shows in the thread at once; it goes once its files are in the task's Library.
+				if (attaching) onPending?.({ text: typed.trim(), attaching });
 				try {
 					// Files go to the task's Library first, and the message carries what they say.
 					const attached = await Promise.all(taken.files.map((file) => api.attachToTask(sessionId, file.file)));
@@ -170,6 +177,7 @@ export const Composer = memo(function Composer({
 							? []
 							: picked.flatMap(({ id, element }) => (element.image ? [imageFromBase64(element.image, `${element.tag}.png`, 'image/png', id)] : []));
 					const context = picked.map(({ element }) => elementContext(element)).join('\n\n');
+					if (attaching) onPending?.('sent');
 					await onSend(withAttachments(context ? `${message}\n\n${context}` : message, attached, 'task'), [...taken.images, ...pictures].slice(0, MAX_IMAGES + picked.length));
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
@@ -178,6 +186,7 @@ export const Composer = memo(function Composer({
 					setElements((current) => (current.length ? current : picked));
 					attachments.setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
+					onPending?.(null);
 					setSending(null);
 				}
 			}}
@@ -200,9 +209,9 @@ export const Composer = memo(function Composer({
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Ask Anton to change the workspace'}
 				/>
-				{blocked || blind || attachments.notice || sending ? (
-					<div className={blocked ? 'text-[12px] text-(--danger-text)' : sending && !blind ? 'text-[12px] text-(--text-tertiary)' : 'text-[12px] text-(--warning-text)'}>
-						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : sending ? `Attaching ${sending}…` : attachments.notice)}
+				{blocked || blind || attachments.notice ? (
+					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
+						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice)}
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">

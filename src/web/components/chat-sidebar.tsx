@@ -75,6 +75,7 @@ import {
 	toggleFilter,
 } from '@/lib/task-view';
 import { useSpaceName } from '@/lib/spaces';
+import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
@@ -438,15 +439,26 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
  * One task in the sidebar. The whole row links to the task, under the links its line holds;
  * its actions show on hover and stay while its menu is open, and resting on it shows a card of details.
  */
-const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate }: { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void }) {
+type TaskRowProps = { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void };
+
+const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate }: TaskRowProps) {
 	const [renaming, setRenaming] = useState(false);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [cardOpen, setCardOpen] = useState(false);
+	// Its actions and menu are made the first time the pointer or focus reaches the row, so a long list mounts and updates as plain rows.
+	const [armed, setArmed] = useState(false);
+	// A task you just started slides in; one already listed when the page loads does not.
+	const [arriving] = useState(() => isStarting(session.id));
 	const note = taskNote(session);
 	const live = isLive(session);
 	return (
 		<TaskPeek session={session} disabled={menuOpen || renaming || cardOpen}>
-			<div data-open={menuOpen || undefined} className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11')}>
+			<div
+				data-open={menuOpen || undefined}
+				onPointerEnter={armed ? undefined : () => setArmed(true)}
+				onFocus={armed ? undefined : () => setArmed(true)}
+				className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11', arriving && 'in-row-enter')}
+			>
 				{active ? <div className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
@@ -499,7 +511,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 						</div>
 					</>
 				)}
-				{renaming ? null : (
+				{renaming || !armed ? null : (
 					<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
 						<HoverActions session={session} place={place} />
 						<TaskMenu session={session} size="xs" side="right" onRename={() => setRenaming(true)} onOpenChange={setMenuOpen} />
@@ -508,7 +520,19 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 			</div>
 		</TaskPeek>
 	);
-});
+}, sameRow);
+
+/**
+ * A row draws again only when what it shows changed. The list's tasks are new objects whenever
+ * one is added above them (the cache shares unchanged values by position, and every task moved
+ * down one), so a task is compared field by field: its nested values are still shared when equal.
+ */
+function sameRow(before: TaskRowProps, after: TaskRowProps): boolean {
+	if (before.place !== after.place || before.view !== after.view || before.active !== after.active || before.onNavigate !== after.onNavigate) return false;
+	if (before.session === after.session) return true;
+	const keys = Object.keys(after.session) as Array<keyof Session>;
+	return keys.length === Object.keys(before.session).length && keys.every((key) => Object.is(before.session[key], after.session[key]));
+}
 
 /** A section's rows, under a heading per repository when grouping. */
 function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {

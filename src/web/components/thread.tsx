@@ -9,7 +9,7 @@ import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-mar
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
-import { SentText } from '@/components/sent-text';
+import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
@@ -28,6 +28,7 @@ import { isPlanRefusal } from '../../core/model-refusal';
 import { dollars, elapsed, tokens } from '@/lib/format';
 import { addToComposer } from '@/lib/composer-inbox';
 import { peekPendingPrompt, takePendingPrompt } from '@/lib/pending-prompt';
+import { openingPrompt } from '@/lib/starting';
 import { HistorySkeleton, ReplySkeleton } from '@/components/starting-task';
 import { cn } from '@/lib/utils';
 import { logoFor } from '@/lib/provider-logos';
@@ -1109,6 +1110,11 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 }
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
+
+/** What you asked, as the message it becomes once the conversation lists it. */
+function openingMessage(text: string): FlueConversationMessage {
+	return { id: 'opening', role: 'user', display: 'visible', parts: [{ type: 'text', text, state: 'done' }] } as FlueConversationMessage;
+}
 const NO_JOINS: Join[] = [];
 const NO_WAITING: WaitingMessage[] = [];
 /** Ids for messages known only as waiting, apart from any the runtime gives. */
@@ -1236,13 +1242,30 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 	const fileLinks = useThreadFileLinks(sessionId);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
-	// Read as the page draws, so a task you just started never shows as empty before its prompt is sent.
-	const firstPrompt = messages.length === 0 && !busy ? peekPendingPrompt(sessionId) : undefined;
+	// A message you sent with files shows while they upload; the ones you send rise in.
+	const { pending, onPending, rises } = useSends();
+	// Read as the page draws, so a task or thread you just started shows what you asked from its first frame,
+	// as the page it opened from did, until the conversation lists it.
+	const firstPrompt = messages.length === 0 ? (peekPendingPrompt(sessionId) ?? openingPrompt(sessionId)) : undefined;
+	// A task this page just made has no history to wait for: its first message goes at once, as its history loads.
+	const sentEarly = useRef<Promise<void> | null>(null);
 	useEffect(() => {
-		if (!agent.historyReady) return;
+		if (!agent.historyReady && openingPrompt(sessionId) === undefined) return;
 		const pending = takePendingPrompt(sessionId);
-		if (pending) void (pending.images.length ? agent.sendMessage(pending.prompt, { images: deliveredImages(pending.images) }) : agent.sendMessage(pending.prompt));
+		if (!pending) return;
+		const sent = pending.images.length ? agent.sendMessage(pending.prompt, { images: deliveredImages(pending.images) }) : agent.sendMessage(pending.prompt);
+		if (!agent.historyReady) sentEarly.current = sent;
+		void sent.catch(() => undefined);
 	}, [agent.historyReady, agent.sendMessage, sessionId]);
+	// Its history may have been read before the message made the conversation, which then reads as absent and
+	// is not followed; once both are in, it is read again.
+	const refresh = agent.refresh;
+	useEffect(() => {
+		const sent = sentEarly.current;
+		if (!agent.historyReady || !sent) return;
+		sentEarly.current = null;
+		void sent.then(refresh, () => undefined);
+	}, [agent.historyReady, refresh]);
 
 	const onSend = useCallback(
 		(text: string, images: ImageAttachment[]) => {
@@ -1250,6 +1273,13 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 			return agent.sendMessage(text, { images: deliveredImages(images) });
 		},
 		[agent.sendMessage, follow],
+	);
+	const showPending = useCallback(
+		(change: PendingChange) => {
+			if (change && change !== 'sent') follow();
+			onPending(change);
+		},
+		[onPending, follow],
 	);
 	// Stop also drops messages still waiting for the agent's next step, unread; they go back to the composer.
 	const waiting = useRef<{ texts: string[]; until: number } | null>(null);
@@ -1292,18 +1322,21 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
 							</div>
 						) : null}
-						{messages.length === 0 && !busy && (!agent.historyReady || firstPrompt) ? (
-							firstPrompt ? (
-								// A task you just started: what you asked, on its way to the agent.
-								<div className="flex flex-col gap-5">
-									<div className="flex flex-col items-end">
-										<SentText text={splitAttachments(firstPrompt).text || firstPrompt} className="max-w-[min(520px,100%)]" />
+						{firstPrompt ? (
+							// A task or thread you just started: what you asked, on its way to the agent, laid out as the message it becomes.
+							<div className="flex flex-col gap-5">
+								<UserMessage message={openingMessage(firstPrompt)} meta={meta} />
+								{busy ? null : session.data?.threadState === 'queued' ? (
+									<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+										<Icon icon={Clock} size={12} className="text-(--icon-tertiary)" />
+										Queued: it starts when a slot frees.
 									</div>
+								) : (
 									<ReplySkeleton />
-								</div>
-							) : (
-								<HistorySkeleton />
-							)
+								)}
+							</div>
+						) : messages.length === 0 && !busy && !agent.historyReady ? (
+							<HistorySkeleton />
 						) : messages.length === 0 && !busy && session.data?.brief ? (
 							// A queued thread: its brief, which it is given once a slot frees.
 							<div className="flex flex-col gap-2.5">
@@ -1331,7 +1364,9 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
-								<div key={row.message.id} data-chat-input={row.message.id}><UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} /></div>
+								<div key={row.message.id} data-chat-input={row.message.id} className={rises(row.message.id, row === rows[0]) ? 'in-sent' : undefined}>
+									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
+								</div>
 							) : (
 								<AssistantMessage
 									key={rowKey(row)}
@@ -1343,6 +1378,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 								/>
 							),
 						)}
+						{pending ? <PendingMessage pending={pending} /> : null}
 						{busy ? <Waiting sessionId={sessionId} tail={tail} queued={rows[rows.length - 1]?.message.role === 'user' && !rows[rows.length - 1]?.joined} phase={liveReply ? 'replying' : rows[rows.length - 1]?.message.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>
@@ -1364,7 +1400,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						}}
 					/>
 				) : null}
-				<Composer busy={busy} onSend={onSend} onStop={onStop} sessionId={sessionId} />
+				<Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} />
 			</div>
 			</FileLinks.Provider>
 			</ReplyActions.Provider>
