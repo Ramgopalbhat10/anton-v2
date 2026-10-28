@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
 import { Markdown } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
@@ -28,6 +28,25 @@ export function buildTree(paths: string[]): TreeNode {
 		});
 	}
 	return root;
+}
+
+/**
+ * The tree with each run of folders that hold only one folder folded into
+ * one row, `src/web/components`, as editors show a sparse tree. Each folded
+ * row takes its deepest folder's path.
+ */
+export function compactTree(node: TreeNode): TreeNode {
+	const children = new Map<string, TreeNode>();
+	for (const [key, child] of node.children) {
+		let folded = child;
+		while (!folded.file && folded.children.size === 1) {
+			const only = [...folded.children.values()][0];
+			if (only.file) break;
+			folded = { ...only, name: `${folded.name}/${only.name}` };
+		}
+		children.set(key, folded.file ? folded : compactTree(folded));
+	}
+	return { ...node, children };
 }
 
 function sorted(node: TreeNode) {
@@ -63,6 +82,7 @@ export function Branch({
 	onToggle,
 	onOpen,
 	statusOf,
+	detailOf,
 }: {
 	node: TreeNode;
 	selected: string | null;
@@ -71,6 +91,8 @@ export function Branch({
 	onToggle: (path: string) => void;
 	onOpen: (path: string) => void;
 	statusOf?: (path: string, folder: boolean) => string | undefined;
+	/** A small figure beside a file, such as the lines it adds. */
+	detailOf?: (path: string) => ReactNode;
 }) {
 	return (
 		<div className={cn('flex flex-col gap-px', depth > 0 && 'ml-[13px] border-l border-(--border-subtle) pl-1')}>
@@ -94,6 +116,7 @@ export function Branch({
 							>
 								{child.name}
 							</span>
+							{detailOf?.(child.path)}
 							{status ? <StatusChip status={status} /> : null}
 						</button>
 					);
@@ -112,7 +135,7 @@ export function Branch({
 							{status ? <StatusChip status={status} /> : null}
 						</button>
 						{open ? (
-							<Branch selected={selected} node={child} depth={depth + 1} expanded={expanded} onToggle={onToggle} onOpen={onOpen} statusOf={statusOf} />
+							<Branch selected={selected} node={child} depth={depth + 1} expanded={expanded} onToggle={onToggle} onOpen={onOpen} statusOf={statusOf} detailOf={detailOf} />
 						) : null}
 					</div>
 				);

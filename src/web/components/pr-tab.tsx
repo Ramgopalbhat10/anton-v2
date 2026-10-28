@@ -5,7 +5,7 @@ import { DiffList } from '@/components/git-tab';
 import { Count, Segmented, SegmentedItem } from '@/components/instrument';
 import { Markdown } from '@/components/markdown';
 import { prColor } from '@/components/pr-status';
-import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Spinner } from '@/components/signal';
+import { Avatar, Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type CheckRun, type PullRequestDetail, type PullRequestItem, type PullRequestState } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
@@ -52,18 +52,23 @@ function BranchChip({ name }: { name: string }) {
 	);
 }
 
-/** Picks one of the task's pull requests; the newest is shown first. */
+/** The pull request's number, and a menu to pick another of the task's pull requests when it has more than one. */
 function PullPicker({ pulls, selected, onSelect }: { pulls: PullRequestItem[]; selected: PullRequestItem; onSelect: (number: number) => void }) {
-	if (pulls.length < 2) return null;
+	if (pulls.length < 2) return <span className="in-num shrink-0 text-[12px] text-(--text-secondary)">#{selected.number}</span>;
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<Btn size="xs" variant="ghost" className="min-w-0">
-					<span className="truncate">
-						#{selected.number} of {pulls.length} pull requests
+				<button
+					type="button"
+					aria-label={`#${selected.number} of ${pulls.length} pull requests`}
+					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[7px] px-1.5 text-[12px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				>
+					<span className="in-num">#{selected.number}</span>
+					<span className="text-(--text-disabled)">
+						{pulls.findIndex((pull) => pull.number === selected.number) + 1} of {pulls.length}
 					</span>
-					<Icon icon={ChevronDown} size={12} />
-				</Btn>
+					<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary)" />
+				</button>
 			</MenuTrigger>
 			<MenuContent align="start" className="w-[320px]">
 				<MenuLabel>Pull requests in this thread</MenuLabel>
@@ -192,14 +197,18 @@ const BOX_TONE = {
 } as const;
 
 function Box({ tone, icon, title, action, children }: { tone: keyof typeof BOX_TONE; icon: typeof GitMerge; title: string; action?: ReactNode; children: ReactNode }) {
+	const color = BOX_TONE[tone];
 	return (
-		<div className="in-card flex-row flex-wrap items-center gap-3 px-3.5 py-3" style={{ boxShadow: `inset 3px 0 0 ${BOX_TONE[tone]}` }}>
-			<span className="inline-flex shrink-0" style={{ color: BOX_TONE[tone] }}>
-				<Icon icon={icon} size={16} />
+		<div className="in-card flex-row flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+			<span
+				className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border"
+				style={{ color, borderColor: `color-mix(in oklab, ${color} 28%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` }}
+			>
+				<Icon icon={icon} size={14} />
 			</span>
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="text-[13px] font-medium text-(--text-primary)">{title}</span>
-				<span className="text-[12px] text-(--text-tertiary)">{children}</span>
+			<div className="flex min-w-0 flex-1 flex-col">
+				<span className="text-[13px] leading-[18px] font-medium text-(--text-primary)">{title}</span>
+				<span className="text-[12px] leading-[17px] text-(--text-tertiary)">{children}</span>
 			</div>
 			{action}
 		</div>
@@ -219,29 +228,31 @@ function PullChanges({ sessionId, number }: { sessionId: string; number: number 
 function Discussion({ pull }: { pull: PullRequestDetail }) {
 	if (pull.discussion.length === 0) return <EmptyState icon={MessageSquare} title="No discussion yet" body="Comments and reviews on GitHub show up here." />;
 	return (
-		<ol className="m-0 flex list-none flex-col gap-2 p-0">
+		<ol className="in-well m-0 flex list-none flex-col p-0">
 			{pull.discussion.map((entry) => (
-				<li key={entry.id} className="in-card gap-1.5 px-3.5 py-3">
-					<div className="flex flex-wrap items-center gap-2 text-[12px]">
-						<span className="font-medium text-(--text-primary)">{entry.author}</span>
-						<span className="text-(--text-tertiary)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on a line' : 'commented'}</span>
-						{entry.verdict ? (
-							<span className={cn('rounded-md px-1.5 py-px text-[11px]', entry.verdict === 'approved' ? 'bg-(--success-bg) text-(--success-text)' : 'bg-(--warning-bg) text-(--warning-text)')}>{entry.verdict}</span>
-						) : null}
-						{entry.path ? (
-							<span className="truncate font-mono text-[11px] text-(--text-tertiary)">
-								{entry.path}
-								{entry.line ? `:${entry.line}` : ''}
-							</span>
-						) : null}
-						<span className="flex-1" />
-						<span className="in-num text-[11px] text-(--text-disabled)">{entry.at ? age(entry.at) : ''}</span>
-					</div>
-					{entry.body ? (
-						<div className="text-[13px] text-(--text-secondary)">
-							<Markdown text={entry.body} />
+				<li key={entry.id} className="flex gap-2.5 border-b border-(--border-subtle) px-3 py-2.5 last:border-b-0">
+					<Avatar name={entry.author} size="xs" />
+					<div className="flex min-w-0 flex-1 flex-col gap-1">
+						<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px]">
+							<span className="font-medium text-(--text-primary)">{entry.author}</span>
+							<span className="text-(--text-tertiary)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
+							{entry.path ? (
+								<span className="min-w-0 truncate font-mono text-[11px] text-(--text-secondary)">
+									{entry.path}
+									{entry.line ? `:${entry.line}` : ''}
+								</span>
+							) : null}
+							{entry.verdict ? (
+								<span className={cn('rounded-md px-1.5 py-px text-[11px]', entry.verdict === 'approved' ? 'bg-(--success-bg) text-(--success-text)' : 'bg-(--warning-bg) text-(--warning-text)')}>{entry.verdict}</span>
+							) : null}
+							<span className="in-num ml-auto text-[11px] text-(--text-disabled)">{entry.at ? age(entry.at) : ''}</span>
 						</div>
-					) : null}
+						{entry.body ? (
+							<div className="text-[12.5px] text-(--text-secondary)">
+								<Markdown text={entry.body} />
+							</div>
+						) : null}
+					</div>
 				</li>
 			))}
 		</ol>
@@ -251,12 +262,12 @@ function Discussion({ pull }: { pull: PullRequestDetail }) {
 function Commits({ pull }: { pull: PullRequestDetail }) {
 	if (pull.commits.length === 0) return <EmptyState icon={GitCommitHorizontal} title="No commits" />;
 	return (
-		<ol className="in-card m-0 list-none p-1.5">
+		<ol className="in-well m-0 list-none p-0">
 			{pull.commits.map((commit) => (
-				<li key={commit.sha} className="flex min-h-10 items-center gap-3 rounded-lg px-2.5 hover:bg-(--bg-hover)">
+				<li key={commit.sha} className="flex h-9 items-center gap-2.5 border-b border-(--border-subtle) px-3 last:border-b-0">
 					<Icon icon={GitCommitHorizontal} size={13} className="shrink-0 text-(--icon-tertiary)" />
 					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{commit.subject}</span>
-					<span className="in-num shrink-0 rounded-md bg-(--alpha-white-6) px-1.5 py-px text-[10.5px] text-(--text-tertiary)">{commit.sha.slice(0, 7)}</span>
+					<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">{commit.sha.slice(0, 7)}</span>
 				</li>
 			))}
 		</ol>
@@ -266,9 +277,9 @@ function Commits({ pull }: { pull: PullRequestDetail }) {
 function Checks({ pull }: { pull: PullRequestDetail }) {
 	if (pull.checks.length === 0) return <EmptyState icon={CircleCheck} title="No checks" body="This repository runs no checks on the pull request's head." />;
 	return (
-		<ol className="in-card m-0 list-none p-1.5">
+		<ol className="in-well m-0 list-none p-0">
 			{pull.checks.map((check, index) => (
-				<li key={`${check.name}-${index}`} className="flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 hover:bg-(--bg-hover)">
+				<li key={`${check.name}-${index}`} className="flex h-9 items-center gap-2.5 border-b border-(--border-subtle) px-3 last:border-b-0">
 					<Icon icon={CHECK_ICON[check.status]} size={14} className={cn('shrink-0', CHECK_TONE[check.status])} />
 					<span className="shrink-0 text-[12.5px] text-(--text-primary)">{check.name}</span>
 					<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-tertiary)">{check.summary}</span>
@@ -297,11 +308,12 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 	const detail = useQuery({ queryKey: ['pull', sessionId, item.number], queryFn: () => api.pull(sessionId, item.number) });
 	const pull = detail.data;
 	const header = (
-		<div className="flex items-center gap-2">
-			<StatePill state={pull?.state ?? item.state} />
+		<div className="flex min-w-0 items-center gap-1.5">
+			<StatePill state={pull?.state ?? item.state} size="sm" />
 			<PullPicker pulls={pulls} selected={item} onSelect={onSelect} />
+			<span className="min-w-0 truncate text-[11.5px] text-(--text-disabled)">{item.repo}</span>
 			<span className="flex-1" />
-			<a href={item.url} target="_blank" rel="noreferrer" className="sg-btn sg-btn--ghost sg-btn--xs">
+			<a href={item.url} target="_blank" rel="noreferrer" className="sg-btn sg-btn--ghost sg-btn--xs shrink-0">
 				<span>GitHub</span>
 				<Icon icon={ArrowUpRight} size={12} />
 			</a>
@@ -331,27 +343,18 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 		{ id: 'checks', label: 'Checks', count: pull.checks.length },
 	];
 	return (
-		<div className="flex flex-col gap-3">
+		<div className="flex flex-col gap-2.5">
 			{header}
-			<div className="flex flex-col gap-1.5">
-				<span className="in-num text-[12px] text-(--text-tertiary)">
-					{pull.repo} · #{pull.number}
-				</span>
-				<h2 className="m-0 text-[16px] leading-[22px] font-medium text-pretty text-(--text-primary)">{pull.title}</h2>
-				<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[12px] text-(--text-tertiary)">
+			<div className="flex flex-col gap-1">
+				<h2 className="m-0 text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{pull.title}</h2>
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-(--text-tertiary)">
 					<span className="text-(--text-secondary)">{pull.author}</span>
 					<span className="flex min-w-0 items-center gap-1">
 						<BranchChip name={pull.baseBranch} />
 						<span aria-label="from">←</span>
 						<BranchChip name={pull.headBranch} />
 					</span>
-					<span>Opened {age(pull.createdAt)} ago</span>
-					<span>
-						{pull.changedFiles} {pull.changedFiles === 1 ? 'file' : 'files'}
-					</span>
-					<span className="in-num">
-						<DiffStat added={pull.additions} removed={pull.deletions} />
-					</span>
+					<span>opened {age(pull.createdAt)} ago</span>
 				</div>
 			</div>
 			<MergeBox sessionId={sessionId} pull={pull} ownWork={ownWork} />
@@ -366,7 +369,7 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 			{section === 'changes' ? <PullChanges sessionId={sessionId} number={pull.number} /> : null}
 			{section === 'description' ? (
 				pull.body ? (
-					<div className="in-card px-4 py-3 text-[13px] text-(--text-secondary)">
+					<div className="in-well px-3.5 py-3 text-[13px] text-(--text-secondary)">
 						<Markdown text={pull.body} />
 					</div>
 				) : (

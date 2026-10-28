@@ -1,5 +1,6 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setChangesScope } from '@/lib/workspace';
 import type { ChangesPayload, PullRequestDetail, PullRequestItem } from '@/lib/api';
 import { renderWithQueries, session } from './render';
 
@@ -33,20 +34,27 @@ const changes = (patchText: string, patchFields: Partial<ChangesPayload> = {}): 
 });
 
 describe('Changes', () => {
-	it('shows the unpushed files as a tree beside the chosen diff, and the whole branch on request', async () => {
+	beforeEach(() => setChangesScope('s1', 'unpushed'));
+
+	it('lists the unpushed files with their diffs open under them, and the whole branch from the explorer', async () => {
 		api.changes.mockImplementation(async (_id: string, scope: string) =>
 			scope === 'branch' ? changes(patch('src/a.ts', 'pushed') + patch('src/b.ts', 'new'), { scope: 'branch', pushedSha: 'p1' }) : changes(patch('src/b.ts', 'new'), { pushedSha: 'p1' }),
 		);
 		renderWithQueries(<GitTab sessionId="s1" />, [[['session', 's1'], session({ workspace: true })]]);
-		expect(await screen.findByLabelText('Changed files')).toBeTruthy();
-		expect(screen.getByRole('button', { name: /^b\.ts\s*M$/ }).getAttribute('aria-current')).toBe('true');
-		expect(screen.queryByRole('button', { name: /^a\.ts/ })).toBeNull();
+		const list = await screen.findByRole('list', { name: 'Changed files' });
+		expect(within(list).getAllByRole('listitem').map((row) => row.getAttribute('aria-label'))).toEqual(['src/b.ts']);
+		expect(within(list).getByRole('button', { name: /^b\.ts/, expanded: true })).toBeTruthy();
 		expect(screen.getByText('new')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /^b\.ts\s*\+1\s*M$/ })).toBeTruthy();
 
-		fireEvent.click(screen.getByRole('tab', { name: 'Whole branch' }));
-		expect(await screen.findByRole('button', { name: /^a\.ts\s*M$/ })).toBeTruthy();
-		fireEvent.click(screen.getByRole('button', { name: /^a\.ts\s*M$/ }));
-		expect(await screen.findByText('pushed')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Whole branch' }));
+		expect(await screen.findByRole('button', { name: /^a\.ts\s*\+1\s*M$/ })).toBeTruthy();
+		expect(screen.getByText('pushed')).toBeTruthy();
+
+		fireEvent.click(within(screen.getByRole('list', { name: 'Changed files' })).getByRole('button', { name: /^a\.ts/, expanded: true }));
+		expect(within(screen.getByRole('list', { name: 'Changed files' })).getByRole('button', { name: /^a\.ts/, expanded: false })).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Expand all files' }));
+		expect(within(screen.getByRole('list', { name: 'Changed files' })).getByRole('button', { name: /^a\.ts/, expanded: true })).toBeTruthy();
 	});
 
 	it('says nothing is unpushed once a pull request has it all', async () => {

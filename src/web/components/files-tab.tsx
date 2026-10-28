@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderOpen, Search, X } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { FileDiff, Folder, Search, X } from 'lucide-react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
@@ -8,7 +8,7 @@ import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, isChat, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
-import { useFocusedFile } from '@/lib/workspace';
+import { ShowPanel, useFocusedFile } from '@/lib/workspace';
 
 /** Paths that match a search, as a flat list. */
 function Matches({
@@ -48,6 +48,46 @@ function Matches({
 }
 
 const MATCHES_SHOWN = 200;
+/** How many changed files the start page offers to open. */
+const CHANGED_SHOWN = 6;
+
+/** What Files shows with nothing open: the changed files to open, and where else to go. */
+function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
+	const showPanel = useContext(ShowPanel);
+	const row = 'flex h-7 items-center gap-2 rounded-[7px] px-2 text-left text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	return (
+		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
+			<div className="flex w-full max-w-[340px] flex-col gap-4">
+				{changed.length ? (
+					<div className="flex flex-col gap-px">
+						<span className="in-caption px-2 pb-1">Changed files</span>
+						{changed.slice(0, CHANGED_SHOWN).map(([path, status]) => {
+							const slash = path.lastIndexOf('/');
+							return (
+								<button type="button" key={path} onClick={() => onOpen(path)} title={path} className={row}>
+									<FileIcon path={path} />
+									<span className="shrink-0 text-(--text-secondary)">{path.slice(slash + 1)}</span>
+									<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+									<StatusChip status={status} />
+								</button>
+							);
+						})}
+					</div>
+				) : null}
+				<div className="flex flex-col gap-px">
+					<button type="button" onClick={onFind} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+						<Icon icon={Search} size={13} />
+						Find a file by name
+					</button>
+					<button type="button" onClick={() => showPanel('Changes')} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+						<Icon icon={FileDiff} size={13} />
+						Review what changed
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
 
 export function FilesTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
@@ -70,6 +110,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		if (focus.line && isMarkdown(focus.path)) setSourceShown((current) => new Set(current).add(focus.path));
 	}, [focus?.at]);
 	const [query, setQuery] = useState('');
+	const search = useRef<HTMLInputElement>(null);
 	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
 	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -94,13 +135,16 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 		<FileIcons>
 			<EditorPane
 				name="files"
+				sessionId={sessionId}
+				mode="files"
 				sideLabel="File tree"
 				opened={selected}
 				side={
 					<>
-					<label className="sg-file-search mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5">
+					<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[8px] border border-(--border-subtle) bg-(--bg-inset) px-2">
 						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 						<input
+							ref={search}
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
 							onKeyDown={(event) => {
@@ -212,7 +256,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 								/>
 						</div>
 					) : (
-						<EmptyState icon={FolderOpen} title="Open a file" body="Select a file to view its contents." />
+						<StartPage changed={[...changes.entries()]} onOpen={open} onFind={() => search.current?.focus()} />
 					)}
 					</>
 				)}

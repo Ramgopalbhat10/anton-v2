@@ -25,20 +25,20 @@ describe('FilesTab', () => {
 			[['session', 's1'], session()],
 			[['files', 's1'], listing],
 		]);
-		const rows = screen
+		const rows = within(screen.getByLabelText('File tree'))
 			.getAllByRole('button')
 			.map((button) => button.textContent)
-			.filter((text) => text !== 'Resume');
+			.filter((text) => text && text !== 'Resume');
 		expect(rows.indexOf('src' + 'M')).toBeLessThan(rows.indexOf('README.md'));
 
 		fireEvent.change(screen.getByLabelText('Find a file'), { target: { value: 'app' } });
-		const matches = screen
+		const matches = within(screen.getByLabelText('File tree'))
 			.getAllByRole('button')
 			.map((button) => button.textContent)
-			.filter((text) => text !== 'Resume');
+			.filter((text) => text && text !== 'Resume');
 		expect(matches).toEqual(['app.tssrcM', 'app.test.tstests']);
 
-		fireEvent.click(screen.getByRole('button', { name: /^app\.ts\s*src\s*M/ }));
+		fireEvent.click(within(screen.getByLabelText('File tree')).getByRole('button', { name: /^app\.ts\s*src\s*M/ }));
 		expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
 		expect(api.file).toHaveBeenCalledWith('s1', 'src/app.ts');
 		expect(screen.getByRole('button', { name: /^app\.ts\s*src\s*M/ }).getAttribute('aria-current')).toBe('true');
