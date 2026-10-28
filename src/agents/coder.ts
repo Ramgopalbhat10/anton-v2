@@ -85,6 +85,7 @@ import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply } from '../services/reply-check.ts';
+import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
@@ -1230,6 +1231,16 @@ function queueCheckpoint(id: string): void {
 	});
 }
 
+/** Tasks whose reply has ended and waits to settle before what it leaves is judged. */
+const followingUp = new Set<string>();
+
+/** Once a reply has settled: whether it waits on you, then a project's thread reports and frees its slot, then your phone hears. */
+async function followUp(id: string): Promise<void> {
+	const reply = await checkReply(id);
+	await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
+	await replyNotice(id, reply);
+}
+
 export function Coder({ id }: AgentProps) {
 	// With a route, the gateway tries the task's provider first or ranks them by its sort.
 	const { model, reasoning } = agentModelFor(id);
@@ -1303,11 +1314,14 @@ export function Coder({ id }: AgentProps) {
 		}
 		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 		queueCheckpoint(id);
-		const reply = await checkReply(id);
-		// A project's thread frees its slot and tells its coordinator what changed.
-		await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
-		// Your phone hears of a task that waits on you, so it is answered without a tab open.
-		await replyNotice(id, reply);
+		// What the reply leaves (a question for you, work done) is judged by the decision model, which takes seconds:
+		// the reply settles first, so its page shows it finished as soon as it is. Replies that end together are judged once, by the last.
+		if (followingUp.has(id)) return;
+		followingUp.add(id);
+		whenIdle(id, () => {
+			followingUp.delete(id);
+			void followUp(id);
+		});
 	});
 	// These response hooks run at the true start/end, across all model and tool calls.
 	// The persisted start survives resumed responses; usage totals are still counted per model call.

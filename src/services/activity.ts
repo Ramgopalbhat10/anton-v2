@@ -60,12 +60,26 @@ export function recordAgentEvent({ type, instanceId, submissionId }: AgentEvent)
 		if (inFlight.get(instanceId)?.size === 0) {
 			inFlight.delete(instanceId);
 			for (const listener of idleListeners) listener(instanceId);
+			const queued = afterIdle.get(instanceId) ?? [];
+			afterIdle.delete(instanceId);
+			for (const run of queued) run();
 		}
 	} else return;
 	announce({ kind: 'task', id: instanceId, what: 'state' });
 }
 
 const idleListeners = new Set<(id: string) => void>();
+
+const afterIdle = new Map<string, (() => void)[]>();
+
+/**
+ * Runs `run` once the task's agent has settled every response in flight, at once if none is, so
+ * work that follows a reply never holds the reply open: the page shows it finished as soon as it is.
+ */
+export function whenIdle(id: string, run: () => void): void {
+	if (!inFlight.has(id)) return run();
+	afterIdle.set(id, [...(afterIdle.get(id) ?? []), run]);
+}
 
 /** Calls `listener` each time an agent finishes its last response for a task (or project), so work it held back can go now. */
 export function onIdle(listener: (id: string) => void): () => void {

@@ -7,7 +7,6 @@ import { Coder } from './agents/coder.ts';
 import { Reviewer } from './agents/reviewer.ts';
 import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
-import { type Change, onChange } from './core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { getSessionRecord } from './db/sessions.ts';
@@ -77,6 +76,7 @@ import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { answerWithin } from './services/answer-within.ts';
 import { waitingMessages } from './services/waiting.ts';
 import { agentNow, recordAgentNow } from './services/agent-now.ts';
+import { streamChanges } from './services/change-stream.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
@@ -263,33 +263,8 @@ setAgentAbort(async (id) => {
 	await Promise.all(routers.map((router) => router.request(path, { method: 'POST' })));
 });
 
-/** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
-const HEARTBEAT_MS = 25_000;
-
 // Open pages learn what changed from here and refetch just that, instead of polling.
-app.get('/api/events', (c) =>
-	streamSSE(c, async (stream) => {
-		const queue: Change[] = [];
-		let wake = () => {};
-		const stop = onChange((change) => {
-			queue.push(change);
-			wake();
-		});
-		stream.onAbort(stop);
-		while (!stream.aborted) {
-			for (const change of queue.splice(0)) await stream.writeSSE({ data: JSON.stringify(change) });
-			await new Promise<void>((resolve) => {
-				const timer = setTimeout(resolve, HEARTBEAT_MS);
-				wake = () => {
-					clearTimeout(timer);
-					resolve();
-				};
-			});
-			if (queue.length === 0 && !stream.aborted) await stream.write(': ping\n\n');
-		}
-		stop();
-	}),
-);
+app.get('/api/events', (c) => streamSSE(c, (stream) => streamChanges(stream)));
 
 app.get('/api/health', (c) =>
 	c.json({

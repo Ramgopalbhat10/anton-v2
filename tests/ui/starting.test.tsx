@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -27,16 +27,23 @@ function later<T>() {
 describe('starting a task', () => {
 	it('lists it and opens it at once, as a skeleton, until the server has made it', async () => {
 		const queryClient = new QueryClient();
+		queryClient.setQueryData(['models'], { models: [] });
 		queryClient.setQueryData(['sessions'], { sessions: [session({ id: 'older', title: 'Older task' })] });
 		const id = newTaskId();
 		expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 		const answer = later<Session>();
 		const draft = draftSession({ id, title: 'Fix the upload retries', prompt: 'Fix the upload retries', projectId: 'p1', repo: 'acme/demo', model: 'openrouter/test/cheap' });
 		startInBackground(queryClient, draft, 'Fix the upload retries', () => answer.promise);
-		render(<Page id={id} />);
+		render(
+			<QueryClientProvider client={queryClient}>
+				<Page id={id} />
+			</QueryClientProvider>,
+		);
 
 		expect(screen.getByText('Fix the upload retries', { selector: 'span' })).toBeTruthy();
 		expect(screen.getByText('Starting the task')).toBeTruthy();
+		// The composer is drawn as it will be, working, so it does not blink out as the page fills in.
+		expect(screen.getByText('Add to what the agent is doing')).toBeTruthy();
 		// The lists take it once the page has drawn.
 		const listed = () => queryClient.getQueryData<{ sessions: Session[] }>(['sessions'])!.sessions.map((item) => [item.id, item.threadState]);
 		expect(listed()).toEqual([['older', session({}).threadState]]);
@@ -60,6 +67,7 @@ describe('starting a task', () => {
 
 	it('says why it could not start, and tries again or gives up', async () => {
 		const queryClient = new QueryClient();
+		queryClient.setQueryData(['models'], { models: [] });
 		queryClient.setQueryData(['sessions'], { sessions: [] });
 		const id = newTaskId();
 		const first = later<Session>();
@@ -67,7 +75,11 @@ describe('starting a task', () => {
 		const make = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 		const onDiscard = vi.fn();
 		startInBackground(queryClient, draftSession({ id, title: 'Compare vendors', prompt: 'Compare vendors', model: 'm' }), 'Compare vendors', make);
-		render(<Page id={id} onDiscard={onDiscard} />);
+		render(
+			<QueryClientProvider client={queryClient}>
+				<Page id={id} onDiscard={onDiscard} />
+			</QueryClientProvider>,
+		);
 		expect(screen.getByText('Starting the chat')).toBeTruthy();
 
 		await act(async () => first.reject(new Error('Unknown model: m')));

@@ -22,8 +22,12 @@ export async function showWorking(queryClient: QueryClient, id: string): Promise
 	queryClient.setQueryData<Session>(['session', id], (session) => (session ? working(session) : session));
 }
 
-/** After a message was turned away, reads the task again so it shows what really happened. */
-export function forgetWorking(queryClient: QueryClient, id: string): void {
+/**
+ * Reads the task again, everywhere it shows: after a message was turned away, to show what really happened,
+ * and once the server has it, as `showWorking` dropped any read under way and with it whatever changed
+ * meanwhile (a new title, a question answered), which no later change would bring back.
+ */
+export function readTaskAgain(queryClient: QueryClient, id: string): void {
 	void queryClient.invalidateQueries({ queryKey: ['sessions'], exact: true });
 	void queryClient.invalidateQueries({ queryKey: ['session', id], exact: true });
 }

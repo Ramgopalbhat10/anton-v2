@@ -103,3 +103,20 @@ test('a plan proposed in the reply waits on your approval, until a reply propose
 	await checkReply('c');
 	assert.equal((await getSessionRecord('c'))?.plan, null);
 });
+
+test('a reply judged after you already sent the next message leaves the task working on it', async () => {
+	const { noteSending, recordAgentEvent } = await import('../src/services/activity.ts');
+	providers({
+		name: 'jev',
+		async decide() {
+			// You answer while the decision model is still reading the reply.
+			noteSending('a');
+			return { answers: { waits: { yes: 0.9 } }, inputTokens: 1, cost: 0 };
+		},
+	});
+	reply('a', 'Which branch should I use?');
+	await checkReply('a');
+	assert.equal((await getSessionRecord('a'))?.asking, null);
+	recordAgentEvent({ type: 'submission_running', instanceId: 'a', submissionId: 'next' });
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'a', submissionId: 'next' });
+});

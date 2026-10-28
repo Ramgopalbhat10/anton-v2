@@ -76,3 +76,20 @@ test("idle listeners hear when a task's last response finishes, not before", () 
 	recordAgentEvent({ type: 'submission_settled', instanceId: 'b', submissionId: 's3' });
 	assert.deepEqual(idle, ['b'], 'a listener that stopped hears nothing more');
 });
+
+test('work that follows a reply waits for it to settle, and runs at once for a task not working', async () => {
+	const { whenIdle } = await import('../src/services/activity.ts');
+	const ran: string[] = [];
+	whenIdle('idle-task', () => ran.push('idle-task'));
+	assert.deepEqual(ran, ['idle-task']);
+	recordAgentEvent({ type: 'submission_running', instanceId: 'w', submissionId: 's1' });
+	recordAgentEvent({ type: 'submission_running', instanceId: 'w', submissionId: 's2' });
+	whenIdle('w', () => ran.push('w'));
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'w', submissionId: 's1' });
+	assert.deepEqual(ran, ['idle-task'], 'a message read behind it is still being answered');
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'w', submissionId: 's2' });
+	assert.deepEqual(ran, ['idle-task', 'w']);
+	recordAgentEvent({ type: 'submission_running', instanceId: 'w', submissionId: 's3' });
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'w', submissionId: 's3' });
+	assert.deepEqual(ran, ['idle-task', 'w'], 'it runs once');
+});
