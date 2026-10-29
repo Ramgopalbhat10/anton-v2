@@ -400,6 +400,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 	const [open, setOpen] = useState(live);
 	const detailsId = useId();
 	useEffect(() => setOpen(live), [live]);
+	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
 		<div className="overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
@@ -427,6 +428,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 					/>
 				</span>
 				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-[12px] text-(--text-secondary)">{label}</div>}
+				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-[11px] text-(--text-tertiary) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
 				<StepStrip steps={steps} live={live} />
 				<div className="in-caption shrink-0 whitespace-nowrap">
 					{steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}
@@ -758,6 +760,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	last,
 	answer,
 	segment,
+	showWorkspaceChanges,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
@@ -766,6 +769,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	answer: string | null;
 	/** The stretch shown, when a message sent while it worked cut the reply: the header goes on its first, the cards and usage on its last. */
 	segment?: ThreadRow['segment'];
+	showWorkspaceChanges: boolean;
 }) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
@@ -845,7 +849,7 @@ const AssistantMessage = memo(function AssistantMessage({
 			)}
 			{foot ? <OutputCards items={made} composer={sessionId} /> : null}
 			{foot && pull ? <PullRequestCard sessionId={sessionId} url={pull.url} title={pull.title} /> : null}
-			{foot && changed.length && !pull ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
+			{foot && showWorkspaceChanges ? <ChangesCard sessionId={sessionId} /> : foot && changed.length ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
 			{foot && !live ? (
 				// Copy and usage stay on the latest reply; earlier ones show them on hover.
 				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
@@ -1376,6 +1380,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 									segment={row.segment}
 									live={row.message === liveReply && (!row.segment || row.segment.last)}
 									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
+									showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
 									answer={answers.get(rowKey(row)) ?? null}
 								/>
 							),

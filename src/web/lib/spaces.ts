@@ -77,13 +77,16 @@ export function groupByState(threads: Session[]): Array<{ state: ThreadState; th
 export const threadActiveAt = (thread: Session) => [thread.checkpointAt, thread.lastInputAt, thread.createdAt].filter((at): at is string => Boolean(at)).sort().pop() ?? thread.createdAt;
 
 /** One line about the thread: its question when it waits on you, else its last words, else its brief. */
-export function threadLine(thread: Session): string {
+export function threadLine(thread: Session, markdown = false): string {
 	if (thread.status === 'error') return thread.errorMessage ?? 'The thread failed.';
 	if (thread.asking) return thread.asking;
 	const text = thread.lastReply ?? thread.brief ?? thread.lastInput ?? '';
 	// A heading only names what follows, so the first line of prose is preferred.
 	const lines = text.split('\n').filter((entry) => entry.trim() && !/^\s*(?:---+|\|)/.test(entry));
-	const plain = (entry: string) => entry.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/^#+\s*/, '').replace(/[*_`]+/g, '').trim();
+	const plain = (entry: string) => {
+		const line = entry.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/^#+\s*/, '').trim();
+		return markdown ? line : line.replace(/[*_`]+/g, '');
+	};
 	const prose = lines.find((entry) => !/^\s*#/.test(entry));
 	return plain(prose ?? lines[0] ?? '');
 }

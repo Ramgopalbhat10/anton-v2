@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { Markdown, InlineLinks } from '@/components/markdown';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
 import { Chip } from '@/components/instrument';
-import { PrStatus, prSummary } from '@/components/pr-status';
+import { PrMergeMetadata, PrStatus, prSummary } from '@/components/pr-status';
 export { prNumber, prSummary } from '@/components/pr-status';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
@@ -288,7 +289,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 	const state = stateOf(thread);
 	const now = useNow(state === 'working');
 	const live = useThreadNow(thread);
-	const line = live?.text ?? threadLine(thread);
+	const line = live?.text ?? threadLine(thread, true);
 	const waiting = state === 'waiting';
 	const broken = waiting && failed(thread);
 	const pr = prSummary(thread);
@@ -316,24 +317,24 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 				waiting ? (
 					<div
 						className={cn(
-							'line-clamp-4 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty',
+							'line-clamp-4 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty [&_.sg-markdown]:text-[12.5px] [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-inherit',
 							broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--warning-base) bg-(--warning-bg) text-(--warning-text)',
 						)}
 					>
-						{line}
+						<InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider>
 					</div>
 				) : (
-					<p className={cn('m-0 flex min-w-0 items-baseline gap-1.5 text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', live && 'agent-live-line')}>
+					<div className={cn('m-0 flex min-w-0 items-baseline gap-1.5 text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)', live && 'agent-live-line')}>
 						{live?.total ? (
 							<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">
 								{live.done}/{live.total}
 							</span>
 						) : null}
-						<span className="line-clamp-3 min-w-0">{line}</span>
-					</p>
+						<div className="line-clamp-3 min-w-0 [&_.sg-markdown]:text-[12.5px] [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-(--text-tertiary)"><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
+					</div>
 				)
 			) : null}
-			{pr ? <PrStatus thread={thread} link full className="max-w-full self-start" /> : null}
+			{pr ? <div className="flex min-w-0 flex-wrap items-center gap-2"><PrStatus thread={thread} link full /><PrMergeMetadata sessionId={thread.id} url={thread.prUrl!} enabled={thread.pullRequest?.state === 'merged'} /></div> : null}
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />

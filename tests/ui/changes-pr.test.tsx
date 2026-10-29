@@ -17,6 +17,7 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
 
 const { GitTab } = await import('@/components/git-tab');
+const { HeaderChanges } = await import('@/components/shell');
 const { PrTab } = await import('@/components/pr-tab');
 
 const patch = (path: string, line: string) => `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,1 @@\n+${line}\n`;
@@ -35,6 +36,15 @@ const changes = (patchText: string, patchFields: Partial<ChangesPayload> = {}): 
 
 describe('Changes', () => {
 	beforeEach(() => setChangesScope('s1', 'unpushed'));
+
+	it('shows clickable change totals in the header, and hides them with an empty diff', async () => {
+		const open = vi.fn();
+		const view = renderWithQueries(<HeaderChanges sessionId="s1" onShowPanel={open} />, [[['changes', 's1', 'unpushed'], changes(patch('src/a.ts', 'new'))]]);
+		fireEvent.click(screen.getByRole('button', { name: 'Open Changes: 1 file, 1 additions, 0 deletions' }));
+		expect(open).toHaveBeenCalledWith('Changes');
+		view.client.setQueryData(['changes', 's1', 'unpushed'], changes(''));
+		await waitFor(() => expect(screen.queryByRole('button', { name: /Open Changes/ })).toBeNull());
+	});
 
 	it('lists the unpushed files with their diffs open under them, and the whole branch from the explorer', async () => {
 		api.changes.mockImplementation(async (_id: string, scope: string) =>
