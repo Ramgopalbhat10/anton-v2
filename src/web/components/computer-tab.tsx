@@ -1,6 +1,6 @@
 import RFB from '@novnc/novnc';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from 'lucide-react';
+import { Bot, Globe, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWindowShown } from '@/components/browser-tab';
 import { Sketch } from '@/components/sketch';
@@ -14,9 +14,11 @@ import { cn } from '@/lib/utils';
 /*
  * The Computer panel: the desktop inside the task's sandbox, shown over VNC
  * (noVNC in the page, through a short-lived address Anton asks the sandbox
- * for). You watch the agent's computer subagent at work, or take over to use
- * it yourself, which makes the agent wait until you give it back. Looking at
- * the panel never starts the sandbox; Start computer does.
+ * for), and the sandbox's headless browser, shown from its live view. You
+ * watch the agent at work, or take over to use it yourself, which makes the
+ * agent wait until you give it back. Looking at the panel never starts the
+ * sandbox; Start computer does, and the agent's first sandbox browser step
+ * brings the browser up.
  */
 
 /** The screen stops streaming after a spell with no sign of you or the agent; the computer keeps running. */
@@ -112,6 +114,131 @@ function Screen({ sessionId, viewOnly, onLink }: { sessionId: string; viewOnly: 
 	return <div ref={target} data-testid="computer-screen" aria-label="Computer screen" className={cn('absolute inset-0', viewOnly && '[&_canvas]:cursor-default!')} />;
 }
 
+const BUTTONS = ['left', 'middle', 'right'] as const;
+/** Mouse moves sent at most this often, as each is a step in the sandbox's browser. */
+const MOVE_MS = 30;
+
+/**
+ * The sandbox browser's tab, from its live view: JPEG frames drawn on a
+ * canvas, and once you take over, your mouse and keyboard sent back in the
+ * tab's own pixels. Only the latest frame is drawn when they come faster
+ * than the page can draw them. A connection that drops uncleanly is tried
+ * again twice, each with a fresh address.
+ */
+function BrowserScreen({ sessionId, viewOnly, onLink, canvas }: { sessionId: string; viewOnly: boolean; onLink: (link: Link) => void; canvas: React.RefObject<HTMLCanvasElement | null> }) {
+	const socket = useRef<WebSocket | null>(null);
+	const lastMove = useRef(0);
+	const [attempt, setAttempt] = useState(0);
+	useEffect(() => {
+		let cancelled = false;
+		let ws: WebSocket | null = null;
+		let latest: Blob | null = null;
+		let drawing = false;
+		const draw = async () => {
+			drawing = true;
+			while (latest && !cancelled) {
+				const blob = latest;
+				latest = null;
+				const image = await createImageBitmap(blob).catch(() => null);
+				const target = canvas.current;
+				if (image && target) target.getContext('2d')?.drawImage(image, 0, 0, target.width, target.height);
+				image?.close();
+			}
+			drawing = false;
+		};
+		onLink({ state: 'connecting' });
+		api
+			.connectSandboxBrowser(sessionId)
+			.then(({ url }) => {
+				if (cancelled) return;
+				ws = new WebSocket(url);
+				ws.binaryType = 'blob';
+				ws.onopen = () => onLink({ state: 'connected' });
+				ws.onmessage = (event: MessageEvent<Blob | string>) => {
+					if (typeof event.data === 'string') {
+						const message = JSON.parse(event.data) as { type: string; width?: number; height?: number };
+						if (message.type === 'size' && canvas.current && message.width && message.height) {
+							canvas.current.width = message.width;
+							canvas.current.height = message.height;
+						}
+						return;
+					}
+					latest = event.data;
+					if (!drawing) void draw();
+				};
+				ws.onclose = (event) => {
+					socket.current = null;
+					if (cancelled) return;
+					if (!event.wasClean && attempt < 2) setTimeout(() => setAttempt((count) => count + 1), 1000);
+					else onLink({ state: 'closed' });
+				};
+				socket.current = ws;
+			})
+			.catch((error: Error) => !cancelled && onLink({ state: 'closed', error: error.message }));
+		return () => {
+			cancelled = true;
+			ws?.close();
+			socket.current = null;
+		};
+	}, [sessionId, attempt, onLink, canvas]);
+	useEffect(() => {
+		if (!viewOnly) canvas.current?.focus();
+	}, [viewOnly, canvas]);
+
+	const send = (message: Record<string, unknown>) => {
+		if (!viewOnly && socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message));
+	};
+	const at = (event: { clientX: number; clientY: number }) => {
+		const target = canvas.current;
+		if (!target) return { x: 0, y: 0 };
+		const box = target.getBoundingClientRect();
+		return { x: ((event.clientX - box.left) / box.width) * target.width, y: ((event.clientY - box.top) / box.height) * target.height };
+	};
+	const button = (event: React.PointerEvent) => BUTTONS[event.button] ?? 'left';
+	return (
+		<canvas
+			ref={canvas}
+			width={1280}
+			height={800}
+			tabIndex={viewOnly ? -1 : 0}
+			data-testid="browser-screen"
+			aria-label="Sandbox browser"
+			className={cn('absolute inset-0 h-full w-full outline-none', viewOnly && 'cursor-default')}
+			onPointerDown={(event) => {
+				if (viewOnly) return;
+				event.currentTarget.focus();
+				event.currentTarget.setPointerCapture?.(event.pointerId);
+				send({ type: 'down', ...at(event), button: button(event), clicks: event.detail || 1 });
+			}}
+			onPointerUp={(event) => send({ type: 'up', ...at(event), button: button(event), clicks: event.detail || 1 })}
+			onPointerMove={(event) => {
+				if (viewOnly || Date.now() - lastMove.current < MOVE_MS) return;
+				lastMove.current = Date.now();
+				send({ type: 'move', ...at(event) });
+			}}
+			onWheel={(event) => send({ type: 'wheel', ...at(event), dx: event.deltaX * (event.deltaMode === 1 ? 16 : 1), dy: event.deltaY * (event.deltaMode === 1 ? 16 : 1) })}
+			onContextMenu={(event) => !viewOnly && event.preventDefault()}
+			onKeyDown={(event) => {
+				if (viewOnly) return;
+				// Pasting goes through the paste event below, with the text itself.
+				if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') return;
+				event.preventDefault();
+				send({ type: 'keydown', key: event.key });
+			}}
+			onKeyUp={(event) => {
+				if (viewOnly) return;
+				event.preventDefault();
+				send({ type: 'keyup', key: event.key });
+			}}
+			onPaste={(event) => {
+				if (viewOnly) return;
+				event.preventDefault();
+				send({ type: 'text', text: event.clipboardData.getData('text') });
+			}}
+		/>
+	);
+}
+
 function StartComputer({ sessionId, live }: { sessionId: string; live: boolean }) {
 	const queryClient = useQueryClient();
 	const start = useMutation({
@@ -145,11 +272,16 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 	const view = useQuery({ queryKey: ['computer', sessionId], queryFn: () => api.computer(sessionId) });
 	const computer = view.data;
 	const running = Boolean(computer?.live && computer.running);
+	const browsing = Boolean(computer?.live && computer.browser);
+	// With both up, the browser shows unless you pick the desktop.
+	const [picked, setPicked] = useState<'browser' | 'desktop' | null>(null);
+	const mode = running && browsing ? (picked ?? 'browser') : browsing ? 'browser' : 'desktop';
+	const browserCanvas = useRef<HTMLCanvasElement | null>(null);
 	const screen = computer?.screen ?? { width: 1280, height: 800 };
 	const [area, room] = useElementSize<HTMLDivElement>();
 	const scale = Math.min(room.width / screen.width, room.height / screen.height);
 	const size = { width: Math.floor(screen.width * scale), height: Math.floor(screen.height * scale) };
-	const [showing, wake] = useScreenAwake(running, Boolean(computer?.agentBusy));
+	const [showing, wake] = useScreenAwake(running || browsing, Boolean(computer?.agentBusy));
 	const [link, setLink] = useState<Link>({ state: 'connecting' });
 	// Mounting the screen again connects again.
 	const [connection, setConnection] = useState(0);
@@ -184,7 +316,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 		);
 	}
 	if (view.isError) return <EmptyState title="Computer unavailable" body={view.error.message} />;
-	if (!running || !computer) return <StartComputer sessionId={sessionId} live={Boolean(computer?.live)} />;
+	if (!(running || browsing) || !computer) return <StartComputer sessionId={sessionId} live={Boolean(computer?.live)} />;
 
 	const yours = computer.userControl;
 	const status = capture.error?.message ?? control.error?.message ?? turnOff.error?.message ?? notice;
@@ -207,13 +339,25 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 						<span className="truncate text-(--text-tertiary)">Watching. Take over to use it yourself.</span>
 					)}
 				</span>
+				{running && browsing ? (
+					<>
+						<IconBtn icon={Globe} size="sm" label="Show the sandbox browser" aria-pressed={mode === 'browser'} onClick={() => setPicked('browser')} className={cn(mode === 'browser' && 'bg-(--accent-bg-subtle) text-(--accent-text)')} />
+						<IconBtn icon={Monitor} size="sm" label="Show the desktop" aria-pressed={mode === 'desktop'} onClick={() => setPicked('desktop')} className={cn(mode === 'desktop' && 'bg-(--accent-bg-subtle) text-(--accent-text)')} />
+					</>
+				) : null}
 				<IconBtn
 					icon={PencilLine}
 					size="sm"
 					label={sketch ? 'Stop drawing' : 'Draw on the screen'}
 					aria-pressed={Boolean(sketch)}
 					disabled={capture.isPending}
-					onClick={() => (sketch ? setSketch(null) : capture.mutate())}
+					onClick={() => {
+						if (sketch) return setSketch(null);
+						const frame = browserCanvas.current;
+						// The browser's tab is drawn from the frame on screen, as the desktop's screenshot needs the desktop.
+						if (mode === 'browser' && frame) setSketch({ data: frame.toDataURL('image/png').split(',')[1] ?? '', width: frame.width, height: frame.height });
+						else capture.mutate();
+					}}
 					className={cn(sketch && 'bg-(--accent-bg-subtle) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
 				/>
 				<IconBtn
@@ -230,7 +374,13 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 			</div>
 			<div ref={area} className="relative flex min-h-[240px] flex-1 items-center justify-center">
 				<div className="in-well relative overflow-hidden bg-(--bg-inset)" style={{ width: size.width, height: size.height }}>
-					{showing ? <Screen key={connection} sessionId={sessionId} viewOnly={!yours} onLink={setLink} /> : null}
+					{showing ? (
+						mode === 'browser' ? (
+							<BrowserScreen key={`browser-${connection}`} sessionId={sessionId} viewOnly={!yours} onLink={setLink} canvas={browserCanvas} />
+						) : (
+							<Screen key={connection} sessionId={sessionId} viewOnly={!yours} onLink={setLink} />
+						)
+					) : null}
 					{!showing ? (
 						<Overlay>
 							<Icon icon={Pause} size={16} className="text-(--icon-tertiary)" />

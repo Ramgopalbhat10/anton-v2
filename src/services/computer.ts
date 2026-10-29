@@ -6,7 +6,7 @@ import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { browse, BrowserStopError, closeBrowser, showBrowserOnDesktop, type BrowserInput, type BrowserState } from './browser.ts';
+import { browse, browserLiveUrl, browserRunning, BrowserStopError, closeBrowser, type BrowserInput, type BrowserState } from './browser.ts';
 import { addressToUrl, screenshotFile } from './browser-step.ts';
 import { liveMachine, machineFor } from './workspace.ts';
 import { untilAborted } from './step-deadline.ts';
@@ -14,8 +14,10 @@ import { untilAborted } from './step-deadline.ts';
 /**
  * The Computer panel and the agent's computer: a desktop inside the task's
  * sandbox, one screen that you watch and take over, and that the agent's
- * computer subagent drives with xdotool. Viewing never starts the sandbox;
- * Start computer, the agent, or Resume does.
+ * computer subagent drives with xdotool; and the sandbox's headless browser,
+ * which the panel shows through its live view (`browser.ts`) and you take
+ * over the same way. Viewing never starts the sandbox; Start computer, the
+ * agent, or Resume does.
  */
 
 export type ComputerView = {
@@ -23,6 +25,8 @@ export type ComputerView = {
 	live: boolean;
 	/** Its desktop runs. */
 	running: boolean;
+	/** Its browser runs, for the panel to show through the live view. */
+	browser: boolean;
 	screen: { width: number; height: number };
 	/** The agent is using the computer, or did a moment ago. */
 	agentBusy: boolean;
@@ -86,13 +90,6 @@ export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Pro
 	return untilAborted(start, signal);
 }
 
-/** Start the screen for an agent and, when it was not running, let an already-open Computer panel find it. */
-export async function ensureAgentDesktop(id: string, machine: Machine, signal?: AbortSignal): Promise<void> {
-	const started = await ensureDesktop(machine, signal);
-	signal?.throwIfAborted();
-	if (started) changed(id);
-}
-
 /** The display the machine's desktop is on, for programs started on it. */
 export const displayOf = (machine: Machine): string => desktopLayout(machine.root).display;
 
@@ -150,42 +147,35 @@ export async function asAgentStep<T>(id: string, work: () => Promise<T>): Promis
 	}
 }
 
-/** Run a sandbox browser action on the same screen and in the same queue as computer actions. */
+/** Tasks whose sandbox browser an open panel was told about; told again once the computer is turned off. */
+const browsing = new Set<string>();
+
+/**
+ * Runs a sandbox browser step in the same queue as computer steps, so taking
+ * over stops both. The browser is headless and needs no desktop: the panel
+ * shows it through its live view, and the first step that starts it tells an
+ * open panel to look.
+ */
 export function browseOnComputer(
 	id: string,
 	getMachine: () => Promise<Machine>,
 	command: BrowserInput,
 	stopped: () => boolean,
-	services: { desktop: typeof ensureAgentDesktop; browser: typeof browse; show?: typeof showBrowserOnDesktop } = { desktop: ensureAgentDesktop, browser: browse, show: showBrowserOnDesktop },
+	browser: typeof browse = browse,
 	signal?: AbortSignal,
-	desktopWaitMs = 5_000,
 ): Promise<BrowserState> {
 	return asAgentStep(id, async () => {
 		const held = (): BrowserState => ({ url: command.url ?? '', title: '', status: null, problem: 'The user has taken over the computer or the browser step was stopped. Stop and report; continue after the computer is handed back.', errors: [], screenshot: null, snapshot: '' });
 		if (stopped() || userHasControl(id)) return held();
 		const machine = await untilAborted(getMachine(), signal);
-		if (stopped() || userHasControl(id)) return held();
-		let notice: string | undefined;
-		let desktopReady = false;
-		const wait = new AbortController();
-		const deadline = setTimeout(() => wait.abort(new Error('The desktop did not become ready in time.')), desktopWaitMs);
-		const desktopSignal = signal ? AbortSignal.any([signal, wait.signal]) : wait.signal;
-		try {
-			await untilAborted(services.desktop(id, machine, desktopSignal), desktopSignal);
-			desktopReady = true;
-		} catch (error) {
-			if (stopped() || signal?.aborted || userHasControl(id)) return held();
-			notice = `The Computer screen was not ready; this browser step may run headless and may not be visible in Computer. Its session stays headless until an explicitly fresh open, which loses its state. ${error instanceof Error ? error.message : String(error)}`;
-		} finally { clearTimeout(deadline); }
 		if (stopped() || signal?.aborted || userHasControl(id)) return held();
 		try {
-			// A navigation alone is not consent to lose cookies or form state. Only an explicitly fresh open moves the browser.
-			if (desktopReady && command.action === 'open' && command.fresh && services.show && await services.show(machine, signal)) {
-				notice = 'The previous headless browser was closed to show the new page on the Computer screen; its cookies, history and tab state were lost.';
+			const result = await browser(machine, command, signal);
+			if (!browsing.has(id)) {
+				browsing.add(id);
+				changed(id);
 			}
-			if (stopped() || signal?.aborted || userHasControl(id)) return held();
-			const result = await services.browser(machine, command, signal);
-			return notice ? { ...result, notice } : result;
+			return result;
 		} catch (error) {
 			if (error instanceof BrowserStopError) unsafeScreens.add(id);
 			throw error;
@@ -195,9 +185,16 @@ export function browseOnComputer(
 
 // ---- What the routes call ----
 
+/** Whether the desktop and the browser run, in one command. */
+async function screens(machine: Machine): Promise<{ running: boolean; browser: boolean }> {
+	const result = await machine.exec(`(${desktopRunning(desktopLayout(machine.root))}) && printf desktop; (${browserRunning(machine)}) && printf browser; true`);
+	const said = text(result.stdout);
+	return { running: said.includes('desktop'), browser: said.includes('browser') };
+}
+
 async function viewOf(id: string, machine: Machine | null): Promise<ComputerView> {
-	const running = machine ? await isDesktopRunning(machine).catch(() => false) : false;
-	return { live: Boolean(machine), running, screen: { ...SCREEN }, agentBusy: agentBusy(id), userControl: userControl.has(id) };
+	const { running, browser } = machine ? await screens(machine).catch(() => ({ running: false, browser: false })) : { running: false, browser: false };
+	return { live: Boolean(machine), running, browser, screen: { ...SCREEN }, agentBusy: agentBusy(id), userControl: userControl.has(id) };
 }
 
 /** The panel's view. Never starts the sandbox or the desktop. */
@@ -228,6 +225,16 @@ export async function connectComputer(id: string): Promise<ComputerConnection> {
 	return connection(id, machine);
 }
 
+/** A fresh address for the panel to watch the sandbox browser at, and to drive it once you take over. Never starts anything. */
+export async function connectBrowser(id: string): Promise<ComputerConnection> {
+	await requireTask(id);
+	const machine = await liveMachine(id);
+	if (!machine) throw new ConflictError('The sandbox is not running.');
+	const url = await browserLiveUrl(machine);
+	if (!url) throw new ConflictError("The sandbox browser is not running. It starts with the agent's next browser step.");
+	return { ...(await viewOf(id, machine)), url };
+}
+
 /**
  * Turn off: closes the desktop and everything open on it, while the sandbox
  * runs on for the task. With nothing else running, the sandbox then stops
@@ -240,8 +247,9 @@ export async function stopComputer(id: string): Promise<ComputerView> {
 	if (!machine) return viewOf(id, null);
 	if (agentBusy(id)) throw new ConflictError('The agent is using the computer. Stop the task, or wait until it is done.');
 	userControl.delete(id);
-	// The sandbox's browser is on the screen; closed, it opens headless at the agent's next step.
+	// The sandbox's browser too; it opens again at the agent's next step.
 	await closeBrowser(machine);
+	browsing.delete(id);
 	forgetDesktop(machine);
 	await run(machine, stopDesktop(desktopLayout(machine.root)), { timeoutMs: 30_000 });
 	unsafeScreens.delete(id);

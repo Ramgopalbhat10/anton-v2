@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComputerView } from '@/lib/api';
@@ -26,10 +26,36 @@ vi.mock('@novnc/novnc', () => ({
 	},
 }));
 
+/** The live view's socket, as the panel opens it. */
+class FakeSocket extends EventTarget {
+	static OPEN = 1;
+	readyState = 0;
+	binaryType = '';
+	sent: Array<Record<string, unknown>> = [];
+	onopen: (() => void) | null = null;
+	onmessage: ((event: { data: unknown }) => void) | null = null;
+	onclose: ((event: { wasClean: boolean }) => void) | null = null;
+	close = vi.fn();
+	constructor(public url: string) {
+		super();
+		sockets.push(this);
+	}
+	send(data: string) {
+		this.sent.push(JSON.parse(data));
+	}
+	open() {
+		this.readyState = 1;
+		this.onopen?.();
+	}
+}
+const sockets: FakeSocket[] = [];
+vi.stubGlobal('WebSocket', FakeSocket);
+
 const api = vi.hoisted(() => ({
 	computer: vi.fn(),
 	startComputer: vi.fn(),
 	connectComputer: vi.fn(),
+	connectSandboxBrowser: vi.fn(),
 	stopComputer: vi.fn(),
 	setComputerControl: vi.fn(),
 	computerScreenshot: vi.fn(),
@@ -41,6 +67,7 @@ const { ComputerTab } = await import('@/components/computer-tab');
 const view = (patch: Partial<ComputerView> = {}): ComputerView => ({
 	live: true,
 	running: true,
+	browser: false,
 	screen: { width: 1280, height: 800 },
 	agentBusy: false,
 	userControl: false,
@@ -49,8 +76,10 @@ const view = (patch: Partial<ComputerView> = {}): ComputerView => ({
 
 beforeEach(() => {
 	clients.length = 0;
+	sockets.length = 0;
 	for (const mock of Object.values(api)) mock.mockReset();
 	api.connectComputer.mockImplementation(async () => ({ ...view(), url: 'wss://screen.example/?_modal_connect_token=t1' }));
+	api.connectSandboxBrowser.mockImplementation(async () => ({ ...view({ running: false, browser: true }), url: 'wss://browser.example/?_modal_connect_token=b1' }));
 });
 
 describe('The Computer panel', () => {
@@ -123,6 +152,41 @@ describe('The Computer panel', () => {
 		await userEvent.click(await screen.findByRole('button', { name: 'Reconnect' }));
 		await waitFor(() => expect(clients).toHaveLength(2));
 		expect(api.connectComputer).toHaveBeenCalledTimes(2);
+		expect(clients[0].disconnect).toHaveBeenCalled();
+	});
+
+	it('shows the sandbox browser from its live view, without a desktop, and sends your input only once you take over', async () => {
+		api.computer.mockResolvedValue(view({ running: false, browser: true }));
+		api.setComputerControl.mockImplementation(async (_id: string, driver: 'user' | 'agent') => view({ running: false, browser: true, userControl: driver === 'user' }));
+		renderWithQueries(<ComputerTab sessionId="s1" />);
+		await waitFor(() => expect(sockets).toHaveLength(1));
+		expect(sockets[0].url).toBe('wss://browser.example/?_modal_connect_token=b1');
+		expect(api.connectComputer).not.toHaveBeenCalled();
+		expect(clients).toHaveLength(0);
+		act(() => sockets[0].open());
+		expect(screen.queryByText('Connecting to the computer')).toBeNull();
+		const canvas = screen.getByTestId('browser-screen') as HTMLCanvasElement;
+		act(() => sockets[0].onmessage?.({ data: JSON.stringify({ type: 'size', width: 1024, height: 640 }) }));
+		expect([canvas.width, canvas.height]).toEqual([1024, 640]);
+
+		fireEvent.keyDown(canvas, { key: 'a' });
+		expect(sockets[0].sent).toEqual([]);
+		await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+		await screen.findByText(/You have the computer/);
+		fireEvent.keyDown(canvas, { key: 'a' });
+		fireEvent.keyUp(canvas, { key: 'a' });
+		expect(sockets[0].sent).toEqual([{ type: 'keydown', key: 'a' }, { type: 'keyup', key: 'a' }]);
+	});
+
+	it('switches between the sandbox browser and the desktop when both run', async () => {
+		api.computer.mockResolvedValue(view({ running: true, browser: true }));
+		renderWithQueries(<ComputerTab sessionId="s1" />);
+		await waitFor(() => expect(sockets).toHaveLength(1));
+		await userEvent.click(screen.getByRole('button', { name: 'Show the desktop' }));
+		await waitFor(() => expect(clients).toHaveLength(1));
+		expect(sockets[0].close).toHaveBeenCalled();
+		await userEvent.click(screen.getByRole('button', { name: 'Show the sandbox browser' }));
+		await waitFor(() => expect(sockets).toHaveLength(2));
 		expect(clients[0].disconnect).toHaveBeenCalled();
 	});
 
