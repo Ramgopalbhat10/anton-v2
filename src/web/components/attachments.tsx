@@ -61,6 +61,16 @@ function freeName(name: string, taken: Set<string>): string {
 	for (let index = 2; ; index++) if (!taken.has(`${base}-${index}${ext}`)) return `${base}-${index}${ext}`;
 }
 
+/** Keep both drafts' files, assigning a different upload name to each. */
+function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
+	const taken = new Set<string>();
+	return files.map((file) => {
+		const name = freeName(file.name, taken);
+		taken.add(name);
+		return name === file.name ? file : { ...file, name, file: new File([file.file], name, { type: file.file.type, lastModified: file.file.lastModified }) };
+	});
+}
+
 /**
  * The attachments every composer shares: picked with the paperclip, pasted, or
  * dropped on the box. `imagesAsFiles` is for a box whose message carries no
@@ -78,16 +88,8 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 			const current = latest.current;
 			const read = await readAttachments(list, { images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length }, imagesAsFiles);
 			// Clamped here too: two quick pastes both read the counts from before either landed.
-			setImages((before) => [...before, ...read.images].slice(0, MAX_IMAGES));
-			setFiles((before) => {
-				const taken = new Set(before.map((file) => file.name));
-				const named = read.files.map((file) => {
-					const name = freeName(file.name, taken);
-					taken.add(name);
-					return name === file.name ? file : { ...file, name, file: new File([file.file], name, { type: file.file.type }) };
-				});
-				return [...before, ...named].slice(0, MAX_FILES);
-			});
+			setImages((before) => [...before, ...read.images.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
+			setFiles((before) => uniqueFiles([...before, ...read.files.slice(0, Math.max(0, MAX_FILES - before.length))]));
 			setNotice(read.rejected);
 		},
 		[imagesAsFiles],
@@ -95,7 +97,7 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 	/** Images handed over by a panel (a drawing, a picked element's picture). */
 	const addImages = useCallback((added: ImageAttachment[]) => {
 		const room = MAX_IMAGES - latest.current.images.length;
-		setImages((before) => [...before, ...added].slice(0, MAX_IMAGES));
+		setImages((before) => [...before, ...added.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
 		setNotice(added.length > room ? `Up to ${MAX_IMAGES} images per message.` : null);
 	}, []);
 	const onPaste = useCallback(
@@ -129,15 +131,17 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 		setNotice(null);
 		return taken;
 	}, []);
-	/** Puts back attachments a send could not deliver, unless new ones were added since. */
+	/** Puts back both the failed send and any newer attachments, without dropping over-limit items. */
 	const restore = useCallback((taken: { images: ImageAttachment[]; files: FileAttachment[] }) => {
 		setImages((current) => [...taken.images, ...current]);
-		setFiles((current) => [...taken.files, ...current]);
+		setFiles((current) => uniqueFiles([...taken.files, ...current]));
 	}, []);
+	const limitError = images.length > MAX_IMAGES ? `Remove ${images.length - MAX_IMAGES} image${images.length - MAX_IMAGES === 1 ? '' : 's'} to send (up to ${MAX_IMAGES} per message).` : files.length > MAX_FILES ? `Remove ${files.length - MAX_FILES} file${files.length - MAX_FILES === 1 ? '' : 's'} to send (up to ${MAX_FILES} per message).` : null;
 	return {
 		images,
 		files,
 		notice,
+		limitError,
 		setNotice,
 		attach,
 		addImages,

@@ -145,7 +145,7 @@ export const Composer = memo(function Composer({
 	const blind = images.length > 0 && model !== undefined && !model.vision;
 	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
-	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending;
+	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending && !attachments.limitError;
 	const mood = useMascotMood({ busy: Boolean(busy), waiting: session.data ? stateOf(session.data) === 'waiting' : false, stir: text });
 
 	return (
@@ -181,9 +181,9 @@ export const Composer = memo(function Composer({
 					await onSend(withAttachments(context ? `${message}\n\n${context}` : message, attached, 'task'), [...taken.images, ...pictures].slice(0, MAX_IMAGES + picked.length));
 				} catch (error) {
 					// Put the draft back so nothing typed is lost, and say why it did not go.
-					setText((current) => current || typed);
+					setText((current) => [typed, current].filter(Boolean).join('\n\n'));
 					attachments.restore(taken);
-					setElements((current) => (current.length ? current : picked));
+					setElements((current) => [...picked, ...current]);
 					attachments.setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
 					onPending?.(null);
@@ -209,9 +209,9 @@ export const Composer = memo(function Composer({
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Ask Anton to change the workspace'}
 				/>
-				{blocked || blind || attachments.notice ? (
+				{blocked || blind || attachments.limitError || attachments.notice ? (
 					<div className={blocked ? 'text-[12px] text-(--danger-text)' : 'text-[12px] text-(--warning-text)'}>
-						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice)}
+						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.limitError ?? attachments.notice)}
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">

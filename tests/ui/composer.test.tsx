@@ -43,7 +43,7 @@ const CONNECTORS = {
 };
 
 function setup(patch = {}) {
-	const onSend = vi.fn(async () => undefined);
+	const onSend = vi.fn(async (_text: string, _images: unknown[]) => undefined);
 	const onStop = vi.fn(async () => undefined);
 	const view = renderWithQueries(<Composer sessionId="s1" onSend={onSend} onStop={onStop} />, [
 		[['session', 's1'], session(patch)],
@@ -244,6 +244,58 @@ describe('attachments', () => {
 		paste(box, [new File(['png'], 'image.png', { type: 'image/png' })], 'Q1 revenue');
 		expect(box.textContent).toBe('Q1 revenue');
 		expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+	});
+
+	it('retains both task drafts and renames duplicate files before retrying the upload', async () => {
+		const { box, onSend } = setup();
+		let reject!: (error: Error) => void;
+		api.attachToTask.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		paste(box, [new File(['old bytes'], 'report.pdf', { type: 'application/pdf' })]);
+		await screen.findByText('report.pdf');
+		await userEvent.type(box, 'Earlier message{Enter}');
+		await waitFor(() => expect(api.attachToTask).toHaveBeenCalledTimes(1));
+		await userEvent.type(box, 'New message');
+		paste(box, [new File(['new bytes'], 'report.pdf', { type: 'application/pdf' })]);
+		await screen.findByText('report.pdf');
+		reject(new Error('offline'));
+		await screen.findByText('Not sent: offline');
+		expect(box.textContent).toBe('Earlier message\n\nNew message');
+		expect(screen.getByText('report.pdf')).toBeTruthy();
+		expect(screen.getByText('report-2.pdf')).toBeTruthy();
+		api.attachToTask.mockImplementation(async (_id: string, file: File) => ({ name: file.name, path: `uploads/${file.name}`, size: file.size, kind: 'PDF', text: await file.text(), cut: null }));
+		await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+		await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+		const uploads = api.attachToTask.mock.calls.slice(1).map((call) => call[1] as File);
+		expect(uploads.map((file) => file.name)).toEqual(['report.pdf', 'report-2.pdf']);
+		expect(await Promise.all(uploads.map((file) => file.text()))).toEqual(['old bytes', 'new bytes']);
+		expect(onSend.mock.calls[0][0]).toContain('Earlier message\n\nNew message');
+		expect(onSend.mock.calls[0][0]).toContain('uploads/report-2.pdf');
+	});
+
+	it('keeps excess restored images visible and blocks sending until the limit is met', async () => {
+		const { box, onSend, client } = setup();
+		client.setQueryData(['models'], { models: [{ ...model, vision: true }], default: model.id });
+		let reject!: (error: Error) => void;
+		api.attachToTask.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		paste(box, [...Array.from({ length: 4 }, (_, i) => new File([String(i)], `picture-${i}.png`, { type: 'image/png' })), new File(['x'], 'pending.pdf', { type: 'application/pdf' })]);
+		await screen.findByText('pending.pdf');
+		await waitFor(() => expect(screen.getAllByRole('button', { name: /^Remove picture-/ })).toHaveLength(4));
+		await userEvent.type(box, 'Check pictures{Enter}');
+		await waitFor(() => expect(api.attachToTask).toHaveBeenCalled());
+		paste(box, [new File(['new'], 'new-picture.png', { type: 'image/png' })]);
+		await screen.findByRole('button', { name: 'Remove new-picture.png' });
+		reject(new Error('offline'));
+		expect(await screen.findByText('Remove 1 image to send (up to 4 per message).')).toBeTruthy();
+		expect(screen.getAllByRole('button', { name: /^Remove .*picture.*png/ })).toHaveLength(5);
+		expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true);
+		paste(box, [new File(['more'], 'extra.png', { type: 'image/png' })]);
+		await waitFor(() => expect(screen.getAllByRole('button', { name: /^Remove .*picture.*png/ })).toHaveLength(5));
+		await userEvent.click(screen.getByRole('button', { name: 'Remove new-picture.png' }));
+		expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(false);
+		api.attachToTask.mockResolvedValueOnce({ name: 'pending.pdf', path: 'uploads/pending.pdf', size: 1, kind: 'PDF', text: null, cut: null });
+		await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+		await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+		expect(onSend.mock.calls[0][1]).toHaveLength(4);
 	});
 
 	it('keeps the files and says why when the upload fails', async () => {

@@ -597,7 +597,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = attachments.images.length > 0 && model !== undefined && !model.vision;
-	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending;
+	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending && !attachments.limitError;
 	const edit = useMutation({
 		mutationFn: (change: Partial<ModelChoice>) =>
 			api.editSpace(space.id, {
@@ -653,12 +653,12 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>
-				{blocked || notice ? (
-					<div className="text-[12px] text-(--danger-text)">{blocked ?? notice}</div>
+				{blocked || notice || attachments.limitError ? (
+					<div className="text-[12px] text-(--danger-text)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
 				) : blind ? (
 					<div className="text-[12px] text-(--warning-text)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
-				) : attachments.notice || paused ? (
-					<div className="text-[12px] text-(--warning-text)">{attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
+				) : attachments.limitError || attachments.notice || paused ? (
+					<div className="text-[12px] text-(--warning-text)">{attachments.limitError ?? attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
