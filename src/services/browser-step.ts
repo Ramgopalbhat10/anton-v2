@@ -42,14 +42,44 @@ export function addressToUrl(input: string): string {
  */
 export type StepResult = { url: string; title: string; status: number | null; problem: string | null; snapshot: string; view?: string };
 
+/** How many iframes a step describes, and how much of each: a page of ads would otherwise fill the snapshot. */
+export const MAX_FRAMES = 5;
+const FRAME_CHARS = 4_000;
+
 /**
  * One step on a Playwright page, as plain JavaScript source: `browserStep(page, command)`
  * acts, waits for a page it loaded to settle, and describes the page as an accessibility tree.
+ * A page's own tree shows an iframe only as "- iframe", so a payment form or an embed was out
+ * of the agent's reach: each iframe big enough to use has its tree added after the page's,
+ * under "- iframe [frame=N]:", N its place among the page's iframes.
  */
 export const BROWSER_STEP = `async function browserStep(page, command) {
+	const framesOf = async () => {
+		const frames = await page.locator('iframe').elementHandles().catch(() => []);
+		let out = '';
+		let shown = 0;
+		for (const [index, handle] of frames.entries()) {
+			if (shown < ${MAX_FRAMES}) {
+				const box = await handle.boundingBox().catch(() => null);
+				const frame = box && box.width >= 40 && box.height >= 20 ? await handle.contentFrame().catch(() => null) : null;
+				const tree = frame ? (await frame.locator('body').ariaSnapshot({ timeout: 2000 }).catch(() => '')).trim() : '';
+				if (tree) {
+					shown += 1;
+					const clipped = tree.length > ${FRAME_CHARS} ? tree.slice(0, ${FRAME_CHARS}) + '\\n… (cut)' : tree;
+					out += '\\n- iframe [frame=' + index + ']:\\n' + clipped.split('\\n').map((line) => '  ' + line).join('\\n');
+				}
+			}
+			await handle.dispose().catch(() => {});
+		}
+		return out;
+	};
+	// A control inside an iframe is named as frame=N >> its selector, N counting the page's iframes from 0, as its tree lists it.
 	const target = () => {
 		if (!command.target) throw new Error('This action needs a target');
-		return page.locator(command.target).first();
+		const inFrame = command.target.startsWith('frame=') ? command.target.indexOf(' >> ') : -1;
+		if (inFrame === -1) return page.locator(command.target).first();
+		const frame = page.locator('iframe').nth(Number(command.target.slice(6, inFrame)) || 0).contentFrame();
+		return frame.locator(command.target.slice(inFrame + 4)).first();
 	};
 	// Requests the step sets off. Playwright's networkidle fires once per load, so after a click on a page that
 	// already idled it answers at once, before what the click fetched is drawn; and on a page that keeps polling it
@@ -117,7 +147,7 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 	}
 	// Only a step that can load a page waits for it to settle; scrolling, hovering, waiting and looking answer at once.
 	if (!['scroll', 'hover', 'wait', 'look'].includes(command.action)) await settle();
-	const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '');
+	const snapshot = (await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '')) + (await framesOf());
 	page.off('request', started);
 	page.off('requestfinished', ended);
 	page.off('requestfailed', ended);

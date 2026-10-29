@@ -240,3 +240,45 @@ test('a tab is clicked without asking whether it buys or deletes anything', asyn
 	assert.equal(asked.filter((call) => call.questions.risky).length, 0);
 	assert.equal(app.commands[0].action, 'look', 'with no page in hand, the run looks first');
 });
+
+test('controls inside an iframe get selectors that enter it, counted within their frame', () => {
+	const found = candidatesOf(
+		[
+			'- button "Pay now"',
+			'- iframe',
+			'- iframe [frame=1]:',
+			'  - textbox "Card number"',
+			'  - button "Pay now"',
+			'- iframe [frame=3]:',
+			'  - button "Pay now"',
+			'- link "Terms"',
+		].join('\n'),
+	);
+	assert.deepEqual(
+		found.map((candidate) => [candidate.label, candidate.selector]),
+		[
+			['button "Pay now"', 'role=button[name="Pay now" s] >> nth=0'],
+			['textbox "Card number" (in an embedded frame) (empty)', 'frame=1 >> role=textbox[name="Card number" s] >> nth=0'],
+			['button "Pay now" (in an embedded frame)', 'frame=1 >> role=button[name="Pay now" s] >> nth=0'],
+			['button "Pay now" (in an embedded frame)', 'frame=3 >> role=button[name="Pay now" s] >> nth=0'],
+			['link "Terms"', 'role=link[name="Terms" s] >> nth=0'],
+		],
+	);
+});
+
+test('a button judged safe on a page is not asked about again in a later run of the same task', async () => {
+	asked = [];
+	rule = (state, questions): Record<string, Answer> => {
+		if (questions.risky) return { risky: no };
+		const page = String(state.page);
+		return { done: { yes: page.includes('"1"') ? 0.97 : 0.02 }, stuck: no, action: pick('click'), click: pick(option(questions.click, 'Add one')) };
+	};
+	const first = counter();
+	await autopilot('same-task', first.step, { goal: 'Click Add one once' });
+	const second = counter();
+	await autopilot('same-task', second.step, { goal: 'Click Add one once' });
+	assert.equal(asked.filter((call) => call.questions.risky).length, 1, 'asked in the first run only');
+	const other = counter();
+	await autopilot('other-task', other.step, { goal: 'Click Add one once' });
+	assert.equal(asked.filter((call) => call.questions.risky).length, 2, 'another task asks for itself');
+});
