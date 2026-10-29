@@ -1,18 +1,17 @@
-import { PrMergeMetadata, PrStatus } from '@/components/pr-status';
-import { useQuery } from "@tanstack/react-query";
+import { PrChecks, PrMetadata, PrStatus, prNumber } from '@/components/pr-status';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
-  CircleCheck,
-  CircleDashed,
-  CircleX,
   ExternalLink,
   FileDiff,
+  GitMerge,
   MessageCircleQuestion,
 } from "lucide-react";
-import { createContext, memo, useContext, useMemo } from "react";
+import { createContext, memo, useContext, useMemo, useState } from "react";
 import { FileIcon, FileIcons } from "@/components/file-icons";
 import { DiffBars, PathName } from "@/components/instrument";
-import { Badge, DiffStat, Icon } from "@/components/signal";
+import { Badge, Btn, DiffStat, Icon } from "@/components/signal";
+import { MergeBox, MergeMethodMenu, mergeLabel, type MergeMethod } from '@/components/pr-merge';
 import { field } from "@/components/tool-describe";
 import { api } from "@/lib/api";
 import { type FileDiff as Diff, parsePatch } from "@/lib/diff";
@@ -300,23 +299,29 @@ function parsedFiles(patch: string): Diff[] {
   return files;
 }
 
-const CHECKS = {
-  passed: {
-    icon: CircleCheck,
-    label: "Checks passed",
-    tone: "text-(--success-text)",
-  },
-  failed: {
-    icon: CircleX,
-    label: "Checks failing",
-    tone: "text-(--danger-text)",
-  },
-  pending: {
-    icon: CircleDashed,
-    label: "Checks running",
-    tone: "text-(--warning-text)",
-  },
-} as const;
+/** Only fetch the full PR when the user asks to merge, not on every reply or agent step. */
+function ChatMerge({ sessionId, url }: { sessionId: string; url: string }) {
+  const queryClient = useQueryClient();
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof api.pull>> | null>(null);
+  const [method, setMethod] = useState<MergeMethod>('squash');
+  const load = useMutation({
+    mutationFn: async () => {
+      const number = Number(prNumber(url));
+      if (!number) throw new Error('This pull request cannot be merged here.');
+      const list = await queryClient.fetchQuery({ queryKey: ['pulls', sessionId], queryFn: () => api.pulls(sessionId), staleTime: 0 });
+      if (!list.pulls.some((item) => item.number === number && item.url === url)) throw new Error('This pull request is not recorded for this task. Open it on GitHub to merge.');
+      const pull = await queryClient.fetchQuery({ queryKey: ['pull', sessionId, number], queryFn: () => api.pull(sessionId, number), staleTime: 0 });
+      if (pull.url !== url) throw new Error('This pull request could not be verified.');
+      return pull;
+    },
+    onSuccess: setDetail,
+  });
+  if (detail) return <div className="px-3.5 pb-2.5 @min-[540px]/pr:py-2.5"><MergeBox sessionId={sessionId} pull={detail} ownWork compact initialConfirming initialMethod={method} onMerged={setDetail} /></div>;
+  return <div className="flex min-w-0 flex-wrap items-center gap-2 px-3.5 pb-2.5 @min-[540px]/pr:py-2.5">
+    <div className="flex shrink-0 items-center"><Btn size="sm" variant="secondary" icon={GitMerge} disabled={load.isPending} className="rounded-r-none" onClick={() => load.mutate()}>{load.isPending ? 'Checking pull request…' : mergeLabel[method]}</Btn><MergeMethodMenu method={method} onChange={setMethod} disabled={load.isPending} /></div>
+    {load.isError ? <span role="alert" className="text-[12px] text-(--danger-text)">{load.error.message}</span> : null}
+  </div>;
+}
 
 /** The pull request a turn opened: its number and title, and its state and checks as GitHub last reported them. */
 export const PullRequestCard = memo(function PullRequestCard({
@@ -333,23 +338,22 @@ export const PullRequestCard = memo(function PullRequestCard({
     queryFn: () => api.session(sessionId),
   });
   const pull = session.data?.prUrl === url ? session.data.pullRequest : null;
-  const checks = pull?.checks ? CHECKS[pull.checks] : null;
-  const failing = pull?.runs.filter((run) => run.status === "failed") ?? [];
   // .in-card lays itself out as a column, so the row is a link inside it.
   return (
-    <div className="in-card">
+    <div className="in-card @container/pr">
+      <div className="flex min-w-0 flex-col @min-[540px]/pr:flex-row @min-[540px]/pr:items-center">
       <a
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="group/pr flex items-center gap-3 rounded-[inherit] px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+        className="group/pr flex min-w-0 flex-1 items-center gap-3 rounded-[inherit] px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
           <span className="flex flex-wrap items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
             <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
-            <PrMergeMetadata sessionId={sessionId} url={url} enabled={!pull || pull.state === "merged"} />
-            {checks ? <span className={cn("inline-flex items-center gap-1", checks.tone)}><Icon icon={checks.icon} size={11} />{failing.length ? `${failing.length} failing` : checks.label}</span> : null}
+            <PrMetadata sessionId={sessionId} url={url} />
+            <PrChecks pull={pull ?? null} />
           </span>
         </span>
         <Icon
@@ -358,6 +362,8 @@ export const PullRequestCard = memo(function PullRequestCard({
           className="shrink-0 text-(--icon-tertiary) opacity-0 transition-opacity group-hover/pr:opacity-100"
         />
       </a>
+      {session.data && !session.data.review && pull?.state === 'open' ? <ChatMerge key={url} sessionId={sessionId} url={url} /> : null}
+      </div>
     </div>
   );
 });

@@ -37,10 +37,10 @@ export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavi
 			{/* One visible handle opens the rail on both touch and pointer devices. */}
 			<button ref={handle} type="button" aria-label={open ? 'Hide chat navigation' : 'Show chat navigation'} aria-expanded={open}
 				onClick={() => { setOpen(!open); setActive(null); }}
-				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-5 items-center justify-center rounded-l-md border border-r-0 border-(--border) bg-(--bg-overlay) text-(--text-secondary) outline-none focus-visible:ring-2 focus-visible:ring-(--accent-base)`}>
+				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-5 items-center justify-center rounded-l-md border border-r-0 border-(--border) bg-(--bg-overlay) text-(--text-secondary) outline-none focus-visible:ring-2 focus-visible:ring-(--accent-base) [@media(hover:hover)]:group-hover/nav:pointer-events-none [@media(hover:hover)]:group-hover/nav:opacity-0 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100`}>
 				<span aria-hidden="true">⋮</span>
 			</button>
-			<div className={`flex max-h-[50vh] flex-col overflow-x-hidden overflow-y-auto py-1 transition-[opacity,width] duration-200 motion-reduce:transition-none [@media(hover:hover)]:group-hover/nav:w-10 [@media(hover:hover)]:group-hover/nav:opacity-100 ${open ? 'w-10 opacity-100' : 'w-2 opacity-0'}`}>
+			<div className={`flex max-h-[50vh] flex-col overflow-x-hidden overflow-y-auto py-1 transition-[opacity,width] duration-200 motion-reduce:transition-none [@media(hover:hover)]:group-hover/nav:w-10 [@media(hover:hover)]:group-hover/nav:opacity-100 [@media(hover:hover)]:group-hover/nav:pointer-events-auto ${open ? 'w-10 opacity-100' : 'pointer-events-none w-5 opacity-0'}`}>
 				{turns.map((turn, index) => (
 					<button key={turn.id} type="button" tabIndex={open ? 0 : -1} aria-label={`Go to input ${index + 1}: ${turn.input}`} aria-describedby={active === turn.id ? previewId : undefined}
 						onMouseEnter={() => setActive(turn.id)}

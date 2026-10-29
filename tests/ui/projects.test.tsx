@@ -20,7 +20,7 @@ const api = vi.hoisted(() => ({
 	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
 	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
-	pull: vi.fn(),
+	pullMetadata: vi.fn(async (): Promise<any> => null),
 	spaceUsage: vi.fn(),
 	spaceAutomations: vi.fn(),
 }));
@@ -97,12 +97,35 @@ function withRouter(ui: () => ReactNode, path = '/projects/space_1') {
 describe('threads', () => {
 	it('renders Markdown links and merged PR metadata in a thread peek', async () => {
 		const url = 'https://github.com/acme/demo/pull/12';
-		api.pull = vi.fn(async () => ({ url, state: 'merged', headBranch: 'anton/fix', baseBranch: 'main', additions: 12, deletions: 3 }));
+		api.pullMetadata = vi.fn(async () => ({ url, state: 'merged', headBranch: 'anton/fix', baseBranch: 'main', additions: 12, deletions: 3 }));
 		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'merged', checks: null, runs: [] }, lastReply: 'Opened **changes** in [PR #12](https://github.com/acme/demo/pull/12).' })} />);
 		expect((await screen.findByRole('link', { name: 'PR #12' })).getAttribute('href')).toBe(url);
 		expect(screen.getByText('changes').tagName).toBe('STRONG');
 		expect(await screen.findByText('anton/fix → main')).toBeTruthy();
 		expect(screen.getByLabelText('12 additions, 3 deletions')).toBeTruthy();
+	});
+
+	it('renders Markdown in the thread card and keeps links independent of thread navigation', async () => {
+		const router = withRouter(() => <ThreadRow thread={thread({ id: 'pr', title: 'Update', threadState: 'review', lastReply: 'Opened **changes** in [PR #12](https://github.com/acme/demo/pull/12).' })} />);
+		const link = await screen.findByRole('link', { name: 'PR #12' });
+		expect(link.getAttribute('href')).toBe('https://github.com/acme/demo/pull/12');
+		expect(screen.getByText('changes').tagName).toBe('STRONG');
+		fireEvent.click(link, { button: 1 });
+		expect(router.state.location.pathname).toBe('/projects/space_1');
+	});
+	it('shows open PR metadata and a separate checks indicator in the peek', async () => {
+		const url = 'https://github.com/acme/demo/pull/12';
+		api.pullMetadata.mockResolvedValueOnce({ url, state: 'open', headBranch: 'anton/fix', baseBranch: 'main', additions: 12, deletions: 3 });
+		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'open', checks: 'passed', runs: [] } })} />);
+		expect((await screen.findByLabelText('Pull request #12 open · checks pass')).textContent).toBe('#12');
+		expect(await screen.findByText('anton/fix → main')).toBeTruthy();
+		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
+	});
+
+	it('shows failing draft checks in the thread peek', async () => {
+		const url = 'https://github.com/acme/demo/pull/12';
+		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'draft', checks: 'failed', runs: [] } })} />);
+		expect(await screen.findByText('Checks failing')).toBeTruthy();
 	});
 
 	beforeEach(() => {
@@ -351,6 +374,7 @@ describe('threads', () => {
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {
 		withRouter(() => <ProjectSidebarBody spaceId="space_1" onNavigate={() => {}} />);
 		await screen.findByText('Pick a name');
+		expect(within(screen.getByRole('link', { name: /Add the endpoint/ })).getByLabelText('Pull request #12 open · checks pass').textContent).toBe('#12');
 		const sections = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'));
 		expect(sections).toEqual(['Waiting on you', 'Working', 'Ready for review', 'Done']);
 		expect(screen.queryByText('Old cleanup')).toBeNull();

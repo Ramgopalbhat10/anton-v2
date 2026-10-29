@@ -854,6 +854,7 @@ export const api = {
 	stopAgent: async (id: string) => void (await request(`/api/agents/coder/${id}/abort`, { method: 'POST' })),
 	changes: (id: string, scope: ChangesScope = 'unpushed') => json<ChangesPayload>(`/api/sessions/${id}/changes${scope === 'branch' ? '?scope=branch' : ''}`),
 	pulls: (id: string) => json<{ pulls: PullRequestItem[] }>(`/api/sessions/${id}/pulls`),
+	pullMetadata: (id: string, number: number) => json<Pick<PullRequestDetail, 'url' | 'headBranch' | 'baseBranch' | 'additions' | 'deletions'>>(`/api/sessions/${id}/pulls/${number}/metadata`),
 	pull: (id: string, number: number) => json<PullRequestDetail>(`/api/sessions/${id}/pulls/${number}`),
 	pullDiff: (id: string, number: number) => json<{ patch: string }>(`/api/sessions/${id}/pulls/${number}/diff`),
 	/** Squashes by default; `sha` refuses the merge when the head moved since you looked. */

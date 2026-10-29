@@ -363,7 +363,7 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			const pull = await json<PullRequest>(`/repos/${repo}/pulls/${number}`);
 			const state = stateOf(pull);
 			// A finished pull request needs nothing more, so its checks and comments are not fetched.
-			if (state === 'merged' || state === 'closed') return { state, headSha: pull.head.sha, checks: [], comments: [] };
+			if (state === 'merged' || state === 'closed') return { state, headSha: pull.head.sha, headBranch: pull.head.ref, baseBranch: pull.base.ref, checks: [], comments: [] };
 			const [runs, statuses, notes, lineNotes, reviews] = await Promise.all([
 				json<{ check_runs: CheckRun[] }>(`/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`),
 				json<{ statuses: CommitStatus[] }>(`/repos/${repo}/commits/${pull.head.sha}/status?per_page=100`),
@@ -377,7 +377,7 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				...reviews.filter(isTrusted).map((review) => commentOf('review', review)),
 			].filter((comment) => comment.body);
 			const checks = [...runs.check_runs.map(checkOf), ...statuses.statuses.map(statusCheckOf)];
-			return { state, headSha: pull.head.sha, checks, comments, approved: approvedBy(reviews), conflicts: pull.mergeable === false, baseSha: pull.base.sha };
+			return { state, headSha: pull.head.sha, headBranch: pull.head.ref, baseBranch: pull.base.ref, checks, comments, approved: approvedBy(reviews), conflicts: pull.mergeable === false, baseSha: pull.base.sha };
 		},
 		async pullRequest(url): Promise<PullRequestInfo> {
 			const { repo, number } = pullOf(url);
@@ -393,6 +393,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				baseBranch: pull.base.ref,
 				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
 			};
+		},
+		async pullRequestMetadata(url) {
+			const { repo, number } = pullOf(url);
+			const pull = await json<PullRequest>(`/repos/${repo}/pulls/${number}`);
+			return { url: pull.html_url, headBranch: pull.head.ref, baseBranch: pull.base.ref, additions: pull.additions ?? 0, deletions: pull.deletions ?? 0 };
 		},
 		async pullRequestDetail(url): Promise<PullRequestDetail> {
 			const { repo, number } = pullOf(url);

@@ -9,7 +9,7 @@ import type { AgentNow } from './agent-now.ts';
  */
 export type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }

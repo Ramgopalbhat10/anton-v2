@@ -96,7 +96,7 @@ import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMc
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
 import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
-import { mergePullRequest, pullRequestDetail, pullRequestDiff, pullRequestsOf, pullRequestView } from './services/pull-requests.ts';
+import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from './services/pull-requests.ts';
 import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
 import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
@@ -918,6 +918,7 @@ const pullNumber = (c: { req: { param: (name: 'number') => string } }) => {
 	return number;
 };
 app.get('/api/sessions/:id/pulls/:number', async (c) => c.json(await pullRequestDetail(c.req.param('id'), pullNumber(c))));
+app.get('/api/sessions/:id/pulls/:number/metadata', async (c) => c.json(await pullRequestMetadata(c.req.param('id'), pullNumber(c))));
 app.get('/api/sessions/:id/pulls/:number/diff', async (c) => c.json({ patch: await pullRequestDiff(c.req.param('id'), pullNumber(c)) }));
 app.post('/api/sessions/:id/pulls/:number/merge', async (c) => {
 	const input = await body(c, v.object({ method: v.optional(v.picklist(['squash', 'merge', 'rebase'])), sha: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/))) }));

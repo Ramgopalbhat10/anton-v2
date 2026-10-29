@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
 	changes: vi.fn(),
 	pulls: vi.fn(),
 	pull: vi.fn(),
+	pullMetadata: vi.fn(async () => null),
 	pullDiff: vi.fn(async () => ({ patch: '' })),
 	mergePull: vi.fn(),
 	revertFile: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
 
 const { GitTab } = await import('@/components/git-tab');
 const { HeaderChanges } = await import('@/components/shell');
+const { PullRequestCard } = await import('@/components/reply-cards');
 const { PrTab } = await import('@/components/pr-tab');
 
 const patch = (path: string, line: string) => `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,1 @@\n+${line}\n`;
@@ -117,6 +119,53 @@ const detail = (number: number, patchFields: Partial<PullRequestDetail> = {}): P
 });
 
 describe('PR', () => {
+	it('merges the current PR from its reply after verifying it and a second click', async () => {
+		const url = 'https://github.com/acme/demo/pull/13';
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(detail(13));
+		api.mergePull.mockReset().mockResolvedValue(detail(13, { state: 'merged', mergedBy: 'you' }));
+		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Change 13" />, [[['session', 's1'], session({ prUrl: url, pullRequest: { state: 'open', checks: 'passed', runs: [] } })]]);
+		expect(api.pull).not.toHaveBeenCalled();
+		expect(api.pulls).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole('button', { name: 'Squash and merge' }));
+		const confirm = await screen.findByRole('button', { name: 'Click again to merge' });
+		expect(api.mergePull).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(confirm);
+		fireEvent.click(confirm);
+		await waitFor(() => expect(api.mergePull).toHaveBeenCalledWith('s1', 13, { method: 'squash', sha: 'a'.repeat(40) }));
+		expect(await screen.findByText(/^Merged by you/)).toBeTruthy();
+	});
+	it('blocks merge when the freshly read PR is a draft or has conflicts', async () => {
+		const url = 'https://github.com/acme/demo/pull/13';
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(detail(13, { state: 'draft', draft: true, mergeable: false }));
+		api.mergePull.mockReset();
+		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Change 13" />, [[['session', 's1'], session({ prUrl: url, pullRequest: { state: 'open', checks: null, runs: [] } })]]);
+		fireEvent.click(screen.getByRole('button', { name: 'Squash and merge' }));
+		expect(await screen.findByText('A draft cannot be merged; mark it ready on GitHub first.')).toBeTruthy();
+		expect((screen.getByRole('button', { name: 'Click again to merge' }) as HTMLButtonElement).disabled).toBe(true);
+		expect(api.mergePull).not.toHaveBeenCalled();
+	});
+
+	it('does not merge a PR absent from the task history', async () => {
+		const url = 'https://github.com/acme/demo/pull/13';
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(12, 'open', true)] });
+		api.pull.mockReset();
+		api.mergePull.mockReset();
+		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Change 13" />, [[['session', 's1'], session({ prUrl: url, pullRequest: { state: 'open', checks: null, runs: [] } })]]);
+		fireEvent.click(screen.getByRole('button', { name: 'Squash and merge' }));
+		expect((await screen.findByRole('alert')).textContent).toContain('not recorded');
+		expect(api.pull).not.toHaveBeenCalled();
+		expect(api.mergePull).not.toHaveBeenCalled();
+	});
+	it('does not offer chat merging for review tasks, historical cards, or merged PRs', () => {
+		const url = 'https://github.com/acme/demo/pull/13';
+		const view = renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Change 13" />, [[['session', 's1'], session({ prUrl: url, review: { number: 13, author: 'other', trusted: true, reviewedHead: null, automatic: false }, pullRequest: { state: 'open', checks: null, runs: [] } })]]);
+		expect(screen.queryByRole('button', { name: 'Squash and merge' })).toBeNull();
+		view.client.setQueryData(['session', 's1'], session({ prUrl: 'https://github.com/acme/demo/pull/14', pullRequest: { state: 'open', checks: null, runs: [] } }));
+		expect(screen.queryByRole('button', { name: 'Squash and merge' })).toBeNull();
+	});
+
 	it("opens on the thread's current pull request, and merges it by squashing after a second click", async () => {
 		api.pulls.mockResolvedValue({ pulls: [item(13, 'open', true), item(12, 'merged', false)] });
 		api.pull.mockImplementation(async (_id: string, number: number) => detail(number, number === 12 ? { state: 'merged', mergedBy: 'ada', mergedAt: '2026-10-02T02:00:00Z' } : {}));

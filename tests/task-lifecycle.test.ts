@@ -79,6 +79,7 @@ const fakeHost: GitHost = {
 		return url;
 	},
 	pullRequestState: async () => pullState,
+	pullRequestMetadata: async (url) => ({ url, headBranch: 'b', baseBranch: 'main', additions: 1, deletions: 0 }),
 	pullRequestDetail: async (url) => ({
 		...(pulls.find((pull) => pull.url === url) ?? { url, number: Number(url.split('/').pop()), title: 'Ours', author: 'anton', trusted: true, draft: false, headBranch: 'b', headSha: 'sha-1', updatedAt: '', repo: 'acme/demo', body: '', baseBranch: 'main', commits: [] }),
 		state: pullState,
@@ -2077,6 +2078,45 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 	} finally {
 		pullState = 'open';
 	}
+});
+
+test('retargeting a PR at the same commit invalidates its metadata only when a ref changes', async () => {
+	const { onChange } = await import('../src/core/changes.ts');
+	const { readPullRequest } = await import('../src/services/pr-status.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Retarget PR' });
+	const url = 'https://example.test/pull/9998';
+	await updateSession(session.id, { prUrl: url });
+	const record = (await getSessionRecord(session.id))!;
+	let changes = 0;
+	const off = onChange((change) => { if (change.kind === 'task' && change.id === session.id && change.what === 'pr-metadata') changes++; });
+	try {
+		activity = { state: 'open', headSha: 'same', baseSha: 'same-base', headBranch: 'feature', baseBranch: 'main', checks: [], comments: [] };
+		await readPullRequest({ ...record, prUrl: url });
+		assert.equal(changes, 1);
+		await readPullRequest({ ...record, prUrl: url });
+		assert.equal(changes, 1, 'unchanged reads do not invalidate');
+		activity = { ...activity, baseBranch: 'release' };
+		await readPullRequest({ ...record, prUrl: url });
+		assert.equal(changes, 2, 'same-SHA base branch change invalidates');
+		activity = { ...activity, headBranch: 'feature-renamed' };
+		await readPullRequest({ ...record, prUrl: url });
+		assert.equal(changes, 3, 'same-SHA head branch change invalidates');
+	} finally {
+		off();
+		activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
+	}
+});
+
+test('PR detail can read the current PR on an older task without a history record', async () => {
+	const { pullRequestDetail, pullRequestMetadata } = await import('../src/services/pull-requests.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Older PR' });
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/9876' });
+	assert.equal((await pullRequestDetail(session.id, 9876)).url, 'https://example.test/pull/9876');
+	assert.equal((await pullRequestMetadata(session.id, 9876)).additions, 1);
+	await assert.rejects(() => pullRequestMetadata(session.id, 9877), /no such pull request/);
+	await assert.rejects(() => pullRequestDetail(session.id, 9877), /no such pull request/);
 });
 
 test("a thread's own pull request merges from the PR panel by squashing", async () => {
