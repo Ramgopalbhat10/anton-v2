@@ -6,7 +6,7 @@ import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { browse, BrowserStopError, closeBrowser, type BrowserInput, type BrowserState } from './browser.ts';
+import { browse, BrowserStopError, closeBrowser, showBrowserOnDesktop, type BrowserInput, type BrowserState } from './browser.ts';
 import { addressToUrl, screenshotFile } from './browser-step.ts';
 import { liveMachine, machineFor } from './workspace.ts';
 import { untilAborted } from './step-deadline.ts';
@@ -45,30 +45,25 @@ export async function isDesktopRunning(machine: Machine, signal?: AbortSignal): 
 	return (await machine.exec(desktopRunning(desktopLayout(machine.root)), { signal })).exitCode === 0;
 }
 
-/**
- * Starts the machine's desktop unless it runs, installing it first in a
- * machine from before it was in the image. The sandbox's own browser started
- * headless before the desktop existed, so it is closed, to open again on the
- * screen at the agent's next step.
- */
+/** One desktop startup per machine; individual waiters may stop waiting without cancelling it. */
 const desktopStarts = new Map<string, Promise<void>>();
 
 export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Promise<void> {
 	signal?.throwIfAborted();
 	const key = `${machine.id}:${machine.root}`;
-	const existing = desktopStarts.get(key);
-	if (existing) return existing;
-	const start = (async () => {
-		if (await isDesktopRunning(machine, signal)) return;
-		signal?.throwIfAborted();
-		await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000, signal });
-		signal?.throwIfAborted();
-		await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000, signal });
-		signal?.throwIfAborted();
-		await closeBrowser(machine).catch(() => undefined);
-	})();
-	desktopStarts.set(key, start);
-	try { await start; } finally { if (desktopStarts.get(key) === start) desktopStarts.delete(key); }
+	let start = desktopStarts.get(key);
+	if (!start) {
+		start = (async () => {
+			if (await isDesktopRunning(machine)) return;
+			await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000 });
+			await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000 });
+		})();
+		desktopStarts.set(key, start);
+		const current = start;
+		void current.finally(() => { if (desktopStarts.get(key) === current) desktopStarts.delete(key); }).catch(() => undefined);
+	}
+	// The shared startup must not close or otherwise alter a browser after a waiter leaves.
+	await untilAborted(start, signal);
 }
 
 /** Start the screen for an agent and let an already-open Computer panel find it. */
@@ -141,8 +136,9 @@ export function browseOnComputer(
 	getMachine: () => Promise<Machine>,
 	command: BrowserInput,
 	stopped: () => boolean,
-	services: { desktop: typeof ensureAgentDesktop; browser: typeof browse } = { desktop: ensureAgentDesktop, browser: browse },
+	services: { desktop: typeof ensureAgentDesktop; browser: typeof browse; show?: typeof showBrowserOnDesktop } = { desktop: ensureAgentDesktop, browser: browse, show: showBrowserOnDesktop },
 	signal?: AbortSignal,
+	desktopWaitMs = 5_000,
 ): Promise<BrowserState> {
 	return asAgentStep(id, async () => {
 		const held = (): BrowserState => ({ url: command.url ?? '', title: '', status: null, problem: 'The user has taken over the computer or the browser step was stopped. Stop and report; continue after the computer is handed back.', errors: [], screenshot: null, snapshot: '' });
@@ -150,14 +146,24 @@ export function browseOnComputer(
 		const machine = await untilAborted(getMachine(), signal);
 		if (stopped() || userHasControl(id)) return held();
 		let notice: string | undefined;
+		let desktopReady = false;
+		const wait = new AbortController();
+		const deadline = setTimeout(() => wait.abort(new Error('The desktop did not become ready in time.')), desktopWaitMs);
+		const desktopSignal = signal ? AbortSignal.any([signal, wait.signal]) : wait.signal;
 		try {
-			await services.desktop(id, machine, signal);
+			await untilAborted(services.desktop(id, machine, desktopSignal), desktopSignal);
+			desktopReady = true;
 		} catch (error) {
-			if (stopped() || userHasControl(id)) return held();
-			notice = `The Computer screen could not start; this browser step runs headless and cannot be watched in Computer. ${error instanceof Error ? error.message : String(error)}`;
-		}
-		if (stopped() || userHasControl(id)) return held();
+			if (stopped() || signal?.aborted || userHasControl(id)) return held();
+			notice = `The Computer screen was not ready; this browser step may run headless and may not be visible in Computer. ${error instanceof Error ? error.message : String(error)}`;
+		} finally { clearTimeout(deadline); }
+		if (stopped() || signal?.aborted || userHasControl(id)) return held();
 		try {
+			if (desktopReady && services.show && await services.show(machine, signal)) {
+				if (command.action !== 'open') return { ...held(), problem: 'The headless browser was closed to show it on the Computer screen. Open the page again; its previous tab state was lost.' };
+				notice = 'The previous headless browser was closed to show the new page on the Computer screen.';
+			}
+			if (stopped() || signal?.aborted || userHasControl(id)) return held();
 			const result = await services.browser(machine, command, signal);
 			return notice ? { ...result, notice } : result;
 		} catch (error) {

@@ -230,7 +230,7 @@ export type BrowserState = {
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
 function browserFiles(machine: Machine) {
 	const base = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}`;
-	return { socket: `${base}.sock`, pid: `${base}.pid`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
+	return { socket: `${base}.sock`, pid: `${base}.pid`, mode: `${base}.mode`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
 }
 
 /** The browser could not be stopped, so nobody else may safely drive its screen yet. */
@@ -238,7 +238,7 @@ export class BrowserStopError extends Error {}
 
 /** Stops the machine's browser and waits for it to leave before another driver can act. */
 export async function closeBrowser(machine: Machine): Promise<void> {
-	const { pid, socket } = browserFiles(machine);
+	const { pid, socket, mode } = browserFiles(machine);
 	const result = await machine.exec(`
 if [ -f ${pid} ]; then
   p=$(cat ${pid})
@@ -250,8 +250,20 @@ if [ -f ${pid} ]; then
   if alive; then echo 'Browser did not stop' >&2; exit 1; fi
   rm -f ${pid}
 fi
-rm -f ${socket}`);
+rm -f ${socket} ${mode}`);
 	if (result.exitCode !== 0) throw new BrowserStopError(result.stderr.trim() || 'The sandbox browser did not stop.');
+}
+
+/** Move a headless browser to a newly ready screen only between queued steps. */
+export async function showBrowserOnDesktop(machine: Machine, signal?: AbortSignal): Promise<boolean> {
+	const { pid, mode } = browserFiles(machine);
+	signal?.throwIfAborted();
+	const result = await machine.exec(`if [ -f ${pid} ] && [ "$(cat ${mode} 2>/dev/null)" != screen ]; then echo switch; fi`, { signal });
+	signal?.throwIfAborted();
+	if (!new TextDecoder().decode(result.stdout).includes('switch')) return false;
+	await closeBrowser(machine);
+	signal?.throwIfAborted();
+	return true;
 }
 
 /**
@@ -280,7 +292,7 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 			signal?.throwIfAborted();
 			await run(
 				machine,
-				`${onScreen ? `DISPLAY=${layout.display} ` : 'env -u DISPLAY '}NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
+				`${onScreen ? `DISPLAY=${layout.display} ` : 'env -u DISPLAY '}NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; printf '%s' ${onScreen ? 'screen' : 'headless'} > ${files.mode}; ` +
 					`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
 				{ signal },
 			);
