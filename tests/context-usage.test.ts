@@ -10,7 +10,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-context-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { compactionFor, compactionReserve, contextView, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
+const { compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
 const { backfillLatestInputs, recordLatestInput } = await import('../src/services/latest-input.ts');
 const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/subscriptions.ts');
 const { setProviders } = await import('../src/providers/index.ts');
@@ -89,12 +89,19 @@ test('a ceiling compacts a large window sooner, and leaves a window that fills f
 	assert.equal(compactionReserve(1_000_000, 384_000, null), 20_000, 'no ceiling waits for the window');
 
 	const models = [model('opencode-go/deepseek-v4-pro', 1_000_000, 384_000), model('openai/gpt-6-luna', 200_000, 128_000), model('cursor/grok-4.7', 0, null)];
-	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 200_000, models), { reserveTokens: 800_000 });
-	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro#sort=price', 400_000, models), { reserveTokens: 600_000 }, 'a route is no model of its own');
-	assert.equal(compactionFor('opencode-go/deepseek-v4-pro', null, models), undefined, 'the runtime keeps its own point');
-	assert.equal(compactionFor('openai/gpt-6-luna', 200_000, models), undefined, 'the window fills first');
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 200_000, models), { reserveTokens: 800_000, keepRecentTokens: 40_000 });
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro#sort=price', 400_000, models), { reserveTokens: 600_000, keepRecentTokens: 40_000 }, 'a route is no model of its own');
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', null, models), { keepRecentTokens: 40_000 }, 'the runtime keeps its own point');
+	assert.deepEqual(compactionFor('openai/gpt-6-luna', 200_000, models), { keepRecentTokens: 36_000 }, 'the window fills first');
 	assert.equal(compactionFor('cursor/grok-4.7', 200_000, models), undefined, 'an unknown window is left to the runtime');
 	assert.equal(compactionFor('openrouter/unlisted', 200_000, models), undefined);
+});
+
+test('a compaction keeps a fifth of the context it compacts at, between the runtime’s 8K and 40K', () => {
+	assert.equal(keptAfterCompaction(100_000), 20_000);
+	assert.equal(keptAfterCompaction(180_000), 36_000);
+	assert.equal(keptAfterCompaction(800_000), 40_000);
+	assert.equal(keptAfterCompaction(20_000), 8_000);
 });
 
 test('the main conversation’s last call sets the task’s context; subagents, the reviewer and compaction leave it alone', async () => {

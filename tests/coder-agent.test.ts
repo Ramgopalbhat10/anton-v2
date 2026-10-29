@@ -24,6 +24,16 @@ test('workspace agents can check the actual Preview URL and are instructed to ve
 	assert.match(hint, /in: sandbox/);
 	assert.match(hint, /or prove iframe embedding/);
 	assert.equal((source.match(/\n\tPREVIEW_HINT,/g) ?? []).length, 2);
+	// The Preview check rides on the UI check's browser run, never a run of its own.
+	assert.match(hint, /one run checks the rendered app, its console errors and Preview together/);
+	assert.match(hint, /Do not start a browser run only to look at Preview once check_preview passes/);
+});
+
+test('workspace agents batch the edits they know and do not run the same tests twice', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /const EDIT_HINT =\n\t'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list/);
+	assert.equal((source.match(/\n\tEDIT_HINT,/g) ?? []).length, 2);
+	assert.match(source, /Never run the same tests both ways/);
 });
 
 test('the browser requires an explicit fresh open and retains its notice after autopilot', () => {
