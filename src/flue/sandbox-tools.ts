@@ -13,6 +13,35 @@ export type ImageSight = { sees: () => Promise<boolean>; describe: (bytes: Uint8
 
 const text = (value: string) => ({ type: 'text' as const, text: value });
 
+const ascii = (bytes: Uint8Array, from: number, length: number) => String.fromCharCode(...bytes.subarray(from, from + length));
+
+/**
+ * Whether an image's bytes end where its format says it ends. A screenshot read
+ * while it was written, or cut short on its way out of the sandbox, otherwise
+ * reaches the model as a broken picture: the provider refuses the whole request
+ * ("could not parse image"), and as the picture stays in the conversation, every
+ * later call of that agent fails the same way.
+ */
+export function isWholeImage(bytes: Uint8Array, mimeType: string): boolean {
+	switch (mimeType) {
+		case 'image/png':
+			// The last chunk is IEND: a zero length, its type, and its CRC.
+			return bytes.length >= 20 && bytes[0] === 0x89 && ascii(bytes, 1, 3) === 'PNG' && ascii(bytes, bytes.length - 8, 4) === 'IEND';
+		case 'image/jpeg': {
+			// Ends with EOI, though some writers pad a few bytes after it.
+			const tail = bytes.subarray(Math.max(2, bytes.length - 64));
+			return bytes[0] === 0xff && bytes[1] === 0xd8 && tail.some((byte, index) => byte === 0xff && tail[index + 1] === 0xd9);
+		}
+		case 'image/gif':
+			return ascii(bytes, 0, 3) === 'GIF' && bytes[bytes.length - 1] === 0x3b;
+		case 'image/webp':
+			// RIFF gives the size of what follows its first 8 bytes.
+			return ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP' && new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true) + 8 <= bytes.length;
+		default:
+			return true;
+	}
+}
+
 /**
  * Flue's standard file and shell tools, with a `read` that shows an image.
  * The standard one reads every file as text, so the agent could never look at
@@ -35,6 +64,9 @@ export function sandboxTools(sight: ImageSight): SandboxToolFactory {
 				const details = { path, size: bytes.length };
 				if (bytes.length > MAX_IMAGE_BYTES) {
 					return { content: [text(`${path} is an image of ${(bytes.length / 1024 / 1024).toFixed(1)} MB, too large to look at. Make a smaller copy (with ImageMagick or Python) and read that.`)], details };
+				}
+				if (!isWholeImage(bytes, mimeType)) {
+					return { content: [text(`${path} is not a whole ${mimeType.slice(6).toUpperCase()} (${bytes.length} bytes): it may still be being written, or is damaged. Read it again in a moment, or take the screenshot again.`)], details };
 				}
 				if (await sight.sees()) return { content: [text(`${path}, an image:`), { type: 'image', data: Buffer.from(bytes).toString('base64'), mimeType }], details };
 				const words = await sight.describe(bytes, mimeType).catch((error: unknown) => `No vision model could describe it: ${error instanceof Error ? error.message : String(error)}`);

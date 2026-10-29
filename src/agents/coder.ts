@@ -419,16 +419,18 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			if (rest.action === 'do') {
 				if (!goal?.trim()) return { output: { problem: 'do needs a goal: the outcome the page should reach.' } };
 				let openingNotice: string | undefined;
+				let opened: BrowserState | undefined;
 				if (rest.url) {
-					state = await go({ action: 'open', url: rest.url, fresh: rest.fresh });
-					if (state.problem) return { output: { ...forAgent(state), snapshot: pageForAgent(`${id}:${place}`, state.url, state.snapshot) } };
-					openingNotice = state.notice;
+					opened = await go({ action: 'open', url: rest.url, fresh: rest.fresh });
+					if (opened.problem) return { output: { ...forAgent(opened), snapshot: pageForAgent(`${id}:${place}`, opened.url, opened.snapshot) } };
+					openingNotice = opened.notice;
 				}
 				const result = await autopilot(
 					id,
 					go,
 					{ goal, values, confirm, maxActions },
-					{ signal, onAction: (actions, decisions, cost) => void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost }) },
+					// The page it opened is where the run starts, without a look at it again.
+					{ signal, start: opened, onAction: (actions, decisions, cost) => void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost }) },
 				);
 				driven = { outcome: result.outcome, actions: result.actions, decisions: result.decisions, cost: result.cost };
 				state = result.state;

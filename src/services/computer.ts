@@ -46,31 +46,51 @@ export async function isDesktopRunning(machine: Machine, signal?: AbortSignal): 
 }
 
 /** One desktop startup per machine; individual waiters may stop waiting without cancelling it. */
-const desktopStarts = new Map<string, Promise<void>>();
+const desktopStarts = new Map<string, Promise<boolean>>();
 
-export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Promise<void> {
+/**
+ * When each machine's desktop was last seen running. Every sandbox browser step
+ * makes sure of the desktop, and asking the machine is a command each time (most
+ * of a second on Modal), so one seen this recently is taken as still running.
+ * Turning the computer off forgets it.
+ */
+const desktopSeen = new Map<string, number>();
+const DESKTOP_SEEN_MS = 30_000;
+const desktopKey = (machine: Machine) => `${machine.id}:${machine.root}`;
+
+/** Asks the machine again at the next step whether its desktop runs. */
+export const forgetDesktop = (machine: Machine) => void desktopSeen.delete(desktopKey(machine));
+
+/** Starts the desktop unless it runs; says whether it started it. */
+export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Promise<boolean> {
 	signal?.throwIfAborted();
-	const key = `${machine.id}:${machine.root}`;
+	const key = desktopKey(machine);
+	if (Date.now() - (desktopSeen.get(key) ?? 0) < DESKTOP_SEEN_MS) return false;
 	let start = desktopStarts.get(key);
 	if (!start) {
 		start = (async () => {
-			if (await isDesktopRunning(machine)) return;
+			if (await isDesktopRunning(machine)) {
+				desktopSeen.set(key, Date.now());
+				return false;
+			}
 			await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000 });
 			await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000 });
+			desktopSeen.set(key, Date.now());
+			return true;
 		})();
 		desktopStarts.set(key, start);
 		const current = start;
 		void current.finally(() => { if (desktopStarts.get(key) === current) desktopStarts.delete(key); }).catch(() => undefined);
 	}
 	// The shared startup must not close or otherwise alter a browser after a waiter leaves.
-	await untilAborted(start, signal);
+	return untilAborted(start, signal);
 }
 
-/** Start the screen for an agent and let an already-open Computer panel find it. */
+/** Start the screen for an agent and, when it was not running, let an already-open Computer panel find it. */
 export async function ensureAgentDesktop(id: string, machine: Machine, signal?: AbortSignal): Promise<void> {
-	await ensureDesktop(machine, signal);
+	const started = await ensureDesktop(machine, signal);
 	signal?.throwIfAborted();
-	changed(id);
+	if (started) changed(id);
 }
 
 /** The display the machine's desktop is on, for programs started on it. */
@@ -222,6 +242,7 @@ export async function stopComputer(id: string): Promise<ComputerView> {
 	userControl.delete(id);
 	// The sandbox's browser is on the screen; closed, it opens headless at the agent's next step.
 	await closeBrowser(machine);
+	forgetDesktop(machine);
 	await run(machine, stopDesktop(desktopLayout(machine.root)), { timeoutMs: 30_000 });
 	unsafeScreens.delete(id);
 	changed(id);

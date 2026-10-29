@@ -51,6 +51,48 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 		if (!command.target) throw new Error('This action needs a target');
 		return page.locator(command.target).first();
 	};
+	// Requests the step sets off. Playwright's networkidle fires once per load, so after a click on a page that
+	// already idled it answers at once, before what the click fetched is drawn; and on a page that keeps polling it
+	// never fires, so every step there waited out the whole timeout.
+	const pending = new Map();
+	let lastNetwork = Date.now();
+	const started = (request) => {
+		lastNetwork = Date.now();
+		if (!['eventsource', 'websocket'].includes(request.resourceType())) pending.set(request, Date.now());
+	};
+	const ended = (request) => {
+		lastNetwork = Date.now();
+		pending.delete(request);
+	};
+	page.on('request', started);
+	page.on('requestfinished', ended);
+	page.on('requestfailed', ended);
+	// How long the page's DOM has gone unchanged, from an observer the first look at a document leaves in it.
+	const domQuietFor = () =>
+		page
+			.evaluate(() => {
+				const seen = window.__antonMutations;
+				if (seen) return performance.now() - seen.last;
+				const record = { last: performance.now() };
+				window.__antonMutations = record;
+				new MutationObserver(() => { record.last = performance.now(); }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+				return 0;
+			})
+			.catch(() => 0);
+	await domQuietFor();
+	// Settled once nothing it asked for is in flight and the network has been quiet a moment, for the page to draw
+	// what came back; or, on a page whose polling keeps the network busy, once a second has passed and its DOM has
+	// been still for half of one. A request open over two seconds is taken for a live connection, which never ends.
+	const settle = async () => {
+		const begun = Date.now();
+		while (Date.now() - begun < 5000) {
+			const now = Date.now();
+			const busy = [...pending.values()].some((at) => now - at < 2000);
+			if (!busy && now - lastNetwork >= 300) return;
+			if (!busy && now - begun >= 1000 && (await domQuietFor()) >= 500) return;
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+	};
 	let status = null;
 	let problem = null;
 	try {
@@ -74,8 +116,11 @@ export const BROWSER_STEP = `async function browserStep(page, command) {
 		problem = String((error && error.message) || error).split('\\n')[0];
 	}
 	// Only a step that can load a page waits for it to settle; scrolling, hovering, waiting and looking answer at once.
-	if (!['scroll', 'hover', 'wait', 'look'].includes(command.action)) await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+	if (!['scroll', 'hover', 'wait', 'look'].includes(command.action)) await settle();
 	const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '');
+	page.off('request', started);
+	page.off('requestfinished', ended);
+	page.off('requestfailed', ended);
 	const view = await page
 		.evaluate(() => {
 			const at = [scrollX + ',' + scrollY];

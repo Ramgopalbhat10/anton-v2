@@ -67,6 +67,12 @@ const FILL = 0.6;
 /** A click judged at least this likely to buy, send, post or delete stops for confirmation. */
 const RISKY = 0.5;
 
+/**
+ * Controls that move around a page or choose among its parts, never commit anything: a click on one is asked
+ * about only for risky words. Any other kind of control (a button, a menu item, a checkbox) is always asked about.
+ */
+const NAVIGATES = new Set(['link', 'tab', 'treeitem']);
+
 /** Words on a link that make it worth asking about before clicking; any other kind of control is always asked about. */
 const RISKY_WORDS =
 	/\b(buy|pay|purchase|order|checkout|check out|place|submit|send|post|publish|delete|remove|destroy|confirm|subscribe|unsubscribe|book|reserve|transfer|donate|sign up|register|create|save|apply|accept|tweet|reply|comment|invite|share|cancel|archive|merge|deploy|approve|install|withdraw|deposit|logout|log out|sign out)\b/i;
@@ -115,7 +121,12 @@ export async function autopilot(
 	id: string,
 	step: (command: BrowserInput) => Promise<BrowserState>,
 	input: AutopilotInput,
-	options: { signal?: AbortSignal; onAction?: (actions: AutopilotAction[], decisions: number, cost: number) => void } = {},
+	options: {
+		signal?: AbortSignal;
+		onAction?: (actions: AutopilotAction[], decisions: number, cost: number) => void;
+		/** The page as the step just before left it (an open), so the run need not look at it again first. */
+		start?: BrowserState;
+	} = {},
 ): Promise<AutopilotResult> {
 	const values = Object.entries(input.values ?? {}).filter(([, value]) => typeof value === 'string');
 	const typed = new Set<string>();
@@ -124,7 +135,9 @@ export async function autopilot(
 	let decisions = 0;
 	let cost = 0;
 	let unchanged = 0;
-	let state = await step({ action: 'look' });
+	let state = options.start && !options.start.problem ? options.start : await step({ action: 'look' });
+	// Elements judged safe to click in this run, so clicking one again ("Add one", twice) asks nothing.
+	const judgedSafe = new Set<string>();
 
 	const ask = async (askState: Record<string, unknown>, questions: Record<string, Question>): Promise<Record<string, Answer>> => {
 		const decision = await consult(id, askState, questions, options.signal);
@@ -228,12 +241,14 @@ export async function autopilot(
 				continue;
 			}
 			const confirmed = Boolean(input.confirm?.trim()) && element.label.toLowerCase().includes(input.confirm!.trim().toLowerCase());
-			if (!confirmed && (element.role !== 'link' || mayBeIrreversible(element.label))) {
+			const asks = (!NAVIGATES.has(element.role) || mayBeIrreversible(element.label)) && !judgedSafe.has(`${state.url}\n${element.label}`);
+			if (!confirmed && asks) {
 				const risky = await ask(
 					{ goal: input.goal.slice(0, 2000), url: state.url, title: state.title, element: element.label, page: state.snapshot.slice(0, PAGE_CHARS / 2) },
 					{ risky: { type: 'yes-no', instructions: IRREVERSIBLE } },
 				);
 				if ((yesOf(risky.risky) ?? 1) >= RISKY) return end('needs_confirmation', element.label);
+				judgedSafe.add(`${state.url}\n${element.label}`);
 			}
 			const changed = await act({ action: 'click', target: element.selector });
 			const failed = Boolean(state.problem);
