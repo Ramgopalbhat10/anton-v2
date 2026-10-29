@@ -196,7 +196,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 					{yours ? (
 						<>
 							<Icon icon={Hand} size={12} className="shrink-0 text-(--accent-text)" />
-							<span className="truncate">You have the computer. The agent waits until you give it back.</span>
+							<span className="truncate">You have the computer. The agent cannot use it until you give it back.</span>
 						</>
 					) : computer.agentBusy ? (
 						<>

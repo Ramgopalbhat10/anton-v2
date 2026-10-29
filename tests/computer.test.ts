@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -13,8 +15,10 @@ const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
-const { DESKTOP_TOOLS, desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
-const { act, asAgentStep, computerScreenshot, computerView, connectComputer, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
+const { DESKTOP_TOOLS, desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN } = await import('../src/core/desktop.ts');
+const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectComputer, ensureDesktop, focusedWindow, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
+const { BrowserStopError, closeBrowser } = await import('../src/services/browser.ts');
+const { untilAborted, withinDeadline } = await import('../src/services/step-deadline.ts');
 const { liveMachine } = await import('../src/services/workspace.ts');
 const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/vision.ts');
 const { openRouterVision } = await import('../src/providers/openrouter/vision.ts');
@@ -40,6 +44,13 @@ const hasDesktop = (() => {
 	} catch {
 		return false;
 	}
+})();
+
+const hasBrowser = (() => {
+	try {
+		execSync(`NODE_PATH="$(npm root -g)" node -e "require('fs').accessSync(require('playwright').chromium.executablePath())"`, { stdio: 'ignore', shell: '/bin/bash' });
+		return true;
+	} catch { return false; }
 })();
 
 after(() => {
@@ -129,6 +140,42 @@ test('Turn off closes the desktop and leaves the sandbox running; Start computer
 	assert.equal(on.running, true);
 });
 
+test('sandbox browser tests a real app on the computer screen and keeps its tab', { skip: !(hasDesktop && hasBrowser) && 'needs desktop packages and Playwright Chromium' }, async (t) => {
+	const server = createServer((_req, res) => {
+		res.writeHead(200, { 'content-type': 'text/html' });
+		res.end('<title>Visible test page</title><p id="count">0</p><button onclick="document.querySelector(\'#count\').textContent++">Add one</button>');
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	t.after(() => server.close());
+	const port = (server.address() as AddressInfo).port;
+	const machine = await liveMachine('pc');
+	assert.ok(machine);
+	await stopComputer('pc');
+	assert.equal((await computerView('pc')).running, false);
+	const changes: string[] = [];
+	const unsubscribe = onChange((change) => change.kind === 'task' && changes.push(change.what));
+	try {
+		const page = await browseOnComputer('pc', async () => machine, { action: 'open', url: `http://127.0.0.1:${port}/` }, () => false);
+		assert.equal(page.problem, null);
+		assert.equal(page.title, 'Visible test page');
+		assert.equal((await computerView('pc')).running, true);
+		assert.ok(changes.includes('computer'), 'the panel hears the agent started the desktop');
+		assert.match(await focusedWindow(machine) ?? '', /Visible test page/);
+		const clicked = await browseOnComputer('pc', async () => machine, { action: 'click', target: 'role=button[name="Add one"]' }, () => false);
+		assert.match(clicked.snapshot, /1/);
+		const again = await browseOnComputer('pc', async () => machine, { action: 'look' }, () => false);
+		assert.equal(again.title, 'Visible test page');
+		assert.match(again.snapshot, /1/);
+		await setComputerControl('pc', 'user');
+		const held = await browseOnComputer('pc', async () => machine, { action: 'look' }, () => false);
+		assert.match(held.problem ?? '', /taken over/);
+		await setComputerControl('pc', 'agent');
+	} finally {
+		unsubscribe();
+		await closeBrowser(machine);
+	}
+});
+
 test('steps called at once run one after another, in the order they were called', async () => {
 	const order: string[] = [];
 	const step = (name: string, ms: number) => asAgentStep('pc', async () => {
@@ -148,6 +195,297 @@ test('taking over makes the agent wait until it is handed back', async () => {
 	assert.equal(userHasControl('pc'), true);
 	assert.equal((await setComputerControl('pc', 'agent')).userControl, false);
 	assert.equal(userHasControl('pc'), false);
+});
+
+test('a headless multi-step flow keeps its page and cookies when the desktop becomes ready', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const server = createServer((request, response) => {
+		response.writeHead(200, { 'content-type': 'text/html', ...(request.url === '/' ? { 'set-cookie': 'session=active; Path=/' } : {}) });
+		response.end(request.url === '/' ? `<title>Headless fallback</title><label>Name <input id="name"></label><button onclick="document.querySelector('#result').textContent=document.querySelector('#name').value+' '+document.cookie">Check session</button><p id="result">Waiting</p>` : `<title>Inspect session</title><p id="result"></p><script>document.querySelector('#result').textContent=document.cookie || 'no cookie'</script>`);
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	t.after(() => server.close());
+	const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+	const machine = await liveMachine('pc');
+	assert.ok(machine);
+	await closeBrowser(machine);
+	const fake = {
+		...machine,
+		exec: (command: string, options?: import('../src/core/ports.ts').ExecOptions) => {
+			if (command === desktopRunning(desktopLayout(machine.root))) return Promise.resolve({ stdout: new Uint8Array(), stderr: '', exitCode: 1 });
+			if (command === ENSURE_DESKTOP) return Promise.resolve({ stdout: new Uint8Array(), stderr: 'Desktop packages unavailable', exitCode: 3 });
+			return machine.exec(command, options);
+		},
+	};
+	try {
+		const result = await browseOnComputer('missing-desktop', async () => fake, { action: 'open', url }, () => false);
+		assert.equal(result.title, 'Headless fallback');
+		assert.equal(result.problem, null);
+		assert.match(result.notice ?? '', /may run headless/);
+		const typed = await browseOnComputer('missing-desktop', async () => fake, { action: 'type', target: '#name', text: 'Alice' }, () => false);
+		assert.equal(typed.problem, null);
+		if (hasDesktop) {
+			const looked = await browseOnComputer('missing-desktop', async () => machine, { action: 'look' }, () => false);
+			assert.equal(looked.problem, null);
+			assert.equal(looked.title, 'Headless fallback');
+			const clicked = await browseOnComputer('missing-desktop', async () => machine, { action: 'click', target: 'role=button[name="Check session"]' }, () => false);
+			assert.equal(clicked.problem, null);
+			assert.match(clicked.snapshot, /Alice session=active/);
+			// An ordinary navigation keeps the same browser context and cookies.
+			const navigated = await browseOnComputer('missing-desktop', async () => machine, { action: 'open', url: `${url}/inspect` }, () => false);
+			assert.match(navigated.snapshot, /session=active/);
+			assert.equal(navigated.notice, undefined);
+			// Only an explicitly fresh open discards the session to move onto the screen.
+			const reopened = await browseOnComputer('missing-desktop', async () => machine, { action: 'open', url: `${url}/inspect`, fresh: true }, () => false);
+			assert.equal(reopened.title, 'Inspect session');
+			assert.match(reopened.snapshot, /no cookie/);
+			assert.match(reopened.notice ?? '', /cookies, history and tab state were lost/);
+			assert.match(await focusedWindow(machine) ?? '', /Inspect session/);
+		}
+	} finally { await closeBrowser(machine); }
+});
+
+test('only an explicitly fresh open may move a headless session onto the screen', async () => {
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	const calls: string[] = [];
+	const services = {
+		desktop: async () => {},
+		show: async () => { calls.push('switch'); return true; },
+		browser: async (_machine: import('../src/core/ports.ts').Machine, command: import('../src/services/browser.ts').BrowserInput) => {
+			calls.push(command.action);
+			return { url: command.url ?? '', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: 'App' };
+		},
+	};
+	for (const command of [{ action: 'look' as const }, { action: 'click' as const, target: 'button' }, { action: 'open' as const, url: 'http://localhost/next' }]) {
+		const result = await browseOnComputer('preserve', async () => machine, command, () => false, services);
+		assert.equal(result.problem, null);
+		assert.equal(result.notice, undefined);
+	}
+	assert.deepEqual(calls, ['look', 'click', 'open']);
+	const fresh = await browseOnComputer('preserve', async () => machine, { action: 'open', url: 'http://localhost/new', fresh: true }, () => false, services);
+	assert.deepEqual(calls, ['look', 'click', 'open', 'switch', 'open']);
+	assert.match(fresh.notice ?? '', /cookies, history and tab state were lost/);
+});
+
+test('the browser falls back to headless when desktop packages are unavailable', async () => {
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	let attempts = 0;
+	const result = await browseOnComputer('fallback', async () => machine, { action: 'open', url: 'http://localhost:3000' }, () => false, {
+		desktop: async () => { throw new Error('The computer needs desktop packages in the sandbox.'); },
+		browser: async (_machine, command) => { attempts++; return { url: command.url!, title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: 'App' }; },
+	});
+	assert.equal(attempts, 1);
+	assert.equal(result.status, 200);
+	assert.match(result.notice ?? '', /may run headless.*may not be visible/);
+});
+
+test('a stopped sandbox browser step does not start a machine or desktop', async () => {
+	let started = false;
+	const state = await browseOnComputer('pc', async () => { started = true; throw new Error('must not start'); }, { action: 'look' }, () => true);
+	assert.equal(started, false);
+	assert.ok(state.problem);
+});
+
+test('cancelling desktop startup prevents the browser action and releases takeover', async () => {
+	const controller = new AbortController();
+	let browserCalled = false;
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	const work = browseOnComputer('pc', async () => machine, { action: 'open', url: 'http://localhost:3000' }, () => controller.signal.aborted, {
+		desktop: async (_id, _machine, signal) => new Promise<void>((_resolve, reject) => signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })),
+		browser: async () => { browserCalled = true; throw new Error('must not run'); },
+	}, controller.signal);
+	await assert.rejects(withinDeadline(work, 30, undefined, () => controller.abort()), /given up/);
+	await work.catch(() => undefined);
+	assert.equal(browserCalled, false);
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	await setComputerControl('pc', 'agent');
+});
+
+test('an aborted browser joining an independent desktop start releases its queue without a late browser close', async () => {
+	let release!: () => void;
+	let installing!: () => void;
+	const started = new Promise<void>((resolve) => { installing = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const commands: string[] = [];
+	const machine = {
+		id: 'shared-start', root: '/tmp/shared-start',
+		exec: async (command: string) => {
+			commands.push(command);
+			if (command === ENSURE_DESKTOP) { installing(); await gate; }
+			return { stdout: new Uint8Array(), stderr: '', exitCode: command === desktopRunning(desktopLayout('/tmp/shared-start')) ? 1 : 0 };
+		},
+	} as unknown as import('../src/core/ports.ts').Machine;
+	const independent = ensureDesktop(machine);
+	await started;
+	const controller = new AbortController();
+	let acted = false;
+	let joined!: () => void;
+	const joinedStart = new Promise<void>((resolve) => { joined = resolve; });
+	const work = browseOnComputer('pc', async () => machine, { action: 'look' }, () => controller.signal.aborted, {
+		desktop: async (_id, m, signal) => { joined(); return ensureDesktop(m, signal); },
+		browser: async () => { acted = true; throw new Error('must not act'); },
+	}, controller.signal, 5000);
+	await joinedStart;
+	controller.abort();
+	await work.catch(() => undefined);
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	release();
+	await independent;
+	assert.equal(acted, false);
+	assert.equal(commands.filter((command) => command === ENSURE_DESKTOP).length, 1);
+	assert.ok(!commands.some((command) => command.includes('anton-browser-')), 'late desktop startup never closes the browser');
+	await setComputerControl('pc', 'agent');
+});
+
+test('a late shared desktop start does not close a fallback browser during its action', async () => {
+	let finishInstall!: () => void;
+	let installStarted!: () => void;
+	let finishBrowser!: () => void;
+	let browserStarted!: () => void;
+	const installed = new Promise<void>((resolve) => { finishInstall = resolve; });
+	const installing = new Promise<void>((resolve) => { installStarted = resolve; });
+	const browserGate = new Promise<void>((resolve) => { finishBrowser = resolve; });
+	const browsing = new Promise<void>((resolve) => { browserStarted = resolve; });
+	const commands: string[] = [];
+	const machine = {
+		id: 'late-start', root: '/tmp/late-start',
+		exec: async (command: string) => {
+			commands.push(command);
+			if (command === ENSURE_DESKTOP) { installStarted(); await installed; }
+			return { stdout: new Uint8Array(), stderr: '', exitCode: command === desktopRunning(desktopLayout('/tmp/late-start')) ? 1 : 0 };
+		},
+	} as unknown as import('../src/core/ports.ts').Machine;
+	const independent = ensureDesktop(machine);
+	await installing;
+	const work = browseOnComputer('late-start', async () => machine, { action: 'open', url: 'http://localhost:3000' }, () => false, {
+		desktop: async (_id, m, signal) => ensureDesktop(m, signal),
+		browser: async () => { browserStarted(); await browserGate; return { url: '', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: '' }; },
+	}, undefined, 30);
+	await browsing;
+	finishInstall();
+	await independent;
+	assert.ok(!commands.some((command) => command.includes('anton-browser-')), 'startup does not close the in-flight browser');
+	finishBrowser();
+	assert.equal((await work).status, 200);
+});
+
+test('a slow optional desktop attempt falls back within the browser budget', async () => {
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	let finish!: () => void;
+	const start = new Promise<void>((resolve) => { finish = resolve; });
+	let calls = 0;
+	const result = await browseOnComputer('slow-desktop', async () => machine, { action: 'open', url: 'http://localhost:3000' }, () => false, {
+		desktop: async () => start,
+		browser: async () => { calls++; return { url: 'http://localhost:3000', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: 'App' }; },
+	}, undefined, 30);
+	assert.equal(result.status, 200);
+	assert.match(result.notice ?? '', /may run headless/);
+	assert.equal(calls, 1);
+	finish();
+	await start;
+	assert.equal(calls, 1, 'the late desktop start does not replay or close the browser');
+});
+
+test('a timed-out real browser action closes the browser before takeover', { skip: !(hasDesktop && hasBrowser) && 'needs desktop packages and Playwright Chromium' }, async () => {
+	const machine = await liveMachine('pc');
+	assert.ok(machine);
+	const open = await browseOnComputer('pc', async () => machine, { action: 'open', url: 'data:text/html,<title>Cancellation test</title>' }, () => false);
+	assert.equal(open.title, 'Cancellation test');
+	const controller = new AbortController();
+	const work = browseOnComputer('pc', async () => machine, { action: 'click', target: 'text=Missing forever' }, () => controller.signal.aborted, undefined, controller.signal);
+	await assert.rejects(withinDeadline(work, 1000, undefined, () => controller.abort()), /given up/);
+	await work.catch(() => undefined);
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	await setComputerControl('pc', 'agent');
+	const next = await browseOnComputer('pc', async () => machine, { action: 'open', url: 'data:text/html,<title>New tab</title>' }, () => false);
+	assert.equal(next.title, 'New tab');
+	await closeBrowser(machine);
+});
+
+test('a timed-out read-only vision wait releases the screen without a late action', async () => {
+	const controller = new AbortController();
+	let finish!: () => void;
+	let acted = false;
+	const slowVision = new Promise<void>((resolve) => { finish = resolve; });
+	const work = asAgentStep('pc', async () => {
+		await untilAborted(slowVision, controller.signal);
+		controller.signal.throwIfAborted();
+		acted = true;
+	});
+	await assert.rejects(withinDeadline(work, 30, undefined, () => controller.abort()), /given up/);
+	await work.catch(() => undefined);
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	finish();
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(acted, false);
+	await setComputerControl('pc', 'agent');
+});
+
+test('a timed-out browser action is cancelled before takeover is granted', async () => {
+	const controller = new AbortController();
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	let running = false;
+	let cleaned = false;
+	const work = browseOnComputer('pc', async () => machine, { action: 'look' }, () => controller.signal.aborted, {
+		desktop: async () => {},
+		browser: async (_machine, _command, signal) => {
+			running = true;
+			await new Promise<void>((resolve) => signal!.addEventListener('abort', () => { running = false; cleaned = true; resolve(); }, { once: true }));
+			return { url: '', title: '', status: null, problem: null, errors: [], screenshot: null, snapshot: '' };
+		},
+	}, controller.signal);
+	await assert.rejects(withinDeadline(work, 30, undefined, () => controller.abort()), /given up/);
+	assert.equal(running, false);
+	assert.equal(cleaned, true);
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	await setComputerControl('pc', 'agent');
+});
+
+test('failed browser termination fences the screen instead of granting takeover', async () => {
+	await insertSession({ id: 'unsafe-pc', projectId: null, title: 'Unsafe screen', model: 'x', reasoning: null, branch: '', baseBranch: '', baseSha: '', planMode: false });
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	await assert.rejects(browseOnComputer('unsafe-pc', async () => machine, { action: 'look' }, () => false, {
+		desktop: async () => {},
+		browser: async () => { throw new BrowserStopError('did not stop'); },
+	}), /did not stop/);
+	await assert.rejects(setComputerControl('unsafe-pc', 'user'), /could not be stopped/);
+	assert.equal(userHasControl('unsafe-pc'), true);
+});
+
+test('takeover fails closed promptly if a screen step does not stop', async () => {
+	let release!: () => void;
+	let started!: () => void;
+	const ready = new Promise<void>((resolve) => { started = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const work = asAgentStep('pc', async () => { started(); await gate; });
+	await ready;
+	await assert.rejects(setComputerControl('pc', 'user', 30), /still stopping/);
+	assert.equal((await computerView('pc')).userControl, false);
+	release();
+	await work;
+	assert.equal((await setComputerControl('pc', 'user')).userControl, true);
+	await setComputerControl('pc', 'agent');
+});
+
+test('takeover waits for an in-flight step and blocks queued steps before granting input', async () => {
+	let release!: () => void;
+	let started!: () => void;
+	const ready = new Promise<void>((resolve) => { started = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const first = asAgentStep('pc', async () => { started(); await gate; });
+	await ready;
+	const takeover = setComputerControl('pc', 'user');
+	// Let the task lookup finish and mark takeover pending while the first step is still running.
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(userHasControl('pc'), true);
+	let acknowledged = false;
+	void takeover.then(() => { acknowledged = true; });
+	const second = asAgentStep('pc', async () => userHasControl('pc') ? 'held' : 'acted');
+	assert.equal(acknowledged, false);
+	release();
+	await first;
+	assert.equal(await second, 'held');
+	assert.equal((await takeover).userControl, true);
+	await setComputerControl('pc', 'agent');
 });
 
 test('the vision model finds what the agent named, kept on the screen, and says what the screen shows', async () => {

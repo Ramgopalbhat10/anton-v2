@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, Globe, Play, RotateCw } from 'lucide-react';
+import { ArrowUpRight, Globe, Monitor, Play, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { useResume } from '@/components/source-bar';
 import { LinkArt, SandboxArt } from '@/components/illustrations';
@@ -40,7 +40,7 @@ function NotRunning({ sessionId }: { sessionId: string }) {
 }
 
 /** The app the agent is running, through the sandbox's public URL for each preview port. */
-export function PreviewTab({ sessionId }: { sessionId: string }) {
+export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWatchTest?: () => void }) {
 	const [chosen, setChosen] = useState<number | null>(null);
 	const [reloads, setReloads] = useState(0);
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
@@ -76,6 +76,7 @@ export function PreviewTab({ sessionId }: { sessionId: string }) {
 					<Icon icon={Globe} size={12} className={current.listening ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
 					<span className="min-w-0 truncate">{current.url ?? `Port ${current.port} has no public URL`}</span>
 				</div>
+				{onWatchTest ? <IconBtn icon={Monitor} size="sm" label="Watch the agent's test in Computer" onClick={onWatchTest} /> : null}
 				<IconBtn
 					icon={RotateCw}
 					size="sm"

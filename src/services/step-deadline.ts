@@ -13,6 +13,19 @@ export class StepGivenUp extends Error {
 	}
 }
 
+/** Stop awaiting work that cannot itself act on the screen; the work may still finish in the background. */
+export function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return work;
+	work.catch(() => undefined);
+	return new Promise<T>((resolve, reject) => {
+		const abort = () => { cleanup(); reject(signal.reason ?? new Error('The step was stopped.')); };
+		const cleanup = () => signal.removeEventListener('abort', abort);
+		if (signal.aborted) return abort();
+		signal.addEventListener('abort', abort, { once: true });
+		work.then((value) => { cleanup(); resolve(value); }, (error: unknown) => { cleanup(); reject(error); });
+	});
+}
+
 /** The longest one browser action may take, a `do` step's actions each. */
 export const STEP_MS = 60_000;
 /** A computer step: finding the target, acting and describing the screen, each a vision model call. */

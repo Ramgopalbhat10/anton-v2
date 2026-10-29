@@ -78,6 +78,7 @@ let page = null;
 const NO_GOOGLE_KEYS = { GOOGLE_API_KEY: 'no', GOOGLE_DEFAULT_CLIENT_ID: 'no', GOOGLE_DEFAULT_CLIENT_SECRET: 'no' };
 let errors = [];
 let quit = null;
+process.on('SIGTERM', () => { void (async () => { await browser?.close().catch(() => {}); process.exit(0); })(); });
 // Set when the tab the agent was on went away (its browser quit or crashed, or the page crashed), so the next step says so.
 let lost = false;
 const idle = () => { clearTimeout(quit); quit = setTimeout(async () => { await browser?.close().catch(() => {}); process.exit(0); }, IDLE_MS); };
@@ -164,11 +165,11 @@ http.createServer((request, response) => {
 	request.on('end', () => {
 		queue = queue.then(async () => {
 			const command = JSON.parse(body);
-			// act only throws before its step acts (starting the browser or a tab), so one more try in a new browser is safe.
-			const result = await act(command).catch(async () => {
+			// A failure may have happened after a click; never replay an action of unknown outcome.
+			const result = await act(command).catch(async (error) => {
 				await restart();
-				return act(command);
-			}).catch(failed);
+				return failed(error);
+			});
 			response.end(JSON.stringify(result));
 		});
 	});
@@ -196,6 +197,8 @@ export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'ho
 export type BrowserInput = {
 	action: BrowserAction;
 	url?: string;
+	/** Explicitly discard a headless session and open a fresh browser on the Computer screen. */
+	fresh?: boolean;
 	/** A Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
 	target?: string;
 	text?: string;
@@ -216,6 +219,8 @@ export type BrowserState = {
 	status: number | null;
 	/** Why the action failed, such as no element matching the target; the page is described as it is anyway. */
 	problem: string | null;
+	/** A nonfatal limitation, such as a headless fallback when the desktop is unavailable. */
+	notice?: string;
 	errors: string[];
 	screenshot: string | null;
 	/** The page's accessibility tree as YAML: roles, names and text, which is what the agent targets. */
@@ -227,13 +232,40 @@ export type BrowserState = {
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
 function browserFiles(machine: Machine) {
 	const base = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}`;
-	return { socket: `${base}.sock`, pid: `${base}.pid`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
+	return { socket: `${base}.sock`, pid: `${base}.pid`, mode: `${base}.mode`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
 }
 
-/** Stops the machine's browser, if one is running. */
+/** The browser could not be stopped, so nobody else may safely drive its screen yet. */
+export class BrowserStopError extends Error {}
+
+/** Stops the machine's browser and waits for it to leave before another driver can act. */
 export async function closeBrowser(machine: Machine): Promise<void> {
-	const { pid } = browserFiles(machine);
-	await machine.exec(`[ -f ${pid} ] && kill "$(cat ${pid})" 2>/dev/null; rm -f ${pid}`);
+	const { pid, socket, mode } = browserFiles(machine);
+	const result = await machine.exec(`
+if [ -f ${pid} ]; then
+  p=$(cat ${pid})
+  alive() { state=$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' '); case "$state" in ''|Z*) return 1;; *) return 0;; esac; }
+  kill "$p" 2>/dev/null || true
+  for i in $(seq 1 30); do alive || break; sleep 0.1; done
+  if alive; then kill -KILL -- "-$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null || true; fi
+  for i in $(seq 1 30); do alive || break; sleep 0.1; done
+  if alive; then echo 'Browser did not stop' >&2; exit 1; fi
+  rm -f ${pid}
+fi
+rm -f ${socket} ${mode}`);
+	if (result.exitCode !== 0) throw new BrowserStopError(result.stderr.trim() || 'The sandbox browser did not stop.');
+}
+
+/** Move a headless browser to a newly ready screen only between queued steps. */
+export async function showBrowserOnDesktop(machine: Machine, signal?: AbortSignal): Promise<boolean> {
+	const { pid, mode } = browserFiles(machine);
+	signal?.throwIfAborted();
+	const result = await machine.exec(`if [ -f ${pid} ] && [ "$(cat ${mode} 2>/dev/null)" != screen ]; then echo switch; fi`, { signal });
+	signal?.throwIfAborted();
+	if (!new TextDecoder().decode(result.stdout).includes('switch')) return false;
+	await closeBrowser(machine);
+	signal?.throwIfAborted();
+	return true;
 }
 
 /**
@@ -241,36 +273,53 @@ export async function closeBrowser(machine: Machine): Promise<void> {
  * describe the page. The tab stays open between steps; the first step starts
  * the browser.
  */
-export async function browse(machine: Machine, input: BrowserInput): Promise<BrowserState> {
-	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
-	const outputs = `${machine.root}/outputs`;
-	const command = quote(JSON.stringify({ ...input, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) }));
-	const files = browserFiles(machine);
-	await writeMachineFile(machine, files.client, new TextEncoder().encode(CLIENT));
-	const send = () => machine.exec(`node ${files.client} ${files.socket} ${command}`, { timeoutMs: 120_000 });
-	let result = await send();
-	if (result.exitCode === 4) {
-		await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
-		const layout = desktopLayout(machine.root);
-		const onScreen = (await machine.exec(desktopRunning(layout))).exitCode === 0;
-		await run(
-			machine,
-			`${onScreen ? `DISPLAY=${layout.display} ` : ''}NODE_PATH="$(npm root -g)" nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
-				`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
-		);
-		result = await send();
+export async function browse(machine: Machine, input: BrowserInput, signal?: AbortSignal): Promise<BrowserState> {
+	signal?.throwIfAborted();
+	try {
+		await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000, signal });
+		signal?.throwIfAborted();
+		const outputs = `${machine.root}/outputs`;
+		const command = quote(JSON.stringify({ ...input, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) }));
+		const files = browserFiles(machine);
+		await writeMachineFile(machine, files.client, new TextEncoder().encode(CLIENT));
+		signal?.throwIfAborted();
+		const send = () => machine.exec(`node ${files.client} ${files.socket} ${command}`, { timeoutMs: 120_000, signal });
+		let result = await send();
+		signal?.throwIfAborted();
+		if (result.exitCode === 4) {
+			await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
+			signal?.throwIfAborted();
+			const layout = desktopLayout(machine.root);
+			const onScreen = (await machine.exec(desktopRunning(layout), { signal })).exitCode === 0;
+			signal?.throwIfAborted();
+			await run(
+				machine,
+				`${onScreen ? `DISPLAY=${layout.display} ` : 'env -u DISPLAY '}NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; printf '%s' ${onScreen ? 'screen' : 'headless'} > ${files.mode}; ` +
+					`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
+				{ signal },
+			);
+			signal?.throwIfAborted();
+			result = await send();
+		}
+		if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
+		const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as Partial<BrowserState>;
+		// Every field filled, whatever the server answered, so a failed step reads as a problem rather than breaking the tool.
+		return {
+			url: state.url ?? input.url ?? '',
+			title: state.title ?? '',
+			status: state.status ?? null,
+			problem: state.problem ?? null,
+			errors: state.errors ?? [],
+			screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null,
+			snapshot: clipSnapshot(state.snapshot ?? ''),
+			view: state.view,
+		};
+	} finally {
+		// The detached browser can still be handling a request after its client is aborted.
+		// Close it before the shared Computer queue is released.
+		if (signal?.aborted) {
+			try { await closeBrowser(machine); }
+			catch (error) { throw new BrowserStopError(`Could not stop the sandbox browser: ${error instanceof Error ? error.message : String(error)}`); }
+		}
 	}
-	if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
-	const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as Partial<BrowserState>;
-	// Every field filled, whatever the server answered, so a failed step reads as a problem rather than breaking the tool.
-	return {
-		url: state.url ?? input.url ?? '',
-		title: state.title ?? '',
-		status: state.status ?? null,
-		problem: state.problem ?? null,
-		errors: state.errors ?? [],
-		screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null,
-		snapshot: clipSnapshot(state.snapshot ?? ''),
-		view: state.view,
-	};
 }

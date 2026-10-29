@@ -27,7 +27,7 @@ export const panels = [
 	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
 	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
 	{ name: 'Browser', icon: AppWindow, desc: 'A real browser for any site; pick elements or draw for the agent' },
-	{ name: 'Computer', icon: Monitor, desc: "The sandbox's own screen; watch the agent use it, or take over" },
+	{ name: 'Computer', icon: Monitor, desc: "Watch the agent test local apps on the sandbox's screen, or take over" },
 	{ name: 'Library', icon: Library, desc: 'Reports, screenshots and exports the agent saved' },
 	{ name: 'History', icon: History, desc: 'Earlier states of the files, to compare or restore' },
 ] as const;
@@ -265,7 +265,7 @@ export const VmPanel = memo(function VmPanel({
 						</div>
 					</div>
 				) : null}
-				{View ? <View key={sessionId} sessionId={sessionId} /> : null}
+				{current === 'Preview' ? <PreviewTab key={sessionId} sessionId={sessionId} onWatchTest={() => show('Computer')} /> : View ? <View key={sessionId} sessionId={sessionId} /> : null}
 			</div>
 		</WorkspacePane>
 	);

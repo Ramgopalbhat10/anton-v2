@@ -27,7 +27,7 @@ import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
-import { browse, type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
+import { type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
 import { decide, hasDecisionModel, newTally, type Tally, yesOf } from '../services/decisions.ts';
 import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } from '../services/browser-autopilot.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
@@ -73,11 +73,11 @@ import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { checkPreview } from '../services/preview-check.ts';
-import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
+import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
 import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from '../services/live-browser.ts';
-import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, withinDeadline } from '../services/step-deadline.ts';
+import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, untilAborted, withinDeadline } from '../services/step-deadline.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
 import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
@@ -327,7 +327,7 @@ type BrowserPlace = 'panel' | 'sandbox';
 
 const PLACES: Record<BrowserPlace, string> = {
 	panel: "the user's Browser panel, a real browser they watch and can take over (to sign in, say), for any site on the web",
-	sandbox: "a headless browser inside the sandbox, the only one that reaches the app's dev server on localhost",
+	sandbox: "the browser on the sandbox's Computer screen, which the user can watch and take over; it reaches the app's dev server on localhost",
 };
 
 /** The browser each task's steps went to last, so a step that names no page stays on the page it is on. */
@@ -355,12 +355,14 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			'role=button[name="Save"], role=textbox[name="Email"], text=Sign in, or CSS. To keep your context small, a page you have seen before comes back as what changed (or as unchanged), ' +
 			'and parts of a long page your job does not need are left out; use look to have the page described again in full. ' +
 			'Pass screenshot to save a PNG to the task\'s Library, where the user sees it; with a sandbox it is in the outputs folder, where you can read it to see the page. ' +
+			'If a sandbox browser started headless, it keeps its session even when the Computer becomes ready. To move it to the screen, use fresh: true with open (or do with a URL); this discards its cookies, history and tab state. Never use it during a flow that needs that state. ' +
 			places.map((place, index) => `"in": "${place}" is ${PLACES[place]}${index === 0 ? ' (the default)' : ''}.`).join(' '),
 		input: v.object({
 			// Do is on offer only with a decision model to drive it.
 			action: v.picklist((autopiloted ? AUTOPILOT_ACTIONS : BROWSER_ACTIONS) as typeof AUTOPILOT_ACTIONS),
 			in: v.optional(v.pipe(v.picklist(places), v.description('Which browser; steps after an open stay in the browser it used'))),
 			url: v.optional(v.pipe(v.string(), v.description('For open: a site, or the dev server in the sandbox such as http://localhost:3000. For do: a page to open first'))),
+			fresh: v.optional(v.pipe(v.boolean(), v.description('For open or do with a URL: explicitly discard a headless sandbox browser session to open a new one on the Computer screen; cookies, history and page state are lost'))),
 			target: v.optional(v.pipe(v.string(), v.description('The element to act on, as a Playwright selector'))),
 			text: v.optional(v.pipe(v.string(), v.description('For type: what to enter, replacing what is there. For select: the option'))),
 			submit: v.optional(v.pipe(v.boolean(), v.description('For type: press Enter afterwards'))),
@@ -384,6 +386,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const full = rest.action === 'look';
 			// Opening the sandbox's own address goes to the sandbox; other steps stay where the last one was.
 			const opens = rest.action === 'open' || (rest.action === 'do' && Boolean(rest.url));
+			if (rest.fresh && (!opens || !rest.url)) return { output: { problem: 'fresh needs open or do with a URL; it discards the headless browser session.' } };
 			const local = opens && isLocalAddress(rest.url);
 			const place: BrowserPlace = chosen ?? (local && places.includes('sandbox') ? 'sandbox' : opens ? places[0] : (lastPlace.get(id) ?? places[0]));
 			if (place === 'panel' && local) {
@@ -395,8 +398,13 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			lastPlace.set(id, place);
 			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
 			const go = async (command: BrowserInput): Promise<BrowserState> => {
+				let givenUp = false;
+				const controller = new AbortController();
+				const stepSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 				try {
-					return await withinDeadline(place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command), STEP_MS, signal, place === 'panel' ? () => dropAgentDriver(id) : undefined);
+					const work = place === 'sandbox' ? browseOnComputer(id, () => machineFor(id), command, () => givenUp || stepSignal.aborted, undefined, stepSignal) : agentBrowse(id, command);
+					// The shared screen remains locked until the actual work ends, even if the reply gives up waiting.
+					return await withinDeadline(work, STEP_MS, signal, () => { givenUp = true; controller.abort(); if (place === 'panel') dropAgentDriver(id); });
 				} catch (error) {
 					if (!(error instanceof StepGivenUp)) throw error;
 					const problem = error.reason === 'stopped' ? error.message : `${error.message} The page may be slow or very large: try a narrower step, or report back, since a page only to be read is quicker with web_fetch.`;
@@ -410,9 +418,11 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const tally = newTally();
 			if (rest.action === 'do') {
 				if (!goal?.trim()) return { output: { problem: 'do needs a goal: the outcome the page should reach.' } };
+				let openingNotice: string | undefined;
 				if (rest.url) {
-					state = await go({ action: 'open', url: rest.url });
+					state = await go({ action: 'open', url: rest.url, fresh: rest.fresh });
 					if (state.problem) return { output: { ...forAgent(state), snapshot: pageForAgent(`${id}:${place}`, state.url, state.snapshot) } };
+					openingNotice = state.notice;
 				}
 				const result = await autopilot(
 					id,
@@ -422,6 +432,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				);
 				driven = { outcome: result.outcome, actions: result.actions, decisions: result.decisions, cost: result.cost };
 				state = result.state;
+				if (openingNotice) state = { ...state, notice: [openingNotice, state.notice].filter(Boolean).join(' ') };
 				report = {
 					outcome: result.outcome,
 					note: outcomeNote(result),
@@ -560,21 +571,27 @@ function computerTool(id: string) {
 		}),
 		async run({ data, toolCallId, signal }) {
 			const { target, to, question, confirm, screenshot, ...step } = data;
-			const machine = await machineFor(id);
+			let givenUp = false;
+			const controller = new AbortController();
+			const stepSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
 			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
+				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
 				if (userHasControl(id)) {
 					return { output: { problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.' } };
 				}
+				const machine = await untilAborted(machineFor(id), stepSignal);
+				if (givenUp || stepSignal.aborted || userHasControl(id)) return { output: { problem: 'The computer step was stopped.' } };
 				const actions: StepDetail['actions'] = [];
 				let cost = 0;
 				const note = () => noteStep(id, toolCallId, { outcome: null, actions, decisions: 0, cost });
 				const input: ComputerInput = { ...step };
 				// Finds what the agent named on the screen as it is now.
 				const find = async (what: string) => {
-					await ensureDesktop(machine);
-					const found = await locate(id, what, await captureScreen(machine), signal);
+					await ensureDesktop(machine, stepSignal);
+					stepSignal.throwIfAborted();
+					const found = await untilAborted(locate(id, what, await captureScreen(machine, stepSignal), stepSignal), stepSignal);
 					cost += found.cost;
 					actions.push(found.at ? { what: `Found ${what} at (${Math.round(found.at.x)}, ${Math.round(found.at.y)})`, p: null } : { what: `Could not find ${what}`, p: null, failed: true });
 					return found;
@@ -602,7 +619,7 @@ function computerTool(id: string) {
 				const clicking = step.action === 'click' || step.action === 'double_click';
 				if (clicking && target && !confirm && mayBeIrreversible(target)) {
 					const tally = newTally();
-					const held = await mayNotUndo(id, target, await currentBrief(id, 'computer'), tally);
+					const held = await untilAborted(mayNotUndo(id, target, await currentBrief(id, 'computer'), tally), stepSignal);
 					actions.push(...tally.actions);
 					cost += tally.cost;
 					if (held) {
@@ -610,9 +627,10 @@ function computerTool(id: string) {
 						return { output: { problem: `Not clicked: ${target} may buy, send, post or delete something. Only if your brief explicitly asks for exactly this, repeat the step with confirm set to its name; otherwise stop and report.` } };
 					}
 				}
-				const { png, window } = await act(machine, input, signal);
+				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
+				const { png, window } = await act(machine, input, stepSignal);
 				const focus = question?.trim() || (await currentBrief(id, 'computer'))?.slice(0, 1500) || null;
-				const seen = await describe(id, png, focus, signal);
+				const seen = await untilAborted(describe(id, png, focus, stepSignal), stepSignal);
 				cost += seen.cost;
 				const saved = screenshot ? await saveScreen(machine, screenshot, png) : undefined;
 				actions.push({ what: 'Described the screen', p: null });
@@ -626,12 +644,10 @@ function computerTool(id: string) {
 					},
 				};
 			};
-			return asAgentStep(id, () =>
-				withinDeadline(takeStep(), COMPUTER_STEP_MS, signal).catch((error: unknown) => {
-					if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
-					throw error;
-				}),
-			);
+			return withinDeadline(asAgentStep(id, takeStep), COMPUTER_STEP_MS, signal, () => { givenUp = true; controller.abort(); }).catch((error: unknown) => {
+				if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
+				throw error;
+			});
 		},
 	});
 }
@@ -1110,7 +1126,7 @@ const SCRIPTED_MCP_HINT = "A connector's MCP tools can also be called from run_s
 const BROWSER_HINT =
 	'To read the web, find pages with web_search and read them with web_fetch (several URLs in one call): that takes seconds, where the browser takes a minute or more a page. ' +
 	'Delegate to the browser subagent, with a complete brief, only to act on pages (click through a flow, fill a form, check a web app) or for a page web_fetch returns empty, cut short or blocked. ' +
-	'It works in the Browser panel, which the user can watch and take over, for example to sign in.';
+	'It works in the Browser panel for websites, which the user can watch and take over, for example to sign in. When a sandbox is available, its local browser runs on the Computer screen, where the user can watch the test.';
 
 const COMPUTER_HINT =
 	'For work that needs a screen (a desktop or GUI program, a native dialog, or a page that must be seen and used as a person would), delegate to the computer subagent with a complete brief; ' +
