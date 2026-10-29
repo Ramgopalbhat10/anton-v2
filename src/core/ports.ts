@@ -300,6 +300,9 @@ export type TreeListing = { sha: string; entries: TreeEntry[] };
 export type PullRequestActivity = {
 	state: PullRequestState;
 	headSha: string;
+	/** Branch names can change even when the commits stay the same. */
+	headBranch?: string;
+	baseBranch?: string;
 	checks: CheckResult[];
 	comments: PullRequestComment[];
 	approved?: boolean;

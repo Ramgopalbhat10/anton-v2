@@ -33,7 +33,7 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 export async function readPullRequest(session: SessionRecord & { prUrl: string }): Promise<PullRequestActivity> {
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
 	readAt.set(session.id, Date.now());
-	const revision = JSON.stringify([session.prUrl, activity.headSha, activity.baseSha, activity.state]);
+	const revision = JSON.stringify([session.prUrl, activity.headSha, activity.baseSha, activity.headBranch, activity.baseBranch, activity.state]);
 	if (heads.get(session.id) !== revision) {
 		heads.set(session.id, revision);
 		announce({ kind: 'task', id: session.id, what: 'pr-metadata' });

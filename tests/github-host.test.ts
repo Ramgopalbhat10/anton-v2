@@ -63,6 +63,8 @@ test('pull request activity keeps only trusted comments, reads every page and ig
 	);
 	assert.equal(activity.conflicts, true, 'GitHub says it cannot merge');
 	assert.equal(activity.baseSha, 'base1');
+	assert.equal(activity.headBranch, 'feature');
+	assert.equal(activity.baseBranch, 'main');
 });
 
 test("someone else's pull request, open pull requests, merge bases, trees and files are read for reviews and merges", async () => {
@@ -106,9 +108,11 @@ test("someone else's pull request, open pull requests, merge bases, trees and fi
 });
 
 test('a merged pull request is not read any further', async () => {
-	const asked = stubFetch({ '/repos/acme/demo/pulls/8': { body: { state: 'closed', draft: false, merged_at: '2026-10-02T00:00:00Z', head: { sha: 'def' } } } });
+	const asked = stubFetch({ '/repos/acme/demo/pulls/8': { body: { state: 'closed', draft: false, merged_at: '2026-10-02T00:00:00Z', head: { sha: 'def', ref: 'feature' }, base: { sha: 'base', ref: 'main' } } } });
 	const activity = await githubHost({ token: 't', apiUrl: API }).pullRequestActivity('https://github.com/acme/demo/pull/8');
 	assert.equal(activity.state, 'merged');
+	assert.equal(activity.headBranch, 'feature');
+	assert.equal(activity.baseBranch, 'main');
 	assert.deepEqual(asked, ['/repos/acme/demo/pulls/8']);
 });
 
