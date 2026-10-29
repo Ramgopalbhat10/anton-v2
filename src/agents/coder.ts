@@ -72,6 +72,7 @@ import { saveTrace } from '../db/traces.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
+import { checkPreview } from '../services/preview-check.ts';
 import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
@@ -288,6 +289,16 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			useMergeBaseBranch(id);
 		}
 	}
+	useTool(
+		defineTool({
+			name: 'check_preview',
+			description: 'Check a configured Preview port and obtain the exact URL used by the Preview panel. For public URLs, requests it from Anton’s server and reports HTTP status, final URL and framing headers; this is not a browser rendering check. Local listening only means a TCP connection inside the sandbox worked. Does not start a sandbox.',
+			input: v.object({ port: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535), v.description('The configured Preview port the app is running on')) }),
+			async run({ data }) {
+				return { output: await checkPreview(id, data.port) };
+			},
+		}),
+	);
 	useTool(
 		defineTool({
 			name: 'screenshot',
@@ -1136,6 +1147,12 @@ const READ_ONLY_PROMPT = [
 	'Be concise, and point to files and lines.',
 ].join(' ');
 
+const PREVIEW_HINT =
+	'When starting a web app for the user to try in Preview, call check_preview with its port after it starts. A listening port or a localhost test does not prove the Preview URL works. ' +
+	'Check the returned HTTP status, final URL and framing headers; if it fails, fix the bind address, exposed port, host restrictions or server as appropriate and check again. For Vite allow the exact Preview hostname, not all hosts. ' +
+	'Also open the exact Preview URL with the browser subagent in the sandbox browser (in: sandbox) and check the rendered app and console errors. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
+	'The HTTP check does not execute JavaScript or prove iframe embedding; report any unverified part honestly. A local-provider localhost URL points to the viewer’s computer, so remote reachability is not established. Never ask the user to run commands to fix Preview when you can do it yourself.';
+
 const WORKSPACE_PROMPT = [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
@@ -1147,6 +1164,7 @@ const WORKSPACE_PROMPT = [
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	'Check UI changes with the browser subagent: brief it with the dev server URL (http://localhost:<port>), what to click and type through, and what to report; use the screenshot tool for a quick full-page capture yourself.',
+	PREVIEW_HINT,
 	WORKSPACE_WEB_HINT,
 	'Be concise. Explain what you changed.',
 ].join(' ');
@@ -1167,6 +1185,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	SCRATCH_HINT,
 	'There is no repository, so there is no pull request: give results in your reply or as files.',
 	'To run a web app, bind its server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file under /tmp; the user can open it from the Preview panel.',
+	PREVIEW_HINT,
 	CHAT_WORKSPACE_WEB_HINT,
 	'Be concise.',
 ].join(' ');

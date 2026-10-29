@@ -180,6 +180,7 @@ const { addProject, updateSettings } = await import('../src/services/projects.ts
 const { addMcpServer, enabledMcpServers, mcpServersView, removeMcpServer, toggleMcpServer, updateMcpServer } = await import('../src/services/mcp-servers.ts');
 const { getProject, setWarmImage } = await import('../src/db/projects.ts');
 const { previewsView } = await import('../src/services/previews.ts');
+const { checkPreview } = await import('../src/services/preview-check.ts');
 const { browse, closeBrowser, takeScreenshot } = await import('../src/services/browser.ts');
 const sessions = await import('../src/services/sessions.ts');
 const files = await import('../src/services/files.ts');
@@ -525,6 +526,7 @@ test('repo settings reach the sandbox: variables, setup script and preview ports
 
 	const session = await sessions.createSession({ projectId: project.id, title: 'Settings' });
 	assert.deepEqual(await previewsView(session.id), { live: false, previews: [] });
+	assert.equal((await checkPreview(session.id, port)).live, false);
 	sessions.invalidateRunning();
 	assert.ok(!(await local.running()).has(session.id), 'looking at previews starts nothing');
 
@@ -538,6 +540,10 @@ test('repo settings reach the sandbox: variables, setup script and preview ports
 			{ port: 9, url: 'http://localhost:9', listening: false },
 		],
 	});
+	const checked = await checkPreview(session.id, port);
+	assert.equal(checked.live, true);
+	assert.equal('check' in checked && checked.check, 'local');
+	assert.deepEqual(await checkPreview(session.id, 8), { live: true, detail: 'Port 8 is not configured for Preview.', ports: [port, 9] });
 });
 
 test('a failing setup script fails the task setup', async () => {
