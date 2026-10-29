@@ -207,15 +207,23 @@ describe('threads', () => {
 		await client.invalidateQueries({ queryKey: ['todos', 'runs'] });
 		expect(await within(working).findByText('Write the migration test')).toBeTruthy();
 		expect(within(working).getByTitle('2 of 3 steps done')).toBeTruthy();
-		expect(within(working).queryByRole('button')).toBeNull();
+		expect(within(working).getByRole('button', { name: 'Add the table' })).toBeTruthy();
 
 		// A finished thread keeps to one line with what it last said; one ready for review opens out with its buttons.
 		const done = screen.getByRole('article', { name: 'Old cleanup' });
-		expect(within(done).queryByRole('button')).toBeNull();
+		expect(within(done).getByRole('button', { name: 'Old cleanup' })).toBeTruthy();
 		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
 		expect(within(ready).getByRole('button', { name: 'Review' })).toBeTruthy();
 		await userEvent.click(within(ready).getByRole('button', { name: 'View thread' }));
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/pr'));
+	});
+
+	it('opens a compact thread from its keyboard-accessible title', async () => {
+		const router = withRouter(() => <ThreadRow thread={threads[3]} />);
+		const title = await screen.findByRole('button', { name: 'Old cleanup' });
+		title.focus();
+		await userEvent.keyboard('{Enter}');
+		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/done'));
 	});
 
 	it('shows the rest of a thread on hover: its state, where it works, what it asks and its next steps', async () => {

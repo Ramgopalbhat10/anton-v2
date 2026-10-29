@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Check, FolderGit2, FolderKanban, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';
 import { Caption } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
@@ -47,8 +48,8 @@ function ProjectCard({ space }: { space: Space }) {
 			</div>
 			<div className="flex flex-wrap gap-1 px-4 pt-2.5">
 				{space.repos.map((repo) => (
-					<span key={repo.id} className="flex h-5 items-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[10.5px] text-(--text-secondary)">
-						{repo.repoFullName.split('/').pop()}
+					<span key={repo.id} className="flex min-h-5 min-w-0 items-center break-all rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[11px] text-(--text-secondary)">
+						{repo.repoFullName}
 					</span>
 				))}
 				{space.repos.length === 0 ? (
@@ -84,6 +85,7 @@ function ProjectCard({ space }: { space: Space }) {
 /** Name, goal and, optionally, repositories for a new project, and a first message for its coordinator. */
 function NewProjectDialog({ onClose }: { onClose: () => void }) {
 	const navigate = useNavigate();
+	const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
 	const queryClient = useQueryClient();
 	const projects = useProjects();
 	const [name, setName] = useState('');
@@ -100,18 +102,14 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 			void navigate({ to: '/projects/$spaceId', params: { spaceId: space.id }, search: ask.trim() ? { ask: ask.trim() } : {} });
 		},
 	});
-	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	}, []);
 	const toggle = (id: string) => setRepoIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 	return (
-		<div className="fixed inset-0 z-40 flex items-start justify-center bg-(--bg-scrim) px-4 pt-[10vh]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+		<Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+			<Dialog.Portal>
+				<Dialog.Overlay className="fixed inset-0 z-40 bg-(--bg-scrim)" />
+				<Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className="in-card fixed top-[10vh] left-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 flex-col overflow-hidden shadow-(--shadow-modal)">
 			<form
-				role="dialog"
-				aria-label="New project"
-				className="in-card flex max-h-[80vh] w-full max-w-[560px] flex-col overflow-hidden shadow-(--shadow-modal)"
+				className="flex min-h-0 flex-col"
 				onSubmit={(event) => {
 					event.preventDefault();
 					create.mutate();
@@ -119,7 +117,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 			>
 				<header className="flex items-center gap-2 border-b border-(--border-subtle) px-4 py-3">
 					<Icon icon={FolderKanban} size={14} className="text-(--accent-text)" />
-					<span className="flex-1 text-[13.5px] font-medium">New project</span>
+					<Dialog.Title className="flex-1 text-[13.5px] font-medium">New project</Dialog.Title>
 					<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
 				</header>
 				<div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5">
@@ -163,8 +161,8 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 						</div>
 					</div>
 					<div className="flex flex-col gap-1.5">
-						<Caption>First message to the coordinator · optional</Caption>
-						<textarea value={ask} onChange={(event) => setAsk(event.target.value)} rows={3} placeholder="Split the billing rewrite into threads: the schema change, the API, and the settings page." className={`${AREA} text-[13px] leading-[19px]`} />
+						<label htmlFor="project-first-message" className="in-caption">First message to the coordinator · optional</label>
+						<textarea id="project-first-message" value={ask} onChange={(event) => setAsk(event.target.value)} rows={3} placeholder="Split the billing rewrite into threads: the schema change, the API, and the settings page." className={`${AREA} text-[13px] leading-[19px]`} />
 					</div>
 				</div>
 				<footer className="flex items-center gap-2 border-t border-(--border-subtle) px-4 py-2.5">
@@ -177,7 +175,9 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 					</Btn>
 				</footer>
 			</form>
-		</div>
+				</Dialog.Content>
+			</Dialog.Portal>
+		</Dialog.Root>
 	);
 }
 
@@ -195,6 +195,7 @@ export function ProjectsPage() {
 		}
 	}, [search.create]);
 	const list = [...(spaces.data?.spaces ?? [])].sort((a, b) => Number(a.state === 'archived') - Number(b.state === 'archived') || b.counts.waiting - a.counts.waiting || b.activeAt.localeCompare(a.activeAt));
+	const active = list.filter((space) => space.state !== 'archived');
 	return (
 		<PageFrame
 			title="Projects"
@@ -205,6 +206,7 @@ export function ProjectsPage() {
 			}
 		>
 			{spaces.isPending ? <Spinner size={12} /> : null}
+			{spaces.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-[13px] text-(--text-secondary)">Unable to load projects. Check your connection and try again. <Btn size="sm" onClick={() => void spaces.refetch()}>Try again</Btn></div> : null}
 			{spaces.data && list.length === 0 ? (
 				<div className="in-card p-1.5">
 					<EmptyState
@@ -218,7 +220,8 @@ export function ProjectsPage() {
 					</EmptyState>
 				</div>
 			) : null}
-			{list.length ? <ProjectRack spaces={list.filter((space) => space.state !== 'archived')} threads={sessions.data?.sessions ?? []} /> : null}
+			{active.length > 0 && sessions.data ? <ProjectRack spaces={active} threads={sessions.data.sessions} /> : null}
+			{active.length > 0 && sessions.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-[13px] text-(--text-secondary)">Unable to load thread activity. Check your connection and try again. <Btn size="sm" onClick={() => void sessions.refetch()}>Try again</Btn></div> : null}
 			{list.length ? (
 				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					{list.map((space) => (

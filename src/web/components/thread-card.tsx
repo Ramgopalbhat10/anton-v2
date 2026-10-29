@@ -424,7 +424,7 @@ export function ThreadRow({ thread }: { thread: Session }) {
 			>
 				<div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 sm:flex-nowrap">
 					<ThreadGlyph thread={thread} size={14} />
-					<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary) sm:flex-initial">{thread.title}</span>
+					<button type="button" onClick={(event) => { event.stopPropagation(); open(thread); }} className="min-w-0 flex-1 truncate rounded text-left text-[13px] text-(--text-primary) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent-text) sm:flex-initial">{thread.title}</button>
 					{/* On a phone the line and the chips take a row each under the title, so none squeezes the others. */}
 					{!calling && line ? <LiveLine text={line} live={live} className="order-last basis-full pl-[24px] sm:order-none sm:shrink-[4] sm:basis-auto sm:pl-0" /> : null}
 					<span className="order-last flex min-w-0 basis-full items-center gap-1 pl-[24px] empty:hidden sm:order-none sm:basis-auto sm:pl-0">
