@@ -77,7 +77,7 @@ import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, ty
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
 import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from '../services/live-browser.ts';
-import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, withinDeadline } from '../services/step-deadline.ts';
+import { COMPUTER_STEP_MS, STEP_MS, StepGivenUp, untilAborted, withinDeadline } from '../services/step-deadline.ts';
 import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
 import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
@@ -396,10 +396,12 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
 			const go = async (command: BrowserInput): Promise<BrowserState> => {
 				let givenUp = false;
+				const controller = new AbortController();
+				const stepSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 				try {
-					const work = place === 'sandbox' ? browseOnComputer(id, () => machineFor(id), command, () => givenUp || Boolean(signal?.aborted)) : agentBrowse(id, command);
+					const work = place === 'sandbox' ? browseOnComputer(id, () => machineFor(id), command, () => givenUp || stepSignal.aborted, undefined, stepSignal) : agentBrowse(id, command);
 					// The shared screen remains locked until the actual work ends, even if the reply gives up waiting.
-					return await withinDeadline(work, STEP_MS, signal, () => { givenUp = true; if (place === 'panel') dropAgentDriver(id); });
+					return await withinDeadline(work, STEP_MS, signal, () => { givenUp = true; controller.abort(); if (place === 'panel') dropAgentDriver(id); });
 				} catch (error) {
 					if (!(error instanceof StepGivenUp)) throw error;
 					const problem = error.reason === 'stopped' ? error.message : `${error.message} The page may be slow or very large: try a narrower step, or report back, since a page only to be read is quicker with web_fetch.`;
@@ -563,8 +565,9 @@ function computerTool(id: string) {
 		}),
 		async run({ data, toolCallId, signal }) {
 			const { target, to, question, confirm, screenshot, ...step } = data;
-			const machine = await machineFor(id);
 			let givenUp = false;
+			const controller = new AbortController();
+			const stepSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
 			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
@@ -572,14 +575,17 @@ function computerTool(id: string) {
 				if (userHasControl(id)) {
 					return { output: { problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.' } };
 				}
+				const machine = await untilAborted(machineFor(id), stepSignal);
+				if (givenUp || stepSignal.aborted || userHasControl(id)) return { output: { problem: 'The computer step was stopped.' } };
 				const actions: StepDetail['actions'] = [];
 				let cost = 0;
 				const note = () => noteStep(id, toolCallId, { outcome: null, actions, decisions: 0, cost });
 				const input: ComputerInput = { ...step };
 				// Finds what the agent named on the screen as it is now.
 				const find = async (what: string) => {
-					await ensureDesktop(machine);
-					const found = await locate(id, what, await captureScreen(machine), signal);
+					await ensureDesktop(machine, stepSignal);
+					stepSignal.throwIfAborted();
+					const found = await untilAborted(locate(id, what, await captureScreen(machine, stepSignal), stepSignal), stepSignal);
 					cost += found.cost;
 					actions.push(found.at ? { what: `Found ${what} at (${Math.round(found.at.x)}, ${Math.round(found.at.y)})`, p: null } : { what: `Could not find ${what}`, p: null, failed: true });
 					return found;
@@ -607,7 +613,7 @@ function computerTool(id: string) {
 				const clicking = step.action === 'click' || step.action === 'double_click';
 				if (clicking && target && !confirm && mayBeIrreversible(target)) {
 					const tally = newTally();
-					const held = await mayNotUndo(id, target, await currentBrief(id, 'computer'), tally);
+					const held = await untilAborted(mayNotUndo(id, target, await currentBrief(id, 'computer'), tally), stepSignal);
 					actions.push(...tally.actions);
 					cost += tally.cost;
 					if (held) {
@@ -616,9 +622,9 @@ function computerTool(id: string) {
 					}
 				}
 				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
-				const { png, window } = await act(machine, input, signal);
+				const { png, window } = await act(machine, input, stepSignal);
 				const focus = question?.trim() || (await currentBrief(id, 'computer'))?.slice(0, 1500) || null;
-				const seen = await describe(id, png, focus, signal);
+				const seen = await untilAborted(describe(id, png, focus, stepSignal), stepSignal);
 				cost += seen.cost;
 				const saved = screenshot ? await saveScreen(machine, screenshot, png) : undefined;
 				actions.push({ what: 'Described the screen', p: null });
@@ -632,7 +638,7 @@ function computerTool(id: string) {
 					},
 				};
 			};
-			return withinDeadline(asAgentStep(id, takeStep), COMPUTER_STEP_MS, signal, () => { givenUp = true; }).catch((error: unknown) => {
+			return withinDeadline(asAgentStep(id, takeStep), COMPUTER_STEP_MS, signal, () => { givenUp = true; controller.abort(); }).catch((error: unknown) => {
 				if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
 				throw error;
 			});

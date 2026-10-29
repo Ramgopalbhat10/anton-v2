@@ -6,9 +6,10 @@ import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { browse, closeBrowser, type BrowserInput, type BrowserState } from './browser.ts';
+import { browse, BrowserStopError, closeBrowser, type BrowserInput, type BrowserState } from './browser.ts';
 import { addressToUrl, screenshotFile } from './browser-step.ts';
 import { liveMachine, machineFor } from './workspace.ts';
+import { untilAborted } from './step-deadline.ts';
 
 /**
  * The Computer panel and the agent's computer: a desktop inside the task's
@@ -39,8 +40,9 @@ async function requireTask(id: string) {
 }
 
 /** Whether the machine's desktop runs, in one command. */
-export async function isDesktopRunning(machine: Machine): Promise<boolean> {
-	return (await machine.exec(desktopRunning(desktopLayout(machine.root)))).exitCode === 0;
+export async function isDesktopRunning(machine: Machine, signal?: AbortSignal): Promise<boolean> {
+	signal?.throwIfAborted();
+	return (await machine.exec(desktopRunning(desktopLayout(machine.root)), { signal })).exitCode === 0;
 }
 
 /**
@@ -51,14 +53,18 @@ export async function isDesktopRunning(machine: Machine): Promise<boolean> {
  */
 const desktopStarts = new Map<string, Promise<void>>();
 
-export async function ensureDesktop(machine: Machine): Promise<void> {
+export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Promise<void> {
+	signal?.throwIfAborted();
 	const key = `${machine.id}:${machine.root}`;
 	const existing = desktopStarts.get(key);
 	if (existing) return existing;
 	const start = (async () => {
-		if (await isDesktopRunning(machine)) return;
-		await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000 });
-		await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000 });
+		if (await isDesktopRunning(machine, signal)) return;
+		signal?.throwIfAborted();
+		await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000, signal });
+		signal?.throwIfAborted();
+		await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000, signal });
+		signal?.throwIfAborted();
 		await closeBrowser(machine).catch(() => undefined);
 	})();
 	desktopStarts.set(key, start);
@@ -66,8 +72,9 @@ export async function ensureDesktop(machine: Machine): Promise<void> {
 }
 
 /** Start the screen for an agent and let an already-open Computer panel find it. */
-export async function ensureAgentDesktop(id: string, machine: Machine): Promise<void> {
-	await ensureDesktop(machine);
+export async function ensureAgentDesktop(id: string, machine: Machine, signal?: AbortSignal): Promise<void> {
+	await ensureDesktop(machine, signal);
+	signal?.throwIfAborted();
 	changed(id);
 }
 
@@ -79,6 +86,8 @@ export const displayOf = (machine: Machine): string => desktopLayout(machine.roo
 const userControl = new Set<string>();
 // A takeover waits for the active step before the panel gives the user input.
 const takingControl = new Set<string>();
+// If cancellation cannot confirm the browser stopped, never hand the screen to another driver.
+const unsafeScreens = new Set<string>();
 
 // While the agent acts, and for a few seconds after, the panel says it is using the computer.
 const BUSY_MS = 8_000;
@@ -89,7 +98,7 @@ export function agentBusy(id: string): boolean {
 	return Boolean(step && (step.running > 0 || Date.now() - step.at < BUSY_MS));
 }
 
-export const userHasControl = (id: string): boolean => userControl.has(id) || takingControl.has(id);
+export const userHasControl = (id: string): boolean => userControl.has(id) || takingControl.has(id) || unsafeScreens.has(id);
 
 /** Each task's last step, so the next waits for it. */
 const queues = new Map<string, Promise<unknown>>();
@@ -127,14 +136,34 @@ export async function asAgentStep<T>(id: string, work: () => Promise<T>): Promis
 }
 
 /** Run a sandbox browser action on the same screen and in the same queue as computer actions. */
-export function browseOnComputer(id: string, getMachine: () => Promise<Machine>, command: BrowserInput, stopped: () => boolean): Promise<BrowserState> {
+export function browseOnComputer(
+	id: string,
+	getMachine: () => Promise<Machine>,
+	command: BrowserInput,
+	stopped: () => boolean,
+	services: { desktop: typeof ensureAgentDesktop; browser: typeof browse } = { desktop: ensureAgentDesktop, browser: browse },
+	signal?: AbortSignal,
+): Promise<BrowserState> {
 	return asAgentStep(id, async () => {
-		const held = (): BrowserState => ({ url: command.url ?? '', title: '', status: null, problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.', errors: [], screenshot: null, snapshot: '' });
+		const held = (): BrowserState => ({ url: command.url ?? '', title: '', status: null, problem: 'The user has taken over the computer or the browser step was stopped. Stop and report; continue after the computer is handed back.', errors: [], screenshot: null, snapshot: '' });
 		if (stopped() || userHasControl(id)) return held();
-		const machine = await getMachine();
-		await ensureAgentDesktop(id, machine);
+		const machine = await untilAborted(getMachine(), signal);
 		if (stopped() || userHasControl(id)) return held();
-		return browse(machine, command);
+		let notice: string | undefined;
+		try {
+			await services.desktop(id, machine, signal);
+		} catch (error) {
+			if (stopped() || userHasControl(id)) return held();
+			notice = `The Computer screen could not start; this browser step runs headless and cannot be watched in Computer. ${error instanceof Error ? error.message : String(error)}`;
+		}
+		if (stopped() || userHasControl(id)) return held();
+		try {
+			const result = await services.browser(machine, command, signal);
+			return notice ? { ...result, notice } : result;
+		} catch (error) {
+			if (error instanceof BrowserStopError) unsafeScreens.add(id);
+			throw error;
+		}
 	});
 }
 
@@ -186,20 +215,32 @@ export async function stopComputer(id: string): Promise<ComputerView> {
 	if (agentBusy(id)) throw new ConflictError('The agent is using the computer. Stop the task, or wait until it is done.');
 	userControl.delete(id);
 	// The sandbox's browser is on the screen; closed, it opens headless at the agent's next step.
-	await closeBrowser(machine).catch(() => undefined);
+	await closeBrowser(machine);
 	await run(machine, stopDesktop(desktopLayout(machine.root)), { timeoutMs: 30_000 });
+	unsafeScreens.delete(id);
 	changed(id);
 	return viewOf(id, machine);
 }
 
 /** Take over (you drive, the agent waits) or hand back to the agent. */
-export async function setComputerControl(id: string, driver: 'user' | 'agent'): Promise<ComputerView> {
+export async function setComputerControl(id: string, driver: 'user' | 'agent', maxWaitMs = 15_000): Promise<ComputerView> {
 	await requireTask(id);
 	if (driver === 'user') {
+		if (unsafeScreens.has(id)) throw new ConflictError('The browser could not be stopped. Turn off the computer before taking over.');
 		takingControl.add(id);
-		// New queued steps see takingControl; the in-flight step finishes before input is enabled.
-		await queues.get(id)?.catch(() => undefined);
-		if (takingControl.delete(id)) userControl.add(id);
+		// New queued steps see takingControl; do not grant input until the in-flight step is quiescent.
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				queues.get(id)?.catch(() => undefined),
+				new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new ConflictError('The agent is still stopping its computer step. Try Take over again shortly.')), maxWaitMs); }),
+			]);
+			if (unsafeScreens.has(id)) throw new ConflictError('The browser could not be stopped. Turn off the computer before taking over.');
+			if (takingControl.delete(id)) userControl.add(id);
+		} catch (error) {
+			takingControl.delete(id);
+			throw error;
+		} finally { clearTimeout(timer); }
 	} else {
 		takingControl.delete(id);
 		userControl.delete(id);
@@ -298,8 +339,9 @@ function programOf(machine: Machine, input: ComputerInput): string | null {
 }
 
 /** The whole screen as a PNG. */
-export async function captureScreen(machine: Machine): Promise<Uint8Array> {
-	const result = await machine.exec(`import -silent -window root -display ${displayOf(machine)} png:-`, { timeoutMs: 30_000 });
+export async function captureScreen(machine: Machine, signal?: AbortSignal): Promise<Uint8Array> {
+	signal?.throwIfAborted();
+	const result = await machine.exec(`import -silent -window root -display ${displayOf(machine)} png:-`, { timeoutMs: 30_000, signal });
 	if (result.exitCode !== 0 || result.stdout.length === 0) throw new Error(`Could not capture the screen: ${result.stderr.trim() || `exit ${result.exitCode}`}`);
 	return result.stdout;
 }
@@ -318,18 +360,21 @@ const SETTLE_MS = { open: 3000, launch: 2500, type: 300, key: 600 } as Partial<R
  * the screen as it is now. Positions are screen pixels.
  */
 export async function act(machine: Machine, input: ComputerInput, signal?: AbortSignal): Promise<{ png: Uint8Array; window: string | null }> {
-	await ensureDesktop(machine);
+	await ensureDesktop(machine, signal);
+	signal?.throwIfAborted();
 	const display = displayOf(machine);
 	const command = inputCommand(input);
 	const program = programOf(machine, input);
 	if (command) await run(machine, `DISPLAY=${display} ${command}`, { timeoutMs: 60_000, signal });
+	signal?.throwIfAborted();
 	if (program) {
 		// Its own session, out of the step's reach, so a program left open stays open; with the desktop's theme.
-		await run(machine, `cd ${quote(machine.root)} && ${desktopEnv(desktopLayout(machine.root))} env -u ANTON_EXEC setsid nohup bash -lc ${quote(program)} > /tmp/anton-launch.log 2>&1 < /dev/null &`);
+		await run(machine, `cd ${quote(machine.root)} && ${desktopEnv(desktopLayout(machine.root))} env -u ANTON_EXEC setsid nohup bash -lc ${quote(program)} > /tmp/anton-launch.log 2>&1 < /dev/null &`, { signal });
 	}
 	const settle = input.action === 'wait' ? Math.min(Math.max(input.ms ?? 1000, 0), 15_000) : input.action === 'look' ? 0 : (SETTLE_MS[input.action] ?? 400);
 	if (settle) await new Promise((resolve) => setTimeout(resolve, settle));
-	const [png, window] = await Promise.all([captureScreen(machine), focusedWindow(machine)]);
+	signal?.throwIfAborted();
+	const [png, window] = await Promise.all([captureScreen(machine, signal), focusedWindow(machine)]);
 	return { png, window };
 }
 
