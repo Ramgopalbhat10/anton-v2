@@ -110,6 +110,13 @@ describe('Thread', () => {
 		fireEvent.click(header);
 		expect(screen.getByText('src/edited.ts')).toBeTruthy();
 	});
+	it('counts the lines of every change in one edit call', () => {
+		const edits = [{ oldText: 'a', newText: 'b\nc' }, { oldText: 'd\ne', newText: 'f\ng\nh' }];
+		show(agent([assistant('a1', [tool('edit', { path: 'src/edited.ts', edits }, { output: 'ok' })])]));
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+		expect(screen.getByText('+5')).toBeTruthy();
+		expect(screen.getByText('-3')).toBeTruthy();
+	});
 
 	it('shows work handed to subagents as an agents card, not as steps, matched to their runs', async () => {
 		api.subagents.mockResolvedValue({

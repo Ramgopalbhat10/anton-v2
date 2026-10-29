@@ -177,8 +177,11 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				),
 			};
 		case 'edit': {
-			const added = lineCount(field(input, 'newText'));
-			const removed = lineCount(field(input, 'oldText'));
+			// One change, or several in its edits list.
+			const edits = input && typeof input === 'object' && Array.isArray((input as { edits?: unknown }).edits) ? ((input as { edits: unknown[] }).edits) : [];
+			const changes = [input, ...edits];
+			const added = changes.reduce<number>((sum, change) => sum + lineCount(field(change, 'newText')), 0);
+			const removed = changes.reduce<number>((sum, change) => sum + lineCount(field(change, 'oldText')), 0);
 			return {
 				icon: Pencil,
 				body: (

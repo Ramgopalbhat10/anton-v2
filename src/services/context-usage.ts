@@ -133,15 +133,28 @@ export function compactionReserve(window: number, maxOutput: number | null, ceil
 }
 
 /**
+ * How much of the latest conversation a compaction keeps word for word: a fifth of the context it compacts
+ * at, from the runtime's 8K up to 40K. The runtime keeps 8K, about the last few tool results, so a coding
+ * agent compacted mid-task lost the files and test output it was working from and spent its next calls
+ * reading them again. A compaction starts the prompt cache over whatever it keeps, so keeping more costs
+ * nothing then, and every call after reads it from the cache.
+ */
+export function keptAfterCompaction(compactsAt: number): number {
+	return Math.min(40_000, Math.max(8_000, Math.floor(compactsAt / 5)));
+}
+
+/**
  * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
- * comes before the window fills, else (undefined) the runtime's own point. Read while the agent renders,
+ * comes before the window fills, else at the runtime's own point, keeping what `keptAfterCompaction`
+ * says. Undefined for a model of unknown window, left to the runtime. Read while the agent renders,
  * from the model list last fetched.
  */
-export function compactionFor(model: string, ceiling = compactionCeiling(), models = loadedModels()): { reserveTokens: number } | undefined {
+export function compactionFor(model: string, ceiling = compactionCeiling(), models = loadedModels()): { reserveTokens?: number; keepRecentTokens: number } | undefined {
 	const info = models.find((entry) => entry.id === unrouted(model));
-	if (!ceiling || !info?.contextLength) return undefined;
+	if (!info?.contextLength) return undefined;
 	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
-	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? undefined : { reserveTokens: reserve };
+	const keepRecentTokens = keptAfterCompaction(info.contextLength - reserve);
+	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens } : { reserveTokens: reserve, keepRecentTokens };
 }
 
 /** Shares `total` across the parts by their estimated sizes, in whole tokens that add up exactly. */

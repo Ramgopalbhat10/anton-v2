@@ -64,3 +64,75 @@ test('an image is whole only when it ends where its format says', () => {
 	assert.equal(isWholeImage(webp, 'image/webp'), true);
 	assert.equal(isWholeImage(webp.subarray(0, 16), 'image/webp'), false);
 });
+
+function editTool(start: Record<string, string>) {
+	const disk = { ...start };
+	const writes: string[] = [];
+	const box = {
+		cwd: '/repo',
+		resolvePath: (path: string) => `/repo/${path}`,
+		readFile: async (path: string) => {
+			if (!(path in disk)) throw new Error(`no such file ${path}`);
+			return disk[path];
+		},
+		writeFile: async (path: string, content: string) => {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			writes.push(path);
+			disk[path] = content;
+		},
+	} as unknown as Sandbox;
+	const tools = sandboxTools({ sees: async () => true, describe: async () => '' })(box, { subagents: {} });
+	const edit = tools.find((tool) => tool.name === 'edit')!;
+	const write = tools.find((tool) => tool.name === 'write')!;
+	return { disk, writes, edit: (params: object) => edit.execute('call', params), write: (params: object) => write.execute('call', params) };
+}
+
+test('edit makes one change as before', async () => {
+	const { disk, edit } = editTool({ 'a.ts': 'const a = 1;\nconst b = 2;\n' });
+	const result = await edit({ path: 'a.ts', oldText: 'const a = 1;', newText: 'const a = 3;' });
+	assert.equal(disk['a.ts'], 'const a = 3;\nconst b = 2;\n');
+	assert.equal((result.content[0] as { text: string }).text, 'Successfully edited a.ts');
+	await assert.rejects(edit({ path: 'a.ts', oldText: 'const', newText: 'let' }), /Found 2 occurrences/);
+	await edit({ path: 'a.ts', oldText: 'const', newText: 'let', replaceAll: true });
+	assert.equal(disk['a.ts'], 'let a = 3;\nlet b = 2;\n');
+});
+
+test('edit makes several changes to a file in one call, each on the text the one before left, and writes once', async () => {
+	const { disk, writes, edit } = editTool({ 'a.ts': 'one\ntwo\nthree\n' });
+	const result = await edit({
+		path: 'a.ts',
+		edits: [
+			{ oldText: 'one', newText: 'uno' },
+			{ oldText: 'uno\ntwo', newText: 'uno\ndos' },
+			{ oldText: 'o', newText: '0', replaceAll: true },
+		],
+	});
+	assert.equal(disk['a.ts'], 'un0\nd0s\nthree\n');
+	assert.deepEqual(writes, ['a.ts']);
+	assert.equal((result.content[0] as { text: string }).text, 'Successfully edited a.ts (3 edits)');
+	assert.deepEqual(result.details, { path: 'a.ts', edits: 3, replacements: 4 });
+});
+
+test('edit changes nothing when one of its changes does not fit, and says which', async () => {
+	const { disk, writes, edit } = editTool({ 'a.ts': 'one\ntwo\n' });
+	await assert.rejects(
+		edit({ path: 'a.ts', edits: [{ oldText: 'one', newText: '1' }, { oldText: 'three', newText: '3' }] }),
+		/^Error: Edit 2 of 2: Could not find the exact text in a\.ts.*No changes made\.$/,
+	);
+	await assert.rejects(edit({ path: 'a.ts', edits: [{ oldText: '', newText: 'x' }] }), /oldText must be a non-empty string/);
+	await assert.rejects(edit({ path: 'a.ts' }), /Give oldText and newText, or a list of edits/);
+	assert.equal(disk['a.ts'], 'one\ntwo\n');
+	assert.deepEqual(writes, []);
+});
+
+test('edits and writes to one file in the same step wait for each other, so none is lost', async () => {
+	const { disk, edit, write } = editTool({ 'a.ts': 'a b c' });
+	await Promise.all([
+		edit({ path: 'a.ts', oldText: 'a', newText: 'A' }),
+		edit({ path: 'a.ts', edits: [{ oldText: 'b', newText: 'B' }] }),
+		edit({ path: 'a.ts', oldText: 'c', newText: 'C' }),
+	]);
+	assert.equal(disk['a.ts'], 'A B C');
+	await Promise.all([write({ path: 'a.ts', content: 'x y' }), edit({ path: 'a.ts', oldText: 'y', newText: 'Y' })]);
+	assert.equal(disk['a.ts'], 'x Y');
+});
