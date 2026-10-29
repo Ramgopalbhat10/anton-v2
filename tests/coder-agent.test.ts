@@ -36,12 +36,12 @@ test('workspace agents batch the edits they know and do not run the same tests t
 	assert.match(source, /Never run the same tests both ways/);
 });
 
-test('the browser requires an explicit fresh open and retains its notice after autopilot', () => {
+test('the sandbox browser needs no desktop, and do keeps the opening notice after autopilot', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	const tool = source.slice(source.indexOf('function browserTool'), source.indexOf('function Browser()'));
-	assert.match(tool, /fresh: v\.optional/);
-	assert.match(tool, /fresh needs open or do with a URL/);
-	assert.match(tool, /go\(\{ action: 'open', url: rest\.url, fresh: rest\.fresh \}\)/);
+	assert.doesNotMatch(tool, /fresh/);
+	assert.match(source, /sandbox: "a browser inside the sandbox, which the user can watch and take over in the Computer panel/);
+	assert.match(tool, /go\(\{ action: 'open', url: rest\.url \}\)/);
 	assert.match(tool, /openingNotice = opened\.notice/);
 	assert.match(tool, /\[openingNotice, state\.notice\]/);
 	// The run starts on the page that was opened, without looking at it again.

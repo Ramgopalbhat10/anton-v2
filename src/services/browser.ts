@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { config } from '../config.ts';
-import { desktopLayout, desktopRunning } from '../core/desktop.ts';
+import { desktopLayout } from '../core/desktop.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
@@ -63,6 +63,164 @@ export async function takeScreenshot(machine: Machine, input: ScreenshotInput): 
 }
 
 /**
+ * The browser server's live view, for the Computer panel: a WebSocket that
+ * sends the tab as JPEG frames from Chromium's screencast, and takes your
+ * mouse and keyboard when you have taken over. The sandbox browser used to
+ * run on the Computer's desktop so you could watch it, and every step waited
+ * on that desktop (a minute or more to start, and a check on each step); it
+ * now runs headless, and only a panel that is watching costs anything.
+ * WebSocket framing is written out here, as the sandbox has Playwright but
+ * no WebSocket server package. Expects `page` and `idle` from the server.
+ */
+const LIVE_VIEW = `
+const viewers = new Set();
+let cast = null;
+let lastFrame = null;
+let lastSize = null;
+let casting = Promise.resolve();
+let inputs = Promise.resolve();
+
+function frame(opcode, payload) {
+	const length = payload.length;
+	let head;
+	if (length < 126) head = Buffer.from([0x80 | opcode, length]);
+	else if (length < 65536) head = Buffer.from([0x80 | opcode, 126, length >> 8, length & 255]);
+	else {
+		head = Buffer.alloc(10);
+		head[0] = 0x80 | opcode;
+		head[1] = 127;
+		head.writeBigUInt64BE(BigInt(length), 2);
+	}
+	return Buffer.concat([head, payload]);
+}
+// A viewer that falls behind misses frames rather than holding the tab's memory.
+const send = (viewer, opcode, payload) => !viewer.destroyed && viewer.writableLength < 2 * 1024 * 1024 && viewer.write(frame(opcode, payload));
+const tell = (viewer, message) => send(viewer, 1, Buffer.from(JSON.stringify(message)));
+
+async function stopCast() {
+	const old = cast;
+	cast = null;
+	if (old) await old.session.detach().catch(() => {});
+}
+
+/** Streams the current tab while anyone watches; follows a new tab, and says when there is none. */
+function recast() {
+	casting = casting.then(async () => {
+		if (!viewers.size || !page || page.isClosed()) {
+			await stopCast();
+			if (!page) {
+				lastFrame = null;
+				for (const viewer of viewers) tell(viewer, { type: 'idle' });
+			}
+			return;
+		}
+		if (cast && cast.page === page) return;
+		await stopCast();
+		const target = page;
+		const session = await target.context().newCDPSession(target);
+		cast = { page: target, session };
+		session.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
+			session.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+			if (!cast || cast.session !== session) return;
+			const size = { type: 'size', width: Math.round(metadata.deviceWidth), height: Math.round(metadata.deviceHeight) };
+			if (!lastSize || lastSize.width !== size.width || lastSize.height !== size.height) {
+				lastSize = size;
+				for (const viewer of viewers) tell(viewer, size);
+			}
+			lastFrame = Buffer.from(data, 'base64');
+			for (const viewer of viewers) send(viewer, 2, lastFrame);
+		});
+		const { width, height } = target.viewportSize() || { width: 1280, height: 800 };
+		await session.send('Page.startScreencast', { format: 'jpeg', quality: 70, maxWidth: width, maxHeight: height, everyNthFrame: 1 });
+	}).catch(() => {});
+}
+
+/** One input from a viewer who has taken over, in the tab's own pixels. */
+async function input(message) {
+	const target = page;
+	if (!target || target.isClosed()) return;
+	idle();
+	const at = () => target.mouse.move(Number(message.x) || 0, Number(message.y) || 0);
+	const button = ['left', 'right', 'middle'].includes(message.button) ? message.button : 'left';
+	switch (message.type) {
+		case 'move': return at();
+		case 'down': await at(); return target.mouse.down({ button, clickCount: Number(message.clicks) || 1 });
+		case 'up': await at(); return target.mouse.up({ button, clickCount: Number(message.clicks) || 1 });
+		case 'wheel': await at(); return target.mouse.wheel(Number(message.dx) || 0, Number(message.dy) || 0);
+		// A key Playwright has no name for (an accented letter, say) is typed as text.
+		case 'keydown': return target.keyboard.down(String(message.key)).catch(() => String(message.key).length === 1 && target.keyboard.insertText(String(message.key)));
+		case 'keyup': return target.keyboard.up(String(message.key)).catch(() => {});
+		case 'text': return target.keyboard.insertText(String(message.text || ''));
+	}
+}
+
+function join(socket) {
+	viewers.add(socket);
+	idle();
+	socket.setNoDelay(true);
+	let pending = Buffer.alloc(0);
+	socket.on('data', (chunk) => {
+		pending = Buffer.concat([pending, chunk]);
+		while (pending.length >= 2) {
+			const opcode = pending[0] & 15;
+			const masked = (pending[1] & 128) !== 0;
+			let length = pending[1] & 127;
+			let at = 2;
+			if (length === 126) {
+				if (pending.length < 4) return;
+				length = pending.readUInt16BE(2);
+				at = 4;
+			} else if (length === 127) {
+				if (pending.length < 10) return;
+				length = Number(pending.readBigUInt64BE(2));
+				at = 10;
+			}
+			if (pending.length < at + (masked ? 4 : 0) + length) return;
+			const mask = masked ? pending.subarray(at, at + 4) : null;
+			if (masked) at += 4;
+			const body = Buffer.from(pending.subarray(at, at + length));
+			pending = pending.subarray(at + length);
+			if (mask) for (let i = 0; i < body.length; i++) body[i] ^= mask[i & 3];
+			if (opcode === 8) return socket.end(frame(8, Buffer.alloc(0)));
+			if (opcode === 9) send(socket, 10, body);
+			if (opcode !== 1) continue;
+			let message;
+			try { message = JSON.parse(body.toString('utf8')); } catch { continue; }
+			inputs = inputs.then(() => input(message)).catch(() => {});
+		}
+	});
+	const leave = () => {
+		if (viewers.delete(socket) && !viewers.size) recast();
+	};
+	socket.on('close', leave);
+	socket.on('error', leave);
+	// What the tab last showed, at once: a page that is not repainting sends no frame of its own.
+	if (lastSize) tell(socket, lastSize);
+	if (lastFrame && page) send(socket, 2, lastFrame);
+	else if (!page) tell(socket, { type: 'idle' });
+	recast();
+}
+
+/** On every address, where only the provider's authenticated way in reaches it, or on ANTON_SCREEN_BIND (a local machine's own). */
+function listenLive(port) {
+	const live = http.createServer((request, response) => {
+		response.statusCode = 426;
+		response.end();
+	});
+	live.on('upgrade', (request, socket) => {
+		const key = request.headers['sec-websocket-key'];
+		if (!key) return socket.destroy();
+		const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+		socket.write('HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Accept: ' + accept + '\\r\\n\\r\\n');
+		join(socket);
+	});
+	// A port another machine's browser holds (local machines share this computer) leaves this one without a live view.
+	live.on('error', (error) => console.error('Live view: ' + error.message));
+	live.listen(port, process.env.ANTON_SCREEN_BIND || '0.0.0.0');
+}
+`;
+
+/**
  * Runs inside the machine and keeps one browser tab open between the agent's
  * steps, so a page keeps its state while the agent clicks and types through
  * it. Takes commands over a Unix socket and quits after a quiet spell.
@@ -70,8 +228,9 @@ export async function takeScreenshot(machine: Machine, input: ScreenshotInput): 
 const SERVER = `
 const http = require('http');
 const fs = require('fs');
+const crypto = require('crypto');
 const { chromium } = require('playwright');
-const [socket, outputs] = process.argv.slice(2);
+const [socket, outputs, livePort] = process.argv.slice(2);
 const IDLE_MS = 15 * 60 * 1000;
 let browser = null;
 let page = null;
@@ -91,14 +250,14 @@ async function tab(width, height) {
 		lost = true;
 	}
 	if (!browser) {
-		// On the task's desktop when it has one, full screen, so you watch it in the Computer panel; else headless.
-		// Without Google's keys, and as a test browser, it shows no infobars about them or --no-sandbox.
-		const launched = await chromium.launch(process.env.DISPLAY ? { headless: false, args: ['--kiosk', '--no-first-run', '--test-type'], env: { ...process.env, ...NO_GOOGLE_KEYS } } : {});
+		// Headless, so a step never waits for a desktop: the Computer panel shows the tab through its live view below.
+		const launched = await chromium.launch({ env: { ...process.env, ...NO_GOOGLE_KEYS } });
 		launched.on('disconnected', () => {
 			if (browser !== launched) return;
 			browser = null;
 			page = null;
 			lost = true;
+			recast();
 		});
 		browser = launched;
 	}
@@ -113,13 +272,17 @@ async function tab(width, height) {
 			page = null;
 			lost = true;
 			opened.close().catch(() => {});
+			recast();
 		});
 		page = opened;
+		recast();
 	} else if (page.viewportSize()?.width !== width || page.viewportSize()?.height !== height) {
 		await page.setViewportSize({ width, height });
 	}
 	return page;
 }
+
+${LIVE_VIEW}
 
 ${BROWSER_STEP}
 
@@ -153,6 +316,7 @@ async function restart() {
 	browser = null;
 	page = null;
 	lost = true;
+	recast();
 	await old?.close().catch(() => {});
 }
 
@@ -174,6 +338,7 @@ http.createServer((request, response) => {
 		});
 	});
 }).listen(socket, idle);
+if (livePort) listenLive(Number(livePort));
 `;
 
 /** Sends one command to the browser and prints its answer; exits 4 when no browser is running. */
@@ -197,8 +362,6 @@ export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'ho
 export type BrowserInput = {
 	action: BrowserAction;
 	url?: string;
-	/** Explicitly discard a headless session and open a fresh browser on the Computer screen. */
-	fresh?: boolean;
 	/** A Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
 	target?: string;
 	text?: string;
@@ -219,7 +382,7 @@ export type BrowserState = {
 	status: number | null;
 	/** Why the action failed, such as no element matching the target; the page is described as it is anyway. */
 	problem: string | null;
-	/** A nonfatal limitation, such as a headless fallback when the desktop is unavailable. */
+	/** A nonfatal limitation to pass on to the agent. */
 	notice?: string;
 	errors: string[];
 	screenshot: string | null;
@@ -232,7 +395,22 @@ export type BrowserState = {
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
 function browserFiles(machine: Machine) {
 	const base = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}`;
-	return { socket: `${base}.sock`, pid: `${base}.pid`, mode: `${base}.mode`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
+	return { socket: `${base}.sock`, pid: `${base}.pid`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
+}
+
+/** The live view's port, a thousand above the desktop's socket, so it is named by the machine the same way. */
+export const browserLivePort = (machine: Machine): number => desktopLayout(machine.root).socketPort + 1000;
+
+/** Whether the machine's browser server runs, as one shell test with no side effects. */
+export function browserRunning(machine: Machine): string {
+	const { socket, pid } = browserFiles(machine);
+	return `[ -S ${socket} ] && [ -f ${pid} ] && kill -0 "$(cat ${pid})" 2>/dev/null`;
+}
+
+/** An address for the Computer panel to watch the browser's tab at, or null when the browser does not run or the provider has no way in. */
+export async function browserLiveUrl(machine: Machine): Promise<string | null> {
+	if ((await machine.exec(browserRunning(machine))).exitCode !== 0) return null;
+	return machine.socketUrl(browserLivePort(machine));
 }
 
 /** The browser could not be stopped, so nobody else may safely drive its screen yet. */
@@ -240,7 +418,7 @@ export class BrowserStopError extends Error {}
 
 /** Stops the machine's browser and waits for it to leave before another driver can act. */
 export async function closeBrowser(machine: Machine): Promise<void> {
-	const { pid, socket, mode } = browserFiles(machine);
+	const { pid, socket } = browserFiles(machine);
 	const result = await machine.exec(`
 if [ -f ${pid} ]; then
   p=$(cat ${pid})
@@ -252,20 +430,8 @@ if [ -f ${pid} ]; then
   if alive; then echo 'Browser did not stop' >&2; exit 1; fi
   rm -f ${pid}
 fi
-rm -f ${socket} ${mode}`);
+rm -f ${socket}`);
 	if (result.exitCode !== 0) throw new BrowserStopError(result.stderr.trim() || 'The sandbox browser did not stop.');
-}
-
-/** Move a headless browser to a newly ready screen only between queued steps. */
-export async function showBrowserOnDesktop(machine: Machine, signal?: AbortSignal): Promise<boolean> {
-	const { pid, mode } = browserFiles(machine);
-	signal?.throwIfAborted();
-	const result = await machine.exec(`if [ -f ${pid} ] && [ "$(cat ${mode} 2>/dev/null)" != screen ]; then echo switch; fi`, { signal });
-	signal?.throwIfAborted();
-	if (!new TextDecoder().decode(result.stdout).includes('switch')) return false;
-	await closeBrowser(machine);
-	signal?.throwIfAborted();
-	return true;
 }
 
 /**
@@ -311,12 +477,9 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 		if (result.exitCode === 4) {
 			await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
 			signal?.throwIfAborted();
-			const layout = desktopLayout(machine.root);
-			const onScreen = (await machine.exec(desktopRunning(layout), { signal })).exitCode === 0;
-			signal?.throwIfAborted();
 			await run(
 				machine,
-				`${onScreen ? `DISPLAY=${layout.display} ` : 'env -u DISPLAY '}NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; printf '%s' ${onScreen ? 'screen' : 'headless'} > ${files.mode}; ` +
+				`env -u DISPLAY NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} ${browserLivePort(machine)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
 					`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
 				{ signal },
 			);

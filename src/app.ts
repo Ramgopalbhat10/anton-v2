@@ -60,7 +60,7 @@ import {
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
-import { computerScreenshot, computerView, connectComputer, setComputerControl, startComputer, stopComputer } from './services/computer.ts';
+import { computerScreenshot, computerView, connectBrowser, connectComputer, setComputerControl, startComputer, stopComputer } from './services/computer.ts';
 import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/live-browser.ts';
 import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
 import { recordTurnUsage, usageView } from './services/usage.ts';
@@ -850,6 +850,8 @@ app.get('/api/sessions/:id/computer', async (c) => c.json(await computerView(c.r
 app.post('/api/sessions/:id/computer', async (c) => c.json(await startComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/stop', async (c) => c.json(await stopComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/connect', async (c) => c.json(await connectComputer(c.req.param('id'))));
+// The sandbox browser's live view, which the panel shows when the agent browses there; it needs no desktop.
+app.post('/api/sessions/:id/computer/browser', async (c) => c.json(await connectBrowser(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/control', async (c) => {
 	const { driver } = await body(c, v.object({ driver: v.picklist(['user', 'agent']) }));
 	return c.json(await setComputerControl(c.req.param('id'), driver));

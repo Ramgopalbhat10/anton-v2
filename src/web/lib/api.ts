@@ -584,6 +584,8 @@ export type ComputerView = {
 	live: boolean;
 	/** Its desktop runs. */
 	running: boolean;
+	/** Its browser runs, shown through its live view. */
+	browser: boolean;
 	screen: { width: number; height: number };
 	/** The agent is using the computer, or did a moment ago. */
 	agentBusy: boolean;
@@ -845,6 +847,7 @@ export const api = {
 	/** Starts the sandbox if it is not running, then its desktop. */
 	startComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer`),
 	connectComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/connect`),
+	connectSandboxBrowser: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/browser`),
 	stopComputer: (id: string) => post<ComputerView>(`/api/sessions/${id}/computer/stop`),
 	setComputerControl: (id: string, driver: 'user' | 'agent') => post<ComputerView>(`/api/sessions/${id}/computer/control`, { driver }),
 	computerScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/computer/screenshot`),

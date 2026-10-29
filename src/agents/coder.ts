@@ -327,7 +327,7 @@ type BrowserPlace = 'panel' | 'sandbox';
 
 const PLACES: Record<BrowserPlace, string> = {
 	panel: "the user's Browser panel, a real browser they watch and can take over (to sign in, say), for any site on the web",
-	sandbox: "the browser on the sandbox's Computer screen, which the user can watch and take over; it reaches the app's dev server on localhost",
+	sandbox: "a browser inside the sandbox, which the user can watch and take over in the Computer panel; the only one that reaches the app's dev server on localhost",
 };
 
 /** The browser each task's steps went to last, so a step that names no page stays on the page it is on. */
@@ -355,14 +355,12 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			'role=button[name="Save"], role=textbox[name="Email"], text=Sign in, or CSS. To keep your context small, a page you have seen before comes back as what changed (or as unchanged), ' +
 			'and parts of a long page your job does not need are left out; use look to have the page described again in full. ' +
 			'Pass screenshot to save a PNG to the task\'s Library, where the user sees it; with a sandbox it is in the outputs folder, where you can read it to see the page. ' +
-			'If a sandbox browser started headless, it keeps its session even when the Computer becomes ready. To move it to the screen, use fresh: true with open (or do with a URL); this discards its cookies, history and tab state. Never use it during a flow that needs that state. ' +
 			places.map((place, index) => `"in": "${place}" is ${PLACES[place]}${index === 0 ? ' (the default)' : ''}.`).join(' '),
 		input: v.object({
 			// Do is on offer only with a decision model to drive it.
 			action: v.picklist((autopiloted ? AUTOPILOT_ACTIONS : BROWSER_ACTIONS) as typeof AUTOPILOT_ACTIONS),
 			in: v.optional(v.pipe(v.picklist(places), v.description('Which browser; steps after an open stay in the browser it used'))),
 			url: v.optional(v.pipe(v.string(), v.description('For open: a site, or the dev server in the sandbox such as http://localhost:3000. For do: a page to open first'))),
-			fresh: v.optional(v.pipe(v.boolean(), v.description('For open or do with a URL: explicitly discard a headless sandbox browser session to open a new one on the Computer screen; cookies, history and page state are lost'))),
 			target: v.optional(v.pipe(v.string(), v.description('The element to act on, as a Playwright selector'))),
 			text: v.optional(v.pipe(v.string(), v.description('For type: what to enter, replacing what is there. For select: the option'))),
 			submit: v.optional(v.pipe(v.boolean(), v.description('For type: press Enter afterwards'))),
@@ -386,7 +384,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			const full = rest.action === 'look';
 			// Opening the sandbox's own address goes to the sandbox; other steps stay where the last one was.
 			const opens = rest.action === 'open' || (rest.action === 'do' && Boolean(rest.url));
-			if (rest.fresh && (!opens || !rest.url)) return { output: { problem: 'fresh needs open or do with a URL; it discards the headless browser session.' } };
 			const local = opens && isLocalAddress(rest.url);
 			const place: BrowserPlace = chosen ?? (local && places.includes('sandbox') ? 'sandbox' : opens ? places[0] : (lastPlace.get(id) ?? places[0]));
 			if (place === 'panel' && local) {
@@ -421,7 +418,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				let openingNotice: string | undefined;
 				let opened: BrowserState | undefined;
 				if (rest.url) {
-					opened = await go({ action: 'open', url: rest.url, fresh: rest.fresh });
+					opened = await go({ action: 'open', url: rest.url });
 					if (opened.problem) return { output: { ...forAgent(opened), snapshot: pageForAgent(`${id}:${place}`, opened.url, opened.snapshot) } };
 					openingNotice = opened.notice;
 				}
