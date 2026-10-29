@@ -5,7 +5,7 @@ import { previewsView, type Preview } from './previews.ts';
 /** An HTTP check from Anton's server, not a browser or a guarantee that an iframe can render. */
 export async function checkPreviewResponse(
 	preview: Preview,
-	fetcher: (request: PageRequest) => Promise<PageResponse> = (request) => fetchForPage(request, { timeoutMs: 10_000, maxBytes: 1024 * 1024 }),
+	fetcher: (request: PageRequest) => Promise<PageResponse> = (request) => fetchForPage(request, { timeoutMs: 10_000, responseMode: 'preview' }),
 ) {
 	if (!preview.url) return { ...preview, check: 'unavailable' as const, detail: 'This port has no Preview URL; it may not have been exposed when the sandbox started.' };
 	if (isLocalAddress(preview.url))
