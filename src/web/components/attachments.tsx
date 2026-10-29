@@ -131,8 +131,8 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 	}, []);
 	/** Puts back attachments a send could not deliver, unless new ones were added since. */
 	const restore = useCallback((taken: { images: ImageAttachment[]; files: FileAttachment[] }) => {
-		setImages((current) => (current.length ? current : taken.images));
-		setFiles((current) => (current.length ? current : taken.files));
+		setImages((current) => [...taken.images, ...current]);
+		setFiles((current) => [...taken.files, ...current]);
 	}, []);
 	return {
 		images,

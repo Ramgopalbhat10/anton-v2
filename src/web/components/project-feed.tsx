@@ -185,7 +185,7 @@ function ActionRow({ icon, children, failed }: { icon: typeof Send; children: Re
 	return (
 		<div className={cn('flex min-w-0 items-center gap-2 px-1 text-[12px]', failed ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 			<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? undefined : 'text-(--icon-tertiary)'} />
-			<span className="min-w-0 truncate">{children}</span>
+			<span className="min-w-0 break-words">{children}</span>
 		</div>
 	);
 }
@@ -581,6 +581,8 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const [notice, setNotice] = useState<string | null>(null);
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
 	const attachments = useAttachments();
 	const { addImages } = attachments;
 	// A drawing on a thread's image, from the viewer, joins the draft.
@@ -615,6 +617,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				if (!ready) return;
 				const taken = attachments.take();
 				askToNotify();
+				draftRef.current = '';
 				onDraft('');
 				setNotice(null);
 				const count = taken.images.length + taken.files.length;
@@ -632,7 +635,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					if (attaching) onPending('sent');
 					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
 				} catch (error) {
-					onDraft(text);
+					onDraft([text, draftRef.current].filter(Boolean).join('\n\n'));
 					attachments.restore(taken);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
@@ -646,7 +649,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput
 					value={draft}
-					onChange={onDraft}
+					onChange={(text) => { draftRef.current = text; onDraft(text); }}
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>

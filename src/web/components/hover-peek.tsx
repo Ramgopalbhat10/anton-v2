@@ -37,7 +37,7 @@ export function HoverPeek({
 					collisionPadding={12}
 					onClick={(event) => event.stopPropagation()}
 					className={cn('in-pop z-50 flex flex-col gap-2.5 p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0')}
-					style={{ width }}
+					style={{ width, maxWidth: 'calc(100vw - 24px)' }}
 				>
 					{content}
 				</HoverCard.Content>

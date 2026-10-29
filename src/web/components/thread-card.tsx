@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { Popover } from 'radix-ui';
 import { Markdown, InlineLinks } from '@/components/markdown';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
@@ -66,7 +67,7 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 	});
 	const steps = nextSteps(thread);
 	return (
-		<div className="flex shrink-0 items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
+		<div className="flex min-w-0 flex-wrap items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
 			{steps.map((step) =>
 				'href' in step ? (
 					<a key={step.label} href={step.href} target="_blank" rel="noreferrer" className={cn('sg-btn', `sg-btn--${size}`, step.primary ? 'sg-btn--secondary' : 'sg-btn--ghost')}>
@@ -86,6 +87,7 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 					</Btn>
 				),
 			)}
+			{send.isError ? <span role="alert" className="basis-full text-[12px] text-(--danger-text)">Action failed. Try again.</span> : null}
 			{size === 'sm' ? (
 				<Btn size="sm" variant="ghost" icon={Play} onClick={() => open(thread)} aria-label={`Open ${thread.title}`}>
 					Open
@@ -159,40 +161,43 @@ function FilePeek({ item }: { item: ViewerItem }) {
 	);
 }
 
-/** How many files the +N chip's list shows before its last row opens the rest. */
-const LISTED_FILES = 8;
-
-/** Files as rows of a thumbnail and a name, each opening in the viewer; past `LISTED_FILES`, a last row opens the rest. */
+/** All remaining files are available by click, keyboard or touch, not only on hover. */
 function FileList({ items, open }: { items: ViewerItem[]; open: (item: ViewerItem) => void }) {
-	const more = items.length - LISTED_FILES;
-	const row = 'flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex min-h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
 	return (
-		<div className="-m-1.5 flex flex-col">
-			{items.slice(0, LISTED_FILES).map((item) => (
+		<div className="flex max-h-[min(320px,50vh)] flex-col overflow-y-auto overscroll-contain">
+			{items.map((item) => (
 				<button key={item.path} type="button" onClick={() => open(item)} className={row}>
 					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-(--border-subtle) bg-(--bg-inset)">
 						{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
 					</span>
-					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>
-						{nameOf(item.path)}
-					</span>
+					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>{nameOf(item.path)}</span>
 				</button>
 			))}
-			{more > 0 ? (
-				<button type="button" onClick={() => open(items[LISTED_FILES])} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-primary)')}>
-					<span className="in-num inline-flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-dashed border-(--border-strong) text-[10px]">+{more}</span>
-					<span className="text-[12px]">More</span>
-				</button>
-			) : null}
 		</div>
+	);
+}
+
+function MoreFiles({ items, open, className }: { items: ViewerItem[]; open: (item: ViewerItem) => void; className: string }) {
+	const [show, setShow] = useState(false);
+	return (
+		<Popover.Root open={show} onOpenChange={setShow}>
+			<Popover.Trigger asChild>
+				<button type="button" aria-label={`${items.length} more files`} onClick={(event) => event.stopPropagation()} className={className}>+{items.length}</button>
+			</Popover.Trigger>
+			<Popover.Portal>
+				<Popover.Content side="top" align="start" sideOffset={6} collisionPadding={12} onClick={(event) => event.stopPropagation()} className="in-pop z-50 w-[min(268px,calc(100vw-24px))] p-1.5 outline-none">
+					<FileList items={items} open={(item) => { setShow(false); open(item); }} />
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
 	);
 }
 
 /**
  * What a thread made, as chips after its pull request: its newest file, a
- * peek of it on hover, and +N for the rest, listed on hover. A click opens
- * the file in the viewer beside the conversation, the thread's others a step
- * away. `onPeek` says when one of them shows a peek, so the row's own stays shut.
+ * peek of it on hover, and +N for the rest, listed in a popover. A click opens
+ * a file in the viewer beside the conversation. `onPeek` says when one of them shows a peek, so the row's own stays shut.
  */
 export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?: (peeking: boolean) => void }) {
 	const outputs = useThreadOutputs(thread.id);
@@ -216,25 +221,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 					<span className="min-w-0 truncate">{nameOf(first.path)}</span>
 				</button>
 			</HoverPeek>
-			{rest.length ? (
-				<HoverPeek
-					width={268}
-					openDelay={200}
-					content={<FileList items={rest} open={open} />}
-				>
-					<button
-						type="button"
-						aria-label={`${rest.length} more files`}
-						onClick={(event) => {
-							event.stopPropagation();
-							open(rest[0]);
-						}}
-						className={cn(CHIP_BUTTON, 'in-num px-1.5 text-[10.5px] text-(--text-tertiary)')}
-					>
-						+{rest.length}
-					</button>
-				</HoverPeek>
-			) : null}
+			{rest.length ? <MoreFiles items={rest} open={open} className={cn(CHIP_BUTTON, 'in-num px-1.5 text-[10.5px] text-(--text-tertiary)')} /> : null}
 		</span>
 	);
 }
@@ -270,11 +257,7 @@ function PeekFiles({ thread, room }: { thread: Session; room: number }) {
 				</span>
 			))}
 			{more > 0 ? (
-				<span role="listitem" className="inline-flex">
-					<button type="button" aria-label={`${more} more files`} onClick={() => open(items[shown.length])} className={cn(tile, 'in-num border-dashed text-[10.5px] text-(--text-tertiary) hover:text-(--text-primary)')}>
-						+{more}
-					</button>
-				</span>
+				<span role="listitem" className="inline-flex"><MoreFiles items={items.slice(shown.length)} open={open} className={cn(tile, 'in-num border-dashed text-[10.5px] text-(--text-tertiary) hover:text-(--text-primary)')} /></span>
 			) : null}
 		</span>
 	);

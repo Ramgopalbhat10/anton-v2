@@ -120,7 +120,7 @@ export function ProjectPage() {
 						<Status tone="warning">{data.state === 'paused' ? 'Paused' : 'Archived'}</Status>
 					) : null}
 					<div className="min-w-0 flex-1" />
-					<Btn size="sm" variant="ghost" icon={Waypoints} onClick={() => setStarting(true)}>
+					<Btn size="sm" variant="ghost" icon={Waypoints} aria-label="New thread" onClick={() => setStarting(true)}>
 						<span className="hidden sm:inline">New thread</span>
 					</Btn>
 					<Link to="/projects/$spaceId/settings" params={{ spaceId }} aria-label="Project settings" title="Project settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
