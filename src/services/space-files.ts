@@ -1,3 +1,4 @@
+import { uploadName } from '../core/upload-name.ts';
 import { announce } from '../core/changes.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { listMachineFiles, writeMachineFile } from '../core/machine-fs.ts';
@@ -36,7 +37,7 @@ export async function listSpaceFiles(spaceId: string): Promise<SpaceFile[]> {
 		.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-const fileName = (name: string) => safeRelativePath(name.split(/[\\/]/).pop()?.replace(/[^\w.\- ]+/g, '_').trim() || 'file');
+const fileName = (name: string) => safeRelativePath(uploadName(name));
 
 /** Each running machine of the project's threads, for copying a file in or out. */
 async function liveThreadMachines(spaceId: string): Promise<Machine[]> {

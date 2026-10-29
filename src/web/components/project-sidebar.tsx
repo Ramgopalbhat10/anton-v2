@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, Plus, Settings, Waypoints } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';
 import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
@@ -47,7 +47,7 @@ export function SidebarHeading({ label, count, open, onToggle, tone, children }:
 			>
 				<SectionLabel className={cn('truncate', tone)}>{label}</SectionLabel>
 				{count ? <span className="in-num text-[11px] text-(--text-disabled)">{count}</span> : null}
-				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) opacity-0 transition-transform group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
+				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) transition-transform" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
 			</button>
 			<span className="flex-1" />
 			{children}
@@ -64,7 +64,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	return (
 		<section aria-label="Projects" className="flex flex-col">
 			<SidebarHeading label="Projects" count={list.length} open={open} onToggle={() => setOpen((current) => !current)}>
-				<Link to="/projects" search={{ create: true }} onClick={onNavigate} aria-label="New project" title="New project" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100">
+				<Link to="/projects" search={{ create: true }} onClick={onNavigate} aria-label="New project" title="New project" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs">
 					<Icon icon={Plus} size={12} />
 				</Link>
 			</SidebarHeading>
@@ -118,7 +118,9 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 
 /** A state's threads under its mono label and count; Resolved starts folded. */
 function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: ThreadState; threads: Session[]; activeId?: string; repos: number; onNavigate: () => void }) {
-	const [open, setOpen] = useState(state !== 'resolved');
+	const [open, setOpen] = useState(state !== 'resolved' || threads.some((thread) => thread.id === activeId));
+	const active = threads.some((thread) => thread.id === activeId);
+	useEffect(() => { if (active) setOpen(true); }, [active, activeId]);
 	const look = STATE_LOOK[state];
 	return (
 		<section aria-label={look.label} className="flex flex-col">

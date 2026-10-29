@@ -207,15 +207,31 @@ describe('threads', () => {
 		await client.invalidateQueries({ queryKey: ['todos', 'runs'] });
 		expect(await within(working).findByText('Write the migration test')).toBeTruthy();
 		expect(within(working).getByTitle('2 of 3 steps done')).toBeTruthy();
-		expect(within(working).queryByRole('button')).toBeNull();
+		expect(within(working).getByRole('button', { name: 'Add the table' })).toBeTruthy();
 
 		// A finished thread keeps to one line with what it last said; one ready for review opens out with its buttons.
 		const done = screen.getByRole('article', { name: 'Old cleanup' });
-		expect(within(done).queryByRole('button')).toBeNull();
+		expect(within(done).getByRole('button', { name: 'Old cleanup' })).toBeTruthy();
 		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
 		expect(within(ready).getByRole('button', { name: 'Review' })).toBeTruthy();
 		await userEvent.click(within(ready).getByRole('button', { name: 'View thread' }));
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/pr'));
+	});
+
+	it('opens a compact thread from its keyboard-accessible title', async () => {
+		const router = withRouter(() => <ThreadRow thread={threads[3]} />);
+		const title = await screen.findByRole('button', { name: 'Old cleanup' });
+		title.focus();
+		await userEvent.keyboard('{Enter}');
+		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/done'));
+	});
+
+	it('shows a retryable error when a thread action fails', async () => {
+		api.nudgeThread.mockRejectedValueOnce(new Error('Network unavailable'));
+		const failedThread = thread({ id: 'broken', title: 'Failed work', threadState: 'waiting', status: 'error' });
+		withRouter(() => <ThreadRow thread={failedThread} />);
+		await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+		expect((await screen.findByRole('alert')).textContent).toBe('Action failed. Try again.');
 	});
 
 	it('shows the rest of a thread on hover: its state, where it works, what it asks and its next steps', async () => {
@@ -259,7 +275,7 @@ describe('threads', () => {
 		const more = screen.getByRole('button', { name: '2 more files' });
 		expect(more.textContent).toBe('+2');
 		expect(screen.getByText('#12')).toBeTruthy();
-		fireEvent.pointerEnter(more, { pointerType: 'mouse' });
+		await userEvent.click(more);
 		expect(await screen.findByText('stream-architecture.svg')).toBeTruthy();
 		expect(screen.getByText('notes.md')).toBeTruthy();
 		// Just the files: no sizes, no counts, no directions.
@@ -269,6 +285,13 @@ describe('threads', () => {
 		expect(within(viewer).getByText('1 of 3')).toBeTruthy();
 		// The row stays where it is: the file opens beside the chat.
 		expect(router.state.location.pathname).toBe('/projects/space_1');
+	});
+
+	it('lists every remaining file from the more-files button', async () => {
+		api.outputs.mockResolvedValueOnce({ source: 'saved', at: null, outputs: Array.from({ length: 12 }, (_, index) => ({ path: `file-${index}.md`, size: 10, mtimeMs: 20 - index })) });
+		withRouter(() => <ThreadRow thread={threads[2]} />);
+		await userEvent.click(await screen.findByRole('button', { name: '11 more files' }));
+		expect(await screen.findByRole('button', { name: 'file-11.md' })).toBeTruthy();
 	});
 
 	it('lists what a thread made in its peek, beside the button that opens it', async () => {
@@ -291,6 +314,7 @@ describe('threads', () => {
 		await waitFor(() => expect(within(files).getAllByRole('button').map((tile) => tile.getAttribute('aria-label'))).toEqual(['Open a.png', '5 more files']));
 		expect(within(card).getByRole('button', { name: 'Open thread' }).className).toContain('sg-btn--primary');
 		await userEvent.click(within(files).getByRole('button', { name: '5 more files' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'b.md' }));
 		expect(await screen.findByRole('complementary', { name: 'Viewing b.md' })).toBeTruthy();
 	});
 
@@ -356,6 +380,51 @@ describe('threads', () => {
 		await waitFor(() => expect(sendMessage).toHaveBeenCalled());
 		expect(api.attachToProject).toHaveBeenCalledWith('space_1', expect.any(File));
 		expect(sendMessage).toHaveBeenCalledWith('Plan this\n\n<attachment name="brief.pdf" path="brief.pdf" kind="PDF" size="4" library="project">\nShip in May.\n</attachment>');
+	});
+
+	it('keeps a newer draft and attachments when an earlier coordinator send fails', async () => {
+		let reject!: (error: Error) => void;
+		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
+		fireEvent.paste(box, { clipboardData: { files: [new File(['old'], 'old.pdf', { type: 'application/pdf' })], getData: () => '' } });
+		await userEvent.type(box, 'Earlier message{Enter}');
+		await waitFor(() => expect(api.attachToProject).toHaveBeenCalled());
+		await userEvent.type(box, 'New draft');
+		fireEvent.paste(box, { clipboardData: { files: [new File(['new'], 'new.pdf', { type: 'application/pdf' })], getData: () => '' } });
+		reject(new Error('Upload failed'));
+		await screen.findByText('Not sent: Upload failed');
+		expect(box.textContent).toBe('Earlier message\n\nNew draft');
+		expect(screen.getByText('old.pdf')).toBeTruthy();
+		expect(screen.getByText('new.pdf')).toBeTruthy();
+	});
+
+	it('retries recovered images and files with distinct normalized upload paths', async () => {
+		let reject!: (error: Error) => void;
+		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		const sendMessage = vi.fn(async (_text: string, _options?: unknown) => undefined);
+		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
+		fireEvent.paste(box, { clipboardData: { files: [new File(['old image'], 'photo.png', { type: 'image/png' })], getData: () => '' } });
+		await screen.findByRole('button', { name: 'Remove photo.png' });
+		await userEvent.type(box, 'First message{Enter}');
+		await waitFor(() => expect(api.attachToProject).toHaveBeenCalledTimes(1));
+		fireEvent.paste(box, { clipboardData: { files: [new File(['new image'], 'photo.png', { type: 'image/png' }), new File(['file'], 'photo.png', { type: 'application/pdf' }), new File(['unsafe'], 'a?.pdf', { type: 'application/pdf' }), new File(['safe'], 'a_.pdf', { type: 'application/pdf' })], getData: () => '' } });
+		await screen.findByText('a_-2.pdf');
+		reject(new Error('Upload failed'));
+		await screen.findByText('Not sent: Upload failed');
+		expect(screen.getAllByRole('button', { name: 'Remove photo.png' })).toHaveLength(3);
+		api.attachToProject.mockImplementation(async (_id: string, file: File) => ({ name: file.name, path: file.name, size: file.size, kind: 'file', text: await file.text(), cut: null }));
+		await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+		await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+		const files = api.attachToProject.mock.calls.slice(1).map((call) => call[1] as File);
+		expect(files.map((file) => file.name)).toEqual(['photo.png', 'photo-2.png', 'photo-3.png', 'a_.pdf', 'a_-2.pdf']);
+		expect(await Promise.all(files.map((file) => file.text()))).toEqual(['old image', 'new image', 'file', 'unsafe', 'safe']);
+		const [message, options] = sendMessage.mock.calls[0] as [string, { images: Array<{ filename: string }> }];
+		expect(options.images.map((image) => image.filename)).toEqual(['photo.png', 'photo-2.png']);
+		for (const file of files) expect(message).toContain(`path="${file.name}"`);
 	});
 
 	it('saves a new thread’s attached files, images too, to the project Library and puts them in its brief', async () => {

@@ -32,6 +32,7 @@ import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../core/attachments';
+import { uniqueUploadNames } from '../../core/upload-name';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 
@@ -185,7 +186,7 @@ function ActionRow({ icon, children, failed }: { icon: typeof Send; children: Re
 	return (
 		<div className={cn('flex min-w-0 items-center gap-2 px-1 text-[12px]', failed ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 			<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? undefined : 'text-(--icon-tertiary)'} />
-			<span className="min-w-0 truncate">{children}</span>
+			<span className="min-w-0 break-words">{children}</span>
 		</div>
 	);
 }
@@ -581,6 +582,8 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const [notice, setNotice] = useState<string | null>(null);
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
 	const attachments = useAttachments();
 	const { addImages } = attachments;
 	// A drawing on a thread's image, from the viewer, joins the draft.
@@ -595,7 +598,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = attachments.images.length > 0 && model !== undefined && !model.vision;
-	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending;
+	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending && !attachments.limitError;
 	const edit = useMutation({
 		mutationFn: (change: Partial<ModelChoice>) =>
 			api.editSpace(space.id, {
@@ -615,6 +618,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				if (!ready) return;
 				const taken = attachments.take();
 				askToNotify();
+				draftRef.current = '';
 				onDraft('');
 				setNotice(null);
 				const count = taken.images.length + taken.files.length;
@@ -625,14 +629,18 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
-					const attached = await Promise.all([...taken.images.map(imageFile), ...taken.files.map((file) => file.file)].map((file) => api.attachToProject(space.id, file)));
+					const uploads = [...taken.images.map(imageFile), ...taken.files.map((file) => file.file)];
+					const names = uniqueUploadNames(uploads.map((file) => file.name));
+					const named = uploads.map((file, index) => file.name === names[index] ? file : new File([file], names[index]!, { type: file.type, lastModified: file.lastModified }));
+					const attached = await Promise.all(named.map((file) => api.attachToProject(space.id, file)));
+					const images = taken.images.map((image, index) => ({ ...image, filename: names[index]! }));
 					// Saved commands are read only for a message that starts with one, so any other goes out without a round trip.
 					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
 					if (attaching) onPending('sent');
-					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
+					await (images.length ? send(message, { images: deliveredImages(images) }) : send(message));
 				} catch (error) {
-					onDraft(text);
+					onDraft([text, draftRef.current].filter(Boolean).join('\n\n'));
 					attachments.restore(taken);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
@@ -646,16 +654,16 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput
 					value={draft}
-					onChange={onDraft}
+					onChange={(text) => { draftRef.current = text; onDraft(text); }}
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>
-				{blocked || notice ? (
-					<div className="text-[12px] text-(--danger-text)">{blocked ?? notice}</div>
+				{blocked || notice || attachments.limitError ? (
+					<div className="text-[12px] text-(--danger-text)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
 				) : blind ? (
 					<div className="text-[12px] text-(--warning-text)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
-				) : attachments.notice || paused ? (
-					<div className="text-[12px] text-(--warning-text)">{attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
+				) : attachments.limitError || attachments.notice || paused ? (
+					<div className="text-[12px] text-(--warning-text)">{attachments.limitError ?? attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
