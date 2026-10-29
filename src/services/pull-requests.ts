@@ -103,9 +103,13 @@ async function recordOf(id: string, number: number): Promise<PullRequestRecord> 
 
 /** What the PR panel shows of one of the task's pull requests, read from the host; its state is kept as read. */
 export async function pullRequestDetail(id: string, number: number): Promise<PullRequestDetail> {
-	const record = await recordOf(id, number);
-	const detail = await getProviders().git.pullRequestDetail(record.url);
-	if (detail.state !== record.state || detail.mergedAt !== record.mergedAt) await setPullRequestState(record.url, detail.state, detail.mergedAt);
+	const record = await getPullRequestRecord(id, number);
+	// Older tasks and review tasks can have a current PR without a history record.
+	const session = record ? null : await getSessionRecord(id);
+	const url = record?.url ?? (session?.prUrl && numberOf(session.prUrl) === number ? session.prUrl : null);
+	if (!url) throw new NotFoundError('This task has no such pull request');
+	const detail = await getProviders().git.pullRequestDetail(url);
+	if (record && (detail.state !== record.state || detail.mergedAt !== record.mergedAt)) await setPullRequestState(url, detail.state, detail.mergedAt);
 	return detail;
 }
 

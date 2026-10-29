@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { GitBranch, GitMerge, GitPullRequest } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest } from 'lucide-react';
 import { Icon } from '@/components/signal';
 import { api, type Session } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -30,15 +30,28 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }
 
-/** Details come from the host for this exact PR, including older PRs in a thread. */
-export function PrMergeMetadata({ sessionId, url, enabled = true }: { sessionId: string; url: string; enabled?: boolean }) {
+/** Branches and diff come from the host for this exact PR, including older PRs. */
+export function PrMetadata({ sessionId, url, enabled = true }: { sessionId: string; url: string; enabled?: boolean }) {
 	const number = Number(prNumber(url));
 	const detail = useQuery({ queryKey: ['pull', sessionId, number], queryFn: () => api.pull(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
-	if (!detail || detail.url !== url || detail.state !== 'merged') return null;
+	if (!detail || detail.url !== url) return null;
 	return (
 		<span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)">
-			<span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} merged into ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>
+			<span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} → ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>
 			<span className="in-num whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--success-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
 		</span>
 	);
+}
+
+/** Checks are a separate status, never part of the PR identity or shown after merge. */
+export function PrChecks({ pull }: { pull: Session['pullRequest'] }) {
+	if (pull?.state !== 'open' || !pull.checks) return null;
+	const checks = {
+		passed: { icon: CircleCheck, label: 'Checks passed', tone: 'text-(--success-text)' },
+		failed: { icon: CircleX, label: 'Checks failing', tone: 'text-(--danger-text)' },
+		pending: { icon: CircleDashed, label: 'Checks running', tone: 'text-(--warning-text)' },
+	} as const;
+	const check = checks[pull.checks];
+	const failing = pull.runs.filter((run) => run.status === 'failed').length;
+	return <span className={cn('inline-flex shrink-0 items-center gap-1 text-[11.5px]', check.tone)}><Icon icon={check.icon} size={11} />{failing ? `${failing} failing` : check.label}</span>;
 }

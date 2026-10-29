@@ -25,6 +25,22 @@ describe('pull request reply card', () => {
 		expect(screen.getByText('anton/fix → main')).toBeTruthy();
 		expect(screen.getByLabelText('42 additions, 7 deletions').textContent).toContain('+42');
 	});
+	it('shows branches, diff and checks separately for an open PR', () => {
+		const url = 'https://github.com/acme/demo/pull/42';
+		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Fix" />, [
+			[['session', 's1'], session({ prUrl: url, pullRequest: { state: 'open', checks: 'passed', runs: [] } })],
+			[['pull', 's1', 42], { url, state: 'open', headBranch: 'anton/fix', baseBranch: 'main', additions: 42, deletions: 7 }],
+		]);
+		expect(screen.getByLabelText('Pull request #42 open · checks pass').textContent).toBe('#42');
+		expect(screen.getByText('anton/fix → main')).toBeTruthy();
+		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
+	});
+	it('hides stale checks after merge', () => {
+		const url = 'https://github.com/acme/demo/pull/42';
+		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Fix" />, [[['session', 's1'], session({ prUrl: url, pullRequest: { state: 'merged', checks: 'passed', runs: [] } })]]);
+		expect(screen.queryByText('Checks passed')).toBeNull();
+	});
+
 	it('does not show metadata for a different PR', () => {
 		const url = 'https://github.com/acme/demo/pull/42';
 		renderWithQueries(<PullRequestCard sessionId="s1" url={url} title="Fix checkout" />, [

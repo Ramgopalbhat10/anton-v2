@@ -1,10 +1,7 @@
-import { PrMergeMetadata, PrStatus } from '@/components/pr-status';
+import { PrChecks, PrMetadata, PrStatus } from '@/components/pr-status';
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
-  CircleCheck,
-  CircleDashed,
-  CircleX,
   ExternalLink,
   FileDiff,
   MessageCircleQuestion,
@@ -300,24 +297,6 @@ function parsedFiles(patch: string): Diff[] {
   return files;
 }
 
-const CHECKS = {
-  passed: {
-    icon: CircleCheck,
-    label: "Checks passed",
-    tone: "text-(--success-text)",
-  },
-  failed: {
-    icon: CircleX,
-    label: "Checks failing",
-    tone: "text-(--danger-text)",
-  },
-  pending: {
-    icon: CircleDashed,
-    label: "Checks running",
-    tone: "text-(--warning-text)",
-  },
-} as const;
-
 /** The pull request a turn opened: its number and title, and its state and checks as GitHub last reported them. */
 export const PullRequestCard = memo(function PullRequestCard({
   sessionId,
@@ -333,8 +312,6 @@ export const PullRequestCard = memo(function PullRequestCard({
     queryFn: () => api.session(sessionId),
   });
   const pull = session.data?.prUrl === url ? session.data.pullRequest : null;
-  const checks = pull?.checks ? CHECKS[pull.checks] : null;
-  const failing = pull?.runs.filter((run) => run.status === "failed") ?? [];
   // .in-card lays itself out as a column, so the row is a link inside it.
   return (
     <div className="in-card">
@@ -348,8 +325,8 @@ export const PullRequestCard = memo(function PullRequestCard({
           <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
           <span className="flex flex-wrap items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
             <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
-            <PrMergeMetadata sessionId={sessionId} url={url} enabled={!pull || pull.state === "merged"} />
-            {checks ? <span className={cn("inline-flex items-center gap-1", checks.tone)}><Icon icon={checks.icon} size={11} />{failing.length ? `${failing.length} failing` : checks.label}</span> : null}
+            <PrMetadata sessionId={sessionId} url={url} />
+            <PrChecks pull={pull ?? null} />
           </span>
         </span>
         <Icon

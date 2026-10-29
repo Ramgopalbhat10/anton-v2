@@ -6,7 +6,7 @@ import { Markdown, InlineLinks } from '@/components/markdown';
 import { HoverPeek } from '@/components/hover-peek';
 import { FileFace, OutputThumb } from '@/components/output-viewer';
 import { Chip } from '@/components/instrument';
-import { PrMergeMetadata, PrStatus, prSummary } from '@/components/pr-status';
+import { PrChecks, PrMetadata, PrStatus, prSummary } from '@/components/pr-status';
 export { prNumber, prSummary } from '@/components/pr-status';
 import { Btn, Icon } from '@/components/signal';
 import { useNow } from '@/components/subagents';
@@ -334,7 +334,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					</div>
 				)
 			) : null}
-			{pr ? <div className="flex min-w-0 flex-wrap items-center gap-2"><PrStatus thread={thread} link full /><PrMergeMetadata sessionId={thread.id} url={thread.prUrl!} enabled={thread.pullRequest?.state === 'merged'} /></div> : null}
+			{pr ? <div className="flex min-w-0 flex-wrap items-center gap-2"><PrStatus thread={thread} link showConflicts={false} showFailing={false} /><PrMetadata sessionId={thread.id} url={thread.prUrl!} /><PrChecks pull={thread.pullRequest} /></div> : null}
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />
@@ -375,16 +375,16 @@ export function useThreadNow(thread: Session): ThreadNow | null {
  */
 function LiveLine({ text, live, className }: { text: string; live: ThreadNow | null; className?: string }) {
 	return (
-		<span className={cn('flex min-w-0 items-center gap-1.5 text-[12px] leading-[17px] text-(--text-tertiary)', className)}>
+		<div className={cn('flex min-w-0 items-center gap-1.5 text-[12px] leading-[17px] text-(--text-tertiary)', className)}>
 			{live?.total ? (
 				<span className="in-num shrink-0 text-[10.5px] text-(--text-disabled)" title={`${live.done} of ${live.total} steps done`}>
 					{live.done}/{live.total}
 				</span>
 			) : null}
-			<span key={text} className={cn('min-w-0 duration-300 animate-in fade-in-0 slide-in-from-bottom-1', live && 'agent-live-line')}>
-				<span className="block truncate">{text}</span>
-			</span>
-		</span>
+			<div key={text} className={cn('min-w-0 duration-300 animate-in fade-in-0 slide-in-from-bottom-1', live && 'agent-live-line')}>
+				<div className="truncate [&_.sg-markdown]:truncate [&_.sg-markdown]:text-[12px] [&_.sg-markdown]:leading-[17px] [&_.sg-markdown]:text-inherit" onClick={(event) => { if ((event.target as HTMLElement).closest('a')) event.stopPropagation(); }}><InlineLinks.Provider value={null}><Markdown text={text} /></InlineLinks.Provider></div>
+			</div>
+		</div>
 	);
 }
 
@@ -405,7 +405,7 @@ export function ThreadRow({ thread }: { thread: Session }) {
 	const live = useThreadNow(thread);
 	const broken = state === 'waiting' && failed(thread);
 	const calling = CALLING.has(state);
-	const line = live?.text ?? (state === 'queued' ? 'Starts when a slot frees' : threadLine(thread));
+	const line = live?.text ?? (state === 'queued' ? 'Starts when a slot frees' : threadLine(thread, true));
 	const steps = nextSteps(thread);
 	// Answer already opens the thread; anything else leaves it a button away.
 	const opens = steps.some((step) => 'open' in step && !step.panel);
@@ -433,7 +433,7 @@ export function ThreadRow({ thread }: { thread: Session }) {
 					</span>
 				</div>
 				{calling && line ? (
-					<span className={cn('line-clamp-2 pl-[24px] text-[12px] leading-[17px] text-pretty', broken ? 'text-(--danger-text)' : state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-secondary)')}>{line}</span>
+					<div className={cn('line-clamp-2 pl-[24px] text-[12px] leading-[17px] text-pretty [&_.sg-markdown]:text-[12px] [&_.sg-markdown]:leading-[17px] [&_.sg-markdown]:text-inherit', broken ? 'text-(--danger-text)' : state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-secondary)')} onClick={(event) => { if ((event.target as HTMLElement).closest('a')) event.stopPropagation(); }}><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
 				) : null}
 				{calling ? (
 					<div className="flex flex-wrap items-center gap-1.5 pl-[24px]">

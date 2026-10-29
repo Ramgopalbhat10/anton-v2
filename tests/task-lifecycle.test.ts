@@ -2079,6 +2079,15 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 	}
 });
 
+test('PR detail can read the current PR on an older task without a history record', async () => {
+	const { pullRequestDetail } = await import('../src/services/pull-requests.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Older PR' });
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/9876' });
+	assert.equal((await pullRequestDetail(session.id, 9876)).url, 'https://example.test/pull/9876');
+	await assert.rejects(() => pullRequestDetail(session.id, 9877), /no such pull request/);
+});
+
 test("a thread's own pull request merges from the PR panel by squashing", async () => {
 	const { mergePullRequest, pullRequestDetail } = await import('../src/services/pull-requests.ts');
 	const project = await addProject('acme/demo');

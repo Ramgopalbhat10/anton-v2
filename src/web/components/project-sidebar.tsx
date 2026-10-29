@@ -1,6 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, Plus, Settings, Waypoints } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';
 import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
 import { ThreadStateIcon } from '@/components/thread-card';
@@ -104,8 +105,11 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 			</span>
 			<span className="relative flex min-w-0 flex-1 flex-col gap-px">
 				<span className="truncate text-[13px]">{thread.title}</span>
-				<span className={cn('truncate text-[11px]', state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-tertiary)')}>
+				<span className={cn('flex min-w-0 items-center gap-1.5 text-[11px]', state === 'waiting' ? 'text-(--warning-text)' : 'text-(--text-tertiary)')}>
+					<PrStatus thread={thread} />
+					<span className="min-w-0 truncate">
 					{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+					</span>
 				</span>
 			</span>
 		</Link>
