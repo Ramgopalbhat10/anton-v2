@@ -4,7 +4,7 @@ import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
@@ -27,7 +27,7 @@ export function onPageChange(listener: (change: PageChange) => void): () => void
 }
 
 /** The queries each change makes stale. Keys match by prefix, so ['file', id] covers every open file. */
-function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
+export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// The pages themselves fetch their state; only the Artifacts page's edited times move.
 	if (change.kind === 'page') return [['artifacts']];
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
@@ -54,6 +54,7 @@ function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
 	// An email the agent asked to send was asked, sent or turned down: only its card reads it.
 	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
+	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;

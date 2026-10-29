@@ -79,6 +79,7 @@ const fakeHost: GitHost = {
 		return url;
 	},
 	pullRequestState: async () => pullState,
+	pullRequestMetadata: async (url) => ({ url, headBranch: 'b', baseBranch: 'main', additions: 1, deletions: 0 }),
 	pullRequestDetail: async (url) => ({
 		...(pulls.find((pull) => pull.url === url) ?? { url, number: Number(url.split('/').pop()), title: 'Ours', author: 'anton', trusted: true, draft: false, headBranch: 'b', headSha: 'sha-1', updatedAt: '', repo: 'acme/demo', body: '', baseBranch: 'main', commits: [] }),
 		state: pullState,
@@ -2080,11 +2081,13 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 });
 
 test('PR detail can read the current PR on an older task without a history record', async () => {
-	const { pullRequestDetail } = await import('../src/services/pull-requests.ts');
+	const { pullRequestDetail, pullRequestMetadata } = await import('../src/services/pull-requests.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Older PR' });
 	await updateSession(session.id, { prUrl: 'https://example.test/pull/9876' });
 	assert.equal((await pullRequestDetail(session.id, 9876)).url, 'https://example.test/pull/9876');
+	assert.equal((await pullRequestMetadata(session.id, 9876)).additions, 1);
+	await assert.rejects(() => pullRequestMetadata(session.id, 9877), /no such pull request/);
 	await assert.rejects(() => pullRequestDetail(session.id, 9877), /no such pull request/);
 });
 

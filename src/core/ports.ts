@@ -186,6 +186,8 @@ export type GitHost = {
 	pullRequest(url: string): Promise<PullRequestInfo>;
 	/** A repository's open pull requests, most recently updated first. */
 	listPullRequests(fullName: string): Promise<PullRequestSummary[]>;
+	/** Branches and diff counts, without fetching discussion or checks. */
+	pullRequestMetadata(url: string): Promise<PullRequestMetadata>;
 	/** Everything the PR panel shows of a pull request, as its page on the host does: state, numbers, checks and discussion. */
 	pullRequestDetail(url: string): Promise<PullRequestDetail>;
 	/** A pull request's whole change as one unified diff. */
@@ -270,6 +272,8 @@ export type DiscussionEntry = PullRequestComment & { kind: 'comment' | 'review' 
  * holds every comment and review with a body, oldest first; unlike `PullRequestActivity`'s, it is never given to
  * an agent, only shown.
  */
+export type PullRequestMetadata = { url: string; headBranch: string; baseBranch: string; additions: number; deletions: number };
+
 export type PullRequestDetail = PullRequestInfo & {
 	createdAt: string;
 	mergedAt: string | null;

@@ -1,3 +1,4 @@
+import { announce } from '../core/changes.ts';
 import type { CheckResult, PullRequestActivity } from '../core/ports.ts';
 import type { PullRequestStatus, SessionRecord } from '../core/types.ts';
 import { setPullRequestState } from '../db/pull-requests.ts';
@@ -9,6 +10,7 @@ import { threadChanged } from './thread-reports.ts';
 /** A pull request read this recently is not read again by the background refresh. */
 const FRESH_MS = 4 * 60_000;
 const readAt = new Map<string, number>();
+const heads = new Map<string, string>();
 
 /** Checks on the head commit in a word: failed if any failed, pending while any run, passed otherwise. */
 function checksOf(checks: CheckResult[]): PullRequestStatus['checks'] {
@@ -31,6 +33,11 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 export async function readPullRequest(session: SessionRecord & { prUrl: string }): Promise<PullRequestActivity> {
 	const activity = await getProviders().git.pullRequestActivity(session.prUrl);
 	readAt.set(session.id, Date.now());
+	const revision = JSON.stringify([session.prUrl, activity.headSha, activity.baseSha, activity.state]);
+	if (heads.get(session.id) !== revision) {
+		heads.set(session.id, revision);
+		announce({ kind: 'task', id: session.id, what: 'pr-metadata' });
+	}
 	// A pull request opened before Anton kept what it pushed: its head is what the host has, so Changes can leave it out.
 	if (!session.pushedSha && !session.review && activity.headSha) await updateSession(session.id, { pushedSha: activity.headSha });
 	const open = activity.state === 'open' || activity.state === 'draft';

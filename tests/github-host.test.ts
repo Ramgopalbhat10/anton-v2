@@ -20,6 +20,14 @@ function stubFetch(pages: Record<string, { body: unknown; next?: string }>): str
 
 const note = (id: number, login: string, association: string, type = 'User') => ({ id, user: { login, type }, author_association: association, body: `note ${id}`, created_at: '2026-10-02T00:00:00Z' });
 
+test('pull request metadata needs only one host request', async () => {
+	const url = 'https://github.com/acme/demo/pull/7';
+	const asked = stubFetch({ '/repos/acme/demo/pulls/7': { body: { html_url: url, head: { ref: 'feature' }, base: { ref: 'main' }, additions: 12, deletions: 4 } } });
+	const metadata = await githubHost({ token: 't', apiUrl: API }).pullRequestMetadata(url);
+	assert.deepEqual(metadata, { url, headBranch: 'feature', baseBranch: 'main', additions: 12, deletions: 4 });
+	assert.deepEqual(asked, ['/repos/acme/demo/pulls/7']);
+});
+
 test('pull request activity keeps only trusted comments, reads every page and ignores cancelled checks', async () => {
 	const pull = '/repos/acme/demo/pulls/7';
 	stubFetch({

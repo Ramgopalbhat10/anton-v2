@@ -394,6 +394,11 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
 			};
 		},
+		async pullRequestMetadata(url) {
+			const { repo, number } = pullOf(url);
+			const pull = await json<PullRequest>(`/repos/${repo}/pulls/${number}`);
+			return { url: pull.html_url, headBranch: pull.head.ref, baseBranch: pull.base.ref, additions: pull.additions ?? 0, deletions: pull.deletions ?? 0 };
+		},
 		async pullRequestDetail(url): Promise<PullRequestDetail> {
 			const { repo, number } = pullOf(url);
 			const [pull, commits, notes, lineNotes, reviews] = await Promise.all([

@@ -57,6 +57,7 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 	});
 	await updateSession(id, { prUrl: url, pullRequestJson: JSON.stringify({ url, state: 'open', checks: null, runs: [] }) });
 	await recordPullRequest({ url, sessionId: id, repo: project.repoFullName, number: numberOf(url), title: input.title, head: session.branch, base: session.baseBranch, state: 'open' });
+	announce({ kind: 'task', id, what: 'pr-metadata' });
 	// Its checks start now; the card follows them closely rather than on the next slow round.
 	watchPullRequest(id);
 	await saveCheckpoint(id, machine);
@@ -101,13 +102,24 @@ async function recordOf(id: string, number: number): Promise<PullRequestRecord> 
 	return record;
 }
 
-/** What the PR panel shows of one of the task's pull requests, read from the host; its state is kept as read. */
-export async function pullRequestDetail(id: string, number: number): Promise<PullRequestDetail> {
+/** Resolve only PRs belonging to the task, including old tasks without a history record. */
+async function detailRecord(id: string, number: number) {
 	const record = await getPullRequestRecord(id, number);
-	// Older tasks and review tasks can have a current PR without a history record.
 	const session = record ? null : await getSessionRecord(id);
 	const url = record?.url ?? (session?.prUrl && numberOf(session.prUrl) === number ? session.prUrl : null);
 	if (!url) throw new NotFoundError('This task has no such pull request');
+	return { record, url };
+}
+
+/** Lightweight metadata for chat, without the PR panel's checks and discussion. */
+export async function pullRequestMetadata(id: string, number: number) {
+	const { url } = await detailRecord(id, number);
+	return getProviders().git.pullRequestMetadata(url);
+}
+
+/** What the PR panel shows of one of the task's pull requests, read from the host; its state is kept as read. */
+export async function pullRequestDetail(id: string, number: number): Promise<PullRequestDetail> {
+	const { record, url } = await detailRecord(id, number);
 	const detail = await getProviders().git.pullRequestDetail(url);
 	if (record && (detail.state !== record.state || detail.mergedAt !== record.mergedAt)) await setPullRequestState(url, detail.state, detail.mergedAt);
 	return detail;
@@ -140,6 +152,7 @@ export async function mergePullRequest(id: string, number: number, input: { meth
 		await savePullRequestStatus(session, { state: 'merged', checks: null, runs: [] });
 	}
 	announce({ kind: 'task', id, what: 'state' });
+	announce({ kind: 'task', id, what: 'pr-metadata' });
 	if (!detail) throw new Error('Merged, but the pull request could not be read back.');
 	return detail;
 }

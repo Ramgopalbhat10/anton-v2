@@ -33,7 +33,7 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 /** Branches and diff come from the host for this exact PR, including older PRs. */
 export function PrMetadata({ sessionId, url, enabled = true }: { sessionId: string; url: string; enabled?: boolean }) {
 	const number = Number(prNumber(url));
-	const detail = useQuery({ queryKey: ['pull', sessionId, number], queryFn: () => api.pull(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
+	const detail = useQuery({ queryKey: ['pr-metadata', sessionId, number], queryFn: () => api.pullMetadata(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
 	if (!detail || detail.url !== url) return null;
 	return (
 		<span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)">
@@ -45,7 +45,7 @@ export function PrMetadata({ sessionId, url, enabled = true }: { sessionId: stri
 
 /** Checks are a separate status, never part of the PR identity or shown after merge. */
 export function PrChecks({ pull }: { pull: Session['pullRequest'] }) {
-	if (pull?.state !== 'open' || !pull.checks) return null;
+	if ((pull?.state !== 'open' && pull?.state !== 'draft') || !pull.checks) return null;
 	const checks = {
 		passed: { icon: CircleCheck, label: 'Checks passed', tone: 'text-(--success-text)' },
 		failed: { icon: CircleX, label: 'Checks failing', tone: 'text-(--danger-text)' },
