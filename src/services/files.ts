@@ -1,3 +1,4 @@
+import { uploadName } from '../core/upload-name.ts';
 import { readMachineFile } from '../core/machine-fs.ts';
 import { safeRelativePath, text } from '../core/shell.ts';
 import { deletedOutputs, deletePage, noteDeletedOutput } from '../db/pages.ts';
@@ -228,7 +229,7 @@ const MAX_LIVE_OUTPUT_BYTES = 50 * 1024 * 1024;
 export async function uploadOutput(id: string, name: string, bytes: Uint8Array, contentType?: string): Promise<string> {
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 	if (bytes.length > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
-	const base = name.split(/[\\/]/).pop()?.replace(/[^\w.\- ]+/g, '_').trim() || 'file';
+	const base = uploadName(name);
 	const path = safeRelativePath(`uploads/${base}`);
 	await saveOutput(id, path, bytes, contentType);
 	const machine = await liveMachine(id);

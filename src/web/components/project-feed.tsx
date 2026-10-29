@@ -32,6 +32,7 @@ import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../core/attachments';
+import { uniqueUploadNames } from '../../core/upload-name';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 
@@ -628,12 +629,16 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
-					const attached = await Promise.all([...taken.images.map(imageFile), ...taken.files.map((file) => file.file)].map((file) => api.attachToProject(space.id, file)));
+					const uploads = [...taken.images.map(imageFile), ...taken.files.map((file) => file.file)];
+					const names = uniqueUploadNames(uploads.map((file) => file.name));
+					const named = uploads.map((file, index) => file.name === names[index] ? file : new File([file], names[index]!, { type: file.type, lastModified: file.lastModified }));
+					const attached = await Promise.all(named.map((file) => api.attachToProject(space.id, file)));
+					const images = taken.images.map((image, index) => ({ ...image, filename: names[index]! }));
 					// Saved commands are read only for a message that starts with one, so any other goes out without a round trip.
 					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
 					if (attaching) onPending('sent');
-					await (taken.images.length ? send(message, { images: deliveredImages(taken.images) }) : send(message));
+					await (images.length ? send(message, { images: deliveredImages(images) }) : send(message));
 				} catch (error) {
 					onDraft([text, draftRef.current].filter(Boolean).join('\n\n'));
 					attachments.restore(taken);

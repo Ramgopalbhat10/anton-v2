@@ -400,6 +400,33 @@ describe('threads', () => {
 		expect(screen.getByText('new.pdf')).toBeTruthy();
 	});
 
+	it('retries recovered images and files with distinct normalized upload paths', async () => {
+		let reject!: (error: Error) => void;
+		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		const sendMessage = vi.fn(async (_text: string, _options?: unknown) => undefined);
+		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
+		fireEvent.paste(box, { clipboardData: { files: [new File(['old image'], 'photo.png', { type: 'image/png' })], getData: () => '' } });
+		await screen.findByRole('button', { name: 'Remove photo.png' });
+		await userEvent.type(box, 'First message{Enter}');
+		await waitFor(() => expect(api.attachToProject).toHaveBeenCalledTimes(1));
+		fireEvent.paste(box, { clipboardData: { files: [new File(['new image'], 'photo.png', { type: 'image/png' }), new File(['file'], 'photo.png', { type: 'application/pdf' }), new File(['unsafe'], 'a?.pdf', { type: 'application/pdf' }), new File(['safe'], 'a_.pdf', { type: 'application/pdf' })], getData: () => '' } });
+		await screen.findByText('a_-2.pdf');
+		reject(new Error('Upload failed'));
+		await screen.findByText('Not sent: Upload failed');
+		expect(screen.getAllByRole('button', { name: 'Remove photo.png' })).toHaveLength(3);
+		api.attachToProject.mockImplementation(async (_id: string, file: File) => ({ name: file.name, path: file.name, size: file.size, kind: 'file', text: await file.text(), cut: null }));
+		await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+		await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+		const files = api.attachToProject.mock.calls.slice(1).map((call) => call[1] as File);
+		expect(files.map((file) => file.name)).toEqual(['photo.png', 'photo-2.png', 'photo-3.png', 'a_.pdf', 'a_-2.pdf']);
+		expect(await Promise.all(files.map((file) => file.text()))).toEqual(['old image', 'new image', 'file', 'unsafe', 'safe']);
+		const [message, options] = sendMessage.mock.calls[0] as [string, { images: Array<{ filename: string }> }];
+		expect(options.images.map((image) => image.filename)).toEqual(['photo.png', 'photo-2.png']);
+		for (const file of files) expect(message).toContain(`path="${file.name}"`);
+	});
+
 	it('saves a new thread’s attached files, images too, to the project Library and puts them in its brief', async () => {
 		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });

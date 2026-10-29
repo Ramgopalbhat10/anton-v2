@@ -2,6 +2,7 @@ import { File as FileGlyph, FileArchive, FileCode, FileImage, FileSpreadsheet, F
 import { type ClipboardEvent, type DragEvent, useCallback, useRef, useState } from 'react';
 import { Icon, IconBtn } from '@/components/signal';
 import type { AttachmentRef } from '../../core/attachments';
+import { uniqueUploadNames } from '../../core/upload-name';
 import { type FileAttachment, type ImageAttachment, MAX_FILES, MAX_IMAGES, readAttachments } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
@@ -53,20 +54,11 @@ function FileChip({ name, note, title, onRemove }: { name: string; note: string;
 /** What a composer holds besides its text: images the model sees, and files saved for the agent and read as text. */
 export type Attachments = ReturnType<typeof useAttachments>;
 
-/** A name not already taken in the draft, so two files never land on one path. */
-function freeName(name: string, taken: Set<string>): string {
-	if (!taken.has(name)) return name;
-	const dot = name.lastIndexOf('.');
-	const [base, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
-	for (let index = 2; ; index++) if (!taken.has(`${base}-${index}${ext}`)) return `${base}-${index}${ext}`;
-}
-
-/** Keep both drafts' files, assigning a different upload name to each. */
+/** Keep both drafts' files, assigning a different normalized upload name to each. */
 function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
-	const taken = new Set<string>();
-	return files.map((file) => {
-		const name = freeName(file.name, taken);
-		taken.add(name);
+	const names = uniqueUploadNames(files.map((file) => file.name));
+	return files.map((file, index) => {
+		const name = names[index]!;
 		return name === file.name ? file : { ...file, name, file: new File([file.file], name, { type: file.file.type, lastModified: file.file.lastModified }) };
 	});
 }
