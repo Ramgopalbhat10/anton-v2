@@ -1,4 +1,4 @@
-import { PrStatus } from '@/components/pr-status';
+import { PrMergeMetadata, PrStatus } from '@/components/pr-status';
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -213,11 +213,11 @@ export const ChangesCard = memo(function ChangesCard({
   paths,
 }: {
   sessionId: string;
-  paths: string[];
+  paths?: string[];
 }) {
   const showPanel = useContext(ShowPanel);
   const changes = useQuery({
-    queryKey: ["changes", sessionId],
+    queryKey: ["changes", sessionId, "unpushed"],
     queryFn: () => api.changes(sessionId),
   });
   const files = useChangedFiles(changes.data?.patch, paths);
@@ -230,13 +230,11 @@ export const ChangesCard = memo(function ChangesCard({
   };
   return (
     <FileIcons>
-      <section className="in-card overflow-hidden" aria-label="Files changed">
+      <section className="in-card overflow-hidden" aria-label={paths ? "Files changed" : "Unpushed changes"}>
         <header className="flex h-9 items-center gap-2 px-3">
           <Icon icon={FileDiff} size={13} className="text-(--icon-tertiary)" />
           <span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
-            {files.length === 1
-              ? "1 file changed"
-              : `${files.length} files changed`}
+            {paths ? (files.length === 1 ? "1 file changed" : `${files.length} files changed`) : (files.length === 1 ? "1 unpushed file" : `${files.length} unpushed files`)}
           </span>
           <span className="in-num text-[11.5px]">
             <DiffStat added={added} removed={removed} />
@@ -275,12 +273,12 @@ export const ChangesCard = memo(function ChangesCard({
 });
 
 /** The task's diff, kept to the files this turn wrote; a file changed back to how it was is left out. */
-function useChangedFiles(patch: string | undefined, paths: string[]): Diff[] {
-  const key = paths.join("\n");
+function useChangedFiles(patch: string | undefined, paths?: string[]): Diff[] {
+  const key = paths?.join("\n");
   return useMemo(() => {
     if (!patch) return [];
     return parsedFiles(patch).filter((file) =>
-      paths.some(
+      !paths || paths.some(
         (path) =>
           file.path === path ||
           file.path.endsWith(`/${path}`) ||
@@ -348,8 +346,9 @@ export const PullRequestCard = memo(function PullRequestCard({
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
-          <span className="flex items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
+          <span className="flex flex-wrap items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
             <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
+            <PrMergeMetadata sessionId={sessionId} url={url} enabled={!pull || pull.state === "merged"} />
             {checks ? <span className={cn("inline-flex items-center gap-1", checks.tone)}><Icon icon={checks.icon} size={11} />{failing.length ? `${failing.length} failing` : checks.label}</span> : null}
           </span>
         </span>

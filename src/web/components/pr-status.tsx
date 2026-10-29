@@ -1,6 +1,7 @@
-import { GitMerge, GitPullRequest } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { GitBranch, GitMerge, GitPullRequest } from 'lucide-react';
 import { Icon } from '@/components/signal';
-import type { Session } from '@/lib/api';
+import { api, type Session } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type State = NonNullable<Session['pullRequest']>['state'];
@@ -27,4 +28,17 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	const content = <><Icon icon={pr?.state === 'merged' ? GitMerge : GitPullRequest} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span className="text-(--warning-text)">Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span className="text-(--danger-text)">Checks failing</span> : null}</>;
 	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: { color: prColor(pr?.state), borderColor: `color-mix(in oklab, ${prColor(pr?.state)} 32%, transparent)`, background: `color-mix(in oklab, ${prColor(pr?.state)} 10%, transparent)` } };
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
+}
+
+/** Details come from the host for this exact PR, including older PRs in a thread. */
+export function PrMergeMetadata({ sessionId, url, enabled = true }: { sessionId: string; url: string; enabled?: boolean }) {
+	const number = Number(prNumber(url));
+	const detail = useQuery({ queryKey: ['pull', sessionId, number], queryFn: () => api.pull(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
+	if (!detail || detail.url !== url || detail.state !== 'merged') return null;
+	return (
+		<span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)">
+			<span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} merged into ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>
+			<span className="in-num whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--success-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
+		</span>
+	);
 }

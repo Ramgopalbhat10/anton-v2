@@ -20,11 +20,12 @@ const api = vi.hoisted(() => ({
 	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
 	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
+	pull: vi.fn(),
 	spaceUsage: vi.fn(),
 	spaceAutomations: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { ThreadChip, ThreadRow, nextSteps } = await import('@/components/thread-card');
+const { ThreadChip, ThreadRow, ThreadPeek, nextSteps } = await import('@/components/thread-card');
 const { InlineLinks, Markdown } = await import('@/components/markdown');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
@@ -94,6 +95,16 @@ function withRouter(ui: () => ReactNode, path = '/projects/space_1') {
 }
 
 describe('threads', () => {
+	it('renders Markdown links and merged PR metadata in a thread peek', async () => {
+		const url = 'https://github.com/acme/demo/pull/12';
+		api.pull = vi.fn(async () => ({ url, state: 'merged', headBranch: 'anton/fix', baseBranch: 'main', additions: 12, deletions: 3 }));
+		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'merged', checks: null, runs: [] }, lastReply: 'Opened **changes** in [PR #12](https://github.com/acme/demo/pull/12).' })} />);
+		expect((await screen.findByRole('link', { name: 'PR #12' })).getAttribute('href')).toBe(url);
+		expect(screen.getByText('changes').tagName).toBe('STRONG');
+		expect(await screen.findByText('anton/fix → main')).toBeTruthy();
+		expect(screen.getByLabelText('12 additions, 3 deletions')).toBeTruthy();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		api.sessions.mockResolvedValue({ sessions: threads });

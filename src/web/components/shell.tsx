@@ -7,7 +7,8 @@ import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
-import { Btn, IconBtn } from '@/components/signal';
+import { DiffStat, Icon, IconBtn } from '@/components/signal';
+import { useChanges } from '@/components/git-tab';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
 import { type PanelName, panels, VmPanel } from '@/components/vm-panel';
@@ -155,6 +156,17 @@ function statusFor(agent: UseFlueAgentResult): StatusTone | null {
  * The task's header: its state, title, pull request and menu. Memoized, as
  * the workspace around it re-renders with every streamed chunk.
  */
+/** Current unpushed work, available even when the workspace is closed. */
+export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; onShowPanel: (name: PanelName) => void }) {
+	const { files } = useChanges(sessionId);
+	if (!files.length) return null;
+	const added = files.reduce((sum, file) => sum + file.added, 0);
+	const removed = files.reduce((sum, file) => sum + file.removed, 0);
+	return <button type="button" onClick={() => onShowPanel('Changes')} aria-label={`Open Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}, ${added} additions, ${removed} deletions`} className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-(--text-secondary) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus-ring)">
+		<Icon icon={FileDiff} size={13} /><span className="in-num whitespace-nowrap">{files.length} {files.length === 1 ? 'file' : 'files'}</span><span className="in-num hidden sm:inline"><DiffStat added={added} removed={removed} /></span>
+	</button>;
+}
+
 const TaskHeader = memo(function TaskHeader({
 	session,
 	status,
@@ -189,12 +201,7 @@ const TaskHeader = memo(function TaskHeader({
 			) : null}
 			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
 			{session ? <PullRequestChip session={session} /> : null}
-			{/* The workspace has its own Changes and PR tabs, so Review only shows while it is closed; a chat has no code to review. */}
-			{!workspaceOpen && session && !isChat(session) ? (
-				<Btn variant="ghost" size="sm" icon={FileDiff} aria-label="Review" className="shrink-0" onClick={() => onShowPanel(session.prUrl ? 'PR' : 'Changes')}>
-					<span className="hidden sm:inline">Review</span>
-				</Btn>
-			) : null}
+			{session && !isChat(session) ? <HeaderChanges sessionId={session.id} onShowPanel={onShowPanel} /> : null}
 			{session ? <TaskMenu session={session} onRename={() => onRenamingChange(true)} onAskForPullRequest={onAskForPullRequest} /> : null}
 			{!workspaceOpen ? <IconBtn icon={PanelRight} size="sm" label="Show workspace" onClick={onOpenWorkspace} /> : null}
 		</header>

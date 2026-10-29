@@ -7,6 +7,7 @@ import { renderWithQueries, session } from './render';
 const api = vi.hoisted(() => ({
 	editSession: vi.fn(),
 	session: vi.fn(),
+	changes: vi.fn(async () => ({ patch: '', source: 'saved' })),
 	health: vi.fn(),
 	budget: vi.fn(),
 	models: vi.fn(),
@@ -90,6 +91,24 @@ describe('Thread', () => {
 		expect(screen.getByText('2 STEPS')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
+	});
+
+	it('shows the current unpushed diff even for bash edits, without assigning it to an older reply', async () => {
+		const patch = 'diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-old\n+new\n';
+		api.changes.mockResolvedValueOnce({ patch, source: 'saved' });
+		show(agent([assistant('old', [{ type: 'text', text: 'Earlier reply' }]), user('u1', 'Change files'), assistant('a1', [tool('bash', { command: 'edit files' }, { output: 'done' }), { type: 'text', text: 'Done' }])]));
+		const card = await screen.findByRole('region', { name: 'Unpushed changes' });
+		expect(within(card).getByText('1 unpushed file')).toBeTruthy();
+		expect(within(card).getByRole('button', { name: /a.ts/ })).toBeTruthy();
+		expect(screen.queryByRole('region', { name: 'Files changed' })).toBeNull();
+	});
+	it('shows edited filenames on the collapsed reasoning header', () => {
+		show(agent([assistant('a1', [tool('edit', { path: 'src/edited.ts', oldText: 'old', newText: 'new' }, { output: 'ok' })])]));
+		const header = screen.getByRole('button', { name: /Worked/ });
+		expect(header.getAttribute('aria-expanded')).toBe('false');
+		expect(within(header).getByText('edited.ts')).toBeTruthy();
+		fireEvent.click(header);
+		expect(screen.getByText('src/edited.ts')).toBeTruthy();
 	});
 
 	it('shows work handed to subagents as an agents card, not as steps, matched to their runs', async () => {

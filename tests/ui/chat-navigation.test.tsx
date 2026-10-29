@@ -39,6 +39,8 @@ describe('chat navigation', () => {
 		const rows = Array.from({ length: 40 }, (_, index) => row(`u${index}`, 'user', `Message ${index}`));
 		render(<><button>Before</button><ChatNavigation rows={rows} onNavigate={navigate} /><button>After</button></>);
 		const trigger = screen.getByRole('button', { name: 'Show chat navigation' });
+		expect(trigger.className).not.toContain('[@media(hover:hover)]:opacity-0');
+		expect(trigger.className).not.toContain('[@media(hover:hover)]:pointer-events-none');
 		const turns = screen.getAllByRole('button', { name: /Go to input/ });
 		expect(turns.every((turn) => turn.tabIndex === -1)).toBe(true);
 		await user.tab();
