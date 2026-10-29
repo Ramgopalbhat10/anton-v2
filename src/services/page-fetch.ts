@@ -183,13 +183,47 @@ async function readBody(response: IncomingMessage, limit: number): Promise<Uint8
 	return new Uint8Array(Buffer.concat(chunks));
 }
 
+/** Read a small error explanation without letting a streaming or broken body hide its HTTP status. */
+async function readErrorPrefix(response: IncomingMessage): Promise<Uint8Array> {
+	const encoding = String(response.headers['content-encoding'] ?? '').trim().toLowerCase();
+	const decoder = encoding === 'gzip' || encoding === 'x-gzip' ? createGunzip() : encoding === 'deflate' ? createInflate() : encoding === 'br' ? createBrotliDecompress() : null;
+	const stream = decoder ?? response;
+	const chunks: Buffer[] = [];
+	const limit = 6000;
+	let size = 0;
+	return new Promise((resolve) => {
+		let done = false;
+		const finish = () => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			response.destroy();
+			decoder?.destroy();
+			resolve(new Uint8Array(Buffer.concat(chunks, size)));
+		};
+		const timer = setTimeout(finish, 500);
+		stream.on('data', (chunk: Buffer) => {
+			const part = chunk.subarray(0, limit - size);
+			chunks.push(part);
+			size += part.length;
+			if (size >= limit) finish();
+		});
+		stream.on('end', finish);
+		stream.on('error', finish);
+		response.on('error', finish);
+		response.on('close', () => { if (!response.complete) finish(); });
+		if (decoder) response.pipe(decoder);
+	});
+}
+
 /**
  * Makes a page's request from Anton, following redirects as a browser would.
  * `allow` decides which addresses it may connect to; tests widen it to this machine.
+ * Preview checks need status and headers, not a whole body; read only a bounded error prefix.
  */
 export async function fetchForPage(
 	request: PageRequest,
-	{ allow = isPublicAddress, timeoutMs = TIMEOUT_MS, maxBytes = MAX_RESPONSE_BYTES }: { allow?: Allow; timeoutMs?: number; maxBytes?: number } = {},
+	{ allow = isPublicAddress, timeoutMs = TIMEOUT_MS, maxBytes = MAX_RESPONSE_BYTES, responseMode = 'full' }: { allow?: Allow; timeoutMs?: number; maxBytes?: number; responseMode?: 'full' | 'preview' } = {},
 ): Promise<PageResponse> {
 	let url = parseUrl(request.url);
 	let method = request.method;
@@ -201,7 +235,8 @@ export async function fetchForPage(
 		const status = response.statusCode ?? 0;
 		const location = response.headers.location;
 		if ([301, 302, 303, 307, 308].includes(status) && location) {
-			response.resume();
+			if (responseMode === 'preview') response.destroy();
+			else response.resume();
 			if (hop >= MAX_REDIRECTS) throw new PageFetchError(`${request.url} redirected more than ${MAX_REDIRECTS} times`);
 			const next = parseUrl(new URL(location, url).href);
 			if (status === 303 || ((status === 301 || status === 302) && method === 'POST')) {
@@ -215,7 +250,14 @@ export async function fetchForPage(
 			url = next;
 			continue;
 		}
-		const bytes = method === 'HEAD' ? new Uint8Array() : await readBody(response, maxBytes);
+		let bytes: Uint8Array;
+		if (responseMode === 'preview') {
+			if (method !== 'HEAD' && status >= 400) bytes = await readErrorPrefix(response);
+			else {
+				response.destroy();
+				bytes = new Uint8Array();
+			}
+		} else bytes = method === 'HEAD' ? new Uint8Array() : await readBody(response, maxBytes);
 		const out: Array<[string, string]> = [];
 		for (let i = 0; i + 1 < response.rawHeaders.length; i += 2) {
 			const name = response.rawHeaders[i];

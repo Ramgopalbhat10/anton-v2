@@ -14,6 +14,18 @@ test('Coder declares explorer, tester, and open_pull_request without useSandbox 
 	assert.doesNotMatch(testerFn, /useSandbox/);
 });
 
+test('workspace agents can check the actual Preview URL and are instructed to verify it in the sandbox browser', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const workspace = source.slice(source.indexOf('function useWorkspace'), source.indexOf('const BROWSER_ACTIONS'));
+	assert.match(workspace, /name: 'check_preview'/);
+	assert.match(workspace, /checkPreview\(id, data\.port\)/);
+	const hint = source.slice(source.indexOf('const PREVIEW_HINT'), source.indexOf('const WORKSPACE_PROMPT'));
+	assert.match(hint, /exact Preview URL/);
+	assert.match(hint, /in: sandbox/);
+	assert.match(hint, /or prove iframe embedding/);
+	assert.equal((source.match(/\n\tPREVIEW_HINT,/g) ?? []).length, 2);
+});
+
 test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /name: 'computer'/);
