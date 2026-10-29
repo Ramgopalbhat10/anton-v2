@@ -26,6 +26,16 @@ test('workspace agents can check the actual Preview URL and are instructed to ve
 	assert.equal((source.match(/\n\tPREVIEW_HINT,/g) ?? []).length, 2);
 });
 
+test('the browser requires an explicit fresh open and retains its notice after autopilot', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const tool = source.slice(source.indexOf('function browserTool'), source.indexOf('function Browser()'));
+	assert.match(tool, /fresh: v\.optional/);
+	assert.match(tool, /fresh needs open or do with a URL/);
+	assert.match(tool, /go\(\{ action: 'open', url: rest\.url, fresh: rest\.fresh \}\)/);
+	assert.match(tool, /openingNotice = state\.notice/);
+	assert.match(tool, /\[openingNotice, state\.notice\]/);
+});
+
 test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /name: 'computer'/);

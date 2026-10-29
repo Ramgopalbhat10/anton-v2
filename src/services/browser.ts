@@ -197,6 +197,8 @@ export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'ho
 export type BrowserInput = {
 	action: BrowserAction;
 	url?: string;
+	/** Explicitly discard a headless session and open a fresh browser on the Computer screen. */
+	fresh?: boolean;
 	/** A Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
 	target?: string;
 	text?: string;

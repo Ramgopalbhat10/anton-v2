@@ -155,13 +155,13 @@ export function browseOnComputer(
 			desktopReady = true;
 		} catch (error) {
 			if (stopped() || signal?.aborted || userHasControl(id)) return held();
-			notice = `The Computer screen was not ready; this browser step may run headless and may not be visible in Computer. ${error instanceof Error ? error.message : String(error)}`;
+			notice = `The Computer screen was not ready; this browser step may run headless and may not be visible in Computer. Its session stays headless until an explicitly fresh open, which loses its state. ${error instanceof Error ? error.message : String(error)}`;
 		} finally { clearTimeout(deadline); }
 		if (stopped() || signal?.aborted || userHasControl(id)) return held();
 		try {
-			if (desktopReady && services.show && await services.show(machine, signal)) {
-				if (command.action !== 'open') return { ...held(), problem: 'The headless browser was closed to show it on the Computer screen. Open the page again; its previous tab state was lost.' };
-				notice = 'The previous headless browser was closed to show the new page on the Computer screen.';
+			// A navigation alone is not consent to lose cookies or form state. Only an explicitly fresh open moves the browser.
+			if (desktopReady && command.action === 'open' && command.fresh && services.show && await services.show(machine, signal)) {
+				notice = 'The previous headless browser was closed to show the new page on the Computer screen; its cookies, history and tab state were lost.';
 			}
 			if (stopped() || signal?.aborted || userHasControl(id)) return held();
 			const result = await services.browser(machine, command, signal);

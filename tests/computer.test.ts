@@ -197,7 +197,14 @@ test('taking over makes the agent wait until it is handed back', async () => {
 	assert.equal(userHasControl('pc'), false);
 });
 
-test('a working browser runs headless when the machine cannot install desktop packages', { skip: !hasBrowser && 'needs Playwright Chromium' }, async () => {
+test('a headless multi-step flow keeps its page and cookies when the desktop becomes ready', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const server = createServer((request, response) => {
+		response.writeHead(200, { 'content-type': 'text/html', ...(request.url === '/' ? { 'set-cookie': 'session=active; Path=/' } : {}) });
+		response.end(request.url === '/' ? `<title>Headless fallback</title><label>Name <input id="name"></label><button onclick="document.querySelector('#result').textContent=document.querySelector('#name').value+' '+document.cookie">Check session</button><p id="result">Waiting</p>` : `<title>Inspect session</title><p id="result"></p><script>document.querySelector('#result').textContent=document.cookie || 'no cookie'</script>`);
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	t.after(() => server.close());
+	const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 	const machine = await liveMachine('pc');
 	assert.ok(machine);
 	await closeBrowser(machine);
@@ -210,18 +217,53 @@ test('a working browser runs headless when the machine cannot install desktop pa
 		},
 	};
 	try {
-		const result = await browseOnComputer('missing-desktop', async () => fake, { action: 'open', url: 'data:text/html,<title>Headless fallback</title>' }, () => false);
+		const result = await browseOnComputer('missing-desktop', async () => fake, { action: 'open', url }, () => false);
 		assert.equal(result.title, 'Headless fallback');
 		assert.equal(result.problem, null);
 		assert.match(result.notice ?? '', /may run headless/);
+		const typed = await browseOnComputer('missing-desktop', async () => fake, { action: 'type', target: '#name', text: 'Alice' }, () => false);
+		assert.equal(typed.problem, null);
 		if (hasDesktop) {
-			const transitioned = await browseOnComputer('missing-desktop', async () => machine, { action: 'look' }, () => false);
-			assert.match(transitioned.problem ?? '', /previous tab state was lost/);
-			const reopened = await browseOnComputer('missing-desktop', async () => machine, { action: 'open', url: 'data:text/html,<title>Visible after fallback</title>' }, () => false);
-			assert.equal(reopened.title, 'Visible after fallback');
-			assert.match(await focusedWindow(machine) ?? '', /Visible after fallback/);
+			const looked = await browseOnComputer('missing-desktop', async () => machine, { action: 'look' }, () => false);
+			assert.equal(looked.problem, null);
+			assert.equal(looked.title, 'Headless fallback');
+			const clicked = await browseOnComputer('missing-desktop', async () => machine, { action: 'click', target: 'role=button[name="Check session"]' }, () => false);
+			assert.equal(clicked.problem, null);
+			assert.match(clicked.snapshot, /Alice session=active/);
+			// An ordinary navigation keeps the same browser context and cookies.
+			const navigated = await browseOnComputer('missing-desktop', async () => machine, { action: 'open', url: `${url}/inspect` }, () => false);
+			assert.match(navigated.snapshot, /session=active/);
+			assert.equal(navigated.notice, undefined);
+			// Only an explicitly fresh open discards the session to move onto the screen.
+			const reopened = await browseOnComputer('missing-desktop', async () => machine, { action: 'open', url: `${url}/inspect`, fresh: true }, () => false);
+			assert.equal(reopened.title, 'Inspect session');
+			assert.match(reopened.snapshot, /no cookie/);
+			assert.match(reopened.notice ?? '', /cookies, history and tab state were lost/);
+			assert.match(await focusedWindow(machine) ?? '', /Inspect session/);
 		}
 	} finally { await closeBrowser(machine); }
+});
+
+test('only an explicitly fresh open may move a headless session onto the screen', async () => {
+	const machine = {} as import('../src/core/ports.ts').Machine;
+	const calls: string[] = [];
+	const services = {
+		desktop: async () => {},
+		show: async () => { calls.push('switch'); return true; },
+		browser: async (_machine: import('../src/core/ports.ts').Machine, command: import('../src/services/browser.ts').BrowserInput) => {
+			calls.push(command.action);
+			return { url: command.url ?? '', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: 'App' };
+		},
+	};
+	for (const command of [{ action: 'look' as const }, { action: 'click' as const, target: 'button' }, { action: 'open' as const, url: 'http://localhost/next' }]) {
+		const result = await browseOnComputer('preserve', async () => machine, command, () => false, services);
+		assert.equal(result.problem, null);
+		assert.equal(result.notice, undefined);
+	}
+	assert.deepEqual(calls, ['look', 'click', 'open']);
+	const fresh = await browseOnComputer('preserve', async () => machine, { action: 'open', url: 'http://localhost/new', fresh: true }, () => false, services);
+	assert.deepEqual(calls, ['look', 'click', 'open', 'switch', 'open']);
+	assert.match(fresh.notice ?? '', /cookies, history and tab state were lost/);
 });
 
 test('the browser falls back to headless when desktop packages are unavailable', async () => {
