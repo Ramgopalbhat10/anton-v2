@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -14,7 +16,8 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { DESKTOP_TOOLS, desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
-const { act, asAgentStep, computerScreenshot, computerView, connectComputer, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
+const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectComputer, focusedWindow, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
+const { closeBrowser } = await import('../src/services/browser.ts');
 const { liveMachine } = await import('../src/services/workspace.ts');
 const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/vision.ts');
 const { openRouterVision } = await import('../src/providers/openrouter/vision.ts');
@@ -40,6 +43,13 @@ const hasDesktop = (() => {
 	} catch {
 		return false;
 	}
+})();
+
+const hasBrowser = (() => {
+	try {
+		execSync(`NODE_PATH="$(npm root -g)" node -e "require('fs').accessSync(require('playwright').chromium.executablePath())"`, { stdio: 'ignore', shell: '/bin/bash' });
+		return true;
+	} catch { return false; }
 })();
 
 after(() => {
@@ -129,6 +139,42 @@ test('Turn off closes the desktop and leaves the sandbox running; Start computer
 	assert.equal(on.running, true);
 });
 
+test('sandbox browser tests a real app on the computer screen and keeps its tab', { skip: !(hasDesktop && hasBrowser) && 'needs desktop packages and Playwright Chromium' }, async (t) => {
+	const server = createServer((_req, res) => {
+		res.writeHead(200, { 'content-type': 'text/html' });
+		res.end('<title>Visible test page</title><p id="count">0</p><button onclick="document.querySelector(\'#count\').textContent++">Add one</button>');
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	t.after(() => server.close());
+	const port = (server.address() as AddressInfo).port;
+	const machine = await liveMachine('pc');
+	assert.ok(machine);
+	await stopComputer('pc');
+	assert.equal((await computerView('pc')).running, false);
+	const changes: string[] = [];
+	const unsubscribe = onChange((change) => change.kind === 'task' && changes.push(change.what));
+	try {
+		const page = await browseOnComputer('pc', async () => machine, { action: 'open', url: `http://127.0.0.1:${port}/` }, () => false);
+		assert.equal(page.problem, null);
+		assert.equal(page.title, 'Visible test page');
+		assert.equal((await computerView('pc')).running, true);
+		assert.ok(changes.includes('computer'), 'the panel hears the agent started the desktop');
+		assert.match(await focusedWindow(machine) ?? '', /Visible test page/);
+		const clicked = await browseOnComputer('pc', async () => machine, { action: 'click', target: 'role=button[name="Add one"]' }, () => false);
+		assert.match(clicked.snapshot, /1/);
+		const again = await browseOnComputer('pc', async () => machine, { action: 'look' }, () => false);
+		assert.equal(again.title, 'Visible test page');
+		assert.match(again.snapshot, /1/);
+		await setComputerControl('pc', 'user');
+		const held = await browseOnComputer('pc', async () => machine, { action: 'look' }, () => false);
+		assert.match(held.problem ?? '', /taken over/);
+		await setComputerControl('pc', 'agent');
+	} finally {
+		unsubscribe();
+		await closeBrowser(machine);
+	}
+});
+
 test('steps called at once run one after another, in the order they were called', async () => {
 	const order: string[] = [];
 	const step = (name: string, ms: number) => asAgentStep('pc', async () => {
@@ -148,6 +194,35 @@ test('taking over makes the agent wait until it is handed back', async () => {
 	assert.equal(userHasControl('pc'), true);
 	assert.equal((await setComputerControl('pc', 'agent')).userControl, false);
 	assert.equal(userHasControl('pc'), false);
+});
+
+test('a stopped sandbox browser step does not start a machine or desktop', async () => {
+	let started = false;
+	const state = await browseOnComputer('pc', async () => { started = true; throw new Error('must not start'); }, { action: 'look' }, () => true);
+	assert.equal(started, false);
+	assert.ok(state.problem);
+});
+
+test('takeover waits for an in-flight step and blocks queued steps before granting input', async () => {
+	let release!: () => void;
+	let started!: () => void;
+	const ready = new Promise<void>((resolve) => { started = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const first = asAgentStep('pc', async () => { started(); await gate; });
+	await ready;
+	const takeover = setComputerControl('pc', 'user');
+	// Let the task lookup finish and mark takeover pending while the first step is still running.
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(userHasControl('pc'), true);
+	let acknowledged = false;
+	void takeover.then(() => { acknowledged = true; });
+	const second = asAgentStep('pc', async () => userHasControl('pc') ? 'held' : 'acted');
+	assert.equal(acknowledged, false);
+	release();
+	await first;
+	assert.equal(await second, 'held');
+	assert.equal((await takeover).userControl, true);
+	await setComputerControl('pc', 'agent');
 });
 
 test('the vision model finds what the agent named, kept on the screen, and says what the screen shows', async () => {

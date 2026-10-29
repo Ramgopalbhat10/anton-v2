@@ -6,7 +6,7 @@ import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run, text } from '../core/shell.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { closeBrowser } from './browser.ts';
+import { browse, closeBrowser, type BrowserInput, type BrowserState } from './browser.ts';
 import { addressToUrl, screenshotFile } from './browser-step.ts';
 import { liveMachine, machineFor } from './workspace.ts';
 
@@ -25,7 +25,7 @@ export type ComputerView = {
 	screen: { width: number; height: number };
 	/** The agent is using the computer, or did a moment ago. */
 	agentBusy: boolean;
-	/** You took over: the agent's computer steps wait until you hand it back. */
+	/** You took over: agent steps stop until you hand it back. */
 	userControl: boolean;
 };
 
@@ -49,11 +49,26 @@ export async function isDesktopRunning(machine: Machine): Promise<boolean> {
  * headless before the desktop existed, so it is closed, to open again on the
  * screen at the agent's next step.
  */
+const desktopStarts = new Map<string, Promise<void>>();
+
 export async function ensureDesktop(machine: Machine): Promise<void> {
-	if (await isDesktopRunning(machine)) return;
-	await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000 });
-	await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000 });
-	await closeBrowser(machine).catch(() => undefined);
+	const key = `${machine.id}:${machine.root}`;
+	const existing = desktopStarts.get(key);
+	if (existing) return existing;
+	const start = (async () => {
+		if (await isDesktopRunning(machine)) return;
+		await run(machine, ENSURE_DESKTOP, { timeoutMs: 10 * 60_000 });
+		await run(machine, startDesktop(desktopLayout(machine.root)), { timeoutMs: 60_000 });
+		await closeBrowser(machine).catch(() => undefined);
+	})();
+	desktopStarts.set(key, start);
+	try { await start; } finally { if (desktopStarts.get(key) === start) desktopStarts.delete(key); }
+}
+
+/** Start the screen for an agent and let an already-open Computer panel find it. */
+export async function ensureAgentDesktop(id: string, machine: Machine): Promise<void> {
+	await ensureDesktop(machine);
+	changed(id);
 }
 
 /** The display the machine's desktop is on, for programs started on it. */
@@ -62,6 +77,8 @@ export const displayOf = (machine: Machine): string => desktopLayout(machine.roo
 // ---- Who drives ----
 
 const userControl = new Set<string>();
+// A takeover waits for the active step before the panel gives the user input.
+const takingControl = new Set<string>();
 
 // While the agent acts, and for a few seconds after, the panel says it is using the computer.
 const BUSY_MS = 8_000;
@@ -72,7 +89,7 @@ export function agentBusy(id: string): boolean {
 	return Boolean(step && (step.running > 0 || Date.now() - step.at < BUSY_MS));
 }
 
-export const userHasControl = (id: string): boolean => userControl.has(id);
+export const userHasControl = (id: string): boolean => userControl.has(id) || takingControl.has(id);
 
 /** Each task's last step, so the next waits for it. */
 const queues = new Map<string, Promise<unknown>>();
@@ -107,6 +124,18 @@ export async function asAgentStep<T>(id: string, work: () => Promise<T>): Promis
 			step.quiet.unref?.();
 		}
 	}
+}
+
+/** Run a sandbox browser action on the same screen and in the same queue as computer actions. */
+export function browseOnComputer(id: string, getMachine: () => Promise<Machine>, command: BrowserInput, stopped: () => boolean): Promise<BrowserState> {
+	return asAgentStep(id, async () => {
+		const held = (): BrowserState => ({ url: command.url ?? '', title: '', status: null, problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.', errors: [], screenshot: null, snapshot: '' });
+		if (stopped() || userHasControl(id)) return held();
+		const machine = await getMachine();
+		await ensureAgentDesktop(id, machine);
+		if (stopped() || userHasControl(id)) return held();
+		return browse(machine, command);
+	});
 }
 
 // ---- What the routes call ----
@@ -166,8 +195,15 @@ export async function stopComputer(id: string): Promise<ComputerView> {
 /** Take over (you drive, the agent waits) or hand back to the agent. */
 export async function setComputerControl(id: string, driver: 'user' | 'agent'): Promise<ComputerView> {
 	await requireTask(id);
-	if (driver === 'user') userControl.add(id);
-	else userControl.delete(id);
+	if (driver === 'user') {
+		takingControl.add(id);
+		// New queued steps see takingControl; the in-flight step finishes before input is enabled.
+		await queues.get(id)?.catch(() => undefined);
+		if (takingControl.delete(id)) userControl.add(id);
+	} else {
+		takingControl.delete(id);
+		userControl.delete(id);
+	}
 	changed(id);
 	return viewOf(id, await liveMachine(id));
 }

@@ -27,7 +27,7 @@ import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
-import { browse, type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
+import { type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
 import { decide, hasDecisionModel, newTally, type Tally, yesOf } from '../services/decisions.ts';
 import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } from '../services/browser-autopilot.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
@@ -73,7 +73,7 @@ import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor } from '../services/workspace.ts';
 import { checkPreview } from '../services/preview-check.ts';
-import { act, asAgentStep, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
+import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { describe, describeImage, locate } from '../services/vision.ts';
 import { agentBrowse, askTheUser, dropAgentDriver, sharedBrowserAvailable } from '../services/live-browser.ts';
@@ -327,7 +327,7 @@ type BrowserPlace = 'panel' | 'sandbox';
 
 const PLACES: Record<BrowserPlace, string> = {
 	panel: "the user's Browser panel, a real browser they watch and can take over (to sign in, say), for any site on the web",
-	sandbox: "a headless browser inside the sandbox, the only one that reaches the app's dev server on localhost",
+	sandbox: "the browser on the sandbox's Computer screen, which the user can watch and take over; it reaches the app's dev server on localhost",
 };
 
 /** The browser each task's steps went to last, so a step that names no page stays on the page it is on. */
@@ -395,8 +395,11 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			lastPlace.set(id, place);
 			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
 			const go = async (command: BrowserInput): Promise<BrowserState> => {
+				let givenUp = false;
 				try {
-					return await withinDeadline(place === 'sandbox' ? browse(await machineFor(id), command) : agentBrowse(id, command), STEP_MS, signal, place === 'panel' ? () => dropAgentDriver(id) : undefined);
+					const work = place === 'sandbox' ? browseOnComputer(id, () => machineFor(id), command, () => givenUp || Boolean(signal?.aborted)) : agentBrowse(id, command);
+					// The shared screen remains locked until the actual work ends, even if the reply gives up waiting.
+					return await withinDeadline(work, STEP_MS, signal, () => { givenUp = true; if (place === 'panel') dropAgentDriver(id); });
 				} catch (error) {
 					if (!(error instanceof StepGivenUp)) throw error;
 					const problem = error.reason === 'stopped' ? error.message : `${error.message} The page may be slow or very large: try a narrower step, or report back, since a page only to be read is quicker with web_fetch.`;
@@ -561,9 +564,11 @@ function computerTool(id: string) {
 		async run({ data, toolCallId, signal }) {
 			const { target, to, question, confirm, screenshot, ...step } = data;
 			const machine = await machineFor(id);
+			let givenUp = false;
 			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
 			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
+				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
 				if (userHasControl(id)) {
 					return { output: { problem: 'The user has taken over the computer in the Computer panel. Stop and report; the job can continue once they hand it back.' } };
 				}
@@ -610,6 +615,7 @@ function computerTool(id: string) {
 						return { output: { problem: `Not clicked: ${target} may buy, send, post or delete something. Only if your brief explicitly asks for exactly this, repeat the step with confirm set to its name; otherwise stop and report.` } };
 					}
 				}
+				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
 				const { png, window } = await act(machine, input, signal);
 				const focus = question?.trim() || (await currentBrief(id, 'computer'))?.slice(0, 1500) || null;
 				const seen = await describe(id, png, focus, signal);
@@ -626,12 +632,10 @@ function computerTool(id: string) {
 					},
 				};
 			};
-			return asAgentStep(id, () =>
-				withinDeadline(takeStep(), COMPUTER_STEP_MS, signal).catch((error: unknown) => {
-					if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
-					throw error;
-				}),
-			);
+			return withinDeadline(asAgentStep(id, takeStep), COMPUTER_STEP_MS, signal, () => { givenUp = true; }).catch((error: unknown) => {
+				if (error instanceof StepGivenUp) return { output: { problem: `${error.message} Look again before the next step.` } };
+				throw error;
+			});
 		},
 	});
 }
@@ -1110,7 +1114,7 @@ const SCRIPTED_MCP_HINT = "A connector's MCP tools can also be called from run_s
 const BROWSER_HINT =
 	'To read the web, find pages with web_search and read them with web_fetch (several URLs in one call): that takes seconds, where the browser takes a minute or more a page. ' +
 	'Delegate to the browser subagent, with a complete brief, only to act on pages (click through a flow, fill a form, check a web app) or for a page web_fetch returns empty, cut short or blocked. ' +
-	'It works in the Browser panel, which the user can watch and take over, for example to sign in.';
+	'It works in the Browser panel for websites, which the user can watch and take over, for example to sign in. When a sandbox is available, its local browser runs on the Computer screen, where the user can watch the test.';
 
 const COMPUTER_HINT =
 	'For work that needs a screen (a desktop or GUI program, a native dialog, or a page that must be seen and used as a person would), delegate to the computer subagent with a complete brief; ' +
