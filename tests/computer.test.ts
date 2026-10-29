@@ -16,7 +16,7 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { DESKTOP_TOOLS, desktopLayout, desktopRunning, ENSURE_DESKTOP, SCREEN } = await import('../src/core/desktop.ts');
-const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectComputer, ensureDesktop, focusedWindow, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
+const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectComputer, ensureDesktop, focusedWindow, forgetDesktop, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
 const { BrowserStopError, closeBrowser } = await import('../src/services/browser.ts');
 const { untilAborted, withinDeadline } = await import('../src/services/step-deadline.ts');
 const { liveMachine } = await import('../src/services/workspace.ts');
@@ -208,6 +208,8 @@ test('a headless multi-step flow keeps its page and cookies when the desktop bec
 	const machine = await liveMachine('pc');
 	assert.ok(machine);
 	await closeBrowser(machine);
+	// The desktop an earlier test started is remembered as running; this machine says it has none.
+	forgetDesktop(machine);
 	const fake = {
 		...machine,
 		exec: (command: string, options?: import('../src/core/ports.ts').ExecOptions) => {
@@ -321,7 +323,7 @@ test('an aborted browser joining an independent desktop start releases its queue
 	let joined!: () => void;
 	const joinedStart = new Promise<void>((resolve) => { joined = resolve; });
 	const work = browseOnComputer('pc', async () => machine, { action: 'look' }, () => controller.signal.aborted, {
-		desktop: async (_id, m, signal) => { joined(); return ensureDesktop(m, signal); },
+		desktop: async (_id, m, signal) => { joined(); await ensureDesktop(m, signal); },
 		browser: async () => { acted = true; throw new Error('must not act'); },
 	}, controller.signal, 5000);
 	await joinedStart;
@@ -357,7 +359,7 @@ test('a late shared desktop start does not close a fallback browser during its a
 	const independent = ensureDesktop(machine);
 	await installing;
 	const work = browseOnComputer('late-start', async () => machine, { action: 'open', url: 'http://localhost:3000' }, () => false, {
-		desktop: async (_id, m, signal) => ensureDesktop(m, signal),
+		desktop: async (_id, m, signal) => { await ensureDesktop(m, signal); },
 		browser: async () => { browserStarted(); await browserGate; return { url: '', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: '' }; },
 	}, undefined, 30);
 	await browsing;

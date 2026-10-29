@@ -269,6 +269,22 @@ export async function showBrowserOnDesktop(machine: Machine, signal?: AbortSigna
 }
 
 /**
+ * Machines whose browser is installed and whose client is written. Each is a
+ * command in the machine (a second or more on Modal, Playwright loaded to check
+ * it), so a step after the first sends its command alone.
+ */
+const prepared = new Set<string>();
+const machineKey = (machine: Machine) => `${machine.id}:${machine.root}`;
+
+async function prepare(machine: Machine, signal?: AbortSignal): Promise<void> {
+	if (prepared.has(machineKey(machine))) return;
+	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000, signal });
+	signal?.throwIfAborted();
+	await writeMachineFile(machine, browserFiles(machine).client, new TextEncoder().encode(CLIENT));
+	prepared.add(machineKey(machine));
+}
+
+/**
  * One step in the machine's browser: open a page, click, type and so on, then
  * describe the page. The tab stays open between steps; the first step starts
  * the browser.
@@ -276,16 +292,22 @@ export async function showBrowserOnDesktop(machine: Machine, signal?: AbortSigna
 export async function browse(machine: Machine, input: BrowserInput, signal?: AbortSignal): Promise<BrowserState> {
 	signal?.throwIfAborted();
 	try {
-		await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000, signal });
+		await prepare(machine, signal);
 		signal?.throwIfAborted();
 		const outputs = `${machine.root}/outputs`;
 		const command = quote(JSON.stringify({ ...input, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) }));
 		const files = browserFiles(machine);
-		await writeMachineFile(machine, files.client, new TextEncoder().encode(CLIENT));
-		signal?.throwIfAborted();
 		const send = () => machine.exec(`node ${files.client} ${files.socket} ${command}`, { timeoutMs: 120_000, signal });
 		let result = await send();
 		signal?.throwIfAborted();
+		// The client went (a machine's /tmp cleared, say): set the machine up again and send once more.
+		if (result.exitCode !== 0 && result.exitCode !== 4 && /Cannot find module/.test(result.stderr)) {
+			prepared.delete(machineKey(machine));
+			await prepare(machine, signal);
+			signal?.throwIfAborted();
+			result = await send();
+			signal?.throwIfAborted();
+		}
 		if (result.exitCode === 4) {
 			await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
 			signal?.throwIfAborted();

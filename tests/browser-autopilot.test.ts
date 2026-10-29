@@ -194,3 +194,49 @@ test('a click that only scrolls the page counts as doing something, and hover is
 	assert.ok(asked.every((call) => !call.questions.risky), 'hovering is never checked as risky');
 	assert.match(String((asked[0].questions.action as { options: Record<string, string> }).options.hover), /tooltip, preview or menu/);
 });
+
+/** A counter app: Add one counts up, a tab switches views, and done comes once it reads 2. */
+function counter() {
+	let count = 0;
+	const commands: BrowserInput[] = [];
+	const snapshot = () => [`- tab "History"`, `- paragraph: "${count}"`, '- button "Add one"'].join('\n');
+	const step = async (command: BrowserInput): Promise<BrowserState> => {
+		commands.push(command);
+		if (command.action === 'click' && command.target?.includes('Add one')) count += 1;
+		return { url: 'http://localhost:3000/', title: 'Counter', status: 200, problem: null, errors: [], screenshot: null, snapshot: snapshot() };
+	};
+	return { step, commands, count: () => count };
+}
+
+test('a run starts on the page the step before opened, and asks about a button once however often it clicks it', async () => {
+	const app = counter();
+	asked = [];
+	rule = (state, questions): Record<string, Answer> => {
+		if (questions.risky) return { risky: no };
+		const page = String(state.page);
+		return { done: { yes: page.includes('"2"') ? 0.97 : 0.02 }, stuck: no, action: pick('click'), click: pick(option(questions.click, 'Add one')) };
+	};
+	const opened = await app.step({ action: 'open', url: 'http://localhost:3000' });
+	const result = await autopilot('t', app.step, { goal: 'Click Add one twice so the counter reads 2' }, { start: opened });
+	assert.equal(result.outcome, 'done');
+	assert.equal(app.count(), 2);
+	assert.deepEqual(app.commands.map((command) => command.action), ['open', 'click', 'click'], 'no look before the first round');
+	assert.equal(asked.filter((call) => call.questions.risky).length, 1, 'the second click on the same button asks nothing');
+	assert.equal(result.decisions, 4);
+});
+
+test('a tab is clicked without asking whether it buys or deletes anything', async () => {
+	const app = counter();
+	asked = [];
+	let clicked = false;
+	rule = (_state, questions): Record<string, Answer> => {
+		if (questions.risky) return { risky: no };
+		const done = clicked;
+		clicked = true;
+		return { done: { yes: done ? 0.97 : 0.02 }, stuck: no, action: pick('click'), click: pick(option(questions.click, 'History')) };
+	};
+	const result = await autopilot('t', app.step, { goal: 'Open the History tab' });
+	assert.equal(result.outcome, 'done');
+	assert.equal(asked.filter((call) => call.questions.risky).length, 0);
+	assert.equal(app.commands[0].action, 'look', 'with no page in hand, the run looks first');
+});

@@ -32,8 +32,10 @@ test('the browser requires an explicit fresh open and retains its notice after a
 	assert.match(tool, /fresh: v\.optional/);
 	assert.match(tool, /fresh needs open or do with a URL/);
 	assert.match(tool, /go\(\{ action: 'open', url: rest\.url, fresh: rest\.fresh \}\)/);
-	assert.match(tool, /openingNotice = state\.notice/);
+	assert.match(tool, /openingNotice = opened\.notice/);
 	assert.match(tool, /\[openingNotice, state\.notice\]/);
+	// The run starts on the page that was opened, without looking at it again.
+	assert.match(tool, /start: opened/);
 });
 
 test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
