@@ -83,3 +83,24 @@ test('a plain page still waits for what the click fetched, even past the quiet s
 	const { result } = await timedClick('/plain?delay=1600');
 	assert.match(result.snapshot, /paragraph: loaded/);
 });
+
+test('an iframe’s controls are described after the page’s, and a step reaches them as frame=N >> selector', { skip: !playwright && 'needs Playwright Chromium' }, async () => {
+	const browser = await playwright!.chromium.launch();
+	try {
+		const page = await browser.newPage();
+		const form = `<label>Card <input name=card></label><button onclick='this.textContent=&quot;Paid&quot;'>Pay now</button>`;
+		await page.setContent(`<h1>Shop</h1><iframe style="display:none" srcdoc="<button>Hidden</button>"></iframe><iframe title="Payment" width="400" height="200" srcdoc="${form}"></iframe>`);
+		await page.waitForTimeout(300);
+		const looked = await browserStep(page, { action: 'look' });
+		assert.match(looked.snapshot, /- iframe \[frame=1\]:\n {2}- text: Card\n {2}- textbox "Card"\n {2}- button "Pay now"/);
+		assert.doesNotMatch(looked.snapshot, /Hidden/, 'a hidden iframe is left out');
+		const typed = await browserStep(page, { action: 'type', target: 'frame=1 >> role=textbox[name="Card"]', text: '4242' });
+		assert.equal(typed.problem, null);
+		const clicked = await browserStep(page, { action: 'click', target: 'frame=1 >> role=button[name="Pay now"]' });
+		assert.equal(clicked.problem, null);
+		assert.match(clicked.snapshot, /textbox "Card": "4242"/);
+		assert.match(clicked.snapshot, /button "Paid"/);
+	} finally {
+		await browser.close();
+	}
+});

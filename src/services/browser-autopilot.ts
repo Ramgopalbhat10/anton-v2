@@ -83,30 +83,59 @@ export const mayBeIrreversible = (text: string) => RISKY_WORDS.test(text);
 /** One line of the accessibility tree: `- role "name" [state]: value`, maybe quoted whole as YAML does for some names. */
 const LINE = /^\s*- '?([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?:\s*\[[^\]]*\])*)'?(?::\s*(.*))?$/;
 
-/** The controls in a page's accessibility tree, in page order, each with a selector that finds exactly it. */
+/** An iframe's tree, as the browser step adds it after the page's: `- iframe [frame=N]:`. */
+const FRAME = /^(\s*)- iframe \[frame=(\d+)\]:$/;
+
+/**
+ * The controls in a page's accessibility tree, in page order, each with a selector that finds exactly it;
+ * one in an iframe's tree with `frame=N >> ` before it, counted within its frame.
+ */
 export function candidatesOf(snapshot: string): Candidate[] {
 	const out: Candidate[] = [];
 	const seen = new Map<string, number>();
+	let frame: { at: number; prefix: string } | null = null;
 	for (const line of snapshot.split('\n')) {
+		const entered = FRAME.exec(line);
+		if (entered) {
+			frame = { at: entered[1].length, prefix: `frame=${entered[2]} >> ` };
+			continue;
+		}
+		if (frame && line.length - line.trimStart().length <= frame.at) frame = null;
 		const match = LINE.exec(line);
 		if (!match) continue;
 		const [, role, quoted, states = '', rest = ''] = match;
 		const kind = FIELDS.has(role) ? 'field' : CLICKABLE.has(role) ? 'click' : null;
+		const scope = frame?.prefix ?? '';
 		// Every control of a role counts toward an unnamed one's position, as `role=x` matches them all.
-		const roleCount = seen.get(role) ?? 0;
-		seen.set(role, roleCount + 1);
+		const roleCount = seen.get(`${scope}${role}`) ?? 0;
+		seen.set(`${scope}${role}`, roleCount + 1);
 		if (!kind) continue;
 		const name = (quoted ?? '').replace(/\\(.)/g, '$1');
-		const key = `${role}\n${name}`;
+		const key = `${scope}${role}\n${name}`;
 		const nth = name ? (seen.get(key) ?? 0) : roleCount;
 		if (name) seen.set(key, nth + 1);
-		const selector = name ? `role=${role}[name=${JSON.stringify(name)} s] >> nth=${nth}` : `role=${role} >> nth=${nth}`;
+		const selector = scope + (name ? `role=${role}[name=${JSON.stringify(name)} s] >> nth=${nth}` : `role=${role} >> nth=${nth}`);
 		const value = rest.trim().replace(/^"(.*)"$/, '$1');
-		const shown = `${role}${name ? ` "${name.length > 80 ? `${name.slice(0, 80)}…` : name}"` : ''}${states.trim() ? ` ${states.trim()}` : ''}`;
+		const shown = `${role}${name ? ` "${name.length > 80 ? `${name.slice(0, 80)}…` : name}"` : ''}${states.trim() ? ` ${states.trim()}` : ''}${frame ? ' (in an embedded frame)' : ''}`;
 		const label = kind === 'field' ? `${shown}${value ? ` holding "${value.slice(0, 60)}"` : ' (empty)'}` : shown;
 		out.push({ role, name, label, selector, kind });
 	}
 	return out;
+}
+
+/**
+ * Each task's elements judged safe to click, by page and label, so clicking one again ("Add one", twice, or
+ * across the do calls of one test) asks nothing. A page is its address without the part after #; the same
+ * label elsewhere is asked about again, as a "Continue" on another page may be the one that pays.
+ */
+const judgedSafe = new Map<string, Set<string>>();
+const MAX_SAFE = 500;
+const MAX_TASKS = 200;
+const safeKey = (url: string, label: string) => `${url.split('#')[0]}\n${label}`;
+function remember(safe: Set<string>, key: string) {
+	safe.add(key);
+	// The oldest go first, so a long task's set stays small.
+	if (safe.size > MAX_SAFE) safe.delete(safe.values().next().value!);
 }
 
 const pct = (p: number | null) => (p === null ? '' : ` (${p.toFixed(2)})`);
@@ -136,8 +165,11 @@ export async function autopilot(
 	let cost = 0;
 	let unchanged = 0;
 	let state = options.start && !options.start.problem ? options.start : await step({ action: 'look' });
-	// Elements judged safe to click in this run, so clicking one again ("Add one", twice) asks nothing.
-	const judgedSafe = new Set<string>();
+	const safe = judgedSafe.get(id) ?? new Set<string>();
+	// The task browsing now goes last, so the one left longest goes first.
+	judgedSafe.delete(id);
+	judgedSafe.set(id, safe);
+	if (judgedSafe.size > MAX_TASKS) judgedSafe.delete(judgedSafe.keys().next().value!);
 
 	const ask = async (askState: Record<string, unknown>, questions: Record<string, Question>): Promise<Record<string, Answer>> => {
 		const decision = await consult(id, askState, questions, options.signal);
@@ -241,14 +273,14 @@ export async function autopilot(
 				continue;
 			}
 			const confirmed = Boolean(input.confirm?.trim()) && element.label.toLowerCase().includes(input.confirm!.trim().toLowerCase());
-			const asks = (!NAVIGATES.has(element.role) || mayBeIrreversible(element.label)) && !judgedSafe.has(`${state.url}\n${element.label}`);
+			const asks = (!NAVIGATES.has(element.role) || mayBeIrreversible(element.label)) && !safe.has(safeKey(state.url, element.label));
 			if (!confirmed && asks) {
 				const risky = await ask(
 					{ goal: input.goal.slice(0, 2000), url: state.url, title: state.title, element: element.label, page: state.snapshot.slice(0, PAGE_CHARS / 2) },
 					{ risky: { type: 'yes-no', instructions: IRREVERSIBLE } },
 				);
 				if ((yesOf(risky.risky) ?? 1) >= RISKY) return end('needs_confirmation', element.label);
-				judgedSafe.add(`${state.url}\n${element.label}`);
+				remember(safe, safeKey(state.url, element.label));
 			}
 			const changed = await act({ action: 'click', target: element.selector });
 			const failed = Boolean(state.problem);
