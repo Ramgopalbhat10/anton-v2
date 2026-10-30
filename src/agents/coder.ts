@@ -85,7 +85,8 @@ import { pageForAgent } from '../services/page-memory.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
-import { checkReply } from '../services/reply-check.ts';
+import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
+import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
@@ -1153,6 +1154,20 @@ const SCRATCH_HINT =
 const EDIT_HINT =
 	'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list, and the edits to other files as calls in the same step. Read a file again only when you need lines you have not seen.';
 
+/** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
+/**
+ * A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). In every
+ * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
+ */
+const REQUIREMENTS_HINT =
+	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
+
+/** A focused check while iterating misses what a change breaks further off, and what the request named that no test covers yet. */
+const FINISH_HINT =
+	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
+	'Then run the whole test suite of the package or module you changed once (through the tester subagent when it is long), not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
+	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user.';
+
 /** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
 const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
 
@@ -1178,8 +1193,9 @@ const WORKSPACE_PROMPT = [
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
-	'Delegate read-heavy investigation to the explorer subagent. Run a quick, focused check (the type check, the tests of the files you changed) yourself; delegate a long or full test suite to the tester subagent. Never run the same tests both ways, and run them again only after changing code they cover.',
+	'Delegate read-heavy investigation to the explorer subagent. While you work, run quick, focused checks (the type check, the tests of the files you changed) yourself; delegate a long or full test suite to the tester subagent. Never run the same tests both ways, and run them again only after changing code they cover.',
 	EDIT_HINT,
+	FINISH_HINT,
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
@@ -1201,6 +1217,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
 	EDIT_HINT,
+	FINISH_HINT,
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
@@ -1249,6 +1266,7 @@ function useLatestInput(id: string) {
 	useAgentStart(async () => {
 		if (delivery.kind !== 'user') return;
 		await noteDelivery(id, delivery.body);
+		noteRequest(id, delivery.body);
 		await recordLatestInput(id, delivery.body);
 	});
 }
@@ -1352,6 +1370,19 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: reminder });
 			return;
 		}
+		// A reply that ends by announcing a step it never took is sent back to take it, once.
+		const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
+		if (stalled) {
+			append({ kind: 'signal', type: 'reminder', body: stalled });
+			return;
+		}
+		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed.
+		// A task that started its workspace during this reply has one now, though this render began without it.
+		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+		if (missed) {
+			append({ kind: 'signal', type: 'reminder', body: missed });
+			return;
+		}
 		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 		queueCheckpoint(id);
 		// What the reply leaves (a question for you, work done) is judged by the decision model, which takes seconds:
@@ -1369,6 +1400,8 @@ export function Coder({ id }: AgentProps) {
 		startReply(id);
 		startTrace(id);
 		startTodoReply(id);
+		startStallCheck(id);
+		startFinishReview(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
@@ -1389,9 +1422,12 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
+
+/** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */
+Coder.durability = { timeoutMs: 4 * 3_600_000 };

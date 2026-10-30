@@ -27,6 +27,8 @@ const MAX_QUESTION = 240;
 const WAITS = 0.6;
 
 const lastReply = new Map<string, string>();
+/** The words of the agent's latest message, empty when it had none, so a reply's end is read from its last message alone. */
+const lastWords = new Map<string, string>();
 /** Everything the agent said in its current reply, as a reply can say its findings and then a closing line. */
 const replyTexts = new Map<string, string[]>();
 
@@ -42,6 +44,7 @@ export function recordReplyText(event: MessageEvent): void {
 	if (event.session !== undefined && event.session !== 'default') return;
 	if (event.agentName && !/^coder$/i.test(event.agentName)) return;
 	const text = textOf(event.message.content).trim();
+	lastWords.set(event.instanceId, text);
 	if (!text) return;
 	lastReply.set(event.instanceId, text);
 	replyTexts.set(event.instanceId, [...(replyTexts.get(event.instanceId) ?? []), text]);
@@ -123,6 +126,7 @@ export async function checkReply(id: string): Promise<string | null> {
 	const ask = takeAsk(id);
 	const plan = takePlan(id);
 	lastReply.delete(id);
+	lastWords.delete(id);
 	replyTexts.delete(id);
 	try {
 		// A question asked with the ask tool waits on the user by its nature.
@@ -134,4 +138,30 @@ export async function checkReply(id: string): Promise<string | null> {
 	}
 	// The coordinator and the thread's card read the question too, when it was asked with the tool, and the plan waiting on approval.
 	return [whole ?? reply, ask, plan ? `Plan waiting for approval:\n${plan}` : null].filter(Boolean).join('\n\n') || null;
+}
+
+/** Tasks whose reply in hand was already sent back to work, so a reply is sent back once. */
+const nudged = new Set<string>();
+
+/** A new reply may be sent back again. */
+export function startStallCheck(id: string): void {
+	nudged.delete(id);
+}
+
+/** A message that only says what the agent will do next ("I'll start by exploring the repository."). */
+const ANNOUNCES = /^(?:(?:ok(?:ay)?|alright|sure|great)[,.!]?\s+)?(?:i['’]ll|i will|i['’]m going to|let me(?! know)|let['’]s|now,? i['’]ll|next,? i['’]ll|first,? i['’]ll)\b/i;
+
+/**
+ * When a reply is about to end on a message that only announces its next step, as some models do, so the
+ * work it promised never runs and the task ends with nothing done: what to tell the agent so it carries on;
+ * null otherwise. Once a reply, and never when the reply ends asking the user or proposing a plan.
+ */
+export function stallReminder(id: string, calls: readonly { tool: string }[]): string | null {
+	const text = lastWords.get(id);
+	if (!text || nudged.has(id)) return null;
+	const last = calls[calls.length - 1]?.tool;
+	if (last === 'ask' || last === 'propose_plan') return null;
+	if (text.length >= SUBSTANCE || text.includes('?') || !ANNOUNCES.test(text)) return null;
+	nudged.add(id);
+	return 'Your reply ended on a step you said you would take, without taking it. Carry on with the work now, and end your reply once it is done or you need the user.';
 }
