@@ -15,6 +15,7 @@ import { REASONING_LEVELS } from './core/ports.ts';
 import { ROUTE_SORTS } from './core/model-route.ts';
 import { FREQUENCIES } from './core/schedule.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
+import { mobileApi } from './api/mobile.ts';
 import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
@@ -244,6 +245,9 @@ app.post('/api/agents/coder/:id/abort', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
+// The Android app's read surface: stable DTOs over the internal shapes, and a transcript
+// normalized from the agent router instead of flue's wire protocol.
+app.route('/api/mobile', mobileApi(agents as never));
 // A project's coordinator, one conversation per project; like a prompt to a task, a message is checked
 // against the daily cap, and the coordinator loads a fresh picture of its project before it renders.
 app.post('/api/agents/coordinator/:id', async (c, next) => {
