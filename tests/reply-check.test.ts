@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-reply-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { checkReply, closingOf, questionOf, recordReplyText } = await import('../src/services/reply-check.ts');
+const { checkReply, closingOf, questionOf, recordReplyText, stallReminder, startStallCheck } = await import('../src/services/reply-check.ts');
 const { recordLatestInput } = await import('../src/services/latest-input.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -119,4 +119,30 @@ test('a reply judged after you already sent the next message leaves the task wor
 	assert.equal((await getSessionRecord('a'))?.asking, null);
 	recordAgentEvent({ type: 'submission_running', instanceId: 'a', submissionId: 'next' });
 	recordAgentEvent({ type: 'submission_settled', instanceId: 'a', submissionId: 'next' });
+});
+
+test('a reply that ends announcing a step it never took is sent back to take it, once a reply', () => {
+	const tool = (name: string) => [{ tool: name }];
+	startStallCheck('s');
+	reply('s', 'I’ll start by exploring the repository structure.');
+	assert.match(stallReminder('s', tool('bash')) ?? '', /Carry on with the work now/);
+	assert.equal(stallReminder('s', tool('bash')), null);
+	startStallCheck('s');
+	assert.match(stallReminder('s', []) ?? '', /Carry on/);
+	for (const [text, calls] of [
+		['Let me know if you want the docs updated too.', []],
+		['I’ll leave the config as it is. Should I also bump the version?', []],
+		[`I’ll summarise: ${'the change adds a retry and a test for it. '.repeat(8)}`, []],
+		['Done: the tests pass.', []],
+		['Let me ask which branch you meant.', tool('ask')],
+		['I’ll wait for your approval of the plan.', tool('propose_plan')],
+	] as const) {
+		startStallCheck('s');
+		reply('s', text);
+		assert.equal(stallReminder('s', calls), null, text);
+	}
+	startStallCheck('s');
+	reply('s', 'Let me run the tests.');
+	reply('s', '', { message: { role: 'assistant', content: [] } });
+	assert.equal(stallReminder('s', []), null, 'a reply whose last message had no words is not read from an earlier one');
 });

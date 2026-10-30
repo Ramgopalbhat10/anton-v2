@@ -69,7 +69,7 @@ export async function todoReminder(id: string, calls: readonly Call[]): Promise<
 	reminded.add(id);
 	return (
 		`Your todo list still shows ${open.length} of ${list.todos.length} steps not done: ${open.map((todo) => `"${todo.content}"`).join(', ')}. ` +
-		'The user follows the list as your progress. Call update_todos now so it matches where the work stands: mark each step you finished completed, ' +
-		'and leave open only what is still to do. Then end your reply without repeating your answer.'
+		'Do any of them you can still do without the user now. The user follows the list as your progress, so then call update_todos to match where the work stands: mark each step you finished completed, ' +
+		'and leave open only what waits on the user or cannot be done. Then end your reply without repeating your answer.'
 	);
 }

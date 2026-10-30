@@ -6,6 +6,9 @@ import { CommandError, quote, text } from '../core/shell.ts';
 
 type ShellOptions = { cwd?: string; env?: Record<string, string>; timeoutMs?: number; signal?: AbortSignal };
 
+/** How long the agent's command runs when it names no timeout of its own: a `grep -r /` must not hold the task for good. */
+export const COMMAND_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * Adapts any `Machine` to Flue's sandbox contract, so the agent is provider-agnostic.
  * While `canWrite` says no, the file tools refuse to write; it is asked at each call.
@@ -33,8 +36,12 @@ export function machineSandbox(
 
 	const driver: SandboxDriver = {
 		async exec(command: string, options?: ShellOptions) {
-			const result = await machine.exec(command, options);
-			return { stdout: hide(text(result.stdout)), stderr: hide(result.stderr), exitCode: result.exitCode };
+			const timeoutMs = options?.timeoutMs ?? COMMAND_TIMEOUT_MS;
+			const started = Date.now();
+			const result = await machine.exec(command, { ...options, timeoutMs });
+			const stopped = options?.timeoutMs === undefined && result.exitCode === 124 && Date.now() - started >= timeoutMs;
+			const note = stopped ? `\n[anton] Stopped after ${timeoutMs / 60_000} minutes. Pass a timeout (in seconds) for a command that needs longer.` : '';
+			return { stdout: hide(text(result.stdout)), stderr: hide(result.stderr) + note, exitCode: result.exitCode };
 		},
 		readFile: async (path) => text(await readMachineFile(machine, path)),
 		readFileBuffer: (path) => readMachineFile(machine, path),

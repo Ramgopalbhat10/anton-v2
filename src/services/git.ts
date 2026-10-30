@@ -84,6 +84,29 @@ export async function changes(machine: Machine, baseSha: string, since: string |
 /** Prints the working tree's difference from `from`, new files and binaries included, as a patch `git apply` takes. */
 export const workingPatchCommand = (from: string) => `(${withScratchIndex(`git diff --cached --no-renames --binary ${from}`)})`;
 
+/** Past this the diffs are cut on the machine, so a build's untracked output never comes back whole. */
+const MAX_OTHER_PATCH = 200_000;
+
+/**
+ * What a chat changed in repositories outside its scratch folder, as one diff with each file under its repository's
+ * path: a repository it cloned, or one already on the machine. Each is diffed, new files included, from its last
+ * commit from before `since`, so its own history is left out and its commits since are not. The index the agent
+ * sees is left as it was.
+ */
+export async function otherRepoChanges(machine: Machine, since: Date, under = '/'): Promise<string> {
+	const epoch = Math.floor(since.getTime() / 1000);
+	const git = `git -c safe.directory='*'`;
+	const script = [
+		`for g in $(find ${quote(under)} -xdev -maxdepth 4 \\( -path /proc -o -path /sys -o -path /dev -o -name node_modules \\) -prune -o -name .git -type d -print 2>/dev/null); do`,
+		'd="${g%/.git}"',
+		`[ "$d" = ${quote(repoDir(machine))} ] && continue`,
+		`if ${git} -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1; then base=$(${git} -C "$d" rev-list -1 --before=@${epoch} HEAD 2>/dev/null); else base=; fi`,
+		`(cd "$d" && export GIT_INDEX_FILE="$(mktemp)"; cp .git/index "$GIT_INDEX_FILE" 2>/dev/null; ${git} add -A >/dev/null 2>&1; ${git} diff --cached --no-renames --binary --src-prefix="a$d/" --dst-prefix="b$d/" "\${base:-${EMPTY_TREE}}"; rm -f "$GIT_INDEX_FILE")`,
+		`done | head -c ${MAX_OTHER_PATCH}; true`,
+	].join('\n');
+	return run(machine, script, { cwd: machine.root, timeoutMs: 60_000 });
+}
+
 /** Tracked files plus new ones that are not ignored. */
 export async function listFiles(machine: Machine): Promise<string[]> {
 	const out = await run(machine, 'git ls-files -co --exclude-standard', { cwd: repoDir(machine) });

@@ -100,3 +100,31 @@ test('the browser turns away raw GitHub files, which web_fetch reads in a second
 	assert.ok(!isRawFile('https://github.com/acme/app/pulls'));
 	assert.ok(!isRawFile(undefined));
 });
+
+test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /Coder\.durability = \{ timeoutMs: 4 \* 3_600_000 \};/);
+});
+
+test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+		const start = source.indexOf(prompt);
+		assert.ok(start >= 0, prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /FINISH_HINT/, prompt);
+	}
+	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/** Links to the outputs folder'));
+	assert.match(finish, /whole test suite of the package or module you changed/);
+	assert.match(finish, /Do not end on part of the request left undone/);
+	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
+	assert.match(source, /startStallCheck\(id\);/);
+});
+
+test('Coder lists the request’s requirements as todos, and has a change read against the request before a coding reply ends', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	// In every repository and chat prompt: a coding task writes its list before it starts its workspace.
+	assert.equal(source.match(/\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/g)?.length, 2);
+	assert.match(source, /noteRequest\(id, delivery\.body\);/);
+	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
+	assert.match(source, /startFinishReview\(id\);/);
+});
