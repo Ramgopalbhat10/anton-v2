@@ -247,7 +247,8 @@ const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
 // The Android app's read surface: stable DTOs over the internal shapes, and a transcript
 // normalized from the agent router instead of flue's wire protocol.
-app.route('/api/mobile', mobileApi(agents as never));
+const coordinators = createAgentRouter(Coordinator);
+app.route('/api/mobile', mobileApi(agents as never, coordinators as never));
 // A project's coordinator, one conversation per project; like a prompt to a task, a message is checked
 // against the daily cap, and the coordinator loads a fresh picture of its project before it renders.
 app.post('/api/agents/coordinator/:id', async (c, next) => {
@@ -257,7 +258,6 @@ app.post('/api/agents/coordinator/:id', async (c, next) => {
 	await primeCoordinator(id);
 	await next();
 });
-const coordinators = createAgentRouter(Coordinator);
 app.route('/api/agents/coordinator', coordinators as never);
 // The reviewer is never served over HTTP; its router only stops it.
 const reviewers = createAgentRouter(Reviewer);
