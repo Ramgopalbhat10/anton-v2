@@ -114,7 +114,7 @@ async function transcript(agents: AgentRouter, id: string) {
  * `POST /api/agents/coder/:id` so budget checks and priming still run;
  * live changes ride the same `/api/events` stream.
  */
-export function mobileApi(agents: AgentRouter) {
+export function mobileApi(agents: AgentRouter, coordinators?: AgentRouter) {
 	const app = new Hono();
 
 	app.get('/sessions', async (c) => c.json({ sessions: (await listSessions()).map(trimSession) }));
@@ -135,6 +135,13 @@ export function mobileApi(agents: AgentRouter) {
 
 	app.get('/spaces', async (c) => c.json({ spaces: await spacesView() }));
 	app.get('/spaces/:id', async (c) => c.json(await spaceView(c.req.param('id'))));
+
+	// The project's coordinator conversation, normalized like a task transcript.
+	// Sending stays on POST /api/agents/coordinator/:id, same as a prompt on a task.
+	app.get('/spaces/:id/messages', async (c) => {
+		if (!coordinators) return c.json({ messages: [] });
+		return c.json({ messages: await transcript(coordinators, c.req.param('id')) });
+	});
 
 	app.get('/models', async (c) =>
 		c.json({ models: await listModels(), default: await defaultModel(), pinned: await pinnedModels() }),
