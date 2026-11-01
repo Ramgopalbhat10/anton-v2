@@ -86,7 +86,7 @@ import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
-import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { finishReview, noteRequest, requestFor, startFinishReview, verifierPrompt } from '../services/finish-review.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
@@ -142,6 +142,22 @@ const tester = defineSubagent({
 	description: `Runs the project test suite and writes ${OUTPUTS}/test-report.md.`,
 	agent: Tester,
 });
+
+/**
+ * Checks the change in the sandbox against the task's request, whole, by running it, and reports pass or fail with
+ * what it ran. It runs on the task's own model: it judges the work, so it is not handed to a cheaper one.
+ */
+function useVerifierSubagent(id: string) {
+	useSubagent(
+		defineSubagent({
+			name: 'verifier',
+			description:
+				'Checks the change in the sandbox against the user\'s request by running it, with fresh eyes: it lists what the request names, exercises each one the way a user would and runs the covering tests, ' +
+				'then reports PASS or FAIL for each with the command it ran. It changes nothing. It already has the request; brief it with how to build, run and test the project and where the change lives.',
+			agent: () => verifierPrompt(requestFor(id)),
+		}),
+	);
+}
 
 /** A subagent's own model from Settings, often a cheaper one; without one it uses the task's. */
 function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
@@ -280,6 +296,8 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			describe: (bytes, mimeType) => describeImage(id, bytes, mimeType),
 		}),
 	});
+	// A change is checked by running it, by a subagent that sees the request and the sandbox but not the conversation (`finishReview`).
+	if (!planning && !review) useVerifierSubagent(id);
 	if (!chat) {
 		useSubagent(withSettingsModel(explorer, 'explorer'));
 		useSubagent(withSettingsModel(tester, 'tester'));
@@ -812,6 +830,9 @@ function useTodos(id: string) {
 						v.object({
 							content: v.pipe(v.string(), v.minLength(1), v.description('The step, a few words in the imperative, such as "Add the migration"')),
 							status: v.picklist(['pending', 'in_progress', 'completed']),
+							evidence: v.optional(
+								v.pipe(v.string(), v.description('For a completed item: how you checked it, the command or check you ran and what it showed, in a short line')),
+							),
 						}),
 					),
 					v.maxLength(MAX_TODOS),
@@ -1160,7 +1181,7 @@ const EDIT_HINT =
  * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
  */
 const REQUIREMENTS_HINT =
-	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
+	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it, with that check as its evidence: the command, request or step you ran and what it showed.';
 
 /** A focused check while iterating misses what a change breaks further off, and what the request named that no test covers yet. */
 const FINISH_HINT =
@@ -1376,7 +1397,7 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: stalled });
 			return;
 		}
-		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed.
+		// A change is sent back to be verified, by running it, against the request alone; a chat's, in the repositories it changed.
 		// A task that started its workspace during this reply has one now, though this render began without it.
 		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 		if (missed) {

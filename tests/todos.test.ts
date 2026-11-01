@@ -76,3 +76,14 @@ test('no reminder for a list from an earlier reply, a finished list, or a reply 
 	await writeTodos('t', [{ content: 'Build the app', status: 'completed' }]);
 	assert.equal(await todoReminder('t', [{ tool: 'update_todos', isError: false }]), null);
 });
+
+test('a finished step keeps how it was checked, trimmed to a line, and a step without evidence has none', async () => {
+	await writeTodos('t', [
+		{ content: 'Add the --reverse flag', status: 'completed', evidence: '  ran `sort --reverse a b`\n  printed b a ' },
+		{ content: 'Run the tests', status: 'pending', evidence: '   ' },
+	], new Date('2026-11-01T00:00:00Z'));
+	assert.deepEqual((await todosFor('t'))?.todos, [
+		{ content: 'Add the --reverse flag', status: 'completed', evidence: 'ran `sort --reverse a b` printed b a' },
+		{ content: 'Run the tests', status: 'pending' },
+	]);
+});

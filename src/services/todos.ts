@@ -7,12 +7,14 @@ import { getSessionTodos, setSessionTodos } from '../db/sessions.ts';
  */
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
-export type Todo = { content: string; status: TodoStatus };
+/** `evidence` is how a finished step was checked: the command or check, and what it showed. */
+export type Todo = { content: string; status: TodoStatus; evidence?: string };
 export type TodoList = { todos: Todo[]; updatedAt: string };
 
 /** A list stays short enough to read at a glance; each item a line. */
 export const MAX_TODOS = 30;
 const MAX_CONTENT = 200;
+const MAX_EVIDENCE = 300;
 
 export async function todosFor(id: string): Promise<TodoList | null> {
 	const saved = await getSessionTodos(id);
@@ -28,7 +30,10 @@ export async function todosFor(id: string): Promise<TodoList | null> {
 /** Saves the list the agent wrote in place of the last one, and says back where it stands. An empty list clears it. */
 export async function writeTodos(id: string, todos: Todo[], at = new Date()): Promise<string> {
 	const list = todos
-		.map((todo) => ({ content: todo.content.replace(/\s+/g, ' ').trim().slice(0, MAX_CONTENT), status: todo.status }))
+		.map((todo) => {
+			const evidence = todo.evidence?.replace(/\s+/g, ' ').trim().slice(0, MAX_EVIDENCE);
+			return { content: todo.content.replace(/\s+/g, ' ').trim().slice(0, MAX_CONTENT), status: todo.status, ...(evidence ? { evidence } : {}) };
+		})
 		.filter((todo) => todo.content)
 		.slice(0, MAX_TODOS);
 	if (list.length === 0) {
