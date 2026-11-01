@@ -1,40 +1,52 @@
 import { createHash } from 'node:crypto';
 import { getSessionRecord } from '../db/sessions.ts';
+import { getProviders } from '../providers/index.ts';
 import { changesView } from './files.ts';
 import { otherRepoChanges } from './git.ts';
 import { logProblem } from './log.ts';
+import { modelFor } from './sessions.ts';
+import { recordUsage } from './usage.ts';
 import { liveMachine } from './workspace.ts';
 
 /*
- * A check of a change, by running it, before the reply that made it ends. A
- * model that has worked through a long conversation reads the request it
- * started from as one message among hundreds, and most changes that fall
- * short do so by a case the request named that the change missed, or built
- * but never reached the way a user would reach it. Reading its own diff again
- * in the same conversation, the agent tends to see what it meant to write.
+ * A second look at a change before the reply that made it ends. A model that
+ * has worked through a long conversation reads the request it started from
+ * as one message among hundreds, and most tasks that fall short do so by a
+ * case the request named and the change missed. So the task's own model reads
+ * only the request and the diff, with nothing else in view, and lists what the
+ * request asks that the change does not do. When it finds something, the agent
+ * is sent back once to check those points; when it finds nothing, the reply
+ * ends as it would have. One short call, on a context of the request and the
+ * diff, never the conversation, and without reasoning, which on a long diff can
+ * use up any budget before the list is written.
  *
- * So the agent is sent back to hand the change to the verifier subagent: its
- * own conversation, with only the request and the sandbox in view, which
- * lists what the request names and exercises each one through the command,
- * API, endpoint or end state a user would meet, then reports pass or fail with
- * what it ran. A subagent runs on the task's model, so on a plan model it is
- * billed to the plan like the rest of the task. When the agent changes the
- * code after a report, the result is verified once more; a small change, a
- * reply that ends asking the user, and a diff already verified end as they are.
+ * A model only a plan runs (ChatGPT, OpenCode Go, Claude, Cursor) cannot be
+ * called on its own here, and a reviewer billed on another key would cost
+ * where the plan did not. The agent itself is then given the request again,
+ * whole, and asked to make that check, on its own plan.
  */
 
 /** A request is kept up to this long; a task's whole brief fits. */
 const MAX_REQUEST = 30_000;
-/** Times one reply is sent back to verify: the change, and the change once more after fixing what the verifier found. */
-const MAX_ROUNDS = 2;
-/** A change of fewer added and removed lines than this ends without a verifier: a one-line fix needs no second agent. */
-const MIN_CHANGED_LINES = 20;
+/** The diff the reviewer reads; past this its start is read, with a note. */
+const MAX_PATCH = 60_000;
+/**
+ * Room for the list. The reviewer answers without reasoning: at low effort DeepSeek still spent 6,000 tokens thinking
+ * on a real task and wrote nothing, while without it the same review took 33 seconds and half a cent.
+ */
+const MAX_TOKENS = 4_000;
+/** Past this the reply ends without the review rather than keep the user waiting. */
+const REVIEW_MS = 120_000;
+/** The list the agent is given back, at most. */
+const MAX_FINDINGS = 3_000;
+/** The request as the agent is shown it again for its own check; a brief past this is cut, with a note. */
+const MAX_SELF_REQUEST = 12_000;
 
 /** Each task's latest request, whole: the latest input kept on the task is cut for its card. */
 const requests = new Map<string, string>();
-/** How many times the reply in hand was sent back to verify. */
-const rounds = new Map<string, number>();
-/** The diff each task's last verification was asked for, so a later reply that changed nothing is not verified again. */
+/** Tasks whose reply in hand was reviewed already, so a reply is reviewed once. */
+const reviewed = new Set<string>();
+/** The diff each task's last review read, so a later reply that changed nothing is not reviewed again. */
 const lastPatch = new Map<string, string>();
 const KEEP_TASKS = 200;
 
@@ -50,46 +62,58 @@ export function noteRequest(id: string, text: string): void {
 	if (request) remember(requests, id, request.slice(0, MAX_REQUEST));
 }
 
-/** The task's latest request, whole, as the verifier reads it. */
-export function requestFor(id: string): string | null {
-	return requests.get(id) ?? null;
-}
-
-/** A new reply may be sent back to verify again. */
+/** A new reply may be reviewed again. */
 export function startFinishReview(id: string): void {
-	rounds.delete(id);
+	reviewed.delete(id);
 }
 
-/** Lines the diff adds or removes, not counting its file headers. */
-export function changedLines(patch: string): number {
-	return patch.split('\n').filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line)).length;
+/** The diff as the reviewer reads it: binary files as one line each, and cut past `MAX_PATCH`. */
+export function reviewPatch(patch: string): string {
+	const text = patch.replace(/GIT binary patch\n[\s\S]*?(?=\ndiff --git |$)/g, '[binary file]');
+	return text.length > MAX_PATCH ? `${text.slice(0, MAX_PATCH)}\n[The diff goes on for ${(text.length - MAX_PATCH).toLocaleString('en-US')} more characters.]` : text;
 }
 
-/** The verifier's instructions: the request, and how to check a change against it by running it. */
-export const verifierPrompt = (request: string | null) =>
+export const reviewPrompt = (request: string, patch: string) =>
 	[
-		'You are the verifier. Another agent changed the code in this sandbox to do what the user asked. You did not write the change, and you see neither its conversation nor its reasoning: only the request and the code.',
-		'Your job is to find out, by running things, whether the change does what the request asks.',
+		'A coding agent was given the request below and made the change below. You check the change against the request, with fresh eyes.',
 		'',
 		'<request>',
-		request ?? '(The request was not kept; take it from your brief.)',
+		request,
 		'</request>',
 		'',
-		'1. List the behaviour the request names: each function, command, option, flag, field, message, output format, default, error and fallback path, edge case and end state.',
-		'2. Read the change (git status and git diff, new files included) to find where each one lives and how a user reaches it.',
-		'3. Check each one the way it will be used: run the command, call the public API from a short script, request the endpoint, or look at the files, services or state the request says should result. Write any script under /tmp, never in the repository.',
-		'4. Run the existing tests that cover the changed code once, and note any that fail.',
-		'Change, stage and commit nothing in the repository, and fix nothing: report. When something cannot be checked here (it needs the user, a browser or a network), say so rather than guess.',
-		'Finish with one line per behaviour, failures first: PASS, FAIL or UNCHECKED, the behaviour in the request\'s words, and the command you ran with the line of its output that shows it. ' +
-			'Then a last line: VERDICT: PASS when every behaviour passed and no test failed, otherwise VERDICT: FAIL.',
+		'<diff>',
+		patch,
+		'</diff>',
+		'',
+		'Find each thing the request asks for that the change does not do, or does differently from what the request says: a named function, option, flag, field, message, output format, default or edge case.',
+		'Write each as one line starting with MISSING: and saying what the request asks and what the change does instead. Only what the request itself asks: no style, naming, refactoring or extra features, and nothing you are unsure the request asks.',
+		'Do not list what the change already does. If it does everything the request asks, answer with the single word NONE.',
 	].join('\n');
 
-/** What the agent is told when it is sent back to verify, the first time in a reply and after fixing. */
-export const verifyReminder = (round: number) =>
-	round === 0
-		? 'Before you end, have the change verified by someone who did not write it: call the verifier subagent. It already has the request; brief it with how to build, run and test the project and where the change lives, not with what you think works. ' +
-			'Then fix each FAIL it reports that is real, and run what covers it; skip one that misreads the request, saying why. Then end your reply.'
-		: 'You changed the code after the verifier reported. Call the verifier once more to check the result, fix what it still finds that is real, then end your reply.';
+/** What the reviewer found, its MISSING: lines, or null when it found nothing. Anything else it wrote is left out. */
+export function findingsOf(answer: string): string | null {
+	const lines = answer
+		.split('\n')
+		.map((line) => /^\W*MISSING\W*:[\s*_]*(.+)$/i.exec(line.trim())?.[1]?.replace(/[*_]+$/, '').trim())
+		.filter((line): line is string => Boolean(line))
+		.map((line) => `- ${line}`);
+	if (!lines.length) return null;
+	const text = lines.join('\n');
+	return text.length > MAX_FINDINGS ? `${text.slice(0, MAX_FINDINGS)}…` : text;
+}
+
+/** What the agent is asked when no reviewer can read the change: the request again, whole, and the check the reviewer would make. */
+export const selfCheck = (request: string) =>
+	[
+		'Before you end, check your change against the request with fresh eyes. Here it is again:',
+		'',
+		'<request>',
+		request.length > MAX_SELF_REQUEST ? `${request.slice(0, MAX_SELF_REQUEST)}\n[The request goes on; read it whole in the conversation.]` : request,
+		'</request>',
+		'',
+		'Read your diff (git diff, new files included) against it, item by item: each named function, option, flag, field, message, output format, default, error or fallback path and edge case. ' +
+			'Do whatever is missing or done differently from what the request says, and run the tests that cover it. If the change already does everything, end your reply without repeating your answer.',
+	].join('\n');
 
 type Call = { tool: string };
 type Deps = { patch: (id: string) => Promise<string | null> };
@@ -107,26 +131,38 @@ async function livePatch(id: string): Promise<string | null> {
 }
 
 /**
- * At the end of a reply that changed the code: what to tell the agent so the verifier checks the change, null
- * otherwise. Never on a reply that ends asking the user or proposing a plan, on a small change, on a diff already
- * verified, or past `MAX_ROUNDS` in one reply.
+ * At the end of a reply that changed the code: what to tell the agent when a fresh read of the request and the diff
+ * finds something the request asks that the change does not do; null otherwise. Once a reply, never on a reply that
+ * ends asking the user or proposing a plan, nor on a diff already reviewed. The review counts on the task's spend.
+ * On a model no reviewer here runs, the agent is sent back once with the request to make that check itself.
  */
 export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: livePatch }): Promise<string | null> {
 	const request = requests.get(id);
-	const round = rounds.get(id) ?? 0;
-	if (!request || round >= MAX_ROUNDS) return null;
+	if (!request || reviewed.has(id)) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
+	const writer = getProviders().text;
+	const { model } = modelFor(id);
+	const own = writer?.runs(model) ? writer : null;
+	reviewed.add(id);
 	try {
 		const patch = await deps.patch(id);
-		if (!patch?.trim() || changedLines(patch) < MIN_CHANGED_LINES) return null;
+		if (!patch?.trim()) return null;
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
 		if (lastPatch.get(id) === digest) return null;
 		remember(lastPatch, id, digest);
-		rounds.set(id, round + 1);
-		return verifyReminder(round);
+		if (!own) return selfCheck(request);
+		const answer = await own.write({ model, prompt: reviewPrompt(request, reviewPatch(patch)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
+		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
+		const findings = findingsOf(answer.text);
+		if (!findings) return null;
+		return (
+			'A reviewer who read only the request and your diff thinks the change misses these points:\n\n' +
+			`${findings}\n\n` +
+			'Check each one against the request and the code. Fix those that are real, and run the tests that cover them; skip any that are wrong. Then end your reply.'
+		);
 	} catch (error) {
-		if (!signal?.aborted) logProblem('warn', 'The change was not verified', error, id);
+		if (!signal?.aborted) logProblem('warn', 'The change was not reviewed', error, id);
 		return null;
 	}
 }
