@@ -2,7 +2,7 @@ import { announce } from '../core/changes.ts';
 import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { compactionCeiling, generalSettings } from './general.ts';
+import { backgroundModel, compactionCeiling, generalSettings } from './general.ts';
 import { logProblem } from './log.ts';
 import { findModel, loadedModels } from './models.ts';
 
@@ -146,15 +146,22 @@ export function keptAfterCompaction(compactsAt: number): number {
 /**
  * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
  * comes before the window fills, else at the runtime's own point, keeping what `keptAfterCompaction`
- * says. Undefined for a model of unknown window, left to the runtime. Read while the agent renders,
- * from the model list last fetched.
+ * says; and the summary written by the compaction model chosen there (a faster one makes compacting
+ * quicker), else by the agent's own. For a model of unknown window the point is left to the runtime.
+ * Undefined leaves both to the runtime. Read while the agent renders, from the model list last fetched.
  */
-export function compactionFor(model: string, ceiling = compactionCeiling(), models = loadedModels()): { reserveTokens?: number; keepRecentTokens: number } | undefined {
+export function compactionFor(
+	model: string,
+	ceiling = compactionCeiling(),
+	models = loadedModels(),
+	summarizer = backgroundModel('compaction'),
+): { reserveTokens?: number; keepRecentTokens?: number; model?: string } | undefined {
+	const summary = summarizer ? { model: summarizer } : {};
 	const info = models.find((entry) => entry.id === unrouted(model));
-	if (!info?.contextLength) return undefined;
+	if (!info?.contextLength) return summarizer ? summary : undefined;
 	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
 	const keepRecentTokens = keptAfterCompaction(info.contextLength - reserve);
-	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens } : { reserveTokens: reserve, keepRecentTokens };
+	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens, ...summary } : { reserveTokens: reserve, keepRecentTokens, ...summary };
 }
 
 /** Shares `total` across the parts by their estimated sizes, in whole tokens that add up exactly. */

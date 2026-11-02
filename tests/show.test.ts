@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { evaluate, formMessage, libraryPath, parseFormula, specText, type UiNode } from '../src/core/ui-spec.ts';
-import { checkImages, checkSpec, shownNote } from '../src/services/show.ts';
+import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../src/services/show.ts';
 
 const card = {
 	title: 'Spend this week',
@@ -78,4 +78,10 @@ test('an image named through the outputs folder is the Library path it names, an
 	assert.deepEqual(spec.children[0], { type: 'image', path: 'nourish/desktop.png', alt: 'Nourish' });
 	await checkImages(spec, async (path) => path === 'nourish/desktop.png');
 	await assert.rejects(checkImages(spec, async () => false), /"nourish\/desktop.png" is not in the Library/);
+});
+
+test('the tool’s schema leaves each component open to its fields, so a provider that constrains output to it does not cut them off', () => {
+	// An object with a rest is what the runtime's JSON schema gives additionalProperties; a loose object gets none.
+	const [children] = SHOW_INPUT.entries.children.pipe;
+	assert.equal(children.item.type, 'object_with_rest');
 });

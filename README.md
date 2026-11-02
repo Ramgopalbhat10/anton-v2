@@ -20,6 +20,15 @@ npm test
 npm run build && npm start   # production: one port (PORT, default 3000)
 ```
 
+To run tasks without the UI, as for a small benchmark or to compare a change before and after on the same tasks, point `npm run anton:run` at a running Anton. Each task is a new task you can open in the UI, and each gives one JSON line with how it ended, its reply, how long it took, its tokens, its cost, its model calls and its largest context:
+
+```sh
+npm run anton:run -- --model openrouter/deepseek/deepseek-v4.1-flash "Fix the failing test in src/date.ts"
+npm run anton:run -- --url http://127.0.0.1:43128 --project <id> --tasks tasks.jsonl --out runs.jsonl --timeout 30m --budget 2.50
+```
+
+A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` object per line. Only `prompt` is required.
+
 With no Modal or Tigris keys, Anton runs everything locally: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
 
 ## How a task runs
@@ -40,7 +49,7 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 
 | Port | Implementations | Chosen by |
 | --- | --- | --- |
-| `SandboxProvider` | `modal`, `local` | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set) |
+| `SandboxProvider` | `modal`, `docker` (a container per task on this computer, from the task's base image), `local` (a folder, no isolation) | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set, else `local`) |
 | `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
 | `GitHost` | `github` | |
 | `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models/user` with a key, else `/models`, cached for an hour) | |
@@ -82,6 +91,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
 | `ANTON_IDLE_MINUTES` | Stop a sandbox this many minutes after its agent finishes (default 5) |
+| `ANTON_DOCKER_NETWORK` | The Docker network the `docker` sandbox's tasks join; `none` keeps them offline (default: Docker's bridge) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
 | `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |

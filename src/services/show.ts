@@ -10,6 +10,19 @@ import { formulaNames, INPUT_TYPES, isInteractive, libraryPath, parseFormula, sp
  * agent to fix.
  */
 
+const SHOW_TYPES = [
+	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
+	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
+] as const;
+
+/** The tool's input: each component's type, its fields checked by `checkSpec`. */
+export const SHOW_INPUT = v.object({
+	title: v.optional(v.pipe(v.string(), v.maxLength(200))),
+	// Open to each component's fields in so many words: a provider that constrains its output to the schema reads an
+	// object without additionalProperties as closed, and its model can then write nothing but the type.
+	children: v.pipe(v.array(v.objectWithRest({ type: v.picklist(SHOW_TYPES) }, v.unknown())), v.minLength(1)),
+});
+
 const text = (max: number = UI_LIMITS.text) => v.pipe(v.string(), v.maxLength(max));
 const label = v.pipe(v.string(), v.minLength(1), v.maxLength(200));
 const name = v.pipe(v.string(), v.regex(/^[A-Za-z_]\w{0,39}$/, 'Input names are letters, digits and _, starting with a letter'));

@@ -593,6 +593,7 @@ export const ModelPicker = memo(function ModelPicker({
 	onRoute,
 	side = 'top',
 	height = 26,
+	only,
 }: {
 	value: ModelChoice;
 	onChange: (change: Partial<ModelChoice>) => void;
@@ -600,6 +601,8 @@ export const ModelPicker = memo(function ModelPicker({
 	onRoute?: (route: ModelRoute | null, model?: string) => void;
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
+	/** The models that can be picked here, when not all can. */
+	only?: (model: ModelInfo) => boolean;
 }) {
 	const models = useModels();
 	const [open, setOpen] = useState(false);
@@ -613,7 +616,7 @@ export const ModelPicker = memo(function ModelPicker({
 	const [cursor, setCursor] = useState(0);
 	const list = useRef<HTMLDivElement>(null);
 
-	const everything = models.data?.models ?? [];
+	const everything = useMemo(() => (only ? (models.data?.models ?? []).filter(only) : (models.data?.models ?? [])), [models.data, only]);
 	// A plan model's larger context and fast mode are its controls along the bottom, not rows.
 	const all = useMemo(() => listedModels(everything), [everything]);
 	const selected = everything.find((model) => model.id === value.model);

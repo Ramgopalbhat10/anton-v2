@@ -22,6 +22,7 @@ import * as v from 'valibot';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { sandboxTools } from '../flue/sandbox-tools.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
+import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
@@ -54,7 +55,7 @@ import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
-import { checkImages, checkSpec, shownNote } from '../services/show.ts';
+import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
 import { pageGuide, saveRender } from '../services/renders.ts';
 import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
@@ -95,16 +96,17 @@ import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
 
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
+// Calls through the gateways and ChatGPT and OpenCode plans send old tool results cleared once a conversation grows (withPruning).
 // A task's route (one provider first, or a sort) is part of the specifier its agent resolves; see src/core/model-route.ts.
-setProvider(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels));
+setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
 // Every model in Vercel AI Gateway's live list, with the key pasted in Settings › Subscriptions.
-setProvider(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels));
+setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
 // Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
-setProvider(chatGptPlanProvider(loadedModels, () => gatewayToken('openai')));
+setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
 // Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 // Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
-setProvider(openCodeGoProvider(loadedModels, () => planKey('opencode-go')));
+setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
@@ -855,11 +857,6 @@ function useAsk(id: string) {
 	);
 }
 
-const SHOW_TYPES = [
-	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
-	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
-] as const;
-
 /** The catalog, as the agent reads it; src/core/ui-spec.ts has the types. */
 const SHOW_DESCRIPTION = [
 	'Show the user components in your reply, drawn in the thread with Anton\'s own look: figures, tables, charts, timelines, and inputs they press.',
@@ -879,10 +876,7 @@ function useShow(id: string) {
 		defineTool({
 			name: 'show',
 			description: SHOW_DESCRIPTION,
-			input: v.object({
-				title: v.optional(v.pipe(v.string(), v.maxLength(200))),
-				children: v.pipe(v.array(v.looseObject({ type: v.picklist(SHOW_TYPES) })), v.minLength(1)),
-			}),
+			input: SHOW_INPUT,
 			run: async ({ data }) => {
 				const spec = checkSpec(data);
 				await checkImages(spec, async (path) => (await readOutputFile(id, path)) !== null);
@@ -1141,8 +1135,10 @@ const OTHER_REPO_HINT =
 const WORKSPACE_OTHER_REPO_HINT =
 	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-const WEB = 'When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch.';
-const CHAT_WEB = 'For current facts, documentation or anything you are unsure of, use web_search and web_fetch.';
+/** A long web result comes back as what bears on the call's objective (src/services/web-digest.ts), so the objective decides what the agent gets. */
+const WEB_OBJECTIVE = 'Give each call an objective naming exactly what you need; leave full_content off unless you need a page whole.';
+const WEB = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
+const CHAT_WEB = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
 const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
 const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
