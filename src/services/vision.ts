@@ -4,6 +4,7 @@ import { SCREEN } from '../core/desktop.ts';
 import { getProviders } from '../providers/index.ts';
 import { agentSettingsNow } from './agent-runner.ts';
 import { loadedModels } from './models.ts';
+import { backgroundModel } from './general.ts';
 import { modelFor } from './sessions.ts';
 import { recordUsage } from './usage.ts';
 
@@ -16,7 +17,7 @@ import { recordUsage } from './usage.ts';
 /**
  * The model that looks at the screen: the computer subagent's own model from
  * Settings when the vision port runs it and it reads images, else the task's,
- * else ANTON_VISION_MODEL.
+ * else the vision model from Settings › General's background models, else ANTON_VISION_MODEL.
  */
 export function visionModelFor(id: string): string {
 	const vision = getProviders().vision;
@@ -25,7 +26,7 @@ export function visionModelFor(id: string): string {
 	const own = agentSettingsNow().models.computer?.model;
 	if (sees(own)) return own;
 	const task = modelFor(id).model;
-	return sees(task) ? task : config.visionModel;
+	return sees(task) ? task : backgroundModel('vision')!;
 }
 
 const ON_SCREEN = `This is a screenshot of a computer's screen, ${SCREEN.width}×${SCREEN.height} pixels. Answer from the image alone.`;

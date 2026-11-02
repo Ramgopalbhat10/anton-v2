@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { toolResultCutInterceptor } from '../src/flue/tool-result-cut.ts';
-import { cutResult, forgetResults, MAX_RESULT_BYTES, partAt, readFullResult } from '../src/services/tool-results.ts';
+import { cutHeadAndTail, cutResult, forgetResults, MAX_RESULT_BYTES, partAt, readFullResult } from '../src/services/tool-results.ts';
 
 const result = (text: string, ...more: Array<Record<string, unknown>>) => ({ content: [{ type: 'text', text }, ...more], details: { customTool: 'web_fetch' } });
 const page = (size: number) => Array.from({ length: Math.ceil(size / 10) }, (_, index) => String(index).padStart(9, '0') + '\n').join('').slice(0, size);
@@ -45,14 +45,15 @@ test('a cut never splits a character', () => {
 	assert.equal(partAt('😀😀', 0, 5), '😀', 'nor a surrogate pair');
 });
 
-test('only the agents’ own conversations are cut: a subagent’s calls and other work pass whole', async () => {
+test('an agent’s own conversation is cut to read on, a subagent’s to its start and end, other work passes whole', async () => {
 	const long = result(page(80_000));
 	const run = (operation: Parameters<typeof toolResultCutInterceptor>[0], ctx: Parameters<typeof toolResultCutInterceptor>[1]) =>
 		toolResultCutInterceptor(operation, ctx, async () => long);
 	const tool = { type: 'tool' as const, toolCallId: 'c3', toolName: 'web_fetch' };
 	assert.notEqual(await run(tool, { instanceId: 'task', session: 'default' }), long);
 	assert.notEqual(await run(tool, { instanceId: 'project' }), long, 'a coordinator’s');
-	assert.equal(await run(tool, { instanceId: 'task', taskId: 'browser-1', session: 'task:default:browser-1' }), long);
+	const subagent = (await run(tool, { instanceId: 'task', taskId: 'browser-1', session: 'task:default:browser-1' })) as typeof long;
+	assert.deepEqual(subagent, cutHeadAndTail('web_fetch', long));
 	assert.equal(await run(tool, { instanceId: 'task', harness: 'invocation-1' }), long);
 	assert.equal(await run({ type: 'task', taskId: 'browser-1' }, { instanceId: 'task' }), long);
 	assert.equal(await run(tool, {}), long);
@@ -67,4 +68,19 @@ test('web search and fetch results are cut sooner: a search at 12KB, a page at 2
 	const [fetched] = cutResult('task', 'call-f', 'mcp__web__web_fetch', result(text)).content as Array<{ text: string }>;
 	assert.match(fetched.text, /\[Result cut at 24KB: characters up to 24,576 of 60,000/);
 	assert.equal(readFullResult('task', 'call-s', 12_288), text.slice(12_288), 'reading on, asked for, goes in the usual parts');
+});
+
+test('a subagent’s long result keeps its start and its end, where an error usually is', () => {
+	const text = page(80_000);
+	const image = { type: 'image', data: 'abc', mimeType: 'image/png' };
+	const cut = cutHeadAndTail('connector_call', result(text, image));
+	const [kept, picture] = cut.content as Array<{ type: string; text?: string }>;
+	assert.deepEqual(picture, image);
+	assert.ok(Buffer.byteLength(kept.text!) < 25_000);
+	assert.ok(kept.text!.startsWith(text.slice(0, 16_000)));
+	assert.ok(kept.text!.endsWith(text.slice(-8_000)));
+	assert.match(kept.text!, /\[\d[\d,]* characters of 80,000 left out here\. Ask the tool for less to see them\.\]/);
+	const short = result(page(20_000));
+	assert.equal(cutHeadAndTail('connector_call', short), short);
+	assert.equal(cutHeadAndTail('bash', result(text)).content[0].text, text, 'the runtime’s tools cut their own');
 });

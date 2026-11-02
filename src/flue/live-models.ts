@@ -34,7 +34,7 @@ function toPiModel(info: ModelInfo, catalog: readonly OpenRouterModel[]): OpenRo
 /**
  * pi's OpenRouter provider, with every model from Anton's live catalog
  * added. pi's own entries win where both exist, since they carry tuned
- * wire settings. `live` is read on every lookup, so newly listed models
+ * wire settings, but take the live list's price. `live` is read on every lookup, so newly listed models
  * resolve without a restart, and `key` on every call, so a key pasted in
  * Settings › Subscriptions takes over from OPENROUTER_API_KEY at once.
  */
@@ -59,8 +59,14 @@ export function liveOpenRouterProvider(live: () => readonly ModelInfo[], key: ()
 	function getModels(): OpenRouterModel[] {
 		const current = live();
 		if (memo?.from !== current) {
+			const listed = new Map(current.map((info) => [info.id.slice('openrouter/'.length), info]));
 			const added = current.filter((info) => !knownIds.has(info.id.slice('openrouter/'.length)));
-			memo = { from: current, models: [...known, ...added.map((info) => toPiModel(info, known))] };
+			// pi's prices are as of its release and OpenRouter's change, so a known model is priced from the live list.
+			const priced = known.map((model) => {
+				const info = listed.get(model.id);
+				return info ? { ...model, cost: info.price } : model;
+			});
+			memo = { from: current, models: [...priced, ...added.map((info) => toPiModel(info, known))] };
 		}
 		return memo.models;
 	}

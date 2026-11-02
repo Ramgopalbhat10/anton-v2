@@ -7,8 +7,8 @@ import { logProblem } from './log.ts';
 import { recordUsage } from './usage.ts';
 
 /*
+ * A task's title is a few words on what it is about, written by a fast model
  * (the TextModel port; Settings › General, else ANTON_TITLE_MODEL) from its first message, not the
- * (the TextModel port, ANTON_TITLE_MODEL) from its first message, not the
  * message itself. Until the model answers, and without an OpenRouter key, the
  * title is the start of the message, cut at a word.
  */
