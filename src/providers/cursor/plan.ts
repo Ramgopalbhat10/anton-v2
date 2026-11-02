@@ -142,8 +142,9 @@ const defaultContext = (item: ModelListItem | undefined) =>
 /**
  * The model and its parameters for a conversation at `effort`: the effort value
  * that names it, thinking on unless it is `off`, the variant's context or else
- * the smallest, and fast mode for a `[fast]` variant. Parameters left out take
- * the model's default variant's value. The context that variant has is left
+ * the smallest, and fast mode for a `[fast]` variant. If the catalog only offers
+ * fast=false, send it explicitly: Cursor Plus rejects requests that omit it.
+ * Other parameters left out take the model's default variant's value. The context that variant has is left
  * out too: Grok 4.7 refuses it named ("Invalid parameters for registry model")
  * and runs it when it is not.
  */
@@ -161,8 +162,9 @@ export function selectionFor(model: string, item: ModelListItem | undefined, eff
 		} else if (param.id === 'context') {
 			const chosen = (context && param.values.find((option) => option.value === context)?.value) || contextParam(item!)?.value;
 			if (chosen && chosen !== defaultContext(item)) params.push({ id: param.id, value: chosen });
-		} else if (param.id === 'fast' && fast && offersFast(item)) {
-			params.push({ id: param.id, value: 'true' });
+		} else if (param.id === 'fast') {
+			if (fast && offersFast(item)) params.push({ id: param.id, value: 'true' });
+			else if (param.values.length === 1 && param.values[0].value === 'false') params.push({ id: param.id, value: 'false' });
 		}
 	}
 	return params.length ? { id, params } : { id };
