@@ -92,6 +92,26 @@ test('Cursor’s larger context and fast mode are listed as variants, and each p
 	assert.deepEqual(selectionFor('claude-sonnet-5[fast]', sonnet as never, null), { id: 'claude-sonnet-5' }, 'a model without fast mode runs at its own speed');
 });
 
+test('Cursor Plus explicitly sends the only offered fast setting without changing other plans', () => {
+	const composerPlus = { id: 'composer-2.5', parameters: [{ id: 'fast', values: [{ value: 'false' }] }] };
+	const grokPlus = {
+		id: 'grok-4.7',
+		parameters: [
+			{ id: 'context', values: [{ value: '256k' }] },
+			{ id: 'reasoning_effort', values: [{ value: 'medium' }] },
+			{ id: 'fast', values: [{ value: 'false' }] },
+		],
+		variants: [{ isDefault: true, params: [{ id: 'context', value: '256k' }, { id: 'reasoning_effort', value: 'medium' }, { id: 'fast', value: 'false' }] }],
+	};
+	assert.deepEqual(selectionFor('composer-2.5', composerPlus as never, null), { id: 'composer-2.5', params: [{ id: 'fast', value: 'false' }] });
+	assert.deepEqual(selectionFor('grok-4.7', grokPlus as never, 'medium'), {
+		id: 'grok-4.7', params: [{ id: 'reasoning_effort', value: 'medium' }, { id: 'fast', value: 'false' }],
+	});
+	assert.deepEqual(selectionFor('grok-4.7[fast]', grokPlus as never, 'medium'), selectionFor('grok-4.7', grokPlus as never, 'medium'));
+	assert.deepEqual(selectionFor('composer-2', composer as never, null), { id: 'composer-2' });
+	assert.ok(!selectionFor('gpt-5.5', gpt as never, null).params?.some((p) => p.id === 'fast'), 'plans offering both fast choices keep their existing default');
+});
+
 test('the context of a Cursor model’s default variant is left out, since Grok 4.7 refuses it named', () => {
 	const grok = {
 		id: 'grok-4.7',
