@@ -620,7 +620,7 @@ export type SubagentStep = { id: string; tool: string; input: unknown; state: 'r
 /** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
 /** The agent's latest todo list for a task (src/services/todos.ts); each one it writes replaces the last. */
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
-export type Todo = { content: string; status: TodoStatus };
+export type Todo = { content: string; status: TodoStatus; evidence?: string };
 export type TodoList = { todos: Todo[]; updatedAt: string };
 
 /** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/joins.ts). */

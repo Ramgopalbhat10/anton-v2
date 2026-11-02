@@ -167,6 +167,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 									)}
 								>
 									{todo.content}
+									{todo.evidence && <span className="block text-[11.5px] text-(--text-tertiary)">{todo.evidence}</span>}
 								</span>
 							</li>
 						))}

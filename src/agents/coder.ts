@@ -812,6 +812,9 @@ function useTodos(id: string) {
 						v.object({
 							content: v.pipe(v.string(), v.minLength(1), v.description('The step, a few words in the imperative, such as "Add the migration"')),
 							status: v.picklist(['pending', 'in_progress', 'completed']),
+							evidence: v.optional(
+								v.pipe(v.string(), v.description('For a completed item: how you checked it, the command or check you ran and what it showed, in a short line')),
+							),
 						}),
 					),
 					v.maxLength(MAX_TODOS),
@@ -1160,7 +1163,7 @@ const EDIT_HINT =
  * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
  */
 const REQUIREMENTS_HINT =
-	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it.';
+	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it, with that check as its evidence: the command, request or step you ran and what it showed.';
 
 /** A focused check while iterating misses what a change breaks further off, and what the request named that no test covers yet. */
 const FINISH_HINT =
