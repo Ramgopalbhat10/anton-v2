@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
-import { frameUrl, PageThumbnail } from '@/components/html-frame';
+import { frameUrl } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { kindOf } from '@/components/library-tab';
@@ -24,6 +24,8 @@ import { cn } from '@/lib/utils';
  */
 
 export type ArtifactsSearch = { type?: Category; q?: string };
+
+const artifactKey = (artifact: Pick<Artifact, 'sessionId' | 'path'>) => JSON.stringify([artifact.sessionId, artifact.path]);
 
 const when = (artifact: Artifact) => age(new Date(artifact.mtimeMs).toISOString());
 
@@ -67,27 +69,27 @@ function useDeleteArtifact(artifact: Artifact, onDeleted?: () => void) {
 	});
 }
 
-/** True once the element has come near the screen, so cards fetch what they show only then. */
-function useSeen<T extends Element>(): [React.RefObject<T | null>, boolean] {
+/** Mount heavy previews only near the viewport; scrolling away releases them again. */
+function useNearViewport<T extends Element>(): [React.RefObject<T | null>, boolean] {
 	const ref = useRef<T>(null);
-	const [seen, setSeen] = useState(false);
+	const [near, setNear] = useState(false);
 	useEffect(() => {
 		const element = ref.current;
-		if (!element || seen) return;
-		if (typeof IntersectionObserver === 'undefined') return setSeen(true);
-		const observer = new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && setSeen(true), { rootMargin: '200px' });
+		if (!element || typeof IntersectionObserver === 'undefined') return;
+		const observer = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting), { rootMargin: '200px' });
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [seen]);
-	return [ref, seen];
+	}, []);
+	return [ref, near];
 }
 
 /** The first lines of a text file, faded out at the card's edge. */
 function Snippet({ artifact }: { artifact: Artifact }) {
 	const text = useQuery({
-		queryKey: ['output', artifact.sessionId, artifact.path],
-		queryFn: () => api.outputText(artifact.sessionId, artifact.path),
+		queryKey: ['artifact-snippet', artifact.sessionId, artifact.path],
+		queryFn: async () => (await api.outputText(artifact.sessionId, artifact.path)).slice(0, 1200),
 		staleTime: 60_000,
+		gcTime: 0,
 	});
 	return (
 		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-[9.5px] leading-[14px] whitespace-pre-wrap wrap-anywhere text-(--text-tertiary) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
@@ -96,29 +98,22 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 	);
 }
 
-/** What a card shows of its artifact: the app itself, the image, a text file's first lines, or its kind. */
+/** Apps never execute in the gallery. Only opening one mounts its live frame. */
 function Thumb({ artifact }: { artifact: Artifact }) {
-	const [ref, seen] = useSeen<HTMLDivElement>();
+	const [ref, near] = useNearViewport<HTMLDivElement>();
 	const category = categoryOf(artifact.path);
 	const info = categoryInfo(category);
-	let body: ReactNode = null;
-	if (seen && category === 'app') body = <PageThumbnail sessionId={artifact.sessionId} path={artifact.path} />;
-	// A picture that cannot be read shows its kind instead of a broken image.
-	else if (seen && kindOf(artifact.path) === 'image')
-		body = (
-			<span className="absolute inset-0">
-				<OutputThumb item={artifact} />
-			</span>
-		);
-	else if (seen && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
-	else if (seen) {
-		body = (
-			<span className="flex h-full flex-col items-center justify-center gap-2">
-				<Icon icon={info.icon} size={22} className={info.tone} />
-				<span className="font-mono text-[10px] tracking-[0.08em] text-(--text-disabled)">{extensionOf(artifact.path)}</span>
-			</span>
-		);
-	}
+	let body: ReactNode = (
+		<span className="flex h-full flex-col items-center justify-center gap-2">
+			<Icon icon={info.icon} size={22} className={info.tone} />
+			<span className="font-mono text-[10px] tracking-[0.08em] text-(--text-tertiary)">{extensionOf(artifact.path)}</span>
+			{category === 'app' ? <span className="text-[11px] text-(--text-tertiary)">Open to run app</span> : null}
+		</span>
+	);
+	// Large originals stay in the detail view; CSS resizing would still decode the full image here.
+	if (near && kindOf(artifact.path) === 'image' && artifact.size <= 2 * 1024 * 1024)
+		body = <span className="absolute inset-0"><OutputThumb item={artifact} /></span>;
+	else if (near && category !== 'app' && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
 	return (
 		<div ref={ref} className="relative aspect-[16/10] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
 			{body}
@@ -239,39 +234,54 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 }
 
 /** One artifact: what it looks like, its name, and the task it came from. The whole card opens it; its menu sits above the link. */
-function ArtifactCard({ artifact }: { artifact: Artifact }) {
+type Selection = { keys: Set<string>; toggle: (artifact: Artifact) => void; disabled: boolean };
+
+function ArtifactCard({ artifact, selection }: { artifact: Artifact; selection?: Selection }) {
 	const info = categoryInfo(categoryOf(artifact.path));
 	return (
-		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-default) has-[a:focus-visible]:shadow-(--focus-ring)">
+		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-default) has-[:focus-visible]:shadow-(--focus-ring)">
 			<Thumb artifact={artifact} />
 			<div className="flex min-w-0 items-start gap-2 py-2.5 pr-1.5 pl-3">
 				<Icon icon={info.icon} size={13} className={cn('mt-[3px] shrink-0', info.tone)} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-[13px] text-(--text-primary)">{artifact.title}</span>
+					<span title={artifact.title} className="truncate text-[13px] text-(--text-primary)">{artifact.title}</span>
 					<span className="truncate text-[11.5px] text-(--text-tertiary)">
 						{artifact.task.title} · {when(artifact)}
 					</span>
 				</div>
 				<span className="relative z-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100">
-					<ArtifactMenu artifact={artifact} />
+					{selection ? null : <ArtifactMenu artifact={artifact} />}
 				</span>
 			</div>
-			<Link
-				to="/artifacts/$taskId"
-				params={{ taskId: artifact.sessionId }}
-				search={{ path: artifact.path }}
-				aria-label={`${artifact.title}, ${info.one.toLowerCase()} from ${artifact.task.title}`}
-				className="absolute inset-0 outline-none"
-			/>
+			{selection ? (
+				<label className="absolute inset-0 cursor-pointer">
+					<input
+						type="checkbox"
+						aria-label={`Select ${artifact.title}`}
+						checked={selection.keys.has(artifactKey(artifact))}
+						onChange={() => selection.toggle(artifact)}
+						disabled={selection.disabled}
+						className="absolute top-3 left-3 size-5 accent-(--accent-text)"
+					/>
+				</label>
+			) : (
+				<Link
+					to="/artifacts/$taskId"
+					params={{ taskId: artifact.sessionId }}
+					search={{ path: artifact.path }}
+					aria-label={`${artifact.title}, ${info.one.toLowerCase()} from ${artifact.task.title}`}
+					className="absolute inset-0 outline-none"
+				/>
+			)}
 		</div>
 	);
 }
 
-function Grid({ items }: { items: Artifact[] }) {
+function Grid({ items, selection }: { items: Artifact[]; selection?: Selection }) {
 	return (
-		<div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+		<div className="grid grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))] gap-3">
 			{items.map((artifact) => (
-				<ArtifactCard key={`${artifact.sessionId}/${artifact.path}`} artifact={artifact} />
+				<ArtifactCard key={artifactKey(artifact)} artifact={artifact} selection={selection} />
 			))}
 		</div>
 	);
@@ -327,6 +337,81 @@ function AddFiles() {
 	);
 }
 
+/** One archive, not many browser downloads. Release the temporary Blob URL after it starts. */
+function saveArchive(blob: Blob) {
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = 'artifacts.zip';
+	link.click();
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: {
+	selected: Artifact[]; shown: Artifact[]; keys: Set<string>;
+	setKeys: (keys: Set<string>) => void; busy: boolean; setBusy: (busy: boolean) => void; finish: () => void;
+}) {
+	const queryClient = useQueryClient();
+	const [confirming, setConfirming] = useState<Set<string> | null>(null);
+	const [notice, setNotice] = useState('');
+	const [error, setError] = useState('');
+	const [operation, setOperation] = useState<'download' | 'delete' | null>(null);
+	const hidden = selected.filter((item) => !shown.some((other) => artifactKey(other) === artifactKey(item))).length;
+	// A confirmation always describes exactly the selection that will be deleted.
+
+	const downloadSelected = async () => {
+		setBusy(true); setOperation('download'); setError(''); setNotice(''); setConfirming(null);
+		try {
+			saveArchive(await api.downloadArtifacts(selected.map(({ sessionId, path }) => ({ sessionId, path }))));
+			setNotice('ZIP download started.');
+		} catch (error) {
+			setError(`${error instanceof Error ? error.message : 'Download failed.'} Try again, or select fewer files.`);
+		} finally { setBusy(false); setOperation(null); }
+	};
+	const deleteSelected = async () => {
+		setBusy(true); setOperation('delete'); setError(''); setNotice('');
+		const removed = new Set<string>();
+		const failures: string[] = [];
+		let next = 0;
+		// Bounded concurrency; preserve failed items for a retry rather than pretending the batch is atomic.
+		await Promise.all(Array.from({ length: Math.min(3, selected.length) }, async () => {
+			while (next < selected.length) {
+				const item = selected[next++];
+				try { await api.deleteOutput(item.sessionId, item.path); removed.add(artifactKey(item)); }
+				catch (error) { failures.push(`${item.title}: ${error instanceof Error ? error.message : 'Delete failed.'}`); }
+			}
+		}));
+		queryClient.setQueryData<{ artifacts: Artifact[] }>(['artifacts'], (current) => current ? { artifacts: current.artifacts.filter((item) => !removed.has(artifactKey(item))) } : current);
+		setKeys(new Set([...keys].filter((key) => !removed.has(key))));
+		void queryClient.invalidateQueries({ queryKey: ['artifacts'] });
+		for (const id of new Set(selected.map((item) => item.sessionId))) void queryClient.invalidateQueries({ queryKey: ['outputs', id] });
+		setConfirming(null); setBusy(false); setOperation(null);
+		setNotice(`${removed.size} artifact${removed.size === 1 ? '' : 's'} deleted.`);
+		if (failures.length) setError(`${failures.length} could not be deleted. They remain selected; retry Delete. ${failures.slice(0, 3).join(' · ')}`);
+	};
+	return (
+		<div className="flex flex-col gap-2 rounded-[10px] border border-(--border-default) bg-(--bg-inset) p-3" role="group" aria-label="Artifact selection">
+			<div className="flex flex-wrap items-center gap-2">
+				<span role="status" className="mr-1 text-[13px] text-(--text-secondary)">{selected.length} selected{hidden ? ` (${hidden} hidden by filters)` : ''}</span>
+				<Btn size="sm" disabled={busy || !shown.length} onClick={() => setKeys(new Set([...keys, ...shown.map(artifactKey)]))}>Select all shown</Btn>
+				<Btn size="sm" variant="ghost" disabled={busy || !selected.length} onClick={() => setKeys(new Set())}>Clear selection</Btn>
+				<span className="flex-1" />
+				<Btn size="sm" icon={Download} disabled={busy || !selected.length} onClick={() => void downloadSelected()}>{operation === 'download' ? 'Preparing ZIP…' : 'Download ZIP'}</Btn>
+				<Btn size="sm" variant="dangerGhost" icon={Trash2} disabled={busy || !selected.length} onClick={() => { setConfirming(keys); setError(''); }}>{operation === 'delete' ? 'Deleting…' : 'Delete selected'}</Btn>
+				<Btn size="sm" variant="ghost" disabled={busy} onClick={finish}>Done</Btn>
+			</div>
+			{confirming === keys ? <div className="flex flex-wrap items-center gap-2 text-[12px] text-(--text-secondary)">
+				<p className="m-0 basis-full">Delete {selected.length} selected artifact{selected.length === 1 ? '' : 's'}{hidden ? ', including those hidden by filters' : ''}? This cannot be undone. They leave their tasks’ Libraries too, and replies show them as deleted. Tasks keep their own copies of files you added and attached.</p>
+				<Btn size="sm" variant="danger" disabled={busy} onClick={() => void deleteSelected()}>Confirm delete</Btn>
+				<Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>Cancel</Btn>
+			</div> : null}
+			<p className="m-0 text-[11px] text-(--text-tertiary)">ZIP: up to 500 files and 50 MB per download. Selections stay selected across filters.</p>
+			{notice ? <p role="status" className="m-0 text-[12px] text-(--text-secondary)">{notice}</p> : null}
+			{error ? <p role="alert" className="m-0 text-[12px] break-words text-(--danger-text)">{error}</p> : null}
+		</div>
+	);
+}
+
 /** Every artifact, newest first: apps on top, then the files; or one kind, picked above. */
 export function ArtifactsPage() {
 	const search = useSearch({ from: '/artifacts' });
@@ -344,12 +429,27 @@ export function ArtifactsPage() {
 	const shown = type ? found.filter((artifact) => categoryOf(artifact.path) === type) : found;
 	const apps = shown.filter((artifact) => categoryOf(artifact.path) === 'app');
 	const files = shown.filter((artifact) => categoryOf(artifact.path) !== 'app');
+	const [selecting, setSelecting] = useState(false);
+	const [keys, setKeys] = useState<Set<string>>(new Set());
+	const [busy, setBusy] = useState(false);
+	const selected = all.filter((item) => keys.has(artifactKey(item)));
+	useEffect(() => {
+		if (!artifacts.data) return;
+		const existing = new Set(artifacts.data.artifacts.map(artifactKey));
+		setKeys((current) => [...current].some((key) => !existing.has(key)) ? new Set([...current].filter((key) => existing.has(key))) : current);
+	}, [artifacts.data]);
+	const selection: Selection | undefined = selecting ? { keys, disabled: busy, toggle: (artifact) => {
+		const next = new Set(keys);
+		const key = artifactKey(artifact);
+		if (next.has(key)) next.delete(key); else next.add(key);
+		setKeys(next);
+	} } : undefined;
 	const setSearch = (next: ArtifactsSearch) => void navigate({ to: '/artifacts', search: next, replace: true });
 
 	return (
 		<PageFrame title="Artifacts">
 			<div className="flex flex-wrap items-center gap-2">
-				<Segmented label="Kind" className="max-w-full overflow-x-auto">
+				<Segmented label="Kind" className="max-w-full flex-wrap [&>button]:shrink-0">
 					<SegmentedItem size="sm" on={!type} onClick={() => setSearch({ q: query || undefined })}>
 						All
 						<span className="in-num text-(--text-disabled)">{found.length}</span>
@@ -362,6 +462,7 @@ export function ArtifactsPage() {
 					))}
 				</Segmented>
 				<span className="min-w-0 flex-1" />
+				{!selecting && all.length ? <Btn size="sm" variant="ghost" icon={CheckSquare} onClick={() => setSelecting(true)}>Select</Btn> : null}
 				<AddFiles />
 				<label className="flex h-8 w-full items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
 					<Icon icon={Search} size={12} className="shrink-0 text-(--icon-tertiary)" />
@@ -381,6 +482,7 @@ export function ArtifactsPage() {
 				</label>
 			</div>
 
+			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}
 			{artifacts.isPending ? (
 				<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
 					<Spinner size={12} />
@@ -397,17 +499,17 @@ export function ArtifactsPage() {
 			) : shown.length === 0 ? (
 				<EmptyState title="Nothing matches" body={query ? 'Try other words, or clear the search.' : 'Pick another kind, or All.'} />
 			) : type ? (
-				<Grid items={shown} />
+				<Grid items={shown} selection={selection} />
 			) : (
 				<>
 					{apps.length ? (
 						<Section label="Apps" count={apps.length}>
-							<Grid items={apps} />
+							<Grid items={apps} selection={selection} />
 						</Section>
 					) : null}
 					{files.length ? (
 						<Section label="Files" count={files.length}>
-							<Grid items={files} />
+							<Grid items={files} selection={selection} />
 						</Section>
 					) : null}
 				</>

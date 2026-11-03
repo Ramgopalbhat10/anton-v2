@@ -890,6 +890,8 @@ export const api = {
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
 	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
+	downloadArtifacts: async (items: { sessionId: string; path: string }[]) =>
+		(await request('/api/artifacts/download', { method: 'POST', body: JSON.stringify({ items }) })).blob(),
 	/** Adds a file of your own to the Artifacts page. */
 	addArtifact: (file: File) =>
 		json<{ path: string; sessionId: string }>(`/api/artifacts?name=${encodeURIComponent(file.name)}`, {
