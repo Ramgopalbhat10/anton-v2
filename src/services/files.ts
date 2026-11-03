@@ -241,6 +241,23 @@ export async function uploadOutput(id: string, name: string, bytes: Uint8Array, 
 	return path;
 }
 
+/**
+ * Saves a file to the task's Library at `path` (under outputs), and into its machine's outputs folder
+ * when one runs, so the agent's shell can read it at once: what http_request wrote to a file.
+ */
+export async function saveToLibrary(id: string, rawPath: string, bytes: Uint8Array, contentType?: string): Promise<string> {
+	const path = safeRelativePath(rawPath);
+	if (bytes.length > MAX_LIVE_OUTPUT_BYTES) throw new InvalidInputError('Files up to 50 MB can be saved to the Library.');
+	await saveOutput(id, path, bytes, contentType);
+	const machine = await liveMachine(id).catch(() => null);
+	if (machine) {
+		await machine.exec(`mkdir -p ${quote(`${machine.root}/outputs/${path}`.replace(/\/[^/]*$/, ''))}`);
+		await writeMachineFile(machine, `${machine.root}/outputs/${path}`, bytes);
+	}
+	announce({ kind: 'task', id, what: 'files' });
+	return path;
+}
+
 /** Removes a file from the task's Library, from its sandbox too when one runs. */
 export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	const path = safeRelativePath(rawPath);

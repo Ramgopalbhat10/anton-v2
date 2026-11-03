@@ -21,6 +21,9 @@ import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
+import { ADDED_FILES, addFile } from './services/added-files.ts';
+import { hostRunnerAvailable } from './services/runners.ts';
+import { deleteSealedSecret, saveSealedSecret, sealedSecretsView } from './services/sealed-secrets.ts';
 import { pageFetch } from './services/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
@@ -282,6 +285,10 @@ app.get('/api/health', (c) =>
 	}),
 );
 
+// Where a task's commands can run, for the composer's Run on menu: its sandbox, and this server when that is another place.
+app.get('/api/runners', (c) => c.json({ sandbox: getProviders().sandbox.name, host: hostRunnerAvailable() }));
+const RUN_ON = v.picklist(['sandbox', 'host']);
+
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
 app.get('/api/usage', async (c) => c.json(await usageView()));
 const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
@@ -411,6 +418,20 @@ app.put('/api/secrets/shared', async (c) => {
 	const { env } = await body(c, v.object({ env: ENV }));
 	return c.json(await setSharedEnv(env));
 });
+// Sealed secrets: values the agent can name in http_request but never read (src/services/sealed-secrets.ts).
+app.get('/api/secrets/sealed', async (c) => c.json({ secrets: await sealedSecretsView() }));
+app.put('/api/secrets/sealed/:name', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			value: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(16_384)))),
+			hosts: v.pipe(v.array(v.pipe(v.string(), v.maxLength(253))), v.maxLength(20)),
+			proxy: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2_000)))),
+		}),
+	);
+	return c.json({ secrets: await saveSealedSecret({ name: c.req.param('name'), ...input }) });
+});
+app.delete('/api/secrets/sealed/:name', async (c) => c.json({ secrets: await deleteSealedSecret(c.req.param('name')) }));
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
 // Reviews any pull request by its link, in a task of its own unless Anton opened it.
@@ -781,6 +802,7 @@ app.post('/api/sessions', async (c) => {
 			// The first message, which a fast model names the task from.
 			titleFrom: v.optional(v.pipe(v.string(), v.maxLength(40_000))),
 			planMode: v.optional(v.boolean()),
+			runOn: v.optional(RUN_ON),
 		}),
 	);
 	return c.json(await createSession(input));
@@ -798,6 +820,7 @@ app.patch('/api/sessions/:id', async (c) => {
 			pinned: v.optional(v.boolean()),
 			resolved: v.optional(v.boolean()),
 			spaceId: v.optional(v.nullable(v.string())),
+			runOn: v.optional(RUN_ON),
 		}),
 	);
 	const { spaceId, ...rest } = change;
@@ -968,6 +991,15 @@ app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
+// A file you add on the Artifacts page: the body is the file, its name in the query. It is read and deleted as the
+// Library of src/services/added-files.ts's holder, through the routes below.
+app.post('/api/artifacts', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added.');
+	const body = new Uint8Array(await c.req.arrayBuffer());
+	return c.json({ path: await addFile(name, body, c.req.header('content-type') || undefined), sessionId: ADDED_FILES });
+});
 // Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {
 	const name = c.req.query('name') ?? '';

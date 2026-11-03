@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import type { Reasoning, Session } from '@/lib/api';
+import type { Reasoning, RunOn, Session } from '@/lib/api';
 
 /**
  * Tasks and threads being made. Starting one opens it at once, by an id the
@@ -84,6 +84,7 @@ export function draftSession(draft: {
 	reasoning?: Reasoning | null;
 	planMode?: boolean;
 	spaceId?: string | null;
+	runOn?: RunOn;
 }): Session {
 	const now = new Date().toISOString();
 	return {
@@ -101,6 +102,7 @@ export function draftSession(draft: {
 		working: true,
 		workspace: false,
 		planMode: Boolean(draft.projectId) && Boolean(draft.planMode),
+		runOn: draft.runOn ?? 'sandbox',
 		prUrl: null,
 		errorMessage: null,
 		checkpointAt: null,

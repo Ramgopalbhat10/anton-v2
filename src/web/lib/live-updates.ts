@@ -33,7 +33,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
-	if (change.kind === 'connectors') return [['connectors'], ['connections']];
+	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
 	// A routine added, edited or run: a repo's automations and a project's routines show it.
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.

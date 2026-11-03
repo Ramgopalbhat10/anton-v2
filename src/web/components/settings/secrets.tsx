@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, Folder, KeyRound } from 'lucide-react';
+import { ChevronRight, Folder, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { storedVariables, toEnv, VariablesEditor } from '@/components/repo-settings';
 import { Status } from '@/components/instrument';
-import { Btn, Icon, Spinner } from '@/components/signal';
-import { api, type SecretsView } from '@/lib/api';
-import { Block, List, PageHeading, RowIcon, SaveState } from './parts';
+import { Btn, Icon, IconBtn, Spinner } from '@/components/signal';
+import { api, type SealedSecret, type SecretsView } from '@/lib/api';
+import { age } from '@/lib/format';
+import { Block, FIELD, List, PageHeading, RowIcon, SaveState } from './parts';
 
 function Shared({ view }: { view: SecretsView }) {
 	const queryClient = useQueryClient();
@@ -47,6 +48,145 @@ function Shared({ view }: { view: SecretsView }) {
 	);
 }
 
+const splitHosts = (text: string) => text.split(/[\s,]+/).filter(Boolean);
+
+/** Adds a sealed secret, or changes one: a value or proxy left empty keeps what is stored. */
+function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone: () => void }) {
+	const queryClient = useQueryClient();
+	const [name, setName] = useState(editing?.name ?? '');
+	const [value, setValue] = useState('');
+	const [hosts, setHosts] = useState(editing?.hosts.join(', ') ?? '');
+	const [proxy, setProxy] = useState('');
+	const [proxyRemoved, setProxyRemoved] = useState(false);
+	const save = useMutation({
+		mutationFn: () =>
+			api.saveSealedSecret(name.trim(), {
+				value: value || null,
+				hosts: splitHosts(hosts),
+				proxy: proxy.trim() ? proxy.trim() : proxyRemoved ? '' : null,
+			}),
+		onSuccess: (saved) => {
+			queryClient.setQueryData(['sealed-secrets'], saved);
+			onDone();
+		},
+	});
+	const label = 'text-[12px] font-medium text-(--text-secondary)';
+	return (
+		<form
+			className="flex flex-col gap-3 rounded-[10px] border border-(--border-subtle) p-3"
+			aria-label={editing ? `Change ${editing.name}` : 'Add a sealed secret'}
+			onSubmit={(event) => {
+				event.preventDefault();
+				save.mutate();
+			}}
+		>
+			<div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3">
+				<label className="flex min-w-0 flex-col gap-1">
+					<span className={label}>Name</span>
+					<input value={name} disabled={Boolean(editing)} onChange={(event) => setName(event.target.value.toUpperCase())} placeholder="BROKER_API_KEY" spellCheck={false} className={`${FIELD} font-mono`} />
+				</label>
+				<label className="flex min-w-0 flex-col gap-1">
+					<span className={label}>Value</span>
+					<input type="password" autoComplete="off" value={value} onChange={(event) => setValue(event.target.value)} placeholder={editing ? 'Saved; type to replace' : 'Never shown again'} className={`${FIELD} font-mono`} />
+				</label>
+				<label className="flex min-w-0 flex-col gap-1">
+					<span className={label}>Hosts it may be sent to</span>
+					<input value={hosts} onChange={(event) => setHosts(event.target.value)} placeholder="api.example.com, *.example.com" spellCheck={false} className={`${FIELD} font-mono`} />
+				</label>
+				<div className="flex min-w-0 flex-col gap-1">
+					<label htmlFor="sealed-proxy" className={label}>
+						Proxy (optional)
+					</label>
+					<span className="flex min-w-0 items-center gap-2">
+						<input
+							id="sealed-proxy"
+							type="password"
+							autoComplete="off"
+							value={proxy}
+							onChange={(event) => setProxy(event.target.value)}
+							placeholder={editing?.proxy && !proxyRemoved ? `${editing.proxy}; type to replace` : 'https://user:password@1-2-3-4.sslip.io'}
+							className={`${FIELD} min-w-0 flex-1 font-mono`}
+						/>
+						{editing?.proxy && !proxyRemoved && !proxy ? (
+							<Btn type="button" size="sm" variant="ghost" aria-label="Remove the proxy" onClick={() => setProxyRemoved(true)}>
+								Remove
+							</Btn>
+						) : null}
+					</span>
+				</div>
+			</div>
+			<div className="flex flex-wrap items-center justify-end gap-2">
+				<SaveState pending={save.isPending} success={false} error={save.error} />
+				<Btn type="button" size="sm" variant="ghost" onClick={onDone}>
+					Cancel
+				</Btn>
+				<Btn type="submit" size="sm" variant="primary" disabled={save.isPending || !name.trim() || !hosts.trim() || (!editing && !value)}>
+					{save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add secret'}
+				</Btn>
+			</div>
+		</form>
+	);
+}
+
+function SealedRow({ secret, onEdit }: { secret: SealedSecret; onEdit: () => void }) {
+	const queryClient = useQueryClient();
+	const remove = useMutation({ mutationFn: () => api.deleteSealedSecret(secret.name), onSuccess: (saved) => queryClient.setQueryData(['sealed-secrets'], saved) });
+	const from = secret.source.by === 'task' ? 'Kept by a task from an answer' : 'Set by you';
+	return (
+		<div className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5">
+			<RowIcon icon={LockKeyhole} />
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<div className="truncate font-mono text-[12.5px] font-medium">{secret.name}</div>
+				<div className="truncate text-[11px] text-(--text-tertiary)">
+					To {secret.hosts.join(', ')}
+					{secret.proxy ? ` · through ${secret.proxy}` : ''} · {from} {age(secret.updatedAt)}
+				</div>
+			</div>
+			{secret.source.by === 'you' ? <IconBtn icon={Pencil} size="sm" label={`Change ${secret.name}`} onClick={onEdit} /> : null}
+			<IconBtn icon={Trash2} size="sm" label={`Delete ${secret.name}`} disabled={remove.isPending} onClick={() => remove.mutate()} />
+		</div>
+	);
+}
+
+/**
+ * Secrets the agent can use but never read: it names one in http_request and Anton fills it in on this server,
+ * only for the hosts it allows. None reaches a sandbox, a shell or the model (src/services/sealed-secrets.ts).
+ */
+function Sealed() {
+	const view = useQuery({ queryKey: ['sealed-secrets'], queryFn: api.sealedSecrets });
+	const [editing, setEditing] = useState<SealedSecret | 'new' | null>(null);
+	const secrets = view.data?.secrets ?? [];
+	return (
+		<Block
+			title="Sealed"
+			icon={LockKeyhole}
+			aside={<Status>{secrets.length === 1 ? '1 secret' : `${secrets.length} secrets`}</Status>}
+			help="Used by the agent, never read by it."
+			info="The agent writes {{secret:NAME}} (or {{totp:NAME}} for the current code of a TOTP secret) in an http_request, and Anton fills it in on this server as it sends it: only to the hosts you list, over https, through the proxy if you give one, with the value hidden in the answer. A token an answer holds can be kept here the same way. Values are stored encrypted."
+			footer={
+				editing ? null : (
+					<Btn type="button" size="sm" variant="ghost" icon={Plus} onClick={() => setEditing('new')}>
+						Add sealed secret
+					</Btn>
+				)
+			}
+		>
+			<div className="flex flex-col gap-2">
+				{editing ? <SealedForm key={editing === 'new' ? 'new' : editing.name} editing={editing === 'new' ? null : editing} onDone={() => setEditing(null)} /> : null}
+				{secrets.length ? (
+					<List>
+						{secrets.map((secret) => (
+							<SealedRow key={secret.name} secret={secret} onEdit={() => setEditing(secret)} />
+						))}
+					</List>
+				) : view.isSuccess && !editing ? (
+					<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No sealed secrets yet.</p>
+				) : null}
+			</div>
+		</Block>
+	);
+}
+
 function RepoRow({ repo }: { repo: SecretsView['repos'][number] }) {
 	return (
 		<Link
@@ -75,6 +215,7 @@ export function SecretsPage() {
 			{view.data ? (
 				<>
 					<Shared view={view.data} />
+					<Sealed />
 					<Block title="Set by a repository" icon={Folder} help="Edited in each repository's settings.">
 						{repos.length ? (
 							<List>

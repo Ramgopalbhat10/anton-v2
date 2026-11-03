@@ -2,6 +2,7 @@ import type { Project } from '../core/types.ts';
 import { getProject, listProjects } from '../db/projects.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
+import { sealedValues } from './sealed-secrets.ts';
 
 const SHARED = 'shared-env';
 const GUARDRAILS = 'guardrails';
@@ -43,7 +44,9 @@ export async function setGuardrails(next: Guardrails): Promise<Guardrails> {
 export async function secretsToHide(sessionId: string): Promise<Record<string, string>> {
 	const session = await getSessionRecord(sessionId);
 	const project = session && (await getProject(session.projectId));
-	return session && (await guardrails()).hideSecrets ? envFor(project) : {};
+	// Sealed secrets never reach the agent, so one showing up anyway is hidden whatever the guardrail says.
+	const sealed = await sealedValues().catch(() => ({}));
+	return { ...(session && (await guardrails()).hideSecrets ? await envFor(project) : {}), ...sealed };
 }
 
 /** Names only, never values: the shared variables and each repository's own. */

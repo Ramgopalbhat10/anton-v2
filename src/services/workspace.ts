@@ -13,6 +13,7 @@ import { logProblem } from './log.ts';
 import { copySpaceFiles } from './space-files.ts';
 import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from './secrets.ts';
+import { runnerFor, runnerOf } from './runners.ts';
 
 /** First lockfile found decides how dependencies are installed. */
 const INSTALLERS: Array<[lockfile: string, command: string]> = [
@@ -102,7 +103,8 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	await runSetupScript(machine, context.project);
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
-	if (origin !== 'image' && context.project) await refreshWarmImage(machine, context.project);
+	// A task on this server makes none: warm images belong to the sandbox, where the next task on the repo starts.
+	if (origin !== 'image' && context.project && session.runOn !== 'host') await refreshWarmImage(machine, context.project);
 	await putBackSavedFiles(machine, session.id);
 }
 
@@ -139,11 +141,11 @@ const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resum
  * setup runs with Anton's credentials, so it is set aside for a fresh one.
  */
 async function acquireReady(session: SessionRecord, project: Project | null): Promise<{ acquired: Acquired; ready: boolean }> {
-	const { sandbox } = getProviders();
+	const sandbox = runnerFor(session.runOn);
 	const settings = await sandboxSettings();
 	const request = {
 		key: session.id,
-		image: project && warmImageFor(project, settings),
+		image: project && session.runOn !== 'host' ? warmImageFor(project, settings) : null,
 		baseImage: project?.baseImage ?? settings.baseImage,
 		ports: previewPortsFor(project),
 		resources: resourcesFrom(settings, project?.fullVm ? 'vm' : 'container'),
@@ -203,7 +205,7 @@ export function machineFor(id: string): Promise<Machine> {
 	const expire = (): void => {
 		setTimeout(async () => {
 			if (!current()) return;
-			if (isWorking(id) && (await getProviders().sandbox.find(id).catch(() => null))) return expire();
+			if (isWorking(id) && (await findMachine(id).catch(() => null))) return expire();
 			if (current()) machines.delete(id);
 		}, CACHE_MS).unref();
 	};
@@ -220,7 +222,13 @@ export function machineFor(id: string): Promise<Machine> {
 export async function liveMachine(id: string): Promise<Machine | null> {
 	const cached = machines.get(id);
 	if (cached && !starting.has(id)) return cached;
-	return getProviders().sandbox.find(id);
+	return findMachine(id);
+}
+
+/** The task's running machine, asked of the runner its task names; none for an id that is no task. */
+async function findMachine(id: string): Promise<Machine | null> {
+	const runner = await runnerOf(id);
+	return runner ? runner.find(id) : null;
 }
 
 export function isStarting(id: string): boolean {

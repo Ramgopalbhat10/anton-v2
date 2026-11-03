@@ -1,6 +1,7 @@
 import { listPages, outputIndexGeneration, readOutputIndex, writeOutputIndex, type IndexedOutput } from '../db/pages.ts';
 import { listSessionRecords } from '../db/sessions.ts';
 import { storedOutputs } from './files.ts';
+import { ADDED_FILES, addedFiles } from './added-files.ts';
 import { isRenderPath, pageTitle } from './renders.ts';
 
 /*
@@ -18,6 +19,8 @@ export type Artifact = {
 	size: number;
 	mtimeMs: number;
 	task: { title: string; spaceId: string | null; chat: boolean };
+	/** You added it on the Artifacts page; it is from no task. */
+	added?: boolean;
 };
 
 /** How many tasks' storage is read at once when filling in the ones not yet listed. */
@@ -33,7 +36,7 @@ async function eachLimited<T>(items: T[], limit: number, work: (item: T) => Prom
 }
 
 export async function listArtifacts(): Promise<Artifact[]> {
-	const [sessions, index, pages] = await Promise.all([listSessionRecords(), readOutputIndex(), listPages()]);
+	const [sessions, index, pages, added] = await Promise.all([listSessionRecords(), readOutputIndex(), listPages(), addedFiles().catch(() => [])]);
 	await eachLimited(
 		sessions.filter((session) => !index.has(session.id)),
 		READS_AT_ONCE,
@@ -56,6 +59,9 @@ export async function listArtifacts(): Promise<Artifact[]> {
 			const mtimeMs = Math.max(output.mtimeMs, page ? Date.parse(page.updatedAt) || 0 : 0);
 			artifacts.push({ sessionId: session.id, path: output.path, title, size: output.size, mtimeMs, task });
 		}
+	}
+	for (const file of added) {
+		artifacts.push({ sessionId: ADDED_FILES, path: file.path, title: file.path, size: file.size, mtimeMs: file.mtimeMs, task: { title: 'Added by you', spaceId: null, chat: true }, added: true });
 	}
 	return artifacts.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }

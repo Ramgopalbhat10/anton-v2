@@ -42,6 +42,14 @@ export type ModelEndpoint = {
 	uptime: number | null;
 };
 
+export type RunOn = 'sandbox' | 'host';
+/** Where tasks can run: the sandbox provider's name, and whether this server is a choice of its own. */
+export type RunnersView = { sandbox: string; host: boolean };
+
+/** A sealed secret, which the agent can use in http_request but never read (src/services/sealed-secrets.ts). */
+export type SealedSecret = { name: string; hosts: string[]; proxy: string | null; source: { by: 'you' } | { by: 'task'; taskId: string }; updatedAt: string };
+export type SealedSecretChange = { value?: string | null; hosts: string[]; proxy?: string | null };
+
 /** A task's model and reasoning level; null reasoning runs the model's default. */
 export type ModelChoice = { model: string; reasoning: Reasoning | null };
 
@@ -66,6 +74,8 @@ export type Session = {
 	workspace: boolean;
 	/** The agent proposes a plan and changes nothing until it is approved. */
 	planMode: boolean;
+	/** Where its commands run: its sandbox, or `host`, the server Anton runs on. Missing from older servers. */
+	runOn?: RunOn;
 	prUrl: string | null;
 	errorMessage: string | null;
 	checkpointAt: string | null;
@@ -659,8 +669,10 @@ export type PushView = { publicKey: string; devices: PushDevice[]; finished: boo
 export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 export type Output = { path: string; size: number; mtimeMs: number };
+/** Who holds the files you add on the Artifacts page: no task (src/services/added-files.ts). */
+export const ADDED_FILES = 'added-files';
 /** Something the agent made in a task, for the Artifacts page (src/services/artifacts.ts). */
-export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean } };
+export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean }; /** You added it on the Artifacts page, so it is from no task. */ added?: boolean };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[]; /** Files you deleted from the Library, which replies show as deleted. */ deleted: string[] };
 
 /** Statuses a proxy in front of Anton answers with when Anton took too long or could not be reached. */
@@ -722,6 +734,11 @@ export const api = {
 	saveGuardrails: (guardrails: Guardrails) => json<Guardrails>('/api/settings/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
 	secrets: () => json<SecretsView>('/api/secrets'),
 	saveSharedEnv: (env: Record<string, string | null>) => json<SecretsView>('/api/secrets/shared', { method: 'PUT', body: JSON.stringify({ env }) }),
+	sealedSecrets: () => json<{ secrets: SealedSecret[] }>('/api/secrets/sealed'),
+	saveSealedSecret: (name: string, change: SealedSecretChange) =>
+		json<{ secrets: SealedSecret[] }>(`/api/secrets/sealed/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(change) }),
+	deleteSealedSecret: (name: string) => json<{ secrets: SealedSecret[] }>(`/api/secrets/sealed/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+	runners: () => json<RunnersView>('/api/runners'),
 	reviews: () => json<{ reviews: ReviewItem[] }>('/api/reviews'),
 	reviewAnyPullRequest: (url: string) => post<Session>('/api/reviews', { url }),
 	stopAllSandboxes: () => post<{ stopped: number }>('/api/compute/stop-all'),
@@ -808,7 +825,7 @@ export const api = {
 		return { ...data, sessions: withStarting(data.sessions) };
 	},
 	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
-	createSession: (body: { id?: string; projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean }) =>
+	createSession: (body: { id?: string; projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean; runOn?: RunOn }) =>
 		post<Session>('/api/sessions', body),
 	session: (id: string) => json<Session>(`/api/sessions/${id}`),
 	stopSession: (id: string) => post<Session>(`/api/sessions/${id}/stop`),
@@ -817,7 +834,7 @@ export const api = {
 	/** The default model a failed reply can run again on; null when the task already runs on it. */
 	fallbackModel: (id: string) => json<{ fallback: { model: string; name: string } | null }>(`/api/sessions/${id}/fallback`),
 	switchToFallbackModel: (id: string) => post<Session>(`/api/sessions/${id}/fallback`),
-	editSession: (id: string, change: Partial<ModelChoice> & { route?: ModelRoute | null; title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null }) =>
+	editSession: (id: string, change: Partial<ModelChoice> & { route?: ModelRoute | null; title?: string; planMode?: boolean; pinned?: boolean; resolved?: boolean; spaceId?: string | null; runOn?: RunOn }) =>
 		json<Session>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSession: async (id: string) => void (await request(`/api/sessions/${id}`, { method: 'DELETE' })),
 	checkpoints: (id: string) => json<{ checkpoints: CheckpointSummary[] }>(`/api/sessions/${id}/checkpoints`),
@@ -873,6 +890,13 @@ export const api = {
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
 	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
+	/** Adds a file of your own to the Artifacts page. */
+	addArtifact: (file: File) =>
+		json<{ path: string; sessionId: string }>(`/api/artifacts?name=${encodeURIComponent(file.name)}`, {
+			method: 'POST',
+			body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		}),
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
 	/** Adds a file to the task's Library, under uploads/. */
 	uploadOutput: (id: string, file: File) =>

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ReviewOf, Session, SessionRecord, SessionStatus } from '../core/types.ts';
+import type { ReviewOf, RunOn, Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { getProject } from '../db/projects.ts';
@@ -8,6 +8,7 @@ import { getProviders } from '../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
+import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { type ModelRoute, routable, routedId } from '../core/model-route.ts';
 import type { Reasoning } from '../core/ports.ts';
@@ -29,7 +30,7 @@ const RUNNING_CACHE_MS = 5_000;
 /** Keys of the sandboxes running now, asked of the provider at most every few seconds. */
 export function runningKeys(): Promise<Set<string>> {
 	if (!runningCache || Date.now() - runningCache.at > RUNNING_CACHE_MS) {
-		runningCache = { at: Date.now(), keys: getProviders().sandbox.running().catch(() => new Set<string>()) };
+		runningCache = { at: Date.now(), keys: runningOnAll() };
 	}
 	return runningCache.keys;
 }
@@ -134,6 +135,8 @@ export async function createSession(input: {
 	automationId?: string;
 	/** The message to name the task from: a fast model gives it a short title in a moment, in place of `title`. */
 	titleFrom?: string;
+	/** Where its commands run; its sandbox unless the composer said This server. */
+	runOn?: RunOn;
 }): Promise<Session> {
 	// GitHub names the commit while the model is checked, rather than one after the other.
 	const [{ projectId, baseBranch, baseSha }, general, chosen] = await Promise.all([
@@ -166,6 +169,7 @@ export async function createSession(input: {
 		prUrl: input.prUrl,
 		automationId: input.automationId,
 		route: input.route && routable(model) ? input.route : null,
+		runOn: input.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox',
 	});
 	if (input.titleFrom) void nameTask(id, input.titleFrom);
 	return getSession(id);
@@ -192,8 +196,8 @@ export async function forkSession(id: string): Promise<Session> {
 	if (machine) await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before fork failed', error, id));
 	const forkId = randomUUID();
 	const title = `${source.title.slice(0, 190)} (fork)`;
-	const { projectId, model, reasoning, route, baseBranch, baseSha, planMode, spaceId } = source;
-	await insertSession({ id: forkId, projectId, title, model, reasoning, route, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId });
+	const { projectId, model, reasoning, route, baseBranch, baseSha, planMode, spaceId, runOn } = source;
+	await insertSession({ id: forkId, projectId, title, model, reasoning, route, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId, runOn });
 	if (await copyCheckpoint(id, forkId)) {
 		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
 	}
@@ -229,6 +233,7 @@ export type SessionChange = {
 	planMode?: boolean;
 	pinned?: boolean;
 	resolved?: boolean;
+	runOn?: RunOn;
 };
 
 /**
@@ -247,6 +252,7 @@ function routeAfter(record: SessionRecord | null, change: SessionChange, model: 
  * done or open again; the agent sees a change from the next prompt.
  */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
+	if (change.runOn) await moveTask(id, change.runOn);
 	const model = change.model && (await knownModel(change.model));
 	const title = change.title?.trim();
 	const record = 'route' in change || model ? await getSessionRecord(id) : null;
@@ -263,6 +269,21 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
 	});
 	return getSession(id);
+}
+
+/**
+ * Moves the task to its sandbox or to this server. A machine it has is stopped first, which saves its
+ * files; the next start sets up on the other runner and puts them back, as a task whose sandbox is gone does.
+ */
+async function moveTask(id: string, runOn: RunOn): Promise<void> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	if (record.runOn === runOn) return;
+	if (runOn === 'host' && !hostRunnerAvailable()) throw new InvalidInputError('Every task already runs on this server.');
+	if (isWorking(id)) throw new ConflictError('Wait for the agent to finish, or stop it, before moving the task.');
+	await stopSession(id);
+	await updateSession(id, { runOn, machineState: null });
+	invalidateRunning();
 }
 
 /** The default model a failed reply can be sent again on, when the task runs on another one; null when it already runs on it. */
@@ -301,19 +322,19 @@ export async function stopSession(id: string): Promise<Session> {
 	if (!record) throw new NotFoundError('Session not found');
 	let stop = stopping.get(id);
 	if (!stop) {
-		stop = stopMachine(id, record.machineState).finally(() => stopping.delete(id));
+		stop = stopMachine(id, record.machineState, record.runOn).finally(() => stopping.delete(id));
 		stopping.set(id, stop);
 	}
 	await stop;
 	return getSession(id);
 }
 
-async function stopMachine(id: string, machineState: string | null): Promise<void> {
+async function stopMachine(id: string, machineState: string | null, runOn: RunOn): Promise<void> {
 	await stopAgent(id);
 	const machine = await liveMachine(id);
 	if (machine && machineState) {
 		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
-		await getProviders().sandbox.stop(machineState);
+		await runnerFor(runOn).stop(machineState);
 	}
 	forgetMachine(id);
 	invalidateRunning();

@@ -14,7 +14,7 @@ import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { TaskRow } from '@/components/task-row';
-import { api, type ModelChoice, type ModelRoute, type Project } from '@/lib/api';
+import { api, type ModelChoice, type ModelRoute, type Project, type RunOn } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
@@ -197,6 +197,7 @@ export function Launcher() {
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [planChoice, setPlanMode] = useState<boolean | null>(null);
+	const [runOn, setRunOn] = useState<RunOn>('sandbox');
 	const [adding, setAdding] = useState(false);
 	const attachments = useAttachments();
 	const queryClient = useQueryClient();
@@ -254,6 +255,7 @@ export function Launcher() {
 			reasoning: reasoning ?? undefined,
 			route: route && routable(model) ? route : undefined,
 			planMode,
+			runOn,
 		});
 	}
 
@@ -307,7 +309,7 @@ export function Launcher() {
 							</div>
 						) : null}
 						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
-							<ComposerPlus attachments={attachments} side="bottom" />
+							<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
 							<ModelPicker value={{ model, reasoning }} onChange={chooseModel} route={route} onRoute={chooseRoute} height={28} side="bottom" />

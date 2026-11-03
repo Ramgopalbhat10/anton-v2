@@ -96,7 +96,11 @@ export type Session = {
 	review: ReviewOf | null;
 	/** The routine (automation) that started the task; null for one you or the coordinator started. */
 	automationId: string | null;
+	/** Where its commands run: its sandbox, or `host`, a folder on the server Anton runs on (`src/services/runners.ts`). */
+	runOn: RunOn;
 };
+
+export type RunOn = 'sandbox' | 'host';
 
 /**
  * A pull request a task reviews. `trusted`: its author can push to the repo. `reviewedHead`: the head

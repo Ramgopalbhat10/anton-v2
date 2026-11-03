@@ -57,3 +57,19 @@ test('a deleted file is listed as deleted, so replies can say so, until the agen
 	await saveOutput('ro', 'renders/chart-1.html', new TextEncoder().encode('<p>again</p>'), 'text/html');
 	assert.ok(!(await outputsView('ro')).deleted.includes('renders/chart-1.html'));
 });
+
+test('files you add on the Artifacts page are listed there, from no task, and read and deleted like any Library file', async () => {
+	const { ADDED_FILES, addFile } = await import('../src/services/added-files.ts');
+	const { listArtifacts } = await import('../src/services/artifacts.ts');
+	const skill = new TextEncoder().encode('---\nname: broker\n---\n# Broker\n');
+	assert.equal(await addFile('SKILL.md', skill, 'text/markdown'), 'SKILL.md');
+	assert.equal(await addFile('SKILL.md', skill, 'text/markdown'), 'SKILL-2.md', 'a name already taken gets a number');
+	const listed = (await listArtifacts()).filter((artifact) => artifact.added);
+	assert.deepEqual(listed.map((artifact) => [artifact.sessionId, artifact.path, artifact.task.title]).sort(), [
+		[ADDED_FILES, 'SKILL-2.md', 'Added by you'],
+		[ADDED_FILES, 'SKILL.md', 'Added by you'],
+	]);
+	assert.deepEqual(await readOutputFile(ADDED_FILES, 'SKILL.md'), skill);
+	await removeOutput(ADDED_FILES, 'SKILL-2.md');
+	assert.deepEqual((await listArtifacts()).filter((artifact) => artifact.added).map((artifact) => artifact.path), ['SKILL.md']);
+});

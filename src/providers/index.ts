@@ -84,6 +84,8 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  */
 export type Providers = {
 	sandbox: SandboxProvider;
+	/** Runs a task on this server, in a folder, for a task whose composer says This server; null when `sandbox` already does. */
+	host?: SandboxProvider | null;
 	store: ObjectStore;
 	git: GitHost;
 	models: ModelCatalog;
@@ -113,6 +115,7 @@ function production(): Providers {
 	const text = openRouterText({ apiUrl, apiKey: openRouterKey });
 	return {
 		sandbox: pick('sandbox', sandboxes, config.sandbox),
+		host: config.sandbox === 'local' ? null : localSandboxProvider(config.dataDir),
 		store: pick('store', stores, config.store),
 		git: githubHost(config.github),
 		models: openRouterCatalog({ apiUrl, ttlMs, apiKey: openRouterKey }),

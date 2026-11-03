@@ -201,6 +201,8 @@ export const migrations: string[][] = [
 			FROM sessions s LEFT JOIN projects p ON p.id = s.project_id
 			WHERE s.pr_url IS NOT NULL AND instr(s.pr_url, '/pull/') > 0`,
 	],
+	// 38: where a task's commands run, chosen in the composer: its sandbox (NULL, as before) or 'host', this server.
+	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
 	connectors: vi.fn(),
 	setMailboxOptions: vi.fn(),
 	setMcpServerEnabled: vi.fn(),
+	runners: vi.fn(),
+	artifacts: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -137,6 +139,47 @@ describe('Composer', () => {
 		await waitFor(() => expect(api.setMcpServerEnabled).toHaveBeenCalledWith('tracker', true));
 		expect(screen.getByText(/Tools load only when a task uses them/)).toBeTruthy();
 		expect(api.editSession).not.toHaveBeenCalled();
+	});
+
+	it('moves the task between its sandbox and this server from the + menu', async () => {
+		api.runners.mockResolvedValue({ sandbox: 'modal', host: true });
+		api.editSession.mockResolvedValue(session({ runOn: 'host' }));
+		setup({ runOn: 'sandbox' });
+		await userEvent.click(screen.getByRole('button', { name: 'Add files and connectors' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: /Run on/ }));
+		const sandbox = await screen.findByRole('menuitemradio', { name: /Sandbox/ });
+		expect(sandbox.getAttribute('aria-checked')).toBe('true');
+		expect(screen.getByText(/not isolated from that machine/)).toBeTruthy();
+		await userEvent.click(screen.getByRole('menuitemradio', { name: /This server/ }));
+		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { runOn: 'host' }));
+	});
+
+	it('does not offer this server where every task already runs on it', async () => {
+		api.runners.mockResolvedValue({ sandbox: 'local', host: false });
+		setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Add files and connectors' }));
+		await screen.findByRole('menuitem', { name: /From Artifacts/ });
+		expect(screen.queryByRole('menuitem', { name: /Run on/ })).toBeNull();
+	});
+
+	it('attaches a file from the Artifacts page to the message', async () => {
+		api.artifacts.mockResolvedValue({
+			artifacts: [
+				{ sessionId: 's9', path: 'reports/old.md', title: 'old.md', size: 3, mtimeMs: 2, task: { title: 'Other task', spaceId: null, chat: true } },
+				{ sessionId: 'added-files', path: 'SKILL.md', title: 'SKILL.md', size: 3, mtimeMs: 1, task: { title: 'Added by you', spaceId: null, chat: true }, added: true },
+			],
+		});
+		const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('# Broker skill', { headers: { 'Content-Type': 'text/markdown' } }));
+		setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Add files and connectors' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /From Artifacts/ }));
+		const items = await screen.findAllByRole('menuitem', { name: /Added by you|Other task/ });
+		expect(items[0]?.textContent).toContain('SKILL.md');
+		await userEvent.click(items[0]!);
+		await waitFor(() => expect(fetched).toHaveBeenCalledWith('/api/sessions/added-files/output?path=SKILL.md'));
+		// Behind the menu, which stays open so more can be added.
+		expect(await screen.findByRole('button', { name: 'Remove SKILL.md', hidden: true })).toBeTruthy();
+		fetched.mockRestore();
 	});
 
 	it('sends on Enter and keeps Shift+Enter for a new line', async () => {

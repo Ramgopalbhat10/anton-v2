@@ -10,6 +10,7 @@ import { assertWithinBudget } from './budget.ts';
 import { type AgentModel, generalSettings, HELPER_AGENTS, type HelperAgent, type VisualReplies } from './general.ts';
 import { type SetUpConnector, setUpConnectors } from './connector-tools.ts';
 import { enabledMcpServers } from './mcp-servers.ts';
+import { type SealedSecretBrief, sealedSecretBriefs } from './sealed-secrets.ts';
 import { serverTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
@@ -28,6 +29,13 @@ const connectors = new Map<string, SetUpConnector[]>();
 
 export function connectorsFor(id: string): SetUpConnector[] {
 	return connectors.get(id) ?? [];
+}
+
+/** The sealed secrets the agent may name in http_request, read as each message starts. */
+const sealedSecrets = new Map<string, SealedSecretBrief[]>();
+
+export function sealedSecretsFor(id: string): SealedSecretBrief[] {
+	return sealedSecrets.get(id) ?? [];
 }
 
 const WEB = 'web';
@@ -117,15 +125,17 @@ async function primeAgentSettings(): Promise<void> {
  * need each other are read at once, as a message waits for all of them before the agent starts.
  */
 export async function primeAgent(id: string, { warm = true }: { warm?: boolean } = {}): Promise<void> {
-	const [session, setUp] = await Promise.all([
+	const [session, setUp, sealed] = await Promise.all([
 		getSessionRecord(id),
 		setUpConnectors(),
+		sealedSecretBriefs().catch(() => []),
 		primeModel(id),
 		primeAgentSettings(),
 		primeSkills(id),
 	]);
 	const [project, space] = await Promise.all([session && getProject(session.projectId), session?.spaceId ? getSpace(session.spaceId) : null]);
 	connectors.set(id, setUp);
+	sealedSecrets.set(id, sealed);
 	// The servers that are on start listing their tools behind the message, so the agent's first look is quick; nothing waits for them.
 	if (warm && setUp.some((connector) => connector.kind === 'mcp')) void enabledMcpServers()
 			.then((servers) => servers.forEach((server) => void serverTools(server).catch(() => undefined)))
