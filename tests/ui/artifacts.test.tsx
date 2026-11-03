@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
 	session: vi.fn(async () => ({ id: 's1', title: 'Budget task', spaceId: null })),
 	outputText: vi.fn(async () => '# Findings\n\nAll good.'),
 	outputs: vi.fn(async () => ({ source: 'saved', at: null, outputs: [], deleted: [] as string[] })),
-	deleteOutput: vi.fn(async () => undefined),
+	deleteOutput: vi.fn(async (_sessionId: string, _path: string): Promise<void> => undefined),
 	addArtifact: vi.fn(async () => ({ path: 'SKILL.md', sessionId: 'added-files' })),
 	downloadArtifacts: vi.fn(),
 }));

@@ -473,6 +473,7 @@ export function SegmentedItem({
 	size = 'md',
 	className,
 	title,
+	disabled,
 }: {
 	on: boolean;
 	onClick: () => void;
@@ -481,12 +482,14 @@ export function SegmentedItem({
 	size?: 'sm' | 'md';
 	className?: string;
 	title?: string;
+	disabled?: boolean;
 }) {
 	const state = role === 'tab' ? { 'aria-selected': on } : role === 'radio' ? { 'aria-checked': on } : { 'aria-pressed': on };
 	return (
 		<button
 			type="button"
 			role={role === 'button' ? undefined : role}
+			disabled={disabled}
 			{...state}
 			title={title}
 			onClick={onClick}

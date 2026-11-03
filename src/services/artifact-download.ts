@@ -30,5 +30,7 @@ export async function downloadArtifacts(raw: unknown): Promise<ReadableStream<Ui
 			},
 		};
 	});
-	return Readable.toWeb(zipStream(entries)) as ReadableStream<Uint8Array>;
+	return Readable.toWeb(zipStream(entries), {
+		strategy: { highWaterMark: 64 * 1024, size: (chunk: Uint8Array) => chunk.byteLength },
+	}) as ReadableStream<Uint8Array>;
 }
