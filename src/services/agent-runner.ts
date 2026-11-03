@@ -61,7 +61,11 @@ export function mcpServersFor(id: string): McpServer[] {
 	return webServer(id);
 }
 
-/** Each task's repo notes, read into the agent's instructions. */
+/**
+ * Each task's repo notes, read into the agent's instructions once, when the task's agent first starts on this server.
+ * They sit in the system prompt, so a note saved later (by this task's `remember`, another task or the user) would change
+ * the prompt's start and lose the prompt cache on the task's next message; later tasks read it instead.
+ */
 const memories = new Map<string, string>();
 
 export function memoryFor(id: string): string {
@@ -145,8 +149,9 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 	if (warm && setUp.some((connector) => connector.kind === 'mcp')) void enabledMcpServers()
 			.then((servers) => servers.forEach((server) => void serverTools(server).catch(() => undefined)))
 			.catch(() => undefined);
-	memories.set(id, project?.memory ?? '');
-	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
+	if (!memories.has(id)) memories.set(id, project?.memory ?? '');
+	// The project's memory is kept as first read too, for the same reason; its name, goal and instructions follow edits.
+	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: threadProjects.get(id)?.id === space.id ? threadProjects.get(id)!.memory : space.memory });
 	else threadProjects.delete(id);
 	if (session?.machineState) workspaces.add(id);
 	if (session?.runOn === 'host') onHost.add(id);

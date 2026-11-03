@@ -1,0 +1,11 @@
+# Projects
+
+Linked from [AGENTS.md](../../AGENTS.md). Projects are `spaces` in code.
+
+- `src/services/spaces.ts` — projects, their repositories and threads (tasks with `space_id`); starts threads within the project's parallel limit and queues the rest (`drainQueue`).
+- `src/core/thread-state.ts` — one derivation of each task's state (waiting, working, queued, review, landing, idle, resolved) for the server and every page. A reply that delivered what was asked resolves its thread (`closeIfFinished` in `thread-reports.ts`); the next message reopens it.
+- `src/agents/coordinator.ts` plans and starts threads. Project state reaches it as a `project-state` signal (`src/services/coordinator.ts`), never in its instructions, so its prompt cache holds.
+- Project files (`space-files.ts`) are copied into each thread's machine at `../project-files`.
+- Deleting a thread (`deleteTask`) keeps its files under `From threads/<title>/` and lists it as deleted for a week (`deleted-threads.ts`), so a follow-up starts a new thread.
+- `src/flue/sandbox-tools.ts` — the sandbox's `read` (images as pictures, or in the vision model's words) and `edit` with several changes in one call.
+- Pages: `project-page.tsx`, `project-panel.tsx`, `project-sidebar.tsx`, `projects-page.tsx`, `project-settings.tsx`; charts in `project-viz.tsx`. A project's mark is a drawn icon (`project-icon.tsx`), never an emoji.

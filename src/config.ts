@@ -109,4 +109,10 @@ export const config = {
 	browserPackage: 'playwright@1.56.1',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */
 	warmImageDays: Number(read('ANTON_WARM_IMAGE_DAYS', '7')),
+	/**
+	 * A repository task's sandbox starts as its agent starts a reply, behind the agent's first steps, rather than when
+	 * the agent asks for it: most such tasks change code, and the start (a clone and an install on a cold image) is
+	 * then under way while the agent reads. One that only answers leaves it to stop after its idle minutes. `0` turns it off.
+	 */
+	prewarmSandbox: read('ANTON_PREWARM_SANDBOX', '1') !== '0',
 };

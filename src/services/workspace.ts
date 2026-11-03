@@ -1,4 +1,5 @@
 import type { Acquired, Machine, MachineOrigin } from '../core/ports.ts';
+import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
@@ -29,10 +30,18 @@ async function installDependencies(machine: Machine): Promise<void> {
 	if (result.exitCode !== 0) logProblem('warn', 'Dependency install failed', result.stderr.slice(-500));
 }
 
-function warmImageFor(project: Project, settings: SandboxSettings): string | null {
-	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < settings.warmImageDays * 86_400_000;
+/** The repo's warm image while it is younger than `share` of its days, else null. */
+function warmImageFor(project: Project, settings: SandboxSettings, share = 1): string | null {
+	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < share * settings.warmImageDays * 86_400_000;
 	return fresh ? project.warmImage : null;
 }
+
+/**
+ * A task that starts from an image past this share of its days saves a new one,
+ * so the image is renewed while tasks still use it and no task meets an expired
+ * one and waits on clone, install and snapshot.
+ */
+const RENEW_SHARE = 0.75;
 
 /**
  * Saves a reusable image of the set-up repo once setup has finished. Waited
@@ -40,7 +49,7 @@ function warmImageFor(project: Project, settings: SandboxSettings): string | nul
  * from it, and their setup runs there with Anton's credentials.
  */
 async function refreshWarmImage(machine: Machine, project: Project): Promise<void> {
-	if (warmImageFor(project, await sandboxSettings())) return;
+	if (warmImageFor(project, await sandboxSettings(), RENEW_SHARE)) return;
 	await getProviders()
 		.sandbox.snapshot(machine)
 		.then((image) => setWarmImage(project.id, image, project.baseImage))
@@ -104,7 +113,8 @@ async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
 	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
 	// A task on this server makes none: warm images belong to the sandbox, where the next task on the repo starts.
-	if (origin !== 'image' && context.project && session.runOn !== 'host') await refreshWarmImage(machine, context.project);
+	// A task started from an image renews it only once it is old (`RENEW_SHARE`), so most image starts take none.
+	if (context.project && session.runOn !== 'host') await refreshWarmImage(machine, context.project);
 	await putBackSavedFiles(machine, session.id);
 }
 
@@ -132,6 +142,13 @@ async function load(id: string): Promise<{ session: SessionRecord; project: Proj
 
 /** The ports a task's sandbox serves previews on: its repository's, or the usual ones for a chat. */
 export const previewPortsFor = (project: Project | null) => project?.previewPorts ?? DEFAULT_PREVIEW_PORTS;
+
+/** The hostnames the user's browser opens the machine's previews on, comma-separated, or null when all are localhost. */
+export async function previewHosts(machine: Machine, ports: number[]): Promise<string | null> {
+	const urls = await Promise.all(ports.map((port) => machine.previewUrl(port).catch(() => null)));
+	const hosts = new Set(urls.flatMap((url) => (url ? [new URL(url).hostname] : [])).filter((host) => host !== 'localhost'));
+	return hosts.size > 0 ? [...hosts].join(',') : null;
+}
 
 const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resumed';
 
@@ -161,7 +178,12 @@ async function provision(id: string): Promise<Machine> {
 	const { session, project } = await load(id);
 	const { acquired, ready } = await acquireReady(session, project);
 	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
-	const ports = { ANTON_PREVIEW_PORTS: previewPortsFor(project).join(' ') };
+	// Vite's dev server turns away hosts it was not told of, so its first Preview check would fail without the tunnels' names.
+	const hosts = await previewHosts(acquired.machine, previewPortsFor(project));
+	const ports = {
+		ANTON_PREVIEW_PORTS: previewPortsFor(project).join(' '),
+		...(hosts && { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: hosts }),
+	};
 	// A review task may be on a repo added only by pasting a link, whose own install scripts are its owner's code:
 	// it gets the repo's own variables (none unless you set some), never the shared ones, and the code of a
 	// pull request whose author cannot push to the repo gets none at all.
@@ -216,6 +238,18 @@ export function machineFor(id: string): Promise<Machine> {
 			announce({ kind: 'task', id, what: 'state' });
 		});
 	return pending;
+}
+
+/**
+ * Starts a repository task's machine as its agent starts a reply, so `start_workspace` finds it started or starting.
+ * Not for a chat (most never need one), a task planning or reviewing (they read first), one that runs on this server,
+ * or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.
+ */
+export async function prewarmMachine(id: string): Promise<void> {
+	if (!config.prewarmSandbox || machines.has(id)) return;
+	const session = await getSessionRecord(id);
+	if (!session?.projectId || session.machineState || session.planMode || session.review || session.runOn === 'host' || machines.has(id)) return;
+	await machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
 }
 
 /** The task's machine only if it is already running. */

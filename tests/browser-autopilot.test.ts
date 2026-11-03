@@ -149,6 +149,11 @@ test('a run stops after its most actions, and when the model is sure the goal is
 	let result = await autopilot('t1', step, { goal: 'Read to the end', maxActions: 3 });
 	assert.equal(result.outcome, 'max_actions');
 	assert.equal(result.actions.length, 3);
+	// A run held to one action that reached the goal ends as done, after one last look.
+	rule = (state) => ({ done: String(state.actions_taken).includes('Scrolled') ? { yes: 0.95 } : no, stuck: no, action: pick('scroll') });
+	result = await autopilot('t1', step, { goal: 'Read the next paragraph', maxActions: 1 });
+	assert.equal(result.outcome, 'done');
+	assert.equal(result.actions.length, 1);
 	rule = () => ({ done: no, stuck: { yes: 0.9 }, action: pick('scroll') });
 	result = await autopilot('t1', step, { goal: 'Open the admin page' });
 	assert.equal(result.outcome, 'stuck');

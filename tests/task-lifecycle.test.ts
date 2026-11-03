@@ -2013,6 +2013,13 @@ test('repo memory: the agent adds notes, the user edits them, and every task rea
 	const next = await sessions.createSession({ projectId: project.id, title: 'Use it' });
 	await primeAgent(next.id);
 	assert.match(memoryFor(next.id), /Use pnpm, not npm\./);
+	// A note saved while the task runs reaches later tasks; this task's instructions stay as they were, so its prompt cache holds.
+	await remember(next.id, 'Lint with biome.');
+	await primeAgent(next.id);
+	assert.doesNotMatch(memoryFor(next.id), /biome/);
+	const later = await sessions.createSession({ projectId: project.id, title: 'Later' });
+	await primeAgent(later.id);
+	assert.match(memoryFor(later.id), /Lint with biome\./);
 
 	await saveMemory(project.id, '- Only this.\n');
 	assert.equal((await getProject(project.id))!.memory, '- Only this.');
@@ -2215,4 +2222,53 @@ test("a thread's own pull request merges from the PR panel by squashing", async 
 	} finally {
 		pullState = 'open';
 	}
+});
+
+test('a repository task starts its sandbox ahead of the agent, but a chat, a plan or a task with a machine does not', async () => {
+	const { prewarmMachine, isStarting, liveMachine } = await import('../src/services/workspace.ts');
+	const project = await addProject('acme/prewarm');
+	const chat = await sessions.createSession({ title: 'What is new?' });
+	const plan = await sessions.createSession({ projectId: project.id, title: 'Plan it', planMode: true });
+	for (const task of [chat, plan]) {
+		await prewarmMachine(task.id);
+		assert.equal(isStarting(task.id), false, task.title);
+		assert.equal(await liveMachine(task.id), null, task.title);
+	}
+	const work = await sessions.createSession({ projectId: project.id, title: 'Change it' });
+	await prewarmMachine(work.id);
+	assert.ok(await liveMachine(work.id), 'the repository task has its machine before the agent asks');
+	await sessions.stopSession(work.id);
+});
+
+test('a task that starts from an old warm image renews it, and one from a young image does not', async () => {
+	const project = await addProject('acme/renew');
+	const imageNow = async () => (await getProject(project.id))?.warmImage;
+	const first = await sessions.createSession({ projectId: project.id, title: 'Clone' });
+	await machineFor(first.id);
+	const cloned = await imageNow();
+	assert.ok(cloned, 'the first task saves an image');
+	await sessions.stopSession(first.id);
+
+	const young = await sessions.createSession({ projectId: project.id, title: 'Young image' });
+	await machineFor(young.id);
+	assert.equal(await imageNow(), cloned, 'a young image is used as it is');
+	await sessions.stopSession(young.id);
+
+	const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000).toISOString();
+	await database.execute({ sql: 'UPDATE projects SET warmed_at = ? WHERE id = ?', args: [sixDaysAgo, project.id] });
+	const old = await sessions.createSession({ projectId: project.id, title: 'Old image' });
+	const machine = await machineFor(old.id);
+	assert.equal((await run(machine, 'git branch --show-current')).trim(), old.branch, 'it still starts from the old image');
+	const renewed = await getProject(project.id);
+	assert.ok(renewed?.warmImage && renewed.warmImage !== cloned, 'it saves a new image');
+	assert.ok(Date.parse(renewed.warmedAt!) > Date.parse(sixDaysAgo));
+	await sessions.stopSession(old.id);
+});
+
+test('preview hostnames reach the sandbox for Vite, but localhost does not', async () => {
+	const { previewHosts } = await import('../src/services/workspace.ts');
+	const machine = (urls: Record<number, string | null>) =>
+		({ previewUrl: async (port: number) => urls[port] ?? null }) as unknown as Parameters<typeof previewHosts>[0];
+	assert.equal(await previewHosts(machine({ 3000: 'https://a1.modal.host', 5173: 'https://b2.modal.host/', 9: null }), [3000, 5173, 9]), 'a1.modal.host,b2.modal.host');
+	assert.equal(await previewHosts(machine({ 3000: 'http://localhost:3000' }), [3000]), null);
 });
