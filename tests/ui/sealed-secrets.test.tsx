@@ -8,8 +8,8 @@ const api = vi.hoisted(() => ({ secrets: vi.fn(), sealedSecrets: vi.fn(), saveSe
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { SecretsPage } = await import('@/components/settings/secrets');
 
-const token: SealedSecret = { name: 'BROKER_TOKEN', hosts: ['api.indstocks.com'], proxy: 'https://3-104-97-252.sslip.io', source: { by: 'task', taskId: 't1' }, updatedAt: new Date().toISOString() };
-const key: SealedSecret = { name: 'BROKER_MPIN', hosts: ['api.indstocks.com'], proxy: 'https://3-104-97-252.sslip.io', source: { by: 'you' }, updatedAt: new Date().toISOString() };
+const token: SealedSecret = { name: 'BROKER_TOKEN', hosts: ['api.indstocks.com'], proxy: 'https://3-104-97-252.sslip.io', readsDirect: false, source: { by: 'task', taskId: 't1' }, updatedAt: new Date().toISOString() };
+const key: SealedSecret = { name: 'BROKER_MPIN', hosts: ['api.indstocks.com'], proxy: 'https://3-104-97-252.sslip.io', readsDirect: false, source: { by: 'you' }, updatedAt: new Date().toISOString() };
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -33,7 +33,7 @@ describe('Settings › Secrets › Sealed', () => {
 		await userEvent.type(within(form).getByPlaceholderText('Never shown again'), 'JBSWY3DPEHPK3PXP');
 		await userEvent.type(within(form).getByPlaceholderText('api.example.com, *.example.com'), 'api.indstocks.com');
 		await userEvent.click(within(form).getByRole('button', { name: 'Add secret' }));
-		await waitFor(() => expect(api.saveSealedSecret).toHaveBeenCalledWith('BROKER_TOTP', { value: 'JBSWY3DPEHPK3PXP', hosts: ['api.indstocks.com'], proxy: null }));
+		await waitFor(() => expect(api.saveSealedSecret).toHaveBeenCalledWith('BROKER_TOTP', { value: 'JBSWY3DPEHPK3PXP', hosts: ['api.indstocks.com'], proxy: null, readsDirect: false }));
 		expect(await within(block).findByText('BROKER_TOTP')).toBeTruthy();
 	});
 
@@ -46,6 +46,6 @@ describe('Settings › Secrets › Sealed', () => {
 		expect((within(form).getByPlaceholderText('Saved; type to replace') as HTMLInputElement).value).toBe('');
 		await userEvent.click(within(form).getByRole('button', { name: 'Remove the proxy' }));
 		await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
-		await waitFor(() => expect(api.saveSealedSecret).toHaveBeenCalledWith('BROKER_MPIN', { value: null, hosts: ['api.indstocks.com'], proxy: '' }));
+		await waitFor(() => expect(api.saveSealedSecret).toHaveBeenCalledWith('BROKER_MPIN', { value: null, hosts: ['api.indstocks.com'], proxy: '', readsDirect: false }));
 	});
 });

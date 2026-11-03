@@ -20,6 +20,11 @@ const MAX_SHOWN = 100_000;
 const MIN_HIDDEN = 4;
 /** A TOTP code about to change is waited out, so the server sees one that is still good. */
 const TOTP_MARGIN_MS = 3_000;
+/**
+ * The answer's headers the agent is shown: what it acts on (the type, where a redirect points, how
+ * long to wait, rate limits, a download's name). CDN, gateway and security headers only take room.
+ */
+const SHOWN_HEADERS = /^(content-type|content-disposition|location|retry-after|www-authenticate|(x-)?rate-?limit-.+|x-request-id)$/i;
 
 export type HttpRequestInput = {
 	url: string;
@@ -106,6 +111,10 @@ export async function httpRequest(taskId: string, input: HttpRequestInput, { sig
 	const proxies = new Set([...secrets.values()].map((secret) => secret.proxy).filter((proxy): proxy is string => proxy !== null));
 	if (proxies.size > 1) throw new EgressError('The secrets in this request go through different proxies, so they cannot be sent together');
 	const proxy = [...proxies][0] ?? null;
+	// A read skips the proxy only when every proxied secret in it says reads may go straight out.
+	const proxied = [...secrets.values()].filter((secret) => secret.proxy !== null);
+	const readsDirect = proxied.length > 0 && proxied.every((secret) => secret.readsDirect);
+	const route = readsDirect && (method === 'GET' || method === 'HEAD') ? null : proxy;
 	if (secrets.size && !input.url.toLowerCase().startsWith('https://')) throw new EgressError('A request with a secret in it goes over https only');
 	for (const { name } of input.save ?? []) await assertKeepable(name);
 
@@ -122,7 +131,7 @@ export async function httpRequest(taskId: string, input: HttpRequestInput, { sig
 
 	const url = new URL(substitute(input.url, secrets, codes));
 	const response = await egressFetch(
-		proxy ? proxyParts(proxy) : null,
+		route ? proxyParts(route) : null,
 		{
 			url,
 			method,
@@ -137,13 +146,13 @@ export async function httpRequest(taskId: string, input: HttpRequestInput, { sig
 	const kept: Array<{ name: string; value: string; from: string }> = [];
 	for (const { name, from } of input.save ?? []) {
 		const value = pick(response, text, from);
-		await keepFromAnswer(taskId, name, value, host, proxy);
+		await keepFromAnswer(taskId, name, value, host, proxy, readsDirect);
 		kept.push({ name, value, from });
 	}
 
 	const hide = hider([...[...secrets.values()].map(({ name, value }) => ({ name, value })), ...kept, ...[...codes].map(([name, value]) => ({ name: `${name} code`, value }))]);
 	const shownHeaders = Object.entries(response.headers)
-		.filter(([name]) => !/^(set-cookie|date|connection|keep-alive|transfer-encoding)$/.test(name))
+		.filter(([name]) => SHOWN_HEADERS.test(name))
 		.map(([name, value]) => `${name}: ${value}`);
 	const notes = kept.map(({ name, from }) => `Kept ${from} as the sealed secret ${name}; use it as {{secret:${name}}}.`);
 	let body = text.length > MAX_SHOWN ? `${text.slice(0, MAX_SHOWN)}\n[cut: the answer is ${text.length} characters]` : text;

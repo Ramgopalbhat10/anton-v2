@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl, PageThumbnail } from '@/components/html-frame';
@@ -126,16 +126,67 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	);
 }
 
+/** The skill a file you added was installed as, if it was. */
+function useInstalledFrom(artifact: Artifact, enabled: boolean) {
+	const plugins = useQuery({ queryKey: ['plugins'], queryFn: api.plugins, enabled, staleTime: 30_000 });
+	return plugins.data?.plugins.find((plugin) => plugin.source.repo === ADDED_FILES && plugin.source.path === artifact.path) ?? null;
+}
+
+/**
+ * Installs a Markdown file you added as a skill, or updates the skill it was installed as. Its name comes
+ * from the file's front matter, so any file name will do. The menu stays open to say how it went.
+ */
+function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolean }) {
+	const queryClient = useQueryClient();
+	const known = useInstalledFrom(artifact, open);
+	const install = useMutation({
+		mutationFn: () => api.installAddedSkill(artifact.path),
+		onSuccess: (result) => queryClient.setQueryData<{ plugins: unknown[]; marketplaces: string[] }>(['plugins'], (current) => (current ? { ...current, plugins: result.plugins } : current)),
+	});
+	const installedAs = install.data?.plugins.find((plugin) => plugin.source.repo === ADDED_FILES && plugin.source.path === artifact.path) ?? known;
+	return (
+		<>
+			<MenuItem
+				icon={Sparkles}
+				disabled={install.isPending}
+				onSelect={(event) => {
+					event.preventDefault();
+					install.mutate();
+				}}
+			>
+				{install.isPending ? 'Installing…' : installedAs ? 'Update the skill' : 'Install as skill'}
+			</MenuItem>
+			{install.isSuccess || install.isError || installedAs ? (
+				<div className={cn('max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-pretty', install.isError ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+					{install.isError ? (
+						install.error.message
+					) : (
+						<>
+							Installed as <span className="font-mono">{installedAs?.skills[0]?.name ?? installedAs?.name}</span>, in{' '}
+							<Link to="/settings/$section" params={{ section: 'skills' }} className="underline underline-offset-2">
+								Settings › Skills
+							</Link>
+							.
+						</>
+					)}
+				</div>
+			) : null}
+		</>
+	);
+}
+
 /** Opening it elsewhere, saving it, going to the task it came from, or deleting it. Delete asks twice inside the menu. */
 function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 	const navigate = useNavigate();
 	const app = categoryOf(artifact.path) === 'app';
 	const [confirming, setConfirming] = useState(false);
+	const [open, setOpen] = useState(false);
 	const remove = useDeleteArtifact(artifact);
 	return (
 		<Menu
-			onOpenChange={(open) => {
-				if (!open) setConfirming(false);
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setConfirming(false);
 			}}
 		>
 			<MenuTrigger asChild>
@@ -162,6 +213,7 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 						Go to the task
 					</MenuItem>
 				)}
+				{artifact.added && isMarkdown(artifact.path) ? <InstallSkillItem artifact={artifact} open={open} /> : null}
 				<MenuSeparator />
 				<MenuItem
 					icon={Trash2}

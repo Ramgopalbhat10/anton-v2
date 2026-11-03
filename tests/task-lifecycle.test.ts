@@ -1566,6 +1566,30 @@ test('run_script runs a program over the read-only repo and the decision model, 
 	}
 });
 
+test('a task with sealed secrets can send http_request from a program, with the same checks as the tool', async () => {
+	const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
+	const { primeAgent } = await import('../src/services/agent-runner.ts');
+	const sealedSecrets = await import('../src/services/sealed-secrets.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Scripted requests' });
+	await primeAgent(session.id);
+	assert.doesNotMatch(scriptToolDescription(session.id, { repo: false, mcp: true }), /http_request/, 'without a sealed secret there is nothing to send');
+	await sealedSecrets.saveSealedSecret({ name: 'SCRIPT_KEY', value: 'script-key-1', hosts: ['api.example.com'] });
+	try {
+		await primeAgent(session.id);
+		assert.match(scriptToolDescription(session.id, { repo: false, mcp: true }), /http_request/);
+		const output = await runScript(
+			session.id,
+			`try { await tools.http_request({ url: 'https://elsewhere.example.net/', headers: { a: '{{secret:SCRIPT_KEY}}' } }); } catch (error) { return String(error.message ?? error); }`,
+			{ repo: false, mcp: false },
+		);
+		assert.match(output, /SCRIPT_KEY may only be sent to api\.example\.com, not elsewhere\.example\.net/);
+	} finally {
+		await sealedSecrets.deleteSealedSecret('SCRIPT_KEY');
+		await primeAgent(session.id);
+	}
+});
+
 test('an MCP connector is found and called on demand, from connector tools and programs, and turning it off keeps the prompt as it was', async () => {
 	const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
 	const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');

@@ -1,3 +1,5 @@
+import { accessSync, constants } from 'node:fs';
+import path from 'node:path';
 import type { SandboxProvider } from '../core/ports.ts';
 import type { RunOn } from '../core/types.ts';
 import { getSessionRecord } from '../db/sessions.ts';
@@ -35,4 +37,28 @@ export function allRunners(): SandboxProvider[] {
 export async function runningOnAll(): Promise<Set<string>> {
 	const sets = await Promise.all(allRunners().map((runner) => runner.running().catch(() => new Set<string>())));
 	return new Set(sets.flatMap((set) => [...set]));
+}
+
+/** Commands an agent commonly reaches for, checked on this server's PATH for a task that runs here. */
+const COMMON_TOOLS = ['node', 'npm', 'bun', 'python3', 'pip3', 'uv', 'git', 'curl', 'jq', 'rg', 'sqlite3', 'docker'];
+
+let toolsHere: { found: string[]; missing: string[] } | undefined;
+
+/** Which common commands this server has, looked up once: a task on This server cannot install them as a sandbox would. */
+export function toolsOnHost(): { found: string[]; missing: string[] } {
+	if (toolsHere) return toolsHere;
+	const dirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+	const has = (name: string) =>
+		dirs.some((dir) => {
+			try {
+				accessSync(path.join(dir, name), constants.X_OK);
+				return true;
+			} catch {
+				return false;
+			}
+		});
+	// Node is what runs Anton, so it is there whatever PATH says.
+	const found = COMMON_TOOLS.filter((name) => name === 'node' || has(name));
+	toolsHere = { found, missing: COMMON_TOOLS.filter((name) => !found.includes(name)) };
+	return toolsHere;
 }

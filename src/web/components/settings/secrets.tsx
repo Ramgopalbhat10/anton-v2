@@ -58,12 +58,15 @@ function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone:
 	const [hosts, setHosts] = useState(editing?.hosts.join(', ') ?? '');
 	const [proxy, setProxy] = useState('');
 	const [proxyRemoved, setProxyRemoved] = useState(false);
+	const [readsDirect, setReadsDirect] = useState(editing?.readsDirect ?? false);
+	const hasProxy = Boolean(proxy.trim() || (editing?.proxy && !proxyRemoved));
 	const save = useMutation({
 		mutationFn: () =>
 			api.saveSealedSecret(name.trim(), {
 				value: value || null,
 				hosts: splitHosts(hosts),
 				proxy: proxy.trim() ? proxy.trim() : proxyRemoved ? '' : null,
+				readsDirect: hasProxy && readsDirect,
 			}),
 		onSuccess: (saved) => {
 			queryClient.setQueryData(['sealed-secrets'], saved);
@@ -115,6 +118,14 @@ function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone:
 					</span>
 				</div>
 			</div>
+			{hasProxy ? (
+				<label className="flex items-start gap-2 text-[12px] text-(--text-secondary)">
+					<input type="checkbox" checked={readsDirect} onChange={(event) => setReadsDirect(event.target.checked)} className="mt-0.5" />
+					<span>
+						Only send changes through the proxy. Reads (GET) go straight out, which is faster. Turn this on when the API asks for the fixed IP only on orders and other changes.
+					</span>
+				</label>
+			) : null}
 			<div className="flex flex-wrap items-center justify-end gap-2">
 				<SaveState pending={save.isPending} success={false} error={save.error} />
 				<Btn type="button" size="sm" variant="ghost" onClick={onDone}>
@@ -139,7 +150,7 @@ function SealedRow({ secret, onEdit }: { secret: SealedSecret; onEdit: () => voi
 				<div className="truncate font-mono text-[12.5px] font-medium">{secret.name}</div>
 				<div className="truncate text-[11px] text-(--text-tertiary)">
 					To {secret.hosts.join(', ')}
-					{secret.proxy ? ` · through ${secret.proxy}` : ''} · {from} {age(secret.updatedAt)}
+					{secret.proxy ? ` · ${secret.readsDirect ? 'changes ' : ''}through ${secret.proxy}` : ''} · {from} {age(secret.updatedAt)}
 				</div>
 			</div>
 			{secret.source.by === 'you' ? <IconBtn icon={Pencil} size="sm" label={`Change ${secret.name}`} onClick={onEdit} /> : null}

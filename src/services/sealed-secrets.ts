@@ -31,16 +31,17 @@ const MAX_VALUE = 16_384;
 /** Who set it: you in Settings, or a task that saved it from an answer. */
 export type SealedSource = { by: 'you' } | { by: 'task'; taskId: string };
 
-type Stored = { value: string; hosts: string[]; proxy: string | null; source: SealedSource; updatedAt: string };
+/** `readsDirect`: a GET or HEAD with this secret goes straight out, and only what changes something takes the proxy. */
+type Stored = { value: string; hosts: string[]; proxy: string | null; readsDirect?: boolean; source: SealedSource; updatedAt: string };
 
 /** A sealed secret as the page sees it: never its value or the proxy's password. */
-export type SealedSecretView = { name: string; hosts: string[]; proxy: string | null; source: SealedSource; updatedAt: string };
+export type SealedSecretView = { name: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: SealedSource; updatedAt: string };
 
 /** What the agent is told of one: its name and where it may go. */
-export type SealedSecretBrief = { name: string; hosts: string[]; proxied: boolean };
+export type SealedSecretBrief = { name: string; hosts: string[]; proxied: boolean; byYou: boolean };
 
 /** A secret as a request uses it, decrypted. */
-export type OpenSecret = { name: string; value: string; hosts: string[]; proxy: string | null; source: SealedSource };
+export type OpenSecret = { name: string; value: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: SealedSource };
 
 let cachedKey: Buffer | undefined;
 
@@ -82,7 +83,7 @@ function unseal(sealed: string): string {
 const stored = () => getSetting<Record<string, Stored>>(KEY, {});
 
 function view(name: string, entry: Stored): SealedSecretView {
-	return { name, hosts: entry.hosts, proxy: entry.proxy ? proxyLabel(unseal(entry.proxy)) : null, source: entry.source, updatedAt: entry.updatedAt };
+	return { name, hosts: entry.hosts, proxy: entry.proxy ? proxyLabel(unseal(entry.proxy)) : null, readsDirect: Boolean(entry.proxy && entry.readsDirect), source: entry.source, updatedAt: entry.updatedAt };
 }
 
 export async function sealedSecretsView(): Promise<SealedSecretView[]> {
@@ -93,7 +94,7 @@ export async function sealedSecretsView(): Promise<SealedSecretView[]> {
 
 export async function sealedSecretBriefs(): Promise<SealedSecretBrief[]> {
 	return Object.entries(await stored())
-		.map(([name, entry]) => ({ name, hosts: entry.hosts, proxied: entry.proxy !== null }))
+		.map(([name, entry]) => ({ name, hosts: entry.hosts, proxied: entry.proxy !== null, byYou: entry.source.by === 'you' }))
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -103,7 +104,7 @@ export async function openSecrets(names: string[]): Promise<Map<string, OpenSecr
 	const open = new Map<string, OpenSecret>();
 	for (const name of new Set(names)) {
 		const entry = all[name];
-		if (entry) open.set(name, { name, value: unseal(entry.value), hosts: entry.hosts, proxy: entry.proxy ? unseal(entry.proxy) : null, source: entry.source });
+		if (entry) open.set(name, { name, value: unseal(entry.value), hosts: entry.hosts, proxy: entry.proxy ? unseal(entry.proxy) : null, readsDirect: Boolean(entry.proxy && entry.readsDirect), source: entry.source });
 	}
 	return open;
 }
@@ -129,10 +130,10 @@ function cleanHosts(hosts: string[]): string[] {
 }
 
 /**
- * What the page sends. `value` and `proxy` left out (or null) keep what is stored; an empty `proxy`
- * removes it. A new secret needs a value.
+ * What the page sends. `value`, `proxy` and `readsDirect` left out (or null) keep what is stored; an
+ * empty `proxy` removes it. A new secret needs a value.
  */
-export type SealedSecretInput = { name: string; value?: string | null; hosts: string[]; proxy?: string | null };
+export type SealedSecretInput = { name: string; value?: string | null; hosts: string[]; proxy?: string | null; readsDirect?: boolean | null };
 
 export async function saveSealedSecret(input: SealedSecretInput): Promise<SealedSecretView[]> {
 	if (!NAME.test(input.name)) throw new InvalidInputError('A name is capital letters, digits and _, starting with a letter, such as BROKER_API_KEY');
@@ -149,10 +150,12 @@ export async function saveSealedSecret(input: SealedSecretInput): Promise<Sealed
 		}
 	}
 	const proxy = input.proxy === '' ? null : input.proxy ? seal(input.proxy) : (current?.proxy ?? null);
+	const readsDirect = proxy !== null && (input.readsDirect ?? current?.readsDirect ?? false);
 	all[input.name] = {
 		value: input.value ? seal(input.value) : current!.value,
 		hosts: cleanHosts(input.hosts),
 		proxy,
+		...(readsDirect ? { readsDirect } : {}),
 		source: { by: 'you' },
 		updatedAt: new Date().toISOString(),
 	};
@@ -178,15 +181,22 @@ export async function assertKeepable(name: string): Promise<void> {
 
 /**
  * Keeps a value a task's request was answered with (a sign-in's token) as a sealed secret, sent only
- * where that request went and through the same proxy. A task may replace what a task saved, never
- * one you set.
+ * where that request went and through the same proxy, with the same rule for reads. A task may
+ * replace what a task saved, never one you set.
  */
-export async function keepFromAnswer(taskId: string, name: string, value: string, host: string, proxy: string | null): Promise<void> {
+export async function keepFromAnswer(taskId: string, name: string, value: string, host: string, proxy: string | null, readsDirect = false): Promise<void> {
 	await assertKeepable(name);
 	const all = await stored();
 	const current = all[name];
 	if (!current && Object.keys(all).length >= MAX_SECRETS) throw new InvalidInputError(`Up to ${MAX_SECRETS} sealed secrets can be kept`);
-	all[name] = { value: seal(value), hosts: [host.toLowerCase()], proxy: proxy ? seal(proxy) : null, source: { by: 'task', taskId }, updatedAt: new Date().toISOString() };
+	all[name] = {
+		value: seal(value),
+		hosts: [host.toLowerCase()],
+		proxy: proxy ? seal(proxy) : null,
+		...(proxy && readsDirect ? { readsDirect: true } : {}),
+		source: { by: 'task', taskId },
+		updatedAt: new Date().toISOString(),
+	};
 	await setSetting(KEY, all);
 	announce({ kind: 'connectors' });
 }

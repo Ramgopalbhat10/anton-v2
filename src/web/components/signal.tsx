@@ -313,6 +313,9 @@ export function MenuItem({
 	);
 }
 
+/** Items that belong together, under a MenuLabel, so a screen reader says the group's name. */
+export const MenuGroup = MenuPrimitive.Group;
+
 /** A menu item that opens a menu of its own beside it. */
 export const MenuSub = MenuPrimitive.Sub;
 

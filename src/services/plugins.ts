@@ -20,6 +20,8 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import type { FileHit } from '../core/ports.ts';
 import { getProviders } from '../providers/index.ts';
+import { ADDED_FILES } from './added-files.ts';
+import { readOutput } from './checkpoints.ts';
 import { logProblem } from './log.ts';
 import { snapshotFiles } from './repo-snapshot.ts';
 
@@ -130,6 +132,10 @@ async function installed(id: string): Promise<InstalledPlugin> {
  * which updates it.
  */
 export async function installPlugin(input: PluginPick | { plugin: string }): Promise<InstalledPlugin> {
+	if ('plugin' in input) {
+		const saved = await installed(input.plugin);
+		if (isAdded(saved.source)) return installAddedSkill(saved.source.path);
+	}
 	const pick = 'plugin' in input ? pickOf(await installed(input.plugin)) : input;
 	const { source, named, fallback, marketplace } = await resolve(pick);
 	const { files, sha } = await filesAt(source.repo, source.ref);
@@ -139,6 +145,42 @@ export async function installPlugin(input: PluginPick | { plugin: string }): Pro
 		throw new InvalidInputError(`${plugin.name} has no skills Anton can use.${servers}${plugin.skipped.length ? ` ${plugin.skipped.join('; ')}` : ''}`);
 	}
 	return savePlugin({ id: idFor({ ...source, ref: null }, named), ...plugin, source, sha, marketplace, pick });
+}
+
+/** The source of a skill installed from a file on the Artifacts page: no repository, the file's path in the Library. */
+const ADDED_SOURCE = ADDED_FILES;
+
+export const isAdded = (source: PluginSource) => source.repo === ADDED_SOURCE;
+
+/**
+ * Installs a file you added on the Artifacts page as a skill. The file is a SKILL.md by content, not by
+ * name: its front matter names the skill and says when to use it, so a file called IndMoney-API.md
+ * installs as the skill its `name:` gives. Installing the same file again updates it.
+ */
+export async function installAddedSkill(path: string): Promise<InstalledPlugin> {
+	const bytes = await readOutput(ADDED_FILES, path);
+	if (!bytes) throw new NotFoundError(`${path} is not among the files you added`);
+	const files: RepoFiles = { paths: ['SKILL.md'], read: async (at) => (at === 'SKILL.md' ? bytes : null) };
+	const skill = await readSkill(files, '');
+	if (typeof skill === 'string') {
+		const why = skill.startsWith('. has no') || skill.startsWith(':') ? 'it has no name: line in its front matter' : skill;
+		throw new InvalidInputError(`${path} cannot be installed as a skill: ${why}. A skill file starts with ---, then name: and description: lines, then --- again.`);
+	}
+	const source: PluginSource = { repo: ADDED_SOURCE, path, ref: null };
+	const sha = createHash('sha1').update(bytes).digest('hex');
+	const { folder: _folder, ...parsed } = skill;
+	return savePlugin({
+		id: idFor(source, null),
+		name: skill.name,
+		description: skill.description,
+		source,
+		sha,
+		marketplace: null,
+		pick: null,
+		skills: [{ ...parsed, omitted: [] }],
+		mcpServers: [],
+		skipped: [],
+	});
 }
 
 /** Files listed for a plugin; a whole large repository is cut short. */
@@ -175,6 +217,7 @@ export type PluginPreview = {
  */
 export async function previewPlugin(input: PluginPick | { plugin: string }): Promise<PluginPreview> {
 	const saved = 'plugin' in input ? await installed(input.plugin) : null;
+	if (saved && isAdded(saved.source)) throw new InvalidInputError(`${saved.name} was installed from ${saved.source.path} on the Artifacts page; open that file to read it`);
 	const pick = saved ? pickOf(saved) : (input as PluginPick);
 	const { source, named, fallback, marketplace } = await resolve(pick);
 	const { files, sha } = await filesAt(source.repo, saved?.sha ?? source.ref);
