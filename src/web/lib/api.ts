@@ -47,8 +47,8 @@ export type RunOn = 'sandbox' | 'host';
 export type RunnersView = { sandbox: string; host: boolean };
 
 /** A sealed secret, which the agent can use in http_request but never read (src/services/sealed-secrets.ts). */
-export type SealedSecret = { name: string; hosts: string[]; proxy: string | null; source: { by: 'you' } | { by: 'task'; taskId: string }; updatedAt: string };
-export type SealedSecretChange = { value?: string | null; hosts: string[]; proxy?: string | null };
+export type SealedSecret = { name: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: { by: 'you' } | { by: 'task'; taskId: string }; updatedAt: string };
+export type SealedSecretChange = { value?: string | null; hosts: string[]; proxy?: string | null; readsDirect?: boolean | null };
 
 /** A task's model and reasoning level; null reasoning runs the model's default. */
 export type ModelChoice = { model: string; reasoning: Reasoning | null };
@@ -897,6 +897,8 @@ export const api = {
 			body: file,
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
+	/** Installs a file you added as a skill: its front matter names it, whatever the file is called. */
+	installAddedSkill: (path: string) => post<{ plugins: Plugin[] }>('/api/artifacts/skill', { path }),
 	outputText: async (id: string, path: string) => (await request(outputUrl(id, path))).text(),
 	/** Adds a file to the task's Library, under uploads/. */
 	uploadOutput: (id: string, file: File) =>

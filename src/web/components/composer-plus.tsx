@@ -1,13 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Cloud, FileStack, Paperclip, Plug, Plus, Server, Settings2, TriangleAlert } from 'lucide-react';
+import { Cloud, FileStack, Paperclip, Plug, Plus, Search, Server, Settings2, TriangleAlert } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Attachments } from '@/components/attachments';
 import { GMAIL, MarkTile, useServerMark } from '@/components/brand-marks';
-import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
+import { Icon, IconBtn, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { api, type Artifact, outputUrl, type RunOn } from '@/lib/api';
+import { categoryInfo, categoryOf } from '@/lib/artifacts';
 import { catalogEntryFor } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, setConnectorOn } from '@/lib/connectors';
+import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** A switch drawn inside a menu row, which toggles as the row is picked. */
@@ -82,19 +84,56 @@ function RunOnMenu({ run }: { run: RunChoice }) {
 	);
 }
 
-/** The most this menu lists; the Artifacts page has the rest. */
+/** The most each group lists; a search finds the rest, and the Artifacts page has them all. */
 const ARTIFACTS_SHOWN = 30;
 
-/** Files you added first, then what the agent made, newest first. */
-const forContext = (artifacts: Artifact[]) => [...artifacts.filter((item) => item.added), ...artifacts.filter((item) => !item.added)].slice(0, ARTIFACTS_SHOWN);
+const matchesQuery = (artifact: Artifact, query: string) => `${artifact.title} ${artifact.path} ${artifact.task.title}`.toLowerCase().includes(query);
+
+/** Files you added, then what the agent made, newest first, each narrowed by the search. */
+function forContext(artifacts: Artifact[], query: string) {
+	const needle = query.trim().toLowerCase();
+	const found = needle ? artifacts.filter((item) => matchesQuery(item, needle)) : artifacts;
+	return { added: found.filter((item) => item.added).slice(0, ARTIFACTS_SHOWN), made: found.filter((item) => !item.added).slice(0, ARTIFACTS_SHOWN) };
+}
+
+const sizeText = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
+
+/** One file: its kind's icon, its name, and where it came from (or how big it is, for one you added). */
+function ArtifactRow({ artifact, added, onAdd }: { artifact: Artifact; added: boolean; onAdd: (artifact: Artifact) => void }) {
+	const info = categoryInfo(categoryOf(artifact.path));
+	const detail = artifact.added ? sizeText(artifact.size) : artifact.task.title;
+	return (
+		<MenuItem
+			checked={added}
+			className="h-auto! items-start py-1.5"
+			// Stays open, so several can be added in a row.
+			onSelect={(event) => {
+				event.preventDefault();
+				onAdd(artifact);
+			}}
+		>
+			<span className="flex min-w-0 items-start gap-2">
+				<Icon icon={info.icon} size={14} className={cn('mt-0.5 shrink-0', info.tone)} />
+				<span className="flex min-w-0 flex-col gap-0.5">
+					<span className="truncate text-[13px] leading-[17px]">{artifact.title}</span>
+					<span className="truncate text-[11px] leading-[14px] text-(--text-tertiary)">
+						{detail} · {age(new Date(artifact.mtimeMs).toISOString())}
+					</span>
+				</span>
+			</span>
+		</MenuItem>
+	);
+}
 
 /** Attaches a file from the Artifacts page to the message, as if it were picked from disk. */
 function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 	const [open, setOpen] = useState(false);
+	const [query, setQuery] = useState('');
 	const [problem, setProblem] = useState<string | null>(null);
 	const [added, setAdded] = useState<Set<string>>(new Set());
 	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, enabled: open, staleTime: 30_000 });
-	const items = forContext(artifacts.data?.artifacts ?? []);
+	const all = artifacts.data?.artifacts ?? [];
+	const groups = forContext(all, query);
 	const keyOf = (artifact: Artifact) => `${artifact.sessionId}\n${artifact.path}`;
 	const add = async (artifact: Artifact) => {
 		setProblem(null);
@@ -109,33 +148,58 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 			setProblem(error instanceof Error ? error.message : String(error));
 		}
 	};
+	const note = (text: string) => <p className="m-0 px-2 py-1.5 text-[12px] leading-[16px] text-pretty text-(--text-tertiary)">{text}</p>;
 	return (
-		<MenuSub open={open} onOpenChange={setOpen}>
+		<MenuSub
+			open={open}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setQuery('');
+			}}
+		>
 			<MenuSubTrigger icon={FileStack} disabled={attachments.full}>
 				From Artifacts
 			</MenuSubTrigger>
-			<MenuSubContent className="max-h-[360px] w-[280px] overflow-y-auto">
-				{artifacts.isPending ? <p className="m-0 px-2 py-1.5 text-[12px] text-(--text-tertiary)">Loading…</p> : null}
-				{artifacts.isSuccess && !items.length ? (
-					<p className="m-0 px-2 py-1.5 text-[12px] text-pretty text-(--text-tertiary)">Nothing yet. Add files on the Artifacts page, such as a skill's SKILL.md.</p>
+			<MenuSubContent className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] w-[320px] gap-0 overflow-hidden p-0">
+				{all.length > 8 ? (
+					<div className="flex items-center gap-2 border-b border-(--border-subtle) px-3 py-2">
+						<Icon icon={Search} size={13} className="shrink-0 text-(--icon-tertiary)" />
+						<input
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							// The menu's own keys (typeahead, arrows, Escape) stay out of the field.
+							onKeyDown={(event) => {
+								if (event.key !== 'ArrowDown' && event.key !== 'Escape') event.stopPropagation();
+							}}
+							placeholder="Search files"
+							aria-label="Search artifacts"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+						/>
+					</div>
 				) : null}
-				{items.map((artifact) => (
-					<MenuItem
-						key={keyOf(artifact)}
-						checked={added.has(keyOf(artifact))}
-						// Stays open, so several can be added in a row.
-						onSelect={(event) => {
-							event.preventDefault();
-							void add(artifact);
-						}}
-					>
-						<span className="flex min-w-0 flex-col">
-							<span className="truncate">{artifact.title}</span>
-							<span className="truncate text-[11px] text-(--text-tertiary)">{artifact.task.title}</span>
-						</span>
-					</MenuItem>
-				))}
-				{problem ? <p className="m-0 px-2 pt-1 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{problem}</p> : null}
+				<div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+					{artifacts.isPending ? note('Loading…') : null}
+					{artifacts.isSuccess && !all.length ? note("Nothing yet. Add files on the Artifacts page, such as a skill's SKILL.md.") : null}
+					{artifacts.isSuccess && all.length > 0 && !groups.added.length && !groups.made.length ? note(`No file matches "${query.trim()}".`) : null}
+					{groups.added.length ? (
+						<MenuGroup>
+							<MenuLabel>Added by you</MenuLabel>
+							{groups.added.map((artifact) => (
+								<ArtifactRow key={keyOf(artifact)} artifact={artifact} added={added.has(keyOf(artifact))} onAdd={(item) => void add(item)} />
+							))}
+						</MenuGroup>
+					) : null}
+					{groups.added.length && groups.made.length ? <MenuSeparator /> : null}
+					{groups.made.length ? (
+						<MenuGroup>
+							<MenuLabel>From tasks</MenuLabel>
+							{groups.made.map((artifact) => (
+								<ArtifactRow key={keyOf(artifact)} artifact={artifact} added={added.has(keyOf(artifact))} onAdd={(item) => void add(item)} />
+							))}
+						</MenuGroup>
+					) : null}
+				</div>
+				{problem ? <p className="m-0 border-t border-(--border-subtle) px-3 py-1.5 text-[11px] leading-[15px] text-(--danger-text)">{problem}</p> : null}
 			</MenuSubContent>
 		</MenuSub>
 	);

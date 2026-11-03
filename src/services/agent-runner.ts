@@ -31,6 +31,11 @@ export function connectorsFor(id: string): SetUpConnector[] {
 	return connectors.get(id) ?? [];
 }
 
+/** The tasks whose commands run on This server rather than in a sandbox. */
+const onHost = new Set<string>();
+
+export const runsOnHost = (id: string): boolean => onHost.has(id);
+
 /** The sealed secrets the agent may name in http_request, read as each message starts. */
 const sealedSecrets = new Map<string, SealedSecretBrief[]>();
 
@@ -144,6 +149,8 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: space.memory });
 	else threadProjects.delete(id);
 	if (session?.machineState) workspaces.add(id);
+	if (session?.runOn === 'host') onHost.add(id);
+	else onHost.delete(id);
 	if (session && !session.projectId) chats.add(id);
 	else chats.delete(id);
 	if (session?.planMode) planning.add(id);

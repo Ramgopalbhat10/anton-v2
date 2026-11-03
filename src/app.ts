@@ -42,6 +42,7 @@ import {
 	installPlugin,
 	marketplaces,
 	pluginFile,
+	installAddedSkill,
 	pluginsView,
 	previewPlugin,
 	removePlugin,
@@ -427,6 +428,7 @@ app.put('/api/secrets/sealed/:name', async (c) => {
 			value: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(16_384)))),
 			hosts: v.pipe(v.array(v.pipe(v.string(), v.maxLength(253))), v.maxLength(20)),
 			proxy: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2_000)))),
+			readsDirect: v.optional(v.nullable(v.boolean())),
 		}),
 	);
 	return c.json({ secrets: await saveSealedSecret({ name: c.req.param('name'), ...input }) });
@@ -999,6 +1001,12 @@ app.post('/api/artifacts', async (c) => {
 	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added.');
 	const body = new Uint8Array(await c.req.arrayBuffer());
 	return c.json({ path: await addFile(name, body, c.req.header('content-type') || undefined), sessionId: ADDED_FILES });
+});
+// A file you added, installed as a skill: its front matter names it, whatever the file is called.
+app.post('/api/artifacts/skill', async (c) => {
+	const { path } = await body(c, v.object({ path: v.pipe(v.string(), v.minLength(1), v.maxLength(500)) }));
+	await installAddedSkill(path);
+	return c.json({ plugins: await pluginsView() });
 });
 // Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {

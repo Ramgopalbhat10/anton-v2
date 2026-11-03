@@ -173,8 +173,12 @@ describe('Composer', () => {
 		setup();
 		await userEvent.click(screen.getByRole('button', { name: 'Add files and connectors' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /From Artifacts/ }));
-		const items = await screen.findAllByRole('menuitem', { name: /Added by you|Other task/ });
+		// Files you added come first, in a group of their own, then what tasks made.
+		expect(await screen.findByText('Added by you')).toBeTruthy();
+		expect(screen.getByText('From tasks')).toBeTruthy();
+		const items = await screen.findAllByRole('menuitem', { name: /SKILL\.md|old\.md/ });
 		expect(items[0]?.textContent).toContain('SKILL.md');
+		expect(items[1]?.textContent).toContain('Other task');
 		await userEvent.click(items[0]!);
 		await waitFor(() => expect(fetched).toHaveBeenCalledWith('/api/sessions/added-files/output?path=SKILL.md'));
 		// Behind the menu, which stays open so more can be added.

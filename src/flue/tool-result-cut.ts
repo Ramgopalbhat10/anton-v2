@@ -1,5 +1,6 @@
 import { type FlueExecutionContext, type FlueExecutionOperation, instrument } from '@flue/runtime';
 import { cutHeadAndTail, cutResult } from '../services/tool-results.ts';
+import { skillFilesReady } from '../services/skill-files.ts';
 import { skillInParts } from '../services/skill-parts.ts';
 import { digestResult, WEB_TOOLS } from '../services/web-digest.ts';
 
@@ -30,7 +31,12 @@ export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, c
 	if (!subagent && !isOwnConversation(ctx)) return next();
 	if (WEB_TOOLS.has(toolName)) return next().then((result) => digestResult(ctx.instanceId!, toolCallId, toolName, result, subagent));
 	// A skill comes whole but for its file list, or in sections to read on from; a subagent's is never cut.
-	if (toolName === SKILL_TOOL) return next().then((result) => skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!));
+	// Its files are copied into the sandbox in the background as it starts (skill-files.ts); a skill in use waits for them.
+	if (toolName === SKILL_TOOL)
+		return next().then(async (result) => {
+			await skillFilesReady(ctx.instanceId!);
+			return skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!);
+		});
 	if (subagent) return next().then((result) => cutHeadAndTail(toolName, result));
 	return next().then((result) => cutResult(ctx.instanceId!, toolCallId, toolName, result));
 }

@@ -73,3 +73,29 @@ test('files you add on the Artifacts page are listed there, from no task, and re
 	await removeOutput(ADDED_FILES, 'SKILL-2.md');
 	assert.deepEqual((await listArtifacts()).filter((artifact) => artifact.added).map((artifact) => artifact.path), ['SKILL.md']);
 });
+
+test('a file you added installs as the skill its front matter names, whatever the file is called', async () => {
+	const { addFile } = await import('../src/services/added-files.ts');
+	const { installAddedSkill, installPlugin, pluginsView } = await import('../src/services/plugins.ts');
+	const first = new TextEncoder().encode('---\nname: indstocks\ndescription: Read an INDstocks account.\n---\n# INDstocks\nUse http_request.\n');
+	const path = await addFile('IndMoney-API.md', first, 'text/markdown');
+	const plugin = await installAddedSkill(path);
+	assert.deepEqual([plugin.name, plugin.source, plugin.skills.map((skill) => [skill.name, skill.description, skill.instructions])], [
+		'indstocks',
+		{ repo: 'added-files', path: 'IndMoney-API.md', ref: null },
+		[['indstocks', 'Read an INDstocks account.', '# INDstocks\nUse http_request.']],
+	]);
+	// Two files can share a name: each installs as its own skill.
+	const other = await addFile('IndMoney-API.md', new TextEncoder().encode('---\nname: indstocks-intraday\ndescription: Day trade.\n---\nRules.\n'), 'text/markdown');
+	assert.equal(other, 'IndMoney-API-2.md');
+	await installAddedSkill(other);
+	assert.deepEqual((await pluginsView()).map((item) => item.name).sort(), ['indstocks', 'indstocks-intraday']);
+	// Installing it again, from the Skills page too, updates it in place.
+	const again = await installPlugin({ plugin: plugin.id });
+	assert.equal(again.id, plugin.id);
+	assert.equal((await pluginsView()).length, 2);
+	// A file with no front matter is not a skill.
+	const plain = await addFile('notes.md', new TextEncoder().encode('# Just notes\n'), 'text/markdown');
+	await assert.rejects(installAddedSkill(plain), /no name: line in its front matter/);
+	await assert.rejects(installAddedSkill('missing.md'), /not among the files you added/);
+});

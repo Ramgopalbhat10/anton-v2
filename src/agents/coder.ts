@@ -40,6 +40,7 @@ import {
 	isChat,
 	isPlanning,
 	connectorsFor,
+	runsOnHost,
 	sealedSecretsFor,
 	mcpServersFor,
 	memoryFor,
@@ -62,7 +63,8 @@ import { pageGuide, saveRender } from '../services/renders.ts';
 import { generateImage, imagesAvailable, MAX_REFERENCES } from '../services/images.ts';
 import { UI_LIMITS } from '../core/ui-spec.ts';
 import { pluginSkillsFor, repoInstructionsFor, skillsFor } from '../services/plugins.ts';
-import { copySkillFiles } from '../services/skill-files.ts';
+import { toolsOnHost } from '../services/runners.ts';
+import { copySkillFilesSoon } from '../services/skill-files.ts';
 import { secretsToHide } from '../services/secrets.ts';
 import { httpRequest } from '../services/http-request.ts';
 import type { SealedSecretBrief } from '../services/sealed-secrets.ts';
@@ -276,7 +278,7 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
 			// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
-			await copySkillFiles(machine, pluginSkillsFor(id)).catch((error: unknown) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
+			copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
 			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
 		},
 		// `read` shows an image, as a picture or in the vision model's words.
@@ -854,7 +856,8 @@ function useAsk(id: string) {
 			}),
 			run: async ({ data }) => {
 				noteAsk(id, data.question);
-				return { output: 'The user sees your question with its options and answers with their next message. Stop here and wait; write nothing after this.' };
+				// The reply ends here: another model call would only write an empty message after the card.
+				return { output: 'The user sees your question with its options and answers with their next message. Stop here and wait; write nothing after this.', terminate: true };
 			},
 		}),
 	);
@@ -1047,8 +1050,13 @@ function useHttpRequest(id: string) {
 /** The sealed secrets, by name and where each may go; never a value. */
 function sealedHint(secrets: SealedSecretBrief[]): string {
 	if (!secrets.length) return '';
-	const list = secrets.map((secret) => `${secret.name} (to ${secret.hosts.join(', ')}${secret.proxied ? ', through its proxy' : ''})`).join('; ');
-	return `The user keeps sealed secrets you can use but never read: ${list}. Use them only through http_request, as {{secret:NAME}} or {{totp:NAME}}; they are not in your shell or files, so never look for them there or ask the user to paste them. `;
+	// Only the ones the user set: a task that keeps a token adds one mid-task, and naming it here would change the prompt and lose its cache.
+	const list = secrets
+		.filter((secret) => secret.byYou)
+		.map((secret) => `${secret.name} (to ${secret.hosts.join(', ')}${secret.proxied ? ', through its proxy' : ''})`)
+		.join('; ');
+	const kept = 'Tasks may have kept more from earlier answers, such as a sign-in token: try the name a skill gives, and http_request says if it is not set.';
+	return `The user keeps sealed secrets you can use but never read${list ? `: ${list}` : ''}. ${kept} Use them only through http_request, as {{secret:NAME}} or {{totp:NAME}}; they are not in your shell or files, so never look for them there or ask the user to paste them. `;
 }
 
 /** The connectors the user set up, named so the agent reaches for them; whether each is on is connector_tools' to say. */
@@ -1118,7 +1126,7 @@ function useProposePlan(id: string) {
 			}),
 			async run({ data }) {
 				notePlan(id, data.plan);
-				return { output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.' };
+				return { output: 'The user sees the plan with an Approve button. Stop here; they will approve it or ask for changes.', terminate: true };
 			},
 		}),
 	);
@@ -1149,6 +1157,15 @@ const SKILL_FILES_HINT =
 function skillHint(id: string, workspace: boolean): string {
 	const copied = workspace && pluginSkillsFor(id).some((skill) => Object.keys(skill.files).length > 0);
 	return copied ? `${SKILL_HINT} ${SKILL_FILES_HINT}` : SKILL_HINT;
+}
+
+/** What a task on This server can count on: it runs in a folder on Anton's own machine, with what that machine has. */
+function hostHint(): string {
+	const { found, missing } = toolsOnHost();
+	return (
+		`Your commands run on Anton's own server, in a folder, not in a sandbox: ${found.join(', ')} are installed${missing.length ? `; ${missing.join(', ')} are not` : ''}. ` +
+		'Use what is there (node for scripts when python3 is missing), check anything else with command -v first, and never install system packages. '
+	);
 }
 
 const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
@@ -1472,11 +1489,11 @@ export function Coder({ id }: AgentProps) {
 	});
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
-		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
+		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
 	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
 	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
 
 /** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */

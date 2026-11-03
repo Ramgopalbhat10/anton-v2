@@ -14,7 +14,7 @@ delete process.env.ANTON_SECRETS_KEY;
 
 const sealed = await import('../src/services/sealed-secrets.ts');
 const { httpRequest } = await import('../src/services/http-request.ts');
-const { egressFetch, proxyLabel, proxyParts } = await import('../src/services/egress.ts');
+const { closeEgressConnections, egressFetch, proxyLabel, proxyParts } = await import('../src/services/egress.ts');
 const { totp, base32Bytes } = await import('../src/core/totp.ts');
 const { getSetting } = await import('../src/db/settings.ts');
 const { setProviders } = await import('../src/providers/index.ts');
@@ -22,7 +22,10 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { readOutput } = await import('../src/services/checkpoints.ts');
 setProviders({ sandbox: { name: 'none', find: async () => null, running: async () => new Set() } as never, store: diskStore(path.join(dir, 'objects')), git: {} as never, models: { name: 'x', list: async () => [] } });
 
-after(() => rmSync(dir, { recursive: true, force: true }));
+after(() => {
+	closeEgressConnections();
+	rmSync(dir, { recursive: true, force: true });
+});
 
 /** A self-signed certificate for localhost, or null where openssl is missing. */
 function certificate(): { key: string; cert: string } | null {
@@ -168,6 +171,64 @@ test('http_request fills secrets in on the server, through a tunnel the proxy ca
 	await assert.rejects(httpRequest('task-1', { url: `${base}/generate/token`, method: 'POST', body: '{}', save: [{ name: 'BROKER_KEY', from: 'status' }] }, trust), /set in Settings/);
 	assert.equal(seen.length, before, 'a request whose answer could not be kept is not sent');
 	assert.equal((await sealed.openSecrets(['BROKER_KEY'])).get('BROKER_KEY')?.value, 'client-key-1');
+});
+
+test('a tunnel is kept for the next request, reads can skip the proxy, and only useful headers are shown', async (t) => {
+	const tls = certificate();
+	if (!tls) return t.skip('openssl is not installed');
+	const methods: string[] = [];
+	const api = https.createServer(tls, (request, response) => {
+		methods.push(request.method ?? '');
+		request.resume();
+		request.on('end', () => {
+			response.setHeader('Content-Type', 'application/json');
+			response.setHeader('X-Kong-Upstream-Latency', '12');
+			response.setHeader('Strict-Transport-Security', 'max-age=1');
+			response.setHeader('X-RateLimit-Remaining', '4');
+			response.end('{"status":"success"}');
+		});
+	});
+	const apiPort = await listen(api);
+	const connects: string[] = [];
+	const proxy = http.createServer().on('connect', (request: http.IncomingMessage, socket: net.Socket) => {
+		connects.push(request.url ?? '');
+		const upstream = net.connect(Number(request.url!.split(':')[1]), '127.0.0.1', () => {
+			socket.write('HTTP/1.1 200 OK\r\n\r\n');
+			socket.pipe(upstream).pipe(socket);
+		});
+	});
+	const proxyPort = await listen(proxy);
+	t.after(() => {
+		closeEgressConnections();
+		api.close();
+		proxy.close();
+	});
+	const base = `https://localhost:${apiPort}`;
+	const trust = { trust: { ca: tls.cert } };
+	await sealed.saveSealedSecret({ name: 'REUSE_TOKEN', value: 'reuse-token-1', hosts: ['localhost'], proxy: `http://127.0.0.1:${proxyPort}` });
+
+	const first = await httpRequest('task-2', { url: `${base}/a`, headers: { Authorization: '{{secret:REUSE_TOKEN}}' } }, trust);
+	await httpRequest('task-2', { url: `${base}/b`, headers: { Authorization: '{{secret:REUSE_TOKEN}}' } }, trust);
+	await httpRequest('task-2', { url: `${base}/order`, method: 'POST', body: '{}', headers: { Authorization: '{{secret:REUSE_TOKEN}}' } }, trust);
+	assert.equal(connects.length, 1, 'three requests, one tunnel');
+	assert.deepEqual(methods, ['GET', 'GET', 'POST']);
+	assert.match(first, /content-type: application\/json/);
+	assert.match(first, /x-ratelimit-remaining: 4/);
+	assert.ok(!/x-kong|strict-transport-security/i.test(first), 'gateway and security headers are left out');
+
+	// With reads straight out, a GET skips the proxy and a POST still takes it.
+	const [view] = (await sealed.saveSealedSecret({ name: 'REUSE_TOKEN', hosts: ['localhost'], readsDirect: true })).filter((secret) => secret.name === 'REUSE_TOKEN');
+	assert.equal(view?.readsDirect, true);
+	closeEgressConnections();
+	connects.length = 0;
+	await httpRequest('task-2', { url: `${base}/c`, headers: { Authorization: '{{secret:REUSE_TOKEN}}' } }, trust);
+	assert.equal(connects.length, 0, 'the read went straight out');
+	await httpRequest('task-2', { url: `${base}/order`, method: 'POST', body: '{}', headers: { Authorization: '{{secret:REUSE_TOKEN}}' } }, trust);
+	assert.equal(connects.length, 1, 'the change went through the proxy');
+	// Without a proxy there is nothing to skip.
+	const [plain] = (await sealed.saveSealedSecret({ name: 'REUSE_TOKEN', hosts: ['localhost'], proxy: '' })).filter((secret) => secret.name === 'REUSE_TOKEN');
+	assert.equal(plain?.readsDirect, false);
+	await sealed.deleteSealedSecret('REUSE_TOKEN');
 });
 
 test('egress refuses a wrong proxy password, a host the proxy does not allow, and plain http through a proxy', async (t) => {

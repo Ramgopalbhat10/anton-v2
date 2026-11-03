@@ -2,9 +2,10 @@ import { CodemodeSandbox, type CodemodeJsonSchema, type CodemodeResult, type Cod
 import type { Question } from '../core/ports.ts';
 import { redactor } from '../core/redact.ts';
 import type { McpServer } from '../core/types.ts';
-import { connectorsFor, isWebServer, mcpServersFor } from './agent-runner.ts';
+import { connectorsFor, isWebServer, mcpServersFor, sealedSecretsFor } from './agent-runner.ts';
 import { mcpToolName } from './connector-tools.ts';
 import { ask, hasDecisionModel } from './decisions.ts';
+import { httpRequest } from './http-request.ts';
 import { logProblem } from './log.ts';
 import { enabledMcpServers } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
@@ -71,6 +72,35 @@ function repoTools(id: string): CodemodeTool[] {
 			inputSchema: { type: 'object', properties: { pattern: { type: 'string' }, ignoreCase: { type: 'boolean' }, ...FILTER }, required: ['pattern'] },
 			outputSchema: { type: 'string' },
 			execute: (args) => searchRepo(id, args as { pattern: string; ignoreCase?: boolean; path?: string; glob?: string; repo?: string }),
+		},
+	];
+}
+
+/** http_request, the same tool as the agent's own, for a task with sealed secrets: several reads in one program. */
+function httpTools(id: string): CodemodeTool[] {
+	if (!sealedSecretsFor(id).length) return [];
+	return [
+		{
+			name: 'http_request',
+			description:
+				"The http_request tool: one HTTP request from Anton's server with {{secret:NAME}} and {{totp:NAME}} filled in there. Resolves to the same text the tool answers (status, a few headers, the body, secrets hidden); a request that could not be sent throws.",
+			inputSchema: {
+				type: 'object',
+				properties: {
+					url: { type: 'string' },
+					method: { type: 'string', enum: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] },
+					headers: { type: 'object', additionalProperties: { type: 'string' } },
+					body: { type: 'string' },
+					to_file: { type: 'string', description: 'Write the body to this Library path instead of returning it' },
+					save: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, from: { type: 'string' } }, required: ['name', 'from'] } },
+				},
+				required: ['url'],
+			},
+			outputSchema: { type: 'string' },
+			execute: (args, { signal }) => {
+				const { to_file: toFile, ...rest } = args as { url: string; method?: string; headers?: Record<string, string>; body?: string; to_file?: string; save?: Array<{ name: string; from: string }> };
+				return httpRequest(id, { ...rest, toFile }, { signal });
+			},
 		},
 	];
 }
@@ -196,7 +226,7 @@ function searchGlobal(tools: () => CodemodeTool[]): CodemodeTool {
 
 /** Whether run_script has anything to offer: the repo, the decision model or an MCP server. */
 export function hasScriptTools(id: string, scope: ScriptScope): boolean {
-	return scope.repo || hasDecisionModel() || (scope.mcp && reachesServers(id));
+	return scope.repo || hasDecisionModel() || (scope.mcp && reachesServers(id)) || httpTools(id).length > 0;
 }
 
 /**
@@ -205,7 +235,7 @@ export function hasScriptTools(id: string, scope: ScriptScope): boolean {
  */
 export function scriptToolDescription(id: string, scope: ScriptScope): string {
 	const globals = [...(hasDecisionModel() ? [decideGlobal(id)] : []), ...(scope.mcp ? [searchGlobal(() => [])] : [])];
-	const declared = renderDeclarations({ tools: scope.repo ? repoTools(id) : [], globals });
+	const declared = renderDeclarations({ tools: [...(scope.repo ? repoTools(id) : []), ...httpTools(id)], globals });
 	const web = scope.mcp && mcpServersFor(id).some(isWebServer) ? ['The web search tools in your tool list (mcp__web__…) can be called here too, as tools.<that name>(args).'] : [];
 	const connected = scope.mcp && connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.codeMode);
 	const connectors = connected
@@ -267,7 +297,7 @@ export async function runScript(id: string, code: string, { repo, mcp, signal, o
 	const told = () => onCalls?.(calls.map((call) => ({ ...call })));
 	// Listing MCP tools may mean connecting, so only for programs that name one or search for one.
 	const reachesMcp = mcp && /mcp__|search_tools/.test(code);
-	const tools = [...(repo ? repoTools(id) : []), ...(reachesMcp ? await mcpTools(id) : [])];
+	const tools = [...(repo ? repoTools(id) : []), ...httpTools(id), ...(reachesMcp ? await mcpTools(id) : [])];
 	const sandbox = new CodemodeSandbox({
 		tools: tools.map((tool) => watched(tool, calls, told)),
 		globals: [...(hasDecisionModel() ? [watched(decideGlobal(id), calls, told)] : []), ...(mcp ? [searchGlobal(() => tools)] : [])],

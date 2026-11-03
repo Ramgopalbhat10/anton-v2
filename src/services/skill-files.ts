@@ -43,18 +43,40 @@ export async function copySkillFiles(machine: Machine, skills: MountedSkill[]): 
 	const mark = fingerprint(withFiles);
 	const current = await machine.exec(`cat ${quote(`${root}/${MARKER}`)} 2>/dev/null`);
 	if (text(current.stdout).trim() === mark) return;
-	const lines = ['set -e', `rm -rf ${quote(root)}`];
+	// Written beside the folder and moved into place at the end, so a command never sees half a copy.
+	const next = `${root}.next`;
+	const lines = ['set -e', `rm -rf ${quote(next)}`];
 	for (const skill of withFiles)
 		for (const [path, content] of Object.entries(skill.files)) {
-			const target = `${root}/${skill.name}/${path}`;
+			const target = `${next}/${skill.name}/${path}`;
 			const bytes = typeof content === 'string' ? Buffer.from(content) : Buffer.from(content.buffer, content.byteOffset, content.byteLength);
 			lines.push(`mkdir -p ${quote(target.slice(0, target.lastIndexOf('/')))}`, `base64 -d > ${quote(target)} <<'ANTON_SKILL_FILE'`, ...(bytes.toString('base64').match(/.{1,76}/g) ?? []), 'ANTON_SKILL_FILE');
 		}
-	lines.push(`printf %s ${quote(mark)} > ${quote(`${root}/${MARKER}`)}`, '');
+	lines.push(`mkdir -p ${quote(next)}`, `printf %s ${quote(mark)} > ${quote(`${next}/${MARKER}`)}`, `rm -rf ${quote(root)}`, `mv ${quote(next)} ${quote(root)}`, '');
 	const script = `${root}.sh`;
 	const result = await machine.exec(`cat > ${quote(script)} && bash ${quote(script)}; status=$?; rm -f ${quote(script)}; exit $status`, {
 		stdin: new TextEncoder().encode(lines.join('\n')),
 		timeoutMs: COPY_MS,
 	});
 	if (result.exitCode !== 0) throw new CommandError('copy the skills into the sandbox', result);
+}
+
+/** Each task's copy in flight, so a skill being activated can wait for its files. */
+const copies = new Map<string, Promise<void>>();
+
+/**
+ * Starts the copy without holding the sandbox start: a few MB of skills take tens of seconds, and
+ * most tasks never use a skill's files. `skillFilesReady` waits for it when a skill is activated.
+ */
+export function copySkillFilesSoon(id: string, machine: Machine, skills: MountedSkill[], onError: (error: unknown) => void): void {
+	const copy = copySkillFiles(machine, skills).catch(onError);
+	copies.set(id, copy);
+	void copy.finally(() => {
+		if (copies.get(id) === copy) copies.delete(id);
+	});
+}
+
+/** Resolves once the task's copy, if one is running, is done or given up. */
+export function skillFilesReady(id: string): Promise<void> {
+	return copies.get(id) ?? Promise.resolve();
 }
