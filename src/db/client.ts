@@ -3,6 +3,7 @@ import path from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { expandConfig, isInMemoryConfig } from '@libsql/core/config';
 import { config } from '../config.ts';
+import { logProblem } from '../services/log.ts';
 import { migrate } from './migrations.ts';
 
 let client: Client | undefined;
@@ -33,14 +34,38 @@ const BUSY_WAIT_MS = 5_000;
 export const isBusy = (error: unknown): boolean =>
 	error instanceof Error && (/^SQLITE_BUSY/.test(String((error as { code?: unknown }).code ?? '')) || /database is locked/i.test(error.message));
 
+/** A lock held this long is no checkpoint: something holds the database and every write fails until it lets go. */
+const STUCK_MS = 30_000;
+/** Since when statements have given up on a locked database, with none getting through; null while they do. */
+let lockedSince: number | null = null;
+let toldAt = 0;
+
+/** Says so, once a minute, when the database has refused every write for a while: Settings › Recent problems shows it, as does the console. */
+function noteGaveUp(now = Date.now()): void {
+	lockedSince ??= now;
+	if (now - lockedSince < STUCK_MS || now - toldAt < 60_000) return;
+	toldAt = now;
+	logProblem(
+		'error',
+		`The database has been locked for ${Math.round((now - lockedSince) / 1000)}s and nothing is being saved: replies, traces and usage are lost until it is freed. ` +
+			'Litestream (npm run start:backup) may be stuck holding it; restarting Anton frees it.',
+	);
+}
+
 /** Runs `work` again while the database is locked by another writer, for up to `waitMs`; a busy statement did nothing, so trying it again is safe. */
 export async function whenFree<T>(work: () => Promise<T>, waitMs = BUSY_WAIT_MS): Promise<T> {
 	const until = Date.now() + waitMs;
 	for (let pause = 10; ; pause = Math.min(pause * 2, 250)) {
 		try {
-			return await work();
+			const result = await work();
+			lockedSince = null;
+			return result;
 		} catch (error) {
-			if (!isBusy(error) || Date.now() + pause > until) throw error;
+			if (!isBusy(error)) throw error;
+			if (Date.now() + pause > until) {
+				noteGaveUp();
+				throw error;
+			}
 			await new Promise((resolve) => setTimeout(resolve, pause));
 		}
 	}

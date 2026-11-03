@@ -48,3 +48,26 @@ test('a write waits out another connection’s transaction on the same file', as
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test('a database that stays locked is reported once a minute, and a write getting through clears it', async (t) => {
+	const { recentProblems } = await import('../src/services/log.ts');
+	const stuck = () => recentProblems().filter((entry) => /database has been locked/.test(entry.message));
+	let now = 1_000_000;
+	t.mock.method(Date, 'now', () => now);
+	const giveUp = () => assert.rejects(whenFree(async () => { throw locked(); }, 0), /database is locked/);
+	await giveUp();
+	now += 20_000;
+	await giveUp();
+	assert.equal(stuck().length, 0, 'a lock of 20 seconds is not reported');
+	now += 15_000;
+	await giveUp();
+	assert.equal(stuck().length, 1);
+	assert.match(stuck()[0].message, /locked for 35s/);
+	now += 10_000;
+	await giveUp();
+	assert.equal(stuck().length, 1, 'once a minute');
+	await whenFree(async () => 'ok');
+	now += 120_000;
+	await giveUp();
+	assert.equal(stuck().length, 1, 'a write got through, so the count starts again');
+});
