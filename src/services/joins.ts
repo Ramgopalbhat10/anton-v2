@@ -61,18 +61,29 @@ export async function joinsFor(id: string): Promise<Join[]> {
 	}
 }
 
+/** Each task's latest joins write: the next waits for it, so two messages never read and write the list at once. */
+const writing = new Map<string, Promise<void>>();
+
 /**
  * For each message the agent is given: one given once the reply in hand has
  * run a tool joined that reply there, and is noted. A message that starts a
- * reply has nothing before it.
+ * reply has nothing before it. Where it joined is read as it is called; the
+ * write may finish later.
  */
-export async function noteDelivery(id: string, text: string, at = new Date()): Promise<void> {
+export function noteDelivery(id: string, text: string, at = new Date()): Promise<void> {
 	const reply = replies.get(id);
-	if (!reply) return;
-	try {
-		const join: Join = { text: text.trim().slice(0, JOIN_TEXT), afterTool: reply.tool, final: reply.final, at: at.toISOString() };
-		await setSessionJoins(id, JSON.stringify([...(await joinsFor(id)), join].slice(-MAX_JOINS)));
-	} catch (error) {
-		logProblem('warn', 'Could not note where a message joined the reply', error, id);
-	}
+	if (!reply) return Promise.resolve();
+	const join: Join = { text: text.trim().slice(0, JOIN_TEXT), afterTool: reply.tool, final: reply.final, at: at.toISOString() };
+	const next = (writing.get(id) ?? Promise.resolve()).then(async () => {
+		try {
+			await setSessionJoins(id, JSON.stringify([...(await joinsFor(id)), join].slice(-MAX_JOINS)));
+		} catch (error) {
+			logProblem('warn', 'Could not note where a message joined the reply', error, id);
+		}
+	});
+	writing.set(id, next);
+	void next.then(() => {
+		if (writing.get(id) === next) writing.delete(id);
+	});
+	return next;
 }

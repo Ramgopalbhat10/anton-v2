@@ -1146,7 +1146,9 @@ const APP_HINT =
 
 const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
-const SKILL_HINT = 'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start.';
+const SKILL_HINT =
+	'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start. ' +
+	"A skill you activated stays loaded: on later messages, work from its instructions above rather than activating it again, unless they are no longer in the conversation.";
 
 /** Where the sandbox keeps the installed skills' files, which `copySkillFiles` puts there. */
 const SKILL_FILES_HINT =
@@ -1328,11 +1330,22 @@ const PLAN_PROMPT = [
  */
 function useLatestInput(id: string) {
 	const delivery = useDelivery();
-	useAgentStart(async () => {
+	useAgentStart(() => {
 		if (delivery.kind !== 'user') return;
-		await noteDelivery(id, delivery.body);
 		noteRequest(id, delivery.body);
-		await recordLatestInput(id, delivery.body);
+		// The card's bookkeeping: the reply starts without waiting on the database, which can be busy for seconds.
+		inBackground(id, Promise.all([noteDelivery(id, delivery.body), recordLatestInput(id, delivery.body)]));
+	});
+}
+
+/** Each task's bookkeeping writes still in hand, which what the reply leaves is written after (`followUp`). */
+const bookkeeping = new Map<string, Promise<unknown>>();
+
+function inBackground(id: string, work: Promise<unknown>): void {
+	const next = Promise.all([bookkeeping.get(id), work]).catch(() => undefined);
+	bookkeeping.set(id, next);
+	void next.then(() => {
+		if (bookkeeping.get(id) === next) bookkeeping.delete(id);
 	});
 }
 
@@ -1359,6 +1372,8 @@ const followingUp = new Set<string>();
 
 /** Once a reply has settled: whether it waits on you, then a project's thread reports and frees its slot, then your phone hears. */
 async function followUp(id: string): Promise<void> {
+	// The message's write clears what the task was asking; what this reply asks is written after it.
+	await bookkeeping.get(id);
 	const reply = await checkReply(id);
 	await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
 	await replyNotice(id, reply);
