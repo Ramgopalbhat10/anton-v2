@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Artifact } from '@/lib/api';
 
 const api = vi.hoisted(() => ({
@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
 	outputText: vi.fn(async () => '# Findings\n\nAll good.'),
 	outputs: vi.fn(async () => ({ source: 'saved', at: null, outputs: [], deleted: [] as string[] })),
 	deleteOutput: vi.fn(async () => undefined),
+	plugins: vi.fn(async () => ({ plugins: [], marketplaces: [] })),
+	downloadArtifacts: vi.fn(async () => new Blob(['zip'], { type: 'application/zip' })),
 	addArtifact: vi.fn(async () => ({ path: 'SKILL.md', sessionId: 'added-files' })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
@@ -33,8 +35,8 @@ const listed = [
 	artifact({ sessionId: 's2', path: 'screenshots/home.png', title: 'home.png', task: { title: 'Landing page', spaceId: 'p1', chat: false } }),
 ];
 
-function open(path: string) {
-	api.artifacts.mockResolvedValue({ artifacts: listed });
+function open(path: string, items = listed, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+	api.artifacts.mockResolvedValue({ artifacts: items });
 	const root = createRootRoute({ component: Outlet });
 	const tree = root.addChildren([
 		createRoute({
@@ -57,7 +59,7 @@ function open(path: string) {
 	]);
 	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
 	render(
-		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+		<QueryClientProvider client={client}>
 			<RouterProvider router={router} />
 		</QueryClientProvider>,
 	);
@@ -65,6 +67,170 @@ function open(path: string) {
 }
 
 describe('Artifacts', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		api.outputText.mockResolvedValue('# Findings\n\nAll good.');
+		api.deleteOutput.mockImplementation(async () => undefined);
+		api.downloadArtifacts.mockImplementation(async () => new Blob(['zip'], { type: 'application/zip' }));
+		api.outputs.mockResolvedValue({ source: 'saved', at: null, outputs: [], deleted: [] });
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('never runs apps in the gallery, even when their cards intersect', async () => {
+		const callbacks: IntersectionObserverCallback[] = [];
+		vi.stubGlobal('IntersectionObserver', class {
+			constructor(callback: IntersectionObserverCallback) { callbacks.push(callback); }
+			observe() {} disconnect() {}
+		});
+		open('/artifacts');
+		await screen.findByText('Budget planner');
+		const { act } = await import('@testing-library/react');
+		act(() => callbacks.forEach((cb) => cb([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)));
+		expect(document.querySelectorAll('iframe').length).toBe(0);
+		expect(screen.getByText('Open to run app')).toBeTruthy();
+		expect(api.outputText).not.toHaveBeenCalledWith('s1', 'renders/budget-planner-a1b2c3.html');
+	});
+
+	it('releases off-screen image and snippet previews, and leaves large images for the detail view', async () => {
+		const callbacks: IntersectionObserverCallback[] = [];
+		vi.stubGlobal('IntersectionObserver', class {
+			constructor(callback: IntersectionObserverCallback) { callbacks.push(callback); }
+			observe() {} disconnect() {}
+		});
+		const big = artifact({ path: 'huge.png', title: 'Huge image', size: 3 * 1024 * 1024 });
+		open('/artifacts', [...listed, big]);
+		await screen.findByText('Huge image');
+		expect(document.querySelectorAll('img').length).toBe(0);
+		const { act } = await import('@testing-library/react');
+		act(() => callbacks.forEach((cb) => cb([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)));
+		await waitFor(() => expect(api.outputText).toHaveBeenCalledWith('s1', 'reports/findings.md'));
+		expect(document.querySelectorAll('img').length).toBe(1);
+		act(() => callbacks.forEach((cb) => cb([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver)));
+		expect(document.querySelectorAll('img, pre').length).toBe(0);
+	});
+
+	it('keeps snippet data separate so opening a previewed document still fetches its full contents', async () => {
+		const callbacks: IntersectionObserverCallback[] = [];
+		vi.stubGlobal('IntersectionObserver', class {
+			constructor(callback: IntersectionObserverCallback) { callbacks.push(callback); }
+			observe() {} disconnect() {}
+		});
+		api.outputText.mockResolvedValue(`# Findings\n\n${'word '.repeat(400)}\n\nEND OF DOCUMENT`);
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		open('/artifacts', [listed[1]], client);
+		await screen.findByText('findings.md');
+		const { act } = await import('@testing-library/react');
+		act(() => callbacks.forEach((cb) => cb([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)));
+		await waitFor(() => expect(client.getQueryData(['artifact-snippet', 's1', 'reports/findings.md'])).toBeDefined());
+		expect(screen.queryByText('END OF DOCUMENT')).toBeNull();
+		expect(client.getQueryData(['output', 's1', 'reports/findings.md'])).toBeUndefined();
+		await userEvent.click(screen.getByRole('link', { name: 'findings.md, document from Budget task' }));
+		expect(await screen.findByText('END OF DOCUMENT')).toBeTruthy();
+	});
+
+	it('disables selection and conflicting bulk actions while a download is pending', async () => {
+		let reject!: (error: Error) => void;
+		api.downloadArtifacts.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+		open('/artifacts');
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		await userEvent.click(screen.getByRole('checkbox', { name: 'Select Budget planner' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Download ZIP' }));
+		expect((screen.getByRole('button', { name: 'Preparing ZIP…' }) as HTMLButtonElement).disabled).toBe(true);
+		expect((screen.getByRole('checkbox', { name: 'Select Budget planner' }) as HTMLInputElement).disabled).toBe(true);
+		for (const name of ['Delete selected', 'Done', 'Clear selection', 'Select all shown']) {
+			expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+		}
+		const { act } = await import('@testing-library/react');
+		act(() => reject(new Error('Offline')));
+		await screen.findByRole('alert');
+		expect((screen.getByRole('button', { name: 'Download ZIP' }) as HTMLButtonElement).disabled).toBe(false);
+	});
+
+	it('selects with the keyboard without opening a card; preserves and counts hidden selections', async () => {
+		const router = open('/artifacts');
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		const checkbox = screen.getByRole('checkbox', { name: 'Select Budget planner' });
+		checkbox.focus();
+		await userEvent.keyboard(' ');
+		expect((checkbox as HTMLInputElement).checked).toBe(true);
+		expect(router.state.location.pathname).toBe('/artifacts');
+		await userEvent.click(screen.getByRole('tab', { name: /Images/ }));
+		expect(screen.getByText('1 selected (1 hidden by filters)')).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Select all shown' }));
+		expect(screen.getByText('2 selected (1 hidden by filters)')).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+		expect(screen.getByText('0 selected')).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+		expect(screen.queryByRole('checkbox')).toBeNull();
+	});
+
+	it('downloads one ZIP for selected files, including matching paths from different tasks', async () => {
+		const duplicate = artifact({ sessionId: 's2', path: listed[0].path, title: 'Another planner' });
+		const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:zip');
+		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+		open('/artifacts', [listed[0], duplicate]);
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Select all shown' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Download ZIP' }));
+		await screen.findByText('ZIP download started.');
+		expect(api.downloadArtifacts).toHaveBeenCalledWith([{ sessionId: 's1', path: listed[0].path }, { sessionId: 's2', path: listed[0].path }]);
+		expect(create).toHaveBeenCalledTimes(1);
+		expect(click).toHaveBeenCalledTimes(1);
+		create.mockRestore(); click.mockRestore();
+	});
+
+	it('keeps selection and offers recovery after a failed ZIP download', async () => {
+		api.downloadArtifacts.mockRejectedValueOnce(new Error('File no longer available.'));
+		open('/artifacts');
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		await userEvent.click(screen.getByRole('checkbox', { name: 'Select Budget planner' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Download ZIP' }));
+		expect((await screen.findByRole('alert')).textContent).toContain('Try again');
+		expect(screen.getByText('1 selected')).toBeTruthy();
+	});
+
+	it('confirms bulk deletion, handles partial failure, invalidates tasks and retries only failures', async () => {
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		const invalidate = vi.spyOn(client, 'invalidateQueries');
+		open('/artifacts', listed, client);
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Select all shown' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+		expect(api.deleteOutput).not.toHaveBeenCalled();
+		await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(api.deleteOutput).not.toHaveBeenCalled();
+		api.deleteOutput.mockImplementation(async (_id?: string, path?: string) => { if (path === listed[1].path) throw new Error('Storage unavailable'); });
+		api.artifacts.mockResolvedValue({ artifacts: [listed[1]] });
+		await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+		expect((await screen.findByRole('alert')).textContent).toContain('1 could not be deleted');
+		expect(screen.getByText('2 artifacts deleted.')).toBeTruthy();
+		expect(screen.getByText('1 selected')).toBeTruthy();
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ['outputs', 's1'] });
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ['outputs', 's2'] });
+		api.deleteOutput.mockImplementation(async () => undefined);
+		api.artifacts.mockResolvedValue({ artifacts: [] });
+		await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+		await screen.findByText('1 artifact deleted.');
+		expect(api.deleteOutput).toHaveBeenCalledTimes(4);
+		expect(screen.getByText('0 selected')).toBeTruthy();
+	});
+
+	it('resets delete confirmation if selection changes and prunes externally deleted selections', async () => {
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		open('/artifacts', listed, client);
+		await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+		await userEvent.click(screen.getByRole('checkbox', { name: 'Select Budget planner' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+		await userEvent.click(screen.getByRole('checkbox', { name: 'Select findings.md' }));
+		expect(screen.queryByRole('button', { name: 'Confirm delete' })).toBeNull();
+		const { act } = await import('@testing-library/react');
+		act(() => client.setQueryData(['artifacts'], { artifacts: [listed[1], listed[2]] }));
+		await screen.findByText('1 selected');
+		expect(api.deleteOutput).not.toHaveBeenCalled();
+	});
+
 	it('adds files of your own, which show as from no task', async () => {
 		open('/artifacts');
 		await screen.findByText('findings.md');

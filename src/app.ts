@@ -20,6 +20,7 @@ import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
+import { artifactArchive } from './services/artifact-archive.ts';
 import { listArtifacts } from './services/artifacts.ts';
 import { ADDED_FILES, addFile } from './services/added-files.ts';
 import { hostRunnerAvailable } from './services/runners.ts';
@@ -993,6 +994,16 @@ app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
+// A single, bounded ZIP rather than many downloads (which browsers may block).
+app.post('/api/artifacts/download', async (c) => {
+	const { items } = await body(c, v.object({ items: v.pipe(v.array(v.object({
+		sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+		path: v.pipe(v.string(), v.minLength(1), v.maxLength(1000)),
+	})), v.minLength(1), v.maxLength(500)) }));
+	return c.body(new Uint8Array(await artifactArchive(items)), 200, {
+		'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="artifacts.zip"', 'Cache-Control': 'no-store',
+	});
+});
 // A file you add on the Artifacts page: the body is the file, its name in the query. It is read and deleted as the
 // Library of src/services/added-files.ts's holder, through the routes below.
 app.post('/api/artifacts', async (c) => {
