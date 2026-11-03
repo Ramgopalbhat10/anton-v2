@@ -2013,6 +2013,13 @@ test('repo memory: the agent adds notes, the user edits them, and every task rea
 	const next = await sessions.createSession({ projectId: project.id, title: 'Use it' });
 	await primeAgent(next.id);
 	assert.match(memoryFor(next.id), /Use pnpm, not npm\./);
+	// A note saved while the task runs reaches later tasks; this task's instructions stay as they were, so its prompt cache holds.
+	await remember(next.id, 'Lint with biome.');
+	await primeAgent(next.id);
+	assert.doesNotMatch(memoryFor(next.id), /biome/);
+	const later = await sessions.createSession({ projectId: project.id, title: 'Later' });
+	await primeAgent(later.id);
+	assert.match(memoryFor(later.id), /Lint with biome\./);
 
 	await saveMemory(project.id, '- Only this.\n');
 	assert.equal((await getProject(project.id))!.memory, '- Only this.');
@@ -2215,4 +2222,20 @@ test("a thread's own pull request merges from the PR panel by squashing", async 
 	} finally {
 		pullState = 'open';
 	}
+});
+
+test('a repository task starts its sandbox ahead of the agent, but a chat, a plan or a task with a machine does not', async () => {
+	const { prewarmMachine, isStarting, liveMachine } = await import('../src/services/workspace.ts');
+	const project = await addProject('acme/prewarm');
+	const chat = await sessions.createSession({ title: 'What is new?' });
+	const plan = await sessions.createSession({ projectId: project.id, title: 'Plan it', planMode: true });
+	for (const task of [chat, plan]) {
+		await prewarmMachine(task.id);
+		assert.equal(isStarting(task.id), false, task.title);
+		assert.equal(await liveMachine(task.id), null, task.title);
+	}
+	const work = await sessions.createSession({ projectId: project.id, title: 'Change it' });
+	await prewarmMachine(work.id);
+	assert.ok(await liveMachine(work.id), 'the repository task has its machine before the agent asks');
+	await sessions.stopSession(work.id);
 });

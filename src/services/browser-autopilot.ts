@@ -57,6 +57,7 @@ const MAX_FIELDS = 40;
 const PAGE_CHARS = 12_000;
 const DEFAULT_ACTIONS = 8;
 export const MAX_ACTIONS = 15;
+const DONE = 'Is the goal already reached? Say yes only if this page itself shows it (its address, title or content prove it), not because a link toward it is on the page.';
 
 /** A round ends the run as done or out of reach when the model is at least this sure. */
 const SURE = 0.8;
@@ -200,7 +201,15 @@ export async function autopilot(
 
 	for (let round = 0; ; round++) {
 		if (options.signal?.aborted) return end('stopped');
-		if (actions.length >= limit) return end('max_actions');
+		// At the limit, one last look says whether the actions taken reached the goal: a run held to one or two actions
+		// that did what was asked ends as done, not as a limit the agent reads as a failure and checks again.
+		if (actions.length >= limit) {
+			const last = await ask(
+				{ goal: input.goal.slice(0, 2000), url: state.url, title: state.title, actions_taken: actions.map((action) => action.what).join('\n'), page: state.snapshot.slice(0, PAGE_CHARS) },
+				{ done: { type: 'yes-no', instructions: DONE } },
+			);
+			return end((yesOf(last.done) ?? 0) >= SURE ? 'done' : 'max_actions');
+		}
 		const candidates = candidatesOf(state.snapshot);
 		const clicks = candidates.filter((candidate) => candidate.kind === 'click').slice(0, MAX_CLICKS);
 		const fields = candidates.filter((candidate) => candidate.kind === 'field').slice(0, MAX_FIELDS);
@@ -213,7 +222,7 @@ export async function autopilot(
 			...(actions.length ? { back: 'Go back to the previous page' } : {}),
 		};
 		const questions: Record<string, Question> = {
-			done: { type: 'yes-no', instructions: 'Is the goal already reached? Say yes only if this page itself shows it (its address, title or content prove it), not because a link toward it is on the page.' },
+			done: { type: 'yes-no', instructions: DONE },
 			stuck: { type: 'yes-no', instructions: 'Is the goal out of reach from this page: it needs signing in, the control it needs is missing, or the page shows an error?' },
 			action: { type: 'choice', instructions: 'Which kind of action should come next toward the goal?', options: kinds },
 		};

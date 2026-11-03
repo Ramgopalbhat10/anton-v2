@@ -1,4 +1,5 @@
 import type { Acquired, Machine, MachineOrigin } from '../core/ports.ts';
+import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
 import { quote, run, text } from '../core/shell.ts';
@@ -216,6 +217,18 @@ export function machineFor(id: string): Promise<Machine> {
 			announce({ kind: 'task', id, what: 'state' });
 		});
 	return pending;
+}
+
+/**
+ * Starts a repository task's machine as its agent starts a reply, so `start_workspace` finds it started or starting.
+ * Not for a chat (most never need one), a task planning or reviewing (they read first), one that runs on this server,
+ * or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.
+ */
+export async function prewarmMachine(id: string): Promise<void> {
+	if (!config.prewarmSandbox || machines.has(id)) return;
+	const session = await getSessionRecord(id);
+	if (!session?.projectId || session.machineState || session.planMode || session.review || session.runOn === 'host' || machines.has(id)) return;
+	await machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
 }
 
 /** The task's machine only if it is already running. */

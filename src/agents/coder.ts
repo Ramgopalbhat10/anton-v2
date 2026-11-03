@@ -77,7 +77,7 @@ import { finishTrace, startTrace } from '../services/response-trace.ts';
 import { saveTrace } from '../db/traces.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
-import { liveMachine, machineFor } from '../services/workspace.ts';
+import { liveMachine, machineFor, prewarmMachine } from '../services/workspace.ts';
 import { checkPreview } from '../services/preview-check.ts';
 import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -1217,6 +1217,14 @@ const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
 
+/**
+ * Everything the agent reads rides along on every later model call, and a tool result past the runtime's cut (about
+ * 50KB) loses its end, so reading is progressive: search, then the part that matters, then follow the links.
+ */
+const READ_HINT =
+	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
+	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
+
 /** Each step is a model call over the whole conversation, so changes the agent already knows go in one step, not one step each. */
 const EDIT_HINT =
 	'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list, and the edits to other files as calls in the same step. Read a file again only when you need lines you have not seen.';
@@ -1232,7 +1240,8 @@ const REQUIREMENTS_HINT =
 /** A focused check while iterating misses what a change breaks further off, and what the request named that no test covers yet. */
 const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
-	'Then run the whole test suite of the package or module you changed once (through the tester subagent when it is long), not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
+	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
+	'Start it in the background with its output in a log under /tmp (independent suites side by side), go on with what is left while it runs, and read its summary and failures from the log rather than its whole output. ' +
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user.';
 
 /** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
@@ -1251,7 +1260,7 @@ const READ_ONLY_PROMPT = [
 const PREVIEW_HINT =
 	'When starting a web app for the user to try in Preview, call check_preview with its port after it starts. A listening port or a localhost test does not prove the Preview URL works. ' +
 	'Check the returned HTTP status, final URL and framing headers; if it fails, fix the bind address, exposed port, host restrictions or server as appropriate and check again. For Vite allow the exact Preview hostname, not all hosts. ' +
-	'When the work also needs its UI checked in a browser, brief the browser subagent with the exact Preview URL in the sandbox browser (in: sandbox) rather than localhost, so one run checks the rendered app, its console errors and Preview together. Do not start a browser run only to look at Preview once check_preview passes. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
+	'When the work also needs its UI checked in a browser, point that check (your script, or the browser subagent in the sandbox browser, in: sandbox) at the exact Preview URL rather than localhost, so one run checks the rendered app, its console errors and Preview together. Do not start a browser run only to look at Preview once check_preview passes. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
 	'The HTTP check does not execute JavaScript or prove iframe embedding; report any unverified part honestly. A local-provider localhost URL points to the viewer’s computer, so remote reachability is not established. Never ask the user to run commands to fix Preview when you can do it yourself.';
 
 const WORKSPACE_PROMPT = [
@@ -1260,13 +1269,17 @@ const WORKSPACE_PROMPT = [
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
-	'Delegate read-heavy investigation to the explorer subagent. While you work, run quick, focused checks (the type check, the tests of the files you changed) yourself; delegate a long or full test suite to the tester subagent. Never run the same tests both ways, and run them again only after changing code they cover.',
+	'Delegate an investigation across many files or areas to the explorer subagent, and build on its report, reading again only the lines you will change; when the change sits in a few files you can name, read them yourself instead.',
+	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites in the background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
+	READ_HINT,
 	EDIT_HINT,
 	FINISH_HINT,
 	'Give each task a complete briefing; subagents do not see this conversation.',
-	'You do not have git push credentials. Call open_pull_request when the user wants a pull request; it commits and pushes for you.',
+	'You do not have git push credentials: open_pull_request commits and pushes for you.',
+	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
-	'Check UI changes with the browser subagent: brief it with the app\'s URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report; use the screenshot tool for a quick full-page capture yourself.',
+	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix.`,
+	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
 	WORKSPACE_WEB_HINT,
 	'Be concise. Explain what you changed.',
@@ -1284,6 +1297,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
 	EDIT_HINT,
+	READ_HINT,
 	FINISH_HINT,
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
@@ -1484,6 +1498,8 @@ export function Coder({ id }: AgentProps) {
 		startTodoReply(id);
 		startStallCheck(id);
 		startFinishReview(id);
+		// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
+		if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
 		return { startedAt: Date.now() };
 	});
 	useResponseFinish(({ response, metadata }) => {
