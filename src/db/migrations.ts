@@ -201,12 +201,8 @@ export const migrations: string[][] = [
 			FROM sessions s LEFT JOIN projects p ON p.id = s.project_id
 			WHERE s.pr_url IS NOT NULL AND instr(s.pr_url, '/pull/') > 0`,
 	],
-	// 38: orders the agent asked a broker to place, change or cancel, each waiting for your Place in the thread; only that press sends it.
-	[
-		`CREATE TABLE IF NOT EXISTS order_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, broker TEXT NOT NULL, action TEXT NOT NULL, order_json TEXT NOT NULL, value REAL, state TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT, order_id TEXT, problem TEXT)`,
-		`CREATE INDEX IF NOT EXISTS order_approvals_session ON order_approvals (session_id)`,
-		`CREATE INDEX IF NOT EXISTS order_approvals_decided ON order_approvals (broker, state, decided_at)`,
-	],
+	// 38: where a task's commands run, chosen in the composer: its sandbox (NULL, as before) or 'host', this server.
+	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

@@ -1,14 +1,16 @@
 #!/bin/bash
 # Lightsail launch script: a Caddy forward proxy with a fixed IP for INDstocks order calls.
 #
-# It holds no broker credentials. Clients open an encrypted tunnel through it to
-# api.indstocks.com, so this box only ever relays TLS bytes: it cannot read tokens,
-# MPINs or orders. It keeps no access log.
+# It holds no broker credentials. Anton's http_request opens an encrypted tunnel
+# through it to api.indstocks.com, so this box only ever relays TLS bytes: it cannot
+# read tokens, MPINs or orders. It keeps no access log. Add another host to
+# ALLOWED_HOSTS to send other APIs' requests through it.
 #
 # Paste this whole file into Lightsail > Create instance > Add launch script (Ubuntu 24.04).
 # After the instance is up: attach a static IP, open TCP 443 in its firewall, then
 # reboot it once (or run `sudo systemctl restart anton-proxy`). `sudo anton-proxy-url`
-# prints the proxy URL to save in Anton.
+# prints the proxy URL: give it as the proxy of each sealed secret in Anton's
+# Settings › Secrets that should leave from this box's IP.
 set -euo pipefail
 
 ALLOWED_HOSTS="api.indstocks.com checkip.amazonaws.com"

@@ -44,6 +44,7 @@ function toRecord(row: Row): SessionRecord {
 		reportedState: optional(row.reported_state),
 		review: row.review_json == null ? null : (JSON.parse(String(row.review_json)) as ReviewOf),
 		automationId: optional(row.automation_id),
+		runOn: row.run_on === 'host' ? 'host' : 'sandbox',
 	};
 }
 
@@ -147,7 +148,7 @@ export async function spendByMinute(since: Date): Promise<Array<{ minute: string
 }
 
 export type NewSession = Pick<SessionRecord, 'id' | 'projectId' | 'title' | 'model' | 'reasoning' | 'branch' | 'baseBranch' | 'baseSha' | 'planMode'> &
-	Partial<Pick<SessionRecord, 'spaceId' | 'brief' | 'review' | 'automationId' | 'route'>> & { prUrl?: string };
+	Partial<Pick<SessionRecord, 'spaceId' | 'brief' | 'review' | 'automationId' | 'route' | 'runOn'>> & { prUrl?: string };
 
 /** A task's repository joined in; a chat has none, and a task whose repository is gone is left out as before. */
 const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN projects p ON p.id = s.project_id WHERE (s.project_id = '' OR p.id IS NOT NULL)";
@@ -155,8 +156,8 @@ const SELECT = "SELECT s.*, p.repo_full_name AS repo FROM sessions s LEFT JOIN p
 export async function insertSession(session: NewSession): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief, review_json, pr_url, automation_id, route_json)
-			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sql: `INSERT INTO sessions (id, project_id, flue_conversation_id, status, model, reasoning, title, branch, base_branch, base_sha, plan_mode, created_at, space_id, brief, review_json, pr_url, automation_id, route_json, run_on)
+			VALUES (?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		args: [
 			session.id,
 			session.projectId ?? '',
@@ -175,6 +176,7 @@ export async function insertSession(session: NewSession): Promise<void> {
 			session.prUrl ?? null,
 			session.automationId ?? null,
 			session.route ? JSON.stringify(session.route) : null,
+			session.runOn === 'host' ? 'host' : null,
 		],
 	});
 	announce({ kind: 'sessions' });
@@ -225,6 +227,7 @@ const columns = {
 	pushedSha: 'pushed_sha',
 	branch: 'branch',
 	reviewJson: 'review_json',
+	runOn: 'run_on',
 } as const;
 
 export type SessionUpdate = Partial<{ [K in keyof typeof columns]: string | null }> & { failed?: boolean; planMode?: boolean };
@@ -278,7 +281,7 @@ export async function deleteSessionRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
 		[
-			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?', 'DELETE FROM deleted_outputs WHERE session_id = ?', 'DELETE FROM mail_approvals WHERE session_id = ?', 'DELETE FROM order_approvals WHERE session_id = ?', 'DELETE FROM response_traces WHERE session_id = ?', 'DELETE FROM pull_requests WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
+			...['DELETE FROM sessions WHERE id = ?', 'DELETE FROM pages WHERE session_id = ?', 'DELETE FROM output_index WHERE session_id = ?', 'DELETE FROM deleted_outputs WHERE session_id = ?', 'DELETE FROM mail_approvals WHERE session_id = ?', 'DELETE FROM response_traces WHERE session_id = ?', 'DELETE FROM pull_requests WHERE session_id = ?'].map((sql) => ({ sql, args: [id] })),
 			{ sql: 'INSERT OR REPLACE INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)', args: [id, new Date().toISOString()] },
 		],
 		'write',

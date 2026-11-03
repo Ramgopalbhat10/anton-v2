@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
 	outputText: vi.fn(async () => '# Findings\n\nAll good.'),
 	outputs: vi.fn(async () => ({ source: 'saved', at: null, outputs: [], deleted: [] as string[] })),
 	deleteOutput: vi.fn(async () => undefined),
+	addArtifact: vi.fn(async () => ({ path: 'SKILL.md', sessionId: 'added-files' })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ArtifactsPage, ArtifactView } = await import('@/components/artifacts-page');
@@ -64,6 +65,21 @@ function open(path: string) {
 }
 
 describe('Artifacts', () => {
+	it('adds files of your own, which show as from no task', async () => {
+		open('/artifacts');
+		await screen.findByText('findings.md');
+		const skill = new File(['# Broker skill'], 'SKILL.md', { type: 'text/markdown' });
+		const added = artifact({ sessionId: 'added-files', path: 'SKILL.md', title: 'SKILL.md', task: { title: 'Added by you', spaceId: null, chat: true }, added: true });
+		api.artifacts.mockResolvedValue({ artifacts: [added, ...listed] });
+		await userEvent.upload(screen.getByLabelText('Files to add'), skill);
+		await waitFor(() => expect(api.addArtifact).toHaveBeenCalledWith(skill));
+		const card = (await screen.findByText('SKILL.md')).closest('.in-card') as HTMLElement;
+		expect(within(card).getByText(/Added by you/)).toBeTruthy();
+		await userEvent.click(within(card).getByRole('button', { name: 'Actions for SKILL.md' }));
+		expect(await screen.findByRole('menuitem', { name: 'Download' })).toBeTruthy();
+		expect(screen.queryByRole('menuitem', { name: 'Go to the task' })).toBeNull();
+	});
+
 	it('puts apps first, then files, each card opening the artifact', async () => {
 		const router = open('/artifacts');
 		const apps = await screen.findByRole('region', { name: 'Apps' });

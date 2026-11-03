@@ -43,6 +43,12 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 6. **Pull request.** The agent calls `open_pull_request`; Anton commits in the sandbox, then rebuilds those commits on GitHub through its API (same hashes), so the token never enters a sandbox the agent has used. Anton's token is used inside a sandbox only to clone during setup, before the agent starts.
 7. **Review.** Each time the agent opens or updates a pull request, a second agent, the reviewer, reads the change in the same sandbox without changing anything. It follows the repo's `REVIEW.md` if there is one, and posts its findings on GitHub as a review with line comments. With follow-ups on, the agent then fixes them. Automatic reviews stop after three on one pull request; **Review the pull request** in the task menu asks for another, and Settings › General turns automatic reviews off.
 
+### Running on this server, sealed secrets and your own files
+
+- **Run on.** The composer's + menu has **Run on**: a task's commands run in its sandbox, or on **This server**, in a folder on the machine Anton runs on, going out from its address (`src/services/runners.ts`, the `host` provider). A task moves between them while its agent is idle: its machine stops, saving its files, and starts on the other side with them. This server is not isolated from the machine Anton runs on, so keep it for tasks you trust. Where `ANTON_SANDBOX=local`, every task already runs here and the menu does not show.
+- **Sealed secrets** (Settings › Secrets › Sealed) are values the agent can use but never read. None reaches a sandbox, a shell, a file or the model. The agent's `http_request` tool sends one HTTP request from Anton's server and fills them in there: `{{secret:NAME}}` for a value, `{{totp:NAME}}` for the current code of a TOTP secret. Each secret goes only to the hosts it lists, over https, through its proxy if it has one (an encrypted CONNECT tunnel the proxy cannot read; `scripts/trading-proxy/lightsail-launch.sh` sets one up with a fixed IP on Lightsail). Its value is hidden in the answer, and `save` keeps a value the answer holds, such as a sign-in token, as a sealed secret of its own. Values are stored encrypted with `ANTON_SECRETS_KEY`, or a key Anton makes once in its data folder. A task on This server runs as the same user as Anton and could still dig that key out, so a task in a sandbox is the safer place for one that uses sealed secrets.
+- **Your files on the Artifacts page.** **Add files** keeps files of your own beside what the agent made, such as a skill's `SKILL.md`. **+ › From Artifacts** in any composer attaches one to the message, so a task works from it.
+
 ## Providers
 
 Every outside service sits behind a small interface in `src/core/ports.ts`, and each implementation lives in `src/providers/<name>/`. To swap one, add an entry to the table in `src/providers/index.ts` and choose it with an environment variable.
@@ -58,15 +64,6 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
 | `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
 | `PushSender` | `webpush` (Web Push with VAPID, no library) | |
-| `Broker` | `indstocks` (INDstocks REST API, signing in with TOTP) | Settings › Trading |
-
-### Trading
-
-Settings › Trading connects a stock broker (INDstocks today; a new one is an entry in `brokers` in `src/providers/index.ts`). The agent reaches it through its connector tools: it reads the account, portfolio, quotes, instruments and today's orders, and asks to place, change or cancel an order. Asking sends nothing. The thread shows the order with **Place** and **Don't place**, and only that press sends it, from Anton's server, within the limits on the page (the most one order may be worth, and new orders a day). An order not answered within 30 minutes is not placed, and one that got no answer from the broker is never sent again.
-
-The sign-in (Client ID, MPIN and TOTP secret, or a pasted access token) is kept in Anton's database and used only on the server: it never reaches a sandbox, a page or the model, and the page never shows it again. With the TOTP secret, Anton signs in again by itself when the day's token ends.
-
-Brokers that take orders only from a registered static IP (INDstocks does) need a **fixed-IP proxy**. `scripts/trading-proxy/lightsail-launch.sh` sets one up on a small Lightsail instance: Caddy's forward proxy, behind a password, letting calls through only to the broker's API. Anton's calls cross it in an encrypted CONNECT tunnel, so the proxy relays bytes it cannot read. Paste its address (`https://anton:<password>@<ip>.sslip.io`) in Settings › Trading, press **Check** to see the address the broker sees, and register that IP with the broker.
 
 ### Subscriptions
 
@@ -99,6 +96,7 @@ Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add 
 | `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
 | `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
+| `ANTON_SECRETS_KEY` | Encrypts sealed secrets (default: a key Anton makes in the data folder) |
 | `ANTON_IDLE_MINUTES` | Stop a sandbox this many minutes after its agent finishes (default 5) |
 | `ANTON_DOCKER_NETWORK` | The Docker network the `docker` sandbox's tasks join; `none` keeps them offline (default: Docker's bridge) |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |

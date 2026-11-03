@@ -21,6 +21,9 @@ import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
+import { ADDED_FILES, addFile } from './services/added-files.ts';
+import { hostRunnerAvailable } from './services/runners.ts';
+import { deleteSealedSecret, saveSealedSecret, sealedSecretsView } from './services/sealed-secrets.ts';
 import { pageFetch } from './services/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
@@ -93,7 +96,6 @@ import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from 
 import { attachToProject, attachToTask } from './services/attachments.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
 import { decideSend, mailApprovals } from './services/mail.ts';
-import { brokersView, checkBroker, decideOrder, orderApprovals, saveBrokerSettings } from './services/trading.ts';
 import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
@@ -283,6 +285,10 @@ app.get('/api/health', (c) =>
 	}),
 );
 
+// Where a task's commands can run, for the composer's Run on menu: its sandbox, and this server when that is another place.
+app.get('/api/runners', (c) => c.json({ sandbox: getProviders().sandbox.name, host: hostRunnerAvailable() }));
+const RUN_ON = v.picklist(['sandbox', 'host']);
+
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
 app.get('/api/usage', async (c) => c.json(await usageView()));
 const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
@@ -412,6 +418,20 @@ app.put('/api/secrets/shared', async (c) => {
 	const { env } = await body(c, v.object({ env: ENV }));
 	return c.json(await setSharedEnv(env));
 });
+// Sealed secrets: values the agent can name in http_request but never read (src/services/sealed-secrets.ts).
+app.get('/api/secrets/sealed', async (c) => c.json({ secrets: await sealedSecretsView() }));
+app.put('/api/secrets/sealed/:name', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			value: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(16_384)))),
+			hosts: v.pipe(v.array(v.pipe(v.string(), v.maxLength(253))), v.maxLength(20)),
+			proxy: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2_000)))),
+		}),
+	);
+	return c.json({ secrets: await saveSealedSecret({ name: c.req.param('name'), ...input }) });
+});
+app.delete('/api/secrets/sealed/:name', async (c) => c.json({ secrets: await deleteSealedSecret(c.req.param('name')) }));
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
 // Reviews any pull request by its link, in a task of its own unless Anton opened it.
@@ -501,23 +521,6 @@ app.put('/api/connectors/mailboxes/:id', async (c) => {
 	const options = await body(c, v.object({ enabled: v.boolean(), draft: v.boolean(), send: v.boolean() }));
 	return c.json(await setMailboxOptions(c.req.param('id'), options));
 });
-// Brokers (Settings › Trading): credentials go in and never come back out; the view says only which are saved.
-app.get('/api/trading', async (c) => c.json({ brokers: await brokersView() }));
-app.put('/api/trading/:broker', async (c) => {
-	const change = await body(
-		c,
-		v.object({
-			enabled: v.optional(v.boolean()),
-			trading: v.optional(v.boolean()),
-			credentials: v.optional(v.record(v.pipe(v.string(), v.maxLength(40)), v.nullable(v.pipe(v.string(), v.maxLength(4000))))),
-			proxy: v.optional(v.pipe(v.string(), v.maxLength(500))),
-			maxOrderValue: v.optional(v.pipe(v.number(), v.minValue(1), v.maxValue(1e10))),
-			maxOrdersPerDay: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000))),
-		}),
-	);
-	return c.json(await saveBrokerSettings(c.req.param('broker'), change));
-});
-app.post('/api/trading/:broker/check', async (c) => c.json(await checkBroker(c.req.param('broker'))));
 // Google sends the browser back here; it goes on to Settings › Connectors, which says how it went.
 app.get('/api/connectors/:account/callback', async (c) => {
 	const query = new URL(c.req.url).search;
@@ -799,6 +802,7 @@ app.post('/api/sessions', async (c) => {
 			// The first message, which a fast model names the task from.
 			titleFrom: v.optional(v.pipe(v.string(), v.maxLength(40_000))),
 			planMode: v.optional(v.boolean()),
+			runOn: v.optional(RUN_ON),
 		}),
 	);
 	return c.json(await createSession(input));
@@ -816,6 +820,7 @@ app.patch('/api/sessions/:id', async (c) => {
 			pinned: v.optional(v.boolean()),
 			resolved: v.optional(v.boolean()),
 			spaceId: v.optional(v.nullable(v.string())),
+			runOn: v.optional(RUN_ON),
 		}),
 	);
 	const { spaceId, ...rest } = change;
@@ -922,16 +927,6 @@ app.post('/api/sessions/:id/mail/:approval', async (c) => {
 	const { send } = await body(c, v.object({ send: v.boolean() }));
 	return c.json(await decideSend(id, c.req.param('approval'), send));
 });
-// Orders the agent asked for; only your Place here sends one to the broker (services/trading.ts).
-app.get('/api/sessions/:id/orders', async (c) => {
-	const { id } = await getSession(c.req.param('id'));
-	return c.json({ orders: await orderApprovals(id) });
-});
-app.post('/api/sessions/:id/orders/:approval', async (c) => {
-	const { id } = await getSession(c.req.param('id'));
-	const { place } = await body(c, v.object({ place: v.boolean() }));
-	return c.json(await decideOrder(id, c.req.param('approval'), place));
-});
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ list: await todosFor(id) });
@@ -996,6 +991,15 @@ app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
+// A file you add on the Artifacts page: the body is the file, its name in the query. It is read and deleted as the
+// Library of src/services/added-files.ts's holder, through the routes below.
+app.post('/api/artifacts', async (c) => {
+	const name = c.req.query('name') ?? '';
+	if (!name) throw new InvalidInputError('Name the file');
+	if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added.');
+	const body = new Uint8Array(await c.req.arrayBuffer());
+	return c.json({ path: await addFile(name, body, c.req.header('content-type') || undefined), sessionId: ADDED_FILES });
+});
 // Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {
 	const name = c.req.query('name') ?? '';

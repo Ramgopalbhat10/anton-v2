@@ -26,7 +26,8 @@ function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 
 /**
  * Runs each task in its own folder on this computer. No isolation: it is
- * for development and tests, where Modal is not wanted.
+ * for development and tests, where Modal is not wanted, and for a task whose
+ * composer says This server (`src/services/runners.ts`).
  */
 export function localSandboxProvider(dataDir: string): SandboxProvider {
 	const machinesDir = path.join(dataDir, 'machines');

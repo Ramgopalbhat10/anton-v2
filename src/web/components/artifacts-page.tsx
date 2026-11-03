@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl, PageThumbnail } from '@/components/html-frame';
@@ -11,7 +11,7 @@ import { MenuButton } from '@/components/nav';
 import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output-viewer';
 import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
-import { api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
+import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf } from '@/lib/artifacts';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { age } from '@/lib/format';
@@ -27,8 +27,9 @@ export type ArtifactsSearch = { type?: Category; q?: string };
 
 const when = (artifact: Artifact) => age(new Date(artifact.mtimeMs).toISOString());
 
-/** Where the task an artifact came from is: a project's thread opens inside its project. */
+/** Where the task an artifact came from is: a project's thread opens inside its project. A file you added is from none. */
 function TaskLink({ artifact, className, children }: { artifact: Artifact; className?: string; children: ReactNode }) {
+	if (artifact.added) return <span className={className}>{children}</span>;
 	return artifact.task.spaceId ? (
 		<Link to="/projects/$spaceId/threads/$threadId" params={{ spaceId: artifact.task.spaceId, threadId: artifact.sessionId }} className={className}>
 			{children}
@@ -149,16 +150,18 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 				<MenuItem icon={Download} onSelect={() => download(artifact)}>
 					Download
 				</MenuItem>
-				<MenuItem
-					icon={ArrowUpRight}
-					onSelect={() =>
-						artifact.task.spaceId
-							? void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: artifact.task.spaceId, threadId: artifact.sessionId } })
-							: void navigate({ to: '/agents/$sessionId', params: { sessionId: artifact.sessionId }, search: { app: 'code' } })
-					}
-				>
-					Go to the task
-				</MenuItem>
+				{artifact.added ? null : (
+					<MenuItem
+						icon={ArrowUpRight}
+						onSelect={() =>
+							artifact.task.spaceId
+								? void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId: artifact.task.spaceId, threadId: artifact.sessionId } })
+								: void navigate({ to: '/agents/$sessionId', params: { sessionId: artifact.sessionId }, search: { app: 'code' } })
+						}
+					>
+						Go to the task
+					</MenuItem>
+				)}
 				<MenuSeparator />
 				<MenuItem
 					icon={Trash2}
@@ -173,7 +176,9 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete'}
 				</MenuItem>
 				{confirming && !remove.isError ? (
-					<div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">It leaves the task's Library too. Replies that showed it say it was deleted.</div>
+					<div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+						{artifact.added ? 'Tasks it was attached to keep their own copy.' : "It leaves the task's Library too. Replies that showed it say it was deleted."}
+					</div>
 				) : null}
 				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
 			</MenuContent>
@@ -238,6 +243,38 @@ function matches(artifact: Artifact, query: string): boolean {
 	return words.every((word) => haystack.includes(word));
 }
 
+/** Adds files of your own, such as a skill's SKILL.md, which any task can then be given from the composer's + menu. */
+function AddFiles() {
+	const picker = useRef<HTMLInputElement>(null);
+	const queryClient = useQueryClient();
+	const add = useMutation({
+		mutationFn: async (files: File[]) => {
+			for (const file of files) await api.addArtifact(file);
+		},
+		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['artifacts'] }),
+	});
+	return (
+		<>
+			<input
+				ref={picker}
+				type="file"
+				multiple
+				hidden
+				aria-label="Files to add"
+				onChange={(event) => {
+					const files = [...(event.target.files ?? [])];
+					event.target.value = '';
+					if (files.length) add.mutate(files);
+				}}
+			/>
+			{add.isError ? <span className="text-[12px] text-(--danger-text)">{add.error.message}</span> : null}
+			<Btn size="sm" variant="ghost" icon={Upload} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
+				{add.isPending ? 'Adding…' : 'Add files'}
+			</Btn>
+		</>
+	);
+}
+
 /** Every artifact, newest first: apps on top, then the files; or one kind, picked above. */
 export function ArtifactsPage() {
 	const search = useSearch({ from: '/artifacts' });
@@ -273,6 +310,7 @@ export function ArtifactsPage() {
 					))}
 				</Segmented>
 				<span className="min-w-0 flex-1" />
+				<AddFiles />
 				<label className="flex h-8 w-full items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
 					<Icon icon={Search} size={12} className="shrink-0 text-(--icon-tertiary)" />
 					<input
@@ -302,7 +340,7 @@ export function ArtifactsPage() {
 				<EmptyState
 					art={<LibraryArt className="w-full max-w-[320px]" />}
 					title="Nothing made yet"
-					body="Apps the agent draws in a reply, and the reports, images and data it saves, gather here from every task."
+					body="Apps the agent draws in a reply, and the reports, images and data it saves, gather here from every task. Files you add here, such as a skill, can be given to any task from the composer's + menu."
 				/>
 			) : shown.length === 0 ? (
 				<EmptyState title="Nothing matches" body={query ? 'Try other words, or clear the search.' : 'Pick another kind, or All.'} />
@@ -331,7 +369,8 @@ export function ArtifactView() {
 	const { taskId: sessionId } = useParams({ from: '/artifacts/$taskId' });
 	const { path = '' } = useSearch({ from: '/artifacts/$taskId' });
 	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, refetchInterval: SAFETY_NET_MS });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const added = sessionId === ADDED_FILES;
+	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId), enabled: !added });
 	const listed = artifacts.data?.artifacts.find((artifact) => artifact.sessionId === sessionId && artifact.path === path);
 	const artifact: Artifact = listed ?? {
 		sessionId,
@@ -339,7 +378,8 @@ export function ArtifactView() {
 		title: nameOf(path),
 		size: 0,
 		mtimeMs: Date.now(),
-		task: { title: session.data?.title ?? 'Task', spaceId: session.data?.spaceId ?? null, chat: false },
+		task: { title: added ? 'Added by you' : (session.data?.title ?? 'Task'), spaceId: session.data?.spaceId ?? null, chat: false },
+		added,
 	};
 	const category = categoryOf(path);
 	const info = categoryInfo(category);

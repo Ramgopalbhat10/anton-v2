@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback } from 'react';
-import { api, type ModelRoute, type Reasoning } from '@/lib/api';
+import { api, type ModelRoute, type Reasoning, type RunOn } from '@/lib/api';
 import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
 import { setPendingPrompt } from '@/lib/pending-prompt';
@@ -18,6 +18,8 @@ export type NewChat = {
 	reasoning?: Reasoning;
 	route?: ModelRoute | null;
 	planMode?: boolean;
+	/** Where its commands run; its sandbox when left out. */
+	runOn?: RunOn;
 	prompt?: string;
 	/** Sent with the first message, as the model sees images. */
 	images?: ImageAttachment[];
@@ -40,7 +42,7 @@ export function useCreateChat(): (chat: NewChat) => void {
 			const named = prompt || files[0]?.name || (images.length ? 'Look at the attached image' : '');
 			// The start of the prompt names it until a fast model gives it a short title.
 			const title = named ? titleFrom(named) : input.projectId ? 'New task' : 'New chat';
-			const draft = draftSession({ id, title, prompt: named, projectId: input.projectId, repo, branch: input.branch, model: input.model ?? '', reasoning: input.reasoning, planMode: input.planMode });
+			const draft = draftSession({ id, title, prompt: named, projectId: input.projectId, repo, branch: input.branch, model: input.model ?? '', reasoning: input.reasoning, planMode: input.planMode, runOn: input.runOn });
 			startInBackground(queryClient, draft, prompt, async () => {
 				const session = await api
 					.createSession({ id, ...input, title, ...(prompt ? { titleFrom: prompt } : {}) })

@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Paperclip, Plug, Plus, Settings2, TriangleAlert } from 'lucide-react';
+import { Cloud, FileStack, Paperclip, Plug, Plus, Server, Settings2, TriangleAlert } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Attachments } from '@/components/attachments';
 import { GMAIL, MarkTile, useServerMark } from '@/components/brand-marks';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
-import { api } from '@/lib/api';
+import { api, type Artifact, outputUrl, type RunOn } from '@/lib/api';
 import { catalogEntryFor } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, setConnectorOn } from '@/lib/connectors';
 import { cn } from '@/lib/utils';
@@ -46,12 +46,107 @@ function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: Co
 	);
 }
 
+/** Where a task's commands run, chosen per task; `locked` says why it cannot change now. */
+export type RunChoice = { value: RunOn; onChange: (next: RunOn) => void; locked?: string | null; note?: string | null };
+
+const PROVIDER_NAMES: Record<string, string> = { modal: 'Modal', docker: 'Docker', local: 'a folder' };
+
+function RunOnMenu({ run }: { run: RunChoice }) {
+	const runners = useQuery({ queryKey: ['runners'], queryFn: api.runners, staleTime: 5 * 60_000 });
+	// Only where this server is a place of its own: a server whose sandbox is a local folder already runs everything here.
+	if (!runners.data?.host) return null;
+	const sandbox = PROVIDER_NAMES[runners.data.sandbox] ?? runners.data.sandbox;
+	const pick = (next: RunOn) => {
+		if (next !== run.value && !run.locked) run.onChange(next);
+	};
+	return (
+		<MenuSub>
+			<MenuSubTrigger icon={run.value === 'host' ? Server : Cloud} hint={run.value === 'host' ? 'This server' : 'Sandbox'}>
+				Run on
+			</MenuSubTrigger>
+			<MenuSubContent className="w-[260px]">
+				<MenuItem role="menuitemradio" aria-checked={run.value === 'sandbox'} checked={run.value === 'sandbox'} icon={Cloud} disabled={Boolean(run.locked)} onSelect={() => pick('sandbox')}>
+					Sandbox <span className="text-(--text-tertiary)">· {sandbox}</span>
+				</MenuItem>
+				<MenuItem role="menuitemradio" aria-checked={run.value === 'host'} checked={run.value === 'host'} icon={Server} disabled={Boolean(run.locked)} onSelect={() => pick('host')}>
+					This server
+				</MenuItem>
+				<MenuSeparator />
+				<p className="m-0 px-2 pt-0.5 pb-1 text-[11px] leading-[15px] text-pretty text-(--text-tertiary)">
+					{run.locked ??
+						run.note ??
+						"This server runs the task's commands in a folder on the machine Anton runs on, from its address. It is not isolated from that machine, so keep it for tasks you trust."}
+				</p>
+			</MenuSubContent>
+		</MenuSub>
+	);
+}
+
+/** The most this menu lists; the Artifacts page has the rest. */
+const ARTIFACTS_SHOWN = 30;
+
+/** Files you added first, then what the agent made, newest first. */
+const forContext = (artifacts: Artifact[]) => [...artifacts.filter((item) => item.added), ...artifacts.filter((item) => !item.added)].slice(0, ARTIFACTS_SHOWN);
+
+/** Attaches a file from the Artifacts page to the message, as if it were picked from disk. */
+function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
+	const [open, setOpen] = useState(false);
+	const [problem, setProblem] = useState<string | null>(null);
+	const [added, setAdded] = useState<Set<string>>(new Set());
+	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, enabled: open, staleTime: 30_000 });
+	const items = forContext(artifacts.data?.artifacts ?? []);
+	const keyOf = (artifact: Artifact) => `${artifact.sessionId}\n${artifact.path}`;
+	const add = async (artifact: Artifact) => {
+		setProblem(null);
+		try {
+			const response = await fetch(outputUrl(artifact.sessionId, artifact.path));
+			if (!response.ok) throw new Error(`${artifact.title} could not be read`);
+			const blob = await response.blob();
+			const name = artifact.path.split('/').pop() || artifact.title;
+			await attachments.attach([new File([blob], name, { type: blob.type })]);
+			setAdded((current) => new Set(current).add(keyOf(artifact)));
+		} catch (error) {
+			setProblem(error instanceof Error ? error.message : String(error));
+		}
+	};
+	return (
+		<MenuSub open={open} onOpenChange={setOpen}>
+			<MenuSubTrigger icon={FileStack} disabled={attachments.full}>
+				From Artifacts
+			</MenuSubTrigger>
+			<MenuSubContent className="max-h-[360px] w-[280px] overflow-y-auto">
+				{artifacts.isPending ? <p className="m-0 px-2 py-1.5 text-[12px] text-(--text-tertiary)">Loading…</p> : null}
+				{artifacts.isSuccess && !items.length ? (
+					<p className="m-0 px-2 py-1.5 text-[12px] text-pretty text-(--text-tertiary)">Nothing yet. Add files on the Artifacts page, such as a skill's SKILL.md.</p>
+				) : null}
+				{items.map((artifact) => (
+					<MenuItem
+						key={keyOf(artifact)}
+						checked={added.has(keyOf(artifact))}
+						// Stays open, so several can be added in a row.
+						onSelect={(event) => {
+							event.preventDefault();
+							void add(artifact);
+						}}
+					>
+						<span className="flex min-w-0 flex-col">
+							<span className="truncate">{artifact.title}</span>
+							<span className="truncate text-[11px] text-(--text-tertiary)">{artifact.task.title}</span>
+						</span>
+					</MenuItem>
+				))}
+				{problem ? <p className="m-0 px-2 pt-1 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{problem}</p> : null}
+			</MenuSubContent>
+		</MenuSub>
+	);
+}
+
 /**
  * The composer's + menu: attach files, and turn connectors on or off, as Claude's composer does. A connector's
  * switch is one state for every task, read by the agent as it calls a tool: its tools load only when a task uses
  * them, so a connector that is on costs no context until then and flipping one never changes the cached prompt.
  */
-export function ComposerPlus({ attachments, label = 'Attach files', side = 'top' }: { attachments: Attachments; label?: string; side?: 'top' | 'bottom' }) {
+export function ComposerPlus({ attachments, label = 'Attach files', side = 'top', run }: { attachments: Attachments; label?: string; side?: 'top' | 'bottom'; run?: RunChoice }) {
 	const picker = useRef<HTMLInputElement>(null);
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -86,6 +181,8 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 					<MenuItem icon={Paperclip} disabled={attachments.full} onSelect={() => picker.current?.click()}>
 						{label}
 					</MenuItem>
+					<ArtifactsMenu attachments={attachments} />
+					{run ? <RunOnMenu run={run} /> : null}
 					<MenuSub>
 						<MenuSubTrigger
 							icon={Plug}

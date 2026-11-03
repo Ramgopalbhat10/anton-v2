@@ -17,18 +17,3 @@ export function statusOf(error: unknown): number {
 	const status = (error as { status?: unknown } | null)?.status;
 	return typeof status === 'number' && status >= 400 && status < 600 ? status : 500;
 }
-
-/**
- * A broker call that failed: `session` when its sign-in ended (sign in again, once), `refused` when the
- * broker turned the request down (fix it, never just retry), `unreachable` when no answer came, so an
- * order may or may not have gone (look at the order book before asking again).
- */
-export class BrokerError extends Error {
-	readonly status: number;
-	readonly reason: 'session' | 'refused' | 'unreachable';
-	constructor(message: string, reason: 'session' | 'refused' | 'unreachable') {
-		super(message);
-		this.reason = reason;
-		this.status = reason === 'unreachable' ? 502 : 409;
-	}
-}

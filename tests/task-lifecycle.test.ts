@@ -240,6 +240,8 @@ setProviders({
 			return { ...acquired, machine: countShells(acquired.machine) };
 		},
 	},
+	// This server, for a task whose composer says so: a folder runner of its own, so a test can tell which one a task used.
+	host: localSandboxProvider(path.join(dir, 'host')),
 	store: diskStore(path.join(dir, 'data', 'objects')),
 	git: fakeHost,
 	models: fakeCatalog,
@@ -707,6 +709,30 @@ test('a task can be pinned, and a fork starts in a sandbox of its own with the t
 	const plain = await sessions.forkSession(untouched.id);
 	assert.equal(plain.checkpointAt, null);
 	assert.equal((await getSessionRecord(plain.id))?.machineState, null, 'nothing to work on, so no sandbox');
+});
+
+test('a task runs on this server when asked, and moves to its sandbox with its files', async () => {
+	const project = await addProject('acme/demo');
+	const task = await sessions.createSession({ projectId: project.id, title: 'Call the broker', runOn: 'host' });
+	assert.equal(task.runOn, 'host');
+	const asked = lastAcquire;
+	const onHost = await machineFor(task.id);
+	assert.ok(onHost.root.startsWith(path.join(dir, 'host')), 'its machine is on the host runner');
+	assert.equal(lastAcquire, asked, 'the sandbox was not asked for it');
+	await run(onHost, 'echo kept > note.txt');
+	sessions.invalidateRunning();
+	assert.equal((await sessions.getSession(task.id)).status, 'running', 'it counts as running');
+
+	const moved = await sessions.editSession(task.id, { runOn: 'sandbox' });
+	assert.equal(moved.runOn, 'sandbox');
+	assert.equal(moved.status, 'stopped', 'moving stops its machine first');
+	const inSandbox = await machineFor(task.id);
+	assert.ok(inSandbox.root.startsWith(path.join(dir, 'data')), 'its machine is now in the sandbox');
+	assert.equal(lastAcquire?.key, task.id);
+	assert.equal((await run(inSandbox, 'cat note.txt')).trim(), 'kept', 'its files came along');
+	assert.equal((await run(inSandbox, 'git rev-parse --abbrev-ref HEAD')).trim(), task.branch);
+	assert.equal((await sessions.forkSession(task.id)).runOn, 'sandbox', 'a fork runs where its task does');
+	await sessions.stopSession(task.id);
 });
 
 test('a task adds up the tokens and cost of its responses', async () => {

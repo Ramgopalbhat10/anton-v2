@@ -10,7 +10,7 @@ import type { PendingChange } from '@/components/sent-text';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/signal';
 import { TodoPill } from '@/components/todo-pill';
-import { api, isChat, type ModelRoute, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, isChat, type ModelRoute, type RunOn, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { type ImageAttachment, imageFromBase64, MAX_IMAGES } from '@/lib/attachments';
 import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
@@ -138,6 +138,30 @@ export const Composer = memo(function Composer({
 		[queryClient, sessionId],
 	);
 	const togglePlan = useCallback((planMode: boolean) => edit({ planMode }), [edit]);
+	// Moving a task stops its machine first, which saves its files, so it is not shown as moved until the server says so.
+	const [moving, setMoving] = useState(false);
+	const [moveProblem, setMoveProblem] = useState<string | null>(null);
+	const moveTo = useCallback(
+		(runOn: RunOn) => {
+			setMoving(true);
+			setMoveProblem(null);
+			api.editSession(sessionId, { runOn })
+				.then((updated) => queryClient.setQueryData(['session', sessionId], updated))
+				.catch((error: unknown) => setMoveProblem(error instanceof Error ? error.message : String(error)))
+				.finally(() => setMoving(false));
+		},
+		[queryClient, sessionId],
+	);
+	const working = session.data?.working ?? false;
+	const run = useMemo(
+		() => ({
+			value: session.data?.runOn ?? ('sandbox' as RunOn),
+			onChange: moveTo,
+			locked: moving ? 'Moving the task: its machine stops first, saving its files.' : working ? 'The agent is working. Move the task once it stops.' : null,
+			note: moveProblem,
+		}),
+		[session.data?.runOn, moveTo, moving, moveProblem, working],
+	);
 	const route = session.data?.route ?? null;
 	// A route picked on another model's row picks that model too, in one change.
 	const setRoute = useCallback((next: ModelRoute | null, model?: string) => edit(model ? { model, reasoning: null, route: next } : { route: next }), [edit]);
@@ -215,7 +239,7 @@ export const Composer = memo(function Composer({
 					</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
-					<ComposerPlus attachments={attachments} />
+					<ComposerPlus attachments={attachments} run={run} />
 					<ModelPicker value={choice} onChange={edit} route={route} onRoute={setRoute} />
 					{/* A chat has no code to plan changes to. */}
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}

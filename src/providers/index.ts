@@ -3,8 +3,6 @@ import { config } from '../config.ts';
 import type {
 	AccountSignIn,
 	AgentRuntime,
-	Broker,
-	BrokerFetch,
 	BrowserHost,
 	DecisionModel,
 	GatewayAccount,
@@ -27,8 +25,6 @@ import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { gmailMailbox } from './google/gmail.ts';
 import { googleSignIn } from './google/sign-in.ts';
-import { indstocksBroker } from './indstocks/broker.ts';
-import { brokerFetch } from './broker-fetch.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
 import { dockerSandboxProvider } from './docker/sandbox.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
@@ -85,11 +81,11 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  * `text` is null without an OpenRouter key; tasks are then named by the start of their first message.
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
  * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
- * `brokers` are stock brokers (INDstocks) set up in Settings › Trading; add one by adding an entry. `brokerFetch` is how their calls
- *   leave the server, through the fixed-IP proxy given (an encrypted tunnel) or straight out; tests swap in a fake broker.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
+	/** Runs a task on this server, in a folder, for a task whose composer says This server; null when `sandbox` already does. */
+	host?: SandboxProvider | null;
 	store: ObjectStore;
 	git: GitHost;
 	models: ModelCatalog;
@@ -106,8 +102,6 @@ export type Providers = {
 	push?: PushSender | null;
 	accounts?: AccountSignIn[];
 	mailboxes?: Mailbox[];
-	brokers?: Broker[];
-	brokerFetch?: (proxy: string | null) => BrokerFetch;
 };
 
 let providers: Providers | undefined;
@@ -121,6 +115,7 @@ function production(): Providers {
 	const text = openRouterText({ apiUrl, apiKey: openRouterKey });
 	return {
 		sandbox: pick('sandbox', sandboxes, config.sandbox),
+		host: config.sandbox === 'local' ? null : localSandboxProvider(config.dataDir),
 		store: pick('store', stores, config.store),
 		git: githubHost(config.github),
 		models: openRouterCatalog({ apiUrl, ttlMs, apiKey: openRouterKey }),
@@ -151,8 +146,6 @@ function production(): Providers {
 		push: webPushSender(),
 		accounts: [googleSignIn()],
 		mailboxes: [gmailMailbox()],
-		brokers: [indstocksBroker()],
-		brokerFetch,
 	};
 }
 
