@@ -122,7 +122,8 @@ function Explorer() {
 		'You are the explorer specialist.',
 		'Investigate the repository using read, grep, glob, and bash.',
 		'Do not modify files in the repository.',
-		`Write a concise findings report to ${OUTPUTS}/explorer-report.md, then stop.`,
+		// The task call hands the final message back to the Coder, so a report file is only extra writing and reading.
+		`Answer with concise findings (files, lines and what they show), then stop. Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report.`,
 		'Do not commit, push, or open a pull request.',
 	].join(' ');
 }
@@ -132,7 +133,7 @@ function Tester() {
 		'You are the tester specialist.',
 		'Detect how this repo runs tests (package.json, Makefile, pytest, go test, cargo test).',
 		'Run the test suite. Capture failures.',
-		`Write a summary to ${OUTPUTS}/test-report.md.`,
+		`Answer with a short summary: the command, pass and fail counts, and each failure with its error. Write ${OUTPUTS}/test-report.md only when the brief asks for a report.`,
 		'Put any script, log or screenshot you make to run the tests in /tmp, not in the repository.',
 		'Do not commit, push, or open a pull request.',
 	].join(' ');
@@ -140,13 +141,13 @@ function Tester() {
 
 const explorer = defineSubagent({
 	name: 'explorer',
-	description: `Read-only codebase investigation. Writes ${OUTPUTS}/explorer-report.md.`,
+	description: 'Read-only codebase investigation. Answers with its findings.',
 	agent: Explorer,
 });
 
 const tester = defineSubagent({
 	name: 'tester',
-	description: `Runs the project test suite and writes ${OUTPUTS}/test-report.md.`,
+	description: 'Runs the project test suite and answers with a summary of its failures.',
 	agent: Tester,
 });
 
@@ -1259,7 +1260,7 @@ const READ_ONLY_PROMPT = [
 
 const PREVIEW_HINT =
 	'When starting a web app for the user to try in Preview, call check_preview with its port after it starts. A listening port or a localhost test does not prove the Preview URL works. ' +
-	'Check the returned HTTP status, final URL and framing headers; if it fails, fix the bind address, exposed port, host restrictions or server as appropriate and check again. For Vite allow the exact Preview hostname, not all hosts. ' +
+	'Check the returned HTTP status, final URL and framing headers; if it fails, fix the bind address, exposed port, host restrictions or server as appropriate and check again. For Vite allow the exact Preview hostname, not all hosts (the sandbox sets __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS to the Preview hostnames, which Vite 5.4.12 and later allow already). ' +
 	'When the work also needs its UI checked in a browser, point that check (your script, or the browser subagent in the sandbox browser, in: sandbox) at the exact Preview URL rather than localhost, so one run checks the rendered app, its console errors and Preview together. Do not start a browser run only to look at Preview once check_preview passes. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
 	'The HTTP check does not execute JavaScript or prove iframe embedding; report any unverified part honestly. A local-provider localhost URL points to the viewer’s computer, so remote reachability is not established. Never ask the user to run commands to fix Preview when you can do it yourself.';
 

@@ -2239,3 +2239,36 @@ test('a repository task starts its sandbox ahead of the agent, but a chat, a pla
 	assert.ok(await liveMachine(work.id), 'the repository task has its machine before the agent asks');
 	await sessions.stopSession(work.id);
 });
+
+test('a task that starts from an old warm image renews it, and one from a young image does not', async () => {
+	const project = await addProject('acme/renew');
+	const imageNow = async () => (await getProject(project.id))?.warmImage;
+	const first = await sessions.createSession({ projectId: project.id, title: 'Clone' });
+	await machineFor(first.id);
+	const cloned = await imageNow();
+	assert.ok(cloned, 'the first task saves an image');
+	await sessions.stopSession(first.id);
+
+	const young = await sessions.createSession({ projectId: project.id, title: 'Young image' });
+	await machineFor(young.id);
+	assert.equal(await imageNow(), cloned, 'a young image is used as it is');
+	await sessions.stopSession(young.id);
+
+	const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000).toISOString();
+	await database.execute({ sql: 'UPDATE projects SET warmed_at = ? WHERE id = ?', args: [sixDaysAgo, project.id] });
+	const old = await sessions.createSession({ projectId: project.id, title: 'Old image' });
+	const machine = await machineFor(old.id);
+	assert.equal((await run(machine, 'git branch --show-current')).trim(), old.branch, 'it still starts from the old image');
+	const renewed = await getProject(project.id);
+	assert.ok(renewed?.warmImage && renewed.warmImage !== cloned, 'it saves a new image');
+	assert.ok(Date.parse(renewed.warmedAt!) > Date.parse(sixDaysAgo));
+	await sessions.stopSession(old.id);
+});
+
+test('preview hostnames reach the sandbox for Vite, but localhost does not', async () => {
+	const { previewHosts } = await import('../src/services/workspace.ts');
+	const machine = (urls: Record<number, string | null>) =>
+		({ previewUrl: async (port: number) => urls[port] ?? null }) as unknown as Parameters<typeof previewHosts>[0];
+	assert.equal(await previewHosts(machine({ 3000: 'https://a1.modal.host', 5173: 'https://b2.modal.host/', 9: null }), [3000, 5173, 9]), 'a1.modal.host,b2.modal.host');
+	assert.equal(await previewHosts(machine({ 3000: 'http://localhost:3000' }), [3000]), null);
+});
