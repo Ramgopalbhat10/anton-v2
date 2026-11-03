@@ -93,6 +93,7 @@ import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from 
 import { attachToProject, attachToTask } from './services/attachments.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
 import { decideSend, mailApprovals } from './services/mail.ts';
+import { brokersView, checkBroker, decideOrder, orderApprovals, saveBrokerSettings } from './services/trading.ts';
 import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
@@ -500,6 +501,23 @@ app.put('/api/connectors/mailboxes/:id', async (c) => {
 	const options = await body(c, v.object({ enabled: v.boolean(), draft: v.boolean(), send: v.boolean() }));
 	return c.json(await setMailboxOptions(c.req.param('id'), options));
 });
+// Brokers (Settings › Trading): credentials go in and never come back out; the view says only which are saved.
+app.get('/api/trading', async (c) => c.json({ brokers: await brokersView() }));
+app.put('/api/trading/:broker', async (c) => {
+	const change = await body(
+		c,
+		v.object({
+			enabled: v.optional(v.boolean()),
+			trading: v.optional(v.boolean()),
+			credentials: v.optional(v.record(v.pipe(v.string(), v.maxLength(40)), v.nullable(v.pipe(v.string(), v.maxLength(4000))))),
+			proxy: v.optional(v.pipe(v.string(), v.maxLength(500))),
+			maxOrderValue: v.optional(v.pipe(v.number(), v.minValue(1), v.maxValue(1e10))),
+			maxOrdersPerDay: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000))),
+		}),
+	);
+	return c.json(await saveBrokerSettings(c.req.param('broker'), change));
+});
+app.post('/api/trading/:broker/check', async (c) => c.json(await checkBroker(c.req.param('broker'))));
 // Google sends the browser back here; it goes on to Settings › Connectors, which says how it went.
 app.get('/api/connectors/:account/callback', async (c) => {
 	const query = new URL(c.req.url).search;
@@ -903,6 +921,16 @@ app.post('/api/sessions/:id/mail/:approval', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	const { send } = await body(c, v.object({ send: v.boolean() }));
 	return c.json(await decideSend(id, c.req.param('approval'), send));
+});
+// Orders the agent asked for; only your Place here sends one to the broker (services/trading.ts).
+app.get('/api/sessions/:id/orders', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ orders: await orderApprovals(id) });
+});
+app.post('/api/sessions/:id/orders/:approval', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const { place } = await body(c, v.object({ place: v.boolean() }));
+	return c.json(await decideOrder(id, c.req.param('approval'), place));
 });
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));

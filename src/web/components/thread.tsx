@@ -14,6 +14,7 @@ import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/reply-cards';
 import { ShowCard } from '@/components/show-card';
 import { approvalOf, MailSendCard, MAIL_SEND_TOOLS } from '@/components/mail-card';
+import { isOrderTool, OrderCard, orderOf } from '@/components/order-card';
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -55,7 +56,8 @@ type Block =
 	| { kind: 'show'; part: ToolPart }
 	| { kind: 'page'; part: ToolPart }
 	| { kind: 'image'; part: ToolPart }
-	| { kind: 'mail'; part: ToolPart };
+	| { kind: 'mail'; part: ToolPart }
+	| { kind: 'order'; part: ToolPart };
 
 const PLAN_TOOL = 'propose_plan';
 /** The todo list shows as the pill above the composer, not as steps in the thread. */
@@ -173,6 +175,8 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 			blocks.push({ kind: 'plan', part });
 		} else if (part.type === 'dynamic-tool' && MAIL_SEND_TOOLS.has(part.toolName) && part.state !== 'output-error') {
 			blocks.push({ kind: 'mail', part });
+		} else if (part.type === 'dynamic-tool' && isOrderTool(part.toolName) && part.state !== 'output-error') {
+			blocks.push({ kind: 'order', part });
 		} else if (part.type === 'dynamic-tool' && DRAWN[part.toolName] && part.state !== 'output-error') {
 			blocks.push({ kind: DRAWN[part.toolName], part });
 		} else if (part.type === 'dynamic-tool' && part.toolName === 'task') {
@@ -838,6 +842,12 @@ const AssistantMessage = memo(function AssistantMessage({
 						<MailSendCard key={block.part.toolCallId} sessionId={sessionId} approvalId={approvalOf(block.part.output)!} place={place} />
 					) : (
 						<Drawing key={block.part.toolCallId} what="Preparing the email" />
+					)
+				) : block.kind === 'order' ? (
+					orderOf(block.part.output) ? (
+						<OrderCard key={block.part.toolCallId} sessionId={sessionId} approvalId={orderOf(block.part.output)!} place={place} />
+					) : (
+						<Drawing key={block.part.toolCallId} what="Preparing the order" />
 					)
 				) : block.kind === 'page' ? (
 					<PageBlock key={block.part.toolCallId} sessionId={sessionId} part={block.part} />

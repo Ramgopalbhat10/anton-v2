@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, BellRing, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Plug, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
+import { Activity, BellRing, Blocks, Box, ChartCandlestick, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Plug, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { CommandsPage } from './commands';
 import { ComputePage } from './compute';
@@ -16,6 +16,7 @@ import { SecretsPage } from './secrets';
 import { SkillsPage } from './skills';
 import { StoragePage } from './storage';
 import { SubscriptionsPage } from './subscriptions';
+import { TradingPage } from './trading';
 import { UsagePage } from './usage';
 
 export type SectionGroup = 'anton' | 'infrastructure' | 'agent';
@@ -44,6 +45,7 @@ export const SECTIONS: SettingsSection[] = [
 	{ id: 'secrets', group: 'agent', label: 'Secrets', icon: KeyRound, desc: 'Environment variables for sandboxes', Page: SecretsPage },
 	{ id: 'guardrails', group: 'agent', label: 'Guardrails', icon: ShieldCheck, desc: 'What the agent cannot see or do', Page: GuardrailsPage },
 	{ id: 'connectors', group: 'agent', label: 'Connectors', icon: Plug, desc: 'Gmail and MCP servers for every task', Page: ConnectorsPage },
+	{ id: 'trading', group: 'agent', label: 'Trading', icon: ChartCandlestick, desc: 'Brokers, their sign-in, fixed-IP proxy and order limits', Page: TradingPage },
 	{ id: 'skills', group: 'agent', label: 'Skills', icon: Blocks, desc: 'Skills and plugins from GitHub and marketplaces', Page: SkillsPage },
 	{ id: 'commands', group: 'agent', label: 'Commands', icon: SquareTerminal, desc: 'Saved prompts you type as /name', Page: CommandsPage },
 ];

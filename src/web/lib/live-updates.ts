@@ -4,7 +4,7 @@ import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'pr-metadata' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'orders' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
@@ -33,7 +33,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
-	if (change.kind === 'connectors') return [['connectors'], ['connections']];
+	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['trading']];
 	// A routine added, edited or run: a repo's automations and a project's routines show it.
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
@@ -54,6 +54,9 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
 	// An email the agent asked to send was asked, sent or turned down: only its card reads it.
 	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
+	// An order the agent asked for was asked, placed or turned down: only its card reads it.
+	// An order the agent asked for was asked, placed or turned down: only its card reads it.
+	if (change.kind === 'task' && change.what === 'orders') return [['orders', change.id]];
 	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];

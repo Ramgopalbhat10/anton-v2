@@ -724,3 +724,99 @@ export type Mailbox = {
 	/** Sends a draft as it stands. */
 	sendDraft(token: string, id: string, signal?: AbortSignal): Promise<{ id: string; threadId: string }>;
 };
+
+/** One thing a broker needs to sign in, as Settings › Trading asks for it; a secret one is never shown again once saved. */
+export type BrokerCredentialField = { key: string; label: string; secret: boolean; optional: boolean; help: string };
+
+/** A broker sign-in Anton holds on its server: the token its calls carry, and when it stops working. */
+export type BrokerSession = { token: string; expiresAt: string };
+
+/** An HTTP answer as a broker adapter reads it. */
+export type BrokerResponse = { status: number; text: string };
+
+/**
+ * How a broker's requests leave Anton's server: through the fixed-IP proxy when one is set (an encrypted
+ * tunnel, so the proxy never reads them), else straight out. Adapters make every call through it.
+ */
+export type BrokerFetch = (
+	url: string,
+	init: { method: 'GET' | 'POST'; headers: Record<string, string>; body?: string; signal?: AbortSignal },
+) => Promise<BrokerResponse>;
+
+export type OrderSide = 'BUY' | 'SELL';
+export type OrderType = 'LIMIT' | 'MARKET';
+
+/** A new order, in the broker's own words for exchange, segment and product. `limitPrice` is null for a market order. */
+export type BrokerOrder = {
+	side: OrderSide;
+	exchange: string;
+	segment: string;
+	product: string;
+	orderType: OrderType;
+	securityId: string;
+	quantity: number;
+	limitPrice: number | null;
+	afterMarket: boolean;
+	/** The user's own note on the order, kept by the broker. */
+	tag: string | null;
+};
+
+/** A change to an order still open: its new quantity and limit price. */
+export type BrokerOrderChange = { orderId: string; segment: string; quantity: number; limitPrice: number };
+
+export type BrokerCancel = { orderId: string; segment: string };
+
+/** What the broker said of an order it took. */
+export type BrokerOrderResult = { orderId: string; status: string };
+
+/** An instrument as the broker lists it, enough to quote and order it. */
+export type BrokerInstrument = {
+	securityId: string;
+	exchange: string;
+	segment: string;
+	symbol: string;
+	name: string;
+	/** The code its quotes are asked for by. */
+	quoteCode: string;
+	lotSize: number;
+	tickSize: number;
+	expiry: string | null;
+	strike: number | null;
+	optionType: string | null;
+};
+
+/** The account's state the agent may read: none of it changes anything. */
+export type BrokerRead = 'profile' | 'funds' | 'holdings' | 'positions' | 'orders';
+
+/**
+ * A stock broker (INDstocks), called from Anton's server with the user's sign-in, which never reaches a
+ * sandbox or the model. Reads are the agent's; orders go only once the user presses Place in the thread.
+ * Failures throw `BrokerError`, which says whether the sign-in ended, the broker refused, or it was not reached.
+ */
+export type Broker = {
+	/** `indstocks` */
+	readonly id: string;
+	readonly name: string;
+	readonly credentials: BrokerCredentialField[];
+	/** The words an order may use, for the tool's arguments. */
+	readonly orderOptions: { exchanges: string[]; segments: string[]; products: string[] };
+	/** The clock the broker's trading day runs on, for the daily order cap. */
+	readonly timeZone: string;
+	/** The hosts its calls go to, which a fixed-IP proxy must let through. */
+	readonly hosts: string[];
+	/** Whether these credentials are enough to sign in. */
+	canSignIn(credentials: Record<string, string>): boolean;
+	/** A session from saved credentials: a token minted from them, or one pasted as it is. */
+	signIn(credentials: Record<string, string>, fetch: BrokerFetch, signal?: AbortSignal): Promise<BrokerSession>;
+	read(session: BrokerSession, what: BrokerRead, fetch: BrokerFetch, signal?: AbortSignal): Promise<unknown>;
+	/** Full quotes for up to a few hundred instruments, by quote code. */
+	quotes(session: BrokerSession, codes: string[], fetch: BrokerFetch, signal?: AbortSignal): Promise<unknown>;
+	/** The latest traded price of what an order names, to value a market order; null when unknown. */
+	lastPrice(session: BrokerSession, order: Pick<BrokerOrder, 'exchange' | 'segment' | 'securityId'>, fetch: BrokerFetch, signal?: AbortSignal): Promise<number | null>;
+	/** Instruments whose symbol or name matches, best first; `source` picks the list (equity, derivatives…). */
+	findInstruments(session: BrokerSession, query: string, source: string, fetch: BrokerFetch, signal?: AbortSignal): Promise<BrokerInstrument[]>;
+	readonly instrumentSources: string[];
+	placeOrder(session: BrokerSession, order: BrokerOrder, fetch: BrokerFetch): Promise<BrokerOrderResult>;
+	modifyOrder(session: BrokerSession, change: BrokerOrderChange, fetch: BrokerFetch): Promise<BrokerOrderResult>;
+	cancelOrder(session: BrokerSession, cancel: BrokerCancel, fetch: BrokerFetch): Promise<BrokerOrderResult>;
+};

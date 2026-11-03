@@ -9,6 +9,7 @@ import { mcpServerStates } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
 import { logProblem } from './log.ts';
 import { secretsToHide } from './secrets.ts';
+import { brokerById, brokerQuotesText, brokerReadText, findInstrumentsText, type OrderApprovalView, readyBrokers, requestOrder } from './trading.ts';
 
 /**
  * Connectors' tools for the agent, loaded on demand. The agent always has the
@@ -21,16 +22,17 @@ import { secretsToHide } from './secrets.ts';
  * there from the agent's next call, one turned off refuses.
  */
 
-/** A connector set up in Settings › Connectors: a connected mailbox, or an added MCP server. */
-export type SetUpConnector = { id: string; name: string; kind: 'mailbox' | 'mcp'; codeMode: boolean };
+/** A connector set up in Settings: a connected mailbox, an added MCP server, or a broker signed in to in Settings › Trading. */
+export type SetUpConnector = { id: string; name: string; kind: 'mailbox' | 'mcp' | 'broker'; codeMode: boolean };
 
 /** The connectors set up now, on or off; what the agent's instructions name, so they change only when one is added or removed. */
 export async function setUpConnectors(): Promise<SetUpConnector[]> {
-	const [view, servers] = await Promise.all([connectorsView(), listMcpServers()]);
+	const [view, servers, brokers] = await Promise.all([connectorsView(), listMcpServers(), readyBrokers()]);
 	const connected = new Set(view.accounts.filter((account) => account.connectedAt).map((account) => account.id));
 	return [
 		...view.mailboxes.filter((mailbox) => connected.has(mailbox.account)).map((mailbox) => ({ id: mailbox.id, name: mailbox.name, kind: 'mailbox' as const, codeMode: false })),
 		...servers.map((server) => ({ id: server.name, name: server.name, kind: 'mcp' as const, codeMode: server.codeMode !== false })),
+		...brokers.map((broker) => ({ id: broker.id, name: broker.name, kind: 'broker' as const, codeMode: false })),
 	];
 }
 
@@ -39,10 +41,16 @@ type ConnectorTool = {
 	name: string;
 	description: string;
 	inputSchema: Record<string, unknown>;
-	run: (taskId: string, args: unknown, signal: AbortSignal) => Promise<{ output: string; approval?: MailApprovalView }>;
+	run: (taskId: string, args: unknown, signal: AbortSignal) => Promise<ConnectorResult>;
 };
 
+/** What a call answers; a mailbox's send carries the email it asks to send, a broker's order the order it asks to place. */
+export type ConnectorResult = { output: string; approval?: MailApprovalView; order?: OrderApprovalView };
+
 type Connector = { id: string; name: string; kind: SetUpConnector['kind']; state: 'on' | 'off' | 'needs-sign-in'; problem: string | null; tools: () => Promise<ConnectorTool[]> };
+
+/** How the agent hears a broker is off: it is turned on in Settings, not the composer. */
+const BROKER_OFF = 'it is off in Settings › Trading. If the work needs it, ask the user to turn it on there.';
 
 const addressList = v.pipe(v.array(v.pipe(v.string(), v.minLength(3), v.maxLength(320), v.regex(/^[^\r\n,]+$/, 'One address per item'))), v.maxLength(50));
 const ADDRESSES = { type: 'array', items: { type: 'string' }, maxItems: 50 };
@@ -135,6 +143,144 @@ function mailboxTools(id: string, name: string, access: { draft: boolean; send: 
 	];
 }
 
+const positive = v.pipe(v.number(), v.check((value) => value > 0, 'Must be above zero'));
+const shortText = (max: number) => v.pipe(v.string(), v.minLength(1), v.maxLength(max));
+
+/**
+ * A broker's tools: reads of the account, portfolio, orders, quotes and instruments, and, while trading is
+ * on in Settings › Trading, asking the user to place, change or cancel an order. Asking sends nothing; the
+ * thread shows the order with Place and Don't place, and only that press sends it from Anton.
+ */
+function brokerTools(id: string, name: string, trading: boolean): ConnectorTool[] {
+	const broker = brokerById(id);
+	const { exchanges, segments, products } = broker.orderOptions;
+	const find = v.object({ query: shortText(100), source: v.optional(v.picklist(broker.instrumentSources)) });
+	const quotes = v.object({ codes: v.pipe(v.array(v.pipe(v.string(), v.regex(/^[A-Z]+_[\w-]+$/, 'A quote code such as NSE_2885'))), v.minLength(1), v.maxLength(100)) });
+	const place = v.object({
+		side: v.picklist(['BUY', 'SELL']),
+		exchange: v.picklist(exchanges),
+		segment: v.picklist(segments),
+		product: v.picklist(products),
+		order_type: v.picklist(['LIMIT', 'MARKET']),
+		security_id: shortText(40),
+		quantity: v.pipe(v.number(), v.integer(), v.minValue(1)),
+		limit_price: v.optional(positive),
+		after_market: v.optional(v.boolean()),
+		tag: v.optional(v.pipe(v.string(), v.maxLength(100))),
+		symbol: v.optional(v.pipe(v.string(), v.maxLength(100))),
+	});
+	const modify = v.object({ order_id: shortText(60), segment: v.picklist(segments), quantity: v.pipe(v.number(), v.integer(), v.minValue(1)), limit_price: positive, symbol: v.optional(v.pipe(v.string(), v.maxLength(100))) });
+	const cancel = v.object({ order_id: shortText(60), segment: v.picklist(segments), symbol: v.optional(v.pipe(v.string(), v.maxLength(100))) });
+	const symbolArg = { type: 'string', description: 'The instrument as the user knows it (RELIANCE, NIFTY 27400 CE), shown to them on the order' };
+	const reads: ConnectorTool[] = [
+		{
+			name: `${id}_account`,
+			description: `The user's ${name} profile and funds: available cash, used margin and limits.`,
+			inputSchema: { type: 'object', properties: {} },
+			run: async (_task, _args, signal) => ({ output: await brokerReadText(id, ['profile', 'funds'], signal) }),
+		},
+		{
+			name: `${id}_portfolio`,
+			description: `The user's ${name} holdings (shares in their demat account, with average price) and open positions (intraday, F&O, commodities).`,
+			inputSchema: { type: 'object', properties: {} },
+			run: async (_task, _args, signal) => ({ output: await brokerReadText(id, ['holdings', 'positions'], signal) }),
+		},
+		{
+			name: `${id}_orders`,
+			description: `Today's ${name} order book: every order placed today with its id, status, quantities and prices. Look here before asking to change or cancel an order, and after an order whose outcome is unknown.`,
+			inputSchema: { type: 'object', properties: {} },
+			run: async (_task, _args, signal) => ({ output: await brokerReadText(id, ['orders'], signal) }),
+		},
+		{
+			name: `${id}_find_instrument`,
+			description:
+				`Find instruments in ${name}'s lists by symbol or name, best first, with the security_id an order needs, the quote code for ${id}_quotes, and lot and tick sizes. ` +
+				`source picks the list: ${broker.instrumentSources.join(', ')} (default ${broker.instrumentSources[0]}). For an option give the underlying, strike and type, such as "NIFTY 27400 CE".`,
+			inputSchema: {
+				type: 'object',
+				properties: { query: { type: 'string', description: 'Symbol or name words, such as RELIANCE or "NIFTY 27400 CE"' }, source: { type: 'string', enum: broker.instrumentSources } },
+				required: ['query'],
+			},
+			run: async (_task, args, signal) => {
+				const data = checked(find, args);
+				return { output: await findInstrumentsText(id, data.query, data.source ?? broker.instrumentSources[0]!, signal) };
+			},
+		},
+		{
+			name: `${id}_quotes`,
+			description: `Live quotes from ${name}: price, day's change, high and low, circuit limits, volume and market depth, for up to 100 instruments by quote code (from ${id}_find_instrument).`,
+			inputSchema: { type: 'object', properties: { codes: { type: 'array', items: { type: 'string' }, maxItems: 100, description: 'Quote codes such as NSE_2885' } }, required: ['codes'] },
+			run: async (_task, args, signal) => ({ output: await brokerQuotesText(id, checked(quotes, args).codes, signal) }),
+		},
+	];
+	if (!trading) return reads;
+	const asks = 'Asking sends nothing: the user sees the order with Place and Don\'t place, and it goes only when they press Place. Ask only for what the user asked for, then stop and wait for their answer.';
+	return [
+		...reads,
+		{
+			name: `${id}_place_order`,
+			description:
+				`Ask the user to place a new ${name} order. ${asks} ` +
+				'quantity is in units (for derivatives and commodities a whole multiple of the lot size). A MARKET order takes no limit_price and goes as a limit order at the live price. after_market places it for the next session.',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					side: { type: 'string', enum: ['BUY', 'SELL'] },
+					exchange: { type: 'string', enum: exchanges },
+					segment: { type: 'string', enum: segments },
+					product: { type: 'string', enum: products, description: 'EQUITY takes CNC (delivery) or INTRADAY; DERIVATIVE and COMMODITY take MARGIN or INTRADAY' },
+					order_type: { type: 'string', enum: ['LIMIT', 'MARKET'] },
+					security_id: { type: 'string', description: `From ${id}_find_instrument` },
+					quantity: { type: 'integer', minimum: 1 },
+					limit_price: { type: 'number', description: 'Required for LIMIT' },
+					after_market: { type: 'boolean' },
+					tag: { type: 'string', maxLength: 100, description: 'A note kept with the order' },
+					symbol: symbolArg,
+				},
+				required: ['side', 'exchange', 'segment', 'product', 'order_type', 'security_id', 'quantity'],
+			},
+			run: (task, args, signal) => {
+				const data = checked(place, args);
+				const order = {
+					side: data.side,
+					exchange: data.exchange,
+					segment: data.segment,
+					product: data.product,
+					orderType: data.order_type,
+					securityId: data.security_id,
+					quantity: data.quantity,
+					limitPrice: data.limit_price ?? null,
+					afterMarket: data.after_market ?? false,
+					tag: data.tag || null,
+				};
+				return requestOrder(task, id, { kind: 'place', order, symbol: data.symbol || null }, signal);
+			},
+		},
+		{
+			name: `${id}_modify_order`,
+			description: `Ask the user to change an open ${name} order's quantity and limit price (its id from ${id}_orders). ${asks}`,
+			inputSchema: {
+				type: 'object',
+				properties: { order_id: { type: 'string' }, segment: { type: 'string', enum: segments }, quantity: { type: 'integer', minimum: 1 }, limit_price: { type: 'number' }, symbol: symbolArg },
+				required: ['order_id', 'segment', 'quantity', 'limit_price'],
+			},
+			run: (task, args, signal) => {
+				const data = checked(modify, args);
+				return requestOrder(task, id, { kind: 'modify', change: { orderId: data.order_id, segment: data.segment, quantity: data.quantity, limitPrice: data.limit_price }, symbol: data.symbol || null }, signal);
+			},
+		},
+		{
+			name: `${id}_cancel_order`,
+			description: `Ask the user to cancel an open ${name} order (its id from ${id}_orders). ${asks}`,
+			inputSchema: { type: 'object', properties: { order_id: { type: 'string' }, segment: { type: 'string', enum: segments }, symbol: symbolArg }, required: ['order_id', 'segment'] },
+			run: (task, args, signal) => {
+				const data = checked(cancel, args);
+				return requestOrder(task, id, { kind: 'cancel', cancel: { orderId: data.order_id, segment: data.segment }, symbol: data.symbol || null }, signal);
+			},
+		},
+	];
+}
+
 /** `mcp__<server>__<tool>`, the name a program calls the tool by too, so both read the same in the thread. */
 export const mcpToolName = (server: string, tool: string) => `mcp__${server}__${tool}`.replace(/[^\w]/g, '_');
 
@@ -167,7 +313,7 @@ function serverToolsFor(server: McpServer, tools: McpTool[]): ConnectorTool[] {
 
 /** Every connector set up, as it stands this moment, with its tools read only when asked for. */
 async function connectorsNow(): Promise<Connector[]> {
-	const [view, servers] = await Promise.all([connectorsView(), mcpServerStates()]);
+	const [view, servers, brokers] = await Promise.all([connectorsView(), mcpServerStates(), readyBrokers()]);
 	const mailboxes = view.mailboxes.flatMap((mailbox): Connector[] => {
 		const account = view.accounts.find((item) => item.id === mailbox.account);
 		if (!account?.connectedAt) return [];
@@ -181,6 +327,9 @@ async function connectorsNow(): Promise<Connector[]> {
 			const server = entry.server;
 			return { id: entry.name, name: entry.name, kind: 'mcp', state: entry.state, problem: entry.problem, tools: async () => (server ? serverToolsFor(server, await serverTools(server)) : []) };
 		}),
+		...brokers.map(
+			(broker): Connector => ({ id: broker.id, name: broker.name, kind: 'broker', state: broker.enabled ? 'on' : 'off', problem: null, tools: async () => brokerTools(broker.id, broker.name, broker.trading) }),
+		),
 	];
 }
 
@@ -214,7 +363,7 @@ export async function connectorToolsText(query: string, signal?: AbortSignal): P
 	for (const connector of connectors) {
 		if (signal?.aborted) break;
 		if (connector.state === 'off') {
-			sections.push(`## ${connector.name}: ${OFF}`);
+			sections.push(`## ${connector.name}: ${connector.kind === 'broker' ? BROKER_OFF : OFF}`);
 			continue;
 		}
 		if (connector.state === 'needs-sign-in') {
@@ -259,11 +408,11 @@ export async function connectorToolsText(query: string, signal?: AbortSignal): P
 /** How long a call may take when the runtime gives no signal of its own. */
 const CALL_MS = 5 * 60_000;
 
-/** Runs one connector tool for a task, if its connector is on now. A mailbox's send only asks: the answer carries the approval the thread shows. */
-export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<{ output: string; approval?: MailApprovalView }> {
+/** Runs one connector tool for a task, if its connector is on now. A mailbox's send and a broker's order only ask: the answer carries what the thread shows. */
+export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<ConnectorResult> {
 	for (const connector of await connectorsNow()) {
 		if (!name.startsWith(connector.kind === 'mcp' ? mcpToolName(connector.id, '') : `${connector.id}_`)) continue;
-		if (connector.state === 'off') throw new InvalidInputError(`${connector.name} is off: ${OFF}`);
+		if (connector.state === 'off') throw new InvalidInputError(`${connector.name} is off: ${connector.kind === 'broker' ? BROKER_OFF : OFF}`);
 		if (connector.state === 'needs-sign-in') throw new InvalidInputError(`${connector.name} needs the user to sign in again in Settings › Connectors.`);
 		const tool = (await connector.tools()).find((item) => item.name === name);
 		if (!tool) continue;

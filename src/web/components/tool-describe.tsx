@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, ChartCandlestick, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 
@@ -325,7 +325,9 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 			};
 		case 'gmail_send':
 			return { icon: GMAIL.icon, body: <>Asked to send an email</> };
-		default:
+		default: {
+			const broker = brokerStep(part.toolName, input);
+			if (broker) return broker;
 			if (part.toolName.startsWith('mcp__')) {
 				// A server's tool given to the agent directly; the thread draws it with the server's own mark.
 				return {
@@ -345,7 +347,35 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					</>
 				),
 			};
+		}
 	}
+}
+
+/** A broker connector's call (`indstocks_quotes`, `indstocks_place_order`…), in words; null for any other tool. */
+function brokerStep(toolName: string, input: unknown): { icon: LucideIcon; body: ReactNode } | null {
+	const match = /^[a-z0-9-]+_(account|portfolio|orders|find_instrument|quotes|place_order|modify_order|cancel_order)$/.exec(toolName);
+	if (!match) return null;
+	const symbol = field(input, 'symbol');
+	const named = (fallback: string) => <Em>{symbol || fallback}</Em>;
+	const bodies: Record<string, ReactNode> = {
+		account: <>Read the trading account and funds</>,
+		portfolio: <>Read holdings and positions</>,
+		orders: <>Read today's orders</>,
+		find_instrument: (
+			<>
+				Looked up <Em>{field(input, 'query')}</Em>
+			</>
+		),
+		quotes: <>Read live quotes</>,
+		place_order: (
+			<>
+				Asked to {field(input, 'side') === 'SELL' ? 'sell' : 'buy'} {field(input, 'quantity')} {named(field(input, 'security_id'))}
+			</>
+		),
+		modify_order: <>Asked to change {named(field(input, 'order_id'))}</>,
+		cancel_order: <>Asked to cancel {named(field(input, 'order_id'))}</>,
+	};
+	return { icon: ChartCandlestick, body: bodies[match[1]!] };
 }
 
 /** What kind of work a tool call was, as a colour: commands cyan, edits violet, the browser amber, failures red. */

@@ -58,6 +58,15 @@ Every outside service sits behind a small interface in `src/core/ports.ts`, and 
 | `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
 | `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
 | `PushSender` | `webpush` (Web Push with VAPID, no library) | |
+| `Broker` | `indstocks` (INDstocks REST API, signing in with TOTP) | Settings › Trading |
+
+### Trading
+
+Settings › Trading connects a stock broker (INDstocks today; a new one is an entry in `brokers` in `src/providers/index.ts`). The agent reaches it through its connector tools: it reads the account, portfolio, quotes, instruments and today's orders, and asks to place, change or cancel an order. Asking sends nothing. The thread shows the order with **Place** and **Don't place**, and only that press sends it, from Anton's server, within the limits on the page (the most one order may be worth, and new orders a day). An order not answered within 30 minutes is not placed, and one that got no answer from the broker is never sent again.
+
+The sign-in (Client ID, MPIN and TOTP secret, or a pasted access token) is kept in Anton's database and used only on the server: it never reaches a sandbox, a page or the model, and the page never shows it again. With the TOTP secret, Anton signs in again by itself when the day's token ends.
+
+Brokers that take orders only from a registered static IP (INDstocks does) need a **fixed-IP proxy**. `scripts/trading-proxy/lightsail-launch.sh` sets one up on a small Lightsail instance: Caddy's forward proxy, behind a password, letting calls through only to the broker's API. Anton's calls cross it in an encrypted CONNECT tunnel, so the proxy relays bytes it cannot read. Paste its address (`https://anton:<password>@<ip>.sslip.io`) in Settings › Trading, press **Check** to see the address the broker sees, and register that IP with the broker.
 
 ### Subscriptions
 

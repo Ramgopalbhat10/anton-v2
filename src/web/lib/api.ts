@@ -268,6 +268,56 @@ export type MailApproval = {
 	decidedAt: string | null;
 };
 
+/** A broker in Settings › Trading. Credentials go in and never come back: each field says only whether it is saved. */
+export type BrokerView = {
+	id: string;
+	name: string;
+	ready: boolean;
+	enabled: boolean;
+	trading: boolean;
+	fields: Array<{ key: string; label: string; secret: boolean; optional: boolean; help: string; set: boolean }>;
+	proxy: string | null;
+	maxOrderValue: number;
+	maxOrdersPerDay: number;
+	timeZone: string;
+	hosts: string[];
+	sessionEndsAt: string | null;
+};
+export type BrokerSettingsChange = Partial<Pick<BrokerView, 'enabled' | 'trading' | 'maxOrderValue' | 'maxOrdersPerDay'>> & {
+	credentials?: Record<string, string | null>;
+	proxy?: string;
+};
+export type BrokerOrder = {
+	side: 'BUY' | 'SELL';
+	exchange: string;
+	segment: string;
+	product: string;
+	orderType: 'LIMIT' | 'MARKET';
+	securityId: string;
+	quantity: number;
+	limitPrice: number | null;
+	afterMarket: boolean;
+	tag: string | null;
+};
+export type OrderAction =
+	| { kind: 'place'; order: BrokerOrder; symbol: string | null }
+	| { kind: 'modify'; change: { orderId: string; segment: string; quantity: number; limitPrice: number }; symbol: string | null }
+	| { kind: 'cancel'; cancel: { orderId: string; segment: string }; symbol: string | null };
+/** An order the agent asked to place, change or cancel, waiting for your Place in the thread or already decided. */
+export type OrderApproval = {
+	id: string;
+	broker: string;
+	brokerName: string;
+	action: OrderAction;
+	value: number | null;
+	state: 'pending' | 'sending' | 'done' | 'declined' | 'failed' | 'unknown' | 'expired';
+	createdAt: string;
+	expiresAt: string;
+	decidedAt: string | null;
+	orderId: string | null;
+	problem: string | null;
+};
+
 /** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
 export type ProjectSettings = {
 	envKeys: string[];
@@ -764,6 +814,11 @@ export const api = {
 	signOutMcpServer: (name: string) => json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}/sign-in`, { method: 'DELETE' }),
 	mailApprovals: (sessionId: string) => json<{ approvals: MailApproval[] }>(`/api/sessions/${sessionId}/mail`),
 	decideMail: (sessionId: string, approval: string, send: boolean) => post<MailApproval>(`/api/sessions/${sessionId}/mail/${approval}`, { send }),
+	orderApprovals: (sessionId: string) => json<{ orders: OrderApproval[] }>(`/api/sessions/${sessionId}/orders`),
+	decideOrder: (sessionId: string, approval: string, place: boolean) => post<OrderApproval>(`/api/sessions/${sessionId}/orders/${approval}`, { place }),
+	trading: () => json<{ brokers: BrokerView[] }>('/api/trading'),
+	saveBroker: (id: string, change: BrokerSettingsChange) => json<BrokerView>(`/api/trading/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+	checkBroker: (id: string) => post<{ name: string | null; address: string | null; problem: string | null }>(`/api/trading/${id}/check`),
 	profile: () => json<{ name: string | null }>('/api/profile'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addableRepos: () => json<{ repos: string[] }>('/api/repos'),
