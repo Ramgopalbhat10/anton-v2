@@ -890,6 +890,21 @@ export const api = {
 		new Uint8Array(await (await request(`/api/sessions/${id}/file?path=${encodeURIComponent(path)}`)).arrayBuffer()),
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
 	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
+	/** Let the browser stream the ZIP to disk instead of buffering it in a Blob. */
+	downloadArtifacts: (items: Pick<Artifact, 'sessionId' | 'path'>[]) => {
+		const form = document.createElement('form');
+		form.method = 'POST';
+		form.action = '/api/artifacts/download';
+		form.target = '_blank';
+		form.rel = 'noopener';
+		form.hidden = true;
+		const input = document.createElement('input');
+		input.name = 'items';
+		input.value = JSON.stringify(items.map(({ sessionId, path }) => ({ sessionId, path })));
+		form.append(input);
+		document.body.append(form);
+		try { form.submit(); } finally { form.remove(); }
+	},
 	/** Adds a file of your own to the Artifacts page. */
 	addArtifact: (file: File) =>
 		json<{ path: string; sessionId: string }>(`/api/artifacts?name=${encodeURIComponent(file.name)}`, {

@@ -2,6 +2,7 @@ import { dispatch } from '@flue/runtime';
 import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { bodyLimit } from 'hono/body-limit';
 import * as v from 'valibot';
 import { Coder } from './agents/coder.ts';
 import { Reviewer } from './agents/reviewer.ts';
@@ -21,6 +22,7 @@ import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
 import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
 import { listArtifacts } from './services/artifacts.ts';
+import { downloadArtifacts } from './services/artifact-download.ts';
 import { ADDED_FILES, addFile } from './services/added-files.ts';
 import { hostRunnerAvailable } from './services/runners.ts';
 import { deleteSealedSecret, saveSealedSecret, sealedSecretsView } from './services/sealed-secrets.ts';
@@ -993,6 +995,18 @@ app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
+app.post('/api/artifacts/download', bodyLimit({ maxSize: 1024 * 1024 }), async (c) => {
+	const { items } = await c.req.parseBody();
+	let selection: unknown;
+	try { selection = JSON.parse(typeof items === 'string' ? items : ''); }
+	catch { throw new InvalidInputError('Select the artifacts to download.'); }
+	return new Response(await downloadArtifacts(selection), { headers: {
+		'Content-Type': 'application/zip',
+		'Content-Disposition': 'attachment; filename="artifacts.zip"',
+		'Cache-Control': 'no-store',
+		'X-Content-Type-Options': 'nosniff',
+	} });
+});
 // A file you add on the Artifacts page: the body is the file, its name in the query. It is read and deleted as the
 // Library of src/services/added-files.ts's holder, through the routes below.
 app.post('/api/artifacts', async (c) => {

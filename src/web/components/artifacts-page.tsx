@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl, PageThumbnail } from '@/components/html-frame';
@@ -67,19 +67,24 @@ function useDeleteArtifact(artifact: Artifact, onDeleted?: () => void) {
 	});
 }
 
-/** True once the element has come near the screen, so cards fetch what they show only then. */
-function useSeen<T extends Element>(): [React.RefObject<T | null>, boolean] {
+/** Preview resources live only while their card is on screen in an active tab. */
+function useVisible<T extends Element>(): [React.RefObject<T | null>, boolean] {
 	const ref = useRef<T>(null);
-	const [seen, setSeen] = useState(false);
+	const [visible, setVisible] = useState(false);
+	const [active, setActive] = useState(!document.hidden);
 	useEffect(() => {
 		const element = ref.current;
-		if (!element || seen) return;
-		if (typeof IntersectionObserver === 'undefined') return setSeen(true);
-		const observer = new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && setSeen(true), { rootMargin: '200px' });
+		if (!element || typeof IntersectionObserver === 'undefined') return;
+		const observer = new IntersectionObserver((entries) => setVisible(entries.some((entry) => entry.isIntersecting)));
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [seen]);
-	return [ref, seen];
+	}, []);
+	useEffect(() => {
+		const changed = () => setActive(!document.hidden);
+		document.addEventListener('visibilitychange', changed);
+		return () => document.removeEventListener('visibilitychange', changed);
+	}, []);
+	return [ref, visible && active];
 }
 
 /** The first lines of a text file, faded out at the card's edge. */
@@ -88,6 +93,7 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 		queryKey: ['output', artifact.sessionId, artifact.path],
 		queryFn: () => api.outputText(artifact.sessionId, artifact.path),
 		staleTime: 60_000,
+		gcTime: 0,
 	});
 	return (
 		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-[9.5px] leading-[14px] whitespace-pre-wrap wrap-anywhere text-(--text-tertiary) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
@@ -97,25 +103,26 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 }
 
 /** What a card shows of its artifact: the app itself, the image, a text file's first lines, or its kind. */
-function Thumb({ artifact }: { artifact: Artifact }) {
-	const [ref, seen] = useSeen<HTMLDivElement>();
+function Thumb({ artifact, previews }: { artifact: Artifact; previews: boolean }) {
+	const [ref, visible] = useVisible<HTMLDivElement>();
 	const category = categoryOf(artifact.path);
 	const info = categoryInfo(category);
-	let body: ReactNode = null;
-	if (seen && category === 'app') body = <PageThumbnail sessionId={artifact.sessionId} path={artifact.path} />;
+	let body: ReactNode;
+	if (visible && previews && category === 'app') body = <PageThumbnail sessionId={artifact.sessionId} path={artifact.path} />;
 	// A picture that cannot be read shows its kind instead of a broken image.
-	else if (seen && kindOf(artifact.path) === 'image')
+	else if (visible && kindOf(artifact.path) === 'image')
 		body = (
 			<span className="absolute inset-0">
 				<OutputThumb item={artifact} />
 			</span>
 		);
-	else if (seen && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
-	else if (seen) {
+	else if (visible && category !== 'app' && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
+	else {
 		body = (
 			<span className="flex h-full flex-col items-center justify-center gap-2">
 				<Icon icon={info.icon} size={22} className={info.tone} />
 				<span className="font-mono text-[10px] tracking-[0.08em] text-(--text-disabled)">{extensionOf(artifact.path)}</span>
+				{category === 'app' ? <span className="text-[11px] text-(--text-tertiary)">Open to use app</span> : null}
 			</span>
 		);
 	}
@@ -239,11 +246,11 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 }
 
 /** One artifact: what it looks like, its name, and the task it came from. The whole card opens it; its menu sits above the link. */
-function ArtifactCard({ artifact }: { artifact: Artifact }) {
+function ArtifactCard({ artifact, previews, selecting, selected, disabled, onSelect }: { artifact: Artifact; previews: boolean; selecting: boolean; selected: boolean; disabled: boolean; onSelect: (artifact: Artifact) => void }) {
 	const info = categoryInfo(categoryOf(artifact.path));
 	return (
-		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-default) has-[a:focus-visible]:shadow-(--focus-ring)">
-			<Thumb artifact={artifact} />
+		<div className={cn('in-card group relative flex flex-col overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-default) has-[:focus-visible]:shadow-(--focus-ring)', selected && 'ring-2 ring-(--text-secondary)')}>
+			<Thumb artifact={artifact} previews={previews} />
 			<div className="flex min-w-0 items-start gap-2 py-2.5 pr-1.5 pl-3">
 				<Icon icon={info.icon} size={13} className={cn('mt-[3px] shrink-0', info.tone)} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -252,26 +259,33 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
 						{artifact.task.title} · {when(artifact)}
 					</span>
 				</div>
-				<span className="relative z-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100">
+				{!selecting ? <span className="relative z-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100">
 					<ArtifactMenu artifact={artifact} />
-				</span>
+				</span> : null}
 			</div>
-			<Link
+			{selecting ? (
+				<label className="absolute inset-0 cursor-pointer">
+					<input type="checkbox" aria-label={`Select ${artifact.title}`} checked={selected} disabled={disabled} onChange={() => onSelect(artifact)} className="absolute top-3 left-3 size-4" />
+				</label>
+			) : <Link
 				to="/artifacts/$taskId"
 				params={{ taskId: artifact.sessionId }}
 				search={{ path: artifact.path }}
 				aria-label={`${artifact.title}, ${info.one.toLowerCase()} from ${artifact.task.title}`}
 				className="absolute inset-0 outline-none"
-			/>
+			/>}
 		</div>
 	);
 }
 
-function Grid({ items }: { items: Artifact[] }) {
+const artifactKey = (artifact: Artifact) => JSON.stringify([artifact.sessionId, artifact.path]);
+const PAGE_SIZE = 24;
+
+function Grid({ items, previews, selecting, selected, disabled, onSelect }: { items: Artifact[]; previews: boolean; selecting: boolean; selected: Set<string>; disabled: boolean; onSelect: (artifact: Artifact) => void }) {
 	return (
 		<div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
 			{items.map((artifact) => (
-				<ArtifactCard key={`${artifact.sessionId}/${artifact.path}`} artifact={artifact} />
+				<ArtifactCard key={artifactKey(artifact)} artifact={artifact} previews={previews} selecting={selecting} selected={selected.has(artifactKey(artifact))} disabled={disabled} onSelect={onSelect} />
 			))}
 		</div>
 	);
@@ -293,6 +307,71 @@ function matches(artifact: Artifact, query: string): boolean {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	const haystack = `${artifact.title} ${artifact.path} ${artifact.task.title}`.toLowerCase();
 	return words.every((word) => haystack.includes(word));
+}
+
+function SelectionActions({ items, shown, selected, setSelected, busy, setBusy, onClose }: {
+	items: Artifact[];
+	shown: Artifact[];
+	selected: Set<string>;
+	setSelected: (next: Set<string>) => void;
+	busy: boolean;
+	setBusy: (next: boolean) => void;
+	onClose: () => void;
+}) {
+	const client = useQueryClient();
+	const [confirming, setConfirming] = useState<Set<string> | null>(null);
+	const [result, setResult] = useState('');
+	const [progress, setProgress] = useState(0);
+	const picked = items.filter((item) => selected.has(artifactKey(item)));
+	const remove = useMutation({
+		mutationFn: async (targets: Artifact[]) => {
+			const failed: Artifact[] = [];
+			const errors: string[] = [];
+			for (const [index, item] of targets.entries()) {
+				try {
+					await api.deleteOutput(item.sessionId, item.path);
+					client.setQueryData<{ artifacts: Artifact[] }>(['artifacts'], (current) => current ? { artifacts: current.artifacts.filter((other) => artifactKey(other) !== artifactKey(item)) } : current);
+				} catch (error) {
+					failed.push(item);
+					errors.push(`${item.title}: ${error instanceof Error ? error.message : 'Delete failed'}`);
+				}
+				setProgress(index + 1);
+			}
+			return { failed, errors, deleted: targets.length - failed.length };
+		},
+		onSuccess: ({ failed, errors, deleted }) => {
+			setSelected(new Set(failed.map(artifactKey)));
+			setResult(`Deleted ${deleted} artifact${deleted === 1 ? '' : 's'}.${failed.length ? ` ${failed.length} could not be deleted. ${errors.join('; ')}` : ''}`);
+		},
+		onSettled: (_data, _error, targets) => {
+			setBusy(false);
+			setConfirming(null);
+			void client.invalidateQueries({ queryKey: ['artifacts'] });
+			for (const id of new Set(targets.map((item) => item.sessionId))) void client.invalidateQueries({ queryKey: ['outputs', id] });
+		},
+	});
+	return (
+		<div className="in-card flex flex-col gap-2 p-3" aria-label="Artifact selection">
+			<div className="flex flex-wrap items-center gap-2">
+				<span className="text-[13px] text-(--text-primary)" role="status">{picked.length} selected</span>
+				<Btn size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(shown.map(artifactKey)))}>Select all {shown.length} matching</Btn>
+				<Btn size="sm" variant="ghost" disabled={busy || !picked.length} onClick={() => setSelected(new Set())}>Clear selection</Btn>
+				<span className="flex-1" />
+				<Btn size="sm" variant="ghost" icon={Download} disabled={busy || !picked.length || picked.length > 1000} onClick={() => api.downloadArtifacts(picked)}>Download ZIP</Btn>
+				<Btn size="sm" variant="ghost" icon={Trash2} disabled={busy || !picked.length} onClick={() => { setResult(''); setConfirming(selected); }}>{busy ? `Deleting… ${progress}` : 'Delete selected'}</Btn>
+				<Btn size="sm" variant="ghost" disabled={busy} onClick={onClose}>Done</Btn>
+			</div>
+			{picked.length > 1000 ? <p className="m-0 text-[12px] text-(--text-secondary)">Download up to 1,000 artifacts at a time.</p> : null}
+			{confirming === selected ? (
+				<div role="alert" className="flex flex-wrap items-center gap-2 text-[12px] text-(--text-secondary)">
+					<span>Permanently delete {picked.length} artifact{picked.length === 1 ? '' : 's'}? They leave their tasks’ Libraries too. This cannot be undone.</span>
+					<Btn size="sm" variant="ghost" disabled={busy} onClick={() => { setBusy(true); setProgress(0); remove.mutate(picked); }}>Confirm delete selected</Btn>
+					<Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>Cancel</Btn>
+				</div>
+			) : null}
+			{result ? <p role="status" className="m-0 text-[12px] text-(--text-secondary)">{result}</p> : null}
+		</div>
+	);
 }
 
 /** Adds files of your own, such as a skill's SKILL.md, which any task can then be given from the composer's + menu. */
@@ -335,6 +414,11 @@ export function ArtifactsPage() {
 	const all = artifacts.data?.artifacts ?? [];
 	const query = search.q ?? '';
 	const type = search.type;
+	const [previews, setPreviews] = useState(false);
+	const [selecting, setSelecting] = useState(false);
+	const [selected, setSelected] = useState(new Set<string>());
+	const [busy, setBusy] = useState(false);
+	const [pagination, setPagination] = useState({ scope: '', page: 1 });
 	const found = useMemo(() => (query ? all.filter((artifact) => matches(artifact, query)) : all), [all, query]);
 	const counts = useMemo(() => {
 		const byCategory = new Map<Category, number>();
@@ -344,28 +428,44 @@ export function ArtifactsPage() {
 	const shown = type ? found.filter((artifact) => categoryOf(artifact.path) === type) : found;
 	const apps = shown.filter((artifact) => categoryOf(artifact.path) === 'app');
 	const files = shown.filter((artifact) => categoryOf(artifact.path) !== 'app');
-	const setSearch = (next: ArtifactsSearch) => void navigate({ to: '/artifacts', search: next, replace: true });
+	const ordered = type ? shown : [...apps, ...files];
+	const scope = JSON.stringify([type, query]);
+	const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+	const page = Math.min(pagination.scope === scope ? pagination.page : 1, pages);
+	const visible = ordered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+	const setSearch = (next: ArtifactsSearch) => {
+		setSelected(new Set());
+		void navigate({ to: '/artifacts', search: next, replace: true });
+	};
+	const grid = (items: Artifact[]) => <Grid items={items} previews={previews} selecting={selecting} selected={selected} disabled={busy} onSelect={(item) => setSelected((current) => {
+		const next = new Set(current);
+		const key = artifactKey(item);
+		if (next.has(key)) next.delete(key); else next.add(key);
+		return next;
+	})} />;
 
 	return (
 		<PageFrame title="Artifacts">
 			<div className="flex flex-wrap items-center gap-2">
 				<Segmented label="Kind" className="max-w-full overflow-x-auto">
-					<SegmentedItem size="sm" on={!type} onClick={() => setSearch({ q: query || undefined })}>
+					<SegmentedItem size="sm" disabled={busy} on={!type} onClick={() => setSearch({ q: query || undefined })}>
 						All
 						<span className="in-num text-(--text-disabled)">{found.length}</span>
 					</SegmentedItem>
 					{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
-						<SegmentedItem key={category.key} size="sm" on={type === category.key} onClick={() => setSearch({ type: category.key, q: query || undefined })}>
+						<SegmentedItem key={category.key} size="sm" disabled={busy} on={type === category.key} onClick={() => setSearch({ type: category.key, q: query || undefined })}>
 							{category.label}
 							<span className="in-num text-(--text-disabled)">{counts.get(category.key) ?? 0}</span>
 						</SegmentedItem>
 					))}
 				</Segmented>
 				<span className="min-w-0 flex-1" />
+				{!selecting ? <Btn size="sm" variant="ghost" icon={CheckSquare} disabled={!shown.length} onClick={() => setSelecting(true)}>Select</Btn> : null}
 				<AddFiles />
 				<label className="flex h-8 w-full items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
 					<Icon icon={Search} size={12} className="shrink-0 text-(--icon-tertiary)" />
 					<input
+						disabled={busy}
 						value={query}
 						onChange={(event) => setSearch({ type, q: event.target.value || undefined })}
 						onKeyDown={(event) => event.key === 'Escape' && setSearch({ type })}
@@ -374,12 +474,17 @@ export function ArtifactsPage() {
 						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none"
 					/>
 					{query ? (
-						<button type="button" aria-label="Clear search" onClick={() => setSearch({ type })} className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)">
+						<button type="button" disabled={busy} aria-label="Clear search" onClick={() => setSearch({ type })} className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)">
 							<Icon icon={X} size={12} />
 						</button>
 					) : null}
 				</label>
 			</div>
+			<div className="flex flex-wrap items-center gap-3 text-[12px] text-(--text-tertiary)">
+				<label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={previews} onChange={(event) => setPreviews(event.target.checked)} />Live app previews</label>
+				<span>{previews ? 'Only on-screen apps run. Scrolling away reloads their previews.' : 'Apps run only when opened to keep this gallery light.'}</span>
+			</div>
+			{selecting ? <SelectionActions items={all} shown={shown} selected={selected} setSelected={setSelected} busy={busy} setBusy={setBusy} onClose={() => { setSelecting(false); setSelected(new Set()); }} /> : null}
 
 			{artifacts.isPending ? (
 				<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
@@ -397,21 +502,26 @@ export function ArtifactsPage() {
 			) : shown.length === 0 ? (
 				<EmptyState title="Nothing matches" body={query ? 'Try other words, or clear the search.' : 'Pick another kind, or All.'} />
 			) : type ? (
-				<Grid items={shown} />
+				grid(visible)
 			) : (
 				<>
-					{apps.length ? (
+					{visible.some((item) => categoryOf(item.path) === 'app') ? (
 						<Section label="Apps" count={apps.length}>
-							<Grid items={apps} />
+							{grid(visible.filter((item) => categoryOf(item.path) === 'app'))}
 						</Section>
 					) : null}
-					{files.length ? (
+					{visible.some((item) => categoryOf(item.path) !== 'app') ? (
 						<Section label="Files" count={files.length}>
-							<Grid items={files} />
+							{grid(visible.filter((item) => categoryOf(item.path) !== 'app'))}
 						</Section>
 					) : null}
 				</>
 			)}
+			{shown.length > PAGE_SIZE ? <nav aria-label="Artifact pages" className="flex items-center justify-center gap-3">
+				<Btn size="sm" variant="ghost" disabled={busy || page === 1} onClick={() => setPagination({ scope, page: page - 1 })}>Previous page</Btn>
+				<span role="status" className="text-[12px] text-(--text-tertiary)">Page {page} of {pages} · {shown.length} artifacts</span>
+				<Btn size="sm" variant="ghost" disabled={busy || page === pages} onClick={() => setPagination({ scope, page: page + 1 })}>Next page</Btn>
+			</nav> : null}
 		</PageFrame>
 	);
 }
