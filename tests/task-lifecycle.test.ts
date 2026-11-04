@@ -872,14 +872,19 @@ test('General settings decide how a new task starts when the launcher does not s
 		imageModel: null,
 		titleModel: null,
 		compactAt: null,
+		claudeCodeCompactAt: 200_000,
 		agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
 		backgroundModels: { webDigest: 'openrouter/plain/no-reasoning', vision: null, compaction: 'openrouter/plain/no-reasoning' },
+		backgroundReasoning: { webDigest: 'low', vision: 'high', compaction: 'medium' },
 	});
-	const { backgroundModel } = await import('../src/services/general.ts');
+	const { backgroundModel, backgroundReasoning } = await import('../src/services/general.ts');
 	const { compactionFor } = await import('../src/services/context-usage.ts');
 	assert.equal(backgroundModel('webDigest'), 'openrouter/plain/no-reasoning', 'a chosen background model is used at once');
 	assert.equal(backgroundModel('vision'), config.visionModel, 'the rest keep their defaults');
 	assert.equal(compactionFor('openrouter/moonshotai/kimi-k2.6')?.model, 'openrouter/plain/no-reasoning', 'compaction summaries come from the chosen model');
+	assert.equal(compactionFor('openrouter/moonshotai/kimi-k2.6')?.reasoning, 'medium', 'at the effort picked with it');
+	assert.equal(backgroundReasoning('webDigest'), 'low');
+	assert.equal(backgroundReasoning('vision'), null, 'an effort counts only beside a model picked for it');
 
 	const plain = await sessions.createSession({ projectId: project.id, title: 'Defaults' });
 	assert.deepEqual([plain.model, plain.reasoning, plain.planMode], ['openrouter/moonshotai/kimi-k2.6', 'low', true]);

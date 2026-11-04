@@ -1,7 +1,7 @@
 import { config } from '../config.ts';
 import { getProviders } from '../providers/index.ts';
 import type { ModelInfo } from '../core/ports.ts';
-import { backgroundModel } from './general.ts';
+import { backgroundModel, backgroundReasoning, textEffort } from './general.ts';
 import { logProblem } from './log.ts';
 import { loadedModels } from './models.ts';
 import { modelFor } from './sessions.ts';
@@ -114,7 +114,11 @@ export async function digestResult<T>(
 	const task = models.find((info) => info.id === modelFor(conversation).model);
 	if (!digestPays(task, models.find((info) => info.id === model), text.length, Math.min(text.length, limitFor(toolName)) - DIGEST_CHARS)) return cut();
 	try {
-		const answer = await writer.write({ model, prompt: digestPrompt(toolName, objective, text), maxTokens: MAX_TOKENS }, AbortSignal.timeout(DIGEST_MS));
+		const effort = textEffort(backgroundReasoning('webDigest'));
+		const answer = await writer.write(
+			{ model, prompt: digestPrompt(toolName, objective, text), maxTokens: MAX_TOKENS, ...(effort ? { reasoning: effort } : {}) },
+			AbortSignal.timeout(DIGEST_MS),
+		);
 		void recordUsage(conversation, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 		const digest = answer.text.trim();
 		if (!digest) return cut();

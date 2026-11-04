@@ -562,10 +562,17 @@ export type DecisionModel = {
  * that must see something, such as the computer tool finding what to click on
  * the screen and saying what the screen shows.
  */
+/** A reasoning effort as OpenRouter's chat API takes it, or `off` for no reasoning. */
+export type OpenRouterEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export type VisionModel = {
 	/** Whether it runs this `<gateway>/<model>` specifier. */
 	runs(model: string): boolean;
-	look(input: { model: string; prompt: string; image: Uint8Array; mimeType: string }, signal?: AbortSignal): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
+	/** `reasoning` asks a reasoning model for that effort, or to answer without reasoning (`off`); without it, the model's default. */
+	look(
+		input: { model: string; prompt: string; image: Uint8Array; mimeType: string; reasoning?: OpenRouterEffort },
+		signal?: AbortSignal,
+	): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };
 
 /**
@@ -577,7 +584,7 @@ export type TextModel = {
 	runs(model: string): boolean;
 	/** `reasoning` asks a reasoning model for that effort, or to answer without reasoning (`off`); `timeoutMs` allows a longer piece than the default few seconds. */
 	write(
-		input: { model: string; prompt: string; maxTokens: number; reasoning?: 'off' | 'low' | 'medium' | 'high'; timeoutMs?: number },
+		input: { model: string; prompt: string; maxTokens: number; reasoning?: OpenRouterEffort; timeoutMs?: number },
 		signal?: AbortSignal,
 	): Promise<{ text: string; inputTokens: number; outputTokens: number; cost: number }>;
 };

@@ -32,7 +32,7 @@ import { profileName } from './services/profile.ts';
 import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
-import { backgroundDefaults, COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
+import { backgroundDefaults, COMPACT_AT, DEFAULT_CLAUDE_CODE_COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
@@ -351,9 +351,14 @@ app.put('/api/settings/general', async (c) => {
 			imageModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			titleModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 			compactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_COMPACT_AT),
+			claudeCodeCompactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_CLAUDE_CODE_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 			backgroundModels: v.optional(
 				v.object({ webDigest: BACKGROUND_MODEL, vision: BACKGROUND_MODEL, compaction: BACKGROUND_MODEL }),
+				{ webDigest: null, vision: null, compaction: null },
+			),
+			backgroundReasoning: v.optional(
+				v.object({ webDigest: v.optional(v.nullable(REASONING), null), vision: v.optional(v.nullable(REASONING), null), compaction: v.optional(v.nullable(REASONING), null) }),
 				{ webDigest: null, vision: null, compaction: null },
 			),
 		}),

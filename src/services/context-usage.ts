@@ -1,8 +1,9 @@
+import type { Reasoning } from '../core/ports.ts';
 import { announce } from '../core/changes.ts';
 import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { backgroundModel, compactionCeiling, generalSettings } from './general.ts';
+import { backgroundModel, backgroundReasoning, compactionCeilingFor, generalSettings } from './general.ts';
 import { logProblem } from './log.ts';
 import { findModel, loadedModels } from './models.ts';
 
@@ -145,18 +146,21 @@ export function keptAfterCompaction(compactsAt: number): number {
 
 /**
  * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
- * comes before the window fills, else at the runtime's own point, keeping what `keptAfterCompaction`
- * says; and the summary written by the compaction model chosen there (a faster one makes compacting
- * quicker), else by the agent's own. For a model of unknown window the point is left to the runtime.
- * Undefined leaves both to the runtime. Read while the agent renders, from the model list last fetched.
+ * comes before the window fills (Claude Code's models have a ceiling of their own), else at the runtime's
+ * own point, keeping what `keptAfterCompaction` says; and the summary written by the compaction model
+ * chosen there (a faster one makes compacting quicker) at the effort chosen with it, else by the agent's
+ * own. For a model of unknown window the point is left to the runtime. Undefined leaves both to the
+ * runtime. Read while the agent renders, from the model list last fetched.
  */
 export function compactionFor(
 	model: string,
-	ceiling = compactionCeiling(),
+	ceiling = compactionCeilingFor(unrouted(model)),
 	models = loadedModels(),
 	summarizer = backgroundModel('compaction'),
-): { reserveTokens?: number; keepRecentTokens?: number; model?: string } | undefined {
-	const summary = summarizer ? { model: summarizer } : {};
+	effort = backgroundReasoning('compaction'),
+): { reserveTokens?: number; keepRecentTokens?: number; model?: string; reasoning?: Reasoning } | undefined {
+	// `reasoning` is read by Anton's patch to Flue's summary call (scripts/patch-flue.ts); without it the summary thinks at high.
+	const summary = summarizer ? { model: summarizer, ...(effort ? { reasoning: effort } : {}) } : {};
 	const info = models.find((entry) => entry.id === unrouted(model));
 	if (!info?.contextLength) return summarizer ? summary : undefined;
 	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
@@ -177,7 +181,8 @@ export function scaleParts(estimates: Record<ContextPart, number>, total: number
 export async function contextView(id: string): Promise<ContextView> {
 	const [snapshot, task] = await Promise.all([getSetting<Snapshot | null>(key(id), null), sessionCalls(id)]);
 	if (!snapshot) return { model: null, window: 0, used: 0, autocompactAt: 0, parts: [], at: null, task };
-	const [info, { compactAt }] = await Promise.all([findModel(snapshot.model).catch(() => undefined), generalSettings()]);
+	const [info, settings] = await Promise.all([findModel(snapshot.model).catch(() => undefined), generalSettings()]);
+	const compactAt = compactionCeilingFor(snapshot.model, settings);
 	const window = info?.contextLength ?? 0;
 	return {
 		model: snapshot.model,

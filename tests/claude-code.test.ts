@@ -10,8 +10,8 @@ import type { AgentRuntime, AgentRuntimeStatus, ModelInfo, RuntimeContent, Runti
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-claude-code-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { childEnv, isExtraUsageNotice, statusFrom, toModels, toRuntimeEvents, toWindows } = await import('../src/providers/claude-code/runtime.ts');
-const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, transcript } = await import('../src/flue/claude-code-models.ts');
+const { childEnv, isExtraUsageNotice, statusFrom, toModels, toRuntimeEvents, toWindows, windowOf } = await import('../src/providers/claude-code/runtime.ts');
+const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, IDLE_MS, sweepIdle, transcript } = await import('../src/flue/claude-code-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/subscriptions.ts');
 const { listModels } = await import('../src/services/models.ts');
@@ -280,6 +280,32 @@ test('only so many conversations stay open; the longest idle closes first', asyn
 	);
 });
 
+test('a conversation stays open while it waits on tools, and only waits out the idle limit otherwise', async () => {
+	const fake = fakeRuntime();
+	const { models, model } = bridge(fake.runtime, { maxOpen: 2 });
+	// w1 asks for a tool, a subagent say, and waits on it; w2 answers and sits idle.
+	const waiting = models.completeSimple(model, { messages: [user('w1')], tools: [readTool] }, { sessionId: 'w1' });
+	await new Promise((resolve) => setImmediate(resolve));
+	fake.opened[0].events.push(...callTools(['tu_w', 'read', { path: 'a.ts' }]));
+	assert.equal((await waiting).stopReason, 'toolUse');
+	const idle = models.completeSimple(model, { messages: [user('w2')] }, { sessionId: 'w2' });
+	await new Promise((resolve) => setImmediate(resolve));
+	fake.opened[1].events.push(...say('ok'));
+	await idle;
+
+	sweepIdle(Date.now() + 10 * 60_000 + 1);
+	assert.deepEqual(fake.opened.map((conversation) => conversation.closed), [false, false], 'ten idle minutes are well inside the cache’s hour');
+	sweepIdle(Date.now() + IDLE_MS + 1);
+	assert.deepEqual(fake.opened.map((conversation) => conversation.closed), [false, true], 'past the limit the idle one closes; the one waiting on its tool stays');
+
+	// A third conversation makes room only from idle ones, never from one waiting on a tool.
+	const third = models.completeSimple(model, { messages: [user('w3')] }, { sessionId: 'w3' });
+	await new Promise((resolve) => setImmediate(resolve));
+	fake.opened[2].events.push(...say('ok'));
+	await third;
+	assert.equal(fake.opened[0].closed, false);
+});
+
 test('the bridge recognises the messages it saw, and tells results and new messages from a changed history', () => {
 	const assistant = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }, { type: 'toolCall', id: 'tu_1', name: 'read', arguments: {} }], responseId: 'x' } as unknown as Message;
 	assert.equal(fingerprint(assistant), fingerprint({ ...assistant, responseId: 'y' } as Message));
@@ -388,6 +414,28 @@ test('a model Claude Code lists under its 1M name gets 1M of context, and one wi
 		[undefined, { of: 'claude-code/claude-opus-5-5[1m]', context: null, fast: true }, undefined],
 		'a plan that serves Opus at 1M alone shows it as the model, with fast mode its variant',
 	);
+});
+
+test('a model gets the context Claude Code itself serves it at on this account, under its plain name', () => {
+	const listed = [
+		{ value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus', description: 'Opus 5.5 · Most capable', supportsAdaptiveThinking: true, supportedEffortLevels: ['low', 'high'] as const },
+		{ value: 'haiku', resolvedModel: 'claude-haiku-4-5', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest' },
+		{ value: 'claude-fable-5-1', displayName: 'Fable', description: 'Toughest challenges' },
+	];
+	const models = toModels(listed as never, 'claude-code', new Map([['opus', 1_000_000], ['haiku', 200_000]]));
+	assert.deepEqual(
+		models.map((model) => [model.id, model.name, model.contextLength]),
+		[
+			['claude-code/claude-opus-5-5', 'Claude Opus 5.5', 1_000_000],
+			['claude-code/claude-haiku-4-5', 'Claude Haiku 4.5', 200_000],
+			['claude-code/claude-fable-5-1', 'Claude Fable 5.1', 200_000],
+		],
+		'a model Claude Code says nothing for keeps 200K',
+	);
+	assert.equal(windowOf({ rawMaxTokens: 1_000_000 }), 1_000_000, 'Claude Code answers in camel case');
+	assert.equal(windowOf({ raw_max_tokens: 200_000 }), 200_000, 'as the SDK’s types name it');
+	assert.equal(windowOf({}), undefined);
+	assert.equal(windowOf(null), undefined);
 });
 
 test('an alias that names 1M keeps it when its wire id does not', () => {

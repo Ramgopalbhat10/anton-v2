@@ -15,7 +15,7 @@ type WireResponse = {
 export function openRouterVision({ apiUrl, apiKey }: VisionOptions): VisionModel {
 	return {
 		runs: (model) => model.startsWith('openrouter/'),
-		async look({ model, prompt, image, mimeType }, signal) {
+		async look({ model, prompt, image, mimeType, reasoning }, signal) {
 			const key = typeof apiKey === 'function' ? apiKey() : apiKey;
 			if (!key) throw new Error('Seeing the screen needs an OpenRouter key. Add one under Settings › Subscriptions.');
 			const timeout = AbortSignal.timeout(TIMEOUT_MS);
@@ -35,6 +35,7 @@ export function openRouterVision({ apiUrl, apiKey }: VisionOptions): VisionModel
 						},
 					],
 					max_tokens: 800,
+					...(reasoning ? { reasoning: reasoning === 'off' ? { enabled: false } : { effort: reasoning } } : {}),
 					usage: { include: true },
 				}),
 			});

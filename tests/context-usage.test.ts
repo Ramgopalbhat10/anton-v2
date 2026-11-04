@@ -17,6 +17,7 @@ const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession, getSessionRecord, addSessionUsage } = await import('../src/db/sessions.ts');
 const { setSetting } = await import('../src/db/settings.ts');
+const { compactionCeilingFor } = await import('../src/services/general.ts');
 
 const model = (id: string, contextLength: number, maxOutput: number | null): ModelInfo => ({
 	id,
@@ -95,6 +96,24 @@ test('a ceiling compacts a large window sooner, and leaves a window that fills f
 	assert.deepEqual(compactionFor('openai/gpt-6-luna', 200_000, models), { keepRecentTokens: 36_000 }, 'the window fills first');
 	assert.equal(compactionFor('cursor/grok-4.7', 200_000, models), undefined, 'an unknown window is left to the runtime');
 	assert.equal(compactionFor('openrouter/unlisted', 200_000, models), undefined);
+});
+
+test('Claude Code’s models compact at their own point, and a compaction model brings the effort picked with it', () => {
+	const models = [model('claude-code/claude-opus-5-5', 1_000_000, 128_000), model('opencode-go/deepseek-v4-pro', 1_000_000, 384_000)];
+	const settings = { compactAt: 400_000 as const, claudeCodeCompactAt: 200_000 as const };
+	assert.equal(compactionCeilingFor('claude-code/claude-opus-5-5', settings), 200_000);
+	assert.equal(compactionCeilingFor('opencode-go/deepseek-v4-pro', settings), 400_000, 'other models keep Compact at');
+	assert.deepEqual(compactionFor('claude-code/claude-opus-5-5', compactionCeilingFor('claude-code/claude-opus-5-5', settings), models, null, null), {
+		reserveTokens: 800_000,
+		keepRecentTokens: 40_000,
+	});
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 400_000, models, 'openrouter/fast', 'low'), {
+		reserveTokens: 600_000,
+		keepRecentTokens: 40_000,
+		model: 'openrouter/fast',
+		reasoning: 'low',
+	});
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 400_000, models, 'openrouter/fast', null), { reserveTokens: 600_000, keepRecentTokens: 40_000, model: 'openrouter/fast' });
 });
 
 test('a compaction keeps a fifth of the context it compacts at, between the runtime’s 8K and 40K', () => {

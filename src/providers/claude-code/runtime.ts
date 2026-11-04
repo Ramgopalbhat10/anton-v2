@@ -238,11 +238,13 @@ function piEntry(id: string): PiAnthropic | undefined {
 }
 
 /**
- * Plan models are given a 200K context: Claude Code serves 1M only on some plans, and lists a model under
- * its `[1m]` name when the plan serves it. A conversation that outgrows what the plan serves fails, so only
- * those models get 1M. Flue compacts at this size.
+ * A plan model's context when Claude Code does not say: 200K. Claude Code serves 1M only on some plans,
+ * and a conversation that outgrows what the plan serves fails. Claude Code says what it serves for each
+ * model the account has (`contextsOf`): Opus 5.5 gets 1M under its plain name, with no `[1m]` name listed.
  */
 const PLAN_CONTEXT = 200_000;
+/** How long the status probe waits for the models' contexts before listing them without. */
+const CONTEXTS_TIMEOUT_MS = 10_000;
 
 /** `claude-opus-4-7` as "Claude Opus 4.7"; a dated snapshot drops its date. */
 export function nameOf(id: string): string {
@@ -254,7 +256,7 @@ export function nameOf(id: string): string {
  * One of the models Claude Code offers the account, as Anton lists it, and its fast mode when Claude Code
  * offers one for it (`[fast]`, which bills paid extra usage rather than the plan). Aliases such as `default` are left out.
  */
-export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): SubscriptionModel[] {
+export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY, window?: number): SubscriptionModel[] {
 	const resolved = parseVariant(listed.resolvedModel ?? listed.value);
 	// The wire id an alias resolves to can drop the 1M its name asks for (`sonnet[1m]` → `claude-sonnet-5`).
 	const context = resolved.context ?? parseVariant(listed.value).context;
@@ -274,7 +276,7 @@ export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): Su
 		vendor: 'Anthropic',
 		description: description || 'Runs on your Claude plan through Claude Code.',
 		createdAt: 0,
-		contextLength: (context && sizeOf(context)) || Math.min(PLAN_CONTEXT, pi?.contextWindow ?? PLAN_CONTEXT),
+		contextLength: window || (context && sizeOf(context)) || Math.min(PLAN_CONTEXT, pi?.contextWindow ?? PLAN_CONTEXT),
 		maxOutput: pi?.maxTokens ?? null,
 		vision: pi?.input.includes('image') ?? true,
 		reasoning,
@@ -292,14 +294,49 @@ export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY): Su
 	return withVariants(model, { fast: { description: 'Fast mode answers sooner, billed as paid extra usage rather than your plan’s limits.', change: { listPrice } } });
 }
 
-export function toModels(listed: ClaudeModel[], gateway = GATEWAY): SubscriptionModel[] {
+/** `contexts`: the context Claude Code serves for each listed model, by the name it lists it under (`value`). */
+export function toModels(listed: ClaudeModel[], gateway = GATEWAY, contexts: ReadonlyMap<string, number> = new Map()): SubscriptionModel[] {
 	const models = new Map<string, SubscriptionModel>();
 	for (const entry of listed) {
-		for (const model of toSubscriptionModels(entry, gateway)) if (!models.has(model.id)) models.set(model.id, model);
+		for (const model of toSubscriptionModels(entry, gateway, contexts.get(entry.value))) if (!models.has(model.id)) models.set(model.id, model);
 	}
 	// A dated snapshot listed beside its undated name is the same model twice.
 	const undated = (id: string) => id.replace(/-\d{8}(?=\[|$)/, '');
 	return linkVariants([...models.values()].filter((model) => undated(model.id) === model.id || !models.has(undated(model.id))));
+}
+
+/** The window Claude Code measures a context against; the SDK's types name it in snake case, its answers in camel case. */
+export function windowOf(usage: unknown): number | undefined {
+	const answer = (usage ?? {}) as { raw_max_tokens?: unknown; rawMaxTokens?: unknown };
+	const tokens = answer.raw_max_tokens ?? answer.rawMaxTokens;
+	return typeof tokens === 'number' && tokens > 0 ? tokens : undefined;
+}
+
+/**
+ * The context Claude Code itself gives each listed model on this account, as `/context` measures it: the
+ * session is switched to each in turn, which makes no model call. Auto-compaction is off in the child
+ * (`childEnv`), so this is the model's whole window rather than a compaction point. A model it will not
+ * say for is left out, and keeps the 200K default.
+ */
+async function contextsOf(session: Query, listed: ClaudeModel[]): Promise<Map<string, number>> {
+	const windows = new Map<string, number>();
+	let late = false;
+	const read = async () => {
+		for (const entry of listed) {
+			if (late) return;
+			if (!parseVariant(entry.resolvedModel ?? entry.value).base.startsWith('claude-')) continue;
+			try {
+				await session.setModel(entry.value);
+				const window = windowOf(await session.getContextUsage({ detail: 'summary' }));
+				if (window) windows.set(entry.value, window);
+			} catch {
+				// An older Claude Code without the call, or a model it will not switch to.
+			}
+		}
+	};
+	await Promise.race([read(), new Promise((resolve) => setTimeout(resolve, CONTEXTS_TIMEOUT_MS).unref())]);
+	late = true;
+	return new Map(windows);
 }
 
 type Usage = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>;
@@ -430,8 +467,10 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 				close();
 				return { status, models: [], windows: Promise.resolve(null) };
 			}
+			const listed = await session.supportedModels();
+			const models = toModels(listed, GATEWAY, await contextsOf(session, listed));
+			// The plan's limits are read once the session has stopped switching models.
 			const windows = usageOf(session).catch(() => null);
-			const models = toModels(await session.supportedModels());
 			void windows.finally(close);
 			return { status, models, windows };
 		} catch (error) {
