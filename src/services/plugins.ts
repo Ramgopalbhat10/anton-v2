@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { unzipSync } from 'fflate';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import {
 	type CatalogEntry,
@@ -152,16 +153,36 @@ const ADDED_SOURCE = ADDED_FILES;
 
 export const isAdded = (source: PluginSource) => source.repo === ADDED_SOURCE;
 
+const isZip = (path: string) => /\.zip$/i.test(path);
+
 /**
- * Installs a file you added on the Artifacts page as a skill. The file is a SKILL.md by content, not by
- * name: its front matter names the skill and says when to use it, so a file called IndMoney-API.md
- * installs as the skill its `name:` gives. Installing the same file again updates it.
+ * A skill folder zipped whole, so its scripts and references come with its SKILL.md: the SKILL.md nearest the
+ * top is the skill, whether the zip holds the folder's files or the folder itself.
+ */
+function zippedSkill(path: string, bytes: Uint8Array): { files: RepoFiles; dir: string } {
+	let entries: Record<string, Uint8Array>;
+	try {
+		entries = unzipSync(bytes, { filter: (file) => !file.name.endsWith('/') && !file.name.startsWith('__MACOSX/') });
+	} catch {
+		throw new InvalidInputError(`${path} could not be opened as a zip`);
+	}
+	const paths = Object.keys(entries).filter((name) => !name.split('/').some((part) => part === '..' || part === ''));
+	const skillFile = paths.filter((name) => name === 'SKILL.md' || name.endsWith('/SKILL.md')).sort((a, b) => a.split('/').length - b.split('/').length)[0];
+	if (!skillFile) throw new InvalidInputError(`${path} has no SKILL.md. Zip a skill's folder: its SKILL.md with the scripts and references beside it.`);
+	return { files: { paths, read: async (at) => entries[at] ?? null }, dir: skillFile.slice(0, -'SKILL.md'.length).replace(/\/$/, '') };
+}
+
+/**
+ * Installs a file you added on the Artifacts page as a skill: a SKILL.md, or a skill's folder zipped with its
+ * scripts. A SKILL.md is one by content, not by name: its front matter names the skill and says when to use
+ * it, so a file called IndMoney-API.md installs as the skill its `name:` gives. Installing the same file again
+ * updates it.
  */
 export async function installAddedSkill(path: string): Promise<InstalledPlugin> {
 	const bytes = await readOutput(ADDED_FILES, path);
 	if (!bytes) throw new NotFoundError(`${path} is not among the files you added`);
-	const files: RepoFiles = { paths: ['SKILL.md'], read: async (at) => (at === 'SKILL.md' ? bytes : null) };
-	const skill = await readSkill(files, '');
+	const { files, dir } = isZip(path) ? zippedSkill(path, bytes) : { files: { paths: ['SKILL.md'], read: async (at: string) => (at === 'SKILL.md' ? bytes : null) } satisfies RepoFiles, dir: '' };
+	const skill = await readSkill(files, dir);
 	if (typeof skill === 'string') {
 		const why = skill.startsWith('. has no') || skill.startsWith(':') ? 'it has no name: line in its front matter' : skill;
 		throw new InvalidInputError(`${path} cannot be installed as a skill: ${why}. A skill file starts with ---, then name: and description: lines, then --- again.`);

@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import type { Pty } from '../core/ports.ts';
 import { saveCheckpoint } from './checkpoints.ts';
+import { saveSpaceFiles } from './space-files.ts';
 import { repoDir } from './git.ts';
 import { holdTerminal } from './idle-stop.ts';
 import { invalidateRunning } from './sessions.ts';
@@ -76,6 +77,7 @@ async function bridge(socket: WebSocket, id: string, size: Size): Promise<void> 
 		release();
 		pty.close();
 		void saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint after terminal failed', error, id));
+		void saveSpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not save the project files after terminal', error, id));
 	});
 }
 

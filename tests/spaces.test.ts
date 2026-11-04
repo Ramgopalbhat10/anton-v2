@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, test } from 'node:test';
@@ -343,6 +343,69 @@ test('idle threads resolve after a week, and project files reach every thread', 
 	await assert.rejects(() => files.readSpaceFile(space.id, '../escape'));
 	await files.removeSpaceFile(space.id, 'spec.md');
 	assert.deepEqual(await files.listSpaceFiles(space.id), []);
+});
+
+test('what a thread saves in ../project-files reaches the project, and the next thread starts with it', async () => {
+	const space = await spaces.createSpace({ name: 'Journal', goal: 'Trade on paper' });
+	const enc = (value: string) => new TextEncoder().encode(value);
+	const dec = (bytes: Uint8Array | null) => (bytes ? new TextDecoder().decode(bytes) : null);
+	const machineFor = async (key: string) =>
+		(
+			await localSandboxProvider(path.join(dir, 'machines')).acquire({
+				key,
+				state: null,
+				image: null,
+				baseImage: null,
+				ports: [],
+				resources: { runtime: 'container', cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] },
+			})
+		).machine;
+	const write = (machine: { root: string }, name: string, value: string) => {
+		mkdirSync(path.dirname(path.join(machine.root, 'project-files', name)), { recursive: true });
+		writeFileSync(path.join(machine.root, 'project-files', name), value);
+	};
+	const read = (machine: { root: string }, name: string) => readFileSync(path.join(machine.root, 'project-files', name), 'utf8');
+	await files.uploadSpaceFile(space.id, 'settings.md', enc('# Limits'));
+
+	const monday = await spaces.startThread(space.id, { title: 'Monday', brief: 'Trade' });
+	const first = await machineFor(monday.id);
+	await files.copySpaceFiles(first, monday.id);
+	assert.equal(read(first, 'settings.md'), '# Limits');
+	assert.deepEqual(await files.saveSpaceFiles(first, monday.id), [], 'a file only copied in is not saved back');
+	write(first, 'trading/journal.md', 'Monday: one trade');
+	assert.deepEqual(await files.saveSpaceFiles(first, monday.id), ['trading/journal.md']);
+	assert.deepEqual(await files.saveSpaceFiles(first, monday.id), [], 'saved once');
+	assert.equal(dec(await files.readSpaceFile(space.id, 'trading/journal.md')), 'Monday: one trade');
+
+	const tuesday = await spaces.startThread(space.id, { title: 'Tuesday', brief: 'Trade' });
+	const second = await machineFor(tuesday.id);
+	await files.copySpaceFiles(second, tuesday.id);
+	assert.equal(read(second, 'trading/journal.md'), 'Monday: one trade', 'the next thread starts with it');
+	write(second, 'trading/journal.md', 'Monday: one trade\nTuesday: none');
+	// Copying in again, as the next message does, saves the change first rather than writing over it.
+	await files.copySpaceFiles(second, tuesday.id);
+	assert.equal(read(second, 'trading/journal.md'), 'Monday: one trade\nTuesday: none');
+	assert.equal(dec(await files.readSpaceFile(space.id, 'trading/journal.md')), 'Monday: one trade\nTuesday: none');
+
+	// Monday's machine changes its stale copy: Tuesday's save is kept, and Monday's beside it.
+	write(first, 'trading/journal.md', 'Monday: one trade, closed');
+	assert.deepEqual(await files.saveSpaceFiles(first, monday.id), ['trading/journal (Monday).md']);
+	assert.equal(dec(await files.readSpaceFile(space.id, 'trading/journal.md')), 'Monday: one trade\nTuesday: none');
+	await files.copySpaceFiles(first, monday.id);
+	assert.equal(read(first, 'trading/journal.md'), 'Monday: one trade\nTuesday: none', 'then it catches up');
+
+	// A file the user uploads while a thread runs is not taken for the thread's change.
+	await files.uploadSpaceFile(space.id, 'settings.md', enc('# Limits v2'));
+	write(second, 'settings.md', '# Limits v2'); // as the upload writes it into a running machine
+	assert.deepEqual(await files.saveSpaceFiles(second, tuesday.id), []);
+	// One removed from the Library leaves the machines on their next copy, rather than coming back.
+	await files.removeSpaceFile(space.id, 'trading/journal (Monday).md');
+	await files.copySpaceFiles(first, monday.id);
+	assert.ok(!existsSync(path.join(first.root, 'project-files', 'trading/journal (Monday).md')));
+	assert.ok(!(await files.listSpaceFiles(space.id)).some((file) => file.path.includes('(Monday)')));
+	// A machine with no record of what it matched, as one running before this was kept, saves only what differs.
+	rmSync(path.join(second.root, '.anton-project-files.json'));
+	assert.deepEqual(await files.saveSpaceFiles(second, tuesday.id), []);
 });
 
 test('a deleted thread leaves the project and keeps its files as project files; a resolved one is reopened first', async () => {

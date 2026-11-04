@@ -96,7 +96,7 @@ import { finishReview, noteRequest, startFinishReview } from '../services/finish
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { threadFinished } from '../services/thread-reports.ts';
-import { PROJECT_FILES, readProjectFileForAgent } from '../services/space-files.ts';
+import { PROJECT_FILES, readProjectFileForAgent, saveSpaceFiles } from '../services/space-files.ts';
 import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
 
@@ -1089,7 +1089,7 @@ function projectPrompt(project: ThreadProject | null, workspace: boolean, chat =
 		'When you need a decision only the user can make, ask it with the ask tool, or end your reply with the question.',
 		project.goal ? `The project's goal: ${project.goal}` : '',
 		workspace
-			? `Files the user added to the project are in ../${PROJECT_FILES} (beside ${chat ? 'your working folder' : 'the repo'}).`
+			? `The project's shared files are in ../${PROJECT_FILES} (beside ${chat ? 'your working folder' : 'the repo'}): what the user added, and what threads saved there. Files you add or change there are saved to the project for every thread, now and later, so keep work that should outlast this thread there, such as a journal, a ledger or notes; deliverables for this thread still go to the outputs folder.`
 			: 'Files the user added to the project can be read with read_project_file.',
 		project.instructions ? `\nThe project's instructions from the user:\n${project.instructions}` : '',
 		project.memory ? `\nThe project's memory (decisions and preferences saved earlier; they may be out of date):\n${project.memory}` : '',
@@ -1371,7 +1371,11 @@ function queueCheckpoint(id: string): void {
 	const next = (checkpoints.get(id) ?? Promise.resolve()).then(async () => {
 		try {
 			const machine = await liveMachine(id);
-			if (machine) await saveCheckpoint(id, machine);
+			if (machine) {
+				await saveCheckpoint(id, machine);
+				// What the reply changed in ../project-files reaches the project's Library, for every thread.
+				await saveSpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not save the project files', error, id));
+			}
 		} catch (error) {
 			logProblem('warn', 'Checkpoint failed', error, id);
 		}

@@ -7,6 +7,7 @@ import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecord
 import { getProviders } from '../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from './checkpoints.ts';
+import { saveSpaceFiles } from './space-files.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
@@ -334,6 +335,7 @@ async function stopMachine(id: string, machineState: string | null, runOn: RunOn
 	const machine = await liveMachine(id);
 	if (machine && machineState) {
 		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
+		await saveSpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not save the project files before stop', error, id));
 		await runnerFor(runOn).stop(machineState);
 	}
 	forgetMachine(id);
