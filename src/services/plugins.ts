@@ -229,6 +229,8 @@ export type PluginPreview = {
 	installed: { sha: string; enabled: boolean } | null;
 	/** A newer commit of an installed plugin, when there is one. */
 	update: string | null;
+	/** For a skill installed from a file on the Artifacts page, that file's path there; its files are read with `pluginFile` under `ADDED_FILES`. */
+	added?: string;
 };
 
 /**
@@ -238,7 +240,7 @@ export type PluginPreview = {
  */
 export async function previewPlugin(input: PluginPick | { plugin: string }): Promise<PluginPreview> {
 	const saved = 'plugin' in input ? await installed(input.plugin) : null;
-	if (saved && isAdded(saved.source)) throw new InvalidInputError(`${saved.name} was installed from ${saved.source.path} on the Artifacts page; open that file to read it`);
+	if (saved && isAdded(saved.source)) return addedPreview(saved);
 	const pick = saved ? pickOf(saved) : (input as PluginPick);
 	const { source, named, fallback, marketplace } = await resolve(pick);
 	const { files, sha } = await filesAt(source.repo, saved?.sha ?? source.ref);
@@ -276,8 +278,49 @@ async function newestCommit(source: PluginSource): Promise<string | null> {
 	return git.resolveRef(source.repo, source.ref ?? (await git.getRepo(source.repo)).defaultBranch);
 }
 
+/**
+ * A skill installed from a file on the Artifacts page, shown as it was installed: its SKILL.md and the files
+ * that came with it from a zip. There is no repository behind it, so it has no newer commit to offer.
+ */
+function addedPreview(saved: InstalledPlugin): PluginPreview {
+	const files = saved.skills.flatMap((skill) => ['SKILL.md', ...Object.keys(skill.files)]).sort((a, b) => (a === 'SKILL.md' ? -1 : b === 'SKILL.md' ? 1 : a.localeCompare(b)));
+	return {
+		id: saved.id,
+		name: saved.name,
+		description: saved.description,
+		source: { repo: ADDED_SOURCE, path: '', ref: saved.sha },
+		sha: saved.sha,
+		marketplace: null,
+		pick: { address: saved.source.path },
+		skills: saved.skills.map((skill) => ({ name: skill.name, description: skill.description, folder: '', license: skill.license ?? null })),
+		mcpServers: [],
+		skipped: saved.skills.flatMap((skill) => (skill.omitted?.length ? [`Left out to keep it small: ${skill.omitted.join(', ')}`] : [])),
+		files,
+		truncated: false,
+		readme: 'SKILL.md',
+		installed: { sha: saved.sha, enabled: saved.enabled },
+		update: null,
+		added: saved.source.path,
+	};
+}
+
+/** A file of a skill installed from the Artifacts page, as installed: its SKILL.md is written back from what was kept. */
+async function addedFile(sha: string, path: string): Promise<Uint8Array | null> {
+	const plugin = (await listPlugins()).find((item) => isAdded(item.source) && item.sha === sha);
+	const skill = plugin?.skills[0];
+	if (!skill) return null;
+	if (path === 'SKILL.md') {
+		const front = [`name: ${skill.name}`, `description: ${JSON.stringify(skill.description)}`, ...(skill.license ? [`license: ${skill.license}`] : [])];
+		return new TextEncoder().encode(`---\n${front.join('\n')}\n---\n\n${skill.instructions}\n`);
+	}
+	const file = skill.files[path];
+	if (!file) return null;
+	return 'text' in file ? new TextEncoder().encode(file.text) : new Uint8Array(Buffer.from(file.base64, 'base64'));
+}
+
 /** One file of a repository at a commit, as a preview shows it; null when there is none or it is too large to keep. */
 export async function pluginFile(repo: string, sha: string, path: string): Promise<Uint8Array | null> {
+	if (repo === ADDED_SOURCE && /^[0-9a-f]{40}$/.test(sha)) return addedFile(sha, path);
 	if (!parseGitHub(repo) || !/^[0-9a-f]{40}$/.test(sha)) throw new InvalidInputError('Give a repository and a commit');
 	return (await snapshotFiles(repo, sha)).read(path);
 }

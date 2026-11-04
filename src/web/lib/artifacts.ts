@@ -31,3 +31,26 @@ export const extensionOf = (path: string) => (nameOf(path).includes('.') ? (name
 export const isText = (path: string) => /\.(md|markdown|txt|log|csv|tsv|json|jsonl|ya?ml|xml|html?|[cm]?[jt]sx?|py|go|rs|rb|java|kt|swift|c|cc|cpp|h|cs|php|sh|sql|css|scss|diff|patch|toml|ini)$/i.test(path);
 
 export const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
+
+/**
+ * A folder picked from disk as one .zip named for it, so a skill's folder (SKILL.md with its scripts beside it)
+ * can be added and installed whole: Artifacts holds files, not folders. Paths inside keep the folder's own name
+ * at the top, as zipping the folder by hand does; `skill` says whether it holds a SKILL.md to install.
+ */
+export async function zipFolder(files: File[]): Promise<{ file: File; skill: boolean }> {
+	const { zipSync } = await import('fflate');
+	const entries: Record<string, Uint8Array> = {};
+	for (const file of files) {
+		const path = file.webkitRelativePath || file.name;
+		// Hidden files and folders (.git, .DS_Store) are not part of a skill.
+		if (path.split('/').some((part) => part.startsWith('.'))) continue;
+		entries[path] = new Uint8Array(await file.arrayBuffer());
+	}
+	const paths = Object.keys(entries);
+	const top = paths[0]?.includes('/') ? paths[0].split('/')[0] : 'folder';
+	const zipped = zipSync(entries);
+	return {
+		file: new File([zipped], `${top}.zip`, { type: 'application/zip' }),
+		skill: paths.some((path) => path === 'SKILL.md' || path.endsWith('/SKILL.md')),
+	};
+}

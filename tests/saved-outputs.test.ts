@@ -117,6 +117,16 @@ test('a skill folder added as a zip installs with its scripts beside its SKILL.m
 	assert.deepEqual(plugin.skills[0].instructions, 'Run `scripts/kit.py levels`.');
 	assert.deepEqual(Object.keys(plugin.skills[0].files).sort(), ['scripts/kit.py', 'universe.json']);
 	assert.deepEqual(plugin.skills[0].files['scripts/kit.py'], { text: 'print("levels")\n' });
+	// Settings › Skills shows it as installed: its SKILL.md and scripts, read back without the zip.
+	const { previewPlugin, pluginFile } = await import('../src/services/plugins.ts');
+	const preview = await previewPlugin({ plugin: plugin.id });
+	assert.equal(preview.added, 'day-trading.zip');
+	assert.deepEqual(preview.files, ['SKILL.md', 'scripts/kit.py', 'universe.json']);
+	assert.equal(preview.readme, 'SKILL.md');
+	const dec = (bytes: Uint8Array | null) => (bytes ? new TextDecoder().decode(bytes) : null);
+	assert.equal(dec(await pluginFile(preview.source.repo, preview.sha, 'scripts/kit.py')), 'print("levels")\n');
+	assert.match(dec(await pluginFile(preview.source.repo, preview.sha, 'SKILL.md')) ?? '', /^---\nname: day-trading\ndescription: "Trade within the day on paper\."\n---\n\nRun `scripts\/kit\.py levels`\./);
+	assert.equal(await pluginFile(preview.source.repo, preview.sha, 'missing.txt'), null);
 	const empty = await addFile('notes.zip', zipSync({ 'notes.txt': enc('hi') }), 'application/zip');
 	await assert.rejects(installAddedSkill(empty), /has no SKILL\.md/);
 	const broken = await addFile('broken.zip', enc('not a zip'), 'application/zip');

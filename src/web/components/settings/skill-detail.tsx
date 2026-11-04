@@ -7,7 +7,7 @@ import { Branch, buildTree, FileView } from '@/components/file-view';
 import { Markdown } from '@/components/markdown';
 import { Card, Count, Status } from '@/components/instrument';
 import { Btn, EmptyState, Icon, Spinner, Switch } from '@/components/signal';
-import { api, type PluginPick, type PluginPreview } from '@/lib/api';
+import { ADDED_FILES, api, type PluginPick, type PluginPreview } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
 
@@ -32,6 +32,16 @@ export function usePreview(pick: PluginPick | null) {
 }
 
 const githubUrl = (preview: PluginPreview, path = preview.source.path) => `https://github.com/${preview.source.repo}/tree/${preview.sha}${path ? `/${path}` : ''}`;
+
+/** The file on the Artifacts page a skill was installed from. */
+function AddedFileLink({ path }: { path: string }) {
+	return (
+		<Link to="/artifacts/$taskId" params={{ taskId: ADDED_FILES }} search={{ path }} className="inline-flex min-w-0 items-center gap-1 outline-none hover:underline">
+			<Icon icon={FileText} size={11} />
+			<span className="truncate">{path} on Artifacts</span>
+		</Link>
+	);
+}
 
 /** Paths relative to the plugin's folder, which the file tree shows. */
 const within = (preview: PluginPreview, path: string) => (preview.source.path ? path.slice(preview.source.path.length + 1) : path);
@@ -97,14 +107,16 @@ function Actions({ preview }: { preview: PluginPreview }) {
 function Facts({ preview }: { preview: PluginPreview }) {
 	const licenses = [...new Set(preview.skills.map((skill) => skill.license).filter(Boolean))];
 	const rows: Array<[string, ReactNode]> = [
-		[
-			'Source',
-			<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 font-mono outline-none hover:underline">
-				<span className="truncate">{[preview.source.repo, preview.source.path].filter(Boolean).join('/')}</span>
-				<Icon icon={ArrowUpRight} size={11} />
-			</a>,
-		],
-		['Commit', <span className="font-mono">{preview.sha.slice(0, 7)}</span>],
+		preview.added
+			? ['Source', <AddedFileLink path={preview.added} />]
+			: [
+					'Source',
+					<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 font-mono outline-none hover:underline">
+						<span className="truncate">{[preview.source.repo, preview.source.path].filter(Boolean).join('/')}</span>
+						<Icon icon={ArrowUpRight} size={11} />
+					</a>,
+				],
+		...(preview.added ? [] : [['Commit', <span className="font-mono">{preview.sha.slice(0, 7)}</span>] as [string, ReactNode]]),
 		...(preview.marketplace ? [['Marketplace', preview.marketplace] as [string, ReactNode]] : []),
 		['Skills', String(preview.skills.length)],
 		['Files', `${preview.files.length.toLocaleString()}${preview.truncated ? '+' : ''}`],
@@ -231,7 +243,7 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 				<div className="flex min-w-0 flex-1 flex-col">
 					<div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--border-subtle) px-3 text-[12px]">
 						<span className="in-num min-w-0 flex-1 truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
-						{selected ? (
+						{selected && !preview.added ? (
 							<a
 								href={`https://github.com/${preview.source.repo}/blob/${preview.sha}/${full}`}
 								target="_blank"
@@ -298,7 +310,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 						{preview.update ? <Status tone="accent" pulse>Update available</Status> : null}
 					</div>
 					<div className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-(--text-tertiary)">
-						<span>by {by}</span>
+						{preview.added ? <span>Added by you</span> : <span>by {by}</span>}
 						<span>·</span>
 						<span>
 							{preview.skills.length} {preview.skills.length === 1 ? 'skill' : 'skills'}
@@ -310,10 +322,14 @@ function Detail({ preview }: { preview: PluginPreview }) {
 							</>
 						) : null}
 						<span>·</span>
-						<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono outline-none hover:text-(--text-primary)">
-							{preview.sha.slice(0, 7)}
-							<Icon icon={ArrowUpRight} size={11} />
-						</a>
+						{preview.added ? (
+							<AddedFileLink path={preview.added} />
+						) : (
+							<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono outline-none hover:text-(--text-primary)">
+								{preview.sha.slice(0, 7)}
+								<Icon icon={ArrowUpRight} size={11} />
+							</a>
+						)}
 					</div>
 					{preview.description ? <p className="m-0 mt-1 max-w-[72ch] text-[13px] leading-[19px] text-pretty text-(--text-secondary)">{preview.description}</p> : null}
 				</div>
@@ -373,7 +389,7 @@ export function SkillDetailPage() {
 			) : preview.isPending ? (
 				<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
 					<Spinner size={12} />
-					Reading from GitHub
+					Reading…
 				</div>
 			) : preview.isError ? (
 				<EmptyState title="Could not read this" body={preview.error.message}>

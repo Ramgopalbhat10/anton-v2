@@ -14,6 +14,9 @@ const api = vi.hoisted(() => ({
 	plugins: vi.fn(async () => ({ plugins: [], marketplaces: [] })),
 	downloadArtifacts: vi.fn(async () => new Blob(['zip'], { type: 'application/zip' })),
 	addArtifact: vi.fn(async () => ({ path: 'SKILL.md', sessionId: 'added-files' })),
+	installAddedSkill: vi.fn(async (path: string) => ({
+		plugins: [{ id: 'p1', name: 'day-trading', source: { repo: 'added-files', path, ref: null }, skills: [{ name: 'day-trading', description: '', active: true }] }],
+	})),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ArtifactsPage, ArtifactView } = await import('@/components/artifacts-page');
@@ -244,6 +247,28 @@ describe('Artifacts', () => {
 		await userEvent.click(within(card).getByRole('button', { name: 'Actions for SKILL.md' }));
 		expect(await screen.findByRole('menuitem', { name: 'Download' })).toBeTruthy();
 		expect(screen.queryByRole('menuitem', { name: 'Go to the task' })).toBeNull();
+	});
+
+	it('adds a folder as one zip, and installs a skill folder as a skill', async () => {
+		open('/artifacts');
+		await screen.findByText('findings.md');
+		const inFolder = (path: string, text: string) => {
+			const file = new File([text], path.split('/').pop()!);
+			Object.defineProperty(file, 'webkitRelativePath', { value: path });
+			return file;
+		};
+		api.addArtifact.mockResolvedValueOnce({ path: 'day-trading.zip', sessionId: 'added-files' });
+		await userEvent.upload(screen.getByLabelText('Folder to add'), [
+			inFolder('day-trading/SKILL.md', '---\nname: day-trading\ndescription: Trade.\n---\nGo.'),
+			inFolder('day-trading/scripts/kit.py', 'print(1)'),
+			inFolder('day-trading/.DS_Store', 'junk'),
+		]);
+		await waitFor(() => expect(api.installAddedSkill).toHaveBeenCalledWith('day-trading.zip'));
+		const zip = (api.addArtifact.mock.calls.at(-1) as unknown as [File])[0];
+		expect(zip.name).toBe('day-trading.zip');
+		const { unzipSync } = await import('fflate');
+		expect(Object.keys(unzipSync(new Uint8Array(await zip.arrayBuffer()))).sort()).toEqual(['day-trading/SKILL.md', 'day-trading/scripts/kit.py']);
+		expect(await screen.findByText(/installed it as the skill day-trading/)).toBeTruthy();
 	});
 
 	it('puts apps first, then files, each card opening the artifact', async () => {

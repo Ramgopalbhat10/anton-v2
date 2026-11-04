@@ -218,6 +218,8 @@ export type PluginPreview = {
 	installed: { sha: string; enabled: boolean } | null;
 	/** A newer commit of an installed plugin. */
 	update: string | null;
+	/** For a skill installed from a file on the Artifacts page, that file's path there. */
+	added?: string;
 };
 
 export type GitHubSkill = { address: string; repo: string; name: string; description: string };
