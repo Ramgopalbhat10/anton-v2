@@ -49,6 +49,7 @@ const space: Space = {
 	coordinatorReasoning: null,
 	threadModel: null,
 	threadReasoning: null,
+	agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
 	maxParallel: 3,
 	autonomy: 'start',
 	state: 'active',

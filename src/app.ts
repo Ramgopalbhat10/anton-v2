@@ -711,6 +711,8 @@ app.patch('/api/spaces/:id', async (c) => {
 			coordinatorReasoning: v.optional(v.nullable(REASONING)),
 			threadModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
 			threadReasoning: v.optional(v.nullable(REASONING)),
+			// Each helper agent's own model for the project's threads; null follows Settings › General.
+			agentModels: v.optional(v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: AGENT_MODEL, computer: AGENT_MODEL, reviewer: AGENT_MODEL })),
 			state: v.optional(v.picklist(['active', 'paused', 'archived'])),
 			repoIds: v.optional(v.pipe(v.array(v.string()), v.maxLength(20))),
 		}),

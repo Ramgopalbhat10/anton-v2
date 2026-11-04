@@ -1,5 +1,5 @@
 import type { Reasoning } from '../core/ports.ts';
-import type { Session } from '../core/types.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Session } from '../core/types.ts';
 import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { THREAD_STATES, type ThreadState } from '../core/thread-state.ts';
@@ -93,6 +93,8 @@ export type SpaceChange = Partial<{
 	coordinatorReasoning: Reasoning | null;
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
+	/** The whole map is replaced at once; a null entry follows Settings › General. */
+	agentModels: Record<HelperAgent, AgentModel | null>;
 	maxParallel: number;
 	autonomy: Autonomy;
 	state: SpaceState;
@@ -105,7 +107,11 @@ async function checkModel(model: string | null | undefined): Promise<void> {
 
 export async function editSpace(id: string, change: SpaceChange): Promise<SpaceView> {
 	await existing(id);
-	await Promise.all([checkModel(change.coordinatorModel), checkModel(change.threadModel)]);
+	await Promise.all([
+		checkModel(change.coordinatorModel),
+		checkModel(change.threadModel),
+		...HELPER_AGENTS.map((agent) => checkModel(change.agentModels?.[agent]?.model)),
+	]);
 	const { repoIds, ...fields } = change;
 	if (fields.name !== undefined && !fields.name.trim()) throw new InvalidInputError('Name the project');
 	if ((fields.instructions?.length ?? 0) > MAX_INSTRUCTIONS) throw new InvalidInputError(`Keep the instructions under ${MAX_INSTRUCTIONS.toLocaleString()} characters`);

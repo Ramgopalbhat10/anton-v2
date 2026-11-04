@@ -98,6 +98,46 @@ test('a project needs a name, and only known repositories', async () => {
 	await assert.rejects(() => spaces.editSpace(space.id, { coordinatorModel: 'openrouter/none/such' }), /Unknown model/);
 	await assert.rejects(() => spaces.editSpace(space.id, { repoIds: ['proj_missing'] }), /repository/);
 	assert.deepEqual((await spaces.editSpace(space.id, { repoIds: [] })).repos, [], 'the last repository can be removed');
+
+	// Each helper agent can have its own model for the project's threads; an unset one follows Settings › General.
+	const helpers = await spaces.editSpace(space.id, {
+		agentModels: { explorer: { model: 'openrouter/test/cheap', reasoning: 'low' }, tester: null, browser: null, computer: null, reviewer: null },
+	});
+	assert.deepEqual(helpers.agentModels.explorer, { model: 'openrouter/test/cheap', reasoning: 'low' });
+	assert.equal(helpers.agentModels.tester, null);
+	await assert.rejects(
+		() => spaces.editSpace(space.id, { agentModels: { explorer: null, tester: { model: 'openrouter/none/such', reasoning: null }, browser: null, computer: null, reviewer: null } }),
+		/Unknown model/,
+	);
+	assert.equal((await spaces.spaceView(space.id)).agentModels.explorer?.model, 'openrouter/test/cheap', 'it is stored');
+});
+
+test("a project's threads run their helper agents on the project's models, else Settings › General's, else the thread's", async () => {
+	const { primeAgent, helperModelFor } = await import('../src/services/agent-runner.ts');
+	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const before = await generalSettings();
+	try {
+		const space = await spaces.createSpace({ name: 'Helpers', repoIds: [api.id] });
+		const thread = await spaces.startThread(space.id, { title: 'Work', brief: 'Do work' });
+		assert.equal(helperModelFor(thread.id, 'explorer'), null, 'nothing chosen anywhere: the thread’s own model');
+
+		await spaces.editSpace(space.id, {
+			agentModels: { explorer: { model: 'openrouter/test/cheap', reasoning: 'low' }, tester: null, browser: null, computer: null, reviewer: null },
+		});
+		await primeAgent(thread.id);
+		assert.deepEqual(helperModelFor(thread.id, 'explorer'), { model: 'openrouter/test/cheap', reasoning: 'low' }, "the project's own choice");
+		// A helper the project leaves alone follows Settings › General; a level unset there runs the model's default.
+		await setGeneralSettings({ ...before, agentModels: { explorer: null, tester: { model: 'openrouter/test/strong', reasoning: null }, browser: null, computer: null, reviewer: null } });
+		await primeAgent(thread.id);
+		assert.deepEqual(helperModelFor(thread.id, 'tester'), { model: 'openrouter/test/strong', reasoning: 'high' });
+		// A task of its own, not a thread, sees only the global choice.
+		const loose = await sessions.createSession({ projectId: api.id, title: 'Loose' });
+		await primeAgent(loose.id);
+		assert.equal(helperModelFor(loose.id, 'explorer'), null);
+		assert.deepEqual(helperModelFor(loose.id, 'tester'), { model: 'openrouter/test/strong', reasoning: 'high' });
+	} finally {
+		await setGeneralSettings(before);
+	}
 });
 
 test('a project without repositories starts its threads as chats', async () => {

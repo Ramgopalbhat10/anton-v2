@@ -1,6 +1,7 @@
 import { config } from '../config.ts';
 import type { OpenRouterEffort, Reasoning } from '../core/ports.ts';
 import { InvalidInputError } from '../core/errors.ts';
+import type { AgentModel, HelperAgent } from '../core/types.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { findModel } from './models.ts';
@@ -51,11 +52,8 @@ export const DEFAULT_CLAUDE_CODE_COMPACT_AT: CompactAt = 200_000;
 export const VISUAL_REPLIES = ['off', 'some', 'more'] as const;
 export type VisualReplies = (typeof VISUAL_REPLIES)[number];
 
-/** The agents that work for the coder: its explorer, tester, browser and computer subagents, and the reviewer of its pull requests. */
-export const HELPER_AGENTS = ['explorer', 'tester', 'browser', 'computer', 'reviewer'] as const;
-export type HelperAgent = (typeof HELPER_AGENTS)[number];
-/** A null reasoning level uses the model's default. */
-export type AgentModel = { model: string; reasoning: Reasoning | null };
+/** The agents that work for the coder, shared with src/db/spaces.ts, which stores a project's own choices for them. */
+export { HELPER_AGENTS, type AgentModel, type HelperAgent } from '../core/types.ts';
 
 /**
  * Work Anton has a model do behind the agents: reading long web results for the agent (src/services/web-digest.ts),

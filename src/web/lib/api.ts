@@ -136,6 +136,7 @@ export type Space = {
 	coordinatorReasoning: Reasoning | null;
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
+	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 	maxParallel: number;
 	autonomy: Autonomy;
 	state: SpaceState;
@@ -150,7 +151,7 @@ export type Space = {
 
 export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds?: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
 export type SpaceChange = Partial<
-	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
+	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'agentModels' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
 >;
 /** `projectId` null starts a thread with no repository, a chat. */
 export type ThreadInput = { id?: string; title?: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
