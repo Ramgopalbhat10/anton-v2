@@ -62,7 +62,6 @@ export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 
 /** One plugin or skill as a card; the whole card opens it, and `action` sits above that. */
 function Card({
 	open,
-	to,
 	bundle,
 	title,
 	caption,
@@ -71,8 +70,6 @@ function Card({
 	children,
 }: {
 	open: ViewSearch;
-	/** Where the title leads instead of the detail page: a skill installed from a file opens that file. */
-	to?: { taskId: string; path: string };
 	bundle: boolean;
 	title: string;
 	caption: ReactNode;
@@ -85,24 +82,13 @@ function Card({
 			<div className="flex items-start gap-3">
 				<Glyph bundle={bundle} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					{to ? (
-						<Link
-							to="/artifacts/$taskId"
-							params={{ taskId: to.taskId }}
-							search={{ path: to.path }}
-							className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)"
-						>
-							{title}
-						</Link>
-					) : (
-						<Link
-							to="/settings/skills/view"
-							search={open}
-							className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)"
-						>
-							{title}
-						</Link>
-					)}
+					<Link
+						to="/settings/skills/view"
+						search={open}
+						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)"
+					>
+						{title}
+					</Link>
 					<div className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-(--text-disabled)">{caption}</div>
 				</div>
 				{action ? <div className="relative z-10 flex shrink-0 items-center">{action}</div> : null}
@@ -145,12 +131,11 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 function InstalledCard({ plugin }: { plugin: Plugin }) {
 	const toggle = usePluginMutation((enabled: boolean) => api.setPluginEnabled(plugin.id, enabled));
 	const remove = usePluginMutation(() => api.removePlugin(plugin.id));
-	// Installed from a file on the Artifacts page: it opens that file, and is removed here (the file stays).
+	// Installed from a file on the Artifacts page: it opens as installed (its SKILL.md and scripts), and is removed here (the file stays).
 	const added = plugin.source.repo === ADDED_FILES;
 	return (
 		<Card
 			open={{ plugin: plugin.id }}
-			to={added ? { taskId: ADDED_FILES, path: plugin.source.path } : undefined}
 			bundle={plugin.skills.length !== 1}
 			title={plugin.name}
 			caption={
