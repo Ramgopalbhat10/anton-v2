@@ -151,10 +151,16 @@ const tester = defineSubagent({
 	agent: Tester,
 });
 
-/** A subagent's own model from Settings, often a cheaper one; without one it uses the task's. */
+/**
+ * A subagent's own model from Settings, often a cheaper one; without one it uses the task's. One on a
+ * Claude Code model compacts where Settings › General says Claude Code compacts (scripts/patch-flue.ts
+ * reads its `compaction`), not near the end of a 1M window; others keep the runtime's default for their model.
+ */
 function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
 	const choice = agentSettingsNow().models[name];
-	return choice ? { ...subagent, model: choice.model, thinkingLevel: choice.reasoning } : subagent;
+	if (!choice) return subagent;
+	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : undefined;
+	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, ...(compaction ? { compaction } : {}) } as typeof explorer;
 }
 
 /**

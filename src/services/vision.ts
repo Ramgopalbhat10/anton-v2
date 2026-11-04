@@ -4,7 +4,7 @@ import { SCREEN } from '../core/desktop.ts';
 import { getProviders } from '../providers/index.ts';
 import { agentSettingsNow } from './agent-runner.ts';
 import { loadedModels } from './models.ts';
-import { backgroundModel } from './general.ts';
+import { backgroundModel, backgroundReasoning, textEffort } from './general.ts';
 import { modelFor } from './sessions.ts';
 import { recordUsage } from './usage.ts';
 
@@ -35,7 +35,9 @@ async function look(id: string, prompt: string, png: Uint8Array, signal?: AbortS
 	const vision = getProviders().vision;
 	if (!vision) throw new Error('Seeing the screen needs an OpenRouter key. Add one under Settings › Subscriptions.');
 	const model = visionModelFor(id);
-	const answer = await vision.look({ model, prompt, image: png, mimeType }, signal);
+	// The effort chosen in Settings › General goes with the model chosen there, not the agent's own.
+	const effort = model === backgroundModel('vision') ? textEffort(backgroundReasoning('vision')) : undefined;
+	const answer = await vision.look({ model, prompt, image: png, mimeType, ...(effort ? { reasoning: effort } : {}) }, signal);
 	await recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 	return { text: answer.text, cost: answer.cost };
 }

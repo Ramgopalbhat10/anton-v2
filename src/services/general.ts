@@ -1,5 +1,5 @@
 import { config } from '../config.ts';
-import type { Reasoning } from '../core/ports.ts';
+import type { OpenRouterEffort, Reasoning } from '../core/ports.ts';
 import { InvalidInputError } from '../core/errors.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
@@ -28,17 +28,25 @@ export type GeneralSettings = {
 	agentModels: Record<HelperAgent, AgentModel | null>;
 	/** The models Anton runs behind the agents for its own work; null uses each one's default. */
 	backgroundModels: Record<BackgroundTask, string | null>;
+	/** The effort each of those models works at, when one is chosen; null uses the work's own default. */
+	backgroundReasoning: Record<BackgroundTask, Reasoning | null>;
 	/**
 	 * The context, in tokens, past which a conversation is compacted, when that comes before the model's
 	 * window fills; null waits for the window. Every call sends the whole conversation, so a long thread
 	 * on a 1M model otherwise sends up to a million tokens a call.
 	 */
 	compactAt: CompactAt;
+	/**
+	 * The same for Claude Code's models, which run on the plan's limits: Claude Code serves some at 1M, and a
+	 * long thread compacted late spends more of the plan re-reading it each call than the summary costs.
+	 */
+	claudeCodeCompactAt: CompactAt;
 };
 
 export const COMPACT_AT = [100_000, 200_000, 400_000] as const;
 export type CompactAt = (typeof COMPACT_AT)[number] | null;
 export const DEFAULT_COMPACT_AT: CompactAt = 200_000;
+export const DEFAULT_CLAUDE_CODE_COMPACT_AT: CompactAt = 200_000;
 
 export const VISUAL_REPLIES = ['off', 'some', 'more'] as const;
 export type VisualReplies = (typeof VISUAL_REPLIES)[number];
@@ -64,16 +72,30 @@ export const backgroundDefaults = (): Record<BackgroundTask, string | null> => (
 /** Run through the TextModel and VisionModel ports, which reach OpenRouter only. */
 const ON_OPENROUTER: BackgroundTask[] = ['webDigest', 'vision'];
 const NO_BACKGROUND_MODELS: Record<BackgroundTask, string | null> = { webDigest: null, vision: null, compaction: null };
+const NO_BACKGROUND_REASONING: Record<BackgroundTask, Reasoning | null> = { webDigest: null, vision: null, compaction: null };
 
 const KEY = 'general';
 
 /** The agents render synchronously, so they read the compaction point from the settings last read; each message reads them first. */
 let compactAtNow: CompactAt = DEFAULT_COMPACT_AT;
+let claudeCodeCompactAtNow: CompactAt = DEFAULT_CLAUDE_CODE_COMPACT_AT;
 export const compactionCeiling = (): CompactAt => compactAtNow;
+/** Where a conversation on `model` (`<gateway>/<model>`) compacts: Claude Code's own point for its models, else Compact at. */
+export const compactionCeilingFor = (model: string, settings: Pick<GeneralSettings, 'compactAt' | 'claudeCodeCompactAt'> = { compactAt: compactAtNow, claudeCodeCompactAt: claudeCodeCompactAtNow }): CompactAt =>
+	model.startsWith('claude-code/') ? settings.claudeCodeCompactAt : settings.compactAt;
 /** Read the same way, from the settings last read: a digest or a compaction cannot wait on the database. */
 let backgroundNow: Record<BackgroundTask, string | null> = NO_BACKGROUND_MODELS;
+let backgroundEffortNow: Record<BackgroundTask, Reasoning | null> = NO_BACKGROUND_REASONING;
 /** The model for one kind of background work: the one chosen in Settings › General, else its default. */
 export const backgroundModel = (task: BackgroundTask): string | null => backgroundNow[task] ?? backgroundDefaults()[task];
+/** An effort as OpenRouter takes it: its nearest level for the two Anton has and it does not. */
+export function textEffort(level: Reasoning | null): OpenRouterEffort | undefined {
+	if (!level) return undefined;
+	return level === 'max' ? 'xhigh' : level;
+}
+
+/** The effort chosen beside that model in Settings › General; null when none was, or no model was chosen. */
+export const backgroundReasoning = (task: BackgroundTask): Reasoning | null => (backgroundNow[task] ? (backgroundEffortNow[task] ?? null) : null);
 
 export async function generalSettings(): Promise<GeneralSettings> {
 	const stored = await getSetting<Partial<GeneralSettings>>(KEY, {});
@@ -89,12 +111,16 @@ export async function generalSettings(): Promise<GeneralSettings> {
 		imageModel: null,
 		titleModel: null,
 		compactAt: DEFAULT_COMPACT_AT,
+		claudeCodeCompactAt: DEFAULT_CLAUDE_CODE_COMPACT_AT,
 		...stored,
 		agentModels,
 		backgroundModels: { ...NO_BACKGROUND_MODELS, ...stored.backgroundModels },
+		backgroundReasoning: { ...NO_BACKGROUND_REASONING, ...stored.backgroundReasoning },
 	};
 	compactAtNow = settings.compactAt;
+	claudeCodeCompactAtNow = settings.claudeCodeCompactAt;
 	backgroundNow = settings.backgroundModels;
+	backgroundEffortNow = settings.backgroundReasoning;
 	return settings;
 }
 
@@ -120,7 +146,9 @@ export async function setGeneralSettings(next: GeneralSettings): Promise<General
 	}
 	await setSetting(KEY, next);
 	compactAtNow = next.compactAt;
+	claudeCodeCompactAtNow = next.claudeCodeCompactAt;
 	backgroundNow = next.backgroundModels;
+	backgroundEffortNow = next.backgroundReasoning;
 	return next;
 }
 

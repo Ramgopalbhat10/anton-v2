@@ -549,8 +549,12 @@ export type GeneralSettings = {
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 	/** The context in tokens past which a conversation is compacted, if the window has not filled first; null waits for the window. */
 	compactAt: 100_000 | 200_000 | 400_000 | null;
+	/** The same for Claude Code's models, which run on the plan's limits. */
+	claudeCodeCompactAt: 100_000 | 200_000 | 400_000 | null;
 	/** The models Anton runs behind the agents for its own work; null uses each one's default. */
 	backgroundModels: Record<BackgroundTask, string | null>;
+	/** The effort each of those models works at; null uses the model's default. */
+	backgroundReasoning: Record<BackgroundTask, Reasoning | null>;
 };
 /** Work Anton has a model do behind the agents: reading long web results, seeing the screen, summarizing on compaction. */
 export type BackgroundTask = 'webDigest' | 'vision' | 'compaction';

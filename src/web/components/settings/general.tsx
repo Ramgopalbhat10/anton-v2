@@ -26,6 +26,8 @@ type AgentModel = { model: string; reasoning: Reasoning | null };
 const onOpenRouter = (model: ModelInfo) => model.id.startsWith('openrouter/');
 const seesOnOpenRouter = (model: ModelInfo) => onOpenRouter(model) && model.vision;
 
+const NO_BACKGROUND = { webDigest: null, vision: null, compaction: null };
+
 const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; info: string; only?: (model: ModelInfo) => boolean }> = [
 	{
 		task: 'webDigest',
@@ -56,6 +58,7 @@ function BackgroundModel({
 	info,
 	only,
 	value,
+	reasoning,
 	fallback,
 	fallbackLabel,
 	disabled,
@@ -66,22 +69,31 @@ function BackgroundModel({
 	info: string;
 	only?: (model: ModelInfo) => boolean;
 	value: string | null;
+	/** The effort picked with the model; null uses the model's default. */
+	reasoning: Reasoning | null;
 	fallback: string;
 	fallbackLabel: string;
 	disabled: boolean;
-	onChange: (value: string | null) => void;
+	onChange: (value: string | null, reasoning: Reasoning | null) => void;
 }) {
 	return (
 		<SettingRow title={title} help={help} info={info}>
 			{value ? (
-				<ModelPicker value={{ model: value, reasoning: null }} onChange={(change) => onChange(change.model ?? value)} height={28} side="bottom" only={only} />
+				<ModelPicker
+					value={{ model: value, reasoning }}
+					// Picking another model starts from its own default effort, as everywhere else.
+					onChange={(change) => onChange(change.model ?? value, change.reasoning !== undefined ? change.reasoning : reasoning)}
+					height={28}
+					side="bottom"
+					only={only}
+				/>
 			) : (
 				<span className="text-[12px] text-(--text-tertiary)">{fallbackLabel}</span>
 			)}
 			<Switch
 				checked={value !== null}
 				disabled={disabled || !fallback}
-				onChange={(on) => onChange(on ? fallback : null)}
+				onChange={(on) => onChange(on ? fallback : null, null)}
 				label={<span className="sr-only">{title} uses a model picked here</span>}
 			/>
 		</SettingRow>
@@ -278,6 +290,24 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						))}
 					</Segmented>
 				</SettingRow>
+				<SettingRow
+					title="Compact Claude Code at"
+					help="The same, for models on your Claude plan."
+					info="Claude Code's models run on your plan's limits, and some come with a 1M window. Each call re-reads the whole conversation, so a long thread compacted late uses more of the plan than its summaries cost: on a long Opus thread, compacting at 200K paid for itself within about 25 calls. Other models follow Compact at."
+				>
+					<Segmented label="Compact Claude Code at" role="radiogroup">
+						{COMPACT_POINTS.map((point) => (
+							<SegmentedItem
+								key={point.label}
+								role="radio"
+								on={settings.claudeCodeCompactAt === point.value}
+								onClick={() => edit({ claudeCodeCompactAt: point.value })}
+							>
+								{point.label}
+							</SegmentedItem>
+						))}
+					</Segmented>
+				</SettingRow>
 			</Block>
 			<Block title="Replies" icon={LayoutPanelTop}>
 				<SettingRow
@@ -348,10 +378,16 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 							info={row.info}
 							only={row.only}
 							value={settings.backgroundModels?.[row.task] ?? null}
+							reasoning={settings.backgroundReasoning?.[row.task] ?? null}
 							fallback={fallback && fallback !== 'off' ? fallback : model}
 							fallbackLabel={fallback === 'off' ? 'Off' : fallback ? `Default · ${nameOf(fallback)}` : "Task's model"}
 							disabled={save.isPending}
-							onChange={(choice) => edit({ backgroundModels: { ...{ webDigest: null, vision: null, compaction: null }, ...settings.backgroundModels, [row.task]: choice } })}
+							onChange={(choice, reasoning) =>
+								edit({
+									backgroundModels: { ...NO_BACKGROUND, ...settings.backgroundModels, [row.task]: choice },
+									backgroundReasoning: { ...NO_BACKGROUND, ...settings.backgroundReasoning, [row.task]: reasoning },
+								})
+							}
 						/>
 					);
 				})}

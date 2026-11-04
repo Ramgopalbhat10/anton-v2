@@ -20,7 +20,15 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * own (Settings › General) then compacts at its window less that reserve: a
  * 400k ceiling on an 872k model reserves 472k, so a subagent on a 500k model
  * compacted at 28k tokens, again and again. One on its own model takes the
- * runtime's default for that model instead.
+ * compaction its definition names (Anton names one for a Claude Code model,
+ * whose 1M window would otherwise compact near 1M), else the runtime's
+ * default for that model.
+ *
+ * A summary at the effort chosen. Flue writes every compaction summary at
+ * `high` reasoning. A compaction model picked in Settings › General comes with
+ * the effort picked beside it, which Anton passes as the compaction's
+ * `reasoning`; the summary is written at that effort (`off` without reasoning),
+ * and at `high` when none was picked.
  *
  * Waiting on a busy database. Litestream writes to and checkpoints flue.db
  * alongside Anton (`npm run start:backup`). Flue opens it without a busy
@@ -45,7 +53,32 @@ const PATCHES: Patch[] = [
 		name: "a subagent's compaction",
 		dir: '',
 		marker: 'async createTaskSession(',
-		fixes: [['compaction: this.config.compaction\n', 'compaction: taskAgent?.model !== void 0 ? void 0 : this.config.compaction\n']],
+		fixes: [
+			['compaction: this.config.compaction\n', 'compaction: taskAgent?.model !== void 0 ? taskAgent.compaction : this.config.compaction\n'],
+			// What this patch made before a subagent's definition could name a compaction.
+			['compaction: taskAgent?.model !== void 0 ? void 0 : this.config.compaction\n', 'compaction: taskAgent?.model !== void 0 ? taskAgent.compaction : this.config.compaction\n'],
+		],
+	},
+	{
+		name: "the compaction model's effort",
+		dir: '',
+		marker: 'async runCompaction(',
+		fixes: [
+			[
+				'const summarizationModel = compactionConfig?.model ? this.resolveModelForCall(compactionConfig.model) : sessionModel;',
+				'const summarizationModel = compactionConfig?.model ? { ...this.resolveModelForCall(compactionConfig.model), summaryReasoning: compactionConfig.reasoning } : sessionModel;',
+			],
+		],
+	},
+	{
+		name: 'a summary at the effort chosen',
+		dir: '',
+		marker: 'async function runSummarizationCall(',
+		fixes: [
+			['if (model.reasoning) completionOptions.reasoning = "high";', 'if (model.reasoning && model.summaryReasoning !== "off") completionOptions.reasoning = model.summaryReasoning ?? "high";'],
+			// The compaction config is checked for fields Flue knows, in the same file.
+			['key !== "keepRecentTokens" && key !== "model") throw', 'key !== "keepRecentTokens" && key !== "model" && key !== "reasoning") throw'],
+		],
 	},
 	{
 		name: 'waiting on a busy database',

@@ -56,7 +56,13 @@ export type RuntimePlan = {
 /** The part of an agent the bridge uses: opening conversations. */
 export type RuntimeOpener = Pick<AgentRuntime, 'open'>;
 
-const IDLE_MS = 10 * 60_000;
+/**
+ * How long a conversation with nothing to do stays open. Once one closes, the next step replays the
+ * conversation as text, which nothing cached matches. Claude Code caches a plan's conversation for an
+ * hour, so one that sits idle under that is read again from the cache; a long thread that closed after
+ * ten idle minutes sent its whole context again uncached.
+ */
+export const IDLE_MS = 55 * 60_000;
 const MAX_OPEN = 3;
 
 type RuntimeModel = Model<string>;
@@ -262,11 +268,17 @@ const openFor = (gateway: string): Map<string, Bridged> => {
 	return open;
 };
 
-/** Closes the conversations idle for ten minutes; a later step starts a new one with the conversation so far. */
-function sweepIdle(): void {
+/**
+ * Whether a conversation is doing something: streaming, or waiting on the results of tools Anton is
+ * running for it, such as a subagent that works for longer than any idle limit.
+ */
+const working = (bridged: Bridged) => bridged.busy || bridged.awaiting.size > 0;
+
+/** Closes the conversations idle past `IDLE_MS`; a later step starts a new one with the conversation so far. */
+export function sweepIdle(now = Date.now()): void {
 	for (const open of conversations.values()) {
 		for (const [key, bridged] of open) {
-			if (!bridged.busy && Date.now() - bridged.usedAt > IDLE_MS) {
+			if (!working(bridged) && now - bridged.usedAt > IDLE_MS) {
 				bridged.close();
 				open.delete(key);
 			}
@@ -274,9 +286,9 @@ function sweepIdle(): void {
 	}
 }
 
-/** Makes room for one more conversation by closing the longest idle ones; busy ones are never closed. */
+/** Makes room for one more conversation by closing the longest idle ones; busy ones, and ones waiting on tools, are never closed. */
 function makeRoom(open: Map<string, Bridged>, maxOpen: number): void {
-	const idle = [...open].filter(([, bridged]) => !bridged.busy).sort(([, a], [, b]) => a.usedAt - b.usedAt);
+	const idle = [...open].filter(([, bridged]) => !working(bridged)).sort(([, a], [, b]) => a.usedAt - b.usedAt);
 	while (open.size >= maxOpen && idle.length) {
 		const [key, bridged] = idle.shift()!;
 		bridged.close();
