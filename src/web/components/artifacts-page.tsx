@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl } from '@/components/html-frame';
@@ -12,7 +12,7 @@ import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output
 import { PageFrame } from '@/components/page-frame';
 import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
 import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
-import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf } from '@/lib/artifacts';
+import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf, zipFolder } from '@/lib/artifacts';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -305,16 +305,36 @@ function matches(artifact: Artifact, query: string): boolean {
 	return words.every((word) => haystack.includes(word));
 }
 
-/** Adds files of your own, such as a skill's SKILL.md, which any task can then be given from the composer's + menu. */
+/**
+ * Adds files of your own, such as a skill's SKILL.md, which any task can then be given from the composer's + menu.
+ * A folder goes in as one .zip named for it, and a folder with a SKILL.md is installed as a skill straight away,
+ * scripts and all.
+ */
 function AddFiles() {
 	const picker = useRef<HTMLInputElement>(null);
+	const folderPicker = useRef<HTMLInputElement>(null);
 	const queryClient = useQueryClient();
 	const add = useMutation({
 		mutationFn: async (files: File[]) => {
 			for (const file of files) await api.addArtifact(file);
+			return null;
 		},
 		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['artifacts'] }),
 	});
+	const addFolder = useMutation({
+		mutationFn: async (files: File[]) => {
+			const { file, skill } = await zipFolder(files);
+			const { path } = await api.addArtifact(file);
+			if (!skill) return `Added ${path}.`;
+			const { plugins } = await api.installAddedSkill(path);
+			queryClient.setQueryData<{ plugins: unknown[]; marketplaces: string[] }>(['plugins'], (current) => (current ? { ...current, plugins } : current));
+			const installed = plugins.find((plugin) => plugin.source.repo === ADDED_FILES && plugin.source.path === path);
+			return `Added ${path} and installed it as the skill ${installed?.skills[0]?.name ?? installed?.name ?? ''}, in Settings › Skills.`;
+		},
+		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['artifacts'] }),
+	});
+	const problem = add.error ?? addFolder.error;
+	const busy = add.isPending || addFolder.isPending;
 	return (
 		<>
 			<input
@@ -329,8 +349,26 @@ function AddFiles() {
 					if (files.length) add.mutate(files);
 				}}
 			/>
-			{add.isError ? <span className="text-[12px] text-(--danger-text)">{add.error.message}</span> : null}
-			<Btn size="sm" variant="ghost" icon={Upload} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
+			<input
+				ref={folderPicker}
+				type="file"
+				multiple
+				hidden
+				aria-label="Folder to add"
+				// React does not know the attribute; browsers that pick folders all read it.
+				{...{ webkitdirectory: '' }}
+				onChange={(event) => {
+					const files = [...(event.target.files ?? [])];
+					event.target.value = '';
+					if (files.length) addFolder.mutate(files);
+				}}
+			/>
+			{problem ? <span className="text-[12px] text-(--danger-text)">{problem.message}</span> : null}
+			{addFolder.isSuccess && addFolder.data ? <span className="text-[12px] text-(--text-tertiary)">{addFolder.data}</span> : null}
+			<Btn size="sm" variant="ghost" icon={FolderUp} disabled={busy} onClick={() => folderPicker.current?.click()} className="shrink-0">
+				{addFolder.isPending ? 'Adding…' : 'Add folder'}
+			</Btn>
+			<Btn size="sm" variant="ghost" icon={Upload} disabled={busy} onClick={() => picker.current?.click()} className="shrink-0">
 				{add.isPending ? 'Adding…' : 'Add files'}
 			</Btn>
 		</>
