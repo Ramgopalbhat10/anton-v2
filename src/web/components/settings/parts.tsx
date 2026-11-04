@@ -2,7 +2,9 @@ import type { LucideIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IconTile } from '@/components/instrument';
-import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel } from '@/components/signal';
+import { ModelPicker } from '@/components/model-picker';
+import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/signal';
+import type { HelperAgent, Reasoning } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export const FIELD =
@@ -145,6 +147,64 @@ export function SettingRow({ title, help, info, children }: { title: ReactNode; 
 /** Rows of one kind (repositories, sandboxes, problems): a card of its own, or plain rows inside a block. */
 export function List({ children }: { children: ReactNode }) {
 	return <div className="in-list in-card flex flex-col gap-0.5">{children}</div>;
+}
+
+/** The helper agents a model can be picked for, as Settings › General and a project's settings list them. */
+export const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: string }> = [
+	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code.' },
+	{ agent: 'tester', title: 'Tester', help: 'Runs the tests and reports failures.' },
+	{ agent: 'browser', title: 'Browser', help: 'Works on web pages.', info: 'In the Browser panel or the sandbox, and reports back.' },
+	{
+		agent: 'computer',
+		title: 'Computer',
+		help: 'Uses the sandbox desktop.',
+		info: "Apps, dialogs, a visual check. It sees the screen with this model when it is an OpenRouter model that reads images, else with the task's, else with ANTON_VISION_MODEL.",
+	},
+	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews pull requests on GitHub.', info: 'Each pull request the agent opens or updates.' },
+];
+
+export type AgentModelChoice = { model: string; reasoning: Reasoning | null };
+
+/** One helper agent: `fallbackLabel` is what it runs on with its switch off — the task's model, or what a project inherits. */
+export function HelperModel({
+	title,
+	help,
+	info,
+	value,
+	fallback,
+	fallbackLabel = "Task's model",
+	disabled,
+	onChange,
+}: {
+	title: string;
+	help: string;
+	info?: string;
+	value: AgentModelChoice | null;
+	fallback: string;
+	fallbackLabel?: ReactNode;
+	disabled: boolean;
+	onChange: (value: AgentModelChoice | null) => void;
+}) {
+	return (
+		<SettingRow title={title} help={help} info={info}>
+			{value ? (
+				<ModelPicker
+					value={value}
+					onChange={(change) => onChange({ model: change.model ?? value.model, reasoning: change.reasoning ?? null })}
+					height={28}
+					side="bottom"
+				/>
+			) : (
+				<span className="text-[12px] text-(--text-tertiary)">{fallbackLabel}</span>
+			)}
+			<Switch
+				checked={value !== null}
+				disabled={disabled || !fallback}
+				onChange={(on) => onChange(on ? { model: fallback, reasoning: null } : null)}
+				label={<span className="sr-only">{title} uses its own model</span>}
+			/>
+		</SettingRow>
+	);
 }
 
 export function size(bytes: number): string {

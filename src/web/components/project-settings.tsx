@@ -8,9 +8,10 @@ import { MenuButton } from '@/components/nav';
 import { IconPicker } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
 import { AREA } from '@/components/repo-settings';
-import { Block, FIELD, PageHeading, SaveState, Select, SettingRow, SubBlock } from '@/components/settings/parts';
+import { Block, FIELD, HelperModel, HELPERS, PageHeading, SaveState, Select, SettingRow, SubBlock } from '@/components/settings/parts';
+import { useGeneralSettings } from '@/components/settings/general';
 import { Btn, EmptyState, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
-import { api, type Autonomy, type ModelChoice, type Space, type SpaceChange } from '@/lib/api';
+import { api, type Autonomy, type HelperAgent, type ModelChoice, type Space, type SpaceChange } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { useSpace } from '@/lib/spaces';
@@ -33,18 +34,26 @@ function useSave(space: Space) {
 	});
 }
 
-/** Name, goal, the coordinator's and threads' models, how many threads run at once, and whether the coordinator starts them. */
+/** Name, goal, the coordinator's and threads' models, each helper agent's, how many threads run at once, and whether the coordinator starts them. */
 function General({ space }: { space: Space }) {
 	const models = useModels();
+	const general = useGeneralSettings();
 	const save = useSave(space);
 	const [name, setName] = useState(space.name);
 	const [icon, setIcon] = useState<string | null>(space.icon);
 	const [goal, setGoal] = useState(space.goal);
 	const [coordinator, setCoordinator] = useState<ModelChoice>({ model: space.coordinatorModel ?? '', reasoning: space.coordinatorReasoning });
 	const [thread, setThread] = useState<ModelChoice>({ model: space.threadModel ?? '', reasoning: space.threadReasoning });
+	const [agentModels, setAgentModels] = useState<Space['agentModels']>(space.agentModels);
 	const [maxParallel, setMaxParallel] = useState(space.maxParallel);
 	const [autonomy, setAutonomy] = useState(space.autonomy);
 	const fallback = models.data?.default ?? '';
+	const nameOf = (id: string) => models.data?.models.find((model) => model.id === id)?.name ?? id.replace(/^openrouter\//, '');
+	/** What a helper follows with its switch off: the choice in Settings › General, else the thread's own model. */
+	const inherited = (agent: HelperAgent) => {
+		const choice = general.data?.agentModels?.[agent];
+		return general.data ? (choice ? `Default · ${nameOf(choice.model)}` : "Default · thread's model") : 'Default';
+	};
 	return (
 		<form
 			onSubmit={(event) => {
@@ -57,6 +66,7 @@ function General({ space }: { space: Space }) {
 					coordinatorReasoning: coordinator.reasoning,
 					threadModel: thread.model || null,
 					threadReasoning: thread.reasoning,
+					agentModels,
 					maxParallel,
 					autonomy,
 				});
@@ -94,6 +104,21 @@ function General({ space }: { space: Space }) {
 					<SettingRow title="Threads" help="Each thread's agent." info="Unless a thread or routine picks its own.">
 						<ModelPicker value={{ model: thread.model || fallback, reasoning: thread.reasoning }} onChange={(change) => setThread((current) => ({ ...current, ...change }))} side="bottom" />
 					</SettingRow>
+				</SubBlock>
+				<SubBlock label="Helper agents" help="Each can run on its own model for this project's threads." info="The agents that work for a thread's agent. Off, one follows Settings › General.">
+					{HELPERS.map((helper) => (
+						<HelperModel
+							key={helper.agent}
+							title={helper.title}
+							help={helper.help}
+							info={helper.info}
+							value={agentModels[helper.agent]}
+							fallback={thread.model || fallback}
+							fallbackLabel={inherited(helper.agent)}
+							disabled={save.isPending}
+							onChange={(choice) => setAgentModels((current) => ({ ...current, [helper.agent]: choice }))}
+						/>
+					))}
 				</SubBlock>
 				<SubBlock label="Running threads">
 					<div className="grid gap-3 sm:grid-cols-2">

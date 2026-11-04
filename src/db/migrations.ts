@@ -203,6 +203,8 @@ export const migrations: string[][] = [
 	],
 	// 38: where a task's commands run, chosen in the composer: its sandbox (NULL, as before) or 'host', this server.
 	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
+	// 39: each helper agent's own model for the project's threads, as JSON of Settings › General's agentModels; NULL follows it.
+	[`ALTER TABLE spaces ADD COLUMN agent_models TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

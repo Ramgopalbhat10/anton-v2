@@ -7,7 +7,7 @@ import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
-import { agentSettingsNow } from '../services/agent-runner.ts';
+import { helperModelFor } from '../services/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
@@ -38,8 +38,8 @@ const PROMPT = [
  * conversation, so the coder never sees how it reasoned, only its comments.
  */
 export function Reviewer({ id }: AgentProps) {
-	// Its own model from Settings, or the task's.
-	const { model, reasoning } = agentSettingsNow().models.reviewer ?? modelFor(id);
+	// Its own model — the project's when the task is a thread, else Settings › General's — or the task's.
+	const { model, reasoning } = helperModelFor(id, 'reviewer') ?? modelFor(id);
 	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	useSandbox({
 		async createSandbox() {

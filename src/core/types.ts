@@ -16,6 +16,12 @@ export type Project = {
 /** A remote MCP server; `auth` is sent as a Bearer token, and `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script programs. */
 export type McpServer = { name: string; url: string; auth: string | null; tools: string[]; codeMode?: boolean };
 
+/** The agents that work for the coder: its explorer, tester, browser and computer subagents, and the reviewer of its pull requests. */
+export const HELPER_AGENTS = ['explorer', 'tester', 'browser', 'computer', 'reviewer'] as const;
+export type HelperAgent = (typeof HELPER_AGENTS)[number];
+/** A helper agent's own model; a null reasoning level uses the model's default. */
+export type AgentModel = { model: string; reasoning: Reasoning | null };
+
 /** An MCP server added in Settings › Connectors, which every task gets while it is on. */
 export type InstalledMcpServer = McpServer & { enabled: boolean; addedAt: string };
 

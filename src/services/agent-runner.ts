@@ -17,7 +17,7 @@ import { primeSkills } from './plugins.ts';
 import { logProblem } from './log.ts';
 import { isRestoring } from './restore.ts';
 import { type ModelChoice, primeModel } from './sessions.ts';
-import { getSpace } from '../db/spaces.ts';
+import { getSpace, type Space } from '../db/spaces.ts';
 import { primeAllCoordinators, primeCoordinator } from './coordinator.ts';
 
 /**
@@ -116,6 +116,14 @@ let agentSettings: AgentSettings = { codeMode: true, visualReplies: 'some', page
 
 export const agentSettingsNow = (): AgentSettings => agentSettings;
 
+/** Each helper's own model as a project's threads resolved it: the project's choice, null when it leaves Settings › General's. */
+const threadHelperModels = new Map<string, Record<HelperAgent, ModelChoice | null>>();
+
+/** The model one of a task's helper agents runs on: its project's choice when it is a thread, else Settings › General's; null means the task's own. */
+export function helperModelFor(id: string, agent: HelperAgent): ModelChoice | null {
+	return threadHelperModels.get(id)?.[agent] ?? agentSettings.models[agent];
+}
+
 async function choiceFor(setting: AgentModel | null): Promise<ModelChoice | null> {
 	if (!setting) return null;
 	const info = await findModel(setting.model).catch(() => undefined);
@@ -126,6 +134,11 @@ async function primeAgentSettings(): Promise<void> {
 	const { codeMode, visualReplies, pageNetwork, agentModels } = await generalSettings();
 	const models = Object.fromEntries(await Promise.all(HELPER_AGENTS.map(async (agent) => [agent, await choiceFor(agentModels[agent])] as const)));
 	agentSettings = { codeMode, visualReplies, pageNetwork, models: models as AgentSettings['models'] };
+}
+
+/** Each helper's model for one of the project's threads: its choice there, resolved the way Settings › General's are. */
+async function helperModelsOf(space: Space): Promise<Record<HelperAgent, ModelChoice | null>> {
+	return Object.fromEntries(await Promise.all(HELPER_AGENTS.map(async (agent) => [agent, await choiceFor(space.agentModels[agent])] as const))) as Record<HelperAgent, ModelChoice | null>;
 }
 
 /**
@@ -151,8 +164,13 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 			.catch(() => undefined);
 	if (!memories.has(id)) memories.set(id, project?.memory ?? '');
 	// The project's memory is kept as first read too, for the same reason; its name, goal and instructions follow edits.
-	if (space) threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: threadProjects.get(id)?.id === space.id ? threadProjects.get(id)!.memory : space.memory });
-	else threadProjects.delete(id);
+	if (space) {
+		threadProjects.set(id, { id: space.id, name: space.name, goal: space.goal, instructions: space.instructions, memory: threadProjects.get(id)?.id === space.id ? threadProjects.get(id)!.memory : space.memory });
+		threadHelperModels.set(id, await helperModelsOf(space));
+	} else {
+		threadProjects.delete(id);
+		threadHelperModels.delete(id);
+	}
 	if (session?.machineState) workspaces.add(id);
 	if (session?.runOn === 'host') onHost.add(id);
 	else onHost.delete(id);

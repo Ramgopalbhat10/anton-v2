@@ -36,6 +36,7 @@ import { agentModelFor, modelFor, routedModels } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import {
 	agentSettingsNow,
+	helperModelFor,
 	hasWorkspace,
 	isChat,
 	isPlanning,
@@ -152,12 +153,13 @@ const tester = defineSubagent({
 });
 
 /**
- * A subagent's own model from Settings, often a cheaper one; without one it uses the task's. One on a
+ * A subagent's own model — its project's choice when the task is a thread, else Settings › General's —
+ * often a cheaper one; without one it uses the task's. One on a
  * Claude Code model compacts where Settings › General says Claude Code compacts (scripts/patch-flue.ts
  * reads its `compaction`), not near the end of a 1M window; others keep the runtime's default for their model.
  */
-function withSettingsModel(subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
-	const choice = agentSettingsNow().models[name];
+function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
+	const choice = helperModelFor(id, name);
 	if (!choice) return subagent;
 	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : undefined;
 	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, ...(compaction ? { compaction } : {}) } as typeof explorer;
@@ -250,7 +252,7 @@ function useSnapshotExplorer(id: string, chat: boolean) {
 			return SnapshotExplorer(scripts, chat);
 		},
 	});
-	useSubagent(withSettingsModel(subagent, 'explorer'));
+	useSubagent(withSettingsModel(id, subagent, 'explorer'));
 }
 
 function useStartWorkspace(id: string, chat: boolean, startWorkspace: () => void) {
@@ -295,8 +297,8 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 		}),
 	});
 	if (!chat) {
-		useSubagent(withSettingsModel(explorer, 'explorer'));
-		useSubagent(withSettingsModel(tester, 'tester'));
+		useSubagent(withSettingsModel(id, explorer, 'explorer'));
+		useSubagent(withSettingsModel(id, tester, 'tester'));
 		// Someone else's pull request is reviewed, never pushed to.
 		if (review) useTool(postReviewTool(id));
 		else if (!planning) {
@@ -539,7 +541,7 @@ function useBrowserSubagent(id: string, places: BrowserPlace[]) {
 			return Browser();
 		},
 	});
-	useSubagent(withSettingsModel(subagent, 'browser'));
+	useSubagent(withSettingsModel(id, subagent, 'browser'));
 }
 
 /** Steps that point at something on the screen, and so need a position. */
@@ -693,7 +695,7 @@ function useComputerSubagent(id: string) {
 			return Computer();
 		},
 	});
-	useSubagent(withSettingsModel(subagent, 'computer'));
+	useSubagent(withSettingsModel(id, subagent, 'computer'));
 }
 
 function useOpenPullRequest(id: string) {
