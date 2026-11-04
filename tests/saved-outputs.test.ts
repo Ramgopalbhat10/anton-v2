@@ -99,3 +99,26 @@ test('a file you added installs as the skill its front matter names, whatever th
 	await assert.rejects(installAddedSkill(plain), /no name: line in its front matter/);
 	await assert.rejects(installAddedSkill('missing.md'), /not among the files you added/);
 });
+
+test('a skill folder added as a zip installs with its scripts beside its SKILL.md', async () => {
+	const { zipSync } = await import('fflate');
+	const { addFile } = await import('../src/services/added-files.ts');
+	const { installAddedSkill } = await import('../src/services/plugins.ts');
+	const enc = (value: string) => new TextEncoder().encode(value);
+	const zip = zipSync({
+		'day-trading/SKILL.md': enc('---\nname: day-trading\ndescription: Trade within the day on paper.\n---\nRun `scripts/kit.py levels`.\n'),
+		'day-trading/scripts/kit.py': enc('print("levels")\n'),
+		'day-trading/universe.json': enc('{"ITC":"NSE_1660"}'),
+		'__MACOSX/day-trading/._SKILL.md': enc('junk'),
+	});
+	const path = await addFile('day-trading.zip', zip, 'application/zip');
+	const plugin = await installAddedSkill(path);
+	assert.equal(plugin.name, 'day-trading');
+	assert.deepEqual(plugin.skills[0].instructions, 'Run `scripts/kit.py levels`.');
+	assert.deepEqual(Object.keys(plugin.skills[0].files).sort(), ['scripts/kit.py', 'universe.json']);
+	assert.deepEqual(plugin.skills[0].files['scripts/kit.py'], { text: 'print("levels")\n' });
+	const empty = await addFile('notes.zip', zipSync({ 'notes.txt': enc('hi') }), 'application/zip');
+	await assert.rejects(installAddedSkill(empty), /has no SKILL\.md/);
+	const broken = await addFile('broken.zip', enc('not a zip'), 'application/zip');
+	await assert.rejects(installAddedSkill(broken), /could not be opened as a zip/);
+});

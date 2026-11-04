@@ -128,8 +128,8 @@ function useInstalledFrom(artifact: Artifact, enabled: boolean) {
 }
 
 /**
- * Installs a Markdown file you added as a skill, or updates the skill it was installed as. Its name comes
- * from the file's front matter, so any file name will do. The menu stays open to say how it went.
+ * Installs a Markdown file you added as a skill, or a skill's folder zipped with its scripts, or updates the
+ * skill it was installed as. Its name comes from the SKILL.md's front matter, so any file name will do. The menu stays open to say how it went.
  */
 function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolean }) {
 	const queryClient = useQueryClient();
@@ -208,7 +208,7 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 						Go to the task
 					</MenuItem>
 				)}
-				{artifact.added && isMarkdown(artifact.path) ? <InstallSkillItem artifact={artifact} open={open} /> : null}
+				{artifact.added && (isMarkdown(artifact.path) || /\.zip$/i.test(artifact.path)) ? <InstallSkillItem artifact={artifact} open={open} /> : null}
 				<MenuSeparator />
 				<MenuItem
 					icon={Trash2}
