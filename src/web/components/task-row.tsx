@@ -38,7 +38,7 @@ export function TaskRow({ session, modelName }: { session: Session; modelName: (
 			to="/agents/$sessionId"
 			params={{ sessionId: session.id }}
 			search={{ app: 'code' }}
-			className="flex min-w-0 flex-col gap-0.5 rounded-[10px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-w-0 flex-col gap-0.5 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				<TaskStatusIcon session={session} size={14} />

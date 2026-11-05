@@ -293,7 +293,7 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 	return (
 		<>
 			<TraceHeader sub={<ReplyModels trace={trace} names={names} when={when} />} onClose={onClose}>
-				<label className="hidden h-8 w-[260px] items-center gap-2 rounded-[9px] border border-(--border-default) bg-(--bg-inset) px-2.5 focus-within:border-(--accent-border) sm:flex">
+				<label className="hidden h-8 w-[260px] items-center gap-2 rounded-[6px] border border-(--border-default) bg-(--bg-inset) px-2.5 focus-within:border-(--accent-border) sm:flex">
 					<Icon icon={Search} size={13} className="text-(--icon-tertiary)" />
 					<input
 						ref={search}
@@ -500,7 +500,7 @@ function StretchGrip({ line }: { line: Timeline }) {
 				window.addEventListener('pointerup', up);
 			}}
 		>
-			<span className="h-4 w-[5px] rounded-full border border-(--border-strong) bg-(--bg-raised) transition-colors duration-(--duration-micro) group-hover/stretch:border-(--accent-border) group-hover/stretch:bg-(--accent-bg-subtle)" />
+			<span className="h-4 w-[5px] rounded-full bg-(--bg-raised) transition-colors duration-(--duration-micro) group-hover/stretch:border group-hover/stretch:border-(--accent-border) group-hover/stretch:bg-(--accent-bg-subtle)" />
 		</span>
 	);
 }
@@ -609,7 +609,7 @@ function RowIcon({ node }: { node: TraceNode }) {
 	const icon: LucideIcon = span.kind === 'model' ? Sparkles : span.kind === 'compaction' ? FoldVertical : describeTool({ toolName: span.tool, input: parsedInput(span) }).icon;
 	return (
 		<span
-			className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[5px]"
+			className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[6px]"
 			style={span.error ? { color: 'var(--danger-text)', background: 'var(--danger-bg)' } : { color: 'var(--icon-secondary)', background: 'var(--alpha-white-6)' }}
 		>
 			<Icon icon={icon} size={11} />
@@ -694,7 +694,7 @@ function StepRow({
 							event.stopPropagation();
 							onToggle();
 						}}
-						className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-(--icon-tertiary) outline-none hover:bg-(--bg-active) hover:text-(--icon-primary) focus-visible:shadow-(--focus-ring)"
+						className="inline-flex size-4 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-active) hover:text-(--icon-primary) focus-visible:shadow-(--focus-ring)"
 					>
 						<Icon icon={row.folded ? ChevronRight : ChevronDown} size={12} />
 					</button>
@@ -737,7 +737,7 @@ function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; tota
 	return (
 		<>
 			{row.group ? (
-				<div className="absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-[4px]" style={{ left: pos(row.start, total), width: width(duration), ...hatch(row.hue) }}>
+				<div className="absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-[6px]" style={{ left: pos(row.start, total), width: width(duration), ...hatch(row.hue) }}>
 					{own.map((call) => (
 						<span
 							key={call.id}
@@ -752,7 +752,7 @@ function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; tota
 				</div>
 			) : (
 				<div
-					className={cn('absolute top-1/2 flex h-3.5 -translate-y-1/2 items-center justify-center rounded-[4px]', span?.kind === 'compaction' && 'opacity-80')}
+					className={cn('absolute top-1/2 flex h-3.5 -translate-y-1/2 items-center justify-center rounded-[6px]', span?.kind === 'compaction' && 'opacity-80')}
 					style={{ left: pos(row.start, total), width: width(duration), background: fill }}
 				>
 					{failed && duration / total > 0.02 ? <Icon icon={X} size={10} className="text-(--danger-fg)" /> : null}
@@ -862,7 +862,7 @@ function StepCard({ node, trace, names, onClose, onSelect }: { node: TraceNode; 
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-3.5 py-3.5 *:shrink-0">
 				{failed ? (
-					<div className="flex items-start gap-2 rounded-[10px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
+					<div className="flex items-start gap-2 rounded-[6px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
 						<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 						<span className="min-w-0 break-words">{failed}</span>
 					</div>
@@ -879,7 +879,7 @@ function StepCard({ node, trace, names, onClose, onSelect }: { node: TraceNode; 
 
 function Facts({ items }: { items: Array<{ label: string; value: ReactNode; tone?: Tone }> }) {
 	return (
-		<dl className="m-0 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] border border-(--border-subtle) bg-(--border-subtle)">
+		<dl className="m-0 grid grid-cols-3 gap-px overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--border-subtle)">
 			{items.map((item) => (
 				<div key={item.label} className="flex min-w-0 flex-col gap-0.5 bg-(--bg-raised) px-3 py-2">
 					<dt className="truncate text-[11px] text-(--text-tertiary)">{item.label}</dt>
@@ -961,7 +961,7 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 					{ label: 'Messages', value: span.messages },
 				]}
 			/>
-			<div className="flex flex-col gap-2 rounded-[10px] border border-(--border-subtle) bg-(--bg-raised) px-3 py-2.5">
+			<div className="flex flex-col gap-2 rounded-[6px] border border-(--border-subtle) bg-(--bg-raised) px-3 py-2.5">
 				<div className="flex min-w-0 items-center gap-2">
 					<ModelLogo model={span.model} size={20} />
 					<div className="flex min-w-0 flex-1 flex-col">

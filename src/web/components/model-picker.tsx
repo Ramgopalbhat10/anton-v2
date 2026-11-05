@@ -76,7 +76,7 @@ export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: numbe
 		<span
 			aria-hidden
 			title={model.vendor}
-			className="relative inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
+			className="relative inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -103,7 +103,7 @@ export function ModelLogo({ model, size = 16, title }: { model: string; size?: n
 		<span
 			aria-hidden={title ? undefined : true}
 			title={title}
-			className="inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
+			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -235,7 +235,7 @@ function ModelRow({
 			onClick={onPick}
 			onMouseMove={onHover}
 			title={about(model)}
-			className={cn(COLUMNS, 'group/row h-8 w-full cursor-default rounded-[7px] text-left outline-none data-active:bg-(--bg-hover)')}
+			className={cn(COLUMNS, 'group/row h-8 w-full cursor-default rounded-[6px] text-left outline-none data-active:bg-(--bg-hover)')}
 		>
 			<ModelMark model={model} />
 			<span className="flex min-w-0 items-center gap-1">
@@ -250,7 +250,7 @@ function ModelRow({
 						onPin();
 					}}
 					className={cn(
-						'inline-flex size-5 shrink-0 items-center justify-center rounded-[5px] outline-none transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-6) focus-visible:opacity-100 focus-visible:shadow-(--focus-ring)',
+						'inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] outline-none transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-6) focus-visible:opacity-100 focus-visible:shadow-(--focus-ring)',
 						pinned ? 'text-(--accent-text) opacity-100' : 'text-(--icon-tertiary) opacity-0 group-hover/row:opacity-100 group-data-active/row:opacity-100',
 					)}
 				>
@@ -374,7 +374,7 @@ export function ContextRuler({ options, onChange }: { options: ModelOptions; onC
 		onChange(sizes[Math.min(sizes.length - 1, Math.max(0, chosen + step))].tag);
 	}
 	return (
-		<div role="radiogroup" aria-label="Context window" onKeyDown={onKeyDown} className="inline-flex shrink-0 gap-0.5 rounded-[8px] bg-(--alpha-white-6) p-0.5">
+		<div role="radiogroup" aria-label="Context window" onKeyDown={onKeyDown} className="inline-flex shrink-0 gap-0.5 rounded-[6px] bg-(--alpha-white-6) p-0.5">
 			{sizes.map((size, index) => {
 				const on = index === chosen;
 				const lit = Math.max(1, Math.round((size.tokens / largest) * TICKS));
@@ -425,7 +425,7 @@ export function FastToggle({ on, note, onChange }: { on: boolean; note?: string;
 			title={note}
 			onClick={() => onChange(!on)}
 			className={cn(
-				'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[8px] pr-1.5 pl-2 text-[11.5px] outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] pr-1.5 pl-2 text-[11.5px] outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 				on ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'text-(--text-tertiary) hover:bg-(--alpha-white-6) hover:text-(--text-secondary)',
 			)}
 		>
@@ -455,7 +455,7 @@ function ProviderFilter({
 }) {
 	const picked = providers.filter((entry) => chosen.has(entry.vendor));
 	return (
-		<span className={cn('flex shrink-0 items-center rounded-[7px]', picked.length && 'bg-(--accent-bg-subtle)')}>
+		<span className={cn('flex shrink-0 items-center rounded-[6px]', picked.length && 'bg-(--accent-bg-subtle)')}>
 			<Menu>
 				<MenuTrigger asChild>
 					<button
@@ -463,7 +463,7 @@ function ProviderFilter({
 						aria-label={picked.length ? `Providers: ${picked.map((entry) => entry.vendor).join(', ')}` : 'Filter by provider'}
 						title={picked.length ? picked.map((entry) => entry.vendor).join(', ') : 'Filter by provider'}
 						className={cn(
-							'inline-flex h-7 shrink-0 items-center justify-center rounded-[7px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
+							'inline-flex h-7 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
 							picked.length ? 'gap-1 pr-1 pl-1.5' : 'w-7',
 						)}
 					>
@@ -471,7 +471,7 @@ function ProviderFilter({
 							<>
 								<span className="flex items-center">
 									{picked.slice(0, 3).map((entry, index) => (
-										<span key={entry.vendor} className={cn('flex rounded-[5px] shadow-[0_0_0_1.5px_var(--pop-bg)]', index > 0 && '-ml-1')}>
+										<span key={entry.vendor} className={cn('flex rounded-[6px] shadow-[0_0_0_1.5px_var(--pop-bg)]', index > 0 && '-ml-1')}>
 											<ModelMark model={{ ...entry.model, subscription: undefined }} size={15} />
 										</span>
 									))}
@@ -490,7 +490,7 @@ function ProviderFilter({
 							<button
 								type="button"
 								onClick={onClear}
-								className="rounded-[5px] px-1.5 py-0.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+								className="rounded-[6px] px-1.5 py-0.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 							>
 								Clear {picked.length}
 							</button>
@@ -758,14 +758,14 @@ export const ModelPicker = memo(function ModelPicker({
 					{selected ? <ModelMark model={selected} size={height - 10} /> : <Spinner size={12} tone="neutral" />}
 					<span className="min-w-0 truncate text-[12px]">{shown ? shortName(shown) : 'Model'}</span>
 					{options?.chosen.context ? (
-						<span className="in-num rounded-[4px] bg-(--alpha-white-6) px-1 py-px text-[10px] text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
+						<span className="in-num rounded-[6px] bg-(--alpha-white-6) px-1 py-px text-[10px] text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
 						</span>
 					) : null}
 					{options?.chosen.fast ? <Icon icon={Zap} size={11} className="text-(--accent-text) [&_path]:fill-current" /> : null}
 					{routed && route ? <RouteBadge model={routed} route={route} size={height - 12} /> : null}
 					{selected?.reasoning.length ? (
-						<span className="flex items-center gap-1 rounded-[4px] bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
+						<span className="flex items-center gap-1 rounded-[6px] bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
 							<span className="text-[10px] text-(--text-tertiary)">{REASONING_LABEL[reasoning]}</span>
 						</span>
@@ -813,7 +813,7 @@ export const ModelPicker = memo(function ModelPicker({
 									type="button"
 									aria-label="Source, filters and sort"
 									className={cn(
-										'relative inline-flex size-7 shrink-0 items-center justify-center rounded-[7px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
+										'relative inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
 										narrowed && 'text-(--accent-text)',
 									)}
 								>

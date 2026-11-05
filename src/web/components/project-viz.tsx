@@ -329,7 +329,7 @@ function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: '
 	return (
 		<span
 			className={cn(
-				'in-caption absolute top-1/2 -translate-y-1/2 rounded-[4px] px-1 text-[9.5px] leading-[15px] whitespace-nowrap',
+				'in-caption absolute top-1/2 -translate-y-1/2 rounded-[6px] px-1 text-[9.5px] leading-[15px] whitespace-nowrap',
 				tone === 'danger' ? 'bg-(--danger-bg) text-(--danger-text)' : 'bg-(--success-bg) text-(--success-text)',
 			)}
 			style={right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }}
@@ -421,12 +421,12 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 						const reply = pct(ms(threadActiveAt(thread)));
 						const bar = (a: number, b: number) => ({ left: `${a}%`, width: `max(6px, ${Math.max(0, b - a)}%)` });
 						return (
-							<button key={thread.id} type="button" onClick={() => open(thread)} aria-label={`${thread.title}: ${KIND_LABEL[kind]}`} className="relative h-6 rounded-[5px] bg-white/[0.025] outline-none focus-visible:shadow-(--focus-ring)">
+							<button key={thread.id} type="button" onClick={() => open(thread)} aria-label={`${thread.title}: ${KIND_LABEL[kind]}`} className="relative h-6 rounded-[6px] bg-white/[0.025] outline-none focus-visible:shadow-(--focus-ring)">
 								{kind === 'working' ? (
-									<span className="in-sweep absolute inset-y-[3px] rounded-[4px]" style={{ ...bar(from, nowAt), background: 'linear-gradient(90deg, color-mix(in srgb, var(--accent-base) 22%, transparent), var(--accent-base))' }} />
+									<span className="in-sweep absolute inset-y-[3px] rounded-[6px]" style={{ ...bar(from, nowAt), background: 'linear-gradient(90deg, color-mix(in srgb, var(--accent-base) 22%, transparent), var(--accent-base))' }} />
 								) : kind === 'failed' ? (
 									<>
-										<span className="absolute inset-y-[3px] rounded-[4px] border border-(--danger-base) bg-(--danger-bg)" style={bar(from, Math.max(reply, from + 2))} />
+										<span className="absolute inset-y-[3px] rounded-[6px] border border-(--danger-base) bg-(--danger-bg)" style={bar(from, Math.max(reply, from + 2))} />
 										<Chip at={Math.max(reply, from + 2)} tone="danger">
 											{thread.status === 'error' ? 'Failed' : 'CI failing'}
 										</Chip>
@@ -437,16 +437,16 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 										<span className="in-hatch absolute inset-y-[3px] rounded-r-[4px] border border-(--warning-border) bg-(--warning-bg) text-(--warning-base)" style={bar(reply, nowAt)} />
 									</>
 								) : kind === 'queued' ? (
-									<span className="absolute inset-y-[3px] rounded-[4px] border border-dashed border-(--border-strong)" style={bar(nowAt + 0.8, Math.min(99.5, nowAt + 9))} />
+									<span className="absolute inset-y-[3px] rounded-[6px] border border-dashed border-(--border-strong)" style={bar(nowAt + 0.8, Math.min(99.5, nowAt + 9))} />
 								) : kind === 'review' || kind === 'landing' ? (
 									<>
-										<span className="absolute inset-y-[3px] rounded-[4px]" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--success-base) 50%, transparent)' }} />
+										<span className="absolute inset-y-[3px] rounded-[6px]" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--success-base) 50%, transparent)' }} />
 										{thread.prUrl ? (
 											<span className="absolute top-1/2 -translate-y-1/2" style={Math.max(reply, from + 1) > 72 ? { right: `calc(${100 - Math.max(reply, from + 1)}% + 6px)` } : { left: `calc(${Math.max(reply, from + 1)}% + 6px)` }}><PrStatus thread={thread} /></span>
 										) : null}
 									</>
 								) : (
-									<span className="absolute inset-y-[3px] rounded-[4px]" style={{ ...bar(from, reply), background: kind === 'resolved' ? 'var(--neutral-700)' : 'var(--neutral-600)' }} />
+									<span className="absolute inset-y-[3px] rounded-[6px]" style={{ ...bar(from, reply), background: kind === 'resolved' ? 'var(--neutral-700)' : 'var(--neutral-600)' }} />
 								)}
 							</button>
 						);
@@ -455,7 +455,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 				<span />
 				<div className="relative mt-2 h-5">
 					<span
-						className="in-caption absolute top-0 -translate-x-1/2 rounded-[5px] border whitespace-nowrap border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 text-(--accent-text)"
+						className="in-caption absolute top-0 -translate-x-1/2 rounded-[6px] border whitespace-nowrap border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 text-(--accent-text)"
 						style={{ left: `clamp(36px, ${nowAt}%, calc(100% - 36px))` }}
 					>
 						Now {hhmm(now)}

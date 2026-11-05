@@ -135,12 +135,12 @@ function Facts({ preview }: { preview: PluginPreview }) {
 				</dl>
 			</Card>
 			{preview.mcpServers.length ? (
-				<p className="m-0 rounded-[12px] border border-dashed border-(--border-default) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
+				<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
 					Also declares MCP servers ({preview.mcpServers.join(', ')}). Anton does not run them; add one in Settings › Connectors to use it.
 				</p>
 			) : null}
 			{preview.skipped.length ? (
-				<div className="flex flex-col gap-1 rounded-[12px] border border-(--border-subtle) bg-(--warning-bg) p-3 text-[12px] leading-[18px] text-(--warning-text)">
+				<div className="flex flex-col gap-1 rounded-[6px] border border-(--border-subtle) bg-(--warning-bg) p-3 text-[12px] leading-[18px] text-(--warning-text)">
 					<span className="font-medium">Left out when installed</span>
 					{preview.skipped.map((note) => (
 						<span key={note}>{note}</span>
@@ -184,7 +184,7 @@ function Skills({ preview, onView }: { preview: PluginPreview; onView: (path: st
 	return (
 		<div className="in-card p-1">
 			{preview.skills.map((skill) => (
-				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-[10px] px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
+				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-[6px] px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
 					<Glyph bundle={false} />
 					<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 						<span className="font-mono text-[13px] text-(--text-primary)">/{skill.name}</span>

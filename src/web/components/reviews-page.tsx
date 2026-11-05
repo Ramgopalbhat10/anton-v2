@@ -50,9 +50,9 @@ function CheckPips({ checks }: { checks: ReviewItem['checks'] }) {
 function Row({ item }: { item: ReviewItem }) {
 	const open = item.group !== 'merged' && item.group !== 'closed';
 	return (
-		<div className="flex min-h-[52px] items-center gap-3 rounded-[10px] px-2 py-1.5 hover:bg-(--bg-hover)">
+		<div className="flex min-h-[52px] items-center gap-3 rounded-[6px] px-2 py-1.5 hover:bg-(--bg-hover)">
 			<span
-				className="inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--border-subtle) bg-(--well-bg)"
+				className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg)"
 				style={{ color: prColor(item.group === 'unknown' ? null : item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open') }}
 			>
 				<Icon icon={item.group === 'merged' ? GitMerge : GitPullRequest} size={13} />

@@ -129,7 +129,7 @@ export function StackedDaysChart({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-[8px] focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)', className)}
 			style={{ height }}
 		>
 			{width > 0 ? (
@@ -289,7 +289,7 @@ export function DotMatrix({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-[8px] focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)', className)}
 			style={{ height }}
 		>
 			{width > 0 && cols ? (

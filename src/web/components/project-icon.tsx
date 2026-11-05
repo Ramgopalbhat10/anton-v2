@@ -199,12 +199,12 @@ export function suggestIcon(name: string): string {
 /** A project's mark: its icon on a tile tinted to match, or its initial when it has none. */
 export function ProjectIcon({ value, name, size = 24, className }: { value: string | null | undefined; name: string; size?: number; className?: string }) {
 	const parsed = parseIcon(value);
-	const radius = Math.max(5, Math.round(size * 0.3));
+	const radius = Math.min(6, Math.round(size * 0.3));
 	if (!parsed) {
 		return (
 			<span
 				aria-hidden
-				className={cn('inline-flex shrink-0 items-center justify-center border border-(--border-subtle) bg-(--well-bg) font-medium text-(--accent-text)', className)}
+				className={cn('inline-flex shrink-0 items-center justify-center bg-(--well-bg) font-medium text-(--accent-text)', className)}
 				style={{ width: size, height: size, borderRadius: radius, fontSize: Math.round(size * 0.48) }}
 			>
 				{name.trim().charAt(0).toUpperCase() || 'P'}
@@ -216,14 +216,13 @@ export function ProjectIcon({ value, name, size = 24, className }: { value: stri
 		<span
 			aria-hidden
 			data-icon={parsed.entry.key}
-			className={cn('inline-flex shrink-0 items-center justify-center border', className)}
+			className={cn('inline-flex shrink-0 items-center justify-center', className)}
 			style={{
 				width: size,
 				height: size,
 				borderRadius: radius,
 				color,
 				background: `linear-gradient(180deg, color-mix(in srgb, ${color} 22%, var(--well-bg)), color-mix(in srgb, ${color} 10%, var(--well-bg)))`,
-				borderColor: `color-mix(in srgb, ${color} 34%, transparent)`,
 				boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 18%, transparent)`,
 			}}
 		>
@@ -260,7 +259,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 				<button
 					type="button"
 					aria-label={parsed ? `Project icon: ${parsed.entry.label}. Change icon` : 'Choose an icon'}
-					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-[11px] outline-none focus-visible:shadow-(--focus-ring) data-[state=open]:shadow-(--focus-ring)"
+					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-[6px] outline-none focus-visible:shadow-(--focus-ring) data-[state=open]:shadow-(--focus-ring)"
 				>
 					<ProjectIcon value={value} name={name} size={size} className="transition-[filter] group-hover/icon:brightness-125" />
 				</button>
@@ -305,7 +304,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 										setOpen(false);
 									}}
 									className={cn(
-										'flex aspect-square items-center justify-center rounded-[8px] border outline-none focus-visible:shadow-(--focus-ring)',
+										'flex aspect-square items-center justify-center rounded-[6px] border outline-none focus-visible:shadow-(--focus-ring)',
 										on ? 'border-transparent' : 'border-transparent text-(--icon-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
 									)}
 									style={on ? { color: tintColor(tint), background: `color-mix(in srgb, ${tintColor(tint)} 16%, transparent)`, borderColor: `color-mix(in srgb, ${tintColor(tint)} 40%, transparent)` } : undefined}

@@ -59,14 +59,14 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
 	const panel = panels.find((panel) => panel.name === name)!;
 	return (
-		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-[8px] hover:bg-(--bg-hover)">
-			{active ? <div className="absolute inset-0 rounded-[8px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
+		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-[6px] hover:bg-(--bg-hover)">
+			{active ? <div className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<button
 				type="button"
 				role="tab"
 				aria-selected={active}
 				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-[8px] pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
+				className="relative flex h-full items-center gap-1.5 rounded-[6px] pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
 			>
 				<span
 					className={cn(
@@ -188,7 +188,7 @@ export const VmPanel = memo(function VmPanel({
 									<div key={panel.name} className="group/row flex items-center gap-0.5">
 										<MenuPrimitive.Item
 											onSelect={() => show(panel.name)}
-											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[8px] px-2 outline-none data-highlighted:bg-(--bg-hover)"
+											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[6px] px-2 outline-none data-highlighted:bg-(--bg-hover)"
 										>
 											<span className="inline-flex shrink-0 text-(--icon-secondary)">
 												<Icon icon={panel.icon} size={13} />
@@ -209,7 +209,7 @@ export const VmPanel = memo(function VmPanel({
 												togglePinnedPanel(panel.name);
 											}}
 											className={cn(
-												'inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] outline-none data-highlighted:bg-(--bg-hover)',
+												'inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] outline-none data-highlighted:bg-(--bg-hover)',
 												isPinned ? 'text-(--accent-text)' : 'text-(--icon-tertiary) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
 											)}
 										>
@@ -252,7 +252,7 @@ export const VmPanel = memo(function VmPanel({
 										onClick={() => show(panel.name)}
 										className="in-card group/panel flex-row items-start gap-3 px-3 py-3 text-left outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 									>
-										<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[9px] border border-dashed border-(--border-strong) text-(--icon-secondary) group-hover/panel:border-(--accent-border) group-hover/panel:text-(--accent-text)">
+										<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong) text-(--icon-secondary) group-hover/panel:border-(--accent-border) group-hover/panel:text-(--accent-text)">
 											<Icon icon={panel.icon} size={14} />
 										</span>
 										<span className="flex min-w-0 flex-col gap-0.5">

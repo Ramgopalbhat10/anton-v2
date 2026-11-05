@@ -18,7 +18,7 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 		<Link
 			to="/settings/repos/$projectId"
 			params={{ projectId: project.id }}
-			className="flex min-h-14 items-center gap-3 rounded-[10px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-h-14 items-center gap-3 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-1">

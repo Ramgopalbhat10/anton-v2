@@ -59,7 +59,7 @@ export function AgentTile({ agent, running, size = 22 }: { agent: string; runnin
 		'--agent-tone': look.tone,
 	} as CSSProperties;
 	return (
-		<span aria-hidden className={cn('relative inline-flex shrink-0 items-center justify-center rounded-[7px]', running && 'agent-tile--running')} style={style}>
+		<span aria-hidden className={cn('relative inline-flex shrink-0 items-center justify-center rounded-[6px]', running && 'agent-tile--running')} style={style}>
 			<Icon icon={look.icon} size={Math.round(size * 0.55)} />
 		</span>
 	);
@@ -338,7 +338,7 @@ export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Del
 	return (
 		<section
 			aria-label={calls.length === 1 ? '1 agent on this reply' : `${calls.length} agents on this reply`}
-			className="flex flex-col divide-y divide-(--border-subtle) overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)"
+			className="flex flex-col divide-y divide-(--border-subtle) overflow-hidden rounded-[6px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)"
 		>
 			{matched.map(({ call, run }) => (
 				<AgentRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} />

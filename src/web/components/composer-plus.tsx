@@ -41,7 +41,7 @@ function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: Co
 			hint={waiting ? <Icon icon={TriangleAlert} size={13} className="text-(--warning-text)" /> : <RowSwitch on={item.state === 'on'} />}
 		>
 			<span className="flex min-w-0 items-center gap-2">
-				<MarkTile mark={mark} size={18} className="rounded-[5px]" />
+				<MarkTile mark={mark} size={18} className="rounded-[6px]" />
 				<span className={cn('truncate', item.kind === 'mcp' && name === item.name && 'font-mono text-[12.5px]')}>{name}</span>
 			</span>
 		</MenuItem>

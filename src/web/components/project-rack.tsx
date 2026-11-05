@@ -80,7 +80,7 @@ function ThreadDetails({ thread }: { thread: Session }) {
 				{line ? (
 					<div
 						className={cn(
-							'flex flex-col gap-1 rounded-[9px] border px-2.5 py-2',
+							'flex flex-col gap-1 rounded-[6px] border px-2.5 py-2',
 							kind === 'waiting' ? 'border-(--warning-border) bg-(--warning-bg)' : kind === 'failed' ? 'border-(--danger-border) bg-(--danger-bg)' : 'border-(--border-subtle) bg-(--well-bg)',
 						)}
 					>
@@ -125,7 +125,7 @@ function Plate({ space, threads, shown }: { space: Space; threads: Session[]; sh
 		<Link
 			to="/projects/$spaceId"
 			params={{ spaceId: space.id }}
-			className="flex max-w-full min-w-0 flex-col items-center gap-0.5 rounded-[9px] border border-transparent px-2.5 py-1 outline-none hover:border-(--border-default) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex max-w-full min-w-0 flex-col items-center gap-0.5 rounded-[6px] border border-transparent px-2.5 py-1 outline-none hover:border-(--border-default) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<span className="flex max-w-full min-w-0 items-center gap-1.5">
 				<SpaceMark space={space} size={16} />

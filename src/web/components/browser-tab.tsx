@@ -163,7 +163,7 @@ function OpenForm({ sessionId, available }: { sessionId: string; available: bool
 					onChange={(event) => setAddress(event.target.value)}
 					placeholder="Address or search"
 					aria-label="Address to open"
-					className="h-7 min-w-0 flex-1 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder) focus-visible:shadow-(--focus-ring)"
+					className="h-7 min-w-0 flex-1 rounded-lg border border-input bg-(--well-bg) px-2.5 text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder) focus-visible:shadow-(--focus-ring)"
 				/>
 				<Btn type="submit" size="sm" variant="primary" disabled={open.isPending}>
 					{open.isPending ? 'Opening…' : 'Open browser'}
@@ -193,7 +193,7 @@ function AddressBar({ sessionId, view, children }: { sessionId: string; view: No
 			<IconBtn icon={ArrowRight} size="sm" label="Forward" disabled={!page?.canGoForward || go.isPending} onClick={() => go.mutate({ action: 'forward' })} />
 			<IconBtn icon={RotateCw} size="sm" label="Reload" disabled={go.isPending} onClick={() => go.mutate({ action: 'reload' })} className={cn(go.isPending && '[&_svg]:animate-spin')} />
 			<form
-				className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 focus-within:shadow-(--focus-ring)"
+				className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-input bg-(--well-bg) px-2.5 focus-within:shadow-(--focus-ring)"
 				onSubmit={(event: FormEvent) => {
 					event.preventDefault();
 					if (draft?.trim()) go.mutate({ url: draft });

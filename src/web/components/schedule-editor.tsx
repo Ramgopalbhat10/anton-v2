@@ -110,7 +110,7 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-(--text-primary) outline-none hover:bg-accent focus-visible:bg-accent"
 						>
 							<span className="min-w-0 flex-1 truncate">{zone.replace(/_/g, ' ')}</span>
-							{zone === local ? <span className="shrink-0 rounded-[4px] bg-(--alpha-white-6) px-1 text-[10px] text-(--text-secondary)">yours</span> : null}
+							{zone === local ? <span className="shrink-0 rounded-[6px] bg-(--alpha-white-6) px-1 text-[10px] text-(--text-secondary)">yours</span> : null}
 							<span className="in-num shrink-0 text-[11px] text-(--text-tertiary)">{offset}</span>
 							<Icon icon={Check} size={12} className={cn('text-(--accent-text)', zone === value ? 'opacity-100' : 'opacity-0')} />
 						</button>

@@ -31,10 +31,13 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	--radius-sm: 4px;
+	--radius-sm: 6px;
 	--radius-md: 6px;
-	--radius-lg: 8px;
-	--radius-xl: 12px;
+	--radius-lg: 6px;
+	--radius-xl: 6px;
+	--radius-2xl: 6px;
+	--radius-3xl: 6px;
+	--radius-4xl: 6px;
 }
 
 /* shadcn variables resolve to Signal semantics, so any primitive left on
@@ -58,7 +61,7 @@
 	--border: var(--border-subtle);
 	--input: var(--border-default);
 	--ring: var(--accent-ring);
-	--radius: 8px;
+	--radius: 6px;
 }
 
 html,
@@ -111,7 +114,7 @@ textarea::placeholder {
 
 ::-webkit-scrollbar-thumb {
 	background: var(--neutral-700);
-	border-radius: 8px;
+	border-radius: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -130,4 +133,12 @@ textarea::placeholder {
 	* {
 		@apply border-border outline-ring/50;
 	}
+}
+
+/* Flat surfaces: a neutral all-side border is off — cards, panels, wells and
+   popovers separate by background and shadow. Semantic, dashed, form-control,
+   selected and side borders (dividers, table rules) are untouched. Unlayered
+   so it wins over the utilities layer. */
+:is([class~='border']):not([class*='border-dashed']):not([class*='border-input']):not([class*='border-ring']):not([class*='border-destructive']):not([class*='border-(--danger']):not([class*='border-(--warning']):not([class*='border-(--success']):not([class*='border-(--accent']):not([class*='border-(--info']):not([class*='border-(--border-selected']):not([class*='border-(--text-']):not([class*='border-white']):not([class*='border-black']):not([class*='border-current']):not([class*='border-inherit']):not([class*='border-red']):not([class*='border-amber']):not([class*='border-emerald']):not([class*='border-cyan']):not([class*='border-neutral']):not([class*='border-gray']):not([class*='border-slate']):not([class*='border-zinc']):not([class*='border-stone']):not([class*='border-blue']):not([class*='border-green']):not([class*='border-yellow']):not([class*='border-orange']):not([class*='border-rose']):not([class*='border-pink']):not([class*='border-purple']):not([class*='border-violet']):not([class*='border-fuchsia']):not([class*='border-indigo']):not([class*='border-teal']):not([class*='border-sky']):not([class*='alert']) {
+	border-width: 0;
 }

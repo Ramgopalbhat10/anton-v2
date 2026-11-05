@@ -230,7 +230,7 @@ export function ProjectsPage() {
 					<button
 						type="button"
 						onClick={() => setCreating(true)}
-						className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-(--border-default) text-[13px] text-(--text-tertiary) outline-none hover:border-(--accent-border) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+						className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[6px] border border-dashed border-(--border-default) text-[13px] text-(--text-tertiary) outline-none hover:border-(--accent-border) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 					>
 						<Icon icon={Plus} size={16} />
 						New project

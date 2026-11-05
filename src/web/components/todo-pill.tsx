@@ -155,7 +155,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 							<li
 								key={index}
 								aria-current={todo.status === 'in_progress' ? 'step' : undefined}
-								className="flex min-h-7 items-start gap-2.5 rounded-[7px] px-1.5 py-[5px] text-[12.5px] leading-[18px]"
+								className="flex min-h-7 items-start gap-2.5 rounded-[6px] px-1.5 py-[5px] text-[12.5px] leading-[18px]"
 							>
 								<span className="flex h-[18px] shrink-0 items-center">
 									<Mark status={todo.status} working={busy} />

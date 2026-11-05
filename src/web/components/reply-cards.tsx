@@ -93,7 +93,7 @@ export const AskCard = memo(function AskCard({
   return (
     <section className="in-card overflow-hidden" aria-label="Question">
       <header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5">
-        <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center rounded-[7px] border border-dashed border-(--accent-border) text-(--accent-text)">
+        <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--accent-border) text-(--accent-text)">
           <Icon icon={MessageCircleQuestion} size={12} />
         </span>
         <h3 className="m-0 min-w-0 flex-1 text-[13px] leading-[20px] font-medium text-(--text-primary)">
@@ -115,7 +115,7 @@ export const AskCard = memo(function AskCard({
               aria-pressed={chosen}
               onClick={() => send(option.label)}
               className={cn(
-                "group/option flex min-h-9 items-center gap-2.5 rounded-[9px] border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus-ring)",
+                "group/option flex min-h-9 items-center gap-2.5 rounded-[6px] border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus-ring)",
                 chosen
                   ? "border-(--accent-border) bg-(--accent-bg-subtle)"
                   : "border-(--border-subtle)",
@@ -246,7 +246,7 @@ export const ChangesCard = memo(function ChangesCard({
               type="button"
               onClick={() => open(file.path)}
               title={`Open ${file.path} in Changes`}
-              className="flex h-7 items-center gap-2 rounded-[7px] px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+              className="flex h-7 items-center gap-2 rounded-[6px] px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
             >
               <FileIcon path={file.path} />
               <PathName path={file.path} className="flex-1" />
@@ -260,7 +260,7 @@ export const ChangesCard = memo(function ChangesCard({
             <button
               type="button"
               onClick={() => showPanel("Changes")}
-              className="h-7 rounded-[7px] px-2 text-left text-[12px] text-(--text-tertiary) hover:bg-(--bg-hover)"
+              className="h-7 rounded-[6px] px-2 text-left text-[12px] text-(--text-tertiary) hover:bg-(--bg-hover)"
             >
               {files.length - 12} more in Changes
             </button>

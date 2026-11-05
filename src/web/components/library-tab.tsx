@@ -344,7 +344,7 @@ function ItemActions({
 							if (!action.keep) onDone?.();
 						}}
 						className={cn(
-							'flex h-8 items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] outline-none hover:bg-(--bg-hover) focus-visible:bg-(--bg-hover)',
+							'flex h-8 items-center gap-2 rounded-[6px] px-2 text-left text-[12.5px] outline-none hover:bg-(--bg-hover) focus-visible:bg-(--bg-hover)',
 							action.danger ? 'text-(--danger-text)' : 'text-(--text-primary)',
 						)}
 					>
@@ -392,7 +392,7 @@ function ItemActions({
 function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folder: Folder; onOpen: () => void }) {
 	return (
 		<div className="group relative pt-2.5">
-			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-[7px] border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
+			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-[4px] border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
 			<div
 				role="button"
 				tabIndex={0}
@@ -443,15 +443,15 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 				</span>
 			)}
 			<span className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-				<span className="inline-flex rounded-[7px] bg-(--bg-scrim)">
+				<span className="inline-flex rounded-[6px] bg-(--bg-scrim)">
 					<ItemActions library={library} path={output.path} folder={false} onOpen={onOpen} variant="menu" />
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
-				<span className="rounded-[5px] bg-(--bg-scrim) px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
+				<span className="rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
 				{kind === 'page' && place.sessionId ? (
-					<span className="min-w-0 truncate rounded-[5px] bg-(--bg-scrim) px-1.5 py-0.5 text-[11px] text-(--text-primary) backdrop-blur-sm">{name}</span>
+					<span className="min-w-0 truncate rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 text-[11px] text-(--text-primary) backdrop-blur-sm">{name}</span>
 				) : kind === 'image' ? null : (
 					<span className="in-num ml-auto text-[10.5px] text-(--text-disabled)">{size(output.size)}</span>
 				)}

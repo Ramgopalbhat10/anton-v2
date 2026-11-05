@@ -38,9 +38,9 @@ function Tab({ name, icon, count, active, onSelect }: { name: string; icon: type
 			role="tab"
 			aria-selected={active}
 			onClick={onSelect}
-			className="relative flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] pr-2 pl-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="relative flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] pr-2 pl-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
-			{active ? <span className="absolute inset-0 rounded-[8px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
+			{active ? <span className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<Icon icon={icon} size={12} className={cn('relative', active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)')} />
 			<span className={cn('relative text-[12px] whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
 			{count ? <span className="in-num relative inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--warning-bg) px-1 text-[10px] text-(--warning-text)">{count}</span> : null}
@@ -260,7 +260,7 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 			<div className="flex min-w-0 items-start gap-3">
 				<span
 					className={cn(
-						'mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border',
+						'mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border',
 						on ? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)' : 'border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary)',
 					)}
 				>
@@ -272,7 +272,7 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 							type="button"
 							aria-expanded={open}
 							onClick={() => setOpen(!open)}
-							className="flex min-w-0 items-center gap-1 rounded-[5px] text-left outline-none focus-visible:shadow-(--focus-ring)"
+							className="flex min-w-0 items-center gap-1 rounded-[6px] text-left outline-none focus-visible:shadow-(--focus-ring)"
 						>
 							<span className={cn('min-w-0 truncate text-[13px] leading-[18px] font-medium', on ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>{routineName(automation)}</span>
 							<Icon icon={ChevronDown} size={12} className={cn('text-(--icon-tertiary) transition-transform duration-(--duration-micro)', open && 'rotate-180')} />
@@ -345,7 +345,7 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 					<RunStrip runs={runs} />
 				</span>
 			</div>
-			{open && automation.prompt ? <p className="m-0 ml-10 rounded-[8px] bg-(--well-bg) px-2.5 py-2 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
+			{open && automation.prompt ? <p className="m-0 ml-10 rounded-[6px] bg-(--well-bg) px-2.5 py-2 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
 			{automation.gate && automation.lastGate && !automation.lastGate.run ? (
 				<div className="ml-10 text-[12px] text-(--text-tertiary)">
 					Skipped {age(automation.lastGate.at) === 'now' ? 'just now' : `${age(automation.lastGate.at)} ago`}
