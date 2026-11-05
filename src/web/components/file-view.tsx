@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { FileIcon } from '@/components/file-icons';
-import { Markdown } from '@/components/markdown';
+import { FileImages, Markdown, type FileImages as FileImagesValue } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { Icon, Spinner } from '@/components/signal';
 import { highlight } from '@/lib/highlight';
@@ -170,7 +170,7 @@ function asText(bytes: Uint8Array): string | null {
 	return new TextDecoder().decode(bytes);
 }
 
-const IMAGE_TYPES: Record<string, string> = {
+export const IMAGE_TYPES: Record<string, string> = {
 	png: 'image/png',
 	jpg: 'image/jpeg',
 	jpeg: 'image/jpeg',
@@ -186,7 +186,7 @@ const IMAGE_TYPES: Record<string, string> = {
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 /** Markdown rendered, with any front matter as a table of its fields rather than a stray heading. */
-function RenderedMarkdown({ text }: { text: string }) {
+function RenderedMarkdown({ text, images }: { text: string; images?: FileImagesValue | null }) {
 	const front = FRONT_MATTER.exec(text);
 	const fields = (front?.[1] ?? '')
 		.split(/\r?\n/)
@@ -206,7 +206,9 @@ function RenderedMarkdown({ text }: { text: string }) {
 					</tbody>
 				</table>
 			) : null}
-			<Markdown text={front && fields.length ? text.slice(front[0].length) : text} />
+			<FileImages.Provider value={images ?? null}>
+				<Markdown text={front && fields.length ? text.slice(front[0].length) : text} />
+			</FileImages.Provider>
 		</div>
 	);
 }
@@ -244,6 +246,7 @@ export function FileView({
 	read,
 	preview: chosen,
 	line: markedLine,
+	images,
 }: {
 	path: string;
 	queryKey: unknown[];
@@ -251,6 +254,8 @@ export function FileView({
 	preview?: boolean;
 	/** A line to bring into view and mark, as when a reply links to it. */
 	line?: number;
+	/** How the file's own images draw, as a plugin preview resolves them. */
+	images?: FileImagesValue | null;
 }) {
 	const imageType = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
 	const markdown = isMarkdown(path);
@@ -296,7 +301,7 @@ export function FileView({
 						<img src={imageUrl} alt={path.split('/').pop()} className="max-h-full max-w-full object-contain" />
 					</div>
 				) : markdown && preview && contents !== null ? (
-					<RenderedMarkdown text={contents} />
+					<RenderedMarkdown text={contents} images={images} />
 				) : contents === null ? (
 					<div className="px-3 py-2.5 text-[12px] text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
 				) : (

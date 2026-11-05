@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, Download, FileText, Info, RefreshCw, Trash2 } from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Download, FileText, Info, PanelLeftOpen, RefreshCw, Trash2, X } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { FileIcons } from '@/components/file-icons';
-import { Branch, buildTree, FileView } from '@/components/file-view';
-import { Markdown } from '@/components/markdown';
+import { Branch, buildTree, FileView, IMAGE_TYPES } from '@/components/file-view';
+import { FileImages, Markdown } from '@/components/markdown';
 import { Card, Count, Status } from '@/components/instrument';
-import { Btn, EmptyState, Icon, Spinner, Switch } from '@/components/signal';
+import { useStoredState } from '@/components/split-pane';
+import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { ADDED_FILES, api, type PluginPick, type PluginPreview } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
@@ -52,6 +53,123 @@ const foldersOf = (path: string) =>
 		.split('/')
 		.slice(0, -1)
 		.map((_, index, parts) => parts.slice(0, index + 1).join('/'));
+
+/** A raw <img …> tag in a README becomes markdown image syntax, so it draws through the same path. */
+const IMG_TAG = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+const ATTR = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+
+/** Rewrites <img> tags outside fenced code as ![alt](src); inside a fence they are an example, not a picture. */
+function prepareImages(text: string): string {
+	let fence: string | null = null;
+	return text
+		.split('\n')
+		.map((line) => {
+			const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+			if (fence) {
+				if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+				return line;
+			}
+			if (marker) {
+				fence = marker;
+				return line;
+			}
+			return line.replace(IMG_TAG, (tag) => {
+				const attrs = new Map<string, string>();
+				for (const match of tag.matchAll(ATTR)) attrs.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? '');
+				const src = attrs.get('src')?.replace(/[<>]/g, '');
+				if (!src) return '';
+				const alt = (attrs.get('alt') ?? '').replace(/[[\]\n]/g, ' ');
+				return `![${alt}](<${src}>)`;
+			});
+		})
+		.join('\n');
+}
+
+const dirname = (path: string) => {
+	const at = path.lastIndexOf('/');
+	return at < 0 ? '' : path.slice(0, at);
+};
+
+/** The plugin-relative path an image src points at, resolved against the file showing it; null when it leaves the plugin. */
+function imagePath(base: string, src: string): string | null {
+	let clean = src;
+	try {
+		clean = decodeURIComponent(clean);
+	} catch {
+		// A malformed escape stays literal.
+	}
+	clean = (clean.split(/[?#]/)[0] ?? '').trim();
+	if (!clean) return null;
+	const parts = (clean.startsWith('/') ? clean.slice(1) : [dirname(base), clean].filter(Boolean).join('/')).split('/');
+	const out: string[] = [];
+	for (const part of parts) {
+		if (!part || part === '.') continue;
+		if (part === '..') {
+			if (!out.pop()) return null;
+			continue;
+		}
+		out.push(part);
+	}
+	return out.length ? out.join('/') : null;
+}
+
+/** One image file of the plugin, fetched on demand and shown from a blob URL. */
+function PluginImage({ repo, sha, path, alt, className }: { repo: string; sha: string; path: string; alt?: string; className?: string }) {
+	const type = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
+	const file = useQuery({
+		// The same key the Files tab reads the file under, so an opened image is already cached.
+		queryKey: ['plugin-file', repo, sha, path],
+		queryFn: () => api.pluginFile(repo, sha, path),
+		enabled: Boolean(type),
+		staleTime: Number.POSITIVE_INFINITY,
+		retry: false,
+	});
+	const [url, setUrl] = useState('');
+	useEffect(() => {
+		if (!file.data || !type) return;
+		const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(file.data)], { type }));
+		setUrl(objectUrl);
+		return () => URL.revokeObjectURL(objectUrl);
+	}, [file.data, type]);
+	if (!type) return null;
+	if (file.isError) return <span className="text-[12px] text-(--text-tertiary)">{alt || path.split('/').pop()}</span>;
+	if (!url) return null;
+	return <img src={url} alt={alt ?? ''} loading="lazy" className={className} />;
+}
+
+/**
+ * How a plugin file's images draw: a relative src resolves against the file's
+ * folder inside the plugin and is fetched like any other file; a remote src
+ * (a README's badges) draws directly. A plugin image opens its file on click.
+ */
+function usePluginImages(preview: PluginPreview, file: string, onOpen?: (path: string) => void): FileImages {
+	return useMemo(() => {
+		const listed = new Set(preview.files.map((path) => within(preview, path)));
+		const repoPath = (path: string) => (preview.source.path ? `${preview.source.path}/${path}` : path);
+		const render = (src: string, alt: string | undefined, inLink: boolean): ReactNode | null => {
+			const clean = src.trim();
+			if (/^https?:\/\//i.test(clean)) return <img src={clean} alt={alt ?? ''} loading="lazy" className="sg-md-image" />;
+			const path = imagePath(file, clean);
+			if (!path || !listed.has(path) || !IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? '']) return null;
+			const picture = (
+				<PluginImage
+					repo={preview.source.repo}
+					sha={preview.sha}
+					path={repoPath(path)}
+					alt={alt}
+					className={inLink || !onOpen ? 'sg-md-image' : undefined}
+				/>
+			);
+			if (inLink || !onOpen) return picture;
+			return (
+				<button type="button" className="sg-output-image" title={`Open ${path.split('/').pop()}`} onClick={() => onOpen(path)}>
+					{picture}
+				</button>
+			);
+		};
+		return { prepare: prepareImages, render };
+	}, [preview, file, onOpen]);
+}
 
 function Actions({ preview }: { preview: PluginPreview }) {
 	const install = usePluginMutation(() => api.installPlugin(preview.pick));
@@ -151,7 +269,7 @@ function Facts({ preview }: { preview: PluginPreview }) {
 	);
 }
 
-function Overview({ preview }: { preview: PluginPreview }) {
+function Overview({ preview, onOpenFile }: { preview: PluginPreview; onOpenFile: (path: string) => void }) {
 	const readme = useQuery({
 		// Text, so not under the 'plugin-file' key, where the Files tab keeps the same file's bytes.
 		queryKey: ['plugin-readme', preview.source.repo, preview.sha, preview.readme],
@@ -159,6 +277,7 @@ function Overview({ preview }: { preview: PluginPreview }) {
 		enabled: Boolean(preview.readme),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
+	const images = usePluginImages(preview, preview.readme ? within(preview, preview.readme) : '', onOpenFile);
 	return (
 		<div className="flex flex-col gap-4 lg:flex-row lg:items-start">
 			<div className="in-card min-w-0 flex-1 px-5 py-4">
@@ -169,7 +288,9 @@ function Overview({ preview }: { preview: PluginPreview }) {
 				) : readme.isError ? (
 					<p className="m-0 text-[12px] text-(--danger-text)">{readme.error.message}</p>
 				) : (
-					<Markdown text={readme.data} />
+					<FileImages.Provider value={images}>
+						<Markdown text={readme.data} />
+					</FileImages.Provider>
 				)}
 			</div>
 			<Facts preview={preview} />
@@ -233,15 +354,31 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 			return next;
 		});
 	const full = preview.source.path ? `${preview.source.path}/${selected}` : selected;
+	const [treeHidden, setTreeHidden] = useStoredState('anton.plugin.tree-hidden', false);
+	const images = usePluginImages(preview, selected, onOpen);
 	return (
 		<FileIcons>
 			<div className="in-card h-[min(640px,70vh)] min-h-[360px] flex-row overflow-hidden">
-				<div className="flex w-[240px] shrink-0 flex-col overflow-y-auto border-r border-(--border-subtle) p-1.5">
-					<Branch node={tree} selected={selected} depth={0} expanded={expanded} onToggle={toggle} onOpen={onOpen} />
-					{preview.truncated ? <p className="m-0 px-2 py-1.5 text-[11px] text-(--text-disabled)">Only the first {preview.files.length.toLocaleString()} files are listed.</p> : null}
-				</div>
+				{treeHidden ? null : (
+					<div className="flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-(--border-subtle)">
+						<div className="flex h-9 shrink-0 items-center gap-1 border-b border-(--border-subtle) px-1.5">
+							<span className="in-caption flex-1">Files</span>
+							<IconBtn icon={X} size="xs" label="Hide the file tree" aria-pressed onClick={() => setTreeHidden(true)} />
+						</div>
+						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-1.5">
+							<Branch node={tree} selected={selected} depth={0} expanded={expanded} onToggle={toggle} onOpen={onOpen} />
+							{preview.truncated ? <p className="m-0 px-2 py-1.5 text-[11px] text-(--text-disabled)">Only the first {preview.files.length.toLocaleString()} files are listed.</p> : null}
+						</div>
+					</div>
+				)}
 				<div className="flex min-w-0 flex-1 flex-col">
 					<div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--border-subtle) px-3 text-[12px]">
+						{treeHidden ? (
+							<>
+								<IconBtn icon={PanelLeftOpen} size="xs" label="Show the file tree" aria-pressed={false} onClick={() => setTreeHidden(false)} className="-ml-1.5 shrink-0" />
+								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
+							</>
+						) : null}
 						<span className="in-num min-w-0 flex-1 truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
 						{selected && !preview.added ? (
 							<a
@@ -261,6 +398,7 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 							path={full}
 							queryKey={['plugin-file', preview.source.repo, preview.sha, full]}
 							read={() => api.pluginFile(preview.source.repo, preview.sha, full)}
+							images={images}
 						/>
 					) : (
 						<EmptyState title="Pick a file" body="Choose a file on the left to read it." />
@@ -298,6 +436,10 @@ function firstFile(preview: PluginPreview): string {
 function Detail({ preview }: { preview: PluginPreview }) {
 	const [tab, setTab] = useState<DetailTab>('overview');
 	const [file, setFile] = useState(() => firstFile(preview));
+	const openFile = useCallback((path: string) => {
+		setFile(path);
+		setTab('files');
+	}, []);
 	const by = owner(preview.source.repo);
 	return (
 		<div className="flex flex-col gap-5">
@@ -346,7 +488,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 					Files <Count>{preview.files.length.toLocaleString()}</Count>
 				</TabButton>
 			</div>
-			{tab === 'overview' ? <Overview preview={preview} /> : null}
+			{tab === 'overview' ? <Overview preview={preview} onOpenFile={openFile} /> : null}
 			{tab === 'skills' ? (
 				<Skills
 					preview={preview}
