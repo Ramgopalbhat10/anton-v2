@@ -186,4 +186,38 @@ describe('A plugin page', () => {
 		await userEvent.click(await screen.findByRole('button', { name: 'Update' }));
 		expect(api.installPlugin).toHaveBeenCalledWith({ plugin: 'plugin_9' });
 	});
+
+	it('draws a README\'s images: plugin files fetched on demand, remote badges directly', async () => {
+		const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:img');
+		api.previewPlugin.mockResolvedValueOnce({
+			...preview,
+			files: [...preview.files, 'plugins/brand/images/diagram.png', 'plugins/brand/assets/logo.svg'],
+		});
+		api.pluginFile.mockImplementation(async (_repo: string, _sha: string, path: string) => {
+			if (path.endsWith('README.md'))
+				return text('# Brand kit\n\n![Diagram](images/diagram.png)\n\n<img src="assets/logo.svg" alt="Logo">\n\n<img src="https://img.shields.io/x" alt="build">');
+			return new Uint8Array([137, 80, 78, 71]);
+		});
+		open('/settings/skills/view?marketplace=anthropics%2Fskills&name=brand-kit');
+		await screen.findByRole('heading', { name: 'brand-kit' });
+		// A markdown image and an <img> tag both resolve to files inside the plugin.
+		await waitFor(() => expect(api.pluginFile).toHaveBeenCalledWith('acme/kit', 'f'.repeat(40), 'plugins/brand/images/diagram.png'));
+		await waitFor(() => expect(api.pluginFile).toHaveBeenCalledWith('acme/kit', 'f'.repeat(40), 'plugins/brand/assets/logo.svg'));
+		expect(await screen.findByRole('img', { name: 'Diagram' })).toBeTruthy();
+		expect(await screen.findByRole('img', { name: 'Logo' })).toBeTruthy();
+		expect(await screen.findByRole('img', { name: 'build' })).toBeTruthy();
+		create.mockRestore();
+	});
+
+	it('hides and shows the file tree', async () => {
+		localStorage.removeItem('anton.plugin.tree-hidden');
+		open('/settings/skills/view?marketplace=anthropics%2Fskills&name=brand-kit');
+		await userEvent.click(await screen.findByRole('tab', { name: /Files/ }));
+		expect(await screen.findByRole('button', { name: 'README.md' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Hide the file tree' }));
+		expect(screen.queryByRole('button', { name: 'README.md' })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'Show the file tree' }));
+		expect(await screen.findByRole('button', { name: 'README.md' })).toBeTruthy();
+		localStorage.removeItem('anton.plugin.tree-hidden');
+	});
 });

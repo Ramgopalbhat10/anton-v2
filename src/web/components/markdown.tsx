@@ -74,6 +74,19 @@ export const InlineLinks = createContext<InlineLinks | null>(null);
 export type OutputLinks = { resolve: (href: string) => ViewerItem | null; open: (item: ViewerItem) => void };
 export const OutputLinks = createContext<OutputLinks | null>(null);
 
+/**
+ * A surface that can draw a markdown file's own images, such as a plugin
+ * preview: `prepare` rewrites raw HTML <img> tags into image syntax before
+ * parsing, and `render` draws an image src — a file fetched on demand, a
+ * remote badge — or returns null to leave the usual link. Without a provider
+ * images stay links, so a reply can't make the browser fetch a URL.
+ */
+export type FileImages = {
+	prepare?: (text: string) => string;
+	render?: (src: string, alt: string | undefined, inLink: boolean) => ReactNode | null;
+};
+export const FileImages = createContext<FileImages | null>(null);
+
 /** A click that means "here": a modified or middle click still opens the link in a tab. */
 const plainClick = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 
@@ -183,7 +196,10 @@ export const components: Components = {
 	img: function Img({ src, alt }) {
 		const inLink = useContext(InLink);
 		const outputs = useContext(OutputLinks);
+		const images = useContext(FileImages);
 		if (typeof src !== 'string' || !src) return null;
+		const drawn = images?.render?.(src, alt, inLink);
+		if (drawn != null) return drawn;
 		if (inLink) return <>{alt || src}</>;
 		// The task's own files are Anton's to show: the picture itself, opening full size.
 		const item = outputs?.resolve(src);
@@ -249,7 +265,9 @@ const Block = memo(function Block({ text }: { text: string }) {
  * while a reply streams, only its last block is.
  */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-	const blocks = useMemo(() => markdownBlocks(text), [text]);
+	const images = useContext(FileImages);
+	const prepare = images?.prepare;
+	const blocks = useMemo(() => markdownBlocks(prepare ? prepare(text) : text), [text, prepare]);
 	return (
 		<div className="sg-markdown">
 			{/* Joined by the line break react-markdown puts between blocks, so the page is the same as in one piece. */}
