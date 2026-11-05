@@ -32,7 +32,7 @@ export function HistorySkeleton() {
 	return (
 		<div aria-hidden className="flex flex-col gap-5">
 			<div className="flex justify-end">
-				<div className="in-pulse h-9 w-[46%] rounded-[14px_14px_4px_14px] bg-(--bg-skeleton)" />
+				<div className="in-pulse h-9 w-[46%] rounded-[6px_6px_3px_6px] bg-(--bg-skeleton)" />
 			</div>
 			<ReplySkeleton />
 		</div>
@@ -44,8 +44,8 @@ function WorkspaceSkeleton() {
 	return (
 		<WorkspacePane expanded={false}>
 			<div aria-hidden className="flex h-11 shrink-0 items-center gap-1.5 px-3">
-				<div className="in-pulse h-6 w-[72px] rounded-[8px] bg-(--bg-skeleton)" />
-				<div className="in-pulse h-6 w-[64px] rounded-[8px] bg-(--bg-skeleton)" />
+				<div className="in-pulse h-6 w-[72px] rounded-[6px] bg-(--bg-skeleton)" />
+				<div className="in-pulse h-6 w-[64px] rounded-[6px] bg-(--bg-skeleton)" />
 			</div>
 			<div aria-hidden className="flex flex-col gap-3 border-t border-(--border-subtle) px-4 pt-4">
 				<Bar width="38%" />
@@ -130,7 +130,7 @@ export function StartingTask({
 							</div>
 						</div>
 						{error ? (
-							<div role="alert" className="flex flex-col gap-2.5 rounded-[12px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--danger-text)">
+							<div role="alert" className="flex flex-col gap-2.5 rounded-[6px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--danger-text)">
 								<div className="flex items-start gap-2">
 									<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 									<div className="min-w-0 flex-1 break-words">

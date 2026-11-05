@@ -356,7 +356,7 @@ function TaskDetails({ session }: { session: Session }) {
 				<div className="truncate text-[12px] text-(--text-tertiary)" title={session.title}>
 					{session.title}
 				</div>
-				<div className="flex flex-col gap-1 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
+				<div className="flex flex-col gap-1 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
 					<div className="flex items-center gap-1.5">
 						<span className="in-caption">{followedUp ? 'Latest input' : 'Input'}</span>
 						<span className="in-caption ml-auto tracking-normal normal-case" title={new Date(latestAt).toLocaleString()}>
@@ -419,7 +419,7 @@ export function RackStats({ stats }: { stats: Array<[string, ReactNode]> }) {
 /** The follow-up field in a card: a line to type in and a send button. */
 export function FollowUp({ value, onChange, label, submitLabel, disabled }: { value: string; onChange: (value: string) => void; label: string; submitLabel: string; disabled?: boolean }) {
 	return (
-		<div className="flex h-9 items-center gap-2 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-1 pl-3 focus-within:border-(--accent-border)">
+		<div className="flex h-9 items-center gap-2 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) pr-1 pl-3 focus-within:border-(--accent-border)">
 			<input
 				value={value}
 				onChange={(event) => onChange(event.target.value)}

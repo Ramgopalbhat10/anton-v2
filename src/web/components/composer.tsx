@@ -35,9 +35,9 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 					className="flex h-9 max-w-[260px] items-center gap-2 rounded-md border border-(--border-subtle) bg-(--well-bg) pr-1 pl-1"
 				>
 					{element.image ? (
-						<img src={`data:image/png;base64,${element.image}`} alt="" className="h-7 w-10 shrink-0 rounded-[4px] bg-white object-contain" />
+						<img src={`data:image/png;base64,${element.image}`} alt="" className="h-7 w-10 shrink-0 rounded-[6px] bg-white object-contain" />
 					) : (
-						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-[4px] bg-(--alpha-white-6) text-(--icon-tertiary)">
+						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-[6px] bg-(--alpha-white-6) text-(--icon-tertiary)">
 							<Icon icon={SquareDashedMousePointer} size={13} />
 						</span>
 					)}

@@ -117,7 +117,7 @@ export function Note({ children, info, className }: { children: ReactNode; info?
 /** The icon at the start of a list row, on the same tile the cards use. */
 export function RowIcon({ icon }: { icon: LucideIcon }) {
 	return (
-		<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[9px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary)">
+		<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary)">
 			<Icon icon={icon} size={14} />
 		</span>
 	);

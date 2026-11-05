@@ -267,7 +267,7 @@ export function Sketch({
 							if (event.key === 'Escape') setTyping(null);
 						}}
 						onBlur={commitText}
-						className="absolute z-10 min-w-[120px] rounded-[4px] border border-(--accent-border) bg-(--bg-raised) px-1.5 py-0.5 text-[13px] text-(--text-primary) outline-none"
+						className="absolute z-10 min-w-[120px] rounded-[6px] border border-(--accent-border) bg-(--bg-raised) px-1.5 py-0.5 text-[13px] text-(--text-primary) outline-none"
 						style={{ left: (typing.at.x / width) * box.width, top: (typing.at.y / height) * box.height }}
 					/>
 				) : null}

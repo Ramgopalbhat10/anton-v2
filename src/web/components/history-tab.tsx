@@ -67,7 +67,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 				)}
 			</div>
 			{restored ? (
-				<div className="flex items-start gap-2.5 rounded-[10px] border border-(--border-subtle) bg-(--success-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-secondary)">
+				<div className="flex items-start gap-2.5 rounded-[6px] border border-(--border-subtle) bg-(--success-bg) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-secondary)">
 					<Icon icon={Check} size={13} className="mt-0.5 text-(--success-text)" />
 					<span>
 					Files restored. Commits and the conversation are unchanged, so tell the agent if it should know.

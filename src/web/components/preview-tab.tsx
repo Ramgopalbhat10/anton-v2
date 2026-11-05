@@ -16,7 +16,7 @@ function PortChip({ preview, active, onSelect }: { preview: Preview; active: boo
 			aria-pressed={active}
 			title={preview.listening ? `Port ${preview.port} is serving` : `Nothing is serving on port ${preview.port}`}
 			className={cn(
-				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-[7px] border px-2 text-[11.5px] outline-none focus-visible:shadow-(--focus-ring)',
+				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-[6px] border px-2 text-[11.5px] outline-none focus-visible:shadow-(--focus-ring)',
 				active
 					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
 					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',

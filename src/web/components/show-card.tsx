@@ -160,7 +160,7 @@ function Table({ node }: { node: Extract<UiNode, { type: "table" }> }) {
           typeof row[key] === "number",
       ));
   return (
-    <div className="max-h-[420px] overflow-auto rounded-[10px] border border-(--border-subtle)">
+    <div className="max-h-[420px] overflow-auto rounded-[6px] border border-(--border-subtle)">
       <table className="w-full border-collapse text-[12px]">
         <thead className="sticky top-0 z-[1] bg-(--card-bg)">
           <tr>
@@ -348,7 +348,7 @@ function Timeline({ node }: { node: Extract<UiNode, { type: "timeline" }> }) {
 function Diff({ node }: { node: Extract<UiNode, { type: "diff" }> }) {
   const lines = node.patch.replace(/\n$/, "").split("\n");
   return (
-    <div className="overflow-hidden rounded-[10px] border border-(--border-subtle) bg-(--bg-inset)">
+    <div className="overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--bg-inset)">
       {node.path ? (
         <div className="in-caption flex h-7 items-center border-b border-(--border-subtle) px-3">
           {node.path}
@@ -584,7 +584,7 @@ function Form({ node }: { node: Extract<UiNode, { type: "form" }> }) {
     state.answer.startsWith(`Submitted "${node.title}"`);
   return (
     <form
-      className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-(--border-subtle) p-3"
+      className="flex min-w-0 flex-col gap-3 rounded-[6px] border border-(--border-subtle) p-3"
       aria-label={node.title}
       onSubmit={(event) => {
         event.preventDefault();
@@ -636,7 +636,7 @@ function LibraryImage({
       <img
         src={outputUrl(sessionId, path)}
         alt={alt}
-        className="block max-h-80 max-w-full rounded-[10px] border border-(--card-border)"
+        className="block max-h-80 max-w-full rounded-[6px] border border-(--card-border)"
       />
     </a>
   );
@@ -647,7 +647,7 @@ function NodeView({ node }: { node: UiNode }) {
   switch (node.type) {
     case "card":
       return (
-        <section className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-(--border-subtle) p-3">
+        <section className="flex min-w-0 flex-col gap-3 rounded-[6px] border border-(--border-subtle) p-3">
           {node.title || node.caption ? (
             <header className="flex flex-col gap-0.5">
               {node.title ? (

@@ -34,7 +34,7 @@ function Matches({
 						key={path}
 						onClick={() => onOpen(path)}
 						aria-current={selected === path ? 'true' : undefined}
-						className="sg-file-row flex h-[26px] items-center gap-2 rounded-[7px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="sg-file-row flex h-[26px] items-center gap-2 rounded-[6px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 					>
 						<FileIcon path={path} />
 						<span className={cn('shrink-0 text-[12px]', selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
@@ -54,7 +54,7 @@ const CHANGED_SHOWN = 6;
 /** What Files shows with nothing open: the changed files to open, and where else to go. */
 function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
 	const showPanel = useContext(ShowPanel);
-	const row = 'flex h-7 items-center gap-2 rounded-[7px] px-2 text-left text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex h-7 items-center gap-2 rounded-[6px] px-2 text-left text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
 	return (
 		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
 			<div className="flex w-full max-w-[340px] flex-col gap-4">
@@ -141,7 +141,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 				opened={selected}
 				side={
 					<>
-					<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[8px] border border-(--border-subtle) bg-(--bg-inset) px-2">
+					<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[6px] border border-input bg-(--bg-inset) px-2">
 						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 						<input
 							ref={search}
@@ -204,7 +204,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 								<div
 									key={path}
 									className={cn(
-										'group flex shrink-0 items-center gap-1 rounded-[7px] border',
+										'group flex shrink-0 items-center gap-1 rounded-[6px] border',
 										selected === path ? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)' : 'border-transparent hover:bg-(--bg-hover)',
 									)}
 								>
@@ -217,7 +217,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 										title={path}
 										onClick={() => setSelected(path)}
 										className={cn(
-											'flex h-[26px] items-center gap-1.5 rounded-[7px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+											'flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
 											selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)',
 										)}
 									>

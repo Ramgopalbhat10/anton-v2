@@ -256,16 +256,15 @@
   --panel-header-height:38px;
 }
 
-/* Radius — small values only. 4 for anything you type into or press,
-   6 for anything that contains those, 8 for anything that floats above
-   the app, full for round-by-nature. A 5th value would be a tell that
-   the containment rule broke down. */
+/* Radius — one small step everywhere: 4px for anything you type into, press,
+   contain or float. --radius-full stays for what is round by nature: avatars,
+   dots, switches, pills. */
 :root{
   --radius-none:0px;
-  --radius-sm:4px;   /* buttons, inputs, badges, kbd */
-  --radius-md:6px;   /* cards, panels, menus, popovers */
-  --radius-lg:8px;   /* modals, command palette */
-  --radius-full:9999px; /* avatars, pills, switch, slider thumb */
+  --radius-sm:6px;
+  --radius-md:6px;
+  --radius-lg:6px;
+  --radius-full:9999px;
 }
 
 /* Elevation is a border + background pair first. Shadow is added ONLY

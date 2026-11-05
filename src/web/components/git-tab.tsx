@@ -81,7 +81,7 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					type="button"
 					aria-label={`Comment on line ${line.number}`}
 					onClick={onComment}
-					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-[5px] bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-[6px] bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
 				>
 					<Icon icon={Plus} size={11} />
 				</button>
@@ -449,7 +449,7 @@ function CommitList({ log, title }: { log: ChangesPayload['log']; title: string 
 			{shown ? (
 				<ol aria-label={title} className="m-0 flex list-none flex-col gap-px p-0">
 					{log.map((entry) => (
-						<li key={entry.sha} title={`${entry.subject}\n${entry.sha.slice(0, 7)} · ${age(entry.at)} ago${entry.pushed === false ? ' · not pushed' : ''}`} className="flex h-[26px] items-center gap-2 rounded-[7px] px-2 hover:bg-(--bg-hover)">
+						<li key={entry.sha} title={`${entry.subject}\n${entry.sha.slice(0, 7)} · ${age(entry.at)} ago${entry.pushed === false ? ' · not pushed' : ''}`} className="flex h-[26px] items-center gap-2 rounded-[6px] px-2 hover:bg-(--bg-hover)">
 							<span
 								aria-label={entry.pushed === false ? 'Not pushed' : undefined}
 								className={cn('size-1.5 shrink-0 rounded-full', entry.pushed === false ? 'bg-(--warning-base)' : 'bg-(--text-disabled)')}
@@ -473,7 +473,7 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	const count = review.comments.length;
 	return (
 		<div className="in-pop sticky bottom-0 flex items-center gap-2 py-1.5 pr-1.5 pl-2">
-			<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-(--accent-bg-subtle) text-(--accent-text)">
+			<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-(--accent-bg-subtle) text-(--accent-text)">
 				<Icon icon={MessageSquare} size={12} />
 			</span>
 			<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
@@ -620,7 +620,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 									{base ? <span className="text-[11px] text-(--text-disabled)">compared with {base}</span> : null}
 								</div>
 							) : null}
-							<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[8px] border border-(--border-subtle) bg-(--bg-inset) px-2">
+							<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[6px] border border-(--border-subtle) bg-(--bg-inset) px-2">
 								<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 								<input
 									value={query}

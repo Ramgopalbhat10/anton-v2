@@ -45,7 +45,7 @@ export function Status({ tone = 'neutral', pulse, children }: { tone?: Tone; pul
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-[8px] border border-dashed border-(--border-strong)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
+			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
 			style={{ width: size, height: size }}
 		>
 			<Icon icon={icon} size={13} />
@@ -458,7 +458,7 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 /** The well a segmented control sits in; its items are `SegmentedItem`s. */
 export function Segmented({ children, label, className, role = 'tablist' }: { children: ReactNode; label: string; className?: string; role?: 'tablist' | 'radiogroup' | 'group' }) {
 	return (
-		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
+		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
 			{children}
 		</div>
 	);
@@ -491,7 +491,7 @@ export function SegmentedItem({
 			title={title}
 			onClick={onClick}
 			className={cn(
-				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[7px] border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[6px] border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 				size === 'sm' ? 'h-[22px] px-2 text-[11px]' : 'h-7 px-3 text-[12.5px]',
 				on
 					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'

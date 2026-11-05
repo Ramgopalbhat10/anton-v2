@@ -213,7 +213,7 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 										share={percent(Math.max(0, measured.autocompactAt - measured.used), window)}
 									/>
 								</div>
-								<div className="flex items-center gap-2 rounded-[8px] bg-(--well-bg) px-2.5 py-1.5 text-[11.5px]">
+								<div className="flex items-center gap-2 rounded-[6px] bg-(--well-bg) px-2.5 py-1.5 text-[11.5px]">
 									<span className="in-num text-(--text-primary)">{tokens(Math.max(0, measured.autocompactAt - measured.used))}</span>
 									<span className="text-(--text-tertiary)">until the agent compacts older turns</span>
 								</div>

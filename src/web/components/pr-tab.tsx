@@ -62,7 +62,7 @@ function PullPicker({ pulls, selected, onSelect }: { pulls: PullRequestItem[]; s
 				<button
 					type="button"
 					aria-label={`#${selected.number} of ${pulls.length} pull requests`}
-					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[7px] px-1.5 text-[12px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[6px] px-1.5 text-[12px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 				>
 					<span className="in-num">#{selected.number}</span>
 					<span className="text-(--text-disabled)">

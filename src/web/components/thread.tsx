@@ -323,9 +323,9 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 					type="button"
 					title={`Open ${image}`}
 					onClick={() => openViewer({ sessionId, path: image }, [], sessionId)}
-					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
 				>
-					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-[10px] border border-(--card-border)" />
+					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-[6px] border border-(--card-border)" />
 				</button>
 			) : null}
 			{output || (expandable && command) ? (
@@ -403,7 +403,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
-		<div className="overflow-hidden rounded-[12px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
+		<div className="overflow-hidden rounded-[6px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
 			<button
 				type="button"
 				aria-expanded={open}
@@ -453,7 +453,7 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	return (
 		<div className="in-card overflow-hidden">
 			<div className="flex h-10 items-center gap-2.5 border-b border-(--card-border) px-3.5">
-				<span className="inline-flex size-[22px] items-center justify-center rounded-[7px] border border-dashed border-(--accent-border) text-(--accent-text)">
+				<span className="inline-flex size-[22px] items-center justify-center rounded-[6px] border border-dashed border-(--accent-border) text-(--accent-text)">
 					<Icon icon={ListChecks} size={12} />
 				</span>
 				<span className="text-[13px] font-medium">Plan</span>
@@ -885,7 +885,7 @@ function copiedText(block: Block): string[] {
 /** A card or page still being drawn. */
 function Drawing({ what }: { what: string }) {
 	return (
-		<div className="flex h-9 items-center gap-2 rounded-[12px] border border-dashed border-(--card-border) px-3 text-[12px] text-(--text-tertiary)">
+		<div className="flex h-9 items-center gap-2 rounded-[6px] border border-dashed border-(--card-border) px-3 text-[12px] text-(--text-tertiary)">
 			<Spinner size={12} />
 			{what}
 		</div>
@@ -919,7 +919,7 @@ const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: st
 		return (
 			<div
 				role="status"
-				className="in-sweep flex h-60 max-w-full items-center justify-center gap-2 self-start rounded-[12px] border border-dashed border-(--card-border) bg-(--bg-inset) px-3 text-[12px] text-(--text-tertiary)"
+				className="in-sweep flex h-60 max-w-full items-center justify-center gap-2 self-start rounded-[6px] border border-dashed border-(--card-border) bg-(--bg-inset) px-3 text-[12px] text-(--text-tertiary)"
 				style={{ aspectRatio: aspectOf(part.input) }}
 			>
 				<Spinner size={12} />
@@ -933,12 +933,12 @@ const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: st
 				type="button"
 				title={`Open ${made.path}`}
 				onClick={() => openViewer({ sessionId, path: made.path }, [], sessionId)}
-				className="block w-fit max-w-full cursor-zoom-in rounded-[12px] outline-none focus-visible:shadow-(--focus-ring)"
+				className="block w-fit max-w-full cursor-zoom-in rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
 			>
 				<img
 					src={outputUrl(sessionId, made.path)}
 					alt={prompt}
-					className="block max-h-[420px] max-w-full rounded-[12px] border border-(--card-border) bg-(--bg-inset)"
+					className="block max-h-[420px] max-w-full rounded-[6px] border border-(--card-border) bg-(--bg-inset)"
 					style={part.input && (part.input as { transparent?: unknown }).transparent === true ? CHECKERBOARD : undefined}
 				/>
 			</button>
@@ -962,7 +962,7 @@ const AgentsBlock = memo(
 
 function Notice({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex items-start gap-2 rounded-[12px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
+		<div className="flex items-start gap-2 rounded-[6px] border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-[12px] leading-[18px] text-(--danger-text)">
 			<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 			<div className="min-w-0 flex-1 break-words">{children}</div>
 		</div>
@@ -1097,7 +1097,7 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
-		<div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-(--card-border) bg-(--card-bg) px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
+		<div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[6px] border border-(--card-border) bg-(--card-bg) px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
 			<Spinner size={12} />
 			<span className="min-w-0 flex-1">
 				Anton reads your message when {who} {running.length === 1 ? 'finishes' : 'finish'}. Stop {running.length === 1 ? 'it' : 'them'} to have it read now.

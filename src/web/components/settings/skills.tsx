@@ -51,7 +51,7 @@ export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 
 			className={cn(
 				'inline-flex shrink-0 items-center justify-center border border-dashed border-(--border-strong) bg-(--well-bg)',
 				bundle ? 'text-(--data-2)' : 'text-(--data-1)',
-				size === 'lg' ? 'size-12 rounded-[12px]' : 'size-8 rounded-[9px]',
+				size === 'lg' ? 'size-12 rounded-[6px]' : 'size-8 rounded-[6px]',
 			)}
 		>
 			<Icon icon={bundle ? Blocks : ScrollText} size={size === 'lg' ? 20 : 15} />
@@ -85,7 +85,7 @@ function Card({
 					<Link
 						to="/settings/skills/view"
 						search={open}
-						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)"
+						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[6px] focus-visible:after:shadow-(--focus-ring)"
 					>
 						{title}
 					</Link>
@@ -201,7 +201,7 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					</button>
 				</p>
 			)}
-			<Note className="rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
+			<Note className="rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
 				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> come first.
 			</Note>
 		</div>
@@ -432,7 +432,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 				<Link
 					to="/settings/skills/view"
 					search={{ address: query.trim() }}
-					className="flex items-center gap-3 rounded-[14px] border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
+					className="flex items-center gap-3 rounded-[6px] border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Github} size={16} className="text-(--accent-text)" />
 					<div className="flex min-w-0 flex-1 flex-col">

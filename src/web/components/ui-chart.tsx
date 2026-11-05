@@ -193,7 +193,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
         onKeyDown={onKeyDown}
         onBlur={() => setActive(null)}
         onPointerLeave={() => setActive(null)}
-        className="in-chart relative outline-none focus-visible:rounded-[8px] focus-visible:shadow-(--focus-ring)"
+        className="in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)"
         style={{ height: HEIGHT }}
       >
         {width > 0 ? (

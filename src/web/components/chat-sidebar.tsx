@@ -80,7 +80,7 @@ import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
 const NAV_ROW =
-	'group/nav relative flex h-8 items-center gap-2.5 rounded-[9px] border border-transparent pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-[6px] border border-transparent pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
 
 /** A nav row's icon, lit in the accent on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
@@ -94,7 +94,7 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[9px] px-1.5 py-1 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[6px] px-1.5 py-1 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
 			<span className={cn('in-num flex items-baseline justify-between gap-2 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 				<span className="in-caption">Spent today</span>
 				<span>
@@ -310,7 +310,7 @@ function Toolbar({
 	};
 	if (searching || query) {
 		return (
-			<div className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5">
+			<div className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-[6px] border border-input bg-(--well-bg) px-2.5">
 				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 				<input
 					autoFocus
@@ -457,9 +457,9 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 				data-open={menuOpen || undefined}
 				onPointerEnter={armed ? undefined : () => setArmed(true)}
 				onFocus={armed ? undefined : () => setArmed(true)}
-				className={cn('group relative flex items-center rounded-[10px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11', arriving && 'in-row-enter')}
+				className={cn('group relative flex items-center rounded-[6px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11', arriving && 'in-row-enter')}
 			>
-				{active ? <div className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
+				{active ? <div className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -472,7 +472,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								params={{ spaceId: session.spaceId, threadId: session.id }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
 							/>
 						) : (
 							<Link
@@ -481,7 +481,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								search={{ app: 'code' }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-[10px] outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
 							/>
 						)}
 						<div
@@ -551,7 +551,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 }
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="mx-3 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
+	return <div className="mx-3 mt-0.5 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -611,7 +611,7 @@ export function ChatSidebar({
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+					className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -621,7 +621,7 @@ export function ChatSidebar({
 					onClick={onOpenPalette}
 					aria-label="Command palette"
 					title="Search or jump to"
-					className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-(--icon-tertiary) outline-none hover:border-(--border-default) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex h-9 shrink-0 items-center gap-1.5 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-(--icon-tertiary) outline-none hover:border-(--border-default) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Search} size={14} />
 					<Kbd keys="mod+k" size="sm" />
@@ -629,7 +629,7 @@ export function ChatSidebar({
 			</div>
 
 			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
-			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px rounded-[12px] border border-(--border-subtle) bg-(--well-bg) p-1', inProject && 'hidden')}>
+			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px rounded-[6px] border border-(--border-subtle) bg-(--well-bg) p-1', inProject && 'hidden')}>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
@@ -678,7 +678,7 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="m-3 mt-1 flex shrink-0 flex-col overflow-hidden rounded-[12px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] shadow-(--card-highlight)">
+			<div className="m-3 mt-1 flex shrink-0 flex-col overflow-hidden rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] shadow-(--card-highlight)">
 				<div className="flex items-center gap-2.5 px-2.5 py-2">
 					<Avatar name={name} />
 					<div className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)">{name}</div>

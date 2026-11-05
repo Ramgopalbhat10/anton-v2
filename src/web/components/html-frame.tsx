@@ -131,7 +131,7 @@ export const HtmlFrame = memo(function HtmlFrame({
 	}
 	return (
 		<figure className="group/page relative m-0">
-			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-[10px] border-0 bg-transparent" style={{ height, colorScheme: 'dark' }} />
+			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-[6px] border-0 bg-transparent" style={{ height, colorScheme: 'dark' }} />
 			{actions ? (
 			<div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--duration-micro) group-hover/page:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
 				<Link to="/artifacts/$taskId" params={{ taskId: sessionId }} search={{ path }} aria-label={`Open ${title} in Artifacts`} title="Open in Artifacts" className={chrome}>

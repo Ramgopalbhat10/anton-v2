@@ -428,7 +428,7 @@ function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: 
 		if (failures.length) setError(`${failures.length} could not be deleted. They remain selected; retry Delete. ${failures.slice(0, 3).join(' · ')}`);
 	};
 	return (
-		<div className="flex flex-col gap-2 rounded-[10px] border border-(--border-default) bg-(--bg-inset) p-3" role="group" aria-label="Artifact selection">
+		<div className="flex flex-col gap-2 rounded-[6px] border border-(--border-default) bg-(--bg-inset) p-3" role="group" aria-label="Artifact selection">
 			<div className="flex flex-wrap items-center gap-2">
 				<span role="status" className="mr-1 text-[13px] text-(--text-secondary)">{selected.length} selected{hidden ? ` (${hidden} hidden by filters)` : ''}</span>
 				<Btn size="sm" disabled={busy || !shown.length} onClick={() => setKeys(new Set([...keys, ...shown.map(artifactKey)]))}>Select all shown</Btn>
@@ -502,7 +502,7 @@ export function ArtifactsPage() {
 				<span className="min-w-0 flex-1" />
 				{!selecting && all.length ? <Btn size="sm" variant="ghost" icon={CheckSquare} onClick={() => setSelecting(true)}>Select</Btn> : null}
 				<AddFiles />
-				<label className="flex h-8 w-full items-center gap-2 rounded-[9px] border border-(--border-subtle) bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
+				<label className="flex h-8 w-full items-center gap-2 rounded-[6px] border border-input bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
 					<Icon icon={Search} size={12} className="shrink-0 text-(--icon-tertiary)" />
 					<input
 						value={query}

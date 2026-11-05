@@ -76,7 +76,7 @@ function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone:
 	const label = 'text-[12px] font-medium text-(--text-secondary)';
 	return (
 		<form
-			className="flex flex-col gap-3 rounded-[10px] border border-(--border-subtle) p-3"
+			className="flex flex-col gap-3 rounded-[6px] border border-(--border-subtle) p-3"
 			aria-label={editing ? `Change ${editing.name}` : 'Add a sealed secret'}
 			onSubmit={(event) => {
 				event.preventDefault();
@@ -191,7 +191,7 @@ function Sealed() {
 						))}
 					</List>
 				) : view.isSuccess && !editing ? (
-					<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No sealed secrets yet.</p>
+					<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No sealed secrets yet.</p>
 				) : null}
 			</div>
 		</Block>
@@ -235,7 +235,7 @@ export function SecretsPage() {
 								))}
 							</List>
 						) : (
-							<p className="m-0 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No repository has variables of its own.</p>
+							<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No repository has variables of its own.</p>
 						)}
 					</Block>
 				</>

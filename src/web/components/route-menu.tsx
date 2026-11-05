@@ -28,7 +28,7 @@ export function HostMark({ slug, name, size = 14 }: { slug: string; name: string
 	return (
 		<span
 			aria-hidden
-			className="inline-flex shrink-0 items-center justify-center rounded-[4px] font-mono font-semibold uppercase"
+			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -57,7 +57,7 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 
 /** The routing buttons: as small as the pin beside them, lit once one is set. */
 const CONTROL =
-	'inline-flex size-5 shrink-0 items-center justify-center rounded-[5px] text-(--icon-tertiary) outline-none hover:bg-(--alpha-white-6) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--alpha-white-6)';
+	'inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--alpha-white-6) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--alpha-white-6)';
 
 /** The providers the gateway lists for the model, shared by the menu and the mark on the picker's button; asked for only once `enabled`. */
 function useEndpoints(model: ModelInfo, enabled = true) {

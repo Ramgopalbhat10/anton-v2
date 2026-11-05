@@ -30,7 +30,7 @@ function SpaceSignal({ space }: { space: Space }) {
 }
 
 const ROW =
-	'group/row relative flex min-w-0 items-center gap-2.5 rounded-[10px] border border-transparent pr-2 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+	'group/row relative flex min-w-0 items-center gap-2.5 rounded-[6px] border border-transparent pr-2 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
 
 /** The page you are on, lifted out as a small card. */
 const LIFTED = 'data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
@@ -78,7 +78,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 						</Link>
 					))}
 					{list.length === 0 ? (
-						<Link to="/projects" search={{ create: true }} onClick={onNavigate} className="mx-0 mt-0.5 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled) hover:text-(--text-tertiary)">
+						<Link to="/projects" search={{ create: true }} onClick={onNavigate} className="mx-0 mt-0.5 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled) hover:text-(--text-tertiary)">
 							Group work and run threads in parallel.
 						</Link>
 					) : null}
@@ -99,7 +99,7 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 			aria-current={active ? 'page' : undefined}
 			className={cn(ROW, 'h-11', active && 'text-(--text-primary)', state === 'working' && 'text-(--text-primary)')}
 		>
-			{active ? <span aria-hidden className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
+			{active ? <span aria-hidden className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
 			<span className="relative inline-flex shrink-0 self-start pt-[7px]">
 				<ThreadStateIcon thread={thread} size={13} />
 			</span>
@@ -171,7 +171,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex flex-col rounded-[12px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-2.5 text-left shadow-(--card-highlight) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong)"
+							className="flex flex-col rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] p-2.5 text-left shadow-(--card-highlight) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong)"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
 								{space ? <SpaceMark space={space} size={34} /> : <span className="size-[34px]" />}
@@ -218,8 +218,8 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						aria-current={coordinatorActive ? 'page' : undefined}
 						className={cn(ROW, 'h-10 pl-1.5', coordinatorActive && 'text-(--text-primary)')}
 					>
-						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-[10px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
-						<span className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)">
+						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
+						<span className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)">
 							<Icon icon={Waypoints} size={15} />
 						</span>
 						<span className="relative min-w-0 flex-1 truncate text-[13px]">Coordinator</span>
@@ -229,7 +229,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
 				))}
 				{threads.length === 0 ? (
-					<div className="mx-3 mt-3 rounded-[10px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">Threads the coordinator or you start show here, by state.</div>
+					<div className="mx-3 mt-3 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">Threads the coordinator or you start show here, by state.</div>
 				) : null}
 			</div>
 		</div>

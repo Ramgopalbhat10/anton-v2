@@ -186,7 +186,7 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 	const save = useConnectorMutation(async () => (editing ? api.updateMcpServer(toInput(draft, editing)) : api.addMcpServer(toInput(draft, null))));
 	return (
 		<form
-			className="flex flex-col gap-2 rounded-[12px] border border-(--border-subtle) p-3"
+			className="flex flex-col gap-2 rounded-[6px] border border-(--border-subtle) p-3"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate(undefined, { onSuccess: () => (onSaved ? onSaved(draft.name.trim()) : onDone()) });
@@ -260,7 +260,7 @@ function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<t
 	const github = /(^|\.)githubcopilot\.com$/.test(hostOf(server.url));
 	return (
 		<form
-			className="flex flex-col gap-2 rounded-[10px] border border-(--border-subtle) px-3 py-2.5"
+			className="flex flex-col gap-2 rounded-[6px] border border-(--border-subtle) px-3 py-2.5"
 			onSubmit={(event) => {
 				event.preventDefault();
 				signIn.mutate({ clientId: clientId.trim(), clientSecret: secret || null });
@@ -303,7 +303,7 @@ function ToolChips({ tools }: { tools: Array<{ name: string; about: string }> })
 		<ul className="m-0 grid list-none grid-cols-1 gap-1.5 p-0 sm:grid-cols-2">
 			{tools.map((tool) => (
 				<li key={tool.name} className="min-w-0" title={tool.about || undefined}>
-					<span className="inline-flex max-w-full items-center rounded-[7px] border border-(--border-subtle) bg-(--well-bg) px-2 py-1 font-mono text-[12px] text-(--text-secondary)">
+					<span className="inline-flex max-w-full items-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-2 py-1 font-mono text-[12px] text-(--text-secondary)">
 						<span className="truncate">{tool.name}</span>
 					</span>
 				</li>
@@ -347,13 +347,13 @@ type Opened = { c?: string; add?: string; connected?: string; problem?: string }
 function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; mark: Mark; title: string; mono?: boolean; by: string; tagline: string; corner: ReactNode }) {
 	return (
 		<div className="in-card group relative flex-row items-start gap-3 p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default)">
-			<MarkTile mark={mark} size={40} className="rounded-[10px]" />
+			<MarkTile mark={mark} size={40} className="rounded-[6px]" />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Link
 					to="/settings/connectors/view"
 					search={open}
 					className={cn(
-						'truncate text-[13.5px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:shadow-(--focus-ring)',
+						'truncate text-[13.5px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[6px] focus-visible:after:shadow-(--focus-ring)',
 						mono && 'font-mono text-[13px]',
 					)}
 				>
@@ -369,7 +369,7 @@ function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; 
 
 /** A tile's + corner: the connector is not added yet. */
 const AddCorner = () => (
-	<span aria-hidden className="inline-flex size-7 items-center justify-center rounded-[8px] border border-(--border-subtle) text-(--icon-tertiary) group-hover:text-(--text-primary)">
+	<span aria-hidden className="inline-flex size-7 items-center justify-center rounded-[6px] border border-(--border-subtle) text-(--icon-tertiary) group-hover:text-(--text-primary)">
 		<Icon icon={Plus} size={14} />
 	</span>
 );
@@ -485,7 +485,7 @@ function Returned({ search }: { search: Opened }) {
 		<div
 			role="status"
 			className={cn(
-				'flex items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-[12.5px]',
+				'flex items-center gap-3 rounded-[6px] border px-3.5 py-2.5 text-[12.5px]',
 				search.problem ? 'border-(--danger-border) text-(--danger-text)' : 'border-(--success-border) text-(--success-text)',
 			)}
 		>
@@ -502,7 +502,7 @@ function DetailFrame({ mark, title, mono, tagline, actions, facts, children }: {
 	return (
 		<div className="flex flex-col gap-5">
 			<div className="flex flex-wrap items-center gap-4 border-b border-(--border-subtle) pb-5">
-				<MarkTile mark={mark} size={64} label={mark.title} className="rounded-[14px]" />
+				<MarkTile mark={mark} size={64} label={mark.title} className="rounded-[6px]" />
 				<div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-1">
 					<h1 className={cn('m-0 truncate text-[26px] leading-[32px] font-semibold tracking-[-0.022em]', mono && 'font-mono text-[22px]')}>{title}</h1>
 					<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">{tagline}</p>
@@ -598,7 +598,7 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 								aria-checked={access === value}
 								onClick={() => setAccess(value)}
 								className={cn(
-									'flex items-center gap-2.5 rounded-[9px] border px-2.5 py-2 text-left outline-none focus-visible:shadow-(--focus-ring)',
+									'flex items-center gap-2.5 rounded-[6px] border px-2.5 py-2 text-left outline-none focus-visible:shadow-(--focus-ring)',
 									access === value ? 'border-(--accent-border) bg-(--accent-bg-subtle)' : 'border-(--border-subtle) hover:border-(--border-strong)',
 								)}
 							>
@@ -621,7 +621,7 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 			) : (
 				<>
 					{account.problem ? (
-						<div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-(--danger-border) px-3 py-2">
+						<div className="flex flex-wrap items-center gap-3 rounded-[6px] border border-(--danger-border) px-3 py-2">
 							<span className="min-w-0 flex-1 text-[12px] text-(--danger-text)">{account.problem}</span>
 							<ConnectButton mailbox={mailbox} access={mailbox.canDraft ? 'draft' : 'read'} label="Connect again" />
 						</div>

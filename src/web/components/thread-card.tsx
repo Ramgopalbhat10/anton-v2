@@ -145,7 +145,7 @@ function FileMark({ item }: { item: ViewerItem }) {
 function FilePeek({ item }: { item: ViewerItem }) {
 	return (
 		<>
-			<div className="relative h-[148px] overflow-hidden rounded-[8px] border border-(--border-subtle) bg-(--bg-inset)">
+			<div className="relative h-[148px] overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--bg-inset)">
 				{isImagePath(item.path) ? <OutputThumb item={item} fit="contain" /> : <FileFace path={item.path} size={24} />}
 			</div>
 			<div className="flex min-w-0 items-center gap-2">
@@ -163,12 +163,12 @@ function FilePeek({ item }: { item: ViewerItem }) {
 
 /** All remaining files are available by click, keyboard or touch, not only on hover. */
 function FileList({ items, open }: { items: ViewerItem[]; open: (item: ViewerItem) => void }) {
-	const row = 'flex min-h-8 min-w-0 items-center gap-2 rounded-[7px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex min-h-8 min-w-0 items-center gap-2 rounded-[6px] px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
 	return (
 		<div className="flex max-h-[min(320px,50vh)] flex-col overflow-y-auto overscroll-contain">
 			{items.map((item) => (
 				<button key={item.path} type="button" onClick={() => open(item)} className={row}>
-					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-(--border-subtle) bg-(--bg-inset)">
+					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--bg-inset)">
 						{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
 					</span>
 					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)" title={item.path}>{nameOf(item.path)}</span>
@@ -300,7 +300,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 				waiting ? (
 					<div
 						className={cn(
-							'line-clamp-4 rounded-r-[6px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty [&_.sg-markdown]:text-[12.5px] [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-inherit',
+							'line-clamp-4 rounded-r-[4px] border-l-2 py-1 pr-2 pl-2.5 text-[12.5px] leading-[18px] text-pretty [&_.sg-markdown]:text-[12.5px] [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-inherit',
 							broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--warning-base) bg-(--warning-bg) text-(--warning-text)',
 						)}
 					>
@@ -372,7 +372,7 @@ function LiveLine({ text, live, className }: { text: string; live: ThreadNow | n
 }
 
 /** A thread's card in the feed: its own border, as wide as what it says. */
-export const THREAD_CARD = 'flex w-fit max-w-full min-w-0 flex-col rounded-[10px] border border-(--card-border) bg-(--card-bg) px-3 py-1.5';
+export const THREAD_CARD = 'flex w-fit max-w-full min-w-0 flex-col rounded-[6px] border border-(--card-border) bg-(--card-bg) px-3 py-1.5';
 
 /**
  * A thread in a reply, as a card that follows it live: its glyph, title and
