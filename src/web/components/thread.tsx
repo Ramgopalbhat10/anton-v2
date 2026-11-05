@@ -221,6 +221,14 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	);
 });
 
+/** A run_script program as the thread shows it: its code, or the saved file it ran and the args it was given. */
+function scriptText(input: unknown): string {
+	const file = field(input, 'file');
+	if (!file) return field(input, 'code').trim();
+	const args = (input as { args?: unknown } | null)?.args;
+	return args && Object.keys(args).length ? `${file}\nargs ${JSON.stringify(args)}` : file;
+}
+
 /** The calls a run_script program made, read from Anton (the runtime only has the program and its result); live while it runs. */
 function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean): ScriptCall[] {
 	const { data } = useQuery({ queryKey: ['scripts', sessionId], queryFn: () => api.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
@@ -274,7 +282,7 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const detailsId = useId();
 	useEffect(() => setOpen(running), [running]);
 	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
-	const command = script ? field(part.input, 'code').trim() : `$ ${field(part.input, 'command')}`;
+	const command = script ? scriptText(part.input) : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
 	const calls = useScriptCalls(sessionId, part.toolCallId, script);
 	const image = part.toolName === 'screenshot' || part.toolName === 'browser' ? screenshotPath(part) : '';

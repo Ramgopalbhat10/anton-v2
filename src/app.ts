@@ -649,6 +649,7 @@ app.post('/api/projects/:id/automations', async (c) => {
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planFirst: v.optional(v.boolean()),
+			gate: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			spaceId: v.optional(v.nullable(v.string())),
 		}),
 	);
@@ -670,6 +671,7 @@ app.put('/api/automations/:id', async (c) => {
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planFirst: v.optional(v.boolean()),
+			gate: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 		}),
 	);
 	return c.json(await editAutomation(c.req.param('id'), input));
@@ -711,6 +713,8 @@ app.patch('/api/spaces/:id', async (c) => {
 			coordinatorReasoning: v.optional(v.nullable(REASONING)),
 			threadModel: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
 			threadReasoning: v.optional(v.nullable(REASONING)),
+			// Each helper agent's own model for the project's threads; null follows Settings › General.
+			agentModels: v.optional(v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: AGENT_MODEL, computer: AGENT_MODEL, reviewer: AGENT_MODEL })),
 			state: v.optional(v.picklist(['active', 'paused', 'archived'])),
 			repoIds: v.optional(v.pipe(v.array(v.string()), v.maxLength(20))),
 		}),
@@ -765,6 +769,7 @@ app.post('/api/spaces/:id/automations', async (c) => {
 			model: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 			reasoning: v.optional(v.nullable(REASONING)),
 			planFirst: v.optional(v.boolean()),
+			gate: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
 		}),
 	);
 	return c.json(await addAutomation(projectId || null, { ...input, spaceId: c.req.param('id') }));

@@ -5,6 +5,7 @@ import { describeSchedule, nextRun, normalizeSchedule, type Schedule, type Sched
 import {
 	type Automation,
 	claimIssue,
+	type GateAnswer,
 	deleteAutomation,
 	getAutomation,
 	insertAutomation,
@@ -25,6 +26,7 @@ import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
 import { logProblem } from './log.ts';
+import { gateProblem, runGate } from './routine-gate.ts';
 import { threadStarted } from './thread-reports.ts';
 import { type ShortTitle, shortTitle, titleFrom } from './titles.ts';
 import { recordUsage } from './usage.ts';
@@ -44,6 +46,8 @@ export type AutomationInput = {
 	planFirst?: boolean;
 	/** A project to start its tasks in, as threads; the repository must be one of the project's. */
 	spaceId?: string | null;
+	/** A project's schedule only: an installed skill's script, `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
+	gate?: string | null;
 };
 
 /**
@@ -69,6 +73,13 @@ async function checked(projectId: string | null, input: AutomationInput): Promis
 		if (problem) throw new InvalidInputError(problem);
 		if (!input.prompt.trim()) throw new InvalidInputError('A schedule needs instructions');
 	}
+	const gate = input.kind === 'schedule' ? input.gate?.trim() || null : null;
+	if (gate) {
+		const problem = gateProblem(gate);
+		if (problem) throw new InvalidInputError(problem);
+		// It reads the project's records, so only a project's routine has one.
+		if (!input.spaceId) throw new InvalidInputError('A gate needs the routine to be in a project');
+	}
 	return {
 		projectId: projectId ?? '',
 		kind: input.kind,
@@ -81,6 +92,7 @@ async function checked(projectId: string | null, input: AutomationInput): Promis
 		reasoning: input.model ? (input.reasoning ?? null) : null,
 		planFirst: input.planFirst ?? false,
 		spaceId: input.spaceId ?? null,
+		gate,
 	};
 }
 
@@ -100,10 +112,16 @@ export async function editAutomation(id: string, input: Omit<AutomationInput, 's
 	const { spaceId: _space, ...change } = await checked(projectId, {
 		...input,
 		planFirst: input.planFirst ?? automation.planFirst,
+		// Left out, the gate stays; null or '' takes it off.
+		gate: input.gate === undefined ? automation.gate : input.gate,
 		spaceId: automation.spaceId,
 	});
-	// New instructions are named again at the next run.
-	await updateAutomation(id, { ...change, ...(change.prompt !== automation.prompt ? { title: null } : {}) });
+	// New instructions are named again at the next run; a new gate has not answered yet.
+	await updateAutomation(id, {
+		...change,
+		...(change.prompt !== automation.prompt ? { title: null } : {}),
+		...(change.gate !== automation.gate ? { lastGate: null } : {}),
+	});
 	return existing(id);
 }
 
@@ -208,6 +226,16 @@ async function routineName(automation: Automation): Promise<{ name: string; spen
 	return { name: named.title, spent: named };
 }
 
+/** The gate's answer; when it cannot run, the run starts, and the answer says why. */
+async function gated(automation: Automation & { gate: string }, now: number): Promise<GateAnswer> {
+	try {
+		return await runGate(automation, now);
+	} catch (error) {
+		logProblem('warn', 'A routine gate failed, so the run starts', error);
+		return { at: new Date(now).toISOString(), run: true, reason: `the gate ${automation.gate} could not answer (${error instanceof Error ? error.message : String(error)})` };
+	}
+}
+
 type Run = { now: number; force: boolean };
 
 const running = new Set<string>();
@@ -237,13 +265,18 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
 		if (!schedule) throw new InvalidInputError('Pick when the routine runs');
 		// Run now starts one early; the schedule's next time stands. A run missed while Anton was down starts once.
 		if (!force && dueAt({ ...automation, schedule }) > now) return {};
+		// A gate can skip a due run before anything starts; Run now always runs. A gate that fails lets the run start.
+		const { gate } = automation;
+		const answer = gate && !force ? await gated({ ...automation, gate }, now) : null;
+		if (answer && !answer.run) return { lastGate: answer, nextRunAt: upcoming(schedule, now) };
 		const { name, spent } = await routineName(automation);
-		const id = await startTask(automation, `${name} · ${runDay(now, schedule.timeZone)}`, automation.prompt).catch(async (error: unknown) => {
+		const prompt = answer?.reason ? `${automation.prompt}\n\n(Started because: ${answer.reason})` : automation.prompt;
+		const id = await startTask(automation, `${name} · ${runDay(now, schedule.timeZone)}`, prompt).catch(async (error: unknown) => {
 			if (!force) await updateAutomation(automation.id, { nextRunAt: new Date(now + RETRY_MS).toISOString() });
 			throw error;
 		});
 		if (spent) await recordUsage(id, spent.usage, spent.model);
-		return { lastRunAt: new Date(now).toISOString(), nextRunAt: upcoming(schedule, now) };
+		return { lastRunAt: new Date(now).toISOString(), nextRunAt: upcoming(schedule, now), ...(answer ? { lastGate: answer } : {}) };
 	},
 };
 

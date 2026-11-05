@@ -210,8 +210,10 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					</>
 				),
 			};
-		case 'run_script':
-			return { icon: Braces, body: <>Ran a script</> };
+		case 'run_script': {
+			const file = field(input, 'file').split('/').pop();
+			return { icon: Braces, body: file ? <>Ran <Em>{file}</Em></> : <>Ran a script</> };
+		}
 		case 'task':
 			return {
 				icon: Bot,

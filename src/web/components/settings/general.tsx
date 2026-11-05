@@ -4,23 +4,8 @@ import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
-import { api, type BackgroundTask, type GeneralSettings, type HelperAgent, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
-import { Block, PageHeading, SaveState, SettingRow } from './parts';
-
-const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: string }> = [
-	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code.' },
-	{ agent: 'tester', title: 'Tester', help: 'Runs the tests and reports failures.' },
-	{ agent: 'browser', title: 'Browser', help: 'Works on web pages.', info: 'In the Browser panel or the sandbox, and reports back.' },
-	{
-		agent: 'computer',
-		title: 'Computer',
-		help: 'Uses the sandbox desktop.',
-		info: "Apps, dialogs, a visual check. It sees the screen with this model when it is an OpenRouter model that reads images, else with the task's, else with ANTON_VISION_MODEL.",
-	},
-	{ agent: 'reviewer', title: 'Reviewer', help: 'Reviews pull requests on GitHub.', info: 'Each pull request the agent opens or updates.' },
-];
-
-type AgentModel = { model: string; reasoning: Reasoning | null };
+import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
+import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
 /** Web reading and screen reading go through Anton's OpenRouter ports; a compaction summary can come from any model. */
 const onOpenRouter = (model: ModelInfo) => model.id.startsWith('openrouter/');
@@ -112,46 +97,6 @@ const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string
 	{ value: 400_000, label: '400K' },
 	{ value: null, label: 'Full' },
 ];
-
-/** One helper agent: the task's model, or its own when switched on. */
-function HelperModel({
-	title,
-	help,
-	info,
-	value,
-	fallback,
-	disabled,
-	onChange,
-}: {
-	title: string;
-	help: string;
-	info?: string;
-	value: AgentModel | null;
-	fallback: string;
-	disabled: boolean;
-	onChange: (value: AgentModel | null) => void;
-}) {
-	return (
-		<SettingRow title={title} help={help} info={info}>
-			{value ? (
-				<ModelPicker
-					value={value}
-					onChange={(change) => onChange({ model: change.model ?? value.model, reasoning: change.reasoning ?? null })}
-					height={28}
-					side="bottom"
-				/>
-			) : (
-				<span className="text-[12px] text-(--text-tertiary)">Task's model</span>
-			)}
-			<Switch
-				checked={value !== null}
-				disabled={disabled || !fallback}
-				onChange={(on) => onChange(on ? { model: fallback, reasoning: null } : null)}
-				label={<span className="sr-only">{title} uses its own model</span>}
-			/>
-		</SettingRow>
-	);
-}
 
 /** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
 function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {

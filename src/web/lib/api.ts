@@ -136,6 +136,7 @@ export type Space = {
 	coordinatorReasoning: Reasoning | null;
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
+	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
 	maxParallel: number;
 	autonomy: Autonomy;
 	state: SpaceState;
@@ -150,7 +151,7 @@ export type Space = {
 
 export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds?: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
 export type SpaceChange = Partial<
-	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
+	Pick<Space, 'name' | 'icon' | 'goal' | 'instructions' | 'memory' | 'coordinatorModel' | 'coordinatorReasoning' | 'threadModel' | 'threadReasoning' | 'agentModels' | 'maxParallel' | 'autonomy' | 'state' | 'repoIds'>
 >;
 /** `projectId` null starts a thread with no repository, a chat. */
 export type ThreadInput = { id?: string; title?: string; brief: string; projectId?: string | null; repo?: string; model?: string; reasoning?: Reasoning; planMode?: boolean };
@@ -332,10 +333,14 @@ export type Automation = {
 	spaceId?: string | null;
 	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
 	title?: string | null;
+	/** A skill's script that says whether a due run starts a thread, as `skill-name/scripts/file.js`. */
+	gate?: string | null;
+	/** What the gate last answered. */
+	lastGate?: { at: string; run: boolean; reason: string } | null;
 	createdAt: string;
 };
 
-export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'schedule' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'schedule' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null; gate?: string | null };
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Reasoning } from '../core/ports.ts';
 import { announce } from '../core/changes.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent } from '../core/types.ts';
 import { appDb } from './client.ts';
 
 /** How a project's coordinator treats new work: starts threads itself, or proposes them for you to start. */
@@ -30,6 +31,8 @@ export type Space = {
 	/** New threads' model; null uses Settings › General. */
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
+	/** Each helper agent's own model for the project's threads; null follows Settings › General, which gives it the task's when it names none. */
+	agentModels: Record<HelperAgent, AgentModel | null>;
 	/** Threads working at once; more wait as queued. */
 	maxParallel: number;
 	autonomy: Autonomy;
@@ -43,6 +46,22 @@ export type Space = {
 type Row = Record<string, unknown>;
 const optional = (value: unknown) => (value == null ? null : String(value));
 
+/** The project's helper choices, all five keys: the stored JSON names only what was set, and a missing key follows Settings › General. */
+function agentModelsOf(value: unknown): Record<HelperAgent, AgentModel | null> {
+	let stored: Record<string, unknown> = {};
+	try {
+		const parsed = JSON.parse(String(value ?? '{}'));
+		if (parsed && typeof parsed === 'object') stored = parsed as Record<string, unknown>;
+	} catch {}
+	return Object.fromEntries(
+		HELPER_AGENTS.map((agent) => {
+			const choice = stored[agent];
+			const model = choice && typeof choice === 'object' ? String((choice as AgentModel).model ?? '') : '';
+			return [agent, model ? { model, reasoning: ((choice as AgentModel).reasoning as Reasoning | null) ?? null } : null];
+		}),
+	) as Record<HelperAgent, AgentModel | null>;
+}
+
 function toSpace(row: Row, repoIds: string[]): Space {
 	return {
 		id: String(row.id),
@@ -55,6 +74,7 @@ function toSpace(row: Row, repoIds: string[]): Space {
 		coordinatorReasoning: optional(row.coordinator_reasoning) as Reasoning | null,
 		threadModel: optional(row.thread_model),
 		threadReasoning: optional(row.thread_reasoning) as Reasoning | null,
+		agentModels: agentModelsOf(row.agent_models),
 		maxParallel: Number(row.max_parallel ?? 3),
 		autonomy: row.autonomy === 'propose' ? 'propose' : 'start',
 		state: (['paused', 'archived'].includes(String(row.state)) ? String(row.state) : 'active') as SpaceState,
@@ -110,6 +130,7 @@ const columns = {
 	coordinatorReasoning: 'coordinator_reasoning',
 	threadModel: 'thread_model',
 	threadReasoning: 'thread_reasoning',
+	agentModels: 'agent_models',
 	maxParallel: 'max_parallel',
 	autonomy: 'autonomy',
 	state: 'state',
@@ -123,7 +144,14 @@ export async function updateSpace(id: string, update: SpaceUpdate): Promise<void
 	const db = await appDb();
 	await db.execute({
 		sql: `UPDATE spaces SET ${entries.map(([, column]) => `${column} = ?`).join(', ')}, updated_at = ? WHERE id = ?`,
-		args: [...entries.map(([key]) => (update[key as keyof SpaceUpdate] ?? null) as string | number | null), new Date().toISOString(), id],
+		args: [
+			...entries.map(([key]) => {
+				const value = update[key as keyof SpaceUpdate];
+				return (value == null ? null : typeof value === 'object' ? JSON.stringify(value) : value) as string | number | null;
+			}),
+			new Date().toISOString(),
+			id,
+		],
 	});
 	announce({ kind: 'spaces' });
 	announce({ kind: 'space', id, what: 'settings' });

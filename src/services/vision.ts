@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { config } from '../config.ts';
 import { SCREEN } from '../core/desktop.ts';
 import { getProviders } from '../providers/index.ts';
-import { agentSettingsNow } from './agent-runner.ts';
+import { helperModelFor } from './agent-runner.ts';
 import { loadedModels } from './models.ts';
 import { backgroundModel, backgroundReasoning, textEffort } from './general.ts';
 import { modelFor } from './sessions.ts';
@@ -23,7 +23,7 @@ export function visionModelFor(id: string): string {
 	const vision = getProviders().vision;
 	const models = loadedModels();
 	const sees = (model: string | undefined): model is string => Boolean(model && vision?.runs(model) && models.find((info) => info.id === model)?.vision);
-	const own = agentSettingsNow().models.computer?.model;
+	const own = helperModelFor(id, 'computer')?.model;
 	if (sees(own)) return own;
 	const task = modelFor(id).model;
 	return sees(task) ? task : backgroundModel('vision')!;

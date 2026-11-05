@@ -1,5 +1,6 @@
 import { CodemodeSandbox, type CodemodeJsonSchema, type CodemodeResult, type CodemodeTool, renderDeclarations, renderToolSample } from '@earendil-works/pi-codemode';
 import type { Question } from '../core/ports.ts';
+import { readMachineFile } from '../core/machine-fs.ts';
 import { redactor } from '../core/redact.ts';
 import type { McpServer } from '../core/types.ts';
 import { connectorsFor, isWebServer, mcpServersFor, sealedSecretsFor } from './agent-runner.ts';
@@ -7,11 +8,13 @@ import { mcpToolName } from './connector-tools.ts';
 import { ask, hasDecisionModel } from './decisions.ts';
 import { httpRequest } from './http-request.ts';
 import { logProblem } from './log.ts';
+import { repoDir } from './git.ts';
 import { enabledMcpServers } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
 import { repoPaths, repoText, searchRepo } from './repo-snapshot.ts';
 import type { ScriptCall } from './script-runs.ts';
 import { secretsToHide } from './secrets.ts';
+import { liveMachine } from './workspace.ts';
 
 /**
  * Code mode: the agent writes one short JavaScript program that calls tools,
@@ -248,6 +251,8 @@ export function scriptToolDescription(id: string, scope: ScriptScope): string {
 		'Use it instead of many separate tool calls when a job needs several reads, searches or lookups, or when results are large and you only need part of them: loop, filter and combine in code.',
 		'The code is the body of an async function: top-level await and return work. There is no file system, network, require, fetch or timers; it can only call what is declared below.',
 		'Run independent calls together with Promise.all. Return something small: paths, short excerpts, counts, a summary.',
+		"In a workspace, a program saved there (a skill's scripts/*.js) runs by path: pass file, as bash would reach it (../skills/<name>/scripts/x.js), instead of code, so it is not written out again. " +
+			'What you pass as args reaches the program as the global `args`, for example { SAVE: [...] }.',
 		...web,
 		...connectors,
 		declared,
@@ -287,6 +292,31 @@ function watched(tool: CodemodeTool, calls: ScriptCall[], told: () => void): Cod
 			}
 		},
 	};
+}
+
+/**
+ * A program saved in the task's workspace, such as a skill's script, with `args` declared ahead of it, so a long
+ * program runs without the model writing it out again each time. Only files inside the workspace.
+ */
+export async function scriptFromFile(id: string, file: string, args: Record<string, unknown> = {}): Promise<string> {
+	const machine = await liveMachine(id);
+	if (!machine) throw new Error('A file runs only in a running workspace. Start the workspace first, or pass the program as code.');
+	const path = workspacePath(machine.root, repoDir(machine), file);
+	const text = new TextDecoder().decode(await readMachineFile(machine, path));
+	return `const args = ${JSON.stringify(args)};\n${text}`;
+}
+
+/** `file` as bash in the repo folder would reach it, kept inside the workspace root. */
+export function workspacePath(root: string, cwd: string, file: string): string {
+	const parts: string[] = [];
+	for (const part of `${file.startsWith('/') ? '' : `${cwd}/`}${file}`.split('/')) {
+		if (part === '' || part === '.') continue;
+		if (part === '..') parts.pop();
+		else parts.push(part);
+	}
+	const path = `/${parts.join('/')}`;
+	if (!path.startsWith(`${root.replace(/\/+$/, '')}/`)) throw new Error(`${file} is outside the workspace`);
+	return path;
 }
 
 type RunOptions = ScriptScope & { signal?: AbortSignal; onCalls?: (calls: ScriptCall[]) => void };
