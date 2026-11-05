@@ -333,10 +333,14 @@ export type Automation = {
 	spaceId?: string | null;
 	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
 	title?: string | null;
+	/** A skill's script that says whether a due run starts a thread, as `skill-name/scripts/file.js`. */
+	gate?: string | null;
+	/** What the gate last answered. */
+	lastGate?: { at: string; run: boolean; reason: string } | null;
 	createdAt: string;
 };
 
-export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'schedule' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null };
+export type AutomationInput = Pick<Automation, 'kind' | 'label' | 'schedule' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & { spaceId?: string | null; gate?: string | null };
 
 /** Where a view's data came from: the running machine, the last checkpoint, or the starting commit. */
 export type Source = 'live' | 'saved' | 'base';

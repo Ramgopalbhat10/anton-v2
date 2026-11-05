@@ -1,6 +1,6 @@
 import { PrStatus } from '@/components/pr-status';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 import { Caption, Card, Chip, Pips } from '@/components/instrument';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
@@ -331,6 +331,11 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 						</span>
 					) : null}
 					{automation.planFirst ? <Chip icon={ListChecks}>Plans first</Chip> : null}
+					{automation.gate ? (
+						<Chip icon={Filter} mono>
+							{automation.gate.split('/').pop()}
+						</Chip>
+					) : null}
 				</span>
 				<span className="ml-auto flex shrink-0 items-center gap-2.5">
 					<span className="flex items-center gap-1.5 text-[11px] text-(--text-tertiary)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
@@ -341,6 +346,12 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 				</span>
 			</div>
 			{open && automation.prompt ? <p className="m-0 ml-10 rounded-[8px] bg-(--well-bg) px-2.5 py-2 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
+			{automation.gate && automation.lastGate && !automation.lastGate.run ? (
+				<div className="ml-10 text-[12px] text-(--text-tertiary)">
+					Skipped {age(automation.lastGate.at) === 'now' ? 'just now' : `${age(automation.lastGate.at)} ago`}
+					{automation.lastGate.reason ? `: ${automation.lastGate.reason}` : ''}
+				</div>
+			) : null}
 			{automation.lastError ? <div className="ml-10 text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
 			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-[12px] text-(--danger-text)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
 		</div>
@@ -359,6 +370,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 	const [schedule, setSchedule] = useState<Schedule>(automation?.schedule ?? defaultSchedule());
 	const [label, setLabel] = useState(automation?.label ?? 'anton');
 	const [prompt, setPrompt] = useState(automation?.prompt ?? '');
+	const [gate, setGate] = useState(automation?.gate ?? '');
 	const models = useModels();
 	const [choice, setChoice] = useState<ModelChoice>({ model: automation ? (automation.model ?? '') : (space.threadModel ?? ''), reasoning: automation?.reasoning ?? null });
 	const save = useMutation({
@@ -372,6 +384,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				model: choice.model || null,
 				reasoning: choice.reasoning,
 				planFirst: automation?.planFirst ?? false,
+				gate: kind === 'schedule' ? gate.trim() || null : null,
 			};
 			return automation ? api.editAutomation(automation.id, input) : api.addSpaceAutomation(space.id, input);
 		},
@@ -427,6 +440,18 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				placeholder={kind === 'schedule' ? 'What each run should do' : 'Anything to add to each issue (optional)'}
 				className="min-h-[72px] text-[13px] md:text-[13px]"
 			/>
+			{kind === 'schedule' ? (
+				<label className="flex flex-col gap-1">
+					<span className="text-[12px] text-(--text-secondary)">Run only when a skill's script says so (optional)</span>
+					<Input
+						aria-label="Gate"
+						value={gate}
+						onChange={(event) => setGate(event.target.value)}
+						placeholder="skill-name/scripts/gate.js"
+						className="font-mono text-[12px] md:text-[12px]"
+					/>
+				</label>
+			) : null}
 			<div className="flex items-center gap-2">
 				{save.isError ? <span className="min-w-0 flex-1 text-[12px] text-(--danger-text)">{save.error.message}</span> : <span className="flex-1" />}
 				<Btn size="sm" variant="ghost" onClick={onDone}>

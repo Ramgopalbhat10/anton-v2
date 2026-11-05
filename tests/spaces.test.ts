@@ -352,6 +352,64 @@ test('a project without repositories runs routines on a schedule, starting chats
 	await assert.rejects(() => automations.runAutomation(routine.id), /not found/);
 });
 
+test("a routine's gate, a skill's script, skips a due run that has nothing to do, and Run now or a failing gate still run", async () => {
+	const { savePlugin } = await import('../src/db/plugins.ts');
+	const gate = `const state = JSON.parse((await tools.read_project_file({ path: 'trading/state.json' })) ?? '{}');
+return state.busy ? { run: true, reason: 'TMCV crossed its level' } : { run: false, reason: 'nothing near a level since ' + (args.lastRunAt ?? 'never') };`;
+	await savePlugin({
+		id: 'added/trading',
+		name: 'trading',
+		description: 'Trading',
+		source: { repo: 'added/trading', path: '', ref: null },
+		sha: 'sha-1',
+		marketplace: null,
+		pick: null,
+		skills: [{ name: 'intraday', description: 'Intraday trading', instructions: 'Trade.', files: { 'scripts/gate.js': { text: gate }, 'scripts/broken.js': { text: 'throw new Error("no quotes")' } } }],
+		mcpServers: [],
+		skipped: [],
+	});
+	const space = await spaces.createSpace({ name: 'Trading', goal: 'Paper trading' });
+	await assert.rejects(() => automations.addAutomation(null, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.', spaceId: space.id, gate: '../x.js' }), /skill-name\/scripts\/file\.js/);
+	await assert.rejects(() => automations.addAutomation(api.id, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.', gate: 'intraday/scripts/gate.js' }), /in a project/);
+	const routine = await automations.addAutomation(null, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.', spaceId: space.id, gate: ' intraday/scripts/gate.js ' });
+	assert.equal(routine.gate, 'intraday/scripts/gate.js');
+	const due = async () => Date.parse((await automations.spaceAutomations(space.id))[0].nextRunAt!) + 1000;
+
+	// Nothing to do: no thread starts, the next time comes, and the routine shows why it skipped.
+	const quiet = await automations.runAutomation(routine.id, { now: await due() });
+	assert.equal(toThreads.length, 0);
+	assert.equal(quiet.lastRunAt, null);
+	assert.equal(quiet.lastGate?.run, false);
+	assert.equal(quiet.lastGate?.reason, 'nothing near a level since never');
+	assert.ok(Date.parse(quiet.nextRunAt!) > Date.parse(quiet.lastGate!.at));
+
+	// Something to do: the run starts, and its thread hears why.
+	// As a thread's ../project-files/trading/state.json reaches the Library.
+	const { getProviders } = await import('../src/providers/index.ts');
+	const record = (text: string) => getProviders().store.put(`spaces/${space.id}/files/trading/state.json`, new TextEncoder().encode(text));
+	await record('{"busy": true}');
+	const busy = await automations.runAutomation(routine.id, { now: await due() });
+	assert.equal(busy.lastError, null);
+	assert.deepEqual(
+		toThreads.map((item) => item.text),
+		['Check in.\n\n(Started because: TMCV crossed its level)'],
+	);
+	assert.equal(busy.lastGate?.run, true);
+
+	// Run now skips the gate; so does a gate that fails, which lets the run start and says so.
+	await record('{}');
+	await automations.runAutomation(routine.id, { force: true });
+	assert.equal(toThreads.at(-1)?.text, 'Check in.');
+	await automations.editAutomation(routine.id, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.', gate: 'intraday/scripts/broken.js' });
+	const broken = await automations.runAutomation(routine.id, { now: await due() });
+	assert.match(toThreads.at(-1)?.text ?? '', /\(Started because: the gate intraday\/scripts\/broken\.js could not answer \(failed: no quotes\)\)$/);
+	assert.equal(broken.lastGate?.run, true);
+	// An edit that leaves the gate out keeps it; null takes it off.
+	assert.equal((await automations.editAutomation(routine.id, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.' })).gate, 'intraday/scripts/broken.js');
+	assert.equal((await automations.editAutomation(routine.id, { kind: 'schedule', schedule: DAILY, prompt: 'Check in.', gate: null })).gate, null);
+	await spaces.removeSpace(space.id);
+});
+
 test('tasks move into and out of a project, and deleting it keeps its threads', async () => {
 	const space = await spaces.createSpace({ name: 'Moves', repoIds: [api.id] });
 	const task = await sessions.createSession({ projectId: web.id, title: 'Loose task' });

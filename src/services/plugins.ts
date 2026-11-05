@@ -396,6 +396,13 @@ function marked(plugins: InstalledPlugin[]): Array<{ plugin: InstalledPlugin; sk
 	);
 }
 
+/** A text file of an installed skill that is on, as a sandbox has it at `../skills/<skill>/<path>`; null when there is none. */
+export async function installedSkillFile(skill: string, path: string): Promise<string | null> {
+	const found = marked(await listPlugins()).find((item) => item.active && item.skill.name === skill);
+	const file = found?.skill.files[path];
+	return file && 'text' in file ? file.text : null;
+}
+
 /** Installed plugins, each skill marked inactive when its plugin is off or an earlier plugin has its name. */
 export async function pluginsView(): Promise<PluginView[]> {
 	const plugins = await listPlugins();
