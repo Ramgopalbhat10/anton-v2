@@ -31,10 +31,10 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	--radius-sm: 4px;
-	--radius-md: 6px;
-	--radius-lg: 8px;
-	--radius-xl: 12px;
+	--radius-sm: 3px;
+	--radius-md: 4px;
+	--radius-lg: 5px;
+	--radius-xl: 6px;
 }
 
 /* shadcn variables resolve to Signal semantics, so any primitive left on
@@ -58,7 +58,7 @@
 	--border: var(--border-subtle);
 	--input: var(--border-default);
 	--ring: var(--accent-ring);
-	--radius: 8px;
+	--radius: 5px;
 }
 
 html,
