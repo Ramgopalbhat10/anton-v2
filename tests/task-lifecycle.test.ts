@@ -1571,6 +1571,22 @@ test('run_script runs a program over the read-only repo and the decision model, 
 	}
 });
 
+test('run_script runs a program saved in the workspace by path, with args ahead of it, and nothing outside it', async () => {
+	const { runScript, scriptFromFile, workspacePath } = await import('../src/services/code-mode.ts');
+	assert.equal(workspacePath('/w', '/w/repo', '../skills/x/scripts/a.js'), '/w/skills/x/scripts/a.js');
+	assert.equal(workspacePath('/w', '/w/repo', '/w/outputs/b.js'), '/w/outputs/b.js');
+	assert.throws(() => workspacePath('/w', '/w/repo', '../../etc/passwd'), /outside the workspace/);
+	assert.throws(() => workspacePath('/w', '/w/repo', '/wx/a.js'), /outside the workspace/);
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Saved script' });
+	await assert.rejects(() => scriptFromFile(session.id, 'a.js'), /running workspace/);
+	const machine = await machineFor(session.id);
+	await machine.exec(`mkdir -p ${machine.root}/skills/x/scripts && printf 'const SAVE = args.SAVE ?? [];\\nreturn SAVE.length;' > ${machine.root}/skills/x/scripts/a.js`);
+	const code = await scriptFromFile(session.id, '../skills/x/scripts/a.js', { SAVE: ['BHEL', 'ITC'] });
+	assert.equal(await runScript(session.id, code, { repo: false, mcp: false }), '2');
+	assert.equal(await runScript(session.id, await scriptFromFile(session.id, '../skills/x/scripts/a.js'), { repo: false, mcp: false }), '0');
+});
+
 test('a task with sealed secrets can send http_request from a program, with the same checks as the tool', async () => {
 	const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
 	const { primeAgent } = await import('../src/services/agent-runner.ts');
@@ -2229,7 +2245,7 @@ test("a thread's own pull request merges from the PR panel by squashing", async 
 	}
 });
 
-test('a repository task starts its sandbox ahead of the agent, but a chat, a plan or a task with a machine does not', async () => {
+test('a repository task or a routine run starts its sandbox ahead of the agent, but a chat, a plan or a task with a machine does not', async () => {
 	const { prewarmMachine, isStarting, liveMachine } = await import('../src/services/workspace.ts');
 	const project = await addProject('acme/prewarm');
 	const chat = await sessions.createSession({ title: 'What is new?' });
@@ -2243,6 +2259,10 @@ test('a repository task starts its sandbox ahead of the agent, but a chat, a pla
 	await prewarmMachine(work.id);
 	assert.ok(await liveMachine(work.id), 'the repository task has its machine before the agent asks');
 	await sessions.stopSession(work.id);
+	const routine = await sessions.createSession({ title: 'Intraday check-in', automationId: 'auto_check-in' });
+	await prewarmMachine(routine.id);
+	assert.ok(await liveMachine(routine.id), "a routine's chat has its machine before the agent asks");
+	await sessions.stopSession(routine.id);
 });
 
 test('a task that starts from an old warm image renews it, and one from a young image does not', async () => {

@@ -242,13 +242,14 @@ export function machineFor(id: string): Promise<Machine> {
 
 /**
  * Starts a repository task's machine as its agent starts a reply, so `start_workspace` finds it started or starting.
- * Not for a chat (most never need one), a task planning or reviewing (they read first), one that runs on this server,
- * or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.
+ * Not for a chat (most never need one) unless a routine started it (routine runs mostly run a skill's scripts, and
+ * nobody is waiting to see whether they will), a task planning or reviewing (they read first), one that runs on this
+ * server, or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.
  */
 export async function prewarmMachine(id: string): Promise<void> {
 	if (!config.prewarmSandbox || machines.has(id)) return;
 	const session = await getSessionRecord(id);
-	if (!session?.projectId || session.machineState || session.planMode || session.review || session.runOn === 'host' || machines.has(id)) return;
+	if (!session || (!session.projectId && !session.automationId) || session.machineState || session.planMode || session.review || session.runOn === 'host' || machines.has(id)) return;
 	await machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
 }
 

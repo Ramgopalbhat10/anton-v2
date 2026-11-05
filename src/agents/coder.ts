@@ -53,7 +53,7 @@ import {
 import { mergeBaseBranch } from '../services/base-merge.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { postReviewTool } from './review-tool.ts';
-import { directServer, hasScriptTools, runScript, type ScriptScope, scriptToolDescription } from '../services/code-mode.ts';
+import { directServer, hasScriptTools, runScript, type ScriptScope, scriptFromFile, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
 import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
@@ -738,15 +738,26 @@ function useRunScript(id: string, scope: ScriptScope) {
 		defineTool({
 			name: 'run_script',
 			description: scriptToolDescription(id, scope),
-			input: v.object({ code: v.pipe(v.string(), v.minLength(1), v.description('The body of an async JavaScript function')) }),
+			input: v.object({
+				code: v.optional(v.pipe(v.string(), v.minLength(1), v.description('The body of an async JavaScript function'))),
+				file: v.optional(v.pipe(v.string(), v.minLength(1), v.description('Instead of code: a program saved in the workspace, such as ../skills/<name>/scripts/x.js'))),
+				args: v.optional(v.pipe(v.record(v.string(), v.unknown()), v.description('With file: values the program reads as the global `args`'))),
+			}),
 			run: async ({ data, signal, toolCallId }) => {
+				if (!data.code === !data.file) return { output: 'Pass either code or file, not both.' };
+				let code: string;
+				try {
+					code = data.file ? await scriptFromFile(id, data.file, data.args) : (data.code as string);
+				} catch (error) {
+					return { output: `The program failed. ${error instanceof Error ? error.message : String(error)}` };
+				}
 				const onCalls = (calls: ScriptCall[]) => {
 					void noteScriptCalls(id, toolCallId, calls).catch(() => undefined);
 					const decisions = calls.filter((call) => call.tool === 'decide').length;
 					const actions = calls.map((call) => ({ what: `${call.tool} ${shortInput(call.input)}`.trim(), p: null, failed: call.state === 'failed' }));
 					void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost: 0, script: true }).catch(() => undefined);
 				};
-				return { output: await runScript(id, data.code, { ...scope, signal, onCalls }) };
+				return { output: await runScript(id, code, { ...scope, signal, onCalls }) };
 			},
 		}),
 	);
