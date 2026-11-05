@@ -205,6 +205,9 @@ export const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
 	// 39: each helper agent's own model for the project's threads, as JSON of Settings › General's agentModels; NULL follows it.
 	[`ALTER TABLE spaces ADD COLUMN agent_models TEXT`],
+	// 40: a routine's gate, a skill's script that says whether a due run is worth a thread (`src/services/routine-gate.ts`),
+	// and what it last answered, as JSON.
+	[`ALTER TABLE automations ADD COLUMN gate TEXT`, `ALTER TABLE automations ADD COLUMN last_gate TEXT`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

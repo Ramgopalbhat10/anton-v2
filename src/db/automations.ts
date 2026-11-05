@@ -33,8 +33,15 @@ export type Automation = {
 	spaceId: string | null;
 	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
 	title: string | null;
+	/** A schedule's gate: an installed skill's script, as `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
+	gate: string | null;
+	/** What the gate last answered, and when. */
+	lastGate: GateAnswer | null;
 	createdAt: string;
 };
+
+/** A gate's answer: whether the run started a thread, and why. */
+export type GateAnswer = { at: string; run: boolean; reason: string };
 
 type Row = Record<string, unknown>;
 const optional = (value: unknown) => (value == null ? null : String(value));
@@ -57,11 +64,13 @@ function toAutomation(row: Row): Automation {
 		seen: (JSON.parse(String(row.seen_json ?? '[]')) as Array<number | null>).filter((number): number is number => number !== null),
 		spaceId: optional(row.space_id),
 		title: optional(row.title),
+		gate: optional(row.gate),
+		lastGate: row.last_gate == null ? null : (JSON.parse(String(row.last_gate)) as GateAnswer),
 		createdAt: String(row.created_at),
 	};
 }
 
-export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'schedule' | 'nextRunAt' | 'prompt' | 'model' | 'reasoning' | 'planFirst'> & {
+export type NewAutomation = Pick<Automation, 'projectId' | 'kind' | 'label' | 'schedule' | 'nextRunAt' | 'prompt' | 'model' | 'reasoning' | 'planFirst' | 'gate'> & {
 	spaceId?: string | null;
 };
 
@@ -69,7 +78,7 @@ export async function insertAutomation(input: NewAutomation): Promise<Automation
 	const db = await appDb();
 	const id = `auto_${randomUUID()}`;
 	await db.execute({
-		sql: `INSERT INTO automations (id, project_id, kind, label, schedule_json, next_run_at, prompt, model, reasoning, plan_first, enabled, created_at, space_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		sql: `INSERT INTO automations (id, project_id, kind, label, schedule_json, next_run_at, prompt, model, reasoning, plan_first, enabled, created_at, space_id, gate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
 		args: [
 			id,
 			input.projectId,
@@ -83,6 +92,7 @@ export async function insertAutomation(input: NewAutomation): Promise<Automation
 			input.planFirst ? 1 : 0,
 			new Date().toISOString(),
 			input.spaceId ?? null,
+			input.gate ?? null,
 		],
 	});
 	announce({ kind: 'automations' });
@@ -127,6 +137,8 @@ const columns = {
 	reasoning: 'reasoning',
 	planFirst: 'plan_first',
 	title: 'title',
+	gate: 'gate',
+	lastGate: 'last_gate',
 } as const;
 export type AutomationUpdate = Partial<Pick<Automation, keyof typeof columns>>;
 
@@ -135,7 +147,7 @@ const stored = (key: keyof typeof columns, value: unknown) =>
 		? value
 			? 1
 			: 0
-		: key === 'schedule'
+		: key === 'schedule' || key === 'lastGate'
 			? value
 				? JSON.stringify(value)
 				: null

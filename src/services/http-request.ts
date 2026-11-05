@@ -91,7 +91,15 @@ function substitute(text: string, secrets: Map<string, OpenSecret>, codes: Map<s
 }
 
 /** Sends the request and returns what the agent may read of the answer. */
-export async function httpRequest(taskId: string, input: HttpRequestInput, { signal, trust }: { signal?: AbortSignal; trust?: TlsTrust } = {}): Promise<string> {
+/**
+ * `maxShown` is for callers that are code rather than the model, such as a routine's gate reading the whole
+ * market's quotes: the cut keeps a model's context small, and a script has no context to keep.
+ */
+export async function httpRequest(
+	taskId: string,
+	input: HttpRequestInput,
+	{ signal, trust, maxShown = MAX_SHOWN }: { signal?: AbortSignal; trust?: TlsTrust; maxShown?: number } = {},
+): Promise<string> {
 	const method = (input.method ?? 'GET').toUpperCase();
 	if (!/^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$/.test(method)) throw new EgressError(`${method} is not a method this tool sends`);
 	const headers = input.headers ?? {};
@@ -155,7 +163,7 @@ export async function httpRequest(taskId: string, input: HttpRequestInput, { sig
 		.filter(([name]) => SHOWN_HEADERS.test(name))
 		.map(([name, value]) => `${name}: ${value}`);
 	const notes = kept.map(({ name, from }) => `Kept ${from} as the sealed secret ${name}; use it as {{secret:${name}}}.`);
-	let body = text.length > MAX_SHOWN ? `${text.slice(0, MAX_SHOWN)}\n[cut: the answer is ${text.length} characters]` : text;
+	let body = text.length > maxShown ? `${text.slice(0, maxShown)}\n[cut: the answer is ${text.length} characters]` : text;
 	if (input.toFile) {
 		const saved = await saveToLibrary(taskId, input.toFile, new TextEncoder().encode(hide(text)), response.headers['content-type']);
 		body = `[${text.length} characters written to ${saved} in the Library (outputs/${saved} in a workspace), secrets hidden]`;
