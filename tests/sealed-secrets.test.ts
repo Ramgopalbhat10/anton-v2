@@ -93,6 +93,7 @@ test('http_request fills secrets in on the server, through a tunnel the proxy ca
 				token += 1;
 				return response.end(good ? JSON.stringify({ status: 'success', data: { token: `token-abcdef-${token}` } }) : JSON.stringify({ status: 'error' }));
 			}
+			if (request.url === '/market/quotes') return response.end(JSON.stringify({ data: 'q'.repeat(250_000), auth: request.headers.authorization }));
 			response.end(JSON.stringify({ echo: { authorization: request.headers.authorization ?? null, body } }));
 		});
 	});
@@ -158,6 +159,14 @@ test('http_request fills secrets in on the server, through a tunnel the proxy ca
 	const file = new TextDecoder().decode((await readOutput('task-1', 'downloads/instruments.json')) ?? new Uint8Array());
 	assert.match(file, /\[BROKER_TOKEN hidden\]/);
 	assert.ok(!file.includes('token-abcdef-1'));
+
+	// The agent is shown 100k characters of an answer; a caller that is code, a routine's gate, can take it whole.
+	const cut = await httpRequest('task-1', { url: `${base}/market/quotes`, headers: { Authorization: '{{secret:BROKER_TOKEN}}' } }, trust);
+	assert.match(cut, /\[cut: the answer is 2500\d\d characters\]/);
+	const whole = await httpRequest('task-1', { url: `${base}/market/quotes`, headers: { Authorization: '{{secret:BROKER_TOKEN}}' } }, { ...trust, maxShown: 1_000_000 });
+	const answer = JSON.parse(whole.slice(whole.indexOf('{'))) as { data: string; auth: string };
+	assert.equal(answer.data.length, 250_000);
+	assert.equal(answer.auth, '[BROKER_TOKEN hidden]', 'a whole answer still hides the secrets');
 
 	// A secret goes nowhere else: not another host, not plain http, not as the host itself.
 	const before = seen.length;
