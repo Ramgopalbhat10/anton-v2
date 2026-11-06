@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, ArrowUpRight, Download, FileText, Info, PanelLeftOpen, RefreshCw, Trash2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { DocumentMarkdown } from '@/components/document-markdown';
 import { FileIcons } from '@/components/file-icons';
-import { Branch, buildTree, FileView, IMAGE_TYPES } from '@/components/file-view';
-import { FileImages, Markdown } from '@/components/markdown';
+import { Branch, buildTree, FileView, IMAGE_TYPES, isMarkdown, MarkdownToggle } from '@/components/file-view';
+import { type FileImages } from '@/components/markdown';
 import { Card, Count, Status } from '@/components/instrument';
 import { useStoredState } from '@/components/split-pane';
 import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
@@ -239,27 +240,28 @@ function Facts({ preview }: { preview: PluginPreview }) {
 }
 
 function Overview({ preview, onOpenFile }: { preview: PluginPreview; onOpenFile: (path: string) => void }) {
+	// Added skills use SKILL.md as their overview; repository skills without a
+	// README should show that root document too, not just repeat the description.
+	const documentPath = preview.readme ?? preview.files.find((path) => within(preview, path) === 'SKILL.md') ?? null;
 	const readme = useQuery({
 		// Text, so not under the 'plugin-file' key, where the Files tab keeps the same file's bytes.
-		queryKey: ['plugin-readme', preview.source.repo, preview.sha, preview.readme],
-		queryFn: async () => new TextDecoder().decode(await api.pluginFile(preview.source.repo, preview.sha, preview.readme as string)),
-		enabled: Boolean(preview.readme),
+		queryKey: ['plugin-readme', preview.source.repo, preview.sha, documentPath],
+		queryFn: async () => new TextDecoder().decode(await api.pluginFile(preview.source.repo, preview.sha, documentPath as string)),
+		enabled: Boolean(documentPath),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
-	const images = usePluginImages(preview, preview.readme ? within(preview, preview.readme) : '', onOpenFile);
+	const images = usePluginImages(preview, documentPath ? within(preview, documentPath) : '', onOpenFile);
 	return (
 		<div className="flex flex-col gap-4 @min-[800px]/settings:flex-row @min-[800px]/settings:items-start">
 			<div className="in-card min-w-0 flex-1 px-5 py-4">
-				{!preview.readme ? (
+				{!documentPath ? (
 					<p className="m-0 text-[13px] text-(--text-tertiary)">{preview.description || 'This has no README. Its skills and files are in the tabs above.'}</p>
 				) : readme.isPending ? (
 					<Spinner size={12} />
 				) : readme.isError ? (
 					<p className="m-0 text-[12px] text-(--danger-text)">{readme.error.message}</p>
 				) : (
-					<FileImages.Provider value={images}>
-						<Markdown text={readme.data} html />
-					</FileImages.Provider>
+					<DocumentMarkdown text={readme.data} images={images} />
 				)}
 			</div>
 			<Facts preview={preview} />
@@ -325,6 +327,7 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 	const full = preview.source.path ? `${preview.source.path}/${selected}` : selected;
 	const [treeHidden, setTreeHidden] = useStoredState('anton.plugin.tree-hidden', false);
 	const images = usePluginImages(preview, selected, onOpen);
+	const [sourceShown, setSourceShown] = useState(() => new Set<string>());
 	return (
 		<FileIcons>
 			<div className="in-card h-[min(640px,70vh)] min-h-[360px] flex-row overflow-hidden">
@@ -341,14 +344,26 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 					</div>
 				)}
 				<div className="flex min-w-0 flex-1 flex-col">
-					<div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--border-subtle) px-3 text-[12px]">
+					<div data-plugin-file-header className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-(--border-subtle) px-3 py-1 text-[12px]">
 						{treeHidden ? (
 							<>
 								<IconBtn icon={PanelLeftOpen} size="xs" label="Show the file tree" aria-pressed={false} onClick={() => setTreeHidden(false)} className="-ml-1.5 shrink-0" />
 								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
 							</>
 						) : null}
-						<span className="in-num min-w-0 flex-1 truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
+						<span title={selected} className="in-num min-w-0 flex-1 basis-[60px] truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
+						{selected && isMarkdown(selected) ? (
+							<MarkdownToggle
+								preview={!sourceShown.has(selected)}
+								className="shrink-0"
+								onChange={(showPreview) => setSourceShown((current) => {
+									const next = new Set(current);
+									if (showPreview) next.delete(selected);
+									else next.add(selected);
+									return next;
+								})}
+							/>
+						) : null}
 						{selected && !preview.added ? (
 							<a
 								href={`https://github.com/${preview.source.repo}/blob/${preview.sha}/${full}`}
@@ -367,6 +382,7 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 							path={full}
 							queryKey={['plugin-file', preview.source.repo, preview.sha, full]}
 							read={() => api.pluginFile(preview.source.repo, preview.sha, full)}
+							preview={!sourceShown.has(selected)}
 							images={images}
 						/>
 					) : (
