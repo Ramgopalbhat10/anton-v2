@@ -3,6 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import anatomyReadme from '../fixtures/skills/anatomy-readme.md?raw';
 import type { CatalogItem, Plugin, PluginPreview } from '@/lib/api';
 
 const installed: Plugin = {
@@ -178,6 +179,22 @@ describe('A plugin page', () => {
 
 		await userEvent.click(screen.getByRole('button', { name: 'Install 2 skills' }));
 		expect(api.installPlugin).toHaveBeenCalledWith({ marketplace: 'anthropics/skills', name: 'brand-kit' });
+	});
+
+	it('uses the sanitized document renderer in Overview and Files without changing source mode', async () => {
+		api.pluginFile.mockImplementationOnce(async () => text(anatomyReadme));
+		open('/settings/skills/view?plugin=plugin_9');
+		expect(await screen.findByRole('heading', { name: 'Anatomy' })).toBeTruthy();
+		expect(screen.getByRole('img', { name: 'Claude Code skill' })).toBeTruthy();
+		expect(screen.getByText('precise figures').tagName).toBe('STRONG');
+		expect(document.querySelector('.sg-markdown script, .sg-markdown iframe')).toBeNull();
+		api.pluginFile.mockImplementationOnce(async () => text(anatomyReadme));
+		await userEvent.click(screen.getByRole('tab', { name: /Files/ }));
+		expect(await screen.findByRole('heading', { name: 'Anatomy' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('radio', { name: 'Source' }));
+		expect(screen.getByText('<h1 align="center">Anatomy</h1>')).toBeTruthy();
+		await userEvent.click(screen.getByRole('radio', { name: 'Preview' }));
+		expect(screen.getByRole('heading', { name: 'Anatomy' })).toBeTruthy();
 	});
 
 	it('updates an installed plugin to its newer commit', async () => {
