@@ -1,3 +1,4 @@
+import { unrouted } from '../core/model-route.ts';
 import { config } from '../config.ts';
 import { getProviders } from '../providers/index.ts';
 import type { ModelInfo } from '../core/ports.ts';
@@ -112,7 +113,7 @@ export async function digestResult<T>(
 	const model = backgroundModel('webDigest')!;
 	if (text === null || Buffer.byteLength(text) <= limitFor(toolName) || !objective || !writer?.runs(model)) return cut();
 	const task = models.find((info) => info.id === modelFor(conversation).model);
-	if (!digestPays(task, models.find((info) => info.id === model), text.length, Math.min(text.length, limitFor(toolName)) - DIGEST_CHARS)) return cut();
+	if (!digestPays(task, models.find((info) => info.id === unrouted(model)), text.length, Math.min(text.length, limitFor(toolName)) - DIGEST_CHARS)) return cut();
 	try {
 		const effort = textEffort(backgroundReasoning('webDigest'));
 		const answer = await writer.write(

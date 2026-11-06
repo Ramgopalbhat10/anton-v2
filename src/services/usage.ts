@@ -19,7 +19,7 @@ export function addUsage(a: Usage, b: Usage): Usage {
 
 /** Adds usage to the task's totals, under the model that did the work; a failed write only loses the count. */
 export async function recordUsage(id: string, usage: Usage, model: string | null = null, turnId: string | null = null): Promise<boolean> {
-	return addSessionUsage(id, usage, new Date(), model, turnId).catch((error: unknown) => {
+	return addSessionUsage(id, usage, new Date(), model ? unrouted(model) : null, turnId).catch((error: unknown) => {
 		logProblem('warn', 'Usage not recorded', error, id);
 		return false;
 	});

@@ -190,7 +190,7 @@ export function HelperModel({
 			{value ? (
 				<ModelPicker
 					value={value}
-					onChange={(change) => onChange({ model: change.model ?? value.model, reasoning: change.reasoning ?? null })}
+					onChange={(change) => onChange({ model: change.model ?? value.model, reasoning: change.reasoning !== undefined ? change.reasoning : value.reasoning })}
 					height={28}
 					side="bottom"
 				/>

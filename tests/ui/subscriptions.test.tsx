@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModelChoice, ModelInfo, Subscription } from '@/lib/api';
 import { renderWithQueries } from './render';
 
@@ -65,6 +65,7 @@ const api = vi.hoisted(() => ({
 	saveGeneralSettings: vi.fn(),
 	models: vi.fn(),
 	setPinnedModels: vi.fn(),
+	modelEndpoints: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -232,6 +233,7 @@ const gpt = model({ id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', vendor: 'Open
 const routed = model({ id: 'openrouter/acme/fast', name: 'Fast', reasoning: ['off', 'low', 'high'], defaultReasoning: 'low' });
 
 describe('Model picker', () => {
+	beforeEach(() => { localStorage.clear(); api.modelEndpoints.mockResolvedValue({ endpoints: [] }); });
 	it('lists plans first, connected or not, then gateways, and never calls a plan free', () => {
 		expect(sourcesOf([routed, gpt], [{ name: 'ChatGPT', connected: true }])).toEqual([
 			{ name: 'ChatGPT', plan: true, connected: true, count: 1 },
@@ -259,6 +261,52 @@ describe('Model picker', () => {
 		return screen.findByRole('menu');
 	}
 
+	it('persists a provider and clears it without losing effort', async () => {
+		api.modelEndpoints.mockResolvedValueOnce({ endpoints: [{ slug: 'groq', name: 'Groq', price: { input: 1, output: 2 }, contextLength: 128000, latency: null, throughput: null, uptime: 100 }] });
+		openPicker({ model: routed.id, reasoning: 'high' }, [], [routed]);
+		await userEvent.click(screen.getByRole('button', { name: 'Provider: any' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: /Groq/ }));
+		expect(screen.getByRole('button', { name: 'Provider: Groq' })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: /^Sort providers:/ })).toBeNull();
+		expect(within(screen.getByRole('radiogroup', { name: 'Reasoning effort' })).getByRole('radio', { name: 'High' }).getAttribute('aria-checked')).toBe('true');
+		await userEvent.click(screen.getByRole('button', { name: 'Provider: Groq' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Any provider' }));
+		expect(screen.getByRole('button', { name: 'Sort providers: default' })).toBeTruthy();
+	});
+
+	it('reports provider errors while sort remains available', async () => {
+		api.modelEndpoints.mockRejectedValueOnce(new Error('Gateway unavailable'));
+		openPicker({ model: routed.id, reasoning: null }, [], [routed]);
+		await userEvent.click(screen.getByRole('button', { name: 'Provider: any' }));
+		expect(await screen.findByText('Could not load providers: Gateway unavailable')).toBeTruthy();
+		await userEvent.keyboard('{Escape}');
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
+		expect(screen.getByRole('button', { name: 'Sort providers: Throughput' })).toBeTruthy();
+	});
+
+	it('keeps default routing available when the gateway lists no providers', async () => {
+		openPicker({ model: routed.id, reasoning: null }, [], [routed]);
+		await userEvent.click(screen.getByRole('button', { name: 'Provider: any' }));
+		expect(await screen.findByText('OpenRouter lists no providers for this model.')).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: 'Any provider' })).toBeTruthy();
+	});
+
+	it('decodes stored routing, carries sorts to gateways, drops providers on model changes and never routes a plan', async () => {
+		const other = { ...routed, id: 'vercel/acme/other', name: 'Other' };
+		openPicker({ model: `${routed.id}#via=removed`, reasoning: 'high' }, [], [routed, other, gpt]);
+		expect(screen.getByRole('option', { name: /Fast/ }).getAttribute('aria-selected')).toBe('true');
+		await userEvent.click(screen.getByRole('option', { name: /Other/ }));
+		expect(screen.getAllByRole('button', { name: 'Sort providers: default' })).toHaveLength(2);
+		const row = screen.getByRole('option', { name: /Other/ });
+		await userEvent.click(within(row).getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
+		await userEvent.click(screen.getByRole('option', { name: /Fast/ }));
+		expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('option', { name: /GPT-6.1-Sol/ }));
+		expect(within(screen.getByRole('button', { name: 'Model and reasoning' })).queryByTitle('Sorted by price')).toBeNull();
+		expect(within(screen.getByRole('option', { name: /GPT-6.1-Sol/ })).queryByRole('button', { name: /^Provider:|^Sort providers:/ })).toBeNull();
+	});
 	it('shows each source as a section, the plan first, and marks the chosen plan model', async () => {
 		openPicker({ model: gpt.id, reasoning: null });
 		const list = await screen.findByRole('listbox', { name: 'Models' });
@@ -511,6 +559,16 @@ describe('OpenRouter', () => {
 		models: Array.from({ length: 45 }, (_, index) => routed(index + 1, index === 29 ? 5_000 : 0)),
 		windows: [{ label: 'Credits', usedPercent: 25, resetsAt: null, limited: false }],
 	};
+
+	it('marks the routed default model in the gateway catalog without treating its route as another model', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [{ ...connected, models: [routed(1)] }] });
+		api.generalSettings.mockResolvedValue({ ...general, model: `${routed(1).id}#sort=price` });
+		api.models.mockResolvedValue({ models: [], default: `${routed(1).id}#sort=price` });
+		renderWithQueries(<SubscriptionsPage />);
+		const list = await screen.findByRole('list', { name: 'OpenRouter models' });
+		expect(await within(list).findByText('Default')).toBeTruthy();
+		expect(within(list).queryByRole('button', { name: 'Use for new tasks' })).toBeNull();
+	});
 
 	it('takes a key, then lists its models a page at a time with a search', async () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [openrouter] });

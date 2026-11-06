@@ -83,6 +83,21 @@ describe('new task composer', () => {
 		await userEvent.keyboard('{Control>}{Enter}{/Control}');
 		await waitFor(() => expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ model: gateway.id, route: { sort: 'throughput' } })));
 	});
+	it('inherits a routed default without leaking it after switching to a plan model', async () => {
+		const gateway = { id: 'openrouter/test/model', name: 'Gateway', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: false, reasoning: [], defaultReasoning: 'off' };
+		renderWithQueries(<Launcher />, [
+			[['projects'], { projects: [] }], [['sessions'], { sessions: [] }],
+			[['models'], { models: [gateway, { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' }], default: `${gateway.id}#sort=price` }],
+			[['general-settings'], { reasoning: null, planMode: false }], [['commands'], { commands: [] }],
+		]);
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('option', { name: /Plan/ }));
+		await userEvent.keyboard('{Escape}');
+		await userEvent.type(screen.getByRole('textbox'), 'Hello');
+		await userEvent.keyboard('{Control>}{Enter}{/Control}');
+		await waitFor(() => expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/plan', route: null })));
+	});
 	it('keeps Enter as a newline and submits only with the modifier shortcut', async () => {
 		setup();
 		await userEvent.type(screen.getByRole('textbox'), 'First line');

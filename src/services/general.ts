@@ -1,3 +1,4 @@
+import { registerRoutedModels } from '../core/routed-models.ts';
 import { config } from '../config.ts';
 import type { OpenRouterEffort, Reasoning } from '../core/ports.ts';
 import { InvalidInputError } from '../core/errors.ts';
@@ -117,6 +118,7 @@ export async function generalSettings(): Promise<GeneralSettings> {
 	};
 	compactAtNow = settings.compactAt;
 	claudeCodeCompactAtNow = settings.claudeCodeCompactAt;
+	registerRoutedModels('background', Object.values(settings.backgroundModels));
 	backgroundNow = settings.backgroundModels;
 	backgroundEffortNow = settings.backgroundReasoning;
 	return settings;
@@ -145,6 +147,7 @@ export async function setGeneralSettings(next: GeneralSettings): Promise<General
 	await setSetting(KEY, next);
 	compactAtNow = next.compactAt;
 	claudeCodeCompactAtNow = next.claudeCodeCompactAt;
+	registerRoutedModels('background', Object.values(next.backgroundModels));
 	backgroundNow = next.backgroundModels;
 	backgroundEffortNow = next.backgroundReasoning;
 	return next;

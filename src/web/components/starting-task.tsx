@@ -1,3 +1,4 @@
+import { unrouted } from '../../core/model-route';
 import { CircleAlert, Plus, Send, Square } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Mascot } from '@/components/mascot';
@@ -62,7 +63,7 @@ function WorkspaceSkeleton() {
  * with your model named, and only its buttons wait. Drawn the same, so nothing blinks out as the page fills in.
  */
 function ComposerSkeleton({ model }: { model: string }) {
-	const info = useModels().data?.models.find((item) => item.id === model);
+	const info = useModels().data?.models.find((item) => item.id === unrouted(model));
 	return (
 		<div className="shrink-0 px-4 pt-1 pb-4">
 			<div aria-hidden className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2">

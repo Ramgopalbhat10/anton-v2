@@ -1,3 +1,4 @@
+import { unrouted } from '../core/model-route.ts';
 import * as v from 'valibot';
 import { config } from '../config.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -22,7 +23,7 @@ import { recordUsage } from './usage.ts';
 export function visionModelFor(id: string): string {
 	const vision = getProviders().vision;
 	const models = loadedModels();
-	const sees = (model: string | undefined): model is string => Boolean(model && vision?.runs(model) && models.find((info) => info.id === model)?.vision);
+	const sees = (model: string | undefined): model is string => Boolean(model && vision?.runs(model) && models.find((info) => info.id === unrouted(model))?.vision);
 	const own = helperModelFor(id, 'computer')?.model;
 	if (sees(own)) return own;
 	const task = modelFor(id).model;

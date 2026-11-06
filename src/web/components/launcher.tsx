@@ -14,11 +14,11 @@ import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { TaskRow } from '@/components/task-row';
-import { api, type ModelChoice, type ModelRoute, type Project, type RunOn } from '@/lib/api';
+import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
-import { routable } from '../../core/model-route';
+import { parseRouted } from '../../core/model-route';
 
 /**
  * The repo a task works on, or No repository for a chat: a question, a job on
@@ -193,7 +193,6 @@ function RouteWell({ art, label, stages }: { art: ReactNode; label: string; stag
 export function Launcher() {
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
-	const [route, setRoute] = useState<ModelRoute | null>(null);
 	const [projectId, setProjectId] = useState('');
 	const [branch, setBranch] = useState('');
 	const [planChoice, setPlanMode] = useState<boolean | null>(null);
@@ -209,7 +208,8 @@ export function Launcher() {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 	const project = chooseProject(projects.data?.projects ?? [], projectId);
 	const general = useGeneralSettings();
-	const model = choice.model ?? models.data?.default ?? '';
+	const specifier = choice.model ?? models.data?.default ?? '';
+	const { model, route } = parseRouted(specifier);
 	// Picking a model sets its reasoning to null, so the default level only rides with the default model.
 	const reasoning = choice.reasoning !== undefined ? choice.reasoning : (general.data?.reasoning ?? null);
 	// No repository picked (or none added yet): the task is a chat, with no branch to pick or plan to make.
@@ -222,14 +222,7 @@ export function Launcher() {
 	const blind = attachments.images.length > 0 && chosenModel !== undefined && !chosenModel.vision;
 
 	function chooseModel(change: Partial<ModelChoice>) {
-		// As a task does: another model drops a provider, which belongs to the model, and keeps a sort while it is on a gateway.
-		if (change.model && change.model !== model) setRoute((current) => (current?.sort && routable(change.model!) ? current : null));
 		setChoice((current) => ({ ...current, ...change }));
-	}
-
-	function chooseRoute(next: ModelRoute | null, picked?: string) {
-		if (picked) setChoice((current) => ({ ...current, model: picked, reasoning: null }));
-		setRoute(next);
 	}
 
 	function pick(id: string) {
@@ -253,7 +246,7 @@ export function Launcher() {
 			branch: project ? chosenBranch || undefined : undefined,
 			model: model || undefined,
 			reasoning: reasoning ?? undefined,
-			route: route && routable(model) ? route : undefined,
+			route,
 			planMode,
 			runOn,
 		});
@@ -312,7 +305,7 @@ export function Launcher() {
 							<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
 							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
-							<ModelPicker value={{ model, reasoning }} onChange={chooseModel} route={route} onRoute={chooseRoute} height={28} side="bottom" />
+							<ModelPicker value={{ model: specifier, reasoning }} onChange={chooseModel} height={28} side="bottom" />
 							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 							<div className="min-w-0 flex-[1_1_8px]" />
 							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={starting || !projects.isSuccess || blind}>

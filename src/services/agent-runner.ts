@@ -1,3 +1,4 @@
+import { registerRoutedModels } from '../core/routed-models.ts';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
@@ -134,6 +135,7 @@ async function primeAgentSettings(): Promise<void> {
 	const { codeMode, visualReplies, pageNetwork, agentModels } = await generalSettings();
 	const models = Object.fromEntries(await Promise.all(HELPER_AGENTS.map(async (agent) => [agent, await choiceFor(agentModels[agent])] as const)));
 	agentSettings = { codeMode, visualReplies, pageNetwork, models: models as AgentSettings['models'] };
+	registerRoutedModels('helpers:general', Object.values(agentSettings.models).map((choice) => choice?.model));
 }
 
 /** Each helper's model for one of the project's threads: its choice there, resolved the way Settings › General's are. */
@@ -171,6 +173,7 @@ export async function primeAgent(id: string, { warm = true }: { warm?: boolean }
 		threadProjects.delete(id);
 		threadHelperModels.delete(id);
 	}
+	registerRoutedModels(`helpers:${id}`, Object.values(threadHelperModels.get(id) ?? {}).map((choice) => choice?.model));
 	if (session?.machineState) workspaces.add(id);
 	if (session?.runOn === 'host') onHost.add(id);
 	else onHost.delete(id);

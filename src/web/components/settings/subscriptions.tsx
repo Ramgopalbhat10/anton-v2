@@ -1,3 +1,4 @@
+import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -208,7 +209,7 @@ function Models({ subscription }: { subscription: Subscription }) {
 			void queryClient.invalidateQueries({ queryKey: ['models'] });
 		},
 	});
-	const current = settings.data?.model ?? models.data?.default;
+	const current = unrouted(settings.data?.model ?? models.data?.default ?? '');
 	const most = Math.max(1, ...subscription.models.map((model) => model.tokens));
 	if (!subscription.models.length) {
 		return (
@@ -758,7 +759,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 			void queryClient.invalidateQueries({ queryKey: ['models'] });
 		},
 	});
-	const current = settings.data?.model ?? models.data?.default;
+	const current = unrouted(settings.data?.model ?? models.data?.default ?? '');
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	// Used ones first, by tokens; the rest keep the gateway's order, newest first.
 	const ranked = subscription.models

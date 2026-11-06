@@ -1,3 +1,4 @@
+import { openRouterRouting, parseRouted } from '../../core/model-route.ts';
 import type { TextModel } from '../../core/ports.ts';
 
 /** `apiKey` is read on each call, so a key pasted in Settings › Subscriptions needs no restart. */
@@ -19,12 +20,14 @@ export function openRouterText({ apiUrl, apiKey }: TextOptions): TextModel {
 			const key = typeof apiKey === 'function' ? apiKey() : apiKey;
 			if (!key) throw new Error('Writing text needs an OpenRouter key. Add one under Settings › Subscriptions.');
 			const timeout = AbortSignal.timeout(timeoutMs ?? TIMEOUT_MS);
+			const parsed = parseRouted(model);
 			const response = await fetch(`${apiUrl}/chat/completions`, {
 				method: 'POST',
 				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
 				headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					model: model.slice('openrouter/'.length),
+					model: parsed.model.slice('openrouter/'.length),
+					...(parsed.route ? { provider: openRouterRouting(parsed.route) } : {}),
 					messages: [{ role: 'user', content: prompt }],
 					max_tokens: maxTokens,
 					...(reasoning ? { reasoning: reasoning === 'off' ? { enabled: false } : { effort: reasoning } } : {}),

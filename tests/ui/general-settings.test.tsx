@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithQueries } from './render';
 
@@ -24,6 +25,7 @@ const api = vi.hoisted(() => ({
 	subscriptions: vi.fn(),
 	setPinnedModels: vi.fn(),
 	imageModels: vi.fn(),
+	modelEndpoints: vi.fn(),
 }));
 
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
@@ -47,6 +49,46 @@ function page(settings: object = general, models: object[] = []) {
 }
 
 describe('General settings', () => {
+	const gateway = { id: 'openrouter/acme/model', name: 'Gateway', vendor: 'Acme', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: true, reasoning: ['low', 'high'], defaultReasoning: 'high' };
+	const callers = ['default', 'title', 'explorer', 'tester', 'browser', 'computer', 'reviewer', 'webDigest', 'vision', 'compaction'];
+	it.each(callers)('round-trips routing in the %s picker without changing adjacent settings', async (caller) => {
+		const helpers = Object.fromEntries(callers.slice(2, 7).map((agent) => [agent, { model: gateway.id, reasoning: 'low' }]));
+		const settings = { ...general, model: gateway.id, reasoning: 'low', titleModel: gateway.id, agentModels: helpers,
+			backgroundModels: { webDigest: gateway.id, vision: gateway.id, compaction: gateway.id },
+			backgroundReasoning: { webDigest: 'low', vision: 'low', compaction: 'low' } };
+		page(settings, [gateway, { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' }]);
+		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[callers.indexOf(caller)]);
+		if (caller === 'title') {
+			expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
+			expect(screen.queryByRole('radiogroup', { name: 'Reasoning effort' })).toBeNull();
+		}
+		if (caller === 'webDigest' || caller === 'vision') expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
+		await userEvent.keyboard('{Escape}');
+		expect(api.saveGeneralSettings).not.toHaveBeenCalled();
+		await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+		const routed = `${gateway.id}#sort=latency`;
+		const patch = caller === 'default' ? { model: routed } : caller === 'title' ? { titleModel: routed }
+			: callers.slice(2, 7).includes(caller) ? { agentModels: { ...helpers, [caller]: { model: routed, reasoning: 'low' } } }
+			: { backgroundModels: { ...settings.backgroundModels, [caller]: routed } };
+		await waitFor(() => expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...settings, ...patch }));
+	});
+	it('retains helper effort when changing context and Fast variants', async () => {
+		const base = { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' };
+		const settings = { ...general, agentModels: { ...general.agentModels, explorer: { model: base.id, reasoning: 'low' } } };
+		page(settings, [base,
+			{ ...base, id: `${base.id}[1m]`, contextLength: 1_000_000, variant: { of: base.id, context: '1m', fast: false } },
+			{ ...base, id: `${base.id}[1m][fast]`, contextLength: 1_000_000, variant: { of: base.id, context: '1m', fast: true } },
+		]);
+		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[2]);
+		await userEvent.click(screen.getByRole('radio', { name: /1M/ }));
+		await userEvent.click(screen.getByRole('switch', { name: 'Fast mode' }));
+		await userEvent.keyboard('{Escape}');
+		await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...settings, agentModels: { ...settings.agentModels, explorer: { model: `${base.id}[1m][fast]`, reasoning: 'low' } } }));
+	});
+
 	it('keeps changes until Save sends them together', async () => {
 		page();
 		const planMode = await screen.findByRole('switch', { name: 'Start in plan mode' });

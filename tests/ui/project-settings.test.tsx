@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Space } from '@/lib/api';
 
@@ -21,6 +22,7 @@ const model = (id: string, name: string) => ({
 
 const api = vi.hoisted(() => ({
 	space: vi.fn(),
+	subscriptions: vi.fn(async () => ({ subscriptions: [] })),
 	editSpace: vi.fn(async (_id: string, change: object) => change),
 	generalSettings: vi.fn(),
 	models: vi.fn(async () => ({ models: [model('openrouter/acme/model', 'Model'), model('openrouter/acme/fast', 'Fast')], default: 'openrouter/acme/model' })),
@@ -91,6 +93,23 @@ function page(current: Space) {
 }
 
 describe('Project settings', () => {
+	it.each(['coordinator', 'thread', 'explorer', 'tester', 'browser', 'computer', 'reviewer'])('saves %s routing in its own project field only', async (caller) => {
+		const id = 'openrouter/acme/model';
+		const agentModels = Object.fromEntries(['explorer', 'tester', 'browser', 'computer', 'reviewer'].map((agent) => [agent, { model: id, reasoning: 'low' }])) as Space['agentModels'];
+		page(space({ coordinatorModel: id, coordinatorReasoning: 'low', threadModel: id, threadReasoning: 'high', agentModels }));
+		const callers = ['coordinator', 'thread', 'explorer', 'tester', 'browser', 'computer', 'reviewer'];
+		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[callers.indexOf(caller)]);
+		await userEvent.click(screen.getAllByRole('button', { name: 'Sort providers: default' })[0]);
+		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
+		await userEvent.keyboard('{Escape}');
+		expect(api.editSpace).not.toHaveBeenCalled();
+		await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+		await waitFor(() => expect(api.editSpace).toHaveBeenCalledWith('space_1', expect.objectContaining({
+			coordinatorModel: caller === 'coordinator' ? `${id}#sort=price` : id,
+			coordinatorReasoning: 'low', threadModel: caller === 'thread' ? `${id}#sort=price` : id, threadReasoning: 'high',
+			agentModels: callers.indexOf(caller) > 1 ? { ...agentModels, [caller]: { model: `${id}#sort=price`, reasoning: 'low' } } : agentModels,
+		})));
+	});
 	it('shows what each helper follows, and saves one of its own', async () => {
 		page(space());
 		// Tester has a model in Settings › General; the rest follow the thread's.

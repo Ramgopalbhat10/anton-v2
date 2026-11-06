@@ -1,3 +1,4 @@
+import { unrouted } from '../../core/model-route';
 import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAgentResult } from '@flue/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -596,13 +597,13 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	/** What is being attached while a message with files is on its way. */
 	const [sending, setSending] = useState<string | null>(null);
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
-	const model = models.data?.models.find((item) => item.id === choice.model);
+	const model = models.data?.models.find((item) => item.id === unrouted(choice.model));
 	const blind = attachments.images.length > 0 && model !== undefined && !model.vision;
 	const ready = (draft.trim() || attachments.count > 0) && !blocked && !blind && !sending && !attachments.limitError;
 	const edit = useMutation({
 		mutationFn: (change: Partial<ModelChoice>) =>
 			api.editSpace(space.id, {
-				...(change.model !== undefined ? { coordinatorModel: change.model, coordinatorReasoning: null } : {}),
+				...(change.model !== undefined ? { coordinatorModel: change.model } : {}),
 				...(change.reasoning !== undefined ? { coordinatorReasoning: change.reasoning } : {}),
 			}),
 		onSuccess: (updated) => queryClient.setQueryData(['space', space.id], updated),
