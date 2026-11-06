@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest } from 'lucide-react';
 import { Icon } from '@/components/signal';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { api, type Session } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -30,15 +31,31 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }
 
-/** Branches and diff come from the host for this exact PR, including older PRs. */
-export function PrMetadata({ sessionId, url, enabled = true }: { sessionId: string; url: string; enabled?: boolean }) {
+/** Focusable text, not a button: inspecting a branch does not perform an action. */
+function BranchName({ name, kind }: { name: string; kind: 'Source' | 'Target' }) {
+	return <Tooltip>
+		<TooltipTrigger asChild><span tabIndex={0} aria-label={`${kind} branch: ${name}`} className="min-w-0 truncate rounded-[2px] focus-visible:shadow-(--focus-ring)">{name}</span></TooltipTrigger>
+		<TooltipContent sideOffset={5} className="z-[60] max-w-[min(24rem,calc(100vw-24px))] break-all">{name}</TooltipContent>
+	</Tooltip>;
+}
+
+/** Branches and diff come from the host for this exact PR, including older PRs.
+ * Compact is for constrained metadata rows outside links; its branches are focusable.
+ */
+export function PrMetadata({ sessionId, url, enabled = true, compact = false }: { sessionId: string; url: string; enabled?: boolean; compact?: boolean }) {
 	const number = Number(prNumber(url));
 	const detail = useQuery({ queryKey: ['pr-metadata', sessionId, number], queryFn: () => api.pullMetadata(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
 	if (!detail || detail.url !== url) return null;
 	return (
-		<span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)">
-			<span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} → ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>
-			<span className="in-num whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--success-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
+		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)', compact ? 'flex-1' : 'flex-wrap')}>
+			{compact ? (
+				<span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+					<BranchName name={detail.headBranch || 'Unknown source'} kind="Source" />
+					<span aria-hidden="true">→</span>
+					<BranchName name={detail.baseBranch || 'Unknown target'} kind="Target" />
+				</span>
+			) : <span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} → ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>}
+			<span className="in-num shrink-0 whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--success-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
 		</span>
 	);
 }
