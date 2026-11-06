@@ -1,3 +1,4 @@
+import { unrouted } from '../../core/model-route';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
@@ -149,7 +150,7 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 	const [open, setOpen] = useState(false);
 	const context = useQuery({ queryKey: ['context', sessionId], queryFn: () => api.context(sessionId) });
 	const models = useModels();
-	const info = models.data?.models.find((entry) => entry.id === model);
+	const info = models.data?.models.find((entry) => entry.id === unrouted(model));
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage, enabled: open && Boolean(info?.subscription) });
 	const view = context.data;
 	// Measured on another model, the share is of this one's window, which the next reply will use.

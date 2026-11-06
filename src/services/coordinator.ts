@@ -1,3 +1,4 @@
+import { registerRoutedModels } from '../core/routed-models.ts';
 import { config } from '../config.ts';
 import type { Session } from '../core/types.ts';
 import { THREAD_STATE_LABELS } from '../core/thread-state.ts';
@@ -105,6 +106,7 @@ export async function primeCoordinator(spaceId: string): Promise<void> {
 	const info = await findModel(model).catch(() => undefined);
 	// A coordinator only routes and answers, so it runs at low reasoning unless the project says otherwise.
 	const reasoning = reasoningFor(info, space.coordinatorReasoning ?? (info?.reasoning.includes('low') ? 'low' : null));
+	registerRoutedModels(`coordinator:${spaceId}`, [model]);
 	briefs.set(spaceId, { model, reasoning, name: space.name, state: await stateBlock(spaceId), propose: space.autonomy === 'propose' });
 }
 

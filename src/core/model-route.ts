@@ -1,5 +1,5 @@
 /**
- * Where a gateway sends a task's model calls. A gateway (OpenRouter, Vercel
+ * Where a gateway sends a model's calls. A gateway (OpenRouter, Vercel
  * AI Gateway) serves most models through several providers and picks one per
  * call; a task can ask it to try one provider first, or to rank them by price,
  * throughput or latency. Either way the gateway falls back to its own routing
@@ -67,4 +67,16 @@ const VERCEL_SORTS: Record<RouteSort, string> = { price: 'cost', throughput: 'tp
  */
 export function vercelRouting(route: ModelRoute): Record<string, unknown> {
 	return route.provider ? { order: [route.provider] } : { sort: VERCEL_SORTS[route.sort!] };
+}
+
+/** Strict stored specifiers: reject malformed suffixes and routes on non-gateway models. */
+export function validModelSpecifier(id: string): boolean {
+	const { model, route } = parseRouted(id);
+	return !id.includes('#') || Boolean(route && asRoute(route) && routable(model) && routedId(model, route) === id);
+}
+
+/** A provider belongs to its model; a sort can follow a selection to another gateway model. */
+export function routeForModel(route: ModelRoute | null, previous: string, next: string): ModelRoute | null {
+	if (!routable(next)) return null;
+	return previous === next || route?.sort ? route : null;
 }

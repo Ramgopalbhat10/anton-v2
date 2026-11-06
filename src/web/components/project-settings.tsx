@@ -1,3 +1,4 @@
+import { unrouted } from '../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, BookOpen, Coins, FolderGit2, Gauge, Layers, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from 'lucide-react';
@@ -48,7 +49,7 @@ function General({ space }: { space: Space }) {
 	const [maxParallel, setMaxParallel] = useState(space.maxParallel);
 	const [autonomy, setAutonomy] = useState(space.autonomy);
 	const fallback = models.data?.default ?? '';
-	const nameOf = (id: string) => models.data?.models.find((model) => model.id === id)?.name ?? id.replace(/^openrouter\//, '');
+	const nameOf = (id: string) => models.data?.models.find((model) => model.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	/** What a helper follows with its switch off: the choice in Settings › General, else the thread's own model. */
 	const inherited = (agent: HelperAgent) => {
 		const choice = general.data?.agentModels?.[agent];

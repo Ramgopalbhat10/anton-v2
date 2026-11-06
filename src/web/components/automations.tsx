@@ -138,7 +138,7 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 				label={<span className="text-[12px] text-(--text-secondary)">Plan first, and wait for my approval before changing code</span>}
 			/>
 			<div className="flex flex-wrap items-center gap-2">
-				<ModelPicker value={model} side="bottom" onChange={(change) => setChoice({ ...model, reasoning: null, ...change })} />
+				<ModelPicker value={model} side="bottom" onChange={(change) => setChoice({ ...model, ...change })} />
 				<span className="flex-1" />
 				<Btn size="sm" variant="ghost" onClick={onDone}>
 					Cancel

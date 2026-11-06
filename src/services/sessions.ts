@@ -1,3 +1,4 @@
+import { registeredRoutedModels } from '../core/routed-models.ts';
 import { randomUUID } from 'node:crypto';
 import type { ReviewOf, RunOn, Session, SessionRecord, SessionStatus } from '../core/types.ts';
 import { config } from '../config.ts';
@@ -11,7 +12,7 @@ import { saveSpaceFiles } from './space-files.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from './workspace.ts';
 import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
-import { type ModelRoute, routable, routedId } from '../core/model-route.ts';
+import { type ModelRoute, parseRouted, routable, routedId } from '../core/model-route.ts';
 import type { Reasoning } from '../core/ports.ts';
 import { generalSettings } from './general.ts';
 import { closeBrowser } from './live-browser.ts';
@@ -55,7 +56,7 @@ export function present(record: SessionRecord, running: Set<string>): Session {
 	return { ...shown, threadState: threadState(shown) };
 }
 
-/** `route` is where the gateway sends the calls, for a model on one; `model` is never routed itself. */
+/** Tasks keep plain `model` + `route`; helpers and coordinators carry the route in their model specifier. */
 export type ModelChoice = { model: string; reasoning: Reasoning; route?: ModelRoute | null };
 
 /**
@@ -76,7 +77,7 @@ export function agentModelFor(id: string): ModelChoice {
 
 /** Every routed specifier a session's agent may resolve, for the gateways' providers to list. */
 export function routedModels(): string[] {
-	return [...choices.values()].filter((choice) => choice.route).map((choice) => routedId(choice.model, choice.route ?? null));
+	return [...new Set([...registeredRoutedModels(), ...[...choices.values()].map((choice) => routedId(choice.model, choice.route ?? null)).filter((model) => parseRouted(model).route)])];
 }
 
 /** Loads the session's choice and the model list the agent resolves it against. */
@@ -149,7 +150,7 @@ export async function createSession(input: {
 	const id = input.id ?? randomUUID();
 	const title = input.title?.trim() || (input.titleFrom && titleFrom(input.titleFrom)) || 'New task';
 	// The default reasoning level belongs to the default model; another model starts at its own default.
-	const model = chosen ?? general.model ?? config.model;
+	const { model, route } = parseRouted(chosen ?? general.model ?? config.model);
 	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
 	// Plan mode plans changes to code; a chat has none to plan.
 	const planMode = projectId ? (input.planMode ?? general.planMode) : false;
@@ -169,7 +170,7 @@ export async function createSession(input: {
 		review: input.review,
 		prUrl: input.prUrl,
 		automationId: input.automationId,
-		route: input.route && routable(model) ? input.route : null,
+		route: routable(model) ? ('route' in input ? input.route : route) : null,
 		runOn: input.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox',
 	});
 	if (input.titleFrom) void nameTask(id, input.titleFrom);
@@ -254,7 +255,10 @@ function routeAfter(record: SessionRecord | null, change: SessionChange, model: 
  */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	if (change.runOn) await moveTask(id, change.runOn);
-	const model = change.model && (await knownModel(change.model));
+	const chosen = change.model && (await knownModel(change.model));
+	const parsed = chosen ? parseRouted(chosen) : undefined;
+	const model = parsed?.model;
+	if (parsed?.route && !('route' in change)) change = { ...change, route: parsed.route };
 	const title = change.title?.trim();
 	const record = 'route' in change || model ? await getSessionRecord(id) : null;
 	const route = routeAfter(record, change, model || undefined);
@@ -292,7 +296,7 @@ export async function fallbackModel(id: string): Promise<{ model: string; name: 
 	const [record, general] = await Promise.all([getSessionRecord(id), generalSettings()]);
 	if (!record) throw new NotFoundError('Session not found');
 	const model = general.model ?? config.model;
-	if (model === record.model) return null;
+	if (model === routedId(record.model, record.route)) return null;
 	const info = await findModel(model).catch(() => undefined);
 	return info ? { model, name: info.name } : null;
 }
@@ -301,7 +305,8 @@ export async function fallbackModel(id: string): Promise<{ model: string; name: 
 export async function switchToFallbackModel(id: string): Promise<Session> {
 	const fallback = await fallbackModel(id);
 	if (!fallback) throw new InvalidInputError('This task already runs on the default model.');
-	return editSession(id, { model: fallback.model, reasoning: (await generalSettings()).reasoning });
+	const { model, route } = parseRouted(fallback.model);
+	return editSession(id, { model, route, reasoning: (await generalSettings()).reasoning });
 }
 
 /** Starts or resumes the task's machine. */

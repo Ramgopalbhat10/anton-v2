@@ -67,7 +67,7 @@ function useEndpoints(model: ModelInfo, enabled = true) {
 type RouteProps = { route: ModelRoute | null; onChange: (route: ModelRoute | null) => void };
 
 /**
- * Where the gateway sends this task's calls, as two icon menus beside a
+ * Where the gateway sends this choice's calls, as two icon menus beside a
  * gateway model's pin in the picker: a provider to try first, and a sort over
  * all of them. They exclude each other, so once one is set only its icon
  * stays: the provider's mark, or the sort's icon. The gateway falls back to
@@ -107,7 +107,7 @@ function ProviderMenu({ model, route, onChange }: RouteProps & { model: ModelInf
 					Any provider
 				</MenuItem>
 				<p className="m-0 px-2 pt-0.5 pb-1.5 text-[11px] leading-[15px] text-(--text-tertiary)">
-					For this task only. If the provider you pick fails, {sourceOf(model)} falls back to its default routing.
+					For this model selection. If the provider you pick fails, {sourceOf(model)} falls back to its default routing.
 				</p>
 				<MenuSeparator />
 				<div className="flex items-center justify-between pr-2">
@@ -175,7 +175,7 @@ function SortMenu({ route, onChange }: RouteProps) {
 						{ROUTE_SORT[sort].label}
 					</MenuItem>
 				))}
-				<p className="m-0 px-2 pt-1 pb-1.5 text-[11px] leading-[15px] text-(--text-tertiary)">For this task only.</p>
+				<p className="m-0 px-2 pt-1 pb-1.5 text-[11px] leading-[15px] text-(--text-tertiary)">For this model selection.</p>
 			</MenuContent>
 		</Menu>
 	);

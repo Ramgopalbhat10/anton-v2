@@ -6,7 +6,7 @@ import { Count } from '@/components/instrument';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api';
 import { RouteBadge, RouteControls } from '@/components/route-menu';
-import { routable } from '../../core/model-route';
+import { parseRouted, routable, routedId, routeForModel, unrouted } from '../../core/model-route';
 import {
 	dollars,
 	effectiveReasoning,
@@ -119,7 +119,10 @@ export function ModelLogo({ model, size = 16, title }: { model: string; size?: n
 export function useModelName(): (model: string) => string {
 	const models = useModels();
 	const byId = useMemo(() => new Map((models.data?.models ?? []).map((model) => [model.id, shortName(model)] as const)), [models.data]);
-	return (model) => byId.get(model) ?? (model.split('/').pop() ?? model).replace(/^~/, '');
+	return (id) => {
+		const model = unrouted(id);
+		return byId.get(model) ?? (model.split('/').pop() ?? model).replace(/^~/, '');
+	};
 }
 
 /** Rising bars: how hard the model reasons, on its own scale. */
@@ -581,16 +584,16 @@ function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; n
  * (a plan you signed in to, or a gateway) as a section, and the chosen
  * model's effort along the bottom. Source, filters and sort sit in one menu.
  * Picking a model keeps the panel open so its effort can be set; Enter picks
- * and closes. With `onRoute`, each model on a gateway gets menus beside its
- * pin for the provider or sort its calls are routed by (picking one on another
- * model's row picks that model too, `onRoute`'s `model`), and the button shows
- * the one that is set.
+ * and closes. Every gateway model has provider/sort controls. Persisted choices
+ * carry routing in their model specifier; tasks can use `onRoute` to retain
+ * their existing separate route field. Both use exactly the same controls.
  */
 export const ModelPicker = memo(function ModelPicker({
-	value,
-	onChange,
-	route = null,
+	value: storedValue,
+	onChange: onStoredChange,
+	route: taskRoute,
 	onRoute,
+	effort = true,
 	side = 'top',
 	height = 26,
 	only,
@@ -598,12 +601,26 @@ export const ModelPicker = memo(function ModelPicker({
 	value: ModelChoice;
 	onChange: (change: Partial<ModelChoice>) => void;
 	route?: ModelRoute | null;
+	/** Legacy task storage: model and route are separate, updated atomically. */
 	onRoute?: (route: ModelRoute | null, model?: string) => void;
+	/** False for model-only ports (titles), which do not persist reasoning. */
+	effort?: boolean;
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
 	/** The models that can be picked here, when not all can. */
 	only?: (model: ModelInfo) => boolean;
 }) {
+	const parsed = parseRouted(storedValue.model);
+	const value = { ...storedValue, model: parsed.model };
+	const route = onRoute ? (taskRoute ?? null) : parsed.route;
+	function onChange(change: Partial<ModelChoice>) {
+		if (!change.model || onRoute) return onStoredChange(change);
+		onStoredChange({ ...change, model: routedId(change.model, routeForModel(route, value.model, change.model)) });
+	}
+	function setRoute(next: ModelRoute | null, picked?: string) {
+		if (onRoute) return onRoute(next, picked);
+		onStoredChange({ model: routedId(picked ?? value.model, next), reasoning: picked ? null : value.reasoning });
+	}
 	const models = useModels();
 	const [open, setOpen] = useState(false);
 	// A plan you could connect is listed in the menu, and named above the list, before it has models.
@@ -719,18 +736,18 @@ export const ModelPicker = memo(function ModelPicker({
 	}
 
 	let offset = 0;
-	const routed = onRoute && selected && !selected.subscription && routable(selected.id) ? selected : undefined;
+	const routed = selected && !selected.subscription && routable(selected.id) ? selected : undefined;
 
-	/** A gateway row's routing menus: the task's route on the chosen model, kept in view; on any other, shown on hover, and a pick there picks the model too. */
+	/** A gateway row's routing menus: this choice's route on the chosen model, kept in view; on any other, shown on hover, and a pick there picks the model too. */
 	function routingFor(model: ModelInfo) {
-		if (model.id === shown?.id && routed) return <RouteControls model={routed} route={route} onChange={(next) => onRoute?.(next)} />;
+		if (model.id === shown?.id && routed) return <RouteControls model={routed} route={route} onChange={(next) => setRoute(next)} />;
 		return (
 			<RouteControls
 				model={model}
 				route={null}
 				onChange={(next) => {
 					rememberModel(model.id);
-					onRoute?.(next, model.id);
+					setRoute(next, model.id);
 				}}
 				className="hidden group-hover/row:flex group-data-active/row:flex has-data-[state=open]:flex"
 			/>
@@ -764,7 +781,7 @@ export const ModelPicker = memo(function ModelPicker({
 					) : null}
 					{options?.chosen.fast ? <Icon icon={Zap} size={11} className="text-(--accent-text) [&_path]:fill-current" /> : null}
 					{routed && route ? <RouteBadge model={routed} route={route} size={height - 12} /> : null}
-					{selected?.reasoning.length ? (
+					{effort && selected?.reasoning.length ? (
 						<span className="flex items-center gap-1 rounded-[6px] bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
 							<span className="text-[10px] text-(--text-tertiary)">{REASONING_LABEL[reasoning]}</span>
@@ -931,7 +948,7 @@ export const ModelPicker = memo(function ModelPicker({
 												onPick={() => pick(model, false)}
 												onHover={() => setCursor(start + index)}
 												onPin={() => togglePin(model)}
-												routing={onRoute && !model.subscription && routable(model.id) ? routingFor(model) : undefined}
+												routing={!model.subscription && routable(model.id) ? routingFor(model) : undefined}
 											/>
 										))}
 									</div>
@@ -944,10 +961,10 @@ export const ModelPicker = memo(function ModelPicker({
 						{options && (options.contexts.length > 1 || options.fast) ? (
 							<ModelOptionsRow options={options} note={selected !== options.base ? selected?.description : undefined} onChange={choose} />
 						) : null}
-						<div className="flex items-center gap-3 py-1.5 pr-2 pl-3">
+						{effort ? <div className="flex items-center gap-3 py-1.5 pr-2 pl-3">
 							<span className="in-caption w-12 shrink-0">Effort</span>
 							<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
-						</div>
+						</div> : null}
 					</div>
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>

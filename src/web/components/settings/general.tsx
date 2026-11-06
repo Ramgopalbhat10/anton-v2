@@ -1,3 +1,4 @@
+import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Workflow } from 'lucide-react';
@@ -104,7 +105,7 @@ function ImageModelPicker({ value, onChange, disabled }: { value: string | null;
 	if (!listed.data) return listed.error ? <span className="text-[12px] text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
 	if (!listed.data.available) return <span className="text-[12px] text-(--text-tertiary)">Needs an OpenRouter key</span>;
 	const { models, default: fallback } = listed.data;
-	const label = (id: string) => models.find((model) => model.id === id)?.name ?? id.replace(/^openrouter\//, '');
+	const label = (id: string) => models.find((model) => model.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	const vendors = new Map<string, ImageModelInfo[]>();
 	for (const model of models) vendors.set(model.vendor, [...(vendors.get(model.vendor) ?? []), model]);
 	return (
@@ -163,7 +164,7 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 	}, [dirty]);
 	const model = settings.model ?? models.data?.default ?? '';
 	const background = useQuery({ queryKey: ['background-models'], queryFn: api.backgroundModelDefaults, staleTime: 5 * 60_000 });
-	const nameOf = (id: string) => models.data?.models.find((info) => info.id === id)?.name ?? id.replace(/^openrouter\//, '');
+	const nameOf = (id: string) => models.data?.models.find((info) => info.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	return (
 		<div className="flex flex-col gap-6">
 			<Block
@@ -175,7 +176,7 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				<div className="self-start">
 					<ModelPicker
 						value={{ model, reasoning: settings.reasoning }}
-						onChange={(change) => edit({ model: change.model ?? model, reasoning: change.reasoning ?? null })}
+						onChange={(change) => edit({ model: change.model ?? model, reasoning: change.reasoning !== undefined ? change.reasoning : settings.reasoning })}
 						height={28}
 						side="bottom"
 					/>
@@ -203,6 +204,8 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				>
 					<ModelPicker
 						value={{ model: settings.titleModel ?? settings.titleModelDefault ?? '', reasoning: null }}
+						only={onOpenRouter}
+						effort={false}
 						onChange={(change) => {
 							if (change.model) edit({ titleModel: change.model === settings.titleModelDefault ? null : change.model });
 						}}

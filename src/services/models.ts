@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { announce } from '../core/changes.ts';
-import { routable } from '../core/model-route.ts';
+import { routable, unrouted, validModelSpecifier } from '../core/model-route.ts';
 import type { ModelCatalog, ModelEndpoint, ModelInfo, Reasoning } from '../core/ports.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
@@ -95,7 +95,8 @@ export function loadedModels(): readonly ModelInfo[] {
 }
 
 export async function findModel(id: string): Promise<ModelInfo | undefined> {
-	return (await listModels()).find((model) => model.id === id);
+	if (!validModelSpecifier(id)) return undefined;
+	return (await listModels()).find((model) => model.id === unrouted(id));
 }
 
 /** The level a task runs at: its own choice when the model accepts it, else the model's default. */

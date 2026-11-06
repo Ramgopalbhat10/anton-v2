@@ -23,6 +23,9 @@ const api = vi.hoisted(() => ({
 	pullMetadata: vi.fn(async (): Promise<any> => null),
 	spaceUsage: vi.fn(),
 	spaceAutomations: vi.fn(),
+	subscriptions: vi.fn(async () => ({ subscriptions: [] })),
+	editSpace: vi.fn(),
+	addSpaceAutomation: vi.fn(async () => ({})),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadChip, ThreadRow, ThreadPeek, nextSteps } = await import('@/components/thread-card');
@@ -348,6 +351,46 @@ describe('threads', () => {
 		expect(screen.getByRole('link', { name: 'docs' }).getAttribute('href')).toBe('https://example.com');
 		await userEvent.click(chip);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks'));
+	});
+
+	const gateway = { id: 'openrouter/test/cheap', name: 'Gateway', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: true, reasoning: ['low', 'high'], defaultReasoning: 'high' };
+	it('saves coordinator routing immediately, preserving effort and thread defaults', async () => {
+		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
+		api.editSpace.mockResolvedValueOnce({ ...space, coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' });
+		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
+		await waitFor(() => expect(api.editSpace).toHaveBeenCalledWith('space_1', { coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' }));
+	});
+
+	it('keeps routing local to a new thread and submits it without changing project defaults', async () => {
+		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
+		withRouter(() => <NewThreadForm space={{ ...space, threadModel: `${gateway.id}#sort=price` }} onDone={() => {}} />);
+		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: Price' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
+		await userEvent.keyboard('{Escape}');
+		expect(api.editSpace).not.toHaveBeenCalled();
+		await userEvent.type(screen.getByRole('textbox', { name: /What should this thread do/ }), 'Do work');
+		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+		await waitFor(() => expect(api.startThread).toHaveBeenCalledWith('space_1', expect.objectContaining({ model: `${gateway.id}#sort=latency` })));
+	});
+
+	it('saves a project routine route only when its form is submitted', async () => {
+		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
+		api.spaceAutomations.mockResolvedValueOnce({ automations: [] });
+		withRouter(() => <ProjectPanel space={space} threads={[]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		await userEvent.click(await screen.findByRole('button', { name: 'New routine' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
+		await userEvent.keyboard('{Escape}');
+		expect(api.addSpaceAutomation).not.toHaveBeenCalled();
+		await userEvent.type(screen.getByRole('textbox', { name: 'Instructions' }), 'Review the project');
+		await userEvent.click(screen.getByRole('button', { name: 'Add routine' }));
+		await waitFor(() => expect(api.addSpaceAutomation).toHaveBeenCalledWith('space_1', expect.objectContaining({ model: `${gateway.id}#sort=throughput` })));
 	});
 
 	it('starts a project without repositories on threads with none, named as chats', async () => {
