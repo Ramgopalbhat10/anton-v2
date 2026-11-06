@@ -16,14 +16,14 @@ const metadata = (data: unknown = detail) => renderWithQueries(<TooltipProvider>
 beforeEach(() => { pullMetadata.mockReset().mockResolvedValue(null); });
 
 describe('compact PR metadata', () => {
-	it('keeps independent branch tracks, a non-truncated arrow, and non-shrinking counts', () => {
+	it('uses intrinsic branch tracks, a non-truncated arrow, and non-shrinking counts', () => {
 		metadata();
 		const source = screen.getByLabelText(`Source branch: ${headBranch}`);
 		const target = screen.getByLabelText(`Target branch: ${baseBranch}`);
 		expect(source.className).toContain('truncate');
 		expect(target.className).toContain('truncate');
 		expect(source.parentElement).toBe(target.parentElement);
-		expect(source.parentElement?.className).toContain('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]');
+		expect(source.parentElement?.className).toContain('grid-cols-[minmax(0,max-content)_max-content_minmax(0,max-content)]');
 		expect(screen.getByText('→').getAttribute('aria-hidden')).toBe('true');
 		expect(screen.getByLabelText('0 additions, 123456 deletions').className).toContain('shrink-0');
 	});
@@ -42,6 +42,27 @@ describe('compact PR metadata', () => {
 		await user.tab();
 		fireEvent.pointerMove(screen.getByLabelText(`Source branch: ${headBranch}`), { pointerType: 'mouse' });
 		expect((await screen.findByRole('tooltip')).textContent).toBe(headBranch);
+	});
+
+	it.each([
+		{ headBranch, baseBranch: 'main' },
+		{ headBranch: 'fix', baseBranch },
+	])('keeps full names accessible with unequal branch lengths (%j)', async (branches) => {
+		const user = userEvent.setup();
+		metadata({ ...detail, ...branches });
+		for (const [kind, name] of [['Source', branches.headBranch], ['Target', branches.baseBranch]]) {
+			await user.tab();
+			expect(document.activeElement).toBe(screen.getByLabelText(`${kind} branch: ${name}`));
+			const tooltip = await screen.findByRole('tooltip');
+			expect(tooltip.textContent).toBe(name);
+			const surface = tooltip.closest('[data-slot="tooltip-content"]')!;
+			expect(surface.className).toContain('bg-(--bg-overlay)');
+			expect(surface.className).toContain('text-(--text-primary)');
+			expect(surface.querySelector('svg')?.getAttribute('class')).toContain('fill-(--bg-overlay)');
+			expect(surface.className).not.toContain('bg-foreground');
+			await user.keyboard('{Escape}');
+			await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+		}
 	});
 
 	it('handles absent branch names without losing the diff', () => {
