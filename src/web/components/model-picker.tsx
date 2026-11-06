@@ -174,7 +174,7 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
  * line up down the list: mark, name, context, input price, output price,
  * check. Fixed widths fit the longest labels ("262K", "$0.435").
  */
-const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-2 px-2';
+const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-1 px-2 @min-[350px]/picker:gap-x-2';
 
 /**
  * What a million tokens cost, in and out, in their own columns; a free
@@ -797,7 +797,7 @@ export const ModelPicker = memo(function ModelPicker({
 					sideOffset={6}
 					collisionPadding={12}
 					onKeyDown={onKeyDown}
-					className="z-50 flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="@container/picker z-50 flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
 				>
 					<div className="flex h-10 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-1.5 pl-3">
 						<Icon icon={Search} size={13} className="text-(--icon-tertiary)" />

@@ -274,7 +274,7 @@ describe('Model picker', () => {
 		expect(screen.getByRole('button', { name: 'Sort providers: default' })).toBeTruthy();
 	});
 
-	it('reports provider errors and empty lists, while sort remains available', async () => {
+	it('reports provider errors while sort remains available', async () => {
 		api.modelEndpoints.mockRejectedValueOnce(new Error('Gateway unavailable'));
 		openPicker({ model: routed.id, reasoning: null }, [], [routed]);
 		await userEvent.click(screen.getByRole('button', { name: 'Provider: any' }));
@@ -283,6 +283,13 @@ describe('Model picker', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
 		expect(screen.getByRole('button', { name: 'Sort providers: Throughput' })).toBeTruthy();
+	});
+
+	it('keeps default routing available when the gateway lists no providers', async () => {
+		openPicker({ model: routed.id, reasoning: null }, [], [routed]);
+		await userEvent.click(screen.getByRole('button', { name: 'Provider: any' }));
+		expect(await screen.findByText('OpenRouter lists no providers for this model.')).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: 'Any provider' })).toBeTruthy();
 	});
 
 	it('decodes stored routing, carries sorts to gateways, drops providers on model changes and never routes a plan', async () => {
@@ -552,6 +559,16 @@ describe('OpenRouter', () => {
 		models: Array.from({ length: 45 }, (_, index) => routed(index + 1, index === 29 ? 5_000 : 0)),
 		windows: [{ label: 'Credits', usedPercent: 25, resetsAt: null, limited: false }],
 	};
+
+	it('marks the routed default model in the gateway catalog without treating its route as another model', async () => {
+		api.subscriptions.mockResolvedValue({ subscriptions: [{ ...connected, models: [routed(1)] }] });
+		api.generalSettings.mockResolvedValue({ ...general, model: `${routed(1).id}#sort=price` });
+		api.models.mockResolvedValue({ models: [], default: `${routed(1).id}#sort=price` });
+		renderWithQueries(<SubscriptionsPage />);
+		const list = await screen.findByRole('list', { name: 'OpenRouter models' });
+		expect(await within(list).findByText('Default')).toBeTruthy();
+		expect(within(list).queryByRole('button', { name: 'Use for new tasks' })).toBeNull();
+	});
 
 	it('takes a key, then lists its models a page at a time with a search', async () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [openrouter] });
