@@ -190,7 +190,7 @@ export const components: Components = {
 		}
 		return (
 			<InLink.Provider value={true}>
-				<a {...props} target="_blank" rel="noreferrer" />
+				<a {...props} target={props.href?.startsWith('#') ? undefined : '_blank'} rel="noreferrer" />
 			</InLink.Provider>
 		);
 	},

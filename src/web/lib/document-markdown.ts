@@ -6,6 +6,9 @@ import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
 import { unified, type PluggableList } from 'unified';
 
+// Keep the same prefix on sanitized IDs/names and links to those targets.
+const clobberPrefix = 'user-content-';
+
 const inlineMarkdown = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
 
 /**
@@ -40,9 +43,30 @@ function markdownInHtml() {
 	};
 }
 
+/** Run after sanitization: every local target received this prefix, even IDs
+ * already prefixed by remark-rehype (footnotes). Do not deduplicate it. Leaving
+ * the original fragment encoded preserves spaces, Unicode and literal `%` IDs.
+ */
+function documentFragments() {
+	return (tree: Root) => {
+		function walk(parent: Root | Element) {
+			for (const child of parent.children) {
+				if (child.type !== 'element') continue;
+				const href = child.properties.href;
+				if (typeof href === 'string' && href.startsWith('#') && href.length > 1) {
+					child.properties.href = `#${clobberPrefix}${href.slice(1)}`;
+				}
+				walk(child);
+			}
+		}
+		walk(tree);
+	};
+}
+
 /** Opt-in for document/file previews only. Never enable raw HTML in agent replies. */
 export const documentPlugins: PluggableList = [rehypeRaw, markdownInHtml, [rehypeSanitize, {
 	...defaultSchema,
+	clobberPrefix,
 	// Unsupported active content must disappear, not leave CSS/script text in the document.
 	strip: [...(defaultSchema.strip ?? []), 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template'],
-}]];
+}], documentFragments];

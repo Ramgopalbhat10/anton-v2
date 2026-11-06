@@ -36,6 +36,53 @@ describe('Document previews', () => {
 		expect(container.textContent).not.toContain('Bad SVG');
 	});
 
+	it('keeps footnote references and backlinks matched to their sanitized IDs', () => {
+		const { container } = render(<Markdown html text={'A claim.[^1] Another claim.[^1]\n\n[^1]: The source.'} />);
+		const references = container.querySelectorAll('a[data-footnote-ref]');
+		const backlinks = container.querySelectorAll('a[data-footnote-backref]');
+		expect(references).toHaveLength(2);
+		expect(backlinks).toHaveLength(2);
+		for (const link of [...references, ...backlinks]) {
+			const fragment = link.getAttribute('href')!;
+			const target = document.getElementById(decodeURIComponent(fragment.slice(1)));
+			expect(target).not.toBeNull();
+			expect(container.contains(target)).toBe(true);
+			expect(link.getAttribute('target')).toBeNull();
+		}
+		expect(references[0].getAttribute('href')).toBe('#user-content-user-content-fn-1');
+		expect(backlinks[0].getAttribute('href')).toBe('#user-content-user-content-fnref-1');
+		// Accessible footnote labels must still resolve as well.
+		for (const reference of references) {
+			expect(document.getElementById(reference.getAttribute('aria-describedby')!)).not.toBeNull();
+		}
+	});
+
+	it('matches HTML IDs and named anchors, preserves encoded fragments, and retains clobbering protection', () => {
+		const { container } = render(<Markdown html text={`
+<a href="#requirements">Requirements</a><h2 id="requirements">Requirements target</h2>
+<a href="#legacy">Legacy</a><a name="legacy">Legacy target</a>
+<a href="#user-content-existing">Prefixed</a><p id="user-content-existing">Prefixed target</p>
+<a href="#r%C3%A9sum%C3%A9%20%25">Encoded</a><p id="résumé %">Encoded target</p>
+<a href="#location">Clobber test</a><p id="location">Safe target</p>
+<a href="#">Top</a><a href="other.md#requirements">Other file</a>
+<a href="https://example.com/#requirements">External</a>
+`} />);
+		for (const label of ['Requirements', 'Legacy', 'Prefixed', 'Encoded', 'Clobber test']) {
+			const link = screen.getByRole('link', { name: label });
+			const fragment = decodeURIComponent(link.getAttribute('href')!.slice(1));
+			const target = [...container.querySelectorAll('[id],a[name]')].find((element) => element.id === fragment || element.getAttribute('name') === fragment);
+			expect(target).toBeTruthy();
+			expect(link.getAttribute('target')).toBeNull();
+		}
+		expect(container.querySelector('[id="location"],[name="legacy"]')).toBeNull();
+		expect(container.querySelector('[id="user-content-location"]')).not.toBeNull();
+		expect(screen.getByRole('link', { name: 'Encoded' }).getAttribute('href')).toBe('#user-content-r%C3%A9sum%C3%A9%20%25');
+		expect(screen.getByRole('link', { name: 'Top' }).getAttribute('href')).toBe('#');
+		expect(screen.getByRole('link', { name: 'Other file' }).getAttribute('href')).toBe('other.md#requirements');
+		expect(screen.getByRole('link', { name: 'External' }).getAttribute('href')).toBe('https://example.com/#requirements');
+		expect(screen.getByRole('link', { name: 'External' }).getAttribute('target')).toBe('_blank');
+	});
+
 	it('keeps raw HTML out of agent replies and never implicitly loads remote images', () => {
 		const { container } = render(<Markdown text={'<h1 onclick="alert(1)">Not a heading</h1>\n\n![private](https://example.com/leak)'} />);
 		expect(container.querySelector('h1,img')).toBeNull();
