@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Frontmatter, useFrontmatter } from '@/components/frontmatter';
+import { DocumentMarkdown } from '@/components/document-markdown';
 import { FileIcon } from '@/components/file-icons';
-import { FileImages, Markdown, type FileImages as FileImagesValue } from '@/components/markdown';
+import { type FileImages as FileImagesValue } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { Icon, Spinner } from '@/components/signal';
 import { highlight } from '@/lib/highlight';
@@ -183,19 +183,6 @@ export const IMAGE_TYPES: Record<string, string> = {
 	bmp: 'image/bmp',
 };
 
-/** Markdown and its complete YAML frontmatter, shared by every file preview. */
-function RenderedMarkdown({ text, images }: { text: string; images?: FileImagesValue | null }) {
-	const front = useFrontmatter(text);
-	return (
-		<div className="flex min-w-0 flex-col gap-4 p-4">
-			<Frontmatter front={front} />
-			<FileImages.Provider value={images ?? null}>
-				<Markdown text={front.body} html />
-			</FileImages.Provider>
-		</div>
-	);
-}
-
 export const isMarkdown = (path: string) => /\.(md|markdown|mdown)$/i.test(path);
 
 /** Two icons for how a Markdown file shows: its source, or rendered. */
@@ -284,7 +271,7 @@ export function FileView({
 						<img src={imageUrl} alt={path.split('/').pop()} className="max-h-full max-w-full object-contain" />
 					</div>
 				) : markdown && preview && contents !== null ? (
-					<RenderedMarkdown text={contents} images={images} />
+					<DocumentMarkdown text={contents} images={images} className="p-4" />
 				) : contents === null ? (
 					<div className="px-3 py-2.5 text-[12px] text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
 				) : (

@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import anatomyReadme from '../fixtures/skills/anatomy-readme.md?raw';
+import anatomySkill from '../fixtures/skills/SKILL.md?raw';
 import type { CatalogItem, Plugin, PluginPreview } from '@/lib/api';
 
 const installed: Plugin = {
@@ -195,6 +196,37 @@ describe('A plugin page', () => {
 		expect(screen.getByText('<h1 align="center">Anatomy</h1>')).toBeTruthy();
 		await userEvent.click(screen.getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('heading', { name: 'Anatomy' })).toBeTruthy();
+	});
+
+	it.each(['SKILL.md', null])('renders a root-only SKILL.md identically in Overview and Files (readme: %s)', async (readme) => {
+		api.previewPlugin.mockResolvedValueOnce({
+			...preview,
+			source: { ...preview.source, path: '' },
+			skills: [{ ...preview.skills[0]!, folder: '' }],
+			files: ['SKILL.md'],
+			readme,
+			added: readme ? 'anatomy.md' : undefined,
+		});
+		api.pluginFile.mockImplementationOnce(async () => text(anatomySkill));
+		open('/settings/skills/view?plugin=plugin_9');
+		const overview = await screen.findByRole('region', { name: 'Frontmatter' });
+		expect(overview.textContent).toContain('wheresryan22');
+		expect(overview.textContent).toContain('webgl');
+		expect(screen.getByRole('heading', { name: 'Anatomy instructions' })).toBeTruthy();
+		const metadata = overview.innerHTML;
+		api.pluginFile.mockImplementationOnce(async () => text(anatomySkill));
+		await userEvent.click(screen.getByRole('tab', { name: /Files/ }));
+		expect((await screen.findByRole('region', { name: 'Frontmatter' })).innerHTML).toBe(metadata);
+		const toggle = screen.getByRole('radiogroup', { name: 'Show Markdown as' });
+		const header = toggle.closest('[data-plugin-file-header]');
+		expect(header).not.toBeNull();
+		expect(within(header as HTMLElement).getByText('SKILL.md')).toBeTruthy();
+		expect(screen.getAllByRole('radiogroup', { name: 'Show Markdown as' })).toHaveLength(1);
+		await userEvent.click(within(toggle).getByRole('radio', { name: 'Source' }));
+		expect(screen.queryByRole('region', { name: 'Frontmatter' })).toBeNull();
+		expect([...document.querySelectorAll('.whitespace-pre')].some((line) => line.textContent === 'metadata:')).toBe(true);
+		await userEvent.click(within(toggle).getByRole('radio', { name: 'Preview' }));
+		expect(screen.getByRole('region', { name: 'Frontmatter' }).innerHTML).toBe(metadata);
 	});
 
 	it('updates an installed plugin to its newer commit', async () => {
