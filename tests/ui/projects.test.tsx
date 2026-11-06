@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session, Space } from '@/lib/api';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { session } from './render';
 
 const api = vi.hoisted(() => ({
@@ -92,7 +93,7 @@ function withRouter(ui: () => ReactNode, path = '/projects/space_1') {
 	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
 	render(
 		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-			<RouterProvider router={router} />
+			<TooltipProvider><RouterProvider router={router} /></TooltipProvider>
 		</QueryClientProvider>,
 	);
 	return router;
@@ -105,7 +106,8 @@ describe('threads', () => {
 		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'merged', checks: null, runs: [] }, lastReply: 'Opened **changes** in [PR #12](https://github.com/acme/demo/pull/12).' })} />);
 		expect((await screen.findByRole('link', { name: 'PR #12' })).getAttribute('href')).toBe(url);
 		expect(screen.getByText('changes').tagName).toBe('STRONG');
-		expect(await screen.findByText('anton/fix → main')).toBeTruthy();
+		expect(await screen.findByLabelText('Source branch: anton/fix')).toBeTruthy();
+		expect(screen.getByLabelText('Target branch: main')).toBeTruthy();
 		expect(screen.getByLabelText('12 additions, 3 deletions')).toBeTruthy();
 	});
 
@@ -122,7 +124,8 @@ describe('threads', () => {
 		api.pullMetadata.mockResolvedValueOnce({ url, state: 'open', headBranch: 'anton/fix', baseBranch: 'main', additions: 12, deletions: 3 });
 		withRouter(() => <ThreadPeek thread={thread({ id: 'pr', prUrl: url, pullRequest: { state: 'open', checks: 'passed', runs: [] } })} />);
 		expect((await screen.findByLabelText('Pull request #12 open · checks pass')).textContent).toBe('#12');
-		expect(await screen.findByText('anton/fix → main')).toBeTruthy();
+		expect(await screen.findByLabelText('Source branch: anton/fix')).toBeTruthy();
+		expect(screen.getByLabelText('Target branch: main')).toBeTruthy();
 		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
 	});
 
@@ -196,7 +199,7 @@ describe('threads', () => {
 		const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
 		render(
 			<QueryClientProvider client={client}>
-				<RouterProvider router={router} />
+				<TooltipProvider><RouterProvider router={router} /></TooltipProvider>
 			</QueryClientProvider>,
 		);
 		const working = await screen.findByRole('article', { name: 'Add the table' });

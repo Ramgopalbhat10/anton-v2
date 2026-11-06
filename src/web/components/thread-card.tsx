@@ -317,7 +317,13 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					</div>
 				)
 			) : null}
-			{pr ? <div className="flex min-w-0 flex-wrap items-center gap-2"><PrStatus thread={thread} link showConflicts={false} showFailing={false} /><PrMetadata sessionId={thread.id} url={thread.prUrl!} /><PrChecks pull={thread.pullRequest} /></div> : null}
+			{pr ? <>
+				<div className="flex min-w-0 items-center gap-2">
+					<PrStatus thread={thread} link showConflicts={false} showFailing={false} />
+					<PrMetadata sessionId={thread.id} url={thread.prUrl!} compact />
+				</div>
+				<PrChecks pull={thread.pullRequest} />
+			</> : null}
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />
@@ -394,7 +400,7 @@ export function ThreadRow({ thread }: { thread: Session }) {
 	const opens = steps.some((step) => 'open' in step && !step.panel);
 	const [peeking, setPeeking] = useState(false);
 	return (
-		<HoverPeek content={<ThreadPeek thread={thread} />} quiet={peeking}>
+		<HoverPeek content={<ThreadPeek thread={thread} />} quiet={peeking} interactive>
 			<article
 				aria-label={thread.title}
 				data-state={state}
@@ -456,7 +462,7 @@ export function ThreadRows({ children, label }: { children: ReactNode; label?: s
 export function ThreadChip({ thread, children }: { thread: Session; children?: ReactNode }) {
 	const open = useOpenThread();
 	return (
-		<HoverPeek content={<ThreadPeek thread={thread} />}>
+		<HoverPeek content={<ThreadPeek thread={thread} />} interactive>
 			<button
 				type="button"
 				onClick={() => open(thread)}
