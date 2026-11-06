@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Frontmatter, useFrontmatter } from '@/components/frontmatter';
 import { FileIcon } from '@/components/file-icons';
 import { FileImages, Markdown, type FileImages as FileImagesValue } from '@/components/markdown';
 import { Segmented, SegmentedItem } from '@/components/instrument';
@@ -182,32 +183,14 @@ export const IMAGE_TYPES: Record<string, string> = {
 	bmp: 'image/bmp',
 };
 
-/** YAML front matter, as SKILL.md files open with, split from the Markdown after it. */
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-
-/** Markdown rendered, with any front matter as a table of its fields rather than a stray heading. */
+/** Markdown and its complete YAML frontmatter, shared by every file preview. */
 function RenderedMarkdown({ text, images }: { text: string; images?: FileImagesValue | null }) {
-	const front = FRONT_MATTER.exec(text);
-	const fields = (front?.[1] ?? '')
-		.split(/\r?\n/)
-		.map((line) => /^([\w-]+):\s*(.*)$/.exec(line))
-		.filter((match): match is RegExpExecArray => match !== null);
+	const front = useFrontmatter(text);
 	return (
-		<div className="flex flex-col gap-4 p-4">
-			{fields.length ? (
-				<table className="in-well w-full border-separate border-spacing-0 overflow-hidden text-[12px]">
-					<tbody>
-						{fields.map(([, key, value]) => (
-							<tr key={key} className="[&:last-child>*]:border-b-0">
-								<th className="in-caption w-[120px] border-b border-(--border-subtle) px-2.5 py-2 text-left align-top font-normal">{key}</th>
-								<td className="border-b border-(--border-subtle) px-2.5 py-1.5 text-pretty text-(--text-secondary)">{value.replace(/^(["'])(.*)\1$/, '$2')}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			) : null}
+		<div className="flex min-w-0 flex-col gap-4 p-4">
+			<Frontmatter front={front} />
 			<FileImages.Provider value={images ?? null}>
-				<Markdown text={front && fields.length ? text.slice(front[0].length) : text} />
+				<Markdown text={front.body} html />
 			</FileImages.Provider>
 		</div>
 	);
@@ -287,7 +270,7 @@ export function FileView({
 	}, [markedLine, lines.length]);
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
-			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="absolute top-2 right-3 z-10" /> : null}
+			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="my-2 me-3 self-end shrink-0" /> : null}
 			<div className="min-h-0 flex-1 overflow-auto">
 				{file.isError ? (
 					<div className="px-3 py-2.5 text-[12px] text-(--danger-text)">{file.error.message || 'Could not read this file.'}</div>

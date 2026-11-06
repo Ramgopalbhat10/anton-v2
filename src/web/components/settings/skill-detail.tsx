@@ -54,37 +54,6 @@ const foldersOf = (path: string) =>
 		.slice(0, -1)
 		.map((_, index, parts) => parts.slice(0, index + 1).join('/'));
 
-/** A raw <img …> tag in a README becomes markdown image syntax, so it draws through the same path. */
-const IMG_TAG = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
-const ATTR = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
-
-/** Rewrites <img> tags outside fenced code as ![alt](src); inside a fence they are an example, not a picture. */
-function prepareImages(text: string): string {
-	let fence: string | null = null;
-	return text
-		.split('\n')
-		.map((line) => {
-			const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-			if (fence) {
-				if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
-				return line;
-			}
-			if (marker) {
-				fence = marker;
-				return line;
-			}
-			return line.replace(IMG_TAG, (tag) => {
-				const attrs = new Map<string, string>();
-				for (const match of tag.matchAll(ATTR)) attrs.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? '');
-				const src = attrs.get('src')?.replace(/[<>]/g, '');
-				if (!src) return '';
-				const alt = (attrs.get('alt') ?? '').replace(/[[\]\n]/g, ' ');
-				return `![${alt}](<${src}>)`;
-			});
-		})
-		.join('\n');
-}
-
 const dirname = (path: string) => {
 	const at = path.lastIndexOf('/');
 	return at < 0 ? '' : path.slice(0, at);
@@ -167,7 +136,7 @@ function usePluginImages(preview: PluginPreview, file: string, onOpen?: (path: s
 				</button>
 			);
 		};
-		return { prepare: prepareImages, render };
+		return { render };
 	}, [preview, file, onOpen]);
 }
 
@@ -180,8 +149,8 @@ function Actions({ preview }: { preview: PluginPreview }) {
 	const [confirming, setConfirming] = useState(false);
 	const error = (install.error ?? update.error ?? toggle.error ?? remove.error)?.message;
 	return (
-		<div className="flex flex-col items-end gap-1.5">
-			<div className="flex items-center gap-2">
+		<div className="flex min-w-0 flex-col items-start gap-1.5 @min-[700px]/settings:items-end">
+			<div className="flex flex-wrap items-center gap-2">
 				{preview.installed ? (
 					<>
 						<Switch
@@ -241,7 +210,7 @@ function Facts({ preview }: { preview: PluginPreview }) {
 		...(licenses.length ? [['License', licenses.join(', ')] as [string, ReactNode]] : []),
 	];
 	return (
-		<aside className="flex flex-col gap-3 lg:w-[260px] lg:shrink-0">
+		<aside aria-label="Plugin details" className="flex min-w-0 flex-col gap-3 @min-[800px]/settings:sticky @min-[800px]/settings:top-12 @min-[800px]/settings:max-h-[calc(100dvh-108px)] @min-[800px]/settings:w-[260px] @min-[800px]/settings:shrink-0 @min-[800px]/settings:overflow-y-auto">
 			<Card icon={Info} title="Details">
 				<dl className="m-0 flex flex-col px-4 pb-2">
 					{rows.map(([label, value]) => (
@@ -279,7 +248,7 @@ function Overview({ preview, onOpenFile }: { preview: PluginPreview; onOpenFile:
 	});
 	const images = usePluginImages(preview, preview.readme ? within(preview, preview.readme) : '', onOpenFile);
 	return (
-		<div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+		<div className="flex flex-col gap-4 @min-[800px]/settings:flex-row @min-[800px]/settings:items-start">
 			<div className="in-card min-w-0 flex-1 px-5 py-4">
 				{!preview.readme ? (
 					<p className="m-0 text-[13px] text-(--text-tertiary)">{preview.description || 'This has no README. Its skills and files are in the tabs above.'}</p>
@@ -289,7 +258,7 @@ function Overview({ preview, onOpenFile }: { preview: PluginPreview; onOpenFile:
 					<p className="m-0 text-[12px] text-(--danger-text)">{readme.error.message}</p>
 				) : (
 					<FileImages.Provider value={images}>
-						<Markdown text={readme.data} />
+						<Markdown text={readme.data} html />
 					</FileImages.Provider>
 				)}
 			</div>
@@ -360,7 +329,7 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 		<FileIcons>
 			<div className="in-card h-[min(640px,70vh)] min-h-[360px] flex-row overflow-hidden">
 				{treeHidden ? null : (
-					<div className="flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-(--border-subtle)">
+					<div className="flex w-[40%] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-(--border-subtle)">
 						<div className="flex h-9 shrink-0 items-center gap-1 border-b border-(--border-subtle) px-1.5">
 							<span className="in-caption flex-1">Files</span>
 							<IconBtn icon={X} size="xs" label="Hide the file tree" aria-pressed onClick={() => setTreeHidden(true)} />
@@ -417,7 +386,7 @@ function TabButton({ on, onClick, children }: { on: boolean; onClick: () => void
 			aria-selected={on}
 			onClick={onClick}
 			className={cn(
-				'-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-1 text-[13px] outline-none focus-visible:shadow-(--focus-ring)',
+				'-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0 text-[13px] @min-[260px]/settings:px-1 outline-none focus-visible:shadow-(--focus-ring)',
 				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 			)}
 		>
@@ -443,11 +412,11 @@ function Detail({ preview }: { preview: PluginPreview }) {
 	const by = owner(preview.source.repo);
 	return (
 		<div className="flex flex-col gap-5">
-			<header className="flex flex-wrap items-start gap-4">
+			<header className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3 @min-[700px]/settings:grid-cols-[auto_minmax(0,1fr)_auto]">
 				<Glyph bundle={preview.skills.length !== 1} size="lg" />
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<div className="flex items-center gap-2">
-						<h1 className="m-0 truncate text-[20px] leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
+					<div className="flex flex-wrap items-center gap-2">
+						<h1 className="m-0 min-w-0 break-words text-[20px] leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
 						{preview.installed ? <Status tone="success">Installed</Status> : null}
 						{preview.update ? <Status tone="accent" pulse>Update available</Status> : null}
 					</div>
@@ -473,11 +442,11 @@ function Detail({ preview }: { preview: PluginPreview }) {
 							</a>
 						)}
 					</div>
-					{preview.description ? <p className="m-0 mt-1 max-w-[72ch] text-[13px] leading-[19px] text-pretty text-(--text-secondary)">{preview.description}</p> : null}
 				</div>
-				<Actions preview={preview} />
+				<div className="col-span-2 @min-[700px]/settings:col-span-1"><Actions preview={preview} /></div>
+				{preview.description ? <p className="col-span-full m-0 text-[13px] leading-[19px] text-pretty text-(--text-secondary) @min-[700px]/settings:col-start-2">{preview.description}</p> : null}
 			</header>
-			<div role="tablist" aria-label="Plugin" className="flex gap-5 border-b border-(--border-subtle)">
+			<div role="tablist" aria-label="Plugin" className="sticky top-0 z-20 flex gap-1 border-b border-(--border-subtle) bg-(--bg-canvas) @min-[260px]/settings:gap-5">
 				<TabButton on={tab === 'overview'} onClick={() => setTab('overview')}>
 					Overview
 				</TabButton>

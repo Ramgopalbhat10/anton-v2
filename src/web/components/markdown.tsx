@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/code-block';
 import { MermaidDiagram } from '@/components/mermaid-diagram';
 import { outputUrl } from '@/lib/api';
+import { documentPlugins } from '@/lib/document-markdown';
 import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import type { ViewerItem } from '@/lib/viewer';
 
@@ -76,13 +77,11 @@ export const OutputLinks = createContext<OutputLinks | null>(null);
 
 /**
  * A surface that can draw a markdown file's own images, such as a plugin
- * preview: `prepare` rewrites raw HTML <img> tags into image syntax before
- * parsing, and `render` draws an image src — a file fetched on demand, a
+ * preview: `render` draws an image src — a file fetched on demand, a
  * remote badge — or returns null to leave the usual link. Without a provider
  * images stay links, so a reply can't make the browser fetch a URL.
  */
 export type FileImages = {
-	prepare?: (text: string) => string;
 	render?: (src: string, alt: string | undefined, inLink: boolean) => ReactNode | null;
 };
 export const FileImages = createContext<FileImages | null>(null);
@@ -154,9 +153,12 @@ export const components: Components = {
 	// Fenced code is drawn by pre above, so this is inline code.
 	code: ({ children }) => <InlineCode>{children}</InlineCode>,
 	a: function Link({ node: _node, ...props }) {
+		const inLink = useContext(InLink);
 		const inline = useContext(InlineLinks);
 		const outputs = useContext(OutputLinks);
 		const files = useContext(FileLinks);
+		// Markdown inside a README's HTML link must not produce nested anchors.
+		if (inLink) return <>{props.children}</>;
 		const drawn = inline && props.href ? inline(props.href, props.children) : null;
 		if (drawn) return drawn;
 		const item = outputs && props.href ? outputs.resolve(props.href) : null;
@@ -188,7 +190,7 @@ export const components: Components = {
 		}
 		return (
 			<InLink.Provider value={true}>
-				<a {...props} target="_blank" rel="noreferrer" />
+				<a {...props} target={props.href?.startsWith('#') ? undefined : '_blank'} rel="noreferrer" />
 			</InLink.Provider>
 		);
 	},
@@ -264,10 +266,19 @@ const Block = memo(function Block({ text }: { text: string }) {
  * block at a time and a block that has not changed is not parsed again:
  * while a reply streams, only its last block is.
  */
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
-	const images = useContext(FileImages);
-	const prepare = images?.prepare;
-	const blocks = useMemo(() => markdownBlocks(prepare ? prepare(text) : text), [text, prepare]);
+export const Markdown = memo(function Markdown({ text, html = false }: {
+	text: string;
+	/** Sanitized HTML for file/document previews, not replies. */
+	html?: boolean;
+}) {
+	// HTML wrappers can span Markdown blocks; parse documents whole, while replies
+	// retain their streaming optimization and never opt into HTML.
+	const blocks = useMemo(() => html ? [text] : markdownBlocks(text), [text, html]);
+	if (html) return (
+		<div className="sg-markdown">
+			<ReactMarkdown remarkPlugins={plugins} rehypePlugins={documentPlugins} components={components}>{text}</ReactMarkdown>
+		</div>
+	);
 	return (
 		<div className="sg-markdown">
 			{/* Joined by the line break react-markdown puts between blocks, so the page is the same as in one piece. */}
