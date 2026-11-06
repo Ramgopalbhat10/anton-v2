@@ -49,7 +49,9 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 	return (
 		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)', compact ? 'flex-1' : 'flex-wrap')}>
 			{compact ? (
-				<span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+				// Intrinsic tracks let a short branch keep its natural width while the
+				// longer branch uses the remaining space; both can still truncate.
+				<span className="grid min-w-0 flex-1 grid-cols-[minmax(0,max-content)_max-content_minmax(0,max-content)] items-center gap-1">
 					<BranchName name={detail.headBranch || 'Unknown source'} kind="Source" />
 					<span aria-hidden="true">→</span>
 					<BranchName name={detail.baseBranch || 'Unknown target'} kind="Target" />
