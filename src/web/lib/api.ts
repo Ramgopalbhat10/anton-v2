@@ -266,7 +266,49 @@ export type ConnectorMailbox = {
 	canDraft: boolean;
 	access: { read: true; draft: boolean; send: boolean } | null;
 };
-export type ConnectorsView = { accounts: ConnectorAccount[]; mailboxes: ConnectorMailbox[]; mcpServers: McpServer[] };
+export type ConnectorsView = { accounts: ConnectorAccount[]; mailboxes: ConnectorMailbox[]; mcpServers: McpServer[]; composio: ComposioView };
+/** An app connected through Composio: Composio holds its sign-in and runs its tools; Anton keeps only its state. */
+export type ComposioAccount = {
+	toolkit: string;
+	name: string;
+	description: string;
+	category: string;
+	appUrl: string;
+	/** The logo URL Composio hosts for the app. */
+	logo: string;
+	enabled: boolean;
+	/** none (never connected), pending (a sign-in waits on you), active, failed. */
+	status: 'none' | 'pending' | 'active' | 'failed';
+	statusReason: string | null;
+	connectedAt: string | null;
+	addedAt: string;
+	/** The connected account's id at Composio, shown only while it is active. */
+	account: string | null;
+};
+export type ComposioView = { configured: boolean; keyFromEnv: boolean; accounts: ComposioAccount[] };
+/** An app in Composio's whole catalog, found by search or by its toolkit slug. */
+export type ComposioToolkitHit = {
+	slug: string;
+	name: string;
+	description: string;
+	logo: string;
+	appUrl: string | null;
+	categories: string[];
+	toolsCount: number;
+	noAuth: boolean;
+};
+/** A connector tool call the agent asked to run, waiting for your Run in the thread or already decided. */
+export type ToolApproval = {
+	id: string;
+	connector: string;
+	tool: string;
+	args: Record<string, unknown>;
+	state: 'pending' | 'running' | 'done' | 'declined' | 'failed';
+	result: string | null;
+	error: string | null;
+	createdAt: string;
+	decidedAt: string | null;
+};
 /** An email the agent asked to send, waiting for your Send in the thread or already decided. */
 export type MailApproval = {
 	id: string;
@@ -790,8 +832,23 @@ export const api = {
 	signInMcpServer: (name: string, client?: { clientId: string; clientSecret: string | null } | null) =>
 		post<{ url: string | null; mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}/sign-in`, { origin: window.location.origin, client: client ?? null }),
 	signOutMcpServer: (name: string) => json<{ mcpServers: McpServer[] }>(`/api/mcp-servers/${encodeURIComponent(name)}/sign-in`, { method: 'DELETE' }),
+	setComposioKey: (key: string | null) => json<ComposioView>('/api/composio/key', { method: 'PUT', body: JSON.stringify({ key }) }),
+	addComposioAccount: (toolkit: string) => post<ComposioView>('/api/composio/accounts', { toolkit }),
+	composioToolkits: (search: string) => json<{ toolkits: ComposioToolkitHit[] }>(`/api/composio/toolkits?search=${encodeURIComponent(search)}`),
+	composioToolkit: (slug: string) => json<ComposioToolkitHit>(`/api/composio/toolkits/${encodeURIComponent(slug)}`),
+	composioTools: (toolkit: string) =>
+		json<{ tools: Array<{ slug: string; name: string; description: string; inputSchema: Record<string, unknown>; tags: string[]; toolkit: string }> }>(
+			`/api/composio/accounts/${encodeURIComponent(toolkit)}/tools`,
+		),
+	setComposioEnabled: (toolkit: string, enabled: boolean) => json<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+	connectComposio: (toolkit: string) => post<{ url: string }>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/connect`, { callbackUrl: `${window.location.origin}/settings/connectors` }),
+	refreshComposio: (toolkit: string) => post<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/refresh`, {}),
+	disconnectComposio: (toolkit: string) => post<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/disconnect`, {}),
+	removeComposio: (toolkit: string) => json<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}`, { method: 'DELETE' }),
 	mailApprovals: (sessionId: string) => json<{ approvals: MailApproval[] }>(`/api/sessions/${sessionId}/mail`),
 	decideMail: (sessionId: string, approval: string, send: boolean) => post<MailApproval>(`/api/sessions/${sessionId}/mail/${approval}`, { send }),
+	toolApprovals: (sessionId: string) => json<{ approvals: ToolApproval[] }>(`/api/sessions/${sessionId}/tool-approvals`),
+	decideToolApproval: (sessionId: string, approval: string, run: boolean) => post<ToolApproval>(`/api/sessions/${sessionId}/tool-approvals/${approval}`, { run }),
 	profile: () => json<{ name: string | null }>('/api/profile'),
 	projects: () => json<{ projects: Project[] }>('/api/projects'),
 	addableRepos: () => json<{ repos: string[] }>('/api/repos'),

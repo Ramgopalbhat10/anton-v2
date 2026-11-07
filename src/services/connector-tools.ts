@@ -2,13 +2,16 @@ import * as v from 'valibot';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { redactor } from '../core/redact.ts';
 import type { McpServer } from '../core/types.ts';
+import { listComposioAccounts } from '../db/composio.ts';
 import { listMcpServers } from '../db/mcp-servers.ts';
+import { composioKeySource, composioToolName, composioToolNeedsApproval, composioTools, executeComposioTool } from './composio.ts';
 import { connectorsView } from './connectors.ts';
 import { MAX_SEARCH, type MailApprovalView, readMailThread, requestSend, searchMail, writeDraft } from './mail.ts';
 import { mcpServerStates } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
 import { logProblem } from './log.ts';
 import { secretsToHide } from './secrets.ts';
+import { requestToolApproval } from './tool-approvals.ts';
 
 /**
  * Connectors' tools for the agent, loaded on demand. The agent always has the
@@ -21,16 +24,17 @@ import { secretsToHide } from './secrets.ts';
  * there from the agent's next call, one turned off refuses.
  */
 
-/** A connector set up in Settings › Connectors: a connected mailbox, or an added MCP server. */
-export type SetUpConnector = { id: string; name: string; kind: 'mailbox' | 'mcp'; codeMode: boolean };
+/** A connector set up in Settings › Connectors: a connected mailbox, an added MCP server, or an app connected through Composio. */
+export type SetUpConnector = { id: string; name: string; kind: 'mailbox' | 'mcp' | 'composio'; codeMode: boolean };
 
 /** The connectors set up now, on or off; what the agent's instructions name, so they change only when one is added or removed. */
 export async function setUpConnectors(): Promise<SetUpConnector[]> {
-	const [view, servers] = await Promise.all([connectorsView(), listMcpServers()]);
+	const [view, servers, composio] = await Promise.all([connectorsView(), listMcpServers(), listComposioAccounts()]);
 	const connected = new Set(view.accounts.filter((account) => account.connectedAt).map((account) => account.id));
 	return [
 		...view.mailboxes.filter((mailbox) => connected.has(mailbox.account)).map((mailbox) => ({ id: mailbox.id, name: mailbox.name, kind: 'mailbox' as const, codeMode: false })),
 		...servers.map((server) => ({ id: server.name, name: server.name, kind: 'mcp' as const, codeMode: server.codeMode !== false })),
+		...composio.map((account) => ({ id: account.toolkit, name: account.name, kind: 'composio' as const, codeMode: false })),
 	];
 }
 
@@ -39,7 +43,7 @@ type ConnectorTool = {
 	name: string;
 	description: string;
 	inputSchema: Record<string, unknown>;
-	run: (taskId: string, args: unknown, signal: AbortSignal) => Promise<{ output: string; approval?: MailApprovalView }>;
+	run: (taskId: string, args: unknown, signal: AbortSignal) => Promise<{ output: string; approval?: MailApprovalView; ask?: string }>;
 };
 
 type Connector = { id: string; name: string; kind: SetUpConnector['kind']; state: 'on' | 'off' | 'needs-sign-in'; problem: string | null; tools: () => Promise<ConnectorTool[]> };
@@ -165,9 +169,40 @@ function serverToolsFor(server: McpServer, tools: McpTool[]): ConnectorTool[] {
 	}));
 }
 
+/**
+ * An app connected through Composio, as connector tools: Composio runs the
+ * tool on the user's account. A call that would change something first asks
+ * the user to Run it, as a Gmail send does; reads go straight through.
+ */
+function composioToolsFor(toolkit: string, name: string, tools: Awaited<ReturnType<typeof composioTools>>): ConnectorTool[] {
+	return tools.map((tool) => {
+		const toolName = composioToolName(toolkit, tool.slug);
+		const schema = tool.inputSchema && typeof tool.inputSchema === 'object' && tool.inputSchema.type ? tool.inputSchema : { type: 'object', properties: {}, ...(tool.inputSchema ?? {}) };
+		return {
+			name: toolName,
+			description: tool.description || tool.name,
+			inputSchema: schema as Record<string, unknown>,
+			run: async (taskId, args, signal) => {
+				const callArgs = (args ?? {}) as Record<string, unknown>;
+				if (composioToolNeedsApproval(toolkit, tool.slug)) {
+					const asked = await requestToolApproval(taskId, {
+						connector: `composio:${toolkit}`,
+						tool: toolName,
+						args: callArgs,
+						payload: { toolkit, slug: tool.slug, args: callArgs },
+					});
+					return { output: asked.output, ask: `Run ${tool.name || tool.slug} in ${name}?` };
+				}
+				return { output: await executeComposioTool(toolkit, tool.slug, callArgs, signal) };
+			},
+		};
+	});
+}
+
 /** Every connector set up, as it stands this moment, with its tools read only when asked for. */
 async function connectorsNow(): Promise<Connector[]> {
-	const [view, servers] = await Promise.all([connectorsView(), mcpServerStates()]);
+	const [view, servers, composioRows] = await Promise.all([connectorsView(), mcpServerStates(), listComposioAccounts()]);
+	const composioKeySet = composioKeySource() !== null;
 	const mailboxes = view.mailboxes.flatMap((mailbox): Connector[] => {
 		const account = view.accounts.find((item) => item.id === mailbox.account);
 		if (!account?.connectedAt) return [];
@@ -175,12 +210,31 @@ async function connectorsNow(): Promise<Connector[]> {
 		const access = mailbox.access;
 		return [{ id: mailbox.id, name: mailbox.name, kind: 'mailbox', state, problem: account.problem, tools: async () => (access ? mailboxTools(mailbox.id, mailbox.name, access) : []) }];
 	});
+	const composio = composioRows.map((row): Connector => {
+		const state = !row.enabled ? 'off' : !composioKeySet || row.status !== 'active' ? 'needs-sign-in' : 'on';
+		const problem = !composioKeySet
+			? 'Composio has no API key yet: add it in Settings › Connectors.'
+			: row.status === 'active'
+				? null
+				: row.status === 'failed'
+					? (row.statusReason ?? 'The connection failed. Connect it again in Settings › Connectors.')
+					: (row.statusReason ?? 'It is not connected yet. Connect it in Settings › Connectors.');
+		return {
+			id: row.toolkit,
+			name: row.name,
+			kind: 'composio',
+			state,
+			problem,
+			tools: async () => composioToolsFor(row.toolkit, row.name, await composioTools(row.toolkit)),
+		};
+	});
 	return [
 		...mailboxes,
 		...servers.map((entry): Connector => {
 			const server = entry.server;
 			return { id: entry.name, name: entry.name, kind: 'mcp', state: entry.state, problem: entry.problem, tools: async () => (server ? serverToolsFor(server, await serverTools(server)) : []) };
 		}),
+		...composio,
 	];
 }
 
@@ -260,9 +314,10 @@ export async function connectorToolsText(query: string, signal?: AbortSignal): P
 const CALL_MS = 5 * 60_000;
 
 /** Runs one connector tool for a task, if its connector is on now. A mailbox's send only asks: the answer carries the approval the thread shows. */
-export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<{ output: string; approval?: MailApprovalView }> {
+export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<{ output: string; approval?: MailApprovalView; ask?: string }> {
 	for (const connector of await connectorsNow()) {
-		if (!name.startsWith(connector.kind === 'mcp' ? mcpToolName(connector.id, '') : `${connector.id}_`)) continue;
+		const prefix = connector.kind === 'mcp' ? mcpToolName(connector.id, '') : connector.kind === 'composio' ? `composio__${connector.id}__` : `${connector.id}_`;
+		if (!name.startsWith(prefix)) continue;
 		if (connector.state === 'off') throw new InvalidInputError(`${connector.name} is off: ${OFF}`);
 		if (connector.state === 'needs-sign-in') throw new InvalidInputError(`${connector.name} needs the user to sign in again in Settings › Connectors.`);
 		const tool = (await connector.tools()).find((item) => item.name === name);

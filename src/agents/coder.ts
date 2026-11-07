@@ -1020,8 +1020,9 @@ function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 				arguments: v.optional(v.record(v.string(), v.unknown()), {}),
 			}),
 			run: async ({ data, signal }) => {
-				const { output, approval } = await callConnectorTool(id, data.tool, data.arguments, signal);
+				const { output, approval, ask } = await callConnectorTool(id, data.tool, data.arguments, signal);
 				if (approval) noteAsk(id, `Send the email "${approval.subject}" to ${approval.to.join(', ')}?`);
+				if (ask) noteAsk(id, ask);
 				return { output };
 			},
 		}),

@@ -98,6 +98,8 @@ import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from 
 import { attachToProject, attachToTask } from './services/attachments.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
 import { decideSend, mailApprovals } from './services/mail.ts';
+import { addComposioToolkit, beginComposioConnect, composioToolkit, composioTools, composioView, disconnectComposioAccount, loadComposioKey, refreshComposioAccount, removeComposioAccount, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from './services/composio.ts';
+import { decideToolApproval, toolApprovals } from './services/tool-approvals.ts';
 import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
 import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
@@ -175,6 +177,8 @@ setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
 // The OpenRouter key pasted in Settings › Subscriptions, before anything calls OpenRouter.
 await loadGatewayKey().catch((error: unknown) => logProblem('warn', 'Could not load the OpenRouter key', error));
+// And the Composio key pasted in Settings › Connectors.
+await loadComposioKey().catch((error: unknown) => logProblem('warn', 'Could not load the Composio key', error));
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
 scheduleHeadlessWork();
@@ -511,8 +515,8 @@ app.put('/api/subscriptions/:id/key', async (c) => {
 });
 app.post('/api/subscriptions/:id/models/refresh', async (c) => c.json(await refreshSubscriptionModels(c.req.param('id'))));
 
-// Connectors: MCP servers every task gets, and accounts such as Gmail signed in to on your own OAuth client; see services/connectors.ts.
-app.get('/api/connectors', async (c) => c.json({ ...(await connectorsView()), mcpServers: await mcpServersView() }));
+// Connectors: MCP servers every task gets, accounts such as Gmail signed in to on your own OAuth client, and apps connected through Composio; see services/connectors.ts and services/composio.ts.
+app.get('/api/connectors', async (c) => c.json({ ...(await connectorsView()), mcpServers: await mcpServersView(), composio: await composioView() }));
 app.put('/api/connectors/accounts/:id/client', async (c) => {
 	const input = await body(
 		c,
@@ -591,6 +595,37 @@ app.get('/api/mcp-servers/callback', async (c) => {
 	}
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
+// Composio: the project key, apps added from its catalog, and each one's Composio-hosted sign-in; see services/composio.ts.
+const COMPOSIO_TOOLKIT = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,64}$/, 'Toolkit names use lowercase letters, digits, - and _'));
+app.put('/api/composio/key', async (c) => {
+	const { key } = await body(c, v.object({ key: v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300))) }));
+	return c.json(await setComposioKey(key));
+});
+app.post('/api/composio/accounts', async (c) => {
+	const { toolkit } = await body(c, v.object({ toolkit: COMPOSIO_TOOLKIT }));
+	return c.json(await addComposioToolkit(toolkit));
+});
+app.get('/api/composio/accounts/:toolkit/tools', async (c) => c.json({ tools: await composioTools(c.req.param('toolkit')) }));
+// The whole Composio catalog, searched live, and one app by its slug for the add page.
+app.get('/api/composio/toolkits', async (c) => c.json({ toolkits: await searchComposioToolkits(c.req.query('search') ?? '') }));
+app.get('/api/composio/toolkits/:slug', async (c) => {
+	const slug = c.req.param('slug');
+	if (!v.safeParse(COMPOSIO_TOOLKIT, slug).success) throw new InvalidInputError('That is not a toolkit name.');
+	const toolkit = await composioToolkit(slug);
+	if (!toolkit) throw new NotFoundError(`Composio has no toolkit named ${slug}`);
+	return c.json(toolkit);
+});
+app.patch('/api/composio/accounts/:toolkit', async (c) => {
+	const { enabled } = await body(c, v.object({ enabled: v.boolean() }));
+	return c.json(await setComposioAccountEnabled(c.req.param('toolkit'), enabled));
+});
+app.post('/api/composio/accounts/:toolkit/connect', async (c) => {
+	const { callbackUrl } = await body(c, v.object({ callbackUrl: v.optional(v.pipe(v.string(), v.maxLength(500))) }));
+	return c.json(await beginComposioConnect(c.req.param('toolkit'), callbackUrl));
+});
+app.post('/api/composio/accounts/:toolkit/refresh', async (c) => c.json(await refreshComposioAccount(c.req.param('toolkit'))));
+app.post('/api/composio/accounts/:toolkit/disconnect', async (c) => c.json(await disconnectComposioAccount(c.req.param('toolkit'))));
+app.delete('/api/composio/accounts/:toolkit', async (c) => c.json(await removeComposioAccount(c.req.param('toolkit'))));
 
 app.get('/api/profile', async (c) => c.json({ name: await profileName() }));
 app.get('/api/projects', async (c) => c.json({ projects: await projects() }));
@@ -939,6 +974,16 @@ app.post('/api/sessions/:id/mail/:approval', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	const { send } = await body(c, v.object({ send: v.boolean() }));
 	return c.json(await decideSend(id, c.req.param('approval'), send));
+});
+// Connector tool calls the agent asked to run; only your Run here runs one (services/tool-approvals.ts).
+app.get('/api/sessions/:id/tool-approvals', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	return c.json({ approvals: await toolApprovals(id) });
+});
+app.post('/api/sessions/:id/tool-approvals/:approval', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const { run } = await body(c, v.object({ run: v.boolean() }));
+	return c.json(await decideToolApproval(id, c.req.param('approval'), run));
 });
 app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));

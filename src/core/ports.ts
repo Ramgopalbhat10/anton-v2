@@ -731,3 +731,69 @@ export type Mailbox = {
 	/** Sends a draft as it stands. */
 	sendDraft(token: string, id: string, signal?: AbortSignal): Promise<{ id: string; threadId: string }>;
 };
+
+/** An app in an apps platform's catalog: a toolkit the platform can connect and run tools for. */
+export type AppsToolkit = {
+	slug: string;
+	name: string;
+	description: string;
+	logo: string;
+	appUrl: string | null;
+	categories: string[];
+	toolsCount: number;
+	noAuth: boolean;
+};
+
+/** A tool the platform runs on a connected account. */
+export type AppsTool = {
+	slug: string;
+	name: string;
+	description: string;
+	inputSchema: Record<string, unknown>;
+	tags: string[];
+};
+
+/** A connected account at the platform: its id and status, never its tokens. */
+export type AppsAccount = {
+	id: string;
+	toolkit: string;
+	/** The platform's own name for the account, for showing which one is connected. */
+	label: string | null;
+	status: string;
+	statusReason: string | null;
+	createdAt: string;
+};
+
+/** A hosted sign-in page for the user to authorize a toolkit on the provider's own site. */
+export type AppsConnectLink = { redirectUrl: string; accountId: string; expiresAt: string };
+
+/** What running a tool answered. */
+export type AppsExecution = { data: unknown; error: string | null; successful: boolean; logId: string | null };
+
+/**
+ * An apps platform (Composio): the catalog of third-party apps, their managed
+ * sign-in as hosted connect links, the connected accounts' status, and tool
+ * execution — with the providers' tokens staying inside the platform. Anton
+ * keeps only account ids and status; another platform fits the same port.
+ */
+export type AppsConnector = {
+	/** Where the project key comes from now: pasted in Settings, the server's environment, or nowhere. */
+	keySource(): 'settings' | 'environment' | null;
+	/** Checks a candidate project key with the platform before it is kept. */
+	checkKey(key: string): Promise<void>;
+	/** Toolkits matching a search, best first; `slug` narrows to one. */
+	toolkits(options?: { search?: string; slug?: string; limit?: number }): Promise<AppsToolkit[]>;
+	/** A toolkit's tools. */
+	tools(toolkit: string): Promise<AppsTool[]>;
+	/** The platform-managed auth config for a toolkit, made on first use. */
+	managedAuthConfig(toolkit: string): Promise<string>;
+	connectLink(input: { authConfigId: string; userId: string; callbackUrl?: string }): Promise<AppsConnectLink>;
+	connectedAccount(id: string): Promise<AppsAccount | null>;
+	/** The user's connected accounts for the given toolkits (empty means all). */
+	connectedAccounts(input: { userId: string; toolkits?: string[] }): Promise<AppsAccount[]>;
+	/** Forgets an unfinished connection. */
+	deleteConnectedAccount(id: string): Promise<void>;
+	/** Revokes the grant at the provider, then removes the account. */
+	revokeConnectedAccount(id: string): Promise<void>;
+	runTool(toolSlug: string, input: { userId: string; connectedAccountId?: string | null; args: Record<string, unknown> }, signal?: AbortSignal): Promise<AppsExecution>;
+};

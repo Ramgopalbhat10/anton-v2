@@ -130,6 +130,31 @@ export function toolServerMark(toolName: string, servers: McpServer[] | undefine
 	return match ? serverMark(match.url, brands) : MCP;
 }
 
+const imageMarks = new Map<string, Mark>();
+
+/** A mark drawn from an image URL, like the logo an apps platform hosts for a toolkit; decorative like every mark. */
+export function imageMark(title: string, src: string): Mark {
+	let mark = imageMarks.get(src);
+	if (!mark) {
+		const Icon = forwardRef<HTMLImageElement, LucideProps>(function Icon({ size = 24 }, ref) {
+			return <img ref={ref} src={src} width={size} height={size} alt="" aria-hidden />;
+		});
+		Icon.displayName = title;
+		mark = { title, icon: Icon as unknown as LucideIcon };
+		imageMarks.set(src, mark);
+	}
+	return mark;
+}
+
+/**
+ * An app connected through an apps platform: its product's own mark when the
+ * address names one Anton knows, else the logo the platform hosts for it, else MCP's.
+ */
+export function useComposioMark(logo: string | null | undefined, url: string, title: string): Mark {
+	const mark = useServerMark(url);
+	return mark === MCP && logo ? imageMark(title, logo) : mark;
+}
+
 /** The MCP servers of Settings › Connectors, for drawing a tool call by its server. */
 export function useMcpServers(enabled = true): McpServer[] | undefined {
 	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors, enabled, staleTime: 60_000 }).data?.mcpServers;

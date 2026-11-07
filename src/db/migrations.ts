@@ -208,6 +208,16 @@ export const migrations: string[][] = [
 	// 40: a routine's gate, a skill's script that says whether a due run is worth a thread (`src/services/routine-gate.ts`),
 	// and what it last answered, as JSON.
 	[`ALTER TABLE automations ADD COLUMN gate TEXT`, `ALTER TABLE automations ADD COLUMN last_gate TEXT`],
+	// 41: apps connected through Composio (Settings › Connectors), one row per toolkit: its Composio connected
+	// account's id and status, never its tokens; and tool calls waiting on the user's Run, as mail_approvals are.
+	[
+		`CREATE TABLE IF NOT EXISTS composio_accounts (toolkit TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '', app_url TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 0, account_id TEXT, status TEXT NOT NULL DEFAULT 'none', status_reason TEXT, connected_at TEXT, added_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS tool_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, connector TEXT NOT NULL, tool TEXT NOT NULL, args_json TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL, result TEXT, error TEXT, created_at TEXT NOT NULL, decided_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS tool_approvals_session ON tool_approvals (session_id)`,
+	],
+	// 42: the logo Composio hosts for each app, so a connector Composio knows but Anton's brand
+	// list does not still draws as the product it is.
+	[`ALTER TABLE composio_accounts ADD COLUMN logo TEXT NOT NULL DEFAULT ''`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */
