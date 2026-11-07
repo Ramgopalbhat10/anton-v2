@@ -130,3 +130,35 @@ test('a run in the sandbox browser waits on the answer about a risky click, and 
 	const seen = await browse(machine, { action: 'look' });
 	assert.doesNotMatch(seen.snapshot, /Sent/);
 });
+
+test('steps after the first go over the command connection, which takes only commands that carry the server’s token', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const app = createServer((_request, response) => {
+		response.setHeader('content-type', 'text/html');
+		response.end('<title>Channel</title><button onclick="this.textContent=\'Pressed\'">Press</button>');
+	});
+	await new Promise<void>((resolve) => app.listen(0, '127.0.0.1', resolve));
+	const real = await machineFor('live');
+	const commands: string[] = [];
+	const machine = { ...real, exec: (command: string, options?: Parameters<typeof real.exec>[1]) => (commands.push(command), real.exec(command, options)) };
+	t.after(async () => {
+		app.close();
+		await closeBrowser(real);
+	});
+	await closeBrowser(machine);
+	await browse(machine, { action: 'open', url: `http://127.0.0.1:${(app.address() as AddressInfo).port}/` });
+	const before = commands.length;
+	const pressed = await browse(machine, { action: 'click', target: 'role=button[name="Press"]' });
+	assert.match(pressed.snapshot, /button "Pressed"/);
+	await browse(machine, { action: 'look' });
+	assert.equal(commands.length, before, 'no process was started in the machine for these steps');
+
+	// Without the token, a command on the live view's port is ignored.
+	const socket = new WebSocket(`${(await browserLiveUrl(machine))!}/?anton=command`);
+	await new Promise((resolve) => socket.addEventListener('open', resolve));
+	const answers: string[] = [];
+	socket.addEventListener('message', (event) => typeof event.data === 'string' && answers.push(event.data));
+	socket.send(JSON.stringify({ type: 'command', token: 'wrong', id: 1, body: { action: 'look' } }));
+	await new Promise((resolve) => setTimeout(resolve, 800));
+	socket.close();
+	assert.deepEqual(answers, []);
+});

@@ -154,8 +154,13 @@ async function input(message) {
 	}
 }
 
-function join(socket) {
-	viewers.add(socket);
+/**
+ * A viewer of the live view, or (\`commands\`, or once it sends one) Anton's command connection: commands that carry
+ * the token this server wrote at its start run as the Unix socket's do, without a process started per step. A
+ * command connection is no viewer, so it never keeps the screencast running.
+ */
+function join(socket, commands) {
+	if (!commands) viewers.add(socket);
 	idle();
 	socket.setNoDelay(true);
 	let pending = Buffer.alloc(0);
@@ -186,6 +191,17 @@ function join(socket) {
 			if (opcode !== 1) continue;
 			let message;
 			try { message = JSON.parse(body.toString('utf8')); } catch { continue; }
+			if (message && message.type === 'command') {
+				if (message.token !== commandToken) continue;
+				commands = true;
+				if (viewers.delete(socket) && !viewers.size) recast();
+				idle();
+				handle(message.body).then((result) => {
+					if (!socket.destroyed) socket.write(frame(1, Buffer.from(JSON.stringify({ type: 'result', id: message.id, body: result }))));
+				});
+				continue;
+			}
+			if (commands) continue;
 			inputs = inputs.then(() => input(message)).catch(() => {});
 		}
 	});
@@ -194,6 +210,7 @@ function join(socket) {
 	};
 	socket.on('close', leave);
 	socket.on('error', leave);
+	if (commands) return;
 	// What the tab last showed, at once: a page that is not repainting sends no frame of its own.
 	if (lastSize) tell(socket, lastSize);
 	if (lastFrame && page) send(socket, 2, lastFrame);
@@ -212,7 +229,7 @@ function listenLive(port) {
 		if (!key) return socket.destroy();
 		const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
 		socket.write('HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Accept: ' + accept + '\\r\\n\\r\\n');
-		join(socket);
+		join(socket, /[?&]anton=command(&|$)/.test(request.url || ''));
 	});
 	// A port another machine's browser holds (local machines share this computer) leaves this one without a live view.
 	live.on('error', (error) => console.error('Live view: ' + error.message));
@@ -370,24 +387,37 @@ async function restart() {
 	await old?.close().catch(() => {});
 }
 
+/** What a command connection on the live view port must show, given only to whoever can run a command here. */
+const commandToken = crypto.randomBytes(24).toString('hex');
+
+/** Runs commands one at a time, from the Unix socket or a command connection alike. */
 let queue = Promise.resolve();
+function handle(command) {
+	const done = queue.then(async () => {
+		// Which build of this script runs, so a newer Anton replaces one it did not start, and the token for a command connection.
+		if (command.action === 'version') return { version, token: commandToken };
+		// A failure may have happened after a click; never replay an action of unknown outcome.
+		const result = await act(command).catch(async (error) => {
+			await restart();
+			return failed(error);
+		});
+		// The page is cut where Anton would cut it anyway, so a long one does not travel whole.
+		if (typeof result.snapshot === 'string' && result.snapshot.length > ANTON_MAX_SNAPSHOT + 1) result.snapshot = result.snapshot.slice(0, ANTON_MAX_SNAPSHOT + 1);
+		return result;
+	});
+	queue = done.catch(() => {});
+	return done;
+}
+
 fs.rmSync(socket, { force: true });
 http.createServer((request, response) => {
 	idle();
 	let body = '';
 	request.on('data', (chunk) => (body += chunk));
 	request.on('end', () => {
-		queue = queue.then(async () => {
-			const command = JSON.parse(body);
-			// Which build of this script runs, so a newer Anton replaces one it did not start.
-			if (command.action === 'version') return response.end(JSON.stringify({ version }));
-			// A failure may have happened after a click; never replay an action of unknown outcome.
-			const result = await act(command).catch(async (error) => {
-				await restart();
-				return failed(error);
-			});
-			response.end(JSON.stringify(result));
-		});
+		let command;
+		try { command = JSON.parse(body); } catch { return response.end(JSON.stringify(failed('a command that is not JSON'))); }
+		handle(command).then((result) => response.end(JSON.stringify(result)));
 	});
 }).listen(socket, idle);
 if (livePort) listenLive(Number(livePort));
@@ -481,6 +511,8 @@ export class BrowserStopError extends Error {}
 /** Stops the machine's browser and waits for it to leave before another driver can act. */
 export async function closeBrowser(machine: Machine): Promise<void> {
 	const { pid, socket } = browserFiles(machine);
+	servers.delete(machineKey(machine));
+	dropChannel(machineKey(machine));
 	const result = await machine.exec(`
 if [ -f ${pid} ]; then
   p=$(cat ${pid})
@@ -502,8 +534,79 @@ rm -f ${socket}`);
  * it), so a step after the first sends its command alone.
  */
 const prepared = new Set<string>();
-/** Machines whose browser server, if one runs, is this build's: checked once, on the first step. */
-const current = new Set<string>();
+/** Machines whose browser server is this build's, with the token for its command connection: checked on the first step, and again after it starts anew. */
+const servers = new Map<string, string>();
+
+/** A command connection to a machine's browser server, through the live view's port: a step costs a message there, not a process started in the machine. */
+type Channel = { request: (body: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>; close: () => void };
+const channels = new Map<string, Promise<Channel | null>>();
+/** A command the connection could not send at all, so it is safe to send another way. */
+class NotSent extends Error {}
+
+function dropChannel(key: string) {
+	const open = channels.get(key);
+	channels.delete(key);
+	void open?.then((channel) => channel?.close()).catch(() => undefined);
+}
+
+/** Connects to the browser server's command connection, or null when the provider has no way in or it does not answer. */
+async function connectChannel(machine: Machine, token: string): Promise<Channel | null> {
+	const base = await machine.socketUrl?.(browserLivePort(machine)).catch(() => null);
+	if (!base) return null;
+	const url = new URL(base);
+	url.searchParams.set('anton', 'command');
+	const socket = new WebSocket(url.toString());
+	const opened = await new Promise<boolean>((resolve) => {
+		const timer = setTimeout(() => resolve(false), 5_000);
+		socket.addEventListener('open', () => (clearTimeout(timer), resolve(true)), { once: true });
+		socket.addEventListener('error', () => (clearTimeout(timer), resolve(false)), { once: true });
+	});
+	if (!opened) {
+		socket.close();
+		return null;
+	}
+	const waiting = new Map<number, { resolve: (body: unknown) => void; reject: (error: Error) => void }>();
+	let next = 0;
+	socket.addEventListener('message', (event) => {
+		if (typeof event.data !== 'string') return;
+		let message: { type?: string; id?: number; body?: unknown };
+		try {
+			message = JSON.parse(event.data);
+		} catch {
+			return;
+		}
+		if (message.type !== 'result' || typeof message.id !== 'number') return;
+		waiting.get(message.id)?.resolve(message.body);
+		waiting.delete(message.id);
+	});
+	socket.addEventListener('close', () => {
+		for (const { reject } of waiting.values()) reject(new Error('The connection to the sandbox browser dropped during the step, so it may or may not have acted. Look before trying it again.'));
+		waiting.clear();
+	});
+	return {
+		request(body, signal) {
+			if (socket.readyState !== WebSocket.OPEN) return Promise.reject(new NotSent('not connected'));
+			const id = ++next;
+			return new Promise((resolve, reject) => {
+				const timer = setTimeout(() => {
+					waiting.delete(id);
+					reject(new Error('The sandbox browser did not answer within 2 minutes.'));
+				}, 120_000);
+				const abort = () => {
+					waiting.delete(id);
+					reject(signal?.reason ?? new Error('The step was stopped.'));
+				};
+				signal?.addEventListener('abort', abort, { once: true });
+				waiting.set(id, {
+					resolve: (value) => (clearTimeout(timer), signal?.removeEventListener('abort', abort), resolve(value)),
+					reject: (error) => (clearTimeout(timer), signal?.removeEventListener('abort', abort), reject(error)),
+				});
+				socket.send(JSON.stringify({ type: 'command', token, id, body }));
+			});
+		},
+		close: () => socket.close(),
+	};
+}
 /** This build of the server script, which a step checks the running one against. */
 const SERVER_VERSION = createHash('sha256').update(SERVER).digest('hex').slice(0, 12);
 const machineKey = (machine: Machine) => `${machine.id}:${machine.root}`;
@@ -539,36 +642,59 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 			);
 			signal?.throwIfAborted();
 		};
+		const key = machineKey(machine);
 		const sendOnce = (body: Record<string, unknown>) => machine.exec(`node ${files.client} ${files.socket} ${quote(JSON.stringify(body))}`, { timeoutMs: 120_000, signal });
-		const send = async (body: Record<string, unknown>): Promise<Partial<BrowserState> & { pending?: { run: string; name: string }; version?: string }> => {
+		type Answer = Partial<BrowserState> & { pending?: { run: string; name: string }; version?: string; token?: string };
+		/** One command through a process in the machine, starting the server when none runs. */
+		const viaExec = async (body: Record<string, unknown>): Promise<Answer> => {
 			let result = await sendOnce(body);
 			signal?.throwIfAborted();
 			// The client went (a machine's /tmp cleared, say): set the machine up again and send once more.
 			if (result.exitCode !== 0 && result.exitCode !== 4 && /Cannot find module/.test(result.stderr)) {
-				prepared.delete(machineKey(machine));
-				current.delete(machineKey(machine));
+				prepared.delete(key);
 				await prepare(machine, signal);
 				signal?.throwIfAborted();
 				result = await sendOnce(body);
 				signal?.throwIfAborted();
 			}
 			if (result.exitCode === 4) {
+				// A new server has a new token: its command connection is opened again after the next check.
+				servers.delete(key);
+				dropChannel(key);
 				await start();
-				current.add(machineKey(machine));
 				result = await sendOnce(body);
 			}
 			if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
 			return JSON.parse(new TextDecoder().decode(result.stdout).trim());
 		};
-		// A browser server an older Anton started knows no run: it is stopped, and the step starts this one.
-		if (!current.has(machineKey(machine))) {
-			const running = await send({ action: 'version' });
+		// A browser server an older Anton started knows no run: it is stopped, and this build's starts in its place.
+		if (!servers.has(key)) {
+			let running = await viaExec({ action: 'version' });
 			if (running.version !== SERVER_VERSION) {
 				await closeBrowser(machine);
 				signal?.throwIfAborted();
+				running = await viaExec({ action: 'version' });
 			}
-			current.add(machineKey(machine));
+			// Checked once either way: a server that still answers otherwise is used as it is, without a command connection.
+			servers.set(key, running.version === SERVER_VERSION ? (running.token ?? '') : '');
 		}
+		const token = servers.get(key);
+		/** One command, over the command connection when there is one, else through a process in the machine. */
+		const send = async (body: Record<string, unknown>): Promise<Answer> => {
+			if (token) {
+				if (!channels.has(key)) channels.set(key, connectChannel(machine, token).catch(() => null));
+				const channel = await channels.get(key);
+				if (channel) {
+					try {
+						return (await channel.request(body, signal)) as Answer;
+					} catch (error) {
+						dropChannel(key);
+						if (!(error instanceof NotSent)) throw error;
+					}
+				}
+			}
+			return viaExec(body);
+		};
 		let state = await send({ ...input, ask: undefined, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) });
 		// A run asks before a risky click; its answer goes back as a resume, until the run ends.
 		while (state.pending) {
