@@ -16,6 +16,7 @@
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
+		"browser:bench": "node --experimental-strip-types scripts/browser-bench.ts",
 		"postinstall": "node --experimental-strip-types scripts/patch-flue.ts"
 	},
 	"dependencies": {
@@ -53,7 +54,7 @@
 		"mermaid": "^11.17.2",
 		"modal": "^0.11.0",
 		"officeparser": "^8.1.0",
-		"playwright-core": "1.56.1",
+		"playwright-core": "1.63.0",
 		"radix-ui": "^1.6.7",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",

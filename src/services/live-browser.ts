@@ -9,7 +9,8 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import type { BrowserInput, BrowserState } from './browser.ts';
-import { addressToUrl, BROWSER_STEP, clipSnapshot, screenshotFile, type StepResult } from './browser-step.ts';
+import { quickjsExecute } from './browser-run.ts';
+import { addressToUrl, browserFunctions, clipSnapshot, screenshotFile } from './browser-step.ts';
 import { saveOutput } from './checkpoints.ts';
 import { DESCRIBE_ELEMENT } from './describe-element.ts';
 import { logProblem } from './log.ts';
@@ -442,8 +443,11 @@ export const browserScreenshot = (id: string): Promise<{ data: string; width: nu
 type Driver = { browserId: string; browser: PlaywrightBrowser; errors: string[]; targets: WeakMap<Page, string> };
 const drivers = new Map<string, Driver>();
 
-/** The shared step, as a function on Anton's side; the sandbox's browser runs the same source. */
-const browserStep = new Function(`return (${BROWSER_STEP})`)() as (page: Page, command: BrowserInput) => Promise<StepResult>;
+/**
+ * The shared step and run, as functions on Anton's side; the sandbox's browser runs the same source. A run's
+ * code runs in a QuickJS VM here, never in Anton's own process.
+ */
+const { browserStep, browserRun } = browserFunctions<Page>();
 
 async function driver(id: string, browser: Stored): Promise<Driver> {
 	const open = drivers.get(id);
@@ -556,7 +560,8 @@ export async function agentBrowse(id: string, input: BrowserInput): Promise<Brow
 			const browser = await ensureBrowser(id);
 			const current = await driver(id, browser);
 			const page = await shownPage(id, browser, current);
-			const result = await browserStep(page, { ...input, url: input.url && addressToUrl(input.url) });
+			const { ask, ...command } = input;
+			const result = input.action === 'run' ? await browserRun(page, command, ask, quickjsExecute) : await browserStep(page, { ...command, url: input.url && addressToUrl(input.url) });
 			const screenshot = input.screenshot ? await saveScreenshot(id, page, input) : null;
 			// Where the agent left the page, for the panel's address bar once the connection is let go.
 			const shown = connections.get(id);

@@ -287,3 +287,16 @@ test('a button judged safe on a page is not asked about again in a later run of 
 	await autopilot('other-task', other.step, { goal: 'Click Add one once' });
 	assert.equal(asked.filter((call) => call.questions.risky).length, 2, 'another task asks for itself');
 });
+
+test('a page described with refs gives each control its ref as the selector, and the ref is not shown as a state', () => {
+	const candidates = candidatesOf('- iframe [ref=e4]:\n  - textbox "Card" [ref=f2e3]: "4242"\n  - button "Pay now" [ref=f2e4]\n- checkbox "Remember me" [checked] [ref=e9]\n- link "Help" [ref=e10]:\n  - /url: /help');
+	assert.deepEqual(
+		candidates.map(({ selector, label }) => [selector, label]),
+		[
+			['aria-ref=f2e3', 'textbox "Card" holding "4242"'],
+			['aria-ref=f2e4', 'button "Pay now"'],
+			['aria-ref=e9', 'checkbox "Remember me" [checked]'],
+			['aria-ref=e10', 'link "Help"'],
+		],
+	);
+});

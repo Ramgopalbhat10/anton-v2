@@ -4,7 +4,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { BROWSER_STEP, type StepResult } from '../src/services/browser-step.ts';
+import { browserFunctions } from '../src/services/browser-step.ts';
 
 /** The sandbox's Playwright, where this computer has it, as the sandbox's browser server runs the step. */
 const playwright = (() => {
@@ -18,7 +18,7 @@ const playwright = (() => {
 	}
 })();
 
-const browserStep = new Function(`return (${BROWSER_STEP})`)() as (page: unknown, command: Record<string, unknown>) => Promise<StepResult>;
+const { browserStep } = browserFunctions();
 
 /**
  * Three apps: one holding a live event stream open and one polling, as Anton's own
@@ -84,7 +84,7 @@ test('a plain page still waits for what the click fetched, even past the quiet s
 	assert.match(result.snapshot, /paragraph: loaded/);
 });
 
-test('an iframe’s controls are described after the page’s, and a step reaches them as frame=N >> selector', { skip: !playwright && 'needs Playwright Chromium' }, async () => {
+test('an iframe’s controls are described in place with refs, and a step reaches them by ref or as frame=N >> selector', { skip: !playwright && 'needs Playwright Chromium' }, async () => {
 	const browser = await playwright!.chromium.launch();
 	try {
 		const page = await browser.newPage();
@@ -92,13 +92,15 @@ test('an iframe’s controls are described after the page’s, and a step reache
 		await page.setContent(`<h1>Shop</h1><iframe style="display:none" srcdoc="<button>Hidden</button>"></iframe><iframe title="Payment" width="400" height="200" srcdoc="${form}"></iframe>`);
 		await page.waitForTimeout(300);
 		const looked = await browserStep(page, { action: 'look' });
-		assert.match(looked.snapshot, /- iframe \[frame=1\]:\n {2}- text: Card\n {2}- textbox "Card"\n {2}- button "Pay now"/);
+		assert.match(looked.snapshot, /- iframe \[ref=e\d+\]:\n {2}- text: Card\n {2}- textbox "Card" \[ref=(f\d+e\d+)\]\n {2}- button "Pay now" \[ref=f\d+e\d+\]/);
 		assert.doesNotMatch(looked.snapshot, /Hidden/, 'a hidden iframe is left out');
-		const typed = await browserStep(page, { action: 'type', target: 'frame=1 >> role=textbox[name="Card"]', text: '4242' });
+		assert.doesNotMatch(looked.snapshot, /- generic|cursor=|heading "Shop" \[ref/, 'no wrappers, cursor notes or refs on what nobody acts on');
+		const card = /textbox "Card" \[ref=(f\d+e\d+)\]/.exec(looked.snapshot)![1];
+		const typed = await browserStep(page, { action: 'type', target: card, text: '4242' });
 		assert.equal(typed.problem, null);
 		const clicked = await browserStep(page, { action: 'click', target: 'frame=1 >> role=button[name="Pay now"]' });
 		assert.equal(clicked.problem, null);
-		assert.match(clicked.snapshot, /textbox "Card": "4242"/);
+		assert.match(clicked.snapshot, /textbox "Card" \[ref=f\d+e\d+\]: "4242"/);
 		assert.match(clicked.snapshot, /button "Paid"/);
 	} finally {
 		await browser.close();
