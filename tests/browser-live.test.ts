@@ -97,3 +97,36 @@ test('the sandbox browser runs headless, streams its tab to a viewer, and takes 
 	t.after(() => late.socket.close());
 	await until(() => late.frames.length > 0, 3_000);
 });
+
+test('a run in the sandbox browser waits on the answer about a risky click, and goes on or stops by it', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const app = createServer((_request, response) => {
+		response.setHeader('content-type', 'text/html');
+		response.end('<title>Run</title><button onclick="document.querySelector(\'p\').textContent=\'Sent\'">Send message</button><p></p>');
+	});
+	await new Promise<void>((resolve) => app.listen(0, '127.0.0.1', resolve));
+	const machine = await machineFor('live');
+	t.after(async () => {
+		app.close();
+		await closeBrowser(machine);
+	});
+	const url = `http://127.0.0.1:${(app.address() as AddressInfo).port}/`;
+	const asked: string[] = [];
+	const sent = await browse(machine, {
+		action: 'run',
+		code: `await page.goto(${JSON.stringify(url)}); await page.getByRole('button').click(); return page.locator('p').innerText();`,
+		ask: async (name) => {
+			asked.push(name);
+			// The run waits in the sandbox meanwhile.
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			return true;
+		},
+	});
+	assert.equal(sent.problem, null);
+	assert.equal(sent.result, 'Sent');
+	assert.deepEqual(asked, ['Send message']);
+
+	const held = await browse(machine, { action: 'run', code: `await page.reload(); await page.getByRole('button').click(); return 'clicked';`, ask: async () => false });
+	assert.match(held.problem ?? '', /^Not clicked: "Send message"/);
+	const seen = await browse(machine, { action: 'look' });
+	assert.doesNotMatch(seen.snapshot, /Sent/);
+});

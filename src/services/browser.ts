@@ -4,7 +4,7 @@ import { desktopLayout } from '../core/desktop.ts';
 import { writeMachineFile } from '../core/machine-fs.ts';
 import type { Machine } from '../core/ports.ts';
 import { quote, run } from '../core/shell.ts';
-import { addressToUrl, BROWSER_STEP, clipSnapshot, screenshotFile } from './browser-step.ts';
+import { addressToUrl, BROWSER_SOURCE, clipSnapshot, screenshotFile } from './browser-step.ts';
 
 /**
  * Runs inside the machine: opens the page in headless Chromium, saves a
@@ -230,7 +230,7 @@ const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const { chromium } = require('playwright');
-const [socket, outputs, livePort] = process.argv.slice(2);
+const [socket, outputs, livePort, version] = process.argv.slice(2);
 const IDLE_MS = 15 * 60 * 1000;
 let browser = null;
 let page = null;
@@ -284,18 +284,68 @@ async function tab(width, height) {
 
 ${LIVE_VIEW}
 
-${BROWSER_STEP}
+${BROWSER_SOURCE}
+
+/*
+ * A run's code asks Anton before a risky click, and Anton's answer comes as another command: the run waits here
+ * meanwhile, and its step answers with what it asks (pending). Any other command ends runs left waiting, as their
+ * step was given up, so their code stops at its next call.
+ */
+const runs = new Map();
+let runCount = 0;
+function dropRuns() {
+	for (const run of runs.values()) if (run.answer) run.answer(false);
+	runs.clear();
+}
+function startRun(target, command) {
+	const run = { id: String(++runCount), events: [], waiting: [], answer: null };
+	const emit = (event) => {
+		const waiter = run.waiting.shift();
+		if (waiter) waiter(event);
+		else run.events.push(event);
+	};
+	run.next = () => (run.events.length ? Promise.resolve(run.events.shift()) : new Promise((resolve) => run.waiting.push(resolve)));
+	const ask = (name) => new Promise((resolve) => {
+		run.answer = resolve;
+		emit({ ask: name });
+	});
+	runs.set(run.id, run);
+	browserRun(target, command, ask, antonNodeExecute).then((done) => emit({ done }), (error) => emit({ done: failed(error) }));
+	return run;
+}
+async function nextOf(run) {
+	const event = await run.next();
+	if (event.done) {
+		runs.delete(run.id);
+		return event.done;
+	}
+	return { url: page && !page.isClosed() ? page.url() : '', title: '', status: null, problem: null, snapshot: '', pending: { run: run.id, name: event.ask } };
+}
 
 async function act(command) {
+	if (command.action === 'resume') {
+		const run = runs.get(String(command.run));
+		if (!run) return { ...failed('That run has ended.'), problem: 'That run has ended.' };
+		const answer = run.answer;
+		run.answer = null;
+		if (answer) answer(Boolean(command.allow));
+		return finish(command, await nextOf(run));
+	}
+	dropRuns();
 	const page = await tab(command.width ?? 1280, command.height ?? 800);
 	const reopened = lost;
 	lost = false;
-	const result = await browserStep(page, command);
+	const result = command.action === 'run' ? await nextOf(startRun(page, command)) : await browserStep(page, command);
 	if (reopened && command.action !== 'open') {
 		result.problem = 'The browser had closed or crashed, so this step ran in a new, blank tab. Open the page again.' + (result.problem ? ' ' + result.problem : '');
 	}
+	return finish(command, result);
+}
+
+/** A step's answer with its console errors, and the screenshot it asked for once it has ended. */
+async function finish(command, result) {
 	let screenshot = null;
-	if (command.screenshot) {
+	if (command.screenshot && !result.pending && page && !page.isClosed()) {
 		try {
 			fs.mkdirSync(outputs + '/screenshots', { recursive: true });
 			await page.screenshot({ path: outputs + '/' + command.screenshot, fullPage: Boolean(command.fullPage) });
@@ -329,6 +379,8 @@ http.createServer((request, response) => {
 	request.on('end', () => {
 		queue = queue.then(async () => {
 			const command = JSON.parse(body);
+			// Which build of this script runs, so a newer Anton replaces one it did not start.
+			if (command.action === 'version') return response.end(JSON.stringify({ version }));
 			// A failure may have happened after a click; never replay an action of unknown outcome.
 			const result = await act(command).catch(async (error) => {
 				await restart();
@@ -357,13 +409,20 @@ request.on('error', (error) => {
 request.end(command);
 `;
 
-export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'hover' | 'scroll' | 'back' | 'wait' | 'look';
+export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'hover' | 'scroll' | 'back' | 'wait' | 'look' | 'run';
 
 export type BrowserInput = {
 	action: BrowserAction;
 	url?: string;
-	/** A Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
+	/** A ref from the page's description (`e12`), or a Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
 	target?: string;
+	/** For run: the body of an async function given `page`, Playwright's API for the tab. */
+	code?: string;
+	/**
+	 * For run: asked, with the element's name, before a click (or Enter) on something named with a risky word;
+	 * the run stops when it answers no. Never sent anywhere: it stays with the caller.
+	 */
+	ask?: (name: string) => Promise<boolean>;
 	text?: string;
 	submit?: boolean;
 	key?: string;
@@ -390,6 +449,9 @@ export type BrowserState = {
 	snapshot: string;
 	/** Where the page is scrolled to (`StepResult.view`), for telling a step that only scrolled from one that did nothing. */
 	view?: string;
+	/** For run: what the code returned, as text, and what it logged. */
+	result?: string;
+	logs?: string[];
 };
 
 /** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
@@ -440,6 +502,10 @@ rm -f ${socket}`);
  * it), so a step after the first sends its command alone.
  */
 const prepared = new Set<string>();
+/** Machines whose browser server, if one runs, is this build's: checked once, on the first step. */
+const current = new Set<string>();
+/** This build of the server script, which a step checks the running one against. */
+const SERVER_VERSION = createHash('sha256').update(SERVER).digest('hex').slice(0, 12);
 const machineKey = (machine: Machine) => `${machine.id}:${machine.root}`;
 
 async function prepare(machine: Machine, signal?: AbortSignal): Promise<void> {
@@ -461,33 +527,55 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 		await prepare(machine, signal);
 		signal?.throwIfAborted();
 		const outputs = `${machine.root}/outputs`;
-		const command = quote(JSON.stringify({ ...input, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) }));
 		const files = browserFiles(machine);
-		const send = () => machine.exec(`node ${files.client} ${files.socket} ${command}`, { timeoutMs: 120_000, signal });
-		let result = await send();
-		signal?.throwIfAborted();
-		// The client went (a machine's /tmp cleared, say): set the machine up again and send once more.
-		if (result.exitCode !== 0 && result.exitCode !== 4 && /Cannot find module/.test(result.stderr)) {
-			prepared.delete(machineKey(machine));
-			await prepare(machine, signal);
-			signal?.throwIfAborted();
-			result = await send();
-			signal?.throwIfAborted();
-		}
-		if (result.exitCode === 4) {
+		const start = async () => {
 			await writeMachineFile(machine, files.server, new TextEncoder().encode(SERVER));
 			signal?.throwIfAborted();
 			await run(
 				machine,
-				`env -u DISPLAY NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} ${browserLivePort(machine)} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
+				`env -u DISPLAY NODE_PATH="$(npm root -g)" setsid nohup node ${files.server} ${files.socket} ${quote(outputs)} ${browserLivePort(machine)} ${SERVER_VERSION} < /dev/null > ${files.log} 2>&1 & echo $! > ${files.pid}; ` +
 					`for i in $(seq 1 50); do [ -S ${files.socket} ] && exit 0; sleep 0.2; done; cat ${files.log} >&2; exit 1`,
 				{ signal },
 			);
 			signal?.throwIfAborted();
-			result = await send();
+		};
+		const sendOnce = (body: Record<string, unknown>) => machine.exec(`node ${files.client} ${files.socket} ${quote(JSON.stringify(body))}`, { timeoutMs: 120_000, signal });
+		const send = async (body: Record<string, unknown>): Promise<Partial<BrowserState> & { pending?: { run: string; name: string }; version?: string }> => {
+			let result = await sendOnce(body);
+			signal?.throwIfAborted();
+			// The client went (a machine's /tmp cleared, say): set the machine up again and send once more.
+			if (result.exitCode !== 0 && result.exitCode !== 4 && /Cannot find module/.test(result.stderr)) {
+				prepared.delete(machineKey(machine));
+				current.delete(machineKey(machine));
+				await prepare(machine, signal);
+				signal?.throwIfAborted();
+				result = await sendOnce(body);
+				signal?.throwIfAborted();
+			}
+			if (result.exitCode === 4) {
+				await start();
+				current.add(machineKey(machine));
+				result = await sendOnce(body);
+			}
+			if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
+			return JSON.parse(new TextDecoder().decode(result.stdout).trim());
+		};
+		// A browser server an older Anton started knows no run: it is stopped, and the step starts this one.
+		if (!current.has(machineKey(machine))) {
+			const running = await send({ action: 'version' });
+			if (running.version !== SERVER_VERSION) {
+				await closeBrowser(machine);
+				signal?.throwIfAborted();
+			}
+			current.add(machineKey(machine));
 		}
-		if (result.exitCode !== 0) throw new Error(`The browser failed: ${result.stderr.trim() || 'no answer'}`);
-		const state = JSON.parse(new TextDecoder().decode(result.stdout).trim()) as Partial<BrowserState>;
+		let state = await send({ ...input, ask: undefined, url: input.url && addressToUrl(input.url), screenshot: input.screenshot && screenshotFile(input.screenshot) });
+		// A run asks before a risky click; its answer goes back as a resume, until the run ends.
+		while (state.pending) {
+			const allow = input.ask ? await input.ask(state.pending.name) : true;
+			signal?.throwIfAborted();
+			state = await send({ action: 'resume', run: state.pending.run, allow });
+		}
 		// Every field filled, whatever the server answered, so a failed step reads as a problem rather than breaking the tool.
 		return {
 			url: state.url ?? input.url ?? '',
@@ -498,6 +586,7 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 			screenshot: state.screenshot ? `../outputs/${state.screenshot}` : null,
 			snapshot: clipSnapshot(state.snapshot ?? ''),
 			view: state.view,
+			...(input.action === 'run' ? { result: state.result ?? '', logs: state.logs ?? [] } : {}),
 		};
 	} finally {
 		// The detached browser can still be handling a request after its client is aborted.

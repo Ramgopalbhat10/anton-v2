@@ -111,7 +111,7 @@ export const config = {
 	 */
 	imageModel: read('ANTON_IMAGE_MODEL', 'openrouter/openai/gpt-image-2.5-flare'),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
-	browserPackage: 'playwright@1.56.1',
+	browserPackage: 'playwright@1.63.0',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */
 	warmImageDays: Number(read('ANTON_WARM_IMAGE_DAYS', '7')),
 	/**
