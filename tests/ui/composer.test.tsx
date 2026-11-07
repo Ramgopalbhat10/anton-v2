@@ -42,6 +42,7 @@ const CONNECTORS = {
 	mcpServers: [
 		{ name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false }, enabled: false, addedAt: '' },
 	],
+	composio: { configured: false, keyFromEnv: false, accounts: [] },
 };
 
 function setup(patch = {}) {

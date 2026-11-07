@@ -3,6 +3,7 @@ import { config } from '../config.ts';
 import type {
 	AccountSignIn,
 	AgentRuntime,
+	AppsConnector,
 	BrowserHost,
 	DecisionModel,
 	GatewayAccount,
@@ -20,6 +21,8 @@ import type {
 } from '../core/ports.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
+import { composioApps } from './composio/index.ts';
+import { composioKeySlot } from './composio/key.ts';
 import { cursorPlan } from './cursor/plan.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
@@ -81,6 +84,7 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  * `text` is null without an OpenRouter key; tasks are then named by the start of their first message.
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
  * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
+ * `apps` is the apps platform (Composio) the Connectors page's Composio apps sign in and run through.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -102,6 +106,8 @@ export type Providers = {
 	push?: PushSender | null;
 	accounts?: AccountSignIn[];
 	mailboxes?: Mailbox[];
+	/** The apps platform behind Settings › Connectors' Composio apps; absent in tests that do not set one. */
+	apps?: AppsConnector | null;
 };
 
 let providers: Providers | undefined;
@@ -146,6 +152,7 @@ function production(): Providers {
 		push: webPushSender(),
 		accounts: [googleSignIn()],
 		mailboxes: [gmailMailbox()],
+		apps: composioApps({ key: composioKeySlot }),
 	};
 }
 

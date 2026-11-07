@@ -3,11 +3,11 @@ import { useNavigate } from '@tanstack/react-router';
 import { Cloud, FileStack, Paperclip, Plug, Plus, Search, Server, Settings2, TriangleAlert } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Attachments } from '@/components/attachments';
-import { GMAIL, MarkTile, useServerMark } from '@/components/brand-marks';
+import { GMAIL, MarkTile, useComposioMark } from '@/components/brand-marks';
 import { Icon, IconBtn, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/signal';
 import { api, type Artifact, outputUrl, type RunOn } from '@/lib/api';
 import { categoryInfo, categoryOf } from '@/lib/artifacts';
-import { catalogEntryFor } from '@/lib/connector-catalog';
+import { catalogEntryFor, composioEntryFor } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, setConnectorOn } from '@/lib/connectors';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -22,8 +22,11 @@ function RowSwitch({ on }: { on: boolean }) {
 }
 
 function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: ConnectorItem) => void }) {
-	const serverMark = useServerMark(item.kind === 'mcp' ? item.server.url : '');
-	const mark = item.kind === 'mailbox' ? GMAIL : serverMark;
+	const composio = item.kind === 'composio' ? item.account : undefined;
+	const composioUrl = composio ? composio.appUrl || composioEntryFor(composio.toolkit)?.url || '' : '';
+	const url = item.kind === 'mcp' ? item.server.url : composioUrl;
+	const composioMark = useComposioMark(composio?.logo || undefined, url, composio?.name ?? '');
+	const mark = item.kind === 'mailbox' ? GMAIL : composioMark;
 	const waiting = item.state === 'needs-sign-in';
 	// A server from the catalog goes by its product's name; one added by address, by the name it was given.
 	const entry = item.kind === 'mcp' ? catalogEntryFor(item.server.url) : undefined;

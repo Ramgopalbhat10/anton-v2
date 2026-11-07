@@ -4,7 +4,7 @@ import type { AgentNow } from '@/lib/api';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'pr-metadata' }
+	| { kind: 'task'; id: string; what: 'state' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
@@ -54,6 +54,8 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
 	// An email the agent asked to send was asked, sent or turned down: only its card reads it.
 	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
+	// A connector tool call waiting on Run was asked, run or turned down: only its card reads it.
+	if (change.kind === 'task' && change.what === 'approvals') return [['tool-approvals', change.id]];
 	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
 	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];

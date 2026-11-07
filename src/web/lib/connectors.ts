@@ -1,19 +1,21 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { api, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer } from '@/lib/api';
+import { api, type ComposioAccount, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer } from '@/lib/api';
 
 /**
  * Connectors as the composer's + menu and Settings › Connectors list them: each mailbox whose account is
- * connected and each MCP server added, with one on/off state for every task. The agent loads a connector's
- * tools only when it uses them, so turning one on costs nothing until then and never changes the cached prompt.
+ * connected, each MCP server added, and each app connected through Composio, with one on/off state for
+ * every task. The agent loads a connector's tools only when it uses them, so turning one on costs nothing
+ * until then and never changes the cached prompt.
  */
 
 export type ConnectorState = 'on' | 'off' | 'needs-sign-in';
 
 export type ConnectorItem =
 	| { key: string; kind: 'mailbox'; name: string; state: ConnectorState; mailbox: ConnectorMailbox; account: ConnectorAccount }
-	| { key: string; kind: 'mcp'; name: string; state: ConnectorState; server: McpServer };
+	| { key: string; kind: 'mcp'; name: string; state: ConnectorState; server: McpServer }
+	| { key: string; kind: 'composio'; name: string; state: ConnectorState; account: ComposioAccount };
 
-export const connectorKey = { mailbox: (id: string) => `mail:${id}`, mcp: (name: string) => `mcp:${name}` };
+export const connectorKey = { mailbox: (id: string) => `mail:${id}`, mcp: (name: string) => `mcp:${name}`, composio: (toolkit: string) => `composio:${toolkit}` };
 
 export function connectorItems(view: ConnectorsView | undefined): ConnectorItem[] {
 	if (!view) return [];
@@ -32,7 +34,11 @@ export function connectorItems(view: ConnectorsView | undefined): ConnectorItem[
 			server,
 		}),
 	);
-	return [...mailboxes, ...servers];
+	const composio = view.composio.accounts.map((account): ConnectorItem => {
+		const state: ConnectorState = !account.enabled ? 'off' : !view.composio.configured || account.status !== 'active' ? 'needs-sign-in' : 'on';
+		return { key: connectorKey.composio(account.toolkit), kind: 'composio', name: account.name, state, account };
+	});
+	return [...mailboxes, ...servers, ...composio];
 }
 
 /** Turns a connector on or off for every task, shown at once and replaced by the server's answer. */
@@ -40,11 +46,21 @@ export async function setConnectorOn(queryClient: QueryClient, item: ConnectorIt
 	const patch = (view: ConnectorsView): ConnectorsView =>
 		item.kind === 'mailbox'
 			? { ...view, mailboxes: view.mailboxes.map((mailbox) => (mailbox.id === item.mailbox.id ? { ...mailbox, options: { ...mailbox.options, enabled: on } } : mailbox)) }
-			: { ...view, mcpServers: view.mcpServers.map((server) => (server.name === item.server.name ? { ...server, enabled: on } : server)) };
+			: item.kind === 'composio'
+				? { ...view, composio: { ...view.composio, accounts: view.composio.accounts.map((account) => (account.toolkit === item.account.toolkit ? { ...account, enabled: on } : account)) } }
+				: { ...view, mcpServers: view.mcpServers.map((server) => (server.name === item.server.name ? { ...server, enabled: on } : server)) };
 	queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? patch(current) : current));
 	try {
-		const next = item.kind === 'mailbox' ? await api.setMailboxOptions(item.mailbox.id, { ...item.mailbox.options, enabled: on }) : await api.setMcpServerEnabled(item.server.name, on);
-		queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? { ...current, ...next } : current));
+		if (item.kind === 'mailbox') {
+			const next = await api.setMailboxOptions(item.mailbox.id, { ...item.mailbox.options, enabled: on });
+			queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? { ...current, ...next } : current));
+		} else if (item.kind === 'composio') {
+			const composio = await api.setComposioEnabled(item.account.toolkit, on);
+			queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? { ...current, composio } : current));
+		} else {
+			const next = await api.setMcpServerEnabled(item.server.name, on);
+			queryClient.setQueryData<ConnectorsView>(['connectors'], (current) => (current ? { ...current, ...next } : current));
+		}
 	} catch (error) {
 		await queryClient.invalidateQueries({ queryKey: ['connectors'] });
 		throw error;

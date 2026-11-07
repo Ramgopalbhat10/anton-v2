@@ -68,6 +68,11 @@ export const config = {
 		clientId: read('GOOGLE_CLIENT_ID'),
 		clientSecret: read('GOOGLE_CLIENT_SECRET'),
 	},
+	/** Composio, the apps connector in Settings › Connectors; the key pasted there is used instead when there is one. */
+	composio: {
+		apiUrl: read('ANTON_COMPOSIO_API_URL', 'https://backend.composio.dev/api/v3.1'),
+		apiKey: read('COMPOSIO_API_KEY'),
+	},
 	/** Kernel's hosted browsers, for the Browser panel; without a key the panel says how to set one. */
 	kernel: {
 		apiUrl: read('ANTON_KERNEL_API_URL', 'https://api.onkernel.com'),

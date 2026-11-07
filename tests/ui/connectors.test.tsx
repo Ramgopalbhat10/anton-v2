@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorsView, MailApproval } from '@/lib/api';
+import type { ConnectorsView, MailApproval, ToolApproval } from '@/lib/api';
 import { renderWithQueries } from './render';
 
 const { api } = vi.hoisted(() => ({
@@ -21,12 +21,25 @@ const { api } = vi.hoisted(() => ({
 		signOutMcpServer: vi.fn(),
 		mailApprovals: vi.fn(),
 		decideMail: vi.fn(),
+		toolApprovals: vi.fn(),
+		decideToolApproval: vi.fn(),
+		setComposioKey: vi.fn(),
+		addComposioAccount: vi.fn(),
+		composioToolkits: vi.fn(),
+		composioToolkit: vi.fn(),
+		composioTools: vi.fn(),
+		setComposioEnabled: vi.fn(),
+		connectComposio: vi.fn(),
+		refreshComposio: vi.fn(),
+		disconnectComposio: vi.fn(),
+		removeComposio: vi.fn(),
 	},
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { ConnectorDetailPage, ConnectorsPage } = await import('@/components/settings/connectors');
 const { MailSendCard } = await import('@/components/mail-card');
+const { ToolApprovalCard } = await import('@/components/tool-approval-card');
 const { ReplyActions } = await import('@/components/reply-cards');
 const { GOOGLE, MCP, serverMark } = await import('@/components/brand-marks');
 const brands = await import('@/lib/brand-icons');
@@ -54,10 +67,26 @@ const gmail = (patch: Partial<ConnectorsView['mailboxes'][number]> = {}): Connec
 const NO_SIGN_IN = { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } as const;
 const tracker = { name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, signIn: NO_SIGN_IN, enabled: true, addedAt: '2026-10-17T00:00:00Z' };
 const linear = { ...tracker, name: 'linear', url: 'https://mcp.linear.app/mcp', hasAuth: false };
+const composioView = (accounts: ConnectorsView['composio']['accounts'] = [], configured = false): ConnectorsView['composio'] => ({ configured, keyFromEnv: false, accounts });
+const slackAccount = (patch: Partial<ConnectorsView['composio']['accounts'][number]> = {}): ConnectorsView['composio']['accounts'][number] => ({
+	toolkit: 'slack',
+	name: 'Slack',
+	description: 'Channels, messages and files',
+	category: 'Communication',
+	appUrl: 'https://slack.com',
+	logo: 'https://logos.composio.dev/slack.png',
+	enabled: true,
+	status: 'active',
+	statusReason: null,
+	connectedAt: '2026-10-17T08:00:00Z',
+	addedAt: '2026-10-16T08:00:00Z',
+	account: 'ca_1',
+	...patch,
+});
 
 /** Settings › Connectors at `at`: the catalog, or a connector's own page (`/settings/connectors/view?c=…`). */
-function open(view: ConnectorsView, at = '/settings/connectors') {
-	api.connectors.mockResolvedValue(view);
+function open(view: Omit<ConnectorsView, 'composio'> & { composio?: ConnectorsView['composio'] }, at = '/settings/connectors') {
+	api.connectors.mockResolvedValue({ composio: composioView(), ...view });
 	const root = createRootRoute({ component: Outlet });
 	const page = createRoute({ getParentRoute: () => root, path: '/settings/connectors', component: ConnectorsPage });
 	const detail = createRoute({
@@ -295,5 +324,107 @@ describe('An email the agent asks to send', () => {
 		renderWithQueries(<MailSendCard sessionId="s1" approvalId="mail_1" place={{ latest: false, answer: "Don't send" }} />);
 		expect(await screen.findByText('Not sent')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+	});
+});
+
+describe('Apps connected through Composio', () => {
+	it('lists an added app as a tile with its switch, marked by its own address', async () => {
+		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([slackAccount()], true) });
+		const yours = await screen.findByRole('region', { name: 'Your connectors' });
+		expect(within(yours).getByRole('link', { name: 'Slack' })).toBeTruthy();
+		expect(screen.getByRole('switch', { name: 'Use Slack in tasks' })).toBeTruthy();
+		const offered = screen.getByRole('region', { name: 'Add a connector' });
+		expect(within(offered).queryByRole('link', { name: 'Slack' })).toBeNull();
+		expect(within(offered).getByRole('link', { name: 'GitHub' })).toBeTruthy();
+	});
+
+	it('asks for the Composio key before an app can be added', async () => {
+		api.setComposioKey.mockResolvedValue(composioView());
+		open({ accounts: [], mailboxes: [], mcpServers: [] }, '/settings/connectors/view?add=composio:slack');
+		expect(await screen.findByText('Set up once')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Add and connect' })).toBeNull();
+		fireEvent.change(screen.getByLabelText('Composio API key'), { target: { value: 'ck_test' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Save key' }));
+		await waitFor(() => expect(api.setComposioKey).toHaveBeenCalledWith('ck_test'));
+	});
+
+	it('adds an app and opens its Composio sign-in with one press', async () => {
+		api.addComposioAccount.mockResolvedValue(composioView([slackAccount({ status: 'pending', account: null })], true));
+		api.connectComposio.mockResolvedValue({ url: 'https://connect.composio.dev/link/abc' });
+		const assign = vi.fn();
+		vi.stubGlobal('location', { ...window.location, assign, origin: window.location.origin });
+		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([], true) }, '/settings/connectors/view?add=composio:slack');
+		fireEvent.click(await screen.findByRole('button', { name: 'Add and connect' }));
+		await waitFor(() => expect(api.addComposioAccount).toHaveBeenCalledWith('slack'));
+		await waitFor(() => expect(api.connectComposio).toHaveBeenCalledWith('slack'));
+		await waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.composio.dev/link/abc'));
+		vi.unstubAllGlobals();
+	});
+
+	it('the one search box also searches Composio’s whole catalog, and opens an app outside the offered list', async () => {
+		const hit = { slug: 'salesforce', name: 'Salesforce', description: 'CRM records and pipelines', logo: 'https://logos.composio.dev/salesforce.png', appUrl: 'https://salesforce.com', categories: ['CRM'], toolsCount: 80, noAuth: false };
+		api.composioToolkits.mockResolvedValue({ toolkits: [hit] });
+		api.composioToolkit.mockResolvedValue(hit);
+		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([], true) });
+		fireEvent.change(await screen.findByLabelText('Search connectors'), { target: { value: 'sales' } });
+		await waitFor(() => expect(api.composioToolkits).toHaveBeenCalledWith('sales'), { timeout: 3000 });
+		fireEvent.click(await screen.findByRole('link', { name: 'Salesforce' }));
+		expect(await screen.findByText('CRM records and pipelines')).toBeTruthy();
+		await waitFor(() => expect(api.composioToolkit).toHaveBeenCalledWith('salesforce'));
+		expect(await screen.findByRole('button', { name: 'Add and connect' })).toBeTruthy();
+	});
+
+	it("shows an app's page: its tools, its switch, and Run-before-change copy", async () => {
+		api.composioTools.mockResolvedValue({ tools: [{ slug: 'SLACK_SEND_MESSAGE', name: 'Send Message', description: 'Post a message', inputSchema: { type: 'object' }, tags: [], toolkit: 'slack' }] });
+		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([slackAccount()], true) }, '/settings/connectors/view?c=composio:slack');
+		expect(await screen.findByText('Send Message')).toBeTruthy();
+		expect(screen.getByRole('switch', { name: 'On for tasks' })).toBeTruthy();
+		expect(screen.getByText(/waits for your/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+	});
+});
+
+describe('A connector call the agent asks to run', () => {
+	const approval: ToolApproval = {
+		id: 'tool_1',
+		connector: 'composio:slack',
+		tool: 'composio__slack__send_message',
+		args: { channel: '#general', text: 'Ship it' },
+		state: 'pending',
+		result: null,
+		error: null,
+		createdAt: '2026-10-17T10:00:00Z',
+		decidedAt: null,
+	};
+
+	it('shows the call with its arguments, and runs it only on Run, telling the agent', async () => {
+		api.toolApprovals.mockResolvedValue({ approvals: [approval] });
+		const done: ToolApproval = { ...approval, state: 'done', result: '{"ok":true}', decidedAt: '2026-10-17T10:42:00Z' };
+		api.decideToolApproval.mockImplementation(async () => {
+			api.toolApprovals.mockResolvedValue({ approvals: [done] });
+			return done;
+		});
+		const reply = vi.fn();
+		renderWithQueries(
+			<ReplyActions.Provider value={{ send: reply, busy: false }}>
+				<ToolApprovalCard sessionId="s1" approvalId="tool_1" place={{ latest: true, answer: null }} />
+			</ReplyActions.Provider>,
+		);
+		const card = await screen.findByRole('region', { name: 'Tool call to run' });
+		expect(within(card).getByText('composio__slack__send_message')).toBeTruthy();
+		expect(within(card).getByText(/channel: #general/)).toBeTruthy();
+		expect(api.decideToolApproval).not.toHaveBeenCalled();
+		fireEvent.click(within(card).getByRole('button', { name: 'Run' }));
+		await waitFor(() => expect(api.decideToolApproval).toHaveBeenCalledWith('s1', 'tool_1', true));
+		await waitFor(() => expect(reply).toHaveBeenCalledWith('I ran composio__slack__send_message.'));
+		expect(await within(card).findByText(/Ran/)).toBeTruthy();
+		expect(within(card).getByText('{"ok":true}')).toBeTruthy();
+	});
+
+	it("says it was not run after Don't run", async () => {
+		api.toolApprovals.mockResolvedValue({ approvals: [{ ...approval, state: 'declined' }] });
+		renderWithQueries(<ToolApprovalCard sessionId="s1" approvalId="tool_1" place={{ latest: false, answer: "Don't run" }} />);
+		expect(await screen.findByText('Not run')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
 	});
 });
