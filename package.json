@@ -16,6 +16,7 @@
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
+		"browser:bench": "node --experimental-strip-types scripts/browser-bench.ts",
 		"postinstall": "node --experimental-strip-types scripts/patch-flue.ts"
 	},
 	"dependencies": {
