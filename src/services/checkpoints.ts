@@ -7,6 +7,7 @@ import { forgetOutputIndex } from '../db/pages.ts';
 import { getProviders } from '../providers/index.ts';
 import { type FileChange, type LogEntry, changes, repoDir } from './git.ts';
 import { hasCommit } from './host-commits.ts';
+import { downloadInto } from './machine-download.ts';
 
 /** Larger files are listed but not copied. */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -274,20 +275,17 @@ export async function savedOutputs(id: string): Promise<SavedOutput[]> {
  */
 export async function copyLibrary(machine: Machine, id: string): Promise<void> {
 	const [saved, checkpoint] = await Promise.all([savedOutputs(id), readCheckpoint(id)]);
-	const wanted = new Map<string, string>();
+	const wanted = new Map<string, SavedOutput & { key: string }>();
 	for (const output of [...(checkpoint?.outputs ?? []), ...saved.filter((output) => output.path.startsWith('uploads/'))]) {
-		if (output.key) wanted.set(output.path, output.key);
+		if (output.key) wanted.set(output.path, { ...output, key: output.key });
 	}
 	if (!wanted.size) return;
 	const present = new Set((await listMachineFiles(machine, `${machine.root}/outputs`)).map((file) => file.path));
-	const missing = [...wanted].filter(([path]) => !present.has(path));
-	if (!missing.length) return;
-	const folders = new Set(missing.map(([path]) => `${machine.root}/outputs/${path}`.replace(/\/[^/]*$/, '')));
-	await run(machine, `mkdir -p ${[...folders].map(quote).join(' ')}`);
-	for (const [path, key] of missing) {
-		const bytes = await getProviders().store.get(key);
-		if (bytes) await writeMachineFile(machine, `${machine.root}/outputs/${path}`, bytes);
-	}
+	const missing = [...wanted.values()].filter((output) => !present.has(output.path));
+	await downloadInto(
+		machine,
+		missing.map((output) => ({ key: output.key, target: `${machine.root}/outputs/${output.path}`, size: output.size })),
+	);
 }
 
 /** One task's saves, one after another, so two at once never lose each other's entry. */

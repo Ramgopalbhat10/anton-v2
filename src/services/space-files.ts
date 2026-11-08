@@ -10,6 +10,7 @@ import { getProviders } from '../providers/index.ts';
 import { documentSlice } from './documents.ts';
 import { MAX_UPLOAD_BYTES } from './files.ts';
 import { logProblem } from './log.ts';
+import { downloadInto } from './machine-download.ts';
 import { liveMachine } from './workspace.ts';
 
 /**
@@ -35,6 +36,14 @@ export async function listSpaceFiles(spaceId: string): Promise<SpaceFile[]> {
 		.map((object) => ({ path: object.key.slice(prefix(spaceId).length), size: object.size, modifiedAt: new Date(object.modifiedAt).toISOString() }))
 		.filter((file) => file.path)
 		.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function isSafePath(path: string): boolean {
+	try {
+		return safeRelativePath(path) === path;
+	} catch {
+		return false;
+	}
 }
 
 const fileName = (name: string) => safeRelativePath(uploadName(name));
@@ -229,21 +238,18 @@ export function copySpaceFiles(machine: Machine, sessionId: string): Promise<voi
 		const [files, present, seen] = await Promise.all([listSpaceFiles(spaceId), listMachineFiles(machine, dir), readSeen(machine)]);
 		const there = new Map(present.map((file) => [file.path, file]));
 		const next: Seen = {};
-		const written: string[] = [];
+		const wanted: SpaceFile[] = [];
 		for (const file of files) {
-			const libraryAt = Date.parse(file.modifiedAt);
 			const copy = there.get(file.path);
 			const before = seen[file.path];
-			if (copy && before && before.libraryAt === libraryAt && before.size === copy.size && before.mtimeMs === copy.mtimeMs) {
-				next[file.path] = before;
-				continue;
-			}
-			const bytes = await readSpaceFile(spaceId, file.path);
-			if (!bytes) continue;
-			await writeInto(machine, file.path, bytes);
-			written.push(file.path);
-			next[file.path] = { size: bytes.length, mtimeMs: 0, libraryAt };
+			if (copy && before && before.libraryAt === Date.parse(file.modifiedAt) && before.size === copy.size && before.mtimeMs === copy.mtimeMs) next[file.path] = before;
+			else if (isSafePath(file.path)) wanted.push(file);
 		}
+		// All at once: a new thread's machine has none of them, and one at a time a project's screenshots took a minute and a half.
+		const target = (path: string) => `${dir}/${path}`;
+		const missing = new Set(await downloadInto(machine, wanted.map((file) => ({ key: `${prefix(spaceId)}${file.path}`, target: target(file.path), size: file.size }))));
+		const written = wanted.filter((file) => !missing.has(target(file.path))).map((file) => file.path);
+		for (const file of wanted) if (!missing.has(target(file.path))) next[file.path] = { size: file.size, mtimeMs: 0, libraryAt: Date.parse(file.modifiedAt) };
 		// A file removed from the Library while this machine was away goes from the machine too, unless the
 		// thread changed it since, in which case the save above put it back.
 		const inLibrary = new Set(files.map((file) => file.path));
