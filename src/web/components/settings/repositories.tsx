@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, Folder, GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Caption, Chip } from '@/components/instrument';
+import { Caption } from '@/components/instrument';
 import { AddRepo } from '@/components/launcher';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type Project, type Session } from '@/lib/api';
@@ -26,28 +26,31 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 					<span className="font-normal text-(--text-tertiary)">{owner}</span>
 					{name}
 				</div>
-				<div className="flex min-w-0 items-center gap-1 text-(--text-tertiary)" title={`Default branch ${project.defaultBranch}`}>
-					<Icon icon={GitBranch} size={11} className="shrink-0" />
-					<span className="in-num truncate text-[11.5px]">{project.defaultBranch}</span>
+				<div className="in-num flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+					<span className="inline-flex min-w-0 items-center gap-1" title={`Default branch ${project.defaultBranch}`}>
+						<Icon icon={GitBranch} size={11} className="shrink-0" />
+						<span className="truncate">{project.defaultBranch}</span>
+					</span>
+					<span className="text-(--text-disabled)">·</span>
+					<span className="truncate" title="The base image its sandboxes start from">
+						{project.baseImage ?? 'default image'}
+					</span>
+					<span className="hidden text-(--text-disabled) md:inline">·</span>
+					{project.warmedAt ? (
+						<span className="hidden shrink-0 items-center gap-1 text-(--text-secondary) md:inline-flex" title="A prepared image starts its sandboxes with the repository and setup already in place">
+							<span className="size-1.5 rounded-full bg-(--accent-base)" />
+							prepared {age(project.warmedAt)} ago
+						</span>
+					) : (
+						<span className="hidden shrink-0 md:inline" title="Sandboxes clone and set up the repository each time until an image is prepared">
+							not prepared
+						</span>
+					)}
 				</div>
 			</div>
-			<div className="hidden shrink-0 flex-col items-end gap-0.5 sm:flex">
+			<div className="hidden shrink-0 items-baseline gap-1 sm:flex">
 				<span className="in-num text-[13px] text-(--text-primary)">{tasks}</span>
 				<Caption>{tasks === 1 ? 'task' : 'tasks'}</Caption>
-			</div>
-			<div className="hidden w-[150px] shrink-0 flex-col items-end gap-1 md:flex">
-				{project.warmedAt ? (
-					<Chip tone="success" title="A prepared image starts its sandboxes with the repository and setup already in place">
-						image · {age(project.warmedAt)} old
-					</Chip>
-				) : (
-					<Chip className="border-dashed bg-transparent text-(--text-tertiary)" title="Sandboxes clone and set up the repository each time until an image is prepared">
-						no prepared image
-					</Chip>
-				)}
-				<Chip mono title="The base image its sandboxes start from">
-					{project.baseImage ?? 'default image'}
-				</Chip>
 			</div>
 			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
 		</Link>

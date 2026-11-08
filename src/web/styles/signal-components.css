@@ -6,12 +6,12 @@
 .sg-btn--md{height:var(--control-md-height);padding:0 var(--control-md-padding);font-size:var(--control-md-font);gap:var(--control-md-gap)}
 .sg-btn--lg{height:var(--control-lg-height);padding:0 var(--control-lg-padding);font-size:var(--control-lg-font);gap:var(--control-lg-gap)}
 .sg-btn--block{width:100%}
-.sg-btn--primary{background:var(--accent-base);color:var(--accent-fg)}
-.sg-btn--primary:hover,.sg-btn--primary.is-hover{background:var(--accent-hover)}
-.sg-btn--primary:active,.sg-btn--primary.is-active{background:var(--accent-active)}
-.sg-btn--secondary{background:var(--bg-raised);border-color:transparent;color:var(--text-primary)}
-.sg-btn--secondary:hover,.sg-btn--secondary.is-hover{background:var(--neutral-800);border-color:transparent}
-.sg-btn--secondary:active,.sg-btn--secondary.is-active{background:var(--neutral-750)}
+.sg-btn--primary{background:var(--primary-bg);color:var(--primary-fg);box-shadow:inset 0 -1px 0 rgba(0,0,0,0.12)}
+.sg-btn--primary:hover,.sg-btn--primary.is-hover{background:var(--primary-bg-hover)}
+.sg-btn--primary:active,.sg-btn--primary.is-active{background:var(--neutral-200)}
+.sg-btn--secondary{background:rgba(255,255,255,0.06);border-color:transparent;color:var(--text-primary);box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
+.sg-btn--secondary:hover,.sg-btn--secondary.is-hover{background:rgba(255,255,255,0.09);border-color:transparent}
+.sg-btn--secondary:active,.sg-btn--secondary.is-active{background:rgba(255,255,255,0.12)}
 .sg-btn--ghost{background:transparent;color:var(--text-secondary)}
 .sg-btn--ghost:hover,.sg-btn--ghost.is-hover{background:var(--bg-hover);color:var(--text-primary)}
 .sg-btn--ghost:active,.sg-btn--ghost.is-active{background:var(--bg-active)}
@@ -188,3 +188,8 @@
 .sg-markdown .sg-output-deleted__tag{display:inline-block;margin-left:6px;padding:0 5px;border:1px dashed var(--border-default);border-radius:6px;font-family:var(--font-mono);font-size:10.5px;line-height:16px;letter-spacing:.02em;color:var(--text-disabled);text-decoration:none;vertical-align:1px}
 .sg-markdown .sg-output-deleted--block{display:flex;width:fit-content;max-width:100%;align-items:center;gap:4px;margin:8px 0;padding:8px 12px;border:1px dashed var(--border-default);border-radius:6px;background:var(--bg-inset);font-size:12.5px;text-decoration:none}
 .sg-markdown .sg-output-deleted--block .sg-output-deleted__tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+
+/* Over the sky, the sidebar's column stacks above it. */
+@media (min-width: 768px) {
+ .sg-nav-column { z-index: 1; }
+}

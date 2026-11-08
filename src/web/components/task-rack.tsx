@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, ArrowUpRight, ChevronLeft, ChevronRight, GitFork, GitPullRequest, Server, Square } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, ChevronLeft, ChevronRight, GitFork, GitPullRequest, LayoutGrid, Square } from 'lucide-react';
 import { type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Block, COS, DETAIL, EDGE, fmt, Ln, type Pair, pt, RECESS, Slot, ve } from '@/components/illustrations';
 import { Card, CardSection } from '@/components/instrument';
 import { Btn, Icon, IconBtn } from '@/components/signal';
 import { useFork } from '@/components/task-actions';
@@ -12,39 +11,22 @@ import { age, dollars, tokens } from '@/lib/format';
 import { useModels } from '@/components/model-picker';
 import { setPendingPrompt } from '@/lib/pending-prompt';
 
-/* Blades in a row of rack bays, drawn like the other isometric objects. Each
-   blade's light shows how its item stands. Pointing at one (or tabbing to it)
-   draws it out of its slot and opens a card with its details and what can be
-   done with it. The card stays while the pointer is on it. The row is as long
-   as it needs to be and scrolls sideways, or by the header's arrows.
+/* Items in a row of bays, drawn flat on the dot grid: each bay a tray of
+   slots, each item a tile standing in its slot with a light that shows how it
+   stands. Pointing at a tile (or tabbing to it) lifts it and opens a card with
+   its details and what can be done with it. The card stays while the pointer is
+   on it. The row is as long as it needs to be and scrolls sideways, or by the
+   header's arrows.
 
    `RackWell` draws any bays of items; the Tasks page fills it with every task,
    ten to a bay (`RackCard`), and Projects with one bay per project and its
-   threads as the blades (`project-rack.tsx`). */
+   threads as the tiles (`project-rack.tsx`). */
 
-/** Blades in one bay. */
+/** Tiles in one bay. */
 export const PER_BAY = 10;
-const PITCH = 12;
-const BLADE = 10;
-const INSET = 8;
-const BAY_W = INSET * 2 + PER_BAY * PITCH - (PITCH - BLADE);
-const DEPTH = 44;
-const HEIGHT = 60;
-const PLINTH = 6;
-/** How far a blade comes out of its slot, and how long the whole way takes. */
-const PULL = 18;
-const SLIDE_MS = 620;
-const BLADE_Z = PLINTH + 7;
-const BLADE_H = 46;
-
-/** Each bay's share of the row, in screen units, and the row's height. */
-const SPAN = 184;
-const TOP = -118;
-const BOTTOM = 54;
-/** How wide each bay's share is drawn on the page, so bays keep one size however many there are. */
-const BAY_PX = 250;
-const SCALE = BAY_PX / SPAN;
-/** How long the card waits after the pointer leaves its blade or itself, so it can be reached. */
+/** How wide each bay's share of the row is, so bays keep one size however many there are. */
+const BAY_PX = 236;
+/** How long the card waits after the pointer leaves its tile or itself, so it can be reached. */
 const LINGER_MS = 320;
 
 type Kind = 'live' | 'pr' | 'failed' | 'stopped';
@@ -68,201 +50,46 @@ function stateWord(session: Session): string {
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** The back corner of bay `bay`, placed so the middle of its footprint lands on
-    its column in a row that runs straight across the screen. */
-function bayOrigin(bay: number): Pair {
-	const t = (SPAN * (bay + 0.5)) / (2 * COS);
-	return [t - BAY_W / 2, -t - DEPTH / 2];
-}
-
-/** Where blade `slot` of a bay stands along the bay's front. */
-const slotX = (slot: number) => INSET + slot * PITCH;
-
-/** Where the card's leader starts on a fully drawn-out blade, at half its
-    height: the far edge of its body on the right, its plate's edge on the left. */
-function bladeSides(index: number): { left: Pair; right: Pair } {
-	const [ox, oy] = bayOrigin(Math.floor(index / PER_BAY));
-	const x = ox + slotX(index % PER_BAY);
-	const z = BLADE_Z + BLADE_H / 2;
-	return { left: pt([x, oy + DEPTH + PULL + 2.2, z]), right: pt([x + BLADE, oy + DEPTH, z]) };
-}
-
-/**
- * How far a blade is out of its slot: eased toward all the way out while it is
- * open and back in when it closes, starting from wherever it is, so a blade let
- * go halfway slides straight back.
- */
-function useDrawOut(out: boolean) {
-	const [pull, setPull] = useState(0);
-	const now = useRef(0);
-	useEffect(() => {
-		const goal = out ? PULL : 0;
-		const from = now.current;
-		if (from === goal) return;
-		if (reducedMotion()) {
-			now.current = goal;
-			setPull(goal);
-			return;
-		}
-		const duration = Math.max(160, (SLIDE_MS * Math.abs(goal - from)) / PULL);
-		const start = performance.now();
-		let frame = 0;
-		const step = (time: number) => {
-			const k = Math.min(1, (time - start) / duration);
-			const eased = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
-			now.current = from + (goal - from) * eased;
-			setPull(now.current);
-			if (k < 1) frame = requestAnimationFrame(step);
-		};
-		frame = requestAnimationFrame(step);
-		return () => cancelAnimationFrame(frame);
-	}, [out]);
-	return pull;
-}
+/** How a tile shows its item: the colour of its light, whether it works (its light runs) or calls for you (its light pulses), and its name for assistive tech. */
+export type RackLook = { color: string; live: boolean; label: string; alert?: boolean };
 
 type Handlers = { onOpen: () => void; onClose: () => void; onChoose: () => void };
 
-/**
- * One blade. Only the part of it that is out of the cabinet is drawn: the body
- * runs from the cabinet's front to the plate and grows as the blade slides out,
- * with its board moving along with the plate, so it comes out of its slot
- * rather than over the rack. The interactive ones stay in slot order; the open
- * one is drawn a second time on top as a copy (`copy`) that takes no input, so
- * it covers its neighbours without the real one moving in the document and
- * losing focus.
- */
-/** How a blade shows its item: the colour of its light, whether it works (blinking, lit) or calls for you (its light pulses), and its name for assistive tech. */
-export type RackLook = { color: string; live: boolean; label: string; alert?: boolean };
-
-function Blade({ look, index, open, copy, handlers }: { look: RackLook; index: number; open: boolean; copy?: boolean; handlers?: Handlers }) {
-	const lit = open || look.live;
-	const slot = index % PER_BAY;
-	const [ox, oy] = bayOrigin(Math.floor(index / PER_BAY));
-	const x = ox + slotX(slot);
-	const front = oy + DEPTH;
-	const pull = useDrawOut(open);
-	// The board is fixed to the plate, so it slides out with it.
-	const behind = fmt(pull - PULL);
+/** One tile: a slim upright card in its slot, its light at the foot. */
+function Tile({ look, slot, open, handlers, tileRef }: { look: RackLook; slot: number; open: boolean; handlers: Handlers; tileRef: (element: HTMLDivElement | null) => void }) {
 	return (
-		<g
-			{...(copy || !handlers
-				? { 'aria-hidden': true, style: { pointerEvents: 'none' } as CSSProperties }
-				: {
-						className: 'rack-blade',
-						style: { '--slot': slot } as CSSProperties,
-						role: 'link',
-						tabIndex: 0,
-						'aria-label': look.label,
-						onPointerEnter: handlers.onOpen,
-						onPointerLeave: handlers.onClose,
-						onFocus: handlers.onOpen,
-						onBlur: handlers.onClose,
-						onClick: handlers.onChoose,
-						onKeyDown: (event: KeyboardEvent<SVGGElement>) => {
-							if (event.key === 'Enter' || event.key === ' ') {
-								event.preventDefault();
-								handlers.onChoose();
-							}
-						},
-					})}
+		<div
+			ref={tileRef}
+			role="link"
+			tabIndex={0}
+			aria-label={look.label}
+			data-open={open || undefined}
+			data-live={look.live || undefined}
+			className="rack-blade"
+			style={{ '--slot': slot, '--light': look.color } as CSSProperties}
+			onPointerEnter={handlers.onOpen}
+			onPointerLeave={handlers.onClose}
+			onFocus={handlers.onOpen}
+			onBlur={handlers.onClose}
+			onClick={handlers.onChoose}
+			onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					handlers.onChoose();
+				}
+			}}
 		>
-			{pull > 0.5 ? (
-				<Block
-					at={[x + 0.6, front, BLADE_Z + 1]}
-					size={[BLADE - 1.2, pull, BLADE_H - 2]}
-					r={Math.min(1, pull / 3)}
-					top={
-						<g transform={`translate(0 ${behind})`}>
-							<Ln a={[2, 2]} b={[2, PULL - 2]} />
-							<Ln a={[BLADE - 3.2, 2]} b={[BLADE - 3.2, PULL - 2]} />
-						</g>
-					}
-					right={
-						<g transform={`translate(${behind} 0)`}>
-							<rect x={2} y={4} width={PULL - 4} height={BLADE_H - 10} rx={1.5} fill={RECESS} stroke={DETAIL} {...ve} />
-							<rect x={4} y={22} width={7} height={7} rx={1} fill="var(--art-top)" stroke={EDGE} {...ve} />
-							<rect x={4} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
-							<rect x={10} y={9} width={4} height={9} rx={0.8} fill="var(--art-top)" stroke={DETAIL} {...ve} />
-							<Ln a={[11, 25.5]} b={[14.5, 25.5]} />
-							<Ln a={[7.5, 29]} b={[7.5, 33]} />
-							<Ln a={[7.5, 33]} b={[13, 33]} />
-							<circle cx={13.5} cy={33} r={0.9} fill={look.live ? 'var(--cyan-300)' : DETAIL} />
-						</g>
-					}
-				/>
-			) : null}
-			<Block
-				at={[x, front + pull, BLADE_Z]}
-				size={[BLADE, 2.2, BLADE_H]}
-				r={1.4}
-				tone={lit ? 'accent' : 'solid'}
-				left={
-					<>
-						<Slot x={3} y={5} w={4} h={9} r={1.2} edge />
-						{[17, 19.4, 21.8, 24.2, 26.6].map((v) => (
-							<rect key={v} x={3} y={v} width={4} height={0.9} rx={0.45} fill={lit ? 'var(--accent-base)' : DETAIL} />
-						))}
-						{look.live
-							? [30, 33, 36].map((v, k) => <circle key={v} className="rack-activity" style={{ '--blink': k } as CSSProperties} cx={5} cy={v} r={0.75} fill="var(--cyan-200)" />)
-							: null}
-						<circle className={look.live || look.alert ? 'in-pulse' : undefined} cx={5} cy={41} r={look.alert ? 1.9 : 1.5} fill={look.color} />
-					</>
-				}
-			/>
-		</g>
-	);
-}
-
-/** One bay's cabinet: its plinth, the slots in its front, vents, and the sweep
-    of the indexing light across its lid. */
-function Bay({ bay, filled, sweep = true, led }: { bay: number; filled: number; sweep?: boolean; led?: string }) {
-	const [ox, oy] = bayOrigin(bay);
-	return (
-		<g>
-			<Block
-				at={[ox - 4, oy - 4, 0]}
-				size={[BAY_W + 8, DEPTH + 8, PLINTH]}
-				r={2}
-				left={Array.from({ length: PER_BAY }, (_, i) => (
-					<rect key={i} x={4 + slotX(i) + BLADE / 2 - 1} y={2.6} width={2} height={0.9} rx={0.45} fill={i < filled ? DETAIL : 'none'} />
-				))}
-			/>
-			<Block
-				at={[ox, oy, PLINTH]}
-				size={[BAY_W, DEPTH, HEIGHT]}
-				r={3.5}
-				top={
-					<>
-						{Array.from({ length: 7 }, (_, i) => (
-							<Slot key={i} x={10 + i * 17} y={8} w={11} h={2.4} r={1.2} />
-						))}
-						<Slot x={10} y={DEPTH - 15} w={BAY_W - 20} h={8} r={2} edge />
-						<g className="rack-sweep" style={{ '--bay': bay } as CSSProperties}>
-							<line x1={12} y1={DEPTH - 13.6} x2={12} y2={DEPTH - 8.4} stroke="var(--cyan-200)" strokeWidth={1.4} {...ve} />
-						</g>
-					</>
-				}
-				left={Array.from({ length: PER_BAY }, (_, i) => (
-					<Slot key={i} x={slotX(i) - 0.6} y={6} w={BLADE + 1.2} h={BLADE_H + 1.2} r={1.4} />
-				))}
-				right={
-					<>
-						<Slot x={8} y={8} w={DEPTH - 16} h={HEIGHT - 20} r={2} edge />
-						{Array.from({ length: 8 }, (_, i) => (
-							<Ln key={i} a={[12, 13 + i * 4.4]} b={[DEPTH - 12, 13 + i * 4.4]} />
-						))}
-						<circle className={led && led !== DETAIL ? 'in-pulse' : undefined} cx={DEPTH - 9} cy={HEIGHT - 6} r={1.4} fill={led ?? (filled ? 'var(--cyan-300)' : DETAIL)} />
-					</>
-				}
-			/>
-		</g>
+			<span aria-hidden className="rack-blade__lines" />
+			{look.live ? <span aria-hidden className="rack-blade__run" /> : null}
+			<span aria-hidden className={look.live || look.alert ? 'rack-blade__light in-pulse' : 'rack-blade__light'} />
+		</div>
 	);
 }
 
 export type Linger = { onPointerEnter: () => void; onPointerLeave: () => void; onFocus: () => void; onBlur: (event: FocusEvent<HTMLDivElement>) => void; onDismiss: () => void };
 
 /** Where the open blade's card sits in the well: beside the blade, on the side with more room, or under the drawing when neither side has room. */
-export type Placement = { side: 'left' | 'right'; from: Pair; edge: number } | { side: 'below' };
+export type Placement = { side: 'left' | 'right'; from: [number, number]; edge: number } | { side: 'below' };
 
 const CARD_W = 300;
 const GAP = 22;
@@ -483,15 +310,10 @@ export function RackWell<T extends { id: string }>({
 }) {
 	const scroll = useRowScroll();
 	const well = useRef<HTMLDivElement>(null);
-	const svg = useRef<SVGSVGElement>(null);
+	const tiles = useRef(new Map<number, HTMLDivElement>());
 	const [open, setOpen] = useState<number | null>(null);
-	// The blade drawn on top: the open one, and after it closes, the last one
-	// opened, so its copy slides back in with it.
-	const [top, setTop] = useState<number | null>(null);
 	const [placement, setPlacement] = useState<Placement | null>(null);
 	const closing = useRef(0);
-	const count = Math.max(1, bays.length);
-	const view = { w: count * SPAN, h: BOTTOM - TOP };
 	const scrolls = !(scroll.edges.start && scroll.edges.end);
 	const itemAt = (index: number): T | undefined => bays[Math.floor(index / PER_BAY)]?.items[index % PER_BAY];
 
@@ -506,16 +328,16 @@ export function RackWell<T extends { id: string }>({
 	};
 	useEffect(() => hold, []);
 
-	/** Where the open blade's card goes, measured from the drawing as it sits now:
-	    beside the blade, on whichever side has room for it, else under the drawing. */
+	/** Where the open tile's card goes, measured from the tile as it sits now:
+	    beside it, on whichever side has room, else under the row. */
 	const place = useCallback((index: number) => {
-		if (!well.current || !svg.current) return;
+		const tile = tiles.current.get(index);
+		if (!well.current || !tile) return;
 		const box = well.current.getBoundingClientRect();
-		const drawing = svg.current.getBoundingClientRect();
-		const toWell = ([x, y]: Pair): Pair => [drawing.left - box.left + x * SCALE, drawing.top - box.top + (y - TOP) * SCALE];
-		const sides = bladeSides(index);
-		const right = toWell(sides.right);
-		const left = toWell(sides.left);
+		const rect = tile.getBoundingClientRect();
+		const middle = rect.top - box.top + rect.height / 2;
+		const right: [number, number] = [rect.right - box.left, middle];
+		const left: [number, number] = [rect.left - box.left, middle];
 		const fitsRight = right[0] + GAP + CARD_W <= box.width - 8;
 		const fitsLeft = left[0] - GAP - CARD_W >= 8;
 		setPlacement(fitsRight ? { side: 'right', from: right, edge: right[0] + GAP } : fitsLeft ? { side: 'left', from: left, edge: left[0] - GAP } : { side: 'below' });
@@ -542,62 +364,57 @@ export function RackWell<T extends { id: string }>({
 	};
 	const fade = `linear-gradient(to right, ${scroll.edges.start ? '#000' : 'transparent'} 0, #000 40px, #000 calc(100% - 40px), ${scroll.edges.end ? '#000' : 'transparent'} 100%)`;
 	const opened = open !== null ? itemAt(open) : undefined;
-	const onTop = top !== null ? itemAt(top) : undefined;
-	const plates = bays.some((bay) => bay.plate);
 
 	return (
-		<div ref={well} className="in-well in-grid relative pt-10 pb-3">
+		<div ref={well} className="in-well in-grid relative py-4">
 			<div
 				ref={scroll.ref}
-				className="rack-scroll overflow-x-auto overflow-y-hidden px-4 pb-2"
+				className="rack-scroll overflow-x-auto overflow-y-hidden px-4 pt-2 pb-1"
 				style={{ maskImage: fade, WebkitMaskImage: fade }}
 				onScroll={() => {
 					scroll.measure();
-					// Keep the open card on its blade as the row moves under it.
+					// Keep the open card on its tile as the row moves under it.
 					if (open !== null) place(open);
 				}}
 			>
-				<div className="mx-auto flex w-max flex-col">
-					<svg ref={svg} role="group" aria-label={label} viewBox={`0 ${TOP} ${view.w} ${view.h}`} width={view.w * SCALE} height={view.h * SCALE} className="block shrink-0 overflow-visible" fill="none">
-						{bays.map((bay, b) => {
-							const items = bay.items.slice(0, PER_BAY);
-							return (
-								<g key={bay.key}>
-									<Bay bay={b} filled={items.length} sweep={bay.sweep} led={bay.led} />
-									{items.map((item, slot) => {
+				<div role="group" aria-label={label} className="mx-auto flex w-max items-start gap-3">
+					{bays.map((bay, b) => {
+						const items = bay.items.slice(0, PER_BAY);
+						return (
+							<div key={bay.key} className="flex flex-col items-center gap-2.5" style={{ width: BAY_PX }}>
+								<div className="rack-bay" data-sweep={bay.sweep || undefined}>
+									{bay.led ? <span aria-hidden className="rack-bay__led" style={{ background: bay.led }} /> : null}
+									{Array.from({ length: PER_BAY }, (_, slot) => {
+										const item = items[slot];
 										const index = b * PER_BAY + slot;
-										return (
-											<Blade
+										return item ? (
+											<Tile
 												key={item.id}
 												look={look(item)}
-												index={index}
+												slot={slot}
 												open={open === index}
+												tileRef={(element) => {
+													if (element) tiles.current.set(index, element);
+													else tiles.current.delete(index);
+												}}
 												handlers={{
 													onOpen: () => {
 														hold();
 														setOpen(index);
-														setTop(index);
 													},
 													onClose: letGo,
 													onChoose: () => onChoose(item),
 												}}
 											/>
+										) : (
+											<span key={`empty-${slot}`} aria-hidden className="rack-slot" />
 										);
 									})}
-								</g>
-							);
-						})}
-						{top !== null && onTop ? <Blade key={`copy-${top}`} look={look(onTop)} index={top} open={open === top} copy /> : null}
-					</svg>
-					{plates ? (
-						<div className="flex">
-							{bays.map((bay) => (
-								<div key={bay.key} className="flex min-w-0 justify-center px-2" style={{ width: BAY_PX }}>
-									{bay.plate}
 								</div>
-							))}
-						</div>
-					) : null}
+								{bay.plate ? <div className="flex w-full min-w-0 justify-center px-2">{bay.plate}</div> : null}
+							</div>
+						);
+					})}
 				</div>
 			</div>
 			{opened && placement ? (
@@ -635,7 +452,7 @@ export function RackCard({ sessions }: { sessions: Session[] }) {
 	}));
 	return (
 		<Card
-			icon={Server}
+			icon={LayoutGrid}
 			title="Rack"
 			sub="every task, newest first"
 			status={<RackArrows state={scroll} newer="Scroll to newer tasks" older="Scroll to older tasks" />}

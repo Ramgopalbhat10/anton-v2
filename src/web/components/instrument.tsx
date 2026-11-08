@@ -45,7 +45,7 @@ export function Status({ tone = 'neutral', pulse, children }: { tone?: Tone; pul
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
+			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] bg-(--bg-hover)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
 			style={{ width: size, height: size }}
 		>
 			<Icon icon={icon} size={13} />
@@ -248,7 +248,12 @@ export function TickGauge({
 				{markers.map((marker) => (
 					<span
 						key={marker.label}
-						className={cn('in-caption absolute bottom-0 -translate-x-1/2 whitespace-nowrap normal-case tracking-normal', TEXT[marker.tone ?? 'neutral'])}
+						className={cn(
+							'in-caption absolute bottom-0 whitespace-nowrap normal-case tracking-normal',
+							// A label at either end sits inside the gauge rather than hanging past its edge.
+							markerAt(marker.at) <= ticks * 0.04 ? '' : markerAt(marker.at) >= ticks * 0.96 ? '-translate-x-full' : '-translate-x-1/2',
+							TEXT[marker.tone ?? 'neutral'],
+						)}
 						style={{ left: `${(markerAt(marker.at) / ticks) * 100}%` }}
 					>
 						{marker.label}
@@ -520,7 +525,7 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 				<span
 					key={index}
 					className="size-[7px] rounded-[2px]"
-					style={{ background: index < green ? 'var(--success-base)' : index < green + red ? 'var(--danger-base)' : 'var(--segment-off)' }}
+					style={{ background: index < green ? 'var(--diff-add-base)' : index < green + red ? 'var(--diff-remove-base)' : 'var(--segment-off)' }}
 				/>
 			))}
 		</span>

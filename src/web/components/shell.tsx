@@ -1,6 +1,6 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
@@ -25,6 +25,9 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { SettingsModal } from '@/components/settings/modal';
+import { Sky } from '@/components/sky';
+import { useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -50,7 +53,22 @@ function TaskNotifications() {
 	return null;
 }
 
+/** How much of the sky a page lets through: all of it on Home, a hint behind a conversation, a little elsewhere. */
+export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
+	if (pathname === '/') return 'full';
+	if (pathname.startsWith('/agents/') || /^\/projects\/[^/]+\/threads\//.test(pathname) || pathname.startsWith('/artifacts/')) return 'faint';
+	return 'dim';
+}
+
+/** This hour's sky behind the app, unless it is turned off in this browser. */
+function AppSky() {
+	const on = useSkyOn();
+	const image = useSky();
+	return on ? <Sky image={image} /> : null;
+}
+
 export function AppShell() {
+	const pathname = useRouterState({ select: (state) => state.location.pathname });
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
@@ -91,7 +109,8 @@ export function AppShell() {
 	return (
 		<NavContext.Provider value={() => setNavOpen(true)}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
-			<div className="flex h-dvh overflow-hidden bg-(--bg-canvas) pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-[13px] leading-[18px] text-(--text-primary)">
+			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-[13px] leading-[18px] text-(--text-primary)">
+				<AppSky />
 				<button
 					type="button"
 					aria-label="Close sidebar"
@@ -112,11 +131,12 @@ export function AppShell() {
 						onOpenNotifications={openNotifications}
 					/>
 				</div>
-				<main className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--bg-canvas)">
+				<main data-sky={skyVeil(pathname)} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
 					<Outlet />
 				</main>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
 				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
+				<SettingsModal />
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>

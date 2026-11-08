@@ -70,7 +70,7 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 				className,
 			)}
 		>
-			<span className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong) text-(--icon-tertiary)', stage ? 'size-11' : 'size-8')}>
+			<span className={cn('inline-flex shrink-0 items-center justify-center rounded-[8px] bg-(--bg-hover) text-(--icon-tertiary)', stage ? 'size-11' : 'size-8')}>
 				<Icon icon={FileX2} size={stage ? 18 : 14} />
 			</span>
 			<span className={cn('flex min-w-0 flex-col gap-0.5', stage && 'items-center')}>

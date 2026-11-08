@@ -193,7 +193,7 @@ const NO_REPO = 'none';
 /** The runs a strip shows, newest at the right. */
 const RUNS_SHOWN = 14;
 
-/** A run's bar: green once it delivered, red when it failed, amber while it asks, cyan while it works. */
+/** A run's bar: green once it delivered, red when it failed, amber while it asks, blue while it works. */
 const RUN_COLOR: Record<GlyphKind, string> = {
 	...STATE_COLOR,
 	resolved: 'color-mix(in oklab, var(--success-base) 62%, var(--neutral-800))',

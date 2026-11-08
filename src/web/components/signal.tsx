@@ -58,6 +58,7 @@ export function IconBtn({
 }
 
 /** How long the cube rests between turns, at random within this span. */
+/** How long the cube rests between turns, at random within this span. */
 const TURN_GAP_MS = [1800, 4500] as const;
 
 /** A turn now and then, at random: a spin a third round, or a hop and a roll two thirds over; none with reduced motion. */
@@ -139,7 +140,7 @@ export function Avatar({ name, size = 'sm' }: { name: string; size?: 'xs' | 'sm'
 /** Uppercase group label: "RUNNING", "RECENT", "ADD A PANEL". */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
 	return (
-		<div className={cn('font-mono text-[10.5px] leading-4 font-medium tracking-[0.08em] uppercase text-(--text-disabled)', className)}>
+		<div className={cn('text-[11.5px] leading-4 font-medium text-(--text-tertiary)', className)}>
 			{children}
 		</div>
 	);
@@ -211,7 +212,7 @@ export function Meta({ children, className }: { children: ReactNode; className?:
 export function DiffStat({ added, removed }: { added: number; removed: number }) {
 	return (
 		<span className="text-[11px]">
-			<span className="text-(--success-text)">+{added}</span>{' '}
+			<span className="text-(--diff-add-text)">+{added}</span>{' '}
 			<span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
 		</span>
 	);
@@ -251,7 +252,7 @@ export function EmptyState({
 	return (
 		<div className={cn('flex flex-col items-center gap-3 px-6 py-8 text-center', className)}>
 			{icon ? (
-				<span className="inline-flex size-8 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong) text-(--icon-secondary)">
+				<span className="inline-flex size-8 items-center justify-center rounded-[8px] bg-(--bg-hover) text-(--icon-secondary)">
 					<Icon icon={icon} />
 				</span>
 			) : null}

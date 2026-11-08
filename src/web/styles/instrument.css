@@ -4,14 +4,14 @@
    a footer with a mono caption and the actions that change it. */
 :root,
 [data-theme='dark'] {
-	--card-bg: #121212;
-	--card-bg-top: #161616;
-	--card-border: rgba(255, 255, 255, 0.07);
-	--card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-	--card-radius: 6px;
-	--well-bg: #0c0c0c;
+	--card-bg: #0f1013;
+	--card-bg-top: #121317;
+	--card-border: rgba(255, 255, 255, 0.075);
+	--card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 0 0 1px rgba(255, 255, 255, 0.06);
+	--card-radius: 10px;
+	--well-bg: #0a0b0d;
 	--well-border: rgba(255, 255, 255, 0.05);
-	--well-radius: 6px;
+	--well-radius: 8px;
 	--grid-line: rgba(255, 255, 255, 0.035);
 	--grid-mark: rgba(255, 255, 255, 0.14);
 	--tick-off: rgba(255, 255, 255, 0.12);
@@ -19,28 +19,15 @@
 	--line-art: rgba(255, 255, 255, 0.34);
 	--line-art-faint: rgba(255, 255, 255, 0.14);
 
-	/* Isometric drawings: three flat face tones lit from the top left, one
-	   hairline edge, recesses cut darker than the well, and the accent as an
-	   outline over a cyan-tinted face. */
-	--art-top: #272727;
-	--art-left: #1d1d1d;
-	--art-right: #161616;
-	--art-edge: rgba(255, 255, 255, 0.27);
-	--art-detail: rgba(255, 255, 255, 0.13);
-	--art-recess: #0a0a0a;
-	--art-glass: rgba(255, 255, 255, 0.03);
-	--art-accent-top: color-mix(in srgb, var(--cyan-400) 26%, #171717);
-	--art-accent-left: color-mix(in srgb, var(--cyan-400) 17%, #141414);
-	--art-accent-right: color-mix(in srgb, var(--cyan-400) 11%, #121212);
-
-	/* Data hues, in the order series take them. Cyan leads so a single series
-	   reads as Anton's; the rest stay apart from the status hues at 10px. */
-	--data-1: #3fb6d8;
-	--data-2: #a78bfa;
-	--data-3: #e3a63f;
-	--data-4: #35c88a;
-	--data-5: #f472b6;
-	--data-6: #8e8e8e;
+	/* Data hues, in the order series take them: one blue and its greys, so a
+	   chart never adds colours of its own. Blue leads so a single series reads
+	   as Anton's. */
+	--data-1: #7096fb;
+	--data-2: #c3cde4;
+	--data-3: #4b67b8;
+	--data-4: #8b919d;
+	--data-5: #a9c0ff;
+	--data-6: #5b5f68;
 
 	--ts-chart-1: var(--data-1);
 	--ts-chart-2: var(--data-2);
@@ -74,31 +61,13 @@
 	background: var(--well-bg);
 }
 
-/* A faint drafting grid with plus marks at its corners, behind illustrations. */
+/* A faint dot matrix behind illustrations: the sky's mesh, at rest. */
 .in-grid {
 	position: relative;
 	background-color: var(--well-bg);
-	background-image:
-		linear-gradient(var(--grid-line) 1px, transparent 1px),
-		linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-	background-size: 24px 24px;
-	background-position: -1px -1px;
-}
-.in-grid::before,
-.in-grid::after {
-	content: '+';
-	position: absolute;
-	font: 400 12px/1 var(--font-mono);
-	color: var(--grid-mark);
-	pointer-events: none;
-}
-.in-grid::before {
-	top: 10px;
-	left: 12px;
-}
-.in-grid::after {
-	right: 12px;
-	bottom: 10px;
+	background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.09) 0.75px, transparent 1.25px);
+	background-size: 10px 10px;
+	background-position: center;
 }
 
 /* A blinking cursor inside an illustration. */
@@ -110,48 +79,12 @@
 		opacity: 0;
 	}
 }
-/* A scan line sweeping a face. */
-.art-scan {
-	animation: art-scan 2.6s ease-in-out infinite alternate;
-}
-@keyframes art-scan {
-	to {
-		transform: translateY(24px);
-	}
-}
-/* The task route: four stages take turns on a ten-second loop, each lit for a
-   quarter of it. Anything that follows a stage sets --stage to its index:
-   the lit station, its captions, the line it draws, and the hand-off that
-   runs to the next stage in the last stretch of its turn. */
-.route-lit,
-.route-caption,
-.route-draw,
-.route-trail,
-.route-dot {
-	animation-duration: 10s;
-	animation-iteration-count: infinite;
-	animation-fill-mode: both;
-	animation-delay: calc(var(--stage, 0) * 2.5s);
-}
-.route-lit {
-	opacity: 0;
-	animation-name: route-lit;
-}
-@keyframes route-lit {
-	0% {
-		opacity: 0;
-	}
-	2%,
-	23% {
-		opacity: 1;
-	}
-	25%,
-	100% {
-		opacity: 0;
-	}
-}
+/* A route's stages take turns on a ten-second loop, each lit for a quarter of
+   it: its caption (here) and its station in the drawing (.fa-stage) share
+   the timing through --stage. */
 .route-caption {
-	animation-name: route-caption;
+	animation: route-caption 10s infinite both;
+	animation-delay: calc(var(--stage, 0) * 2.5s);
 }
 @keyframes route-caption {
 	0% {
@@ -166,342 +99,121 @@
 		color: var(--text-tertiary);
 	}
 }
-.route-draw {
-	stroke-dasharray: 1 1;
-	animation-name: route-draw;
-}
-@keyframes route-draw {
-	0%,
-	3% {
-		stroke-dashoffset: 1;
-	}
-	11%,
-	100% {
-		stroke-dashoffset: 0;
-	}
-}
-.route-trail {
-	stroke-dasharray: 1 1;
-	stroke-dashoffset: 1;
-	animation-name: route-trail;
-}
-@keyframes route-trail {
-	0%,
-	18% {
-		stroke-dashoffset: 1;
-		opacity: 1;
-	}
-	25% {
-		stroke-dashoffset: 0;
-		opacity: 1;
-	}
-	32%,
-	100% {
-		stroke-dashoffset: 0;
-		opacity: 0;
-	}
-}
-.route-dot {
-	opacity: 0;
-	animation-name: route-dot;
-}
-@keyframes route-dot {
-	0%,
-	18% {
-		opacity: 0;
-		transform: translateX(0);
-	}
-	19% {
-		opacity: 1;
-	}
-	25% {
-		opacity: 1;
-		transform: translateX(calc(var(--run) * 1px));
-	}
-	27%,
-	100% {
-		opacity: 0;
-		transform: translateX(calc(var(--run) * 1px));
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.art-blink,
-	.art-scan,
-	.route-lit,
-	.route-caption,
-	.route-draw,
-	.route-trail,
-	.route-dot {
+	.route-caption {
 		animation: none;
-	}
-	.route-lit[data-first],
-	.route-draw {
-		opacity: 1;
-		stroke-dashoffset: 0;
 	}
 	.route-caption[data-first] {
 		color: var(--accent-text);
 	}
 }
 
-/* Three parts take turns on a seven-and-a-half-second loop, each lit for a
-   third of it: the subagent pods, the storage platters. A part sets --stage to
-   its index; its wire draws from the source, a dot runs along it (--run and
-   --rise, in drawing units), then the part lights and rises into place. */
-.cycle-lit,
-.cycle-rise,
-.cycle-trail,
-.cycle-dot {
-	animation-duration: 7.5s;
-	animation-iteration-count: infinite;
-	animation-fill-mode: both;
-	animation-timing-function: var(--ease-out);
-	animation-delay: calc(var(--stage, 0) * 2.5s);
+/* The rack (task-rack.tsx): bays as trays on the dot grid, items as slim
+   tiles standing in their slots. Tiles arrive one after another, a pointed-at
+   tile lifts and lights, and a working one has a light running up it. */
+.rack-bay {
+	position: relative;
+	display: flex;
+	align-items: flex-end;
+	gap: 6px;
+	padding: 14px 12px 10px;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.025);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-.cycle-lit {
-	opacity: 0;
-	animation-name: cycle-lit;
+.rack-bay__led {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	width: 4px;
+	height: 4px;
+	border-radius: 1px;
 }
-@keyframes cycle-lit {
-	0%,
-	6% {
-		opacity: 0;
-	}
-	10%,
-	30% {
-		opacity: 1;
-	}
-	33.3%,
-	100% {
-		opacity: 0;
-	}
+.rack-slot,
+.rack-blade {
+	position: relative;
+	width: 15px;
+	height: 64px;
+	border-radius: 4px;
+	flex: none;
 }
-.cycle-rise {
-	animation-name: cycle-rise;
+.rack-slot {
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+	background-image: radial-gradient(circle, rgba(255, 255, 255, 0.07) 0.6px, transparent 1px);
+	background-size: 5px 5px;
 }
-@keyframes cycle-rise {
-	0%,
-	6% {
-		transform: translateY(7px);
-	}
-	14%,
-	100% {
-		transform: translateY(0);
-	}
-}
-.cycle-trail {
-	stroke-dasharray: 1 1;
-	stroke-dashoffset: 1;
-	animation-name: cycle-trail;
-}
-@keyframes cycle-trail {
-	0% {
-		stroke-dashoffset: 1;
-		opacity: 1;
-	}
-	8%,
-	30% {
-		stroke-dashoffset: 0;
-		opacity: 1;
-	}
-	33.3%,
-	100% {
-		stroke-dashoffset: 0;
-		opacity: 0;
-	}
-}
-.cycle-dot {
-	opacity: 0;
-	animation-name: cycle-dot;
-}
-@keyframes cycle-dot {
-	0% {
-		opacity: 1;
-		transform: translate(0, 0);
-	}
-	8% {
-		opacity: 1;
-		transform: translate(calc(var(--run, 0) * 1px), calc(var(--rise, 0) * 1px));
-	}
-	10%,
-	100% {
-		opacity: 0;
-		transform: translate(calc(var(--run, 0) * 1px), calc(var(--rise, 0) * 1px));
-	}
-}
-/* A part spinning in the plane of its face, about its own origin. */
-.art-spin {
-	animation: art-spin 9s linear infinite;
-}
-@keyframes art-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-/* A part hovering: a slow bob. */
-.art-bob {
-	animation: art-bob 2.4s ease-in-out infinite alternate;
-	animation-delay: calc(var(--bob, 0) * -0.8s);
-}
-@keyframes art-bob {
-	to {
-		transform: translateY(-2.5px);
-	}
-}
-/* A dashed line whose dashes run along it, like data on a wire; --period is
-   the length of one dash and gap. */
-.art-march {
-	animation: art-march 1.4s linear infinite;
-}
-@keyframes art-march {
-	to {
-		stroke-dashoffset: calc(var(--period, 10) * -1);
-	}
-}
-/* The Changes drawing: lines of a diff are typed in one after another, the
-   branch draws itself, and its newest commit lands; then it all starts again.
-   --row staggers the lines. */
-.diff-type,
-.diff-draw,
-.diff-pop {
-	animation-duration: 6s;
-	animation-iteration-count: infinite;
-	animation-fill-mode: both;
-}
-.diff-type {
-	transform-box: fill-box;
-	transform-origin: left center;
-	animation-name: diff-type;
-	animation-timing-function: steps(8, end);
-	animation-delay: calc(var(--row, 0) * 0.7s);
-}
-@keyframes diff-type {
-	0% {
-		transform: scaleX(0);
-		opacity: 1;
-	}
-	12%,
-	80% {
-		transform: scaleX(1);
-		opacity: 1;
-	}
-	88%,
-	100% {
-		transform: scaleX(1);
-		opacity: 0;
-	}
-}
-.diff-draw {
-	stroke-dasharray: 1 1;
-	animation-name: diff-draw;
-	animation-timing-function: var(--ease-out);
-}
-@keyframes diff-draw {
-	0% {
-		stroke-dashoffset: 1;
-		opacity: 1;
-	}
-	22%,
-	90% {
-		stroke-dashoffset: 0;
-		opacity: 1;
-	}
-	97%,
-	100% {
-		stroke-dashoffset: 0;
-		opacity: 0;
-	}
-}
-.diff-pop {
-	transform-box: fill-box;
-	transform-origin: center;
-	animation-name: diff-pop;
-	animation-timing-function: var(--ease-out);
-}
-@keyframes diff-pop {
-	0%,
-	20% {
-		opacity: 0;
-		transform: scale(0.2);
-	}
-	28%,
-	90% {
-		opacity: 1;
-		transform: scale(1);
-	}
-	97%,
-	100% {
-		opacity: 0;
-		transform: scale(1);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.cycle-lit,
-	.cycle-rise,
-	.cycle-trail,
-	.cycle-dot,
-	.art-spin,
-	.art-bob,
-	.art-march,
-	.diff-type,
-	.diff-draw,
-	.diff-pop {
-		animation: none;
-	}
-	.cycle-lit[data-first],
-	.cycle-trail[data-first] {
-		opacity: 1;
-		stroke-dashoffset: 0;
-	}
-	.diff-draw {
-		stroke-dashoffset: 0;
-	}
-}
-
-/* The task rack: blades slide in one after another, running ones blink, and an
-   indexing light sweeps each bay's lid. The open blade is drawn out of its slot
-   in script (task-rack.tsx), since its body grows as it comes out. */
 .rack-blade {
 	cursor: pointer;
 	outline: none;
-	animation: rack-in 560ms var(--ease-out) both;
-	animation-delay: calc(var(--slot, 0) * 45ms);
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+	transition:
+		transform var(--transition-overlay),
+		background var(--transition-micro),
+		box-shadow var(--transition-micro);
+	animation: rack-in 480ms var(--ease-out) both;
+	animation-delay: calc(var(--slot, 0) * 40ms);
+}
+.rack-blade:hover,
+.rack-blade[data-open] {
+	transform: translateY(-6px);
+	background: linear-gradient(180deg, var(--blue-alpha-30), var(--blue-alpha-12));
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px var(--accent-border);
+}
+.rack-blade:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+/* Three short rules near the top: a label, like a drive's. */
+.rack-blade__lines {
+	position: absolute;
+	top: 7px;
+	left: 4px;
+	right: 4px;
+	height: 9px;
+	background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 4px);
+}
+.rack-blade__light {
+	position: absolute;
+	left: 50%;
+	bottom: 6px;
+	width: 5px;
+	height: 5px;
+	margin-left: -2.5px;
+	border-radius: 1px;
+	background: var(--light);
+}
+.rack-blade__run {
+	position: absolute;
+	left: 50%;
+	bottom: 14px;
+	width: 3px;
+	height: 3px;
+	margin-left: -1.5px;
+	border-radius: 0.5px;
+	background: var(--blue-200);
+	animation: rack-run 1.4s steps(6, end) infinite;
+}
+@keyframes rack-run {
+	to {
+		transform: translateY(-30px);
+		opacity: 0.2;
+	}
 }
 @keyframes rack-in {
 	from {
 		opacity: 0;
-		transform: translate(-12px, 7px);
+		transform: translateY(8px);
 	}
 }
-/* The open blade's card and its leader fade into place as the blade comes out. */
+/* The open tile's card and its leader fade into place as the tile lifts. */
 .rack-card,
 .rack-leader {
-	animation: rack-card 260ms var(--ease-out) 120ms both;
+	animation: rack-card 220ms var(--ease-out) 60ms both;
 }
 @keyframes rack-card {
 	from {
 		opacity: 0;
 		margin-top: 6px;
-	}
-}
-.rack-activity {
-	animation: rack-activity 0.9s steps(1, end) infinite;
-	animation-delay: calc(var(--blink, 0) * 0.3s);
-}
-@keyframes rack-activity {
-	50% {
-		opacity: 0.15;
-	}
-}
-.rack-sweep {
-	animation: rack-sweep 4.2s ease-in-out infinite alternate;
-	animation-delay: calc(var(--bay, 0) * -1.3s);
-}
-@keyframes rack-sweep {
-	to {
-		transform: translateX(110px);
 	}
 }
 /* The rack's row scrolls sideways. */
@@ -512,10 +224,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
 	.rack-blade,
-	.rack-activity,
-	.rack-sweep {
-		animation: none;
-	}
+	.rack-blade__run,
 	.rack-card,
 	.rack-leader {
 		animation: none;
@@ -524,13 +233,12 @@
 
 /* The mono caption every card footer and gauge label uses. */
 .in-caption {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-family: var(--font-sans);
+	font-size: 11.5px;
 	line-height: 16px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--text-disabled);
+	font-weight: 450;
+	letter-spacing: 0;
+	color: var(--text-tertiary);
 }
 
 .in-figure {
@@ -555,6 +263,10 @@
 }
 .in-chart svg {
 	overflow: visible;
+}
+.in-chart .in-chart-empty {
+	font-family: var(--font-sans);
+	font-size: 12px;
 }
 
 /*
@@ -701,6 +413,24 @@
 .in-list {
 	padding: 4px;
 }
+/* A hairline between rows, inset so the hover fill of a row still reads as one shape. */
+.in-list > * + * {
+	position: relative;
+}
+.in-list > * + *::before {
+	content: '';
+	position: absolute;
+	top: -1.5px;
+	left: 12px;
+	right: 12px;
+	height: 1px;
+	background: var(--border-subtle);
+	pointer-events: none;
+}
+.in-list > :hover::before,
+.in-list > :hover + *::before {
+	opacity: 0;
+}
 .in-card .in-list {
 	border: 0;
 	background: transparent;
@@ -713,19 +443,21 @@
    they read as the same object as the cards beneath them. */
 :root,
 [data-theme='dark'] {
-	--pop-bg: #1a1a1a;
-	--pop-bg-top: #1f1f1f;
+	--pop-bg: #16171b;
+	--pop-bg-top: #1a1b20;
 	--pop-border: rgba(255, 255, 255, 0.09);
-	--pop-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 44px -14px rgba(0, 0, 0, 0.75), 0 3px 10px -3px rgba(0, 0, 0, 0.5);
+	--pop-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.07), 0 18px 44px -14px rgba(0, 0, 0, 0.75), 0 3px 10px -3px rgba(0, 0, 0, 0.5);
 }
 .in-pop {
-	border-radius: 6px;
+	border-radius: 10px;
 	border: 1px solid transparent;
-	background: linear-gradient(180deg, var(--pop-bg-top), var(--pop-bg) 48px);
+	background: color-mix(in srgb, var(--pop-bg) 88%, transparent);
+	-webkit-backdrop-filter: blur(20px) saturate(140%);
+	backdrop-filter: blur(20px) saturate(140%);
 	box-shadow: var(--pop-shadow);
 }
 .in-pop--modal {
-	border-radius: 6px;
+	border-radius: 14px;
 	box-shadow: var(--pop-shadow), 0 40px 80px -24px rgba(0, 0, 0, 0.8);
 }
 .in-pop .sg-menu-item {
@@ -1128,6 +860,60 @@
 	}
 }
 
+/* Flat drawings (illustrations.tsx): a lit wire's slow dashed flow, a
+   cursor's blink, and a route's stations lit in turn with their captions. */
+.fa-flow {
+	animation: fa-flow 1.4s linear infinite;
+}
+@keyframes fa-flow {
+	to {
+		stroke-dashoffset: -12;
+	}
+}
+.fa-blink {
+	animation: fa-blink 1.1s steps(1, end) infinite;
+}
+@keyframes fa-blink {
+	50% {
+		opacity: 0;
+	}
+}
+.fa-stage {
+	opacity: 0;
+	animation: fa-stage 10s infinite both;
+	animation-delay: calc(var(--stage, 0) * 2.5s);
+}
+@keyframes fa-stage {
+	0% {
+		opacity: 0;
+	}
+	2%,
+	23% {
+		opacity: 1;
+	}
+	25%,
+	100% {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fa-flow,
+	.fa-blink,
+	.fa-stage {
+		animation: none;
+	}
+	.fa-stage[data-first] {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anton-logo * {
+		animation: none !important;
+	}
+}
+
 /*
  * The loader: Anton's cube, its faces taking turns. Each face lifts out
  * along its own edge and brightens, top, left, then right, and eases back,
@@ -1138,9 +924,9 @@
  * it started. `--lt`, `--ll` and `--lr` colour the top, left and right faces.
  */
 .sg-spinner {
-	--lt: var(--cyan-200);
-	--ll: var(--cyan-400);
-	--lr: var(--cyan-700);
+	--lt: #9ee1f3;
+	--ll: #3fb6d8;
+	--lr: #17627a;
 	--ease-sine: cubic-bezier(0.37, 0, 0.63, 1);
 	display: inline-flex;
 	flex: 0 0 auto;

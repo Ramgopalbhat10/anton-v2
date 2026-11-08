@@ -6,7 +6,7 @@ import type { AgentSpan, ModelSpan, ToolSpan, Trace, TraceSpan } from '../../cor
  * into rows as folds and the search allow; and the reply's totals.
  */
 
-/** Each conversation's hue: the agent's is Anton's cyan, subagents take the next data hues in the order they started. */
+/** Each conversation's hue: the agent's is Anton's blue, subagents take the next data hues in the order they started. */
 const LANE_HUES = ['var(--data-1)', 'var(--data-2)', 'var(--data-3)', 'var(--data-5)', 'var(--data-4)', 'var(--data-6)'];
 
 export type TraceNode = {

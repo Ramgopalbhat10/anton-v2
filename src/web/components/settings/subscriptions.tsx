@@ -371,7 +371,7 @@ function Plan({ subscription }: { subscription: Subscription }) {
 		>
 			<CardSection ruled={false} className="pt-0">
 				<Well grid className="flex items-center justify-center px-4 py-6">
-					<PlanLinkArt linked={connected} plan={subscription.name} className="w-full max-w-[440px]" />
+					<PlanLinkArt linked={connected} plan={subscription.name} logo={logoFor({ id: `${subscription.gateway}/` })} className="w-full max-w-[440px]" />
 				</Well>
 			</CardSection>
 			{connected ? (
@@ -451,7 +451,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 		>
 			<CardSection ruled={false} className="pt-0">
 				<Well grid className="flex items-center justify-center px-4 py-6">
-					<PlanLinkArt linked={connected} plan={subscription.name} className="w-full max-w-[440px]" />
+					<PlanLinkArt linked={connected} plan={subscription.name} logo={logoFor({ id: `${subscription.gateway}/` })} className="w-full max-w-[440px]" />
 				</Well>
 			</CardSection>
 			{connected ? (
@@ -670,7 +670,7 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 		>
 			<CardSection ruled={false} className="pt-0">
 				<Well grid className="flex items-center justify-center px-4 py-6">
-					<PlanLinkArt linked={connected} plan={subscription.name} className="w-full max-w-[440px]" />
+					<PlanLinkArt linked={connected} plan={subscription.name} logo={logoFor({ id: `${subscription.gateway}/` })} className="w-full max-w-[440px]" />
 				</Well>
 			</CardSection>
 			{connected ? (
@@ -906,7 +906,7 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 		>
 			<CardSection ruled={false} className="pt-0">
 				<Well grid className="flex items-center justify-center px-4 py-6">
-					<PlanLinkArt linked={connected} plan={subscription.name} noun="account" className="w-full max-w-[440px]" />
+					<PlanLinkArt linked={connected} plan={subscription.name} logo={logoFor({ id: `${subscription.gateway}/` })} noun="account" className="w-full max-w-[440px]" />
 				</Well>
 			</CardSection>
 			{connected ? (

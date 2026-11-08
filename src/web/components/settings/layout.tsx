@@ -1,8 +1,8 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ChevronRight, List, type LucideIcon } from 'lucide-react';
+import { ChevronRight, List, type LucideIcon, X } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
-import { MenuButton } from '@/components/nav';
-import { EmptyState, Icon, SectionLabel } from '@/components/signal';
+import { EmptyState, Icon, IconBtn, SectionLabel } from '@/components/signal';
+import { closeSettings } from '@/lib/settings-modal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { GROUPS, SECTIONS, sectionById } from './sections';
@@ -90,21 +90,22 @@ function CrumbLink({ to, children }: { to: string; children: ReactNode }) {
 	);
 }
 
-/** The settings frame: breadcrumbs, the grouped nav, and the page beside it. */
+/** The settings frame, as the Settings card shows it: breadcrumbs and a close button, the grouped nav, and the page beside it. */
 export function SettingsLayout() {
 	// Skills and Connectors lay cards out side by side, and a page beside its facts, so they get more room.
 	const path = usePath();
 	const wide = path.startsWith('/settings/skills') || path.startsWith('/settings/connectors');
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium md:pl-4">
-				<MenuButton />
+			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-2 pl-4 text-[13px] font-medium">
 				<Crumbs />
+				<span className="flex-1" />
+				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />
 			</header>
 			<div className="flex min-h-0 flex-1">
 				<Nav />
 				<div data-settings-scroll className="min-h-0 min-w-0 flex-1 scroll-pt-12 overflow-y-auto px-4 pb-12 md:px-6">
-					<div className={cn('@container/settings flex flex-col gap-6 pt-4', wide ? 'max-w-[1080px]' : 'max-w-[820px]')}>
+					<div className={cn('@container/settings flex flex-col gap-6 pt-4', wide ? 'max-w-[1080px]' : 'max-w-[880px]')}>
 						<Outlet />
 					</div>
 				</div>

@@ -384,7 +384,7 @@ function stepTone(step: Step): string {
 const STRIP = 36;
 
 /**
- * One mark per step, coloured by what it did (commands cyan, edits violet,
+ * One mark per step, coloured by what it did (commands blue, edits violet,
  * the browser amber, failures red), so a turn's shape reads before it opens.
  */
 function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
@@ -465,7 +465,7 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	return (
 		<div className="in-card overflow-hidden">
 			<div className="flex h-10 items-center gap-2.5 border-b border-(--card-border) px-3.5">
-				<span className="inline-flex size-[22px] items-center justify-center rounded-[6px] border border-dashed border-(--accent-border) text-(--accent-text)">
+				<span className="inline-flex size-[22px] items-center justify-center rounded-[6px] bg-(--accent-bg-subtle) text-(--accent-text)">
 					<Icon icon={ListChecks} size={12} />
 				</span>
 				<span className="text-[13px] font-medium">Plan</span>
@@ -635,7 +635,7 @@ function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 }
 
 /** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
-const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
+const USAGE_COLORS = { cached: 'var(--blue-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
 /** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
 function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {

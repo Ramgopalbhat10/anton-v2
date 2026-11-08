@@ -55,13 +55,13 @@ function sorted(node: TreeNode) {
 }
 
 export const STATUS_TONE: Record<string, string> = {
-	A: 'text-(--success-text)',
+	A: 'text-(--diff-add-text)',
 	M: 'text-(--warning-text)',
 	D: 'text-(--danger-text)',
 };
 
 const STATUS_BG: Record<string, string> = {
-	A: 'bg-(--success-bg)',
+	A: 'bg-(--diff-add-bg)',
 	M: 'bg-(--warning-bg)',
 	D: 'bg-(--danger-bg)',
 };

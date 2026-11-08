@@ -71,7 +71,7 @@ function Running({ view }: { view: ComputeView }) {
 				<CardSection className="gap-0 px-2 py-1.5">
 					{view.running.map((task) => (
 						<div key={task.id} className="flex min-h-12 items-center gap-3 rounded-[6px] px-2 py-1.5 hover:bg-(--bg-hover)">
-							<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--success-base)" />
+							<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
 							<Link
 								to="/agents/$sessionId"
 								params={{ sessionId: task.id }}

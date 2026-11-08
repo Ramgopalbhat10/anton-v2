@@ -16,6 +16,7 @@ function Commands({ saved }: { saved: Command[] }) {
 			queryClient.setQueryData(['commands'], result);
 		},
 	});
+	const dirty = JSON.stringify(rows) !== JSON.stringify(saved);
 	const change = (index: number, patch: Partial<Command>) => setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
 	return (
 		<form
@@ -34,14 +35,16 @@ function Commands({ saved }: { saved: Command[] }) {
 							Add a command
 						</Btn>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
-						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
-							{save.isPending ? 'Saving…' : 'Save commands'}
-						</Btn>
+						{dirty || save.isPending ? (
+							<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+								{save.isPending ? 'Saving…' : 'Save commands'}
+							</Btn>
+						) : null}
 					</>
 				}
 			>
 				{rows.length === 0 ? (
-					<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No commands yet. Add one, then type / and its name in any message.</p>
+					<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No commands yet. Add one, then type / and its name in any message.</p>
 				) : null}
 				{rows.map((row, index) => (
 					<div key={index} className="flex items-start gap-2">
