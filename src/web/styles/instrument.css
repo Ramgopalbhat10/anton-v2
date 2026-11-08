@@ -338,21 +338,17 @@
 	animation: in-sweep 2.2s linear infinite;
 }
 
-/* A working subagent's tile: a ring in its own colour that breathes out and fades. */
+/* A working subagent's glyph: it breathes, dimming and coming back, in its own colour. */
 @keyframes agent-breathe {
 	from {
-		box-shadow: 0 0 0 0 color-mix(in oklab, var(--agent-tone) 45%, transparent);
+		opacity: 1;
 	}
 	to {
-		box-shadow: 0 0 0 5px transparent;
+		opacity: 0.4;
 	}
 }
-.agent-tile--running::after {
-	content: '';
-	position: absolute;
-	inset: 0;
-	border-radius: inherit;
-	animation: agent-breathe 1.6s var(--ease-out) infinite;
+.agent-tile--running {
+	animation: agent-breathe 0.9s ease-in-out infinite alternate;
 }
 
 /* What a working subagent is doing now: the words catch a slow light, left to right. */
@@ -396,7 +392,7 @@
 	.in-row-enter,
 	.in-pulse,
 	.in-sweep::after,
-	.agent-tile--running::after,
+	.agent-tile--running,
 	.agent-live-line > span:last-child,
 	.in-shimmer {
 		animation: none;

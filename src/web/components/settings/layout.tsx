@@ -13,11 +13,11 @@ import type { ViewSearch } from './skills';
 const NAV_ITEM =
 	'group/nav relative flex h-8 items-center gap-2.5 rounded-[6px] pr-2 pl-1 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
 
-/** A nav item's icon on a small tile, lit on the page you are on. */
+/** A nav item's bare icon, lit on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
 	return (
-		<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-(--well-bg) text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:border group-data-[status=active]/nav:border-(--accent-border) group-data-[status=active]/nav:text-(--accent-text)">
-			<Icon icon={icon} size={13} />
+		<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--accent-text)">
+			<Icon icon={icon} size={15} />
 		</span>
 	);
 }

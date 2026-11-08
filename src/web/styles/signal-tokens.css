@@ -78,6 +78,11 @@
   --red-500:#C13B37;
   --red-alpha-12:rgba(229,84,79,0.12);
   --red-alpha-30:rgba(229,84,79,0.30);
+
+  /* Pull request hues only: merged is violet and a conflict orange, as on
+     the git host, so a PR's state reads the same in every place it shows. */
+  --violet-300:#C4A2F5;
+  --orange-300:#F5A462;
 }
 
 /* ============================================================
@@ -161,6 +166,21 @@
   --danger-hover:var(--red-300);
   --danger-active:var(--red-500);
   --danger-fg:#180605;
+
+  /* Pull requests. The calm states above keep the rest of the app quiet; a
+     PR's state is the one place colour carries the meaning, everywhere it
+     appears: open green, draft grey, merged violet, closed red, conflicts
+     orange, and checks passed green / running amber / failing red. Read
+     through prTone() in components/pr-status.tsx, not directly. */
+  --pr-open:var(--emerald-300);
+  --pr-draft:var(--neutral-300);
+  --pr-merged:var(--violet-300);
+  --pr-closed:var(--red-300);
+  --pr-conflicts:var(--orange-300);
+  --pr-passed:var(--emerald-300);
+  --pr-running:var(--amber-300);
+  --pr-failing:var(--red-300);
+  --pr-unknown:var(--neutral-400);
 
   /* Info deliberately aliases the accent: "informational" and
      "interactive" are the same voice — the system talking. */

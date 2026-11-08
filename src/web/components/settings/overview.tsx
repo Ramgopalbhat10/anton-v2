@@ -209,8 +209,8 @@ export function SettingsOverview() {
 								params={{ section: section.id }}
 								className="group/row flex min-h-14 items-center gap-3 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 							>
-								<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) text-(--icon-secondary) group-hover/row:text-(--accent-text)">
-									<Icon icon={section.icon} size={14} />
+								<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/row:text-(--accent-text)">
+									<Icon icon={section.icon} size={17} />
 								</span>
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 									<div className="truncate text-[13px] font-medium">{section.label}</div>

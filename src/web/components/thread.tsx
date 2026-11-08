@@ -465,8 +465,8 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	return (
 		<div className="in-card overflow-hidden">
 			<div className="flex h-10 items-center gap-2.5 border-b border-(--card-border) px-3.5">
-				<span className="inline-flex size-[22px] items-center justify-center rounded-[6px] bg-(--accent-bg-subtle) text-(--accent-text)">
-					<Icon icon={ListChecks} size={12} />
+				<span className="inline-flex size-[22px] items-center justify-center text-(--accent-text)">
+					<Icon icon={ListChecks} size={15} />
 				</span>
 				<span className="text-[13px] font-medium">Plan</span>
 				<span className="in-caption ml-auto">{!plan ? 'Writing' : answer === APPROVED ? 'Approved' : 'Proposed'}</span>

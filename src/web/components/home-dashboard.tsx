@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, CalendarRange, Clock, EyeOff, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Image as ImageIcon, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, CalendarRange, Clock, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { PR_ICON, prColor, prTone } from '@/components/pr-status';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
-import { setSkyOn, type SkyImage, skyLink, untilNextHour, useSky, useSkyOn } from '@/lib/sky';
+import { setSkyOn, shuffleSky, type SkyImage, skyLink, untilNextHour, useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
 
 /*
@@ -160,12 +161,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 	);
 }
 
-const PR_LOOK: Record<NonNullable<Session['pullRequest']>['state'], { icon: LucideIcon; color: string; label: string }> = {
-	open: { icon: GitPullRequest, color: 'var(--success-text)', label: 'Open' },
-	draft: { icon: GitPullRequestDraft, color: 'var(--text-tertiary)', label: 'Draft' },
-	merged: { icon: GitMerge, color: 'var(--data-2)', label: 'Merged' },
-	closed: { icon: GitPullRequestClosed, color: 'var(--danger-text)', label: 'Closed' },
-};
+const PR_LABEL: Record<NonNullable<Session['pullRequest']>['state'], string> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
 
 /** Pull requests the agent opened, newest first, with their state and repository. */
 function PullRequests({ sessions }: { sessions: Session[] }) {
@@ -188,7 +184,8 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 			{shown.length ? (
 				<div className="flex flex-col">
 					{shown.map((session) => {
-						const look = PR_LOOK[session.pullRequest?.state ?? 'open'];
+						const state = session.pullRequest?.state ?? 'open';
+						const look = { icon: PR_ICON[state], color: prColor(session.pullRequest?.state), label: PR_LABEL[state] };
 						return (
 							<TaskLink key={session.id} session={session} className={cn(ROW, 'h-[38px]')}>
 								<span role="img" aria-label={look.label} className="inline-flex shrink-0 self-start pt-[5px]" style={{ color: look.color }}>
@@ -198,7 +195,8 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 									<span className="truncate text-[12.5px] leading-4 text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
 									<span className="truncate text-[11px] leading-4 text-(--text-disabled)">
 										<span className="in-num">{prNumber(session)}</span> · {session.repo.split('/').pop()} · {age(session.createdAt)}
-										{session.pullRequest?.checks === 'failed' ? <span className="text-(--danger-text)"> · checks failing</span> : null}
+										{session.pullRequest?.conflicts && (state === 'open' || state === 'draft') ? <span style={{ color: prTone('conflicts') }}> · conflicts</span> : null}
+										{session.pullRequest?.checks === 'failed' && (state === 'open' || state === 'draft') ? <span style={{ color: prTone('failing') }}> · checks failing</span> : null}
 									</span>
 								</span>
 							</TaskLink>
@@ -280,7 +278,7 @@ function useNextIn(): string {
 	return `${minutes} min`;
 }
 
-/** The hour's picture, credited, in Home's corner: where it comes from, when it changes, and a way to turn the sky off. */
+/** The hour's picture, credited, in Home's corner: where it comes from, when it changes, a random other one, and a way to turn the sky off. */
 export function SkyCredit() {
 	const on = useSkyOn();
 	const image: SkyImage = useSky();
@@ -307,6 +305,9 @@ export function SkyCredit() {
 					</span>
 				</MenuLabel>
 				<MenuSeparator />
+				<MenuItem icon={Shuffle} onSelect={(event) => { event.preventDefault(); shuffleSky(); }}>
+					Show a random picture
+				</MenuItem>
 				<MenuItem icon={ArrowUpRight} onSelect={() => window.open(skyLink(image), '_blank', 'noopener')}>
 					Open at NASA
 				</MenuItem>

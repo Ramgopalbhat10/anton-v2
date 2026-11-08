@@ -1,11 +1,11 @@
-import { PrStatus, prColor } from '@/components/pr-status';
+import { PR_ICON, PrFlag, PrStatus, type PrTone, prTone } from '@/components/pr-status';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ExternalLink, GitMerge, GitPullRequest, MessageSquare, ShieldCheck } from 'lucide-react';
+import { ExternalLink, GitPullRequest, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { FIELD } from '@/components/settings/parts';
 import { BranchArt } from '@/components/illustrations';
-import { Card, CardSection, Figure, Pips, SplitBar, StatRow, Status, type Tone } from '@/components/instrument';
+import { Card, CardSection, Figure, Pips, SplitBar, StatRow, Status } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { Badge, Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type ReviewGroup, type ReviewItem } from '@/lib/api';
@@ -25,23 +25,16 @@ function checksText({ passed, failed, pending }: ReviewItem['checks']): string {
 	return parts.length ? parts.join(', ') : 'no checks';
 }
 
-const GROUP_TONE: Record<ReviewGroup, Tone> = { ready: 'success', failing: 'danger', checking: 'warning', unknown: 'neutral', merged: 'accent', closed: 'neutral' };
-const GROUP_COLOR: Record<ReviewGroup, string> = {
-	ready: 'var(--success-base)',
-	failing: 'var(--danger-base)',
-	checking: 'var(--warning-base)',
-	unknown: 'var(--neutral-500)',
-	merged: 'var(--data-2)',
-	closed: 'var(--neutral-600)',
-};
+/** Each group in the colour of what its pull requests wait on, as a PR chip of that state would be. */
+const GROUP_TONE: Record<ReviewGroup, PrTone> = { ready: 'passed', failing: 'failing', checking: 'running', unknown: 'unknown', merged: 'merged', closed: 'closed' };
 const SHORT: Record<ReviewGroup, string> = { ready: 'Ready', failing: 'Failing', checking: 'Running', unknown: 'Unknown', merged: 'Merged', closed: 'Closed' };
 
 /** One pip per check, failures first, so a row shows its CI at a glance. */
 function CheckPips({ checks }: { checks: ReviewItem['checks'] }) {
 	const items = [
-		...Array.from({ length: checks.failed }, () => ({ tone: 'danger' as const, title: 'Failed' })),
-		...Array.from({ length: checks.pending }, () => ({ tone: 'warning' as const, title: 'Running' })),
-		...Array.from({ length: checks.passed }, () => ({ tone: 'success' as const, title: 'Passed' })),
+		...Array.from({ length: checks.failed }, () => ({ color: prTone('failing'), title: 'Failed' })),
+		...Array.from({ length: checks.pending }, () => ({ color: prTone('running'), title: 'Running' })),
+		...Array.from({ length: checks.passed }, () => ({ color: prTone('passed'), title: 'Passed' })),
 	].slice(0, 12);
 	if (!items.length) return null;
 	return <Pips items={items} label={checksText(checks)} />;
@@ -49,13 +42,11 @@ function CheckPips({ checks }: { checks: ReviewItem['checks'] }) {
 
 function Row({ item }: { item: ReviewItem }) {
 	const open = item.group !== 'merged' && item.group !== 'closed';
+	const state = item.group === 'unknown' ? 'unknown' : item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open';
 	return (
 		<div className="flex min-h-[52px] items-center gap-3 rounded-[6px] px-2 py-1.5 hover:bg-(--bg-hover)">
-			<span
-				className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg)"
-				style={{ color: prColor(item.group === 'unknown' ? null : item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open') }}
-			>
-				<Icon icon={item.group === 'merged' ? GitMerge : GitPullRequest} size={13} />
+			<span className="inline-flex size-7 shrink-0 items-center justify-center" style={{ color: prTone(state === 'unknown' ? 'unknown' : state) }}>
+				<Icon icon={PR_ICON[state === 'unknown' ? 'open' : state]} size={14} />
 			</span>
 			<Link
 				to="/agents/$sessionId"
@@ -66,11 +57,11 @@ function Row({ item }: { item: ReviewItem }) {
 				<div className="flex min-w-0 items-center gap-2">
 					<span className="truncate text-[13px] font-medium">{item.title}</span>
 					{item.reviewing ? <Badge tone="accent">Reviewing @{item.reviewing}</Badge> : null}
-					{item.draft ? <Badge>Draft</Badge> : null}
-					{open && item.conflicts ? <Badge tone="danger">Conflicts</Badge> : null}
+					{item.draft ? <PrFlag tone="draft">Draft</PrFlag> : null}
+					{open && item.conflicts ? <PrFlag tone="conflicts">Conflicts</PrFlag> : null}
 				</div>
 				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
-					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: item.group === 'unknown' ? null : { state: item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open', checks: null, runs: [] } }} full /> · {age(item.createdAt)}
+					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: state === 'unknown' ? null : { state, checks: null, runs: [] } }} full /> · {age(item.createdAt)}
 					{open ? ` · ${checksText(item.checks)}` : ''}
 				</div>
 			</Link>
@@ -140,20 +131,20 @@ function Summary({ items }: { items: ReviewItem[] }) {
 			icon={GitPullRequest}
 			title="Pull requests"
 			sub="opened or reviewed by the agent"
-			status={failing ? <Status tone="danger">{failing} failing</Status> : <Status tone="success">No failures</Status>}
+			status={failing ? <Status color={prTone('failing')}>{failing} failing</Status> : <Status color={prTone('passed')}>No failures</Status>}
 		>
 			<CardSection ruled={false} className="pt-1">
 				<Figure value={String(openItems.length)} unit={`open of ${items.length}`} />
 				<SplitBar
 					label="Pull requests by what each waits on"
-					parts={(Object.keys(GROUPS) as ReviewGroup[]).map((group) => ({ key: group, label: SHORT[group], value: items.filter((item) => item.group === group).length, color: GROUP_COLOR[group] }))}
+					parts={(Object.keys(GROUPS) as ReviewGroup[]).map((group) => ({ key: group, label: SHORT[group], value: items.filter((item) => item.group === group).length, color: prTone(GROUP_TONE[group]) }))}
 				/>
 			</CardSection>
 			<StatRow
 				stats={[
-					{ label: 'checks passed', value: total('passed'), tone: 'success' },
-					{ label: 'checks failed', value: total('failed'), tone: total('failed') ? 'danger' : undefined },
-					{ label: 'checks running', value: total('pending'), tone: total('pending') ? 'warning' : undefined },
+					{ label: 'checks passed', value: total('passed'), color: total('passed') ? prTone('passed') : undefined },
+					{ label: 'checks failed', value: total('failed'), color: total('failed') ? prTone('failing') : undefined },
+					{ label: 'checks running', value: total('pending'), color: total('pending') ? prTone('running') : undefined },
 				]}
 			/>
 		</Card>
@@ -190,7 +181,7 @@ export function ReviewsPage() {
 							title={GROUPS[group].label}
 							sub={GROUPS[group].help || undefined}
 							status={
-								<Status tone={GROUP_TONE[group]} pulse={group === 'checking'}>
+								<Status color={prTone(GROUP_TONE[group])} pulse={group === 'checking'}>
 									{items.length}
 								</Status>
 							}

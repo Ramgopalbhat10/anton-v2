@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { AppWindow, Bot, Check, ChevronRight, CircleAlert, CircleStop, FlaskConical, Monitor, Square, Telescope } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useContext, useEffect, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { Chip } from '@/components/instrument';
 import { Btn, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -50,17 +50,10 @@ export function plainLine(text: string | null | undefined): string {
 /** The subagent's kind as a small tile in its colour; it breathes while the subagent works. */
 export function AgentTile({ agent, running, size = 22 }: { agent: string; running?: boolean; size?: number }) {
 	const look = lookOf(agent);
-	const style = {
-		width: size,
-		height: size,
-		color: look.tone,
-		background: `color-mix(in oklab, ${look.tone} 14%, transparent)`,
-		boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${look.tone} 38%, transparent)`,
-		'--agent-tone': look.tone,
-	} as CSSProperties;
+	// Just the role's glyph in the role's colour, no tile behind it: the colour is what tells roles apart.
 	return (
-		<span aria-hidden className={cn('relative inline-flex shrink-0 items-center justify-center rounded-[6px]', running && 'agent-tile--running')} style={style}>
-			<Icon icon={look.icon} size={Math.round(size * 0.55)} />
+		<span aria-hidden className={cn('relative inline-flex shrink-0 items-center justify-center', running && 'agent-tile--running')} style={{ width: size, height: size, color: look.tone }}>
+			<Icon icon={look.icon} size={Math.round(size * 0.72)} />
 		</span>
 	);
 }

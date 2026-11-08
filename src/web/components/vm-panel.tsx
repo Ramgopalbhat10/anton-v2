@@ -252,8 +252,8 @@ export const VmPanel = memo(function VmPanel({
 										onClick={() => show(panel.name)}
 										className="group/panel flex items-start gap-3 rounded-[10px] px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 									>
-										<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-(--bg-hover) text-(--icon-secondary) group-hover/panel:bg-(--accent-bg-subtle) group-hover/panel:text-(--accent-text)">
-											<Icon icon={panel.icon} size={14} />
+										<span className="inline-flex size-7 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/panel:text-(--accent-text)">
+											<Icon icon={panel.icon} size={16} />
 										</span>
 										<span className="flex min-w-0 flex-col gap-0.5">
 											<span className="text-[13px] font-medium text-(--text-primary)">{panel.name}</span>

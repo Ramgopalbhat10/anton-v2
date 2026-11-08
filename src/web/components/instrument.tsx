@@ -32,23 +32,23 @@ export function Caption({ children, className, tone }: { children: ReactNode; cl
 }
 
 /** A small status word in a card header or row: "LIVE", "2 FAILING", "CAP 80%". */
-export function Status({ tone = 'neutral', pulse, children }: { tone?: Tone; pulse?: boolean; children: ReactNode }) {
+export function Status({ tone = 'neutral', color, pulse, children }: { tone?: Tone; /** A colour of its own, over the tone's (a PR state's). */ color?: string; pulse?: boolean; children: ReactNode }) {
 	return (
-		<span className={cn('in-caption inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap', TEXT[tone])}>
-			{tone !== 'neutral' ? <span className={cn('size-1.5 rounded-full', pulse && 'in-pulse')} style={{ background: FILL[tone] }} /> : null}
+		<span className={cn('in-caption inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap', !color && TEXT[tone])} style={color ? { color } : undefined}>
+			{color || tone !== 'neutral' ? <span className={cn('size-1.5 rounded-full', pulse && 'in-pulse')} style={{ background: color ?? FILL[tone] }} /> : null}
 			{children}
 		</span>
 	);
 }
 
-/** The square, dashed tile a card's icon sits in. */
+/** A card's icon: a bare glyph in the tile's footprint, so titles still line up. */
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] bg-(--bg-hover)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
+			className={cn('inline-flex shrink-0 items-center justify-center', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
 			style={{ width: size, height: size }}
 		>
-			<Icon icon={icon} size={13} />
+			<Icon icon={icon} size={16} />
 		</span>
 	);
 }
@@ -186,12 +186,12 @@ export function Delta({ tone = 'neutral', children }: { tone?: Tone; children: R
 }
 
 /** Stats side by side, ruled apart: a value over a caption. */
-export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; title?: string }>; className?: string }) {
+export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; color?: string; title?: string }>; className?: string }) {
 	return (
 		<div className={cn('grid border-t border-(--border-subtle)', className)} style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
 			{stats.map((stat, index) => (
 				<div key={index} title={stat.title} className={cn('flex min-w-0 flex-col gap-0.5 px-4 py-3', index > 0 && 'border-l border-(--border-subtle)')}>
-					<span className={cn('in-figure truncate text-[15px] leading-[20px]', stat.tone && TEXT[stat.tone])}>{stat.value}</span>
+					<span className={cn('in-figure truncate text-[15px] leading-[20px]', !stat.color && stat.tone && TEXT[stat.tone])} style={stat.color ? { color: stat.color } : undefined}>{stat.value}</span>
 					<span className="truncate text-[11px] leading-4 text-(--text-tertiary)">{stat.label}</span>
 				</div>
 			))}
@@ -372,11 +372,11 @@ export function ShareRow({ label, sub, share, value, color = 'var(--accent-base)
 }
 
 /** Small dots, one per item, coloured by state: the pips beside a pull request's checks. */
-export function Pips({ items, label }: { items: Array<{ tone: Tone; title?: string }>; label: string }) {
+export function Pips({ items, label }: { items: Array<{ tone?: Tone; color?: string; title?: string }>; label: string }) {
 	return (
 		<span role="img" aria-label={label} className="inline-flex items-center gap-[3px]">
 			{items.map((item, index) => (
-				<span key={index} title={item.title} className="size-1.5 rounded-full" style={{ background: FILL[item.tone] }} />
+				<span key={index} title={item.title} className="size-1.5 rounded-full" style={{ background: item.color ?? FILL[item.tone ?? 'neutral'] }} />
 			))}
 		</span>
 	);

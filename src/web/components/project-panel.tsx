@@ -260,11 +260,11 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 			<div className="flex min-w-0 items-start gap-3">
 				<span
 					className={cn(
-						'mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border',
-						on ? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)' : 'border-(--border-subtle) bg-(--well-bg) text-(--icon-tertiary)',
+						'mt-px inline-flex size-7 shrink-0 items-center justify-center',
+						on ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
 					)}
 				>
-					<Icon icon={automation.kind === 'issues' ? CircleDot : CalendarClock} size={13} />
+					<Icon icon={automation.kind === 'issues' ? CircleDot : CalendarClock} size={16} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex min-w-0 items-center gap-1">

@@ -86,19 +86,71 @@ function pinned(): SkyImage | undefined {
 	}
 }
 
-/** This hour's picture, moving on by itself at the top of each hour. */
+const PICK_KEY = 'anton.sky.pick';
+
+/**
+ * A picture chosen with "Show a random picture", held until the top of the
+ * hour it was chosen in; then the hourly order takes over again. Kept in this
+ * browser so a reload keeps it.
+ */
+type Pick = { slug: string; until: number };
+
+function readPick(now: number): SkyImage | undefined {
+	try {
+		const pick = JSON.parse(localStorage.getItem(PICK_KEY) ?? 'null') as Pick | null;
+		return pick && pick.until > now ? SKY.find((image) => image.slug === pick.slug) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+let held: Pick | null = null;
+const pickListeners = new Set<() => void>();
+
+/** The picture to show at `now`: one asked for in the address, one picked at random this hour, or the hour's own. */
+function current(now: Date): SkyImage {
+	const time = now.getTime();
+	const fromMemory = held && held.until > time ? SKY.find((image) => image.slug === held?.slug) : undefined;
+	return pinned() ?? fromMemory ?? readPick(time) ?? skyAt(now);
+}
+
+/** A different one of the pictures, at random, and that `random` picks it (for tests). */
+export function randomSky(than: SkyImage, random: () => number = Math.random): SkyImage {
+	const others = SKY.filter((image) => image.slug !== than.slug);
+	return others[Math.floor(random() * others.length)] ?? than;
+}
+
+/** Swaps the sky for another picture at random, until the top of the hour. */
+export function shuffleSky() {
+	const now = new Date();
+	const next = randomSky(current(now));
+	held = { slug: next.slug, until: now.getTime() + untilNextHour(now) };
+	try {
+		localStorage.setItem(PICK_KEY, JSON.stringify(held));
+	} catch {
+		// Storage is a convenience; the pick still holds for this page.
+	}
+	for (const listener of pickListeners) listener();
+}
+
+/** This hour's picture (or one picked at random), moving on by itself at the top of each hour. */
 export function useSky(): SkyImage {
-	const [image, setImage] = useState(() => pinned() ?? skyAt(new Date()));
+	const [image, setImage] = useState(() => current(new Date()));
 	useEffect(() => {
 		let timer: ReturnType<typeof setTimeout>;
 		const schedule = () => {
 			timer = setTimeout(() => {
-				setImage(pinned() ?? skyAt(new Date()));
+				setImage(current(new Date()));
 				schedule();
 			}, untilNextHour(new Date()) + 500);
 		};
 		schedule();
-		return () => clearTimeout(timer);
+		const onPick = () => setImage(current(new Date()));
+		pickListeners.add(onPick);
+		return () => {
+			clearTimeout(timer);
+			pickListeners.delete(onPick);
+		};
 	}, []);
 	return image;
 }

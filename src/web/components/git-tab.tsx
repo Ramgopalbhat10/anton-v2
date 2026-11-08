@@ -473,8 +473,8 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	const count = review.comments.length;
 	return (
 		<div className="in-pop sticky bottom-0 flex items-center gap-2 py-1.5 pr-1.5 pl-2">
-			<span className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-(--accent-bg-subtle) text-(--accent-text)">
-				<Icon icon={MessageSquare} size={12} />
+			<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--accent-text)">
+				<Icon icon={MessageSquare} size={14} />
 			</span>
 			<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
 				{error ?? `${count} ${count === 1 ? 'comment' : 'comments'} for the agent`}

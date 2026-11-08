@@ -252,8 +252,8 @@ export function EmptyState({
 	return (
 		<div className={cn('flex flex-col items-center gap-3 px-6 py-8 text-center', className)}>
 			{icon ? (
-				<span className="inline-flex size-8 items-center justify-center rounded-[8px] bg-(--bg-hover) text-(--icon-secondary)">
-					<Icon icon={icon} />
+				<span className="inline-flex size-8 items-center justify-center text-(--icon-secondary)">
+					<Icon icon={icon} size={20} />
 				</span>
 			) : null}
 			<div className="flex flex-col gap-1">
