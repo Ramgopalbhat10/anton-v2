@@ -120,4 +120,16 @@ export const config = {
 	 * then under way while the agent reads. One that only answers leaves it to stop after its idle minutes. `0` turns it off.
 	 */
 	prewarmSandbox: read('ANTON_PREWARM_SANDBOX', '1') !== '0',
+	/**
+	 * A repo's prepared image is built in the background (`prepared-images.ts`): when the repo is added, when a task
+	 * finds it missing, old or out of date with the lockfile. `0` leaves repos to start without one until asked.
+	 */
+	prepareImages: read('ANTON_PREPARE_IMAGES', '1') !== '0',
+	/**
+	 * A sandbox starts while a task is typed (`spares.ts`, `wakeMachine`) and a minute or so before a routine runs,
+	 * so it is set up when the task starts. `0` turns it off, leaving the start to `prewarmSandbox`.
+	 */
+	wakeSandbox: read('ANTON_WAKE_SANDBOX', '1') !== '0',
+	/** How long a sandbox woken for a draft waits for its task after the composer last asked, before it is stopped. */
+	spareWaitMs: Number(read('ANTON_SPARE_WAIT_SECONDS', '120')) * 1000,
 };

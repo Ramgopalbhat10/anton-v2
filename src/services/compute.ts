@@ -2,6 +2,7 @@ import { config } from '../config.ts';
 import { listSessionRecords } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { runningKeys, stopSession } from './sessions.ts';
+import { sparesWaiting } from './spares.ts';
 
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 
@@ -14,11 +15,13 @@ export type ComputeView = { provider: string; app: string | null; running: Runni
 export async function computeView(): Promise<ComputeView> {
 	const [keys, records] = await Promise.all([runningKeys(), listSessionRecords()]);
 	const running = records.filter((record) => keys.has(record.id));
+	const ours = new Set([...records.map((record) => record.id), ...sparesWaiting()]);
 	return {
 		provider: getProviders().sandbox.name,
 		app: config.sandbox === 'modal' ? config.modal.app : null,
 		running: running.map(({ id, title, repo, createdAt }) => ({ id, title, repo, createdAt })),
-		others: keys.size - running.length,
+		// Sandboxes started for drafts not yet sent have no task yet, but are this Anton's.
+		others: [...keys].filter((key) => !ours.has(key)).length,
 	};
 }
 

@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
 	branches: vi.fn(),
 	commands: vi.fn(),
 	plugins: vi.fn(async () => ({ plugins: [] })),
+	wakeDraft: vi.fn(async () => ({ waking: true })),
+	releaseDraft: vi.fn(async () => ({ released: true })),
 	projectFiles: vi.fn(async (id: string, branch: string) => ({
 		paths: id === 'p2' ? ['other/repo.ts'] : branch === 'feature/ui' ? ['feature/view.ts'] : ['src/server.ts', 'README.md'],
 	})),
@@ -65,6 +67,26 @@ describe('new task composer', () => {
 				expect.objectContaining({ projectId: 'p1', branch: 'main', prompt: 'Review the branch for bugs.\n\nCheck @src/server.ts' }),
 			),
 		);
+	});
+	it('wakes a sandbox for the task as its prompt is typed, and starts the task under that id', async () => {
+		setup();
+		await waitFor(() => expect(screen.getByRole('button', { name: /Start task/ })).toBeTruthy());
+		expect(api.wakeDraft).not.toHaveBeenCalled();
+		await userEvent.type(screen.getByRole('textbox'), 'Fix the flaky upload test');
+		await waitFor(() => expect(api.wakeDraft).toHaveBeenCalledTimes(1));
+		const [projectId, taskId, branch] = api.wakeDraft.mock.calls[0] as unknown as [string, string, string];
+		expect([projectId, branch]).toEqual(['p1', 'main']);
+		await userEvent.keyboard('{Control>}{Enter}{/Control}');
+		await waitFor(() => expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ id: taskId, projectId: 'p1' })));
+	});
+	it('lets the woken sandbox go when the prompt is cleared', async () => {
+		setup();
+		const box = screen.getByRole('textbox');
+		await userEvent.type(box, 'Something');
+		await waitFor(() => expect(api.wakeDraft).toHaveBeenCalledTimes(1));
+		const taskId = (api.wakeDraft.mock.calls[0] as unknown as [string, string])[1];
+		await userEvent.clear(box);
+		await waitFor(() => expect(api.releaseDraft).toHaveBeenCalledWith(taskId));
 	});
 	it('starts the task with the provider routing picked in the model picker', async () => {
 		const gateway = { id: 'openrouter/test/model', name: 'Test model', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: false, reasoning: [], defaultReasoning: 'off' };

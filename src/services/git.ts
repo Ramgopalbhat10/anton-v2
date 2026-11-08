@@ -54,11 +54,15 @@ export async function cloneRepo(machine: Machine, url: string, auth: Record<stri
 	await run(machine, AUTHOR.map((setting) => `git config ${setting}`).join(' && '), { cwd: repoDir(machine) });
 }
 
-/** Puts the repo on a fresh task branch at `sha`, discarding anything left in the image. */
+/**
+ * Puts the repo on a fresh task branch at `sha`, discarding anything left in the image. One command, as each is a
+ * round trip to the sandbox; the fetch happens only when the image lacks the commit.
+ */
 export async function checkoutTaskBranch(machine: Machine, branch: string, sha: string, auth: Record<string, string>): Promise<void> {
-	const cwd = repoDir(machine);
-	await run(machine, `git cat-file -e ${sha}^{commit} 2>/dev/null || git fetch --filter=blob:none origin ${sha}`, { cwd, env: auth });
-	await run(machine, `git checkout -f -B ${quote(branch)} ${sha} && git clean -fd`, { cwd });
+	const fetch = `git cat-file -e ${quote(`${sha}^{commit}`)} 2>/dev/null || git fetch --filter=blob:none origin ${quote(sha)}`;
+	// The credentials are for the fetch alone: they are gone before checkout runs the repo's filters.
+	const forget = Object.keys(auth).length ? `unset ${Object.keys(auth).join(' ')}; ` : '';
+	await run(machine, `(${fetch}) && { ${forget}git checkout -f -B ${quote(branch)} ${quote(sha)} && git clean -fd; }`, { cwd: repoDir(machine), env: auth });
 }
 
 /**

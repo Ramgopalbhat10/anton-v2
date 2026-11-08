@@ -5,6 +5,7 @@ import { clearWarmImage, deleteProjectRecord, getProject, listProjects, projectS
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
+import { renewPreparedImage } from './prepared-images.ts';
 import { mergeEnv } from './secrets.ts';
 import { deleteSession } from './sessions.ts';
 
@@ -28,7 +29,10 @@ function present({ env, warmImage, warmedAt, ...project }: Project): ProjectView
 export async function addProject(fullName: string): Promise<ProjectView> {
 	if (!REPO_NAME.test(fullName)) throw new InvalidInputError('Use the form owner/name');
 	const repo = await getProviders().git.getRepo(fullName);
-	return present(await upsertProject(repo.fullName, repo.defaultBranch));
+	const project = await upsertProject(repo.fullName, repo.defaultBranch);
+	// Built now, in the background, so even the repo's first task starts from it rather than cloning.
+	renewPreparedImage(project.id);
+	return present(project);
 }
 
 /** Repos Anton's account can reach that are not added yet, most recently pushed first. */
@@ -95,9 +99,10 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 	return present(await existing(id));
 }
 
-/** Drops the repo's prepared image, so its next task clones and installs from scratch and saves a new one. */
+/** Drops the repo's prepared image and builds a new one from scratch in the background; tasks until then clone. */
 export async function rebuildPreparedImage(id: string): Promise<ProjectView> {
 	await existing(id);
 	await clearWarmImage(id);
+	renewPreparedImage(id);
 	return present(await existing(id));
 }

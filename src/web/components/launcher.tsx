@@ -17,6 +17,7 @@ import { TaskRow } from '@/components/task-row';
 import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
+import { useDraftWake } from '@/lib/wake';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
 import { parseRouted } from '../../core/model-route';
 
@@ -216,6 +217,8 @@ export function Launcher() {
 	const chat = projects.isSuccess && !project;
 	const planMode = !chat && (planChoice ?? general.data?.planMode ?? false);
 	const chosenBranch = branch || project?.defaultBranch || '';
+	// A task that will edit code gets its sandbox started as you type, so it is ready when you start the task.
+	const takeTaskId = useDraftWake({ projectId: project?.id, branch: chosenBranch, typed: prompt.trim().length > 0, enabled: !chat && !planMode && runOn === 'sandbox' });
 	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
 	const modelName = useModelName();
 	const chosenModel = models.data?.models.find((item) => item.id === model);
@@ -238,6 +241,7 @@ export function Launcher() {
 		const { images, files } = attachments;
 		// The task opens at once; it is made behind its page.
 		create({
+			id: takeTaskId(),
 			prompt: expandCommand(prompt, saved.commands, true),
 			images,
 			files,

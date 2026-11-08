@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 	setMcpServerEnabled: vi.fn(),
 	runners: vi.fn(),
 	artifacts: vi.fn(),
+	wakeSession: vi.fn(async () => ({ waking: true })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -391,5 +392,23 @@ describe('selected file references', () => {
 		await waitFor(() => expect(screen.queryByRole('button', { name: /whole message|Fold the message/ })).toBeNull());
 		expect(box.style.maxHeight).toBe('110px');
 		height.mockRestore();
+	});
+});
+
+describe('waking the sandbox', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		api.budget.mockResolvedValue({ limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null });
+	});
+	it("starts a stopped task's sandbox as a message to it is typed, once", async () => {
+		const { box } = setup({ status: 'stopped' });
+		await userEvent.type(box, 'And the docs');
+		await waitFor(() => expect(api.wakeSession).toHaveBeenCalledWith('s1'));
+		expect(api.wakeSession).toHaveBeenCalledTimes(1);
+	});
+	it('leaves a running task alone', async () => {
+		const { box } = setup({ status: 'running' });
+		await userEvent.type(box, 'And the docs');
+		expect(api.wakeSession).not.toHaveBeenCalled();
 	});
 });

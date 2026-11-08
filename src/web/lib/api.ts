@@ -774,6 +774,12 @@ export const api = {
 	saveSandboxSettings: (settings: SandboxSettings) =>
 		json<SandboxView>('/api/settings/sandbox', { method: 'PUT', body: JSON.stringify(settings) }),
 	rebuildPreparedImage: (projectId: string) => post<Project>(`/api/projects/${projectId}/prepared-image/rebuild`),
+	/** Wakes a sandbox for a new task while it is typed, under the id the task will have; asked again while the draft stays. */
+	wakeDraft: (projectId: string, taskId: string, branch?: string) => post<{ waking: boolean }>(`/api/projects/${projectId}/wake`, { taskId, ...(branch ? { branch } : {}) }),
+	/** Lets a draft's sandbox go: its text was cleared, or it moved to another repo. */
+	releaseDraft: (taskId: string) => json<{ released: boolean }>(`/api/drafts/${taskId}/wake`, { method: 'DELETE', keepalive: true }),
+	/** Starts a task's sandbox while a message to it is typed. */
+	wakeSession: (id: string) => post<{ waking: boolean }>(`/api/sessions/${id}/wake`),
 	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
 	backgroundModelDefaults: () => json<{ defaults: Record<BackgroundTask, string | null> }>('/api/settings/background-models'),
 	saveGeneralSettings: (settings: GeneralSettings) =>

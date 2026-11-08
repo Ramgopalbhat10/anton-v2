@@ -16,6 +16,7 @@ import { expandCommand } from '@/lib/completion';
 import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { askToNotify } from '@/lib/notifications';
 import { stateOf } from '@/lib/spaces';
+import { useSessionWake } from '@/lib/wake';
 import { withAttachments } from '../../core/attachments';
 
 /** Sent when a message is only images, since the agent always gets text. */
@@ -153,6 +154,8 @@ export const Composer = memo(function Composer({
 		[queryClient, sessionId],
 	);
 	const working = session.data?.working ?? false;
+	// Typing to a task whose sandbox is stopped starts it, so it is up when the message is sent; the server decides if it needs one.
+	useSessionWake(sessionId, text.trim().length > 0, session.data?.status === 'stopped' && !working);
 	const run = useMemo(
 		() => ({
 			value: session.data?.runOn ?? ('sandbox' as RunOn),

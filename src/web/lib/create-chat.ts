@@ -10,6 +10,8 @@ import { draftSession, madeAlready, newTaskId, startInBackground, titleFrom } fr
 import { withAttachments } from '../../core/attachments';
 
 export type NewChat = {
+	/** The id the page woke a sandbox under while the prompt was typed (`useDraftWake`); a new one otherwise. */
+	id?: string;
 	projectId?: string;
 	/** `owner/name` of the repository, for the task's row while it is made. */
 	repo?: string;
@@ -35,9 +37,9 @@ export function useCreateChat(): (chat: NewChat) => void {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	return useCallback(
-		({ prompt: raw, images = [], files = [], repo, ...input }: NewChat) => {
+		({ id: chosen, prompt: raw, images = [], files = [], repo, ...input }: NewChat) => {
 			askToNotify();
-			const id = newTaskId();
+			const id = chosen ?? newTaskId();
 			const prompt = raw?.trim() ?? '';
 			const named = prompt || files[0]?.name || (images.length ? 'Look at the attached image' : '');
 			// The start of the prompt names it until a fast model gives it a short title.
