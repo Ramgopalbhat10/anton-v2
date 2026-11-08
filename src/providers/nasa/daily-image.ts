@@ -37,6 +37,45 @@ export function imageLicense(credit: string, description: string): string | null
 	return null;
 }
 
+/** Validate decoded size and reject animated PNG/WebP before retaining bytes. No image decoder needed. */
+export function isSmallStaticRaster(bytes: Uint8Array, type: string): boolean {
+	const b = Buffer.from(bytes);
+	let width = 0;
+	let height = 0;
+	if (type === 'image/png' && b.length >= 33 && b.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) && b.toString('ascii', 12, 16) === 'IHDR') {
+		width = b.readUInt32BE(16); height = b.readUInt32BE(20);
+		for (let offset = 8; offset + 12 <= b.length;) {
+			const length = b.readUInt32BE(offset);
+			if (b.toString('ascii', offset + 4, offset + 8) === 'acTL') return false;
+			offset += length + 12;
+			if (offset > b.length) return false;
+		}
+	} else if (type === 'image/webp' && b.length >= 30 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') {
+		const format = b.toString('ascii', 12, 16);
+		if (format === 'VP8X') {
+			if (b[20] & 2) return false; // ANIMATION_FLAG
+			width = b.readUIntLE(24, 3) + 1; height = b.readUIntLE(27, 3) + 1;
+		} else if (format === 'VP8 ' && b[23] === 0x9d && b[24] === 1 && b[25] === 0x2a) {
+			width = b.readUInt16LE(26) & 0x3fff; height = b.readUInt16LE(28) & 0x3fff;
+		} else if (format === 'VP8L' && b[20] === 0x2f) {
+			width = (b.readUInt32LE(21) & 0x3fff) + 1;
+			height = ((b.readUInt32LE(21) >>> 14) & 0x3fff) + 1;
+		}
+	} else if (type === 'image/jpeg' && b[0] === 0xff && b[1] === 0xd8) {
+		for (let offset = 2; offset + 4 <= b.length;) {
+			if (b[offset] !== 0xff) return false;
+			const marker = b[offset + 1];
+			const length = b.readUInt16BE(offset + 2);
+			if (length < 2 || offset + 2 + length > b.length) return false;
+			if ([0xc0, 0xc1, 0xc2].includes(marker) && length >= 8) {
+				height = b.readUInt16BE(offset + 5); width = b.readUInt16BE(offset + 7); break;
+			}
+			offset += length + 2;
+		}
+	}
+	return width > 0 && width <= 1024 && height > 0 && height <= 2048 && width * height <= 2_000_000;
+}
+
 /** One <=2MiB still per process, one in-flight refresh; no API key, disk archive or background polling. */
 export function nasaDailyImage(options: { fetch?: typeof fetch; now?: () => number } = {}): DailyScienceImageProvider {
 	const request = options.fetch ?? fetch;
@@ -88,21 +127,26 @@ export function nasaDailyImage(options: { fetch?: typeof fetch; now?: () => numb
 			const enclosure = item.match(/<enclosure\b[^>]*>/)?.[0] ?? '';
 			const original = nasaUrl(text(enclosure.match(/\burl="([^"]+)"/)?.[1] ?? ''), /^\/wp-content\/uploads\/\d{4}\/\d{2}\/[\w.-]+\.(?:jpg|jpeg|png|webp)$/i);
 			if (!/\btype="image\/(?:jpeg|png|webp)"/.test(enclosure)) throw new Error('Not a still image');
-			const slug = source.pathname.split('/').filter(Boolean).at(-1)!;
-			const metaResponse = await bounded(`https://www.nasa.gov/wp-json/wp/v2/media?slug=${encodeURIComponent(slug)}`, 1024 * 1024, /^application\/json$/);
-			const metadata = JSON.parse(Buffer.from(metaResponse.body).toString('utf8'));
-			const media = Array.isArray(metadata) ? metadata.find((entry) => entry?.link === source.href && entry?.source_url === original.href) : null;
-			if (!media || typeof media.credits !== 'string' || media.credits.length > 500) throw new Error('Missing credits');
-			const credit = text(media.credits);
-			const licenseUrl = imageLicense(credit, `${title} ${field('description')} ${text(media.description?.rendered ?? '')}`);
-			if (!licenseUrl || media.media_details?.image_meta?.copyright) throw new Error('Unverified rights');
+			// The public source page includes the authoritative credit and image alt text.
+			// Avoid the WordPress REST API, which NASA may block independently of its pages/feed.
+			const page = await bounded(source, 1024 * 1024, /^text\/html$/);
+			const html = Buffer.from(page.body).toString('utf8');
+			const meta = (property: string) => {
+				const tag = (html.match(/<meta\b[^>]*>/g) ?? []).find((tag) => tag.includes(`property="${property}"`));
+				return text(tag?.match(/\bcontent="([^"]*)"/)?.[1] ?? '');
+			};
+			if (meta('og:image') !== original.href) throw new Error('Mismatched image metadata');
+			const credit = text(html.match(/<div\b[^>]*class="[^"]*\bhds-attachment-single__credit\b[^"]*"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? '').replace(/^Image Credit:\s*/i, '');
+			if (!credit || credit.length > 500) throw new Error('Missing credits');
+			const licenseUrl = imageLicense(credit, `${title} ${field('description')} ${meta('og:description')} ${meta('og:image:alt')}`);
+			if (!licenseUrl) throw new Error('Unverified rights');
 			if (cached?.sourceUrl === source.href) {
 				cached = { ...cached, title, credit, licenseUrl };
 			} else {
 				// NASA's WordPress image service returns a bounded 960px rendition, not the original.
 				original.search = '?w=960';
 				const image = await bounded(original, 2 * 1024 * 1024, /^image\/(?:jpeg|png|webp)$/);
-				if (!image.body.length) throw new Error('Empty image');
+				if (!isSmallStaticRaster(image.body, image.type)) throw new Error('Not a small static image');
 				const id = createHash('sha256').update(image.body).digest('hex').slice(0, 16);
 				cached = { id, title, credit, licenseUrl, date: new Date(published).toISOString().slice(0, 10), sourceUrl: source.href, bytes: image.body, contentType: image.type as DailyScienceImage['contentType'] };
 			}

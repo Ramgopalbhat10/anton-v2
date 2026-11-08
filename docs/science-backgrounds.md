@@ -3,7 +3,7 @@
 The shared content canvas shows NASA's latest **Image of the Day**, not APOD and
 not an hourly feed. No API key or other credentials are required. The provider
 fetches the official [IOTD RSS feed](https://www.nasa.gov/feeds/iotd-feed/) and
-looks up the selected attachment's public WordPress metadata for the full credit.
+reads the selected public source page for the full credit and image description.
 NASA does not necessarily publish a new item every calendar day: the UI displays
 the actual publication date, including on weekends.
 
@@ -16,7 +16,8 @@ the actual publication date, including on weekends.
   no scheduled server polling, database change, disk archive or growing history.
 - The provider requests a 960px NASA image-service rendition, not the full-size
   original. A 12-second total timeout, streamed byte limits (512 KiB RSS, 1 MiB
-  metadata, 2 MiB image), MIME validation and disabled redirects bound downloads.
+  metadata, 2 MiB image), MIME/header validation, decoded dimension bounds (at most 2 megapixels), rejection
+  of animated PNG/WebP, and disabled redirects bound downloads.
   All URLs are restricted to exact `https://www.nasa.gov` paths. The API is not
   an arbitrary URL proxy and callers cannot select a remote URL.
 - `GET /api/science-background` returns metadata and a same-origin image URL;
@@ -49,7 +50,7 @@ collaborations and captions indicating identifiable people. It accepts standard
 NASA-owned credits under [NASA's media guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/),
 known NASA/ESA/CSA/STScI imagery under the [STScI policy](https://webbtelescope.org/copyright),
 and joint ESA/Hubble & NASA imagery under the [ESA/Hubble CC BY 4.0 policy](https://esahubble.org/copyright/).
-NASA metadata explicitly declaring copyright is also rejected. This conservative
+Credits explicitly declaring copyright are also rejected. This conservative
 credit/caption gate is not a universal license parser: new credit formats require
 review and tests before being accepted. No NASA endorsement is implied.
 
@@ -78,7 +79,7 @@ colors and print hide the decorative layer. No new package dependencies are adde
 ## Verification
 
 - `node --experimental-strip-types --test tests/nasa-daily-image.test.ts`: feed,
-  metadata, cache/day rollover/concurrency, rights, bounds, timeout and API tests.
+  metadata, cache/day rollover/concurrency, rights, animation/dimension/byte bounds, timeout and API tests.
 - `npm run test:ui -- tests/ui/science-background.test.tsx`: daily refresh, resume,
   credits, image/metadata fallback, accessibility attributes and cleanup.
 - `npm run check:types`, `npm test`, `npm run test:ui`, `npm run build`.
