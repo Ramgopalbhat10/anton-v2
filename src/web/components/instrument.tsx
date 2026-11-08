@@ -248,7 +248,12 @@ export function TickGauge({
 				{markers.map((marker) => (
 					<span
 						key={marker.label}
-						className={cn('in-caption absolute bottom-0 -translate-x-1/2 whitespace-nowrap normal-case tracking-normal', TEXT[marker.tone ?? 'neutral'])}
+						className={cn(
+							'in-caption absolute bottom-0 whitespace-nowrap normal-case tracking-normal',
+							// A label at either end sits inside the gauge rather than hanging past its edge.
+							markerAt(marker.at) <= ticks * 0.04 ? '' : markerAt(marker.at) >= ticks * 0.96 ? '-translate-x-full' : '-translate-x-1/2',
+							TEXT[marker.tone ?? 'neutral'],
+						)}
 						style={{ left: `${(markerAt(marker.at) / ticks) * 100}%` }}
 					>
 						{marker.label}

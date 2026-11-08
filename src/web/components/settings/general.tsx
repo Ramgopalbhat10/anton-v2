@@ -168,20 +168,19 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 	const nameOf = (id: string) => models.data?.models.find((info) => info.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	return (
 		<div className="flex flex-col gap-6">
-			<Block
-				title="Default model"
-				icon={Cpu}
-				help="What new tasks and automations start on."
-				info="With its reasoning level, unless a task or automation picks its own. Each task can change its own."
-			>
-				<div className="self-start">
+			<Block title="Models" icon={Cpu}>
+				<SettingRow
+					title="Default model"
+					help="What new tasks and automations start on."
+					info="With its reasoning level, unless a task or automation picks its own. Each task can change its own."
+				>
 					<ModelPicker
 						value={{ model, reasoning: settings.reasoning }}
 						onChange={(change) => edit({ model: change.model ?? model, reasoning: change.reasoning !== undefined ? change.reasoning : settings.reasoning })}
 						height={28}
 						side="bottom"
 					/>
-				</div>
+				</SettingRow>
 			</Block>
 			<Appearance />
 			<Block title="New tasks" icon={ListChecks}>

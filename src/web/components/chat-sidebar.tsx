@@ -76,6 +76,7 @@ import {
 	toggleFilter,
 } from '@/lib/task-view';
 import { useSpaceName } from '@/lib/spaces';
+import { openSettings } from '@/lib/settings-modal';
 import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
@@ -688,9 +689,18 @@ export function ChatSidebar({
 				<div className="flex items-center gap-2.5 px-1.5">
 					<Avatar name={name} />
 					<div className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)">{name}</div>
-					<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
+					<button
+						type="button"
+						onClick={() => {
+							onNavigate?.();
+							openSettings();
+						}}
+						aria-label="Settings"
+						title="Settings"
+						className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm"
+					>
 						<Icon icon={Settings} size={14} />
-					</Link>
+					</button>
 				</div>
 				<SpentToday />
 			</div>

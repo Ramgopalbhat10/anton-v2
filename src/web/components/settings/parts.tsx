@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { IconTile } from '@/components/instrument';
+import { Children, type ReactNode } from 'react';
 import { ModelPicker } from '@/components/model-picker';
 import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/signal';
 import type { HelperAgent, Reasoning } from '@/lib/api';
@@ -38,14 +37,14 @@ export function PageHeading({ title, children, info, actions }: { title: string;
 }
 
 /**
- * One titled block within a settings page, as a card: an icon tile and title,
- * what it decides, then its rows, and a footer for the save that applies them.
- * A product's block shows its own mark in place of the icon; `info` is the
- * rest of what it decides, behind an icon by its title.
+ * One titled block within a settings page: its title and what it decides sit
+ * above, and its rows in a card below, with a footer for the save that
+ * applies them. A product's block shows its own mark by its title; `info` is
+ * the rest of what it decides, behind an icon by its title. `className` dresses
+ * the card (a danger zone's red edge, say).
  */
 export function Block({
 	title,
-	icon,
 	mark,
 	help,
 	info,
@@ -55,6 +54,7 @@ export function Block({
 	footer,
 }: {
 	title: string;
+	/** Kept for callers; blocks no longer draw an icon by their title. */
 	icon?: LucideIcon;
 	mark?: ReactNode;
 	help?: ReactNode;
@@ -64,23 +64,27 @@ export function Block({
 	aside?: ReactNode;
 	footer?: ReactNode;
 }) {
+	// Rows shown only in some states leave nothing behind when none show.
+	const rows = Children.toArray(children).length > 0;
 	return (
-		<section className={cn('in-card', className)} aria-label={title}>
-			<header className="flex items-start gap-3 px-4 pt-3.5 pb-1">
-				{mark || icon ? <span className="mt-px">{mark ?? (icon ? <IconTile icon={icon} /> : null)}</span> : null}
-				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<div className="flex min-h-[26px] flex-wrap items-center gap-x-3 gap-y-1">
-						<h2 className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-[18px] font-medium tracking-[-0.005em]">
-							<span className="min-w-0 truncate">{title}</span>
-							{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
-						</h2>
-						{aside}
-					</div>
-					{help ? <p className="m-0 max-w-[76ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
+		<section className="flex flex-col gap-2.5" aria-label={title}>
+			<header className="flex min-h-7 items-end gap-3 px-0.5">
+				{mark ? <span className="shrink-0 self-center">{mark}</span> : null}
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<h2 className="m-0 flex min-w-0 items-center gap-1.5 text-[13.5px] leading-[20px] font-medium tracking-[-0.005em]">
+						<span className="min-w-0 truncate">{title}</span>
+						{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
+					</h2>
+					{help ? <p className="m-0 max-w-[76ch] text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
 				</div>
+				{aside ? <div className="flex shrink-0 items-center gap-2 self-center">{aside}</div> : null}
 			</header>
-			{children ? <div className="flex flex-col gap-2 px-4 pt-2 pb-4">{children}</div> : <div className="h-3" />}
-			{footer ? <footer className="mt-auto flex min-h-[52px] flex-wrap items-center justify-end gap-3 border-t border-(--border-subtle) px-4 py-2.5">{footer}</footer> : null}
+			{rows || footer ? (
+				<div className={cn('in-card settings-group', className)}>
+					{rows ? <div className="flex flex-col gap-2.5 px-4 py-3">{children}</div> : null}
+					{footer ? <footer className="mt-auto flex min-h-[48px] flex-wrap items-center justify-end gap-3 border-t border-(--border-subtle) px-4 py-2">{footer}</footer> : null}
+				</div>
+			) : null}
 		</section>
 	);
 }
@@ -132,7 +136,7 @@ export function RowIcon({ icon }: { icon: LucideIcon }) {
  */
 export function SettingRow({ title, help, info, children }: { title: ReactNode; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
-		<div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--border-subtle) py-2.5 first:border-t-0 first:pt-1">
+		<div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--border-subtle) py-3 first:border-t-0 first:pt-0.5 last:pb-0.5">
 			<div className="flex min-w-0 flex-1 basis-[200px] flex-col gap-0.5">
 				<div className="text-[13px] font-medium">
 					<Titled info={info}>{title}</Titled>

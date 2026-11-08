@@ -25,6 +25,7 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { SettingsModal } from '@/components/settings/modal';
 import { Sky } from '@/components/sky';
 import { useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
@@ -135,6 +136,7 @@ export function AppShell() {
 				</main>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
 				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
+				<SettingsModal />
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>

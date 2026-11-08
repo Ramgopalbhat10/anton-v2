@@ -20,6 +20,8 @@ function Shared({ view }: { view: SecretsView }) {
 		},
 	});
 	const count = view.shared.length;
+	// The save button only shows once something here differs from what is stored.
+	const dirty = JSON.stringify(rows) !== JSON.stringify(storedVariables(view.shared));
 	return (
 		<form
 			onSubmit={(event) => {
@@ -34,12 +36,16 @@ function Shared({ view }: { view: SecretsView }) {
 				help="Set in every sandbox."
 				info="For the agent's commands, setup and the terminal. A repository's own variable of the same name wins."
 				footer={
-					<>
-						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes get them from their next start." />
-						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
-							{save.isPending ? 'Saving…' : 'Save changes'}
-						</Btn>
-					</>
+					dirty || save.isPending || save.isSuccess || save.isError ? (
+						<>
+							<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. Sandboxes get them from their next start." />
+							{dirty ? (
+								<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+									{save.isPending ? 'Saving…' : 'Save changes'}
+								</Btn>
+							) : null}
+						</>
+					) : null
 				}
 			>
 				<VariablesEditor rows={rows} onChange={setRows} />
@@ -174,13 +180,6 @@ function Sealed() {
 			aside={<Status>{secrets.length === 1 ? '1 secret' : `${secrets.length} secrets`}</Status>}
 			help="Used by the agent, never read by it."
 			info="The agent writes {{secret:NAME}} (or {{totp:NAME}} for the current code of a TOTP secret) in an http_request, and Anton fills it in on this server as it sends it: only to the hosts you list, over https, through the proxy if you give one, with the value hidden in the answer. A token an answer holds can be kept here the same way. Values are stored encrypted."
-			footer={
-				editing ? null : (
-					<Btn type="button" size="sm" variant="ghost" icon={Plus} onClick={() => setEditing('new')}>
-						Add sealed secret
-					</Btn>
-				)
-			}
 		>
 			<div className="flex flex-col gap-2">
 				{editing ? <SealedForm key={editing === 'new' ? 'new' : editing.name} editing={editing === 'new' ? null : editing} onDone={() => setEditing(null)} /> : null}
@@ -190,9 +189,12 @@ function Sealed() {
 							<SealedRow key={secret.name} secret={secret} onEdit={() => setEditing(secret)} />
 						))}
 					</List>
-				) : view.isSuccess && !editing ? (
-					<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No sealed secrets yet.</p>
 				) : null}
+				{editing ? null : (
+					<Btn type="button" size="sm" variant="ghost" icon={Plus} className="self-start" onClick={() => setEditing('new')}>
+						Add a sealed secret
+					</Btn>
+				)}
 			</div>
 		</Block>
 	);

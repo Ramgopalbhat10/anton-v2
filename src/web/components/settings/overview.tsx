@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ArcDial, DotMatrix, lastDays } from '@/components/charts';
-import { SandboxArt } from '@/components/illustrations';
+import { SandboxArt, StorageArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, usedTone, Well } from '@/components/instrument';
 import { Icon } from '@/components/signal';
 import { isLive } from '@/components/task-status';
@@ -110,7 +110,7 @@ function TasksCard() {
 									search={{ app: 'code' }}
 									className="flex min-h-8 items-center gap-2 rounded-lg px-1 text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 								>
-									<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--success-base)" />
+									<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
 									<span className="min-w-0 flex-1 truncate">{session.title}</span>
 									<Caption className="tracking-normal normal-case">{age(session.createdAt)}</Caption>
 								</Link>
@@ -175,6 +175,11 @@ function StorageCard() {
 					{data?.lastCleanup ? `Last cleanup freed ${size(data.lastCleanup.freedBytes)} from ${data.lastCleanup.removed} objects.` : 'Nothing cleaned up yet.'}
 				</Caption>
 			</CardSection>
+			<CardSection className="flex-1 pt-3">
+				<Well grid className="flex flex-1 items-center justify-center py-3">
+					<StorageArt className="w-full max-w-[220px]" />
+				</Well>
+			</CardSection>
 		</Card>
 	);
 }
@@ -193,8 +198,9 @@ export function SettingsOverview() {
 				<ReposCard />
 				<StorageCard />
 			</div>
+			{/* Every page by group, for a phone, where the nav beside the page is hidden. */}
 			{GROUPS.map((group) => (
-				<Card key={group.id} title={group.label} sub={group.desc}>
+				<Card key={group.id} title={group.label} sub={group.desc} className="md:hidden">
 					<nav aria-label={group.label} className="grid gap-px px-1.5 pb-1.5 sm:grid-cols-2">
 						{SECTIONS.filter((section) => section.group === group.id).map((section) => (
 							<Link

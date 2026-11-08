@@ -110,8 +110,8 @@ describe('Settings', () => {
 		expect(web.getAttribute('href')).toBe('/settings/repos/p1');
 		expect(within(web).getByText('acme/')).toBeTruthy();
 		expect(within(web).getByText('2').nextSibling?.textContent).toBe('tasks');
-		expect(within(web).getByText('image · 3h old')).toBeTruthy();
+		expect(within(web).getByText('prepared 3h ago')).toBeTruthy();
 		const api_ = screen.getByText('api').closest('a') as HTMLElement;
-		expect(within(api_).getByText('no prepared image')).toBeTruthy();
+		expect(within(api_).getByText('not prepared')).toBeTruthy();
 	});
 });

@@ -16,6 +16,7 @@ function Commands({ saved }: { saved: Command[] }) {
 			queryClient.setQueryData(['commands'], result);
 		},
 	});
+	const dirty = JSON.stringify(rows) !== JSON.stringify(saved);
 	const change = (index: number, patch: Partial<Command>) => setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
 	return (
 		<form
@@ -34,9 +35,11 @@ function Commands({ saved }: { saved: Command[] }) {
 							Add a command
 						</Btn>
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
-						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
-							{save.isPending ? 'Saving…' : 'Save commands'}
-						</Btn>
+						{dirty || save.isPending ? (
+							<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+								{save.isPending ? 'Saving…' : 'Save commands'}
+							</Btn>
+						) : null}
 					</>
 				}
 			>

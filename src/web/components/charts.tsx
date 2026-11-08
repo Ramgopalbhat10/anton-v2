@@ -96,8 +96,10 @@ export function StackedDaysChart({
 		const peak = Math.max(0, ...byDay.map((entry) => entry.total));
 		// A cap far above anything spent would flatten every bar, so it only shows once spend gets within reach of it.
 		const showLimit = Boolean(limit && limit.value > 0 && peak >= limit.value * 0.4);
-		const ticks = niceTicks(Math.max(peak, showLimit && limit ? limit.value : 0), whole);
-		const top = Math.max(ticks[2], peak * 1.08) || 1;
+		const reach = Math.max(peak, showLimit && limit ? limit.value : 0);
+		// With nothing to draw, only the baseline is labelled: a scale of tiny fractions says nothing.
+		const ticks = reach > 0 ? niceTicks(reach, whole) : [0];
+		const top = reach > 0 ? Math.max(ticks[2], peak * 1.08) : 1;
 		const peakIndex = peak > 0 ? byDay.findIndex((entry) => entry.total === peak) : -1;
 		return { byDay, ticks, top, showLimit, peakIndex };
 	}, [rows, days, series, limit, whole]);
@@ -191,6 +193,11 @@ export function StackedDaysChart({
 							</g>
 						);
 					})}
+					{model.peakIndex < 0 ? (
+						<text x={GUTTER.left + plotW / 2} y={GUTTER.top + plotH / 2} textAnchor="middle" fill="var(--text-tertiary)" className="in-chart-empty">
+							Nothing in these {days.length} days
+						</text>
+					) : null}
 					{days.map((day, index) =>
 						(days.length - 1 - index) % 7 === 0 ? (
 							<text key={day} x={x(index)} y={height - 6} textAnchor="middle" fill={index === days.length - 1 ? 'var(--text-secondary)' : 'currentColor'}>

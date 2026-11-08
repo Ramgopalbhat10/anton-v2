@@ -14,7 +14,8 @@ import { SectionPage, SettingsLayout } from '@/components/settings/layout';
 import { SettingsOverview } from '@/components/settings/overview';
 import { SkillDetailPage } from '@/components/settings/skill-detail';
 import { ConnectorDetailPage } from '@/components/settings/connectors';
-import type { SkillsTab, ViewSearch } from '@/components/settings/skills';
+import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
+import { openSettings } from '@/lib/settings-modal';
 import { OutputViewerHost } from '@/components/output-viewer';
 import { ProjectPage, ThreadPage } from '@/components/project-page';
 import { ProjectSettingsPage } from '@/components/project-settings';
@@ -126,9 +127,20 @@ const reviewsRoute = createRoute({
 	component: ReviewsPage,
 });
 
+/**
+ * Settings opens as a card over the page you are on (SettingsModal in the
+ * shell), not as a page: going to any settings address opens the card there
+ * and leaves you where you were, or on Home when you arrived by the address.
+ */
 const settingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/settings',
+	beforeLoad: ({ location, preload }) => {
+		if (preload) return;
+		openSettings(location.href);
+		const from = router.state.resolvedLocation;
+		throw redirect({ href: from && !from.pathname.startsWith('/settings') ? from.href : '/', replace: true });
+	},
 	component: SettingsLayout,
 });
 
@@ -141,33 +153,21 @@ const settingsIndexRoute = createRoute({
 const settingsSectionRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: '$section',
-	// The Skills page keeps its tab and search here, so coming back from a plugin finds them again;
-	// Connectors hears here how a Google sign-in went.
-	validateSearch: (search: Record<string, unknown>): { tab?: SkillsTab; q?: string; connected?: string; problem?: string } => ({
-		tab: search.tab === 'installed' || search.tab === 'discover' ? search.tab : undefined,
-		q: typeof search.q === 'string' && search.q ? search.q : undefined,
-		connected: typeof search.connected === 'string' && search.connected ? search.connected : undefined,
-		problem: typeof search.problem === 'string' && search.problem ? search.problem.slice(0, 500) : undefined,
-	}),
+	validateSearch: sectionSearch,
 	component: SectionPage,
 });
 
 const skillRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: 'skills/view',
-	validateSearch: (search: Record<string, unknown>): ViewSearch =>
-		Object.fromEntries(['marketplace', 'name', 'address', 'plugin'].flatMap((key) => (typeof search[key] === 'string' ? [[key, search[key]]] : []))),
+	validateSearch: skillViewSearch,
 	component: SkillDetailPage,
 });
 
 const connectorRoute = createRoute({
 	getParentRoute: () => settingsRoute,
 	path: 'connectors/view',
-	// `c` is a connector you have (`mail:gmail`, `mcp:<name>`), `add` one from the catalog; a sign-in comes back with how it went.
-	validateSearch: (search: Record<string, unknown>): { c?: string; add?: string; connected?: string; problem?: string } =>
-		Object.fromEntries(
-			['c', 'add', 'connected', 'problem'].flatMap((key) => (typeof search[key] === 'string' && search[key] ? [[key, (search[key] as string).slice(0, 500)]] : [])),
-		),
+	validateSearch: connectorViewSearch,
 	component: ConnectorDetailPage,
 });
 

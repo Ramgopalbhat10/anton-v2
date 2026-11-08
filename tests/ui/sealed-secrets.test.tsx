@@ -27,7 +27,7 @@ describe('Settings › Secrets › Sealed', () => {
 		expect(within(block).getByText(/Kept by a task from an answer/)).toBeTruthy();
 		// What a task kept can be deleted, not edited.
 		expect(within(block).queryByRole('button', { name: 'Change BROKER_TOKEN' })).toBeNull();
-		await userEvent.click(within(block).getByRole('button', { name: 'Add sealed secret' }));
+		await userEvent.click(within(block).getByRole('button', { name: 'Add a sealed secret' }));
 		const form = within(block).getByRole('form', { name: 'Add a sealed secret' });
 		await userEvent.type(within(form).getByPlaceholderText('BROKER_API_KEY'), 'broker_totp');
 		await userEvent.type(within(form).getByPlaceholderText('Never shown again'), 'JBSWY3DPEHPK3PXP');

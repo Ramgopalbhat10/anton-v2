@@ -58,7 +58,7 @@ function Form({ view }: { view: SandboxView }) {
 					</>
 				}
 			>
-				<div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-4 gap-y-5 pt-1 pb-2">
+				<div className="grid grid-cols-[repeat(auto-fit,minmax(176px,1fr))] gap-x-4 gap-y-5 pt-1 pb-2">
 					<Select
 						label="Machine size"
 						icon={Cpu}

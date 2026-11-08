@@ -264,6 +264,10 @@
 .in-chart svg {
 	overflow: visible;
 }
+.in-chart .in-chart-empty {
+	font-family: var(--font-sans);
+	font-size: 12px;
+}
 
 /*
  * Arrivals. What you just did shows the frame you did it, then settles into place: a page
@@ -408,6 +412,24 @@
 /* A list inside a block is rows on the block's own card, not a second card. */
 .in-list {
 	padding: 4px;
+}
+/* A hairline between rows, inset so the hover fill of a row still reads as one shape. */
+.in-list > * + * {
+	position: relative;
+}
+.in-list > * + *::before {
+	content: '';
+	position: absolute;
+	top: -1.5px;
+	left: 12px;
+	right: 12px;
+	height: 1px;
+	background: var(--border-subtle);
+	pointer-events: none;
+}
+.in-list > :hover::before,
+.in-list > :hover + *::before {
+	opacity: 0;
 }
 .in-card .in-list {
 	border: 0;
