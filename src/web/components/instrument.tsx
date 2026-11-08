@@ -520,7 +520,7 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 				<span
 					key={index}
 					className="size-[7px] rounded-[2px]"
-					style={{ background: index < green ? 'var(--success-base)' : index < green + red ? 'var(--danger-base)' : 'var(--segment-off)' }}
+					style={{ background: index < green ? 'var(--diff-add-base)' : index < green + red ? 'var(--diff-remove-base)' : 'var(--segment-off)' }}
 				/>
 			))}
 		</span>

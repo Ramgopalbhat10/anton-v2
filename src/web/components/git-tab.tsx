@@ -72,7 +72,7 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 		<div
 			className={cn(
 				'group relative flex',
-				line.kind === 'add' && 'bg-(--success-bg) shadow-[inset_2px_0_0_var(--success-base)]',
+				line.kind === 'add' && 'bg-(--diff-add-bg) shadow-[inset_2px_0_0_var(--diff-add-base)]',
 				line.kind === 'remove' && 'bg-(--danger-bg) shadow-[inset_2px_0_0_var(--danger-base)]',
 			)}
 		>
@@ -87,13 +87,13 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 				</button>
 			) : null}
 			<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{line.number}</span>
-			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--success-text)' : line.kind === 'remove' ? 'text-(--danger-text)' : 'text-transparent')}>
+			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--diff-add-text)' : line.kind === 'remove' ? 'text-(--diff-remove-text)' : 'text-transparent')}>
 				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}
 			</span>
 			<span
 				className={cn(
 					'pr-3 whitespace-pre',
-					line.kind === 'add' ? 'text-(--success-text)' : line.kind === 'remove' ? 'text-(--danger-text)' : 'text-(--text-secondary)',
+					line.kind === 'add' ? 'text-(--diff-add-text)' : line.kind === 'remove' ? 'text-(--diff-remove-text)' : 'text-(--text-secondary)',
 				)}
 			>
 				{line.text}
@@ -522,7 +522,7 @@ function foldersOf(paths: string[]): Set<string> {
 function LinesFigure({ file }: { file: FileDiff | undefined }) {
 	if (!file || file.added + file.removed === 0) return null;
 	return file.added ? (
-		<span className="in-num shrink-0 text-[10.5px] text-(--success-text)">+{file.added}</span>
+		<span className="in-num shrink-0 text-[10.5px] text-(--diff-add-text)">+{file.added}</span>
 	) : (
 		<span className="in-num shrink-0 text-[10.5px] text-(--danger-text)">-{file.removed}</span>
 	);

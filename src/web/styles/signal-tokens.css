@@ -32,6 +32,15 @@
   --alpha-black-40:rgba(0,0,0,0.40);
   --alpha-black-60:rgba(0,0,0,0.60);
 
+  /* The mark's own cyan: Anton's cube (Logo) and the mascot on the composer
+     are drawn in it. It is not an interface colour; the accent is blue. */
+  --cyan-200:#9EE1F3;
+  --cyan-300:#6FCDE8;
+  --cyan-400:#3FB6D8;
+  --cyan-500:#2C9BBD;
+  --cyan-600:#1F7F9E;
+  --cyan-700:#17627A;
+
   /* Accent ramp — ION BLUE, the only accent hue in the system: the blue of
      an atmosphere's limb seen from orbit. Calm on near-black, and far enough
      from emerald / amber / red to tell apart at 11px on a 1px border. */
@@ -126,15 +135,24 @@
 
   /* Semantic states — each has text / subtle bg / border, so one state
      renders as text, as a badge, and as a banner with no improvisation. */
-  --success-text:var(--emerald-300);
-  --success-base:var(--emerald-400);
-  --success-bg:var(--emerald-alpha-12);
-  --success-border:var(--emerald-alpha-30);
+  /* Calm states: done reads as quiet white, anything that wants you takes the
+     one accent, and only a failure is red. Green and red are kept for diffs. */
+  --success-text:var(--neutral-200);
+  --success-base:var(--neutral-300);
+  --success-bg:rgba(255,255,255,0.06);
+  --success-border:rgba(255,255,255,0.14);
 
-  --warning-text:var(--amber-300);
-  --warning-base:var(--amber-400);
-  --warning-bg:var(--amber-alpha-12);
-  --warning-border:var(--amber-alpha-30);
+  --warning-text:var(--blue-200);
+  --warning-base:var(--blue-300);
+  --warning-bg:var(--blue-alpha-12);
+  --warning-border:var(--blue-alpha-30);
+
+  --diff-add-text:var(--emerald-300);
+  --diff-add-base:var(--emerald-400);
+  --diff-add-bg:var(--emerald-alpha-12);
+  --diff-add-border:var(--emerald-alpha-30);
+  --diff-remove-text:var(--red-300);
+  --diff-remove-base:var(--red-400);
 
   --danger-text:var(--red-300);
   --danger-base:var(--red-400);

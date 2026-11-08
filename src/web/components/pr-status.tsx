@@ -57,7 +57,7 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 					<BranchName name={detail.baseBranch || 'Unknown target'} kind="Target" />
 				</span>
 			) : <span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} → ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>}
-			<span className="in-num shrink-0 whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--success-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
+			<span className="in-num shrink-0 whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--diff-add-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
 		</span>
 	);
 }

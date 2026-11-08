@@ -162,13 +162,13 @@ export const PROJECT_ICONS: ProjectIconEntry[] = [
 
 const BY_KEY = new Map(PROJECT_ICONS.map((entry) => [entry.key, entry]));
 
-/** The tints a mark can take: the chart hues, so marks sit with the rest of the page. */
+/** The tints a mark can take: a project's own colour, the one place the page lets you pick one. */
 export const ICON_TINTS = [
-	{ key: 'cyan', label: 'Blue', color: 'var(--data-1)' },
-	{ key: 'violet', label: 'Violet', color: 'var(--data-2)' },
-	{ key: 'amber', label: 'Amber', color: 'var(--data-3)' },
-	{ key: 'green', label: 'Green', color: 'var(--data-4)' },
-	{ key: 'pink', label: 'Pink', color: 'var(--data-5)' },
+	{ key: 'cyan', label: 'Blue', color: '#7096fb' },
+	{ key: 'violet', label: 'Violet', color: '#a78bfa' },
+	{ key: 'amber', label: 'Amber', color: '#e3a63f' },
+	{ key: 'green', label: 'Green', color: '#35c88a' },
+	{ key: 'pink', label: 'Pink', color: '#f472b6' },
 	{ key: 'gray', label: 'Gray', color: 'var(--neutral-300)' },
 ] as const;
 

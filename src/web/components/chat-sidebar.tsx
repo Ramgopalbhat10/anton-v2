@@ -605,7 +605,7 @@ export function ChatSidebar({
 			className="sg-nav glass-strong flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
-				<Logo size={15} />
+				<Logo size={22} />
 				<div className="min-w-0 truncate text-[14px] font-semibold tracking-[-0.02em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
 				<NotificationsBell onOpen={onOpenNotifications} />

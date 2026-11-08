@@ -186,7 +186,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				icon: Pencil,
 				body: (
 					<>
-						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--success-text)">+{added}</span>{' '}
+						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--diff-add-text)">+{added}</span>{' '}
 						<span className="text-(--danger-text)">-{removed}</span>
 					</>
 				),
@@ -197,7 +197,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				icon: FilePlus,
 				body: (
 					<>
-						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--success-text)">+{lineCount(field(input, 'content'))}</span>
+						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--diff-add-text)">+{lineCount(field(input, 'content'))}</span>
 					</>
 				),
 			};

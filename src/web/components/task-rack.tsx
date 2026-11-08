@@ -11,7 +11,7 @@ import { age, dollars, tokens } from '@/lib/format';
 import { useModels } from '@/components/model-picker';
 import { setPendingPrompt } from '@/lib/pending-prompt';
 
-/* Items in a row of bays, drawn flat on the pixel grid: each bay a tray of
+/* Items in a row of bays, drawn flat on the dot grid: each bay a tray of
    slots, each item a tile standing in its slot with a light that shows how it
    stands. Pointing at a tile (or tabbing to it) lifts it and opens a card with
    its details and what can be done with it. The card stays while the pointer is

@@ -825,7 +825,7 @@ const AssistantMessage = memo(function AssistantMessage({
 		<div className="group/reply flex flex-col gap-3">
 			{head ? (
 				<div className="flex items-center gap-2">
-					<Logo size={15} />
+					<Logo size={18} />
 					<div className="text-[12px] font-medium text-(--text-secondary)">Anton</div>
 					{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
 				</div>

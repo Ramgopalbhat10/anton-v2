@@ -58,31 +58,48 @@ export function IconBtn({
 }
 
 /** How long the cube rests between turns, at random within this span. */
-/** The eight outer cells of a 3×3 grid, clockwise from the top left: the order the light runs round. */
-const RING: Array<[number, number]> = [
-	[0, 0],
-	[1, 0],
-	[2, 0],
-	[2, 1],
-	[2, 2],
-	[1, 2],
-	[0, 2],
-	[0, 1],
-];
+/** How long the cube rests between turns, at random within this span. */
+const TURN_GAP_MS = [1800, 4500] as const;
+
+/** A turn now and then, at random: a spin a third round, or a hop and a roll two thirds over; none with reduced motion. */
+function useTurns(): ['spin' | 'roll' | null, () => void] {
+	const [turn, setTurn] = useState<'spin' | 'roll' | null>(null);
+	useEffect(() => {
+		if (turn || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+		const timer = setTimeout(() => setTurn(Math.random() < 0.55 ? 'spin' : 'roll'), TURN_GAP_MS[0] + Math.random() * (TURN_GAP_MS[1] - TURN_GAP_MS[0]));
+		return () => clearTimeout(timer);
+	}, [turn]);
+	return [turn, () => setTurn(null)];
+}
 
 /**
- * Waiting, drawn on the pixel grid: a light runs round the eight outer cells of
- * a 3×3 square, its tail fading, around a dim centre (`.sg-spinner` in
- * instrument.css). It holds still, fully lit, with reduced motion.
+ * Waiting, drawn as Anton's cube: its faces lift out and brighten in turn,
+ * and now and then it spins or rolls over (`.sg-spinner` in instrument.css);
+ * from 16px it has the mascot's eyes.
  */
 export function Spinner({ size = 14, tone = 'accent' }: { size?: number; tone?: 'accent' | 'neutral' | 'onAccent' }) {
+	const [turn, rest] = useTurns();
 	return (
-		<span role="status" aria-label="Loading" className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`)} style={{ width: size, height: size }}>
-			<svg aria-hidden width={size} height={size} viewBox="0 0 3 3" shapeRendering="crispEdges">
-				<rect className="sl-core" x={1.14} y={1.14} width={0.72} height={0.72} />
-				{RING.map(([x, y], index) => (
-					<rect key={index} className="sl-cell" x={x + 0.14} y={y + 0.14} width={0.72} height={0.72} style={{ '--i': index } as CSSProperties} />
-				))}
+		<span role="status" aria-label="Loading" className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`, turn && `is-${turn}`)} style={{ width: size, height: size }}>
+			<svg aria-hidden width={size} height={size} viewBox="3.5 5.2 17 17.8" className="overflow-visible">
+				<g
+					className="sl-cube"
+					onAnimationEnd={(event) => {
+						if (event.target === event.currentTarget) rest();
+					}}
+				>
+					<polygon className="sl-face sl-top" points="12,6 19.1,10.1 12,14.2 4.9,10.1" />
+					<polygon className="sl-face sl-left" points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" />
+					<polygon className="sl-face sl-right" points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" />
+					{size >= 16 ? (
+						<g className="sl-face sl-left">
+							<g className="sl-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+								<path d="M7.03 14.28v2.13" />
+								<path d="M9.87 15.92v2.13" />
+							</g>
+						</g>
+					) : null}
+				</g>
 			</svg>
 		</span>
 	);
@@ -195,7 +212,7 @@ export function Meta({ children, className }: { children: ReactNode; className?:
 export function DiffStat({ added, removed }: { added: number; removed: number }) {
 	return (
 		<span className="text-[11px]">
-			<span className="text-(--success-text)">+{added}</span>{' '}
+			<span className="text-(--diff-add-text)">+{added}</span>{' '}
 			<span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
 		</span>
 	);

@@ -19,14 +19,15 @@
 	--line-art: rgba(255, 255, 255, 0.34);
 	--line-art-faint: rgba(255, 255, 255, 0.14);
 
-	/* Data hues, in the order series take them. Blue leads so a single series
-	   reads as Anton's; the rest stay apart from the status hues at 10px. */
+	/* Data hues, in the order series take them: one blue and its greys, so a
+	   chart never adds colours of its own. Blue leads so a single series reads
+	   as Anton's. */
 	--data-1: #7096fb;
-	--data-2: #a78bfa;
-	--data-3: #e3a63f;
-	--data-4: #35c88a;
-	--data-5: #f472b6;
-	--data-6: #8e8e8e;
+	--data-2: #c3cde4;
+	--data-3: #4b67b8;
+	--data-4: #8b919d;
+	--data-5: #a9c0ff;
+	--data-6: #5b5f68;
 
 	--ts-chart-1: var(--data-1);
 	--ts-chart-2: var(--data-2);
@@ -79,7 +80,7 @@
 	}
 }
 /* A route's stages take turns on a ten-second loop, each lit for a quarter of
-   it: its caption (here) and its station in a pixel drawing (.px-stage) share
+   it: its caption (here) and its station in the drawing (.fa-stage) share
    the timing through --stage. */
 .route-caption {
 	animation: route-caption 10s infinite both;
@@ -107,7 +108,7 @@
 	}
 }
 
-/* The rack (task-rack.tsx): bays as trays on the pixel grid, items as slim
+/* The rack (task-rack.tsx): bays as trays on the dot grid, items as slim
    tiles standing in their slots. Tiles arrive one after another, a pointed-at
    tile lifts and lights, and a working one has a light running up it. */
 .rack-bay {
@@ -523,7 +524,7 @@
    Every loop moves whole pixels (steps), and a mood's pose holds without them. */
 .anton-mascot {
 	overflow: visible;
-	--am-led: var(--blue-700);
+	--am-led: var(--cyan-700);
 }
 .anton-mascot :is(.am-question, .am-zzz, .am-spark, .am-happy, .am-shut) {
 	display: none;
@@ -568,7 +569,7 @@
    walks and hops are picked at random in mascot.tsx), types with both hands,
    reads side to side, the antenna blinks. */
 .anton-mascot[data-mood='working'] {
-	--am-led: var(--blue-200);
+	--am-led: var(--cyan-200);
 }
 .anton-mascot .am-hopper {
 	animation: am-hop-small 0.5s steps(1, end) 1 both;
@@ -641,7 +642,7 @@
 }
 @keyframes am-led {
 	50% {
-		fill: var(--blue-600);
+		fill: var(--cyan-600);
 	}
 }
 
@@ -668,7 +669,7 @@
 
 /* Done: one hop, pleased eyes and a spark. */
 .anton-mascot[data-mood='done'] {
-	--am-led: var(--blue-200);
+	--am-led: var(--cyan-200);
 }
 .anton-mascot[data-mood='done'] :is(.am-happy, .am-spark) {
 	display: inline;
@@ -771,68 +772,98 @@
 	}
 }
 
-/* Anton's mark (Logo in illustrations.tsx): pointed at, its signal pixel
-   blinks twice, as a light answering. */
-.anton-logo:hover .al-signal {
-	animation: al-signal 0.9s steps(1, end);
+/* Anton's mark (Logo in illustrations.tsx): pointed at, the cube crouches,
+   hops and lands, glancing along its face and blinking once. Lengths are the
+   mark's own units (a 17-unit square). */
+.anton-logo .al-cube {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
 }
-@keyframes al-signal {
+.anton-logo .al-eye {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+}
+.anton-logo:hover .al-cube {
+	animation: al-hop 0.62s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.anton-logo:hover .al-eyes {
+	animation: al-glance 1.1s ease-in-out;
+}
+.anton-logo:hover .al-eye {
+	animation: al-blink 1.1s steps(1, end);
+}
+@keyframes al-hop {
 	0%,
-	50% {
-		opacity: 0.2;
-	}
-	25%,
-	75%,
 	100% {
-		opacity: 1;
+		transform: none;
+	}
+	16% {
+		transform: scale(1.06, 0.9);
+	}
+	42% {
+		transform: translateY(-2.2px) scale(0.97, 1.04);
+	}
+	68% {
+		transform: scale(1.05, 0.93);
+	}
+	84% {
+		transform: scale(0.99, 1.01);
+	}
+}
+@keyframes al-glance {
+	0%,
+	20%,
+	100% {
+		transform: none;
+	}
+	38%,
+	62% {
+		transform: translate(0.9px, 0.52px);
+	}
+}
+@keyframes al-blink {
+	0%,
+	76%,
+	100% {
+		transform: none;
+	}
+	70% {
+		transform: scaleY(0.15);
 	}
 }
 
-/* Pixel drawings (pixel-art.tsx): the greys they are drawn in, a dot for an
-   empty cell, a twinkle, a pulse running along a wire, and stages lit in turn. */
-:root,
-[data-theme='dark'] {
-	--px-edge: rgba(236, 236, 240, 0.72);
-	--px-mid: rgba(236, 236, 240, 0.34);
-	--px-faint: rgba(236, 236, 240, 0.14);
-	--px-accent-dim: rgba(112, 150, 251, 0.34);
-}
-.px-twinkle {
-	animation: px-twinkle 3.6s ease-in-out infinite;
-	animation-delay: calc(var(--i, 0) * -1.3s);
-}
-@keyframes px-twinkle {
-	0%,
-	100% {
-		opacity: 1;
+@media (prefers-reduced-motion: reduce) {
+	.anton-logo * {
+		animation: none !important;
 	}
+}
+
+/* Flat drawings (illustrations.tsx): a lit wire's slow dashed flow, a
+   cursor's blink, and a route's stations lit in turn with their captions. */
+.fa-flow {
+	animation: fa-flow 1.4s linear infinite;
+}
+@keyframes fa-flow {
+	to {
+		stroke-dashoffset: -12;
+	}
+}
+.fa-blink {
+	animation: fa-blink 1.1s steps(1, end) infinite;
+}
+@keyframes fa-blink {
 	50% {
-		opacity: 0.25;
+		opacity: 0;
 	}
 }
-.px-run {
-	opacity: 0.25;
-	animation: px-run 2.4s linear infinite;
-	animation-delay: calc(var(--i, 0) * 0.07s);
-}
-@keyframes px-run {
-	0%,
-	12% {
-		opacity: 1;
-	}
-	30%,
-	100% {
-		opacity: 0.25;
-	}
-}
-.px-stage {
-	opacity: 0.3;
-	animation: px-stage 10s infinite both;
+.fa-stage {
+	opacity: 0;
+	animation: fa-stage 10s infinite both;
 	animation-delay: calc(var(--stage, 0) * 2.5s);
 }
-@keyframes px-stage {
+@keyframes fa-stage {
 	0% {
-		opacity: 0.3;
+		opacity: 0;
 	}
 	2%,
 	23% {
@@ -840,18 +871,17 @@
 	}
 	25%,
 	100% {
-		opacity: 0.3;
+		opacity: 0;
 	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.px-twinkle,
-	.px-run,
-	.px-stage {
+	.fa-flow,
+	.fa-blink,
+	.fa-stage {
 		animation: none;
 	}
-	.px-run,
-	.px-stage {
+	.fa-stage[data-first] {
 		opacity: 1;
 	}
 }
@@ -863,42 +893,236 @@
 }
 
 /*
- * The loader (Spinner in signal.tsx): a light running round a 3×3 square of
- * pixels, each cell lit in turn and fading behind it. `--ls` is the lit colour.
+ * The loader: Anton's cube, its faces taking turns. Each face lifts out
+ * along its own edge and brightens, top, left, then right, and eases back,
+ * so the cube seems to breathe while it waits; its eyes blink now and then.
+ * Now and again (`Spinner` picks when) it spins a third of a turn in place
+ * or hops and rolls two thirds over. Its outline is the same at every third
+ * of a turn, so the faces trade colours as they go and it lands looking as
+ * it started. `--lt`, `--ll` and `--lr` colour the top, left and right faces.
  */
 .sg-spinner {
-	--ls: var(--accent-base);
+	--lt: #9ee1f3;
+	--ll: #3fb6d8;
+	--lr: #17627a;
+	--ease-sine: cubic-bezier(0.37, 0, 0.63, 1);
 	display: inline-flex;
 	flex: 0 0 auto;
 }
 .sg-spinner--neutral {
-	--ls: var(--neutral-300);
+	--lt: var(--neutral-300);
+	--ll: var(--neutral-500);
+	--lr: var(--neutral-700);
 }
 .sg-spinner--onAccent {
-	--ls: var(--primary-fg);
+	--lt: rgba(6, 24, 31, 0.5);
+	--ll: rgba(6, 24, 31, 0.8);
+	--lr: rgba(6, 24, 31, 0.95);
 }
-.sg-spinner .sl-core {
-	fill: var(--ls);
-	opacity: 0.25;
+.sg-spinner .sl-cube {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
 }
-.sg-spinner .sl-cell {
-	fill: var(--ls);
-	opacity: 0.18;
-	animation: sl-run 0.96s linear infinite;
-	animation-delay: calc(var(--i) * 0.12s - 0.96s);
+.sg-spinner .sl-face {
+	transform-box: view-box;
+	animation: 1.3s var(--ease-sine) infinite;
 }
-@keyframes sl-run {
-	0% {
-		opacity: 1;
-	}
-	45%,
+.sg-spinner .sl-top {
+	fill: var(--lt);
+	animation-name: sl-top;
+}
+.sg-spinner .sl-left {
+	fill: var(--ll);
+	animation-name: sl-left;
+	animation-delay: 0.22s;
+}
+.sg-spinner .sl-right {
+	fill: var(--lr);
+	animation-name: sl-right;
+	animation-delay: 0.44s;
+}
+.sg-spinner .sl-eyes {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+	animation: sl-blink 2.8s steps(1, end) infinite;
+	transition: opacity 160ms var(--ease-sine);
+}
+@keyframes sl-top {
+	0%,
+	50%,
 	100% {
-		opacity: 0.18;
+		transform: none;
+		fill: var(--lt);
+	}
+	25% {
+		transform: translateY(-1.5px);
+		fill: color-mix(in oklab, var(--lt) 82%, white);
+	}
+}
+@keyframes sl-left {
+	0%,
+	50%,
+	100% {
+		transform: none;
+		fill: var(--ll);
+	}
+	25% {
+		transform: translate(-1.3px, 0.75px);
+		fill: color-mix(in oklab, var(--ll) 78%, white);
+	}
+}
+@keyframes sl-right {
+	0%,
+	50%,
+	100% {
+		transform: none;
+		fill: var(--lr);
+	}
+	25% {
+		transform: translate(1.3px, 0.75px);
+		fill: color-mix(in oklab, var(--lr) 70%, var(--ll));
+	}
+}
+@keyframes sl-blink {
+	0%,
+	92%,
+	100% {
+		transform: none;
+	}
+	95% {
+		transform: scaleY(0.15);
+	}
+}
+
+/* A turn: the faces stop breathing and trade colours as they go round, so the light stays on top; a roll passes through a third of a turn's colours on its way. */
+.sg-spinner.is-spin .sl-cube {
+	animation: sl-spin 0.62s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.sg-spinner.is-roll .sl-cube {
+	animation: sl-roll 0.85s cubic-bezier(0.55, 0, 0.3, 1);
+}
+.sg-spinner:is(.is-spin, .is-roll) .sl-face {
+	animation-delay: 0s;
+	animation-iteration-count: 1;
+	animation-fill-mode: both;
+}
+.sg-spinner.is-spin .sl-face {
+	animation-duration: 0.62s;
+	animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+}
+.sg-spinner.is-roll .sl-face {
+	animation-duration: 0.85s;
+	animation-timing-function: cubic-bezier(0.55, 0, 0.3, 1);
+}
+.sg-spinner.is-spin .sl-top {
+	animation-name: sl-top-to-right;
+}
+.sg-spinner.is-spin .sl-right {
+	animation-name: sl-right-to-left;
+}
+.sg-spinner.is-spin .sl-left {
+	animation-name: sl-left-to-top;
+}
+.sg-spinner.is-roll .sl-top {
+	animation-name: sl-top-to-left;
+}
+.sg-spinner.is-roll .sl-right {
+	animation-name: sl-right-to-top;
+}
+.sg-spinner.is-roll .sl-left {
+	animation-name: sl-left-to-right;
+}
+.sg-spinner:is(.is-spin, .is-roll) .sl-eyes {
+	opacity: 0;
+}
+@keyframes sl-spin {
+	from {
+		transform: none;
+	}
+	to {
+		transform: rotate(120deg);
+	}
+}
+@keyframes sl-roll {
+	0% {
+		transform: none;
+	}
+	14% {
+		transform: translateY(0.6px) scale(1.06, 0.9);
+	}
+	55% {
+		transform: translateY(-3px) rotate(180deg);
+	}
+	86% {
+		transform: translateY(0.4px) rotate(240deg) scale(1.05, 0.93);
+	}
+	100% {
+		transform: rotate(240deg);
+	}
+}
+@keyframes sl-top-to-right {
+	from {
+		fill: var(--lt);
+	}
+	to {
+		fill: var(--lr);
+	}
+}
+@keyframes sl-right-to-left {
+	from {
+		fill: var(--lr);
+	}
+	to {
+		fill: var(--ll);
+	}
+}
+@keyframes sl-left-to-top {
+	from {
+		fill: var(--ll);
+	}
+	to {
+		fill: var(--lt);
+	}
+}
+@keyframes sl-top-to-left {
+	0% {
+		fill: var(--lt);
+	}
+	40% {
+		fill: var(--lr);
+	}
+	86%,
+	100% {
+		fill: var(--ll);
+	}
+}
+@keyframes sl-right-to-top {
+	0% {
+		fill: var(--lr);
+	}
+	40% {
+		fill: var(--ll);
+	}
+	86%,
+	100% {
+		fill: var(--lt);
+	}
+}
+@keyframes sl-left-to-right {
+	0% {
+		fill: var(--ll);
+	}
+	40% {
+		fill: var(--lt);
+	}
+	86%,
+	100% {
+		fill: var(--lr);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.sg-spinner .sl-cell {
-		animation: none;
-		opacity: 0.7;
+	.sg-spinner .sl-face,
+	.sg-spinner .sl-eyes {
+		animation-duration: 4s;
 	}
 }
