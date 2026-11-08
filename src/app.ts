@@ -16,6 +16,7 @@ import { ROUTE_SORTS } from './core/model-route.ts';
 import { FREQUENCIES } from './core/schedule.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { mobileApi } from './api/mobile.ts';
+import { scienceBackgroundApi } from './api/science-background.ts';
 import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
 import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
@@ -286,6 +287,7 @@ setAgentAbort(async (id) => {
 
 // Open pages learn what changed from here and refetch just that, instead of polling.
 app.get('/api/events', (c) => streamSSE(c, (stream) => streamChanges(stream)));
+app.route('/', scienceBackgroundApi(() => getProviders().scienceBackground));
 
 app.get('/api/health', (c) =>
 	c.json({

@@ -25,6 +25,7 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { ScienceBackground } from '@/components/science-background';
 import { cn } from '@/lib/utils';
 
 function readCollapsed() {
@@ -112,9 +113,9 @@ export function AppShell() {
 						onOpenNotifications={openNotifications}
 					/>
 				</div>
-				<main className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--bg-canvas)">
+				<ScienceBackground>
 					<Outlet />
-				</main>
+				</ScienceBackground>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
 				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
 				<TaskNotifications />

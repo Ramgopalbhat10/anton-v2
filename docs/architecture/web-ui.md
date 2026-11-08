@@ -3,6 +3,7 @@
 Linked from [AGENTS.md](../../AGENTS.md).
 
 - `src/web/` — TanStack Router UI; shadcn components in `components/ui/`, motion tokens in `instrument.css`.
+- The shared main canvas has NASA's daily Image of the Day, cached server-side without credentials and shown under a static pixel mesh/scrim. Failed or unsuitable entries retain the last image or a credited bundled fallback. Credits and implementation notes: [science backgrounds](../science-backgrounds.md).
 - New tasks and threads open the moment you send, by an id the page chose (`src/web/lib/starting.ts`, `starting-task.tsx` draws the skeleton).
 - Pages refetch on server events mapped in `src/web/lib/live-updates.ts`; keep sidebar rows cheap (`sameRow`).
 - On a phone-width screen (`useOnePane`) a task opens on its conversation; side panels open on demand.

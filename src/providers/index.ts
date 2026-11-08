@@ -6,6 +6,7 @@ import type {
 	AppsConnector,
 	BrowserHost,
 	DecisionModel,
+	DailyScienceImageProvider,
 	GatewayAccount,
 	GitHost,
 	ImageModel,
@@ -46,6 +47,7 @@ import { vercelCatalog } from './vercel/catalog.ts';
 import { vercelKeySlot } from './vercel/key.ts';
 import { s3Store } from './s3/store.ts';
 import { webPushSender } from './webpush/sender.ts';
+import { nasaDailyImage } from './nasa/daily-image.ts';
 
 /** Add a provider by adding one entry; choose it with ANTON_SANDBOX / ANTON_STORE. */
 const sandboxes: Record<string, () => SandboxProvider> = {
@@ -87,6 +89,7 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  * `apps` is the apps platform (Composio) the Connectors page's Composio apps sign in and run through.
  */
 export type Providers = {
+	scienceBackground?: DailyScienceImageProvider | null;
 	sandbox: SandboxProvider;
 	/** Runs a task on this server, in a folder, for a task whose composer says This server; null when `sandbox` already does. */
 	host?: SandboxProvider | null;
@@ -150,6 +153,7 @@ function production(): Providers {
 			return openRouterKey() ? text : null;
 		},
 		push: webPushSender(),
+		scienceBackground: nasaDailyImage(),
 		accounts: [googleSignIn()],
 		mailboxes: [gmailMailbox()],
 		apps: composioApps({ key: composioKeySlot }),

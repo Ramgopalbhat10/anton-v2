@@ -797,3 +797,19 @@ export type AppsConnector = {
 	revokeConnectedAccount(id: string): Promise<void>;
 	runTool(toolSlug: string, input: { userId: string; connectedAccountId?: string | null; args: Record<string, unknown> }, signal?: AbortSignal): Promise<AppsExecution>;
 };
+
+/** A rights-checked NASA daily still, cached and served by our server, never an arbitrary URL proxy. */
+export type DailyScienceImage = {
+	id: string;
+	title: string;
+	date: string;
+	credit: string;
+	sourceUrl: string;
+	licenseUrl: string;
+	bytes: Uint8Array;
+	contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+};
+
+export type DailyScienceImageProvider = {
+	current(): Promise<DailyScienceImage | null>;
+};

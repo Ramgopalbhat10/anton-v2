@@ -1,0 +1,76 @@
+/* A single static, bounded-resolution still behind the content, never above controls.
+   The base canvas is also the loading/error fallback; no blur, canvas, animation,
+   blend modes, or persistent GPU promotion. Cards and chrome keep their surfaces. */
+.science-canvas {
+	position: relative;
+	isolation: isolate;
+}
+
+.science-background {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	overflow: hidden;
+	pointer-events: none;
+	background: var(--bg-canvas);
+}
+
+.science-background img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	opacity: 0;
+}
+
+.science-background img[data-loaded='true'] {
+	opacity: 0.28;
+}
+
+/* The sky is quieter behind headings and reading areas, more visible below.
+   A fine 3px mesh gives the daily photo a static pixel/dither treatment.
+   The bundled fallback also has ordered-dither pixels baked into its WebP. */
+.science-background::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background:
+		linear-gradient(180deg, var(--bg-canvas), transparent 1px) 0 0 / 3px 3px,
+		linear-gradient(90deg, var(--bg-canvas), transparent 1px) 0 0 / 3px 3px,
+		radial-gradient(ellipse at 50% 20%, color-mix(in srgb, var(--bg-canvas) 82%, transparent), transparent 85%),
+		linear-gradient(180deg, color-mix(in srgb, var(--bg-canvas) 60%, transparent), transparent 80%, color-mix(in srgb, var(--bg-canvas) 30%, transparent));
+}
+
+.science-credit {
+	flex-shrink: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 12px;
+	padding: 5px 16px;
+	font-size: 10px;
+	line-height: 15px;
+	color: var(--text-secondary);
+	background: var(--bg-canvas);
+}
+
+.science-credit a {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.science-credit a:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+	.science-background {
+		display: none;
+	}
+}
+
+@media print {
+	.science-background {
+		display: none;
+	}
+}
