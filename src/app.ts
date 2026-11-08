@@ -128,6 +128,7 @@ import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
 import { recordWebCall } from './services/web-digest.ts';
+import { markNotifications, notificationsView, notifyFailedReply } from './services/notifications.ts';
 import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sendTest, setPushOptions } from './services/push.ts';
 
 const app = new Hono();
@@ -161,6 +162,7 @@ observeRuntime((event) => {
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
 	recordFailedReply(event as Parameters<typeof recordFailedReply>[0]);
+	notifyFailedReply(event as Parameters<typeof notifyFailedReply>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
 		.then((id) => (id ? stopIfOverBudget(id) : undefined))
 		.catch((error: unknown) => logProblem('warn', 'Spending check failed', error));
@@ -421,6 +423,21 @@ app.post('/api/push/devices', async (c) => {
 app.delete('/api/push/devices/:id', async (c) => c.json(await removeDevice(c.req.param('id'))));
 app.post('/api/push/test', async (c) => c.json(await sendTest((await body(c, v.object({ device: v.optional(v.string()) }))).device)));
 app.put('/api/push/options', async (c) => c.json(await setPushOptions(await body(c, v.object({ finished: v.boolean() })))));
+// The Notifications dialog (src/services/notifications.ts): the moments worth a look, and which you have seen.
+app.get('/api/notifications', async (c) => c.json(await notificationsView()));
+app.post('/api/notifications/read', async (c) => {
+	const input = await body(
+		c,
+		v.object({
+			ids: v.optional(v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(500))),
+			sessionId: v.optional(v.pipe(v.string(), v.maxLength(100))),
+			all: v.optional(v.boolean()),
+			read: v.optional(v.boolean(), true),
+		}),
+	);
+	await markNotifications({ ids: input.ids, sessionId: input.sessionId, all: input.all }, input.read);
+	return c.json(await notificationsView());
+});
 // Pages say while they are in front of you, so your phone stays quiet while you are at Anton.
 app.post('/api/push/presence', async (c) => {
 	notePresence((await body(c, v.object({ present: v.boolean() }))).present);

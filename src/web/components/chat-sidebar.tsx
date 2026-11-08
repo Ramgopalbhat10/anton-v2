@@ -48,6 +48,7 @@ import {
 } from '@/components/signal';
 import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
+import { NotificationsBell } from '@/components/notifications';
 import { ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
@@ -108,7 +109,7 @@ function SpentToday() {
 }
 
 /** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task, fading in as the sidebar slides away. */
-export function SidebarRail({ shown, onExpand }: { shown: boolean; onExpand: () => void }) {
+export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: boolean; onExpand: () => void; onOpenNotifications: () => void }) {
 	const navigate = useNavigate();
 	return (
 		<nav
@@ -118,6 +119,7 @@ export function SidebarRail({ shown, onExpand }: { shown: boolean; onExpand: () 
 			<div className="mb-2">
 				<Logo />
 			</div>
+			<NotificationsBell size="sm" onOpen={onOpenNotifications} />
 			<IconBtn icon={PanelLeft} size="sm" label="Show sidebar" onClick={onExpand} />
 			<IconBtn icon={Plus} size="sm" label="New task" onClick={() => void navigate({ to: '/' })} />
 		</nav>
@@ -560,6 +562,7 @@ export function ChatSidebar({
 	onNavigate,
 	onCollapse,
 	onOpenPalette,
+	onOpenNotifications,
 }: {
 	/** Shown as a sheet over the page, on a phone. */
 	open: boolean;
@@ -568,6 +571,8 @@ export function ChatSidebar({
 	onNavigate: () => void;
 	onCollapse: () => void;
 	onOpenPalette: () => void;
+	/** The bell left of the sidebar toggle opens the Notifications dialog. */
+	onOpenNotifications: () => void;
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
 	const inProject = Boolean(params.spaceId);
@@ -603,6 +608,7 @@ export function ChatSidebar({
 				<Logo size={22} />
 				<div className="min-w-0 truncate text-[13.5px] font-semibold tracking-[-0.01em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
+				<NotificationsBell onOpen={onOpenNotifications} />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>

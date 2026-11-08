@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
 	editSession: vi.fn(async (id: string, change: { pinned?: boolean }) => ({ id, pinnedAt: change.pinned ? 'now' : null })),
 	forkSession: vi.fn(async () => ({ id: 'fork' })),
 	stopAllSandboxes: vi.fn(async () => ({ stopped: 2 })),
+	notifications: vi.fn(async () => ({ notifications: [], unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0 } })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ChatSidebar } = await import('@/components/chat-sidebar');
@@ -47,7 +48,7 @@ const tasks = [
 ];
 
 function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
+	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} onOpenNotifications={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),

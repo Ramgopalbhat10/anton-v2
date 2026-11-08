@@ -5,6 +5,7 @@ import { setPullRequestState } from '../db/pull-requests.ts';
 import { listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { logProblem } from './log.ts';
+import { notifyPullRequest } from './notifications.ts';
 import { threadChanged } from './thread-reports.ts';
 
 /** A pull request read this recently is not read again by the background refresh. */
@@ -24,6 +25,8 @@ export async function savePullRequestStatus(session: SessionRecord, status: Pull
 	if (!session.prUrl) return;
 	if (JSON.stringify(session.pullRequest) === JSON.stringify(status)) return;
 	await updateSession(session.id, { pullRequestJson: JSON.stringify({ url: session.prUrl, ...status }) });
+	// A pull request read for the first time is not news: only a change seen here is.
+	if (session.pullRequest) notifyPullRequest(session, session.pullRequest, status);
 	if (status.state !== session.pullRequest?.state) await setPullRequestState(session.prUrl, status.state);
 	// A task is done once its pull request merges or closes; a project's thread also tells its coordinator.
 	await threadChanged(session.id).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, session.id));

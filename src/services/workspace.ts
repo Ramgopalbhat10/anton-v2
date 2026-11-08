@@ -8,6 +8,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { applyFiles, copyLibrary, readCheckpoint } from './checkpoints.ts';
 import { isWorking } from './activity.ts';
 import { logProblem } from './log.ts';
+import { notifySandboxFailed, notifySandboxReady } from './notifications.ts';
 import { machineRequest, previewEnv, readMarker, setUpMachine } from './machine-setup.ts';
 import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';
 import { copySpaceFiles } from './space-files.ts';
@@ -120,6 +121,7 @@ async function provision(id: string): Promise<Machine> {
 		} else if (readiness.state === 'unready') await prepare(context, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
+		notifySandboxFailed(session, error);
 		throw error;
 	}
 	await Promise.all([
@@ -130,6 +132,8 @@ async function provision(id: string): Promise<Machine> {
 	]);
 	const how = readiness.state === 'spare' ? 'woken while typed' : readiness.state === 'ready' ? acquired.origin : `${acquired.origin}, set up`;
 	console.info(`[anton] Sandbox for ${id} ready in ${Date.now() - startedAt} ms (${how}; machine ${acquiredAt - startedAt} ms, setup ${Date.now() - acquiredAt} ms)`);
+	// A new sandbox is news; one resumed from its saved state, or still running, is not.
+	if (readiness.state !== 'ready' || !isUsed(acquired.origin)) notifySandboxReady(session, Date.now() - startedAt);
 	return machine;
 }
 

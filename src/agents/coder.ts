@@ -98,6 +98,7 @@ import { checkReply, stallReminder, startStallCheck } from '../services/reply-ch
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
+import { replyNotification } from '../services/notifications.ts';
 import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent, saveSpaceFiles } from '../services/space-files.ts';
 import { readAttachment } from '../services/attachments.ts';
@@ -1410,6 +1411,8 @@ async function followUp(id: string): Promise<void> {
 	await bookkeeping.get(id);
 	const reply = await checkReply(id);
 	await threadFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not report the thread', error, id));
+	// After it is judged done or not, so the row says Done rather than Replied.
+	await replyNotification(id, reply);
 	await replyNotice(id, reply);
 }
 

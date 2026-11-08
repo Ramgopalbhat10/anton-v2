@@ -2,6 +2,7 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { userHasControl } from './computer.ts';
 import { logProblem } from './log.ts';
+import { notifySandboxStopped } from './notifications.ts';
 import { sandboxSettings } from './sandbox-settings.ts';
 import { runningKeys, stopSession } from './sessions.ts';
 import { isStarting } from './workspace.ts';
@@ -67,7 +68,10 @@ export async function stopIdleSandboxes(now = Date.now()): Promise<string[]> {
 		// A sandbox of another install sharing the provider is not this Anton's to stop; a reply may have started meanwhile.
 		if (!(await getSessionRecord(id)) || inUse(id)) continue;
 		await stopSession(id).then(
-			() => stopped.push(id),
+			() => {
+				stopped.push(id);
+				notifySandboxStopped(id, settings.idleMinutes);
+			},
 			(error: unknown) => logProblem('warn', 'Could not stop an idle sandbox', error, id),
 		);
 	}
