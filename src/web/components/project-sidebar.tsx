@@ -219,7 +219,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						className={cn(ROW, 'h-10 pl-1.5', coordinatorActive && 'text-(--text-primary)')}
 					>
 						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-[7px] bg-(--bg-active)" /> : null}
-						<span className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-(--accent-bg-subtle) text-(--accent-text)">
+						<span className="relative inline-flex size-7 shrink-0 items-center justify-center text-(--accent-text)">
 							<Icon icon={Waypoints} size={15} />
 						</span>
 						<span className="relative min-w-0 flex-1 truncate text-[13px]">Coordinator</span>

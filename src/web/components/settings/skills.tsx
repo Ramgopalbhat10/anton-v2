@@ -44,17 +44,17 @@ export const looksLikeAddress = (text: string) => /^(https?:\/\/(www\.)?github\.
 
 export const owner = (repo: string) => repo.split('/')[0] ?? repo;
 
-/** A square tile with a plugin's or a skill's glyph. */
+/** A plugin's or a skill's bare glyph, in a square footprint. */
 export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 'lg' }) {
 	return (
 		<span
 			className={cn(
-				'inline-flex shrink-0 items-center justify-center bg-(--bg-hover)',
+				'inline-flex shrink-0 items-center justify-center',
 				bundle ? 'text-(--data-2)' : 'text-(--data-1)',
-				size === 'lg' ? 'size-12 rounded-[6px]' : 'size-8 rounded-[6px]',
+				size === 'lg' ? 'size-12' : 'size-8',
 			)}
 		>
-			<Icon icon={bundle ? Blocks : ScrollText} size={size === 'lg' ? 20 : 15} />
+			<Icon icon={bundle ? Blocks : ScrollText} size={size === 'lg' ? 26 : 18} />
 		</span>
 	);
 }

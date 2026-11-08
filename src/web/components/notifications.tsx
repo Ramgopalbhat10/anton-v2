@@ -321,8 +321,8 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 							</div>
 						) : shown.length === 0 ? (
 							<div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-								<span className="inline-flex size-9 items-center justify-center rounded-[8px] bg-(--bg-hover) text-(--icon-secondary)">
-									<Icon icon={BellOff} />
+								<span className="inline-flex size-9 items-center justify-center text-(--icon-secondary)">
+									<Icon icon={BellOff} size={22} />
 								</span>
 								<div className="flex flex-col gap-1">
 									<div className="text-[13.5px] font-medium">{filtered ? 'Nothing matches these filters' : 'You are all caught up'}</div>

@@ -334,8 +334,9 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 	return (
 		<li className="flex min-w-0 flex-col border-t border-(--border-subtle) first:border-t-0">
 			<span className="flex min-h-8 min-w-0 items-center gap-2.5 text-[12px] text-(--text-tertiary)">
-				<span className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[6px] bg-(--bg-inset)">
-					{step.state === 'running' ? <Spinner size={11} /> : <Icon icon={icon} size={11} style={{ color: tone }} />}
+				{/* A bare glyph, quiet: only the agent's own icon carries colour; the bar beside it keeps the kind's. */}
+				<span className="inline-flex size-[18px] shrink-0 items-center justify-center text-(--icon-tertiary)">
+					{step.state === 'running' ? <Spinner size={12} /> : <Icon icon={icon} size={13} className={step.state === 'failed' ? 'text-(--danger-text)' : undefined} />}
 				</span>
 				<span className={cn('line-clamp-2 min-w-0 flex-1 py-1 text-(--text-secondary)', step.state === 'failed' && 'text-(--danger-text)')}>{body}</span>
 				<span aria-hidden className="relative h-1 w-[72px] shrink-0 rounded-full bg-(--segment-off)">

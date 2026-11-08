@@ -3,7 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { Icon } from '@/components/signal';
-import { PrStatus } from '@/components/pr-status';
+import { checksTone, PrStatus, prTone } from '@/components/pr-status';
 import type { Session } from '@/lib/api';
 import { planReady, prNumber } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
@@ -11,13 +11,12 @@ import { cn } from '@/lib/utils';
 type PullRequest = NonNullable<Session['pullRequest']>;
 type Checks = NonNullable<PullRequest['checks']>;
 
-const DOT: Record<Checks, string> = { failed: 'bg-(--danger-base)', pending: 'bg-(--warning-base)', passed: 'bg-(--success-base)' };
 const CHECKS: Record<Checks, string> = { failed: 'failing', pending: 'running', passed: 'passing' };
 
 const CUE = 'relative inline-flex shrink-0 items-center gap-1 rounded-sm outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
 
 function Dot({ checks }: { checks: Checks }) {
-	return <span className={cn('size-1.5 shrink-0 rounded-full', DOT[checks], checks === 'pending' && 'animate-pulse')} />;
+	return <span className={cn('size-1.5 shrink-0 rounded-full', checks === 'pending' && 'animate-pulse')} style={{ background: prTone(checksTone(checks)) }} />;
 }
 
 /** Each check on the pull request's head commit, failing ones first. */
@@ -124,7 +123,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 		cues.push(<PrStatus key="pr" thread={session} link showConflicts={false} showFailing={false} className={CUE} />);
 		if (pullRequest?.conflicts) {
 			cues.push(
-				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={cn(CUE, 'text-(--danger-text)')}>
+				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={CUE} style={{ color: prTone('conflicts') }}>
 					Conflicts
 				</a>,
 			);

@@ -3,7 +3,7 @@ import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/instrument';
 import { Icon } from '@/components/signal';
-import { PrStatus } from '@/components/pr-status';
+import { checksTone, PrStatus, prTone } from '@/components/pr-status';
 import { TaskStatusIcon } from '@/components/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
@@ -19,7 +19,6 @@ export const TONE: Record<Tone, string> = {
 };
 
 const CHECKS = { passed: 'checks pass', failed: 'checks failing', pending: 'checks running' } as const;
-const CHECK_TONE = { passed: 'success', failed: 'danger', pending: 'warning' } as const;
 
 /** A fact as a spec-sheet row: what it is on the left, its value on the right. */
 function Fact({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
@@ -89,7 +88,7 @@ function Peek({ session }: { session: Session }) {
 				{session.prUrl ? (
 					<Fact label="Pull request">
 						<span className="inline-flex items-center gap-1.5">
-							{pr?.runs.length ? <Pips items={pr.runs.map((run) => ({ tone: CHECK_TONE[run.status], title: run.name }))} label={pr.checks ? CHECKS[pr.checks] : 'Checks'} /> : null}
+							{pr?.runs.length ? <Pips items={pr.runs.map((run) => ({ color: prTone(checksTone(run.status)), title: run.name }))} label={pr.checks ? CHECKS[pr.checks] : 'Checks'} /> : null}
 							<PrStatus thread={session} link full className="outline-none hover:underline focus-visible:shadow-(--focus-ring)" />
 						</span>
 					</Fact>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon } from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { api, type Session } from '@/lib/api';
@@ -7,7 +8,29 @@ import { cn } from '@/lib/utils';
 
 type State = NonNullable<Session['pullRequest']>['state'];
 export const prNumber = (url: string | null) => url ? (/\/pull\/(\d+)/.exec(url)?.[1] ?? null) : null;
-export const prColor = (state?: State | null) => (state ? { open: 'var(--success-text)', merged: 'var(--data-2)', draft: 'var(--text-tertiary)', closed: 'var(--danger-text)' }[state] : 'var(--text-tertiary)');
+
+/**
+ * One colour per thing a pull request can be, the same everywhere it shows
+ * (chips, rows, the PR tab, Reviews, Home): open green, draft grey, merged
+ * violet, closed red, conflicts orange, and checks passed green, running
+ * amber, failing red. The hues are `--pr-*` in `styles/signal-tokens.css`.
+ */
+export type PrTone = 'open' | 'draft' | 'merged' | 'closed' | 'conflicts' | 'passed' | 'running' | 'failing' | 'unknown';
+export const prTone = (tone: PrTone) => `var(--pr-${tone})`;
+export const prColor = (state?: State | null) => prTone(state ?? 'unknown');
+export const checksTone = (checks: 'passed' | 'pending' | 'failed'): PrTone => ({ passed: 'passed', pending: 'running', failed: 'failing' } as const)[checks];
+export const PR_ICON: Record<State, LucideIcon> = { open: GitPullRequest, draft: GitPullRequestDraft, merged: GitMerge, closed: GitPullRequestClosed };
+
+/** A chip tinted in a PR tone: its text in the colour, on a faint wash of it with a hairline. */
+export const prChipStyle = (tone: PrTone): CSSProperties => {
+	const color = prTone(tone);
+	return { color, borderColor: `color-mix(in oklab, ${color} 34%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` };
+};
+
+/** A short PR word on a row (Conflicts, Draft, Checks failing), tinted in its tone. */
+export function PrFlag({ tone, children, className }: { tone: PrTone; children: ReactNode; className?: string }) {
+	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-[6px] border px-1.5 text-[11px] leading-none font-medium whitespace-nowrap', className)} style={prChipStyle(tone)}>{children}</span>;
+}
 
 /** State remains visible even when checks or conflicts need attention. */
 export function prSummary(thread: Pick<Session, 'prUrl' | 'pullRequest'>): string | null {
@@ -26,8 +49,8 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	const pr = thread.pullRequest;
 	const active = pr && (pr.state === 'open' || pr.state === 'draft');
 	const visible = full && pr?.state !== 'merged' ? summary : `#${prNumber(thread.prUrl) ?? '?'}`;
-	const content = <><Icon icon={pr?.state === 'merged' ? GitMerge : GitPullRequest} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span className="text-(--warning-text)">Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span className="text-(--danger-text)">Checks failing</span> : null}</>;
-	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: { color: prColor(pr?.state), borderColor: `color-mix(in oklab, ${prColor(pr?.state)} 32%, transparent)`, background: `color-mix(in oklab, ${prColor(pr?.state)} 10%, transparent)` } };
+	const content = <><Icon icon={PR_ICON[pr?.state ?? 'open']} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span style={{ color: prTone('conflicts') }}>Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span style={{ color: prTone('failing') }}>Checks failing</span> : null}</>;
+	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: prChipStyle(pr?.state ?? 'unknown') };
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }
 
@@ -66,11 +89,11 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 export function PrChecks({ pull }: { pull: Session['pullRequest'] }) {
 	if ((pull?.state !== 'open' && pull?.state !== 'draft') || !pull.checks) return null;
 	const checks = {
-		passed: { icon: CircleCheck, label: 'Checks passed', tone: 'text-(--success-text)' },
-		failed: { icon: CircleX, label: 'Checks failing', tone: 'text-(--danger-text)' },
-		pending: { icon: CircleDashed, label: 'Checks running', tone: 'text-(--warning-text)' },
+		passed: { icon: CircleCheck, label: 'Checks passed' },
+		failed: { icon: CircleX, label: 'Checks failing' },
+		pending: { icon: CircleDashed, label: 'Checks running' },
 	} as const;
 	const check = checks[pull.checks];
 	const failing = pull.runs.filter((run) => run.status === 'failed').length;
-	return <span className={cn('inline-flex shrink-0 items-center gap-1 text-[11.5px]', check.tone)}><Icon icon={check.icon} size={11} />{failing ? `${failing} failing` : check.label}</span>;
+	return <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px]" style={{ color: prTone(checksTone(pull.checks)) }}><Icon icon={check.icon} size={11} />{failing ? `${failing} failing` : check.label}</span>;
 }

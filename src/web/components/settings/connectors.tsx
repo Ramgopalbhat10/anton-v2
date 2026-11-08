@@ -372,8 +372,8 @@ function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; 
 
 /** A tile's + corner: the connector is not added yet. */
 const AddCorner = () => (
-	<span aria-hidden className="inline-flex size-7 items-center justify-center rounded-[6px] border border-(--border-subtle) text-(--icon-tertiary) group-hover:text-(--text-primary)">
-		<Icon icon={Plus} size={14} />
+	<span aria-hidden className="inline-flex size-7 items-center justify-center text-(--icon-tertiary) group-hover:text-(--text-primary)">
+		<Icon icon={Plus} size={16} />
 	</span>
 );
 

@@ -609,10 +609,10 @@ function RowIcon({ node }: { node: TraceNode }) {
 	const icon: LucideIcon = span.kind === 'model' ? Sparkles : span.kind === 'compaction' ? FoldVertical : describeTool({ toolName: span.tool, input: parsedInput(span) }).icon;
 	return (
 		<span
-			className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[6px]"
-			style={span.error ? { color: 'var(--danger-text)', background: 'var(--danger-bg)' } : { color: 'var(--icon-secondary)', background: 'var(--alpha-white-6)' }}
+			className="inline-flex size-[18px] shrink-0 items-center justify-center"
+			style={{ color: span.error ? 'var(--danger-text)' : 'var(--icon-tertiary)' }}
 		>
-			<Icon icon={icon} size={11} />
+			<Icon icon={icon} size={13} />
 		</span>
 	);
 }

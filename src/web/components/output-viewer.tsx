@@ -70,8 +70,8 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 				className,
 			)}
 		>
-			<span className={cn('inline-flex shrink-0 items-center justify-center rounded-[8px] bg-(--bg-hover) text-(--icon-tertiary)', stage ? 'size-11' : 'size-8')}>
-				<Icon icon={FileX2} size={stage ? 18 : 14} />
+			<span className={cn('inline-flex shrink-0 items-center justify-center text-(--icon-tertiary)', stage ? 'size-11' : 'size-8')}>
+				<Icon icon={FileX2} size={stage ? 24 : 18} />
 			</span>
 			<span className={cn('flex min-w-0 flex-col gap-0.5', stage && 'items-center')}>
 				<span className="text-[13px] leading-[18px] text-(--text-secondary)">This {noun} was deleted</span>
@@ -372,8 +372,8 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 			className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-(--border-default) bg-(--bg-surface) shadow-[-24px_0_60px_-24px_rgba(0,0,0,0.7)] duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]"
 		>
 			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-3">
-				<span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[6px] border border-(--border-subtle) bg-(--bg-inset)">
-					<Icon icon={info.icon} size={13} className={info.tone} />
+				<span className="inline-flex size-[26px] shrink-0 items-center justify-center">
+					<Icon icon={info.icon} size={16} className={info.tone} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col">
 					<span className="truncate text-[13px] leading-[17px] font-medium text-(--text-primary)" title={item.path}>

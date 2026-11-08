@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/signal';
 import { api, type CheckRun, type PullRequestDetail } from '@/lib/api';
 import { age } from '@/lib/format';
+import { prTone } from '@/components/pr-status';
 
 /** Checks in a phrase: "2 failing, 5 passing". */
 function checksPhrase(checks: CheckRun[]): string {
@@ -92,7 +93,7 @@ export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, 
 	const problem = merge.isError ? merge.error.message : blocked;
 	if (compact) return <div className="flex min-w-0 flex-col items-start gap-1">{action}{problem ? <span role="alert" className="max-w-[280px] text-[12px] text-(--danger-text)">{problem}</span> : null}</div>;
 	return (
-		<Box tone={blocked || failing ? 'warning' : 'ready'} icon={blocked || failing ? CircleAlert : running ? CircleDot : CircleCheck}
+		<Box tone={pull.draft ? 'draft' : pull.mergeable === false ? 'conflicts' : blocked ? 'neutral' : failing ? 'failing' : running ? 'running' : 'ready'} icon={blocked || failing ? CircleAlert : running ? CircleDot : CircleCheck}
 			title={blocked ? 'Not ready to merge' : failing ? 'Checks are failing' : running ? 'Checks are running' : 'Ready to merge'} action={action}>
 			{merge.isError ? <span className="text-(--danger-text)">{merge.error.message}</span> : <>{blocked ?? checksPhrase(pull.checks)}{pull.approved ? ' · Approved' : ''}</>}
 		</Box>
@@ -100,21 +101,22 @@ export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, 
 }
 
 const BOX_TONE = {
-	ready: 'var(--success-text)',
-	warning: 'var(--warning-text)',
-	merged: 'var(--data-2)',
-	closed: 'var(--danger-text)',
+	ready: prTone('passed'),
+	running: prTone('running'),
+	conflicts: prTone('conflicts'),
+	draft: prTone('draft'),
+	neutral: prTone('unknown'),
+	failing: prTone('failing'),
+	merged: prTone('merged'),
+	closed: prTone('closed'),
 } as const;
 
 function Box({ tone, icon, title, action, children }: { tone: keyof typeof BOX_TONE; icon: typeof GitMerge; title: string; action?: ReactNode; children: ReactNode }) {
 	const color = BOX_TONE[tone];
 	return (
 		<div className="in-card flex-row flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-			<span
-				className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border"
-				style={{ color, borderColor: `color-mix(in oklab, ${color} 28%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` }}
-			>
-				<Icon icon={icon} size={14} />
+			<span className="inline-flex size-7 shrink-0 items-center justify-center" style={{ color }}>
+				<Icon icon={icon} size={16} />
 			</span>
 			<div className="flex min-w-0 flex-1 flex-col">
 				<span className="text-[13px] leading-[18px] font-medium text-(--text-primary)">{title}</span>

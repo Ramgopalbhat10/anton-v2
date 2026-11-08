@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { PullRequestChip } from '@/components/task-actions';
-import { PrStatus, prColor, prSummary } from '@/components/pr-status';
+import { PrChecks, PrStatus, prColor, prSummary, prTone } from '@/components/pr-status';
 import { renderWithQueries, session } from './render';
 
 const url = 'https://github.com/acme/demo/pull/42?x=1';
@@ -52,4 +52,20 @@ describe('pull request presentation', () => {
 		expect(screen.queryByText('Checks failing')).toBeNull();
 	});
 
+	it('gives every state and attention cue its own colour', () => {
+		const tones = ['open', 'draft', 'merged', 'closed', 'conflicts'] as const;
+		expect(new Set(tones.map(prTone)).size).toBe(tones.length);
+		expect(prColor('merged')).toBe('var(--pr-merged)');
+		expect(prColor(null)).toBe('var(--pr-unknown)');
+		const thread = session({ prUrl: url, pullRequest: { state: 'open', checks: 'failed', conflicts: true, runs: [] } });
+		render(<PrStatus thread={thread} />);
+		expect(screen.getByText('Conflicts').style.color).toBe(prTone('conflicts'));
+		expect(screen.getByText('Checks failing').style.color).toBe(prTone('failing'));
+	});
+	it('colours checks by how they stand', () => {
+		const { rerender } = render(<PrChecks pull={{ state: 'open', checks: 'passed', runs: [] }} />);
+		expect(screen.getByText('Checks passed').closest('span')!.style.color).toBe(prTone('passed'));
+		rerender(<PrChecks pull={{ state: 'open', checks: 'pending', runs: [] }} />);
+		expect(screen.getByText('Checks running').closest('span')!.style.color).toBe(prTone('running'));
+	});
 });

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { Count, Segmented, SegmentedItem } from '@/components/instrument';
 import { Markdown } from '@/components/markdown';
 import { MergeBox } from '@/components/pr-merge';
-import { prColor } from '@/components/pr-status';
+import { PR_ICON, prChipStyle, prColor, prTone } from '@/components/pr-status';
 import { Avatar, EmptyState, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type CheckRun, type PullRequestDetail, type PullRequestItem, type PullRequestState } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
@@ -13,15 +13,14 @@ import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const STATE_LABEL: Record<PullRequestState, string> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
-const STATE_ICON = { open: GitPullRequest, draft: GitPullRequest, merged: GitMerge, closed: GitPullRequestClosed } as const;
+const STATE_ICON = PR_ICON;
 
 /** The pull request's state as GitHub shows it: a coloured pill with its icon. */
 function StatePill({ state, size = 'md' }: { state: PullRequestState | null; size?: 'sm' | 'md' }) {
-	const color = prColor(state);
 	return (
 		<span
 			className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border font-medium whitespace-nowrap', size === 'md' ? 'h-6 px-2.5 text-[12px]' : 'h-5 px-1.5 text-[11px]')}
-			style={{ color, borderColor: `color-mix(in oklab, ${color} 32%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` }}
+			style={prChipStyle(state ?? 'unknown')}
 		>
 			<Icon icon={STATE_ICON[state ?? 'open']} size={size === 'md' ? 13 : 11} />
 			{state ? STATE_LABEL[state] : 'Unknown'}
@@ -90,7 +89,7 @@ function PullPicker({ pulls, selected, onSelect }: { pulls: PullRequestItem[]; s
 }
 
 const CHECK_ICON = { passed: CircleCheck, failed: CircleX, pending: CircleDot, skipped: CircleDot } as const;
-const CHECK_TONE = { passed: 'text-(--success-text)', failed: 'text-(--danger-text)', pending: 'text-(--warning-text)', skipped: 'text-(--text-disabled)' } as const;
+const CHECK_TONE = { passed: prTone('passed'), failed: prTone('failing'), pending: prTone('running'), skipped: 'var(--text-disabled)' } as const;
 
 type Section = 'changes' | 'description' | 'discussion' | 'commits' | 'checks';
 
@@ -157,7 +156,7 @@ function Checks({ pull }: { pull: PullRequestDetail }) {
 		<ol className="in-well m-0 list-none p-0">
 			{pull.checks.map((check, index) => (
 				<li key={`${check.name}-${index}`} className="flex h-9 items-center gap-2.5 border-b border-(--border-subtle) px-3 last:border-b-0">
-					<Icon icon={CHECK_ICON[check.status]} size={14} className={cn('shrink-0', CHECK_TONE[check.status])} />
+					<Icon icon={CHECK_ICON[check.status]} size={14} className="shrink-0" style={{ color: CHECK_TONE[check.status] }} />
 					<span className="shrink-0 text-[12.5px] text-(--text-primary)">{check.name}</span>
 					<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-tertiary)">{check.summary}</span>
 					{check.url ? (
