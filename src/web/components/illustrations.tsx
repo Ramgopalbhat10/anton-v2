@@ -288,8 +288,8 @@ function MarkShapes() {
 	);
 }
 
-/** Anton on the left, your plan on the right, and the wire between them: live when linked, broken when not. */
-export function PlanLinkArt({ className, linked, plan, noun = 'plan' }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account' }) {
+/** Anton on the left, your plan on the right (its vendor's logo when there is one), and the wire between them: live when linked, broken when not. */
+export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
 	return (
 		<Art w={260} h={100} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
 			{linked ? <Wire d="M80 42 H180" lit /> : <Wire d="M80 42 H120 M140 42 H180" broken />}
@@ -299,8 +299,21 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan' }: { classN
 				<MarkShapes />
 			</g>
 			<Tile x={180} y={16} w={52} h={52} r={9} lit={linked} />
-			<Rules x={192} y={30} w={[26, 18, 22]} gap={5} lit={linked} />
-			<Light x={222} y={58} on={linked} />
+			{logo ? (
+				// The vendor's own logo, as its tab shows it; one-colour logos take the text colour.
+				<foreignObject x={180} y={16} width={52} height={52}>
+					<div
+						aria-hidden
+						className={cn('flex size-full items-center justify-center text-[26px] [&_svg]:block', linked ? 'text-(--text-primary)' : 'text-(--text-secondary)')}
+						dangerouslySetInnerHTML={{ __html: logo }}
+					/>
+				</foreignObject>
+			) : (
+				<>
+					<Rules x={192} y={30} w={[26, 18, 22]} gap={5} lit={linked} />
+					<Light x={222} y={58} on={linked} />
+				</>
+			)}
 			<Caption x={54} y={88} anchor="middle">
 				Anton
 			</Caption>
