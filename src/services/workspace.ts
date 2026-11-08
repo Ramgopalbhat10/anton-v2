@@ -114,24 +114,28 @@ async function provision(id: string): Promise<Machine> {
 	const machine = session.review && !session.review.trusted ? withEnv(acquired.machine, ports) : setupMachine;
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	const acquiredAt = Date.now();
+	// They sit beside the repo, not in it, so they are copied while it is set up rather than after.
+	const files = Promise.all([
+		// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
+		session.spaceId ? copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id)) : null,
+		// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
+		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
+	]);
 	try {
 		const context = { machine: setupMachine, session, project };
 		if (readiness.state === 'spare') {
 			if (!(await finishSpare(setupMachine, readiness.marker, session))) await prepare(context, 'image');
 		} else if (readiness.state === 'unready') await prepare(context, acquired.origin);
 	} catch (error) {
+		await files;
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		notifySandboxFailed(session, error);
 		throw error;
 	}
-	await Promise.all([
-		// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
-		session.spaceId ? copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id)) : null,
-		// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
-		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
-	]);
+	const setUpAt = Date.now();
+	await files;
 	const how = readiness.state === 'spare' ? 'woken while typed' : readiness.state === 'ready' ? acquired.origin : `${acquired.origin}, set up`;
-	console.info(`[anton] Sandbox for ${id} ready in ${Date.now() - startedAt} ms (${how}; machine ${acquiredAt - startedAt} ms, setup ${Date.now() - acquiredAt} ms)`);
+	console.info(`[anton] Sandbox for ${id} ready in ${Date.now() - startedAt} ms (${how}; machine ${acquiredAt - startedAt} ms, setup ${setUpAt - acquiredAt} ms, files ${Date.now() - acquiredAt} ms)`);
 	// A new sandbox is news; one resumed from its saved state, or still running, is not.
 	if (readiness.state !== 'ready' || !isUsed(acquired.origin)) notifySandboxReady(session, Date.now() - startedAt);
 	return machine;

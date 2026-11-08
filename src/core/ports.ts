@@ -112,6 +112,11 @@ export type ObjectStore = {
 	list(prefix: string): Promise<StoredObject[]>;
 	/** Deletes one object; a missing key is not an error. */
 	remove(key: string): Promise<void>;
+	/**
+	 * A link that reads one object, with no credentials, until it expires: a sandbox downloads from the store
+	 * itself rather than through Anton. A store that cannot make one (a folder on this server) leaves it out.
+	 */
+	signedUrl?(key: string, expiresInSeconds: number): Promise<string>;
 };
 
 export type RepoInfo = { fullName: string; defaultBranch: string; private: boolean };

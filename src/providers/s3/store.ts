@@ -52,6 +52,11 @@ export function s3Store(options: S3Options): ObjectStore {
 		async remove(key) {
 			await send(urlFor(key), { method: 'DELETE' });
 		},
+		async signedUrl(key, expiresInSeconds) {
+			const url = new URL(urlFor(key));
+			url.searchParams.set('X-Amz-Expires', String(Math.round(expiresInSeconds)));
+			return (await client.sign(url.toString(), { method: 'GET', aws: { signQuery: true } })).url;
+		},
 		has: async (key) => (await send(urlFor(key), { method: 'HEAD' })).status !== 404,
 		async list(prefix) {
 			const all: StoredObject[] = [];
