@@ -218,6 +218,14 @@ export const migrations: string[][] = [
 	// 42: the logo Composio hosts for each app, so a connector Composio knows but Anton's brand
 	// list does not still draws as the product it is.
 	[`ALTER TABLE composio_accounts ADD COLUMN logo TEXT NOT NULL DEFAULT ''`],
+	// 43: the Notifications dialog's list (`src/services/notifications.ts`): only the moments worth a look, each about one
+	// task. `key` names what a row stands for (a task's last reply, its sandbox, its pull request), so a newer one replaces it.
+	[
+		`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, key TEXT NOT NULL, kind TEXT NOT NULL, session_id TEXT, space_id TEXT, title TEXT NOT NULL, body TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created_at)`,
+		`CREATE INDEX IF NOT EXISTS notifications_key ON notifications (key)`,
+		`CREATE INDEX IF NOT EXISTS notifications_session ON notifications (session_id)`,
+	],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */

@@ -24,6 +24,7 @@ import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
 import { threadState } from '../core/thread-state.ts';
 import { nameTask, titleFrom } from './titles.ts';
+import { forgetNotificationsOf } from './notifications.ts';
 
 /** The sandbox provider is the source of truth for what is running; cached briefly. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
@@ -360,4 +361,5 @@ export async function deleteSession(id: string): Promise<void> {
 	await forgetScriptCalls(id);
 	forgetResults(id);
 	await deleteSessionRecord(id);
+	await forgetNotificationsOf(id);
 }

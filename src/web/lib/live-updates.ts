@@ -11,6 +11,8 @@ type Change =
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
+	/** The Notifications dialog's list gained a row, or rows were read. */
+	| { kind: 'notifications' }
 	| PageChange
 	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
 	| { kind: 'now'; id: string; now: AgentNow | null };
@@ -33,6 +35,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
 	if (change.kind === 'models') return [['models']];
+	if (change.kind === 'notifications') return [['notifications']];
 	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
 	// A routine added, edited or run: a repo's automations and a project's routines show it.
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];

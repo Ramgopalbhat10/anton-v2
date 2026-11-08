@@ -5,6 +5,7 @@ import { FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
+import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
 import { DiffStat, Icon, IconBtn } from '@/components/signal';
@@ -53,7 +54,13 @@ export function AppShell() {
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [notificationsOpen, setNotificationsOpen] = useState(false);
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
+	const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
+	const openNotifications = useCallback(() => {
+		setNavOpen(false);
+		setNotificationsOpen(true);
+	}, []);
 	const closeNav = useCallback(() => setNavOpen(false), []);
 	const collapse = useCallback(() => setCollapsed(true), []);
 	const openPalette = useCallback(() => {
@@ -95,19 +102,21 @@ export function AppShell() {
 				/>
 				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
 				<div className="sg-nav-column" data-collapsed={collapsed}>
-					<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} />
+					<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
 					<ChatSidebar
 						open={navOpen}
 						collapsed={collapsed}
 						onNavigate={closeNav}
 						onCollapse={collapse}
 						onOpenPalette={openPalette}
+						onOpenNotifications={openNotifications}
 					/>
 				</div>
 				<main className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--bg-canvas)">
 					<Outlet />
 				</main>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
+				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>
@@ -344,6 +353,7 @@ export function TaskWorkspace({
 	return (
 		<SendToAgent.Provider value={send}>
 			<ShowPanel.Provider value={showPanel}>
+				<ReadNotificationsOf sessionId={sessionId} />
 				<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
 					{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
 					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>

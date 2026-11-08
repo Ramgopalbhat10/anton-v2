@@ -721,6 +721,35 @@ export type PushDevice = { id: string; name: string; addedAt: string; lastSentAt
 export type PushView = { publicKey: string; devices: PushDevice[]; finished: boolean };
 export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
 
+/** A moment in a task worth a look, for the Notifications dialog (src/services/notifications.ts). */
+export type NotificationKind =
+	| 'question'
+	| 'plan'
+	| 'approval'
+	| 'replied'
+	| 'done'
+	| 'merged'
+	| 'failed'
+	| 'checks-failed'
+	| 'budget'
+	| 'sandbox-ready'
+	| 'sandbox-stopped'
+	| 'sandbox-failed';
+export type NotificationCategory = 'needs-you' | 'replies' | 'done' | 'failures' | 'sandboxes';
+export type AppNotification = {
+	id: string;
+	kind: NotificationKind;
+	category: NotificationCategory;
+	sessionId: string | null;
+	spaceId: string | null;
+	title: string;
+	body: string;
+	url: string;
+	createdAt: string;
+	read: boolean;
+};
+export type NotificationsView = { notifications: AppNotification[]; unread: Record<NotificationCategory, number> };
+
 export type Output = { path: string; size: number; mtimeMs: number };
 /** Who holds the files you add on the Artifacts page: no task (src/services/added-files.ts). */
 export const ADDED_FILES = 'added-files';
@@ -785,6 +814,9 @@ export const api = {
 	saveGeneralSettings: (settings: GeneralSettings) =>
 		json<GeneralSettings>('/api/settings/general', { method: 'PUT', body: JSON.stringify(settings) }),
 	push: () => json<PushView>('/api/push'),
+	notifications: () => json<NotificationsView>('/api/notifications'),
+	/** Marks rows read, or unread with `read: false`: the ones named, a task's, or all. */
+	readNotifications: (which: { ids?: string[]; sessionId?: string; all?: boolean; read?: boolean }) => post<NotificationsView>('/api/notifications/read', which),
 	addPushDevice: (subscription: PushSubscriptionJson & { name: string }) => post<PushView>('/api/push/devices', subscription),
 	removePushDevice: (id: string) => json<PushView>(`/api/push/devices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 	testPush: (device?: string) => post<{ sent: number }>('/api/push/test', device ? { device } : {}),

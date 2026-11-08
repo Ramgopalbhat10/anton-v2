@@ -16,6 +16,8 @@ export type Change =
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
+	/** The Notifications dialog's list gained a row, or rows were read. */
+	| { kind: 'notifications' }
 	/** A copy of a page saved its state; `from` is that copy, so it skips its own echo. */
 	| { kind: 'page'; id: string; path: string; version: number; from: string }
 	| { kind: 'now'; id: string; now: AgentNow | null };
