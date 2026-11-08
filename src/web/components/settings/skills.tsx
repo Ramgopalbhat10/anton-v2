@@ -49,7 +49,7 @@ export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 
 	return (
 		<span
 			className={cn(
-				'inline-flex shrink-0 items-center justify-center border border-dashed border-(--border-strong) bg-(--well-bg)',
+				'inline-flex shrink-0 items-center justify-center bg-(--bg-hover)',
 				bundle ? 'text-(--data-2)' : 'text-(--data-1)',
 				size === 'lg' ? 'size-12 rounded-[6px]' : 'size-8 rounded-[6px]',
 			)}
@@ -201,7 +201,7 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					</button>
 				</p>
 			)}
-			<Note className="rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
+			<Note className="rounded-[8px] bg-(--bg-inset) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
 				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> come first.
 			</Note>
 		</div>

@@ -41,7 +41,7 @@ function Commands({ saved }: { saved: Command[] }) {
 				}
 			>
 				{rows.length === 0 ? (
-					<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No commands yet. Add one, then type / and its name in any message.</p>
+					<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No commands yet. Add one, then type / and its name in any message.</p>
 				) : null}
 				{rows.map((row, index) => (
 					<div key={index} className="flex items-start gap-2">

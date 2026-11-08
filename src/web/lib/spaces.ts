@@ -39,7 +39,7 @@ export function useThreads(spaceId: string) {
 
 export type StateLook = { label: string; short: string; tone: Tone; icon: LucideIcon };
 
-/** How each state shows: amber waits on you, cyan works, emerald is ready, neutral is quiet. */
+/** How each state shows: amber waits on you, blue works, emerald is ready, neutral is quiet. */
 export const STATE_LOOK: Record<ThreadState, StateLook> = {
 	waiting: { label: 'Waiting on you', short: 'Needs you', tone: 'warning', icon: MessageCircleQuestion },
 	working: { label: 'Working', short: 'Working', tone: 'accent', icon: CircleCheck },

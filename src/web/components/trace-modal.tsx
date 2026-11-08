@@ -596,7 +596,7 @@ function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; 
 /** A row's icon: the agent's mark, a subagent's tile, the model's vendor, or what kind of tool it was. */
 function RowIcon({ node }: { node: TraceNode }) {
 	const span = node.span;
-	if (!span) return <Logo size={16} />;
+	if (!span) return <Logo size={15} />;
 	if (span.kind === 'agent') return <AgentTile agent={span.agent} size={18} />;
 	if (span.kind === 'model' && !span.error) {
 		return (

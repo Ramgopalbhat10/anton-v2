@@ -1,19 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Clock, Folder, GitBranch, MessageSquare, Play, Plus, Settings } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useState } from 'react';
+import { ArrowUp, BookOpen, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
+import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
-import { ChatRouteArt, TaskRouteArt } from '@/components/illustrations';
-import { Caption, Card } from '@/components/instrument';
+import { HomeDashboard, SkyCredit } from '@/components/home-dashboard';
+import { Logo } from '@/components/illustrations';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { Mascot, useMascotMood } from '@/components/mascot';
-import { ModelPicker, useModelName, useModels } from '@/components/model-picker';
+import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
-import { TaskRow } from '@/components/task-row';
 import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
@@ -144,50 +143,48 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 	);
 }
 
-type Stage = { title: string; note: string };
+type Stage = { title: string; note: string; icon: LucideIcon };
 
 /**
- * How a task runs, left to right: it reads first, then takes its own branch,
- * starts a sandbox only when it has to edit or run code, and ends in a pull request.
- * The drawing shows the line and lights each stage in turn; the captions under
- * it are the words, and light with their stage.
+ * How a task runs, left to right, as one quiet line under the composer: it reads
+ * first, then takes its own branch, starts a sandbox only when it has to edit or
+ * run code, and ends in a pull request. Each stage lights in turn.
  */
 function Route({ repo, branch, planMode }: { repo?: string; branch: string; planMode: boolean }) {
 	const stages: Stage[] = [
-		{ title: planMode ? 'Plan' : 'Read', note: repo ?? 'repository' },
-		{ title: 'Branch', note: `off ${branch || 'main'}` },
-		{ title: 'Sandbox', note: 'when it edits' },
-		{ title: 'Pull request', note: 'for your review' },
+		{ title: planMode ? 'Plans' : 'Reads', note: repo ?? 'the repository', icon: planMode ? ListChecks : BookOpen },
+		{ title: 'Branches', note: `off ${branch || 'main'}`, icon: GitBranch },
+		{ title: 'Sandbox', note: 'when it edits', icon: SquareTerminal },
+		{ title: 'Pull request', note: 'for your review', icon: GitPullRequest },
 	];
-	return <RouteWell art={<TaskRouteArt className="w-full" />} label="How a task runs" stages={stages} />;
+	return <RouteLine label="How a task runs" stages={stages} />;
 }
 
 /** A chat's route: no repository, so it answers, browses, and runs things in a scratch sandbox only when it must. */
 function ChatRoute() {
 	const stages: Stage[] = [
-		{ title: 'Ask', note: 'no repository' },
-		{ title: 'Browse', note: 'on the web' },
-		{ title: 'Scratch', note: 'when it runs code' },
-		{ title: 'Answer', note: 'right in the chat' },
+		{ title: 'Asks', note: 'no repository', icon: MessageSquare },
+		{ title: 'Browses', note: 'the web', icon: Globe },
+		{ title: 'Scratch', note: 'when it runs code', icon: SquareTerminal },
+		{ title: 'Answers', note: 'in the chat', icon: Sparkle },
 	];
-	return <RouteWell art={<ChatRouteArt className="w-full" />} label="How a chat runs" stages={stages} />;
+	return <RouteLine label="How a chat runs" stages={stages} />;
 }
 
-function RouteWell({ art, label, stages }: { art: ReactNode; label: string; stages: Stage[] }) {
+function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 	return (
-		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
-			{art}
-			<ol aria-label={label} className="m-0 grid list-none grid-cols-4 p-0">
-				{stages.map((stage, index) => (
-					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
-						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
-							{String(index + 1).padStart(2, '0')} {stage.title}
-						</span>
-						<div className="line-clamp-2 w-full text-[11.5px] leading-[15px] text-balance text-(--text-secondary) sm:line-clamp-1 sm:text-[12px] sm:leading-[18px]">{stage.note}</div>
-					</li>
-				))}
-			</ol>
-		</div>
+		<ol aria-label={label} className="sky-credit m-0 mx-auto flex w-fit max-w-full list-none flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-[10px] px-3 py-1.5 text-[11.5px] sm:rounded-full">
+			{stages.map((stage, index) => (
+				<li key={stage.title} className="flex items-center gap-1">
+					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--border-strong)" /> : null}
+					<span className="route-caption inline-flex items-center gap-1.5 text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
+						<Icon icon={stage.icon} size={12} />
+						<span>{stage.title}</span>
+					</span>
+					<span className="hidden text-(--text-disabled) sm:inline">{stage.note}</span>
+				</li>
+			))}
+		</ol>
 	);
 }
 
@@ -206,7 +203,6 @@ export function Launcher() {
 	const mood = useMascotMood({ busy: starting, waiting: false, stir: prompt });
 	const models = useModels();
 	const projects = useProjects();
-	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 	const project = chooseProject(projects.data?.projects ?? [], projectId);
 	const general = useGeneralSettings();
 	const specifier = choice.model ?? models.data?.default ?? '';
@@ -219,8 +215,6 @@ export function Launcher() {
 	const chosenBranch = branch || project?.defaultBranch || '';
 	// A task that will edit code gets its sandbox started as you type, so it is ready when you start the task.
 	const takeTaskId = useDraftWake({ projectId: project?.id, branch: chosenBranch, typed: prompt.trim().length > 0, enabled: !chat && !planMode && runOn === 'sandbox' });
-	const recent = (sessions.data?.sessions ?? []).slice(0, 6);
-	const modelName = useModelName();
 	const chosenModel = models.data?.models.find((item) => item.id === model);
 	const blind = attachments.images.length > 0 && chosenModel !== undefined && !chosenModel.vision;
 
@@ -257,86 +251,80 @@ export function Launcher() {
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] font-medium text-(--text-secondary) md:pl-4">
+		<div className="relative flex min-h-0 flex-1 flex-col">
+			<header className="flex h-11 shrink-0 items-center gap-1 pr-4 pl-2 md:hidden">
 				<MenuButton />
-				New task
 			</header>
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-8 pb-12 md:px-6">
-				<div className="mx-auto flex max-w-[660px] flex-col gap-5">
-					<div className="flex flex-col gap-2">
-						<Caption>New task</Caption>
-						<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">What should the agent do?</h1>
-						<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">
-							{chat
-								? 'Ask anything, or hand off a job on the web. With no repository, Anton answers directly, works in the Browser panel, and starts a scratch sandbox only when it has to run something.'
-								: 'Describe the outcome, not the steps. Anton works on its own branch in a fresh sandbox, and shows the diff, the terminal, and the files as it goes.'}
-						</p>
+			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-16 md:px-6">
+				<div className="mx-auto flex max-w-[880px] flex-col gap-10 pt-6 md:pt-[min(16vh,148px)]">
+					<div className="mx-auto flex w-full max-w-[680px] flex-col gap-4">
+						<h1 className="m-0 flex items-center gap-2.5 text-[22px] leading-7 font-semibold tracking-[-0.03em]">
+							<Logo size={25} />
+							<span>Anton</span>
+							<span className="sr-only">New task</span>
+						</h1>
+
+						<form
+							className="home-composer relative flex flex-col"
+							onSubmit={(event) => {
+								event.preventDefault();
+								void start();
+							}}
+							{...attachments.dropZone}
+						>
+							<Mascot mood={mood} className="absolute right-6 bottom-[calc(100%-1px)]" />
+							<AttachmentTray attachments={attachments} className="px-4 pt-3.5" />
+							<ComposerInput
+								autoFocus
+								value={prompt}
+								onChange={setPrompt}
+								projectId={project?.id}
+								branch={chosenBranch}
+								submitOn="mod-enter"
+								suggestionsPosition="below"
+								onPaste={attachments.onPaste}
+								placeholder={chat ? 'Ask anything, or hand off a job on the web' : 'Ask Anton to build a feature, fix a bug, or explain the code'}
+								className="min-h-[84px] px-4 pt-3.5 text-[14px] leading-[21px]"
+							/>
+							{attachments.notice || blind ? (
+								<div className="px-4 pt-2 text-[12px] text-(--warning-text)">
+									{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
+								</div>
+							) : null}
+							<div className="mt-2 flex flex-wrap items-center gap-1 px-2.5 pt-1 pb-2.5">
+								<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
+								<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
+								{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
+								<ModelPicker value={{ model: specifier, reasoning }} onChange={chooseModel} height={28} side="bottom" />
+								{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
+								<div className="min-w-0 flex-[1_1_8px]" />
+								<button
+									type="submit"
+									aria-label={chat ? 'Start chat' : 'Start task'}
+									title={chat ? 'Start chat (⌘↵)' : 'Start task (⌘↵)'}
+									disabled={starting || !projects.isSuccess || blind}
+									className="sg-btn sg-btn--primary sg-icon-btn sg-btn--round size-8"
+								>
+									<Icon icon={ArrowUp} size={16} />
+								</button>
+							</div>
+						</form>
+						{adding ? (
+							<AddRepo
+								onAdded={(added) => {
+									pick(added.id);
+									setAdding(false);
+								}}
+								onCancel={() => setAdding(false)}
+							/>
+						) : null}
+						{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 					</div>
 
-					<form
-						className="in-card relative flex flex-col focus-within:border-(--border-strong)"
-						onSubmit={(event) => {
-							event.preventDefault();
-							void start();
-						}}
-						{...attachments.dropZone}
-					>
-						<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
-						<AttachmentTray attachments={attachments} className="px-4 pt-3.5" />
-						<ComposerInput
-							autoFocus
-							value={prompt}
-							onChange={setPrompt}
-							projectId={project?.id}
-							branch={chosenBranch}
-							submitOn="mod-enter"
-							suggestionsPosition="below"
-							onPaste={attachments.onPaste}
-							placeholder={
-								chat
-									? 'Compare the free tiers on the Vercel, Netlify and Fly.io pricing pages, and tell me which suits a hobby app.'
-									: 'Uploads retry forever when S3 returns 503. Add capped backoff and cover it with a test.'
-							}
-							className="min-h-[96px] px-4 pt-4 text-[14px] leading-[21px]"
-						/>
-						{attachments.notice || blind ? (
-							<div className="px-4 pt-2 text-[12px] text-(--warning-text)">
-								{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
-							</div>
-						) : null}
-						<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2.5">
-							<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
-							<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
-							{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
-							<ModelPicker value={{ model: specifier, reasoning }} onChange={chooseModel} height={28} side="bottom" />
-							{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
-							<div className="min-w-0 flex-[1_1_8px]" />
-							<Btn type="submit" variant="primary" icon={chat ? MessageSquare : Play} disabled={starting || !projects.isSuccess || blind}>
-								{chat ? 'Start chat' : 'Start task'}
-							</Btn>
-						</div>
-					</form>
-					{adding ? (
-						<AddRepo
-							onAdded={(added) => {
-								pick(added.id);
-								setAdding(false);
-							}}
-							onCancel={() => setAdding(false)}
-						/>
-					) : null}
-					{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
-
-					{recent.length > 0 ? (
-						<Card icon={Clock} title="Recent tasks" sub={`latest ${recent.length}`}>
-							<div className="flex flex-col gap-px px-1.5 pb-1.5">
-								{recent.map((session) => (
-									<TaskRow key={session.id} session={session} modelName={modelName} />
-								))}
-							</div>
-						</Card>
-					) : null}
+					<HomeDashboard />
+					<div className="-mt-2 flex min-w-0 justify-end">
+						<SkyCredit />
+					</div>
 				</div>
 			</div>
 		</div>

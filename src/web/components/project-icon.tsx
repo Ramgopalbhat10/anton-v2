@@ -164,7 +164,7 @@ const BY_KEY = new Map(PROJECT_ICONS.map((entry) => [entry.key, entry]));
 
 /** The tints a mark can take: the chart hues, so marks sit with the rest of the page. */
 export const ICON_TINTS = [
-	{ key: 'cyan', label: 'Cyan', color: 'var(--data-1)' },
+	{ key: 'cyan', label: 'Blue', color: 'var(--data-1)' },
 	{ key: 'violet', label: 'Violet', color: 'var(--data-2)' },
 	{ key: 'amber', label: 'Amber', color: 'var(--data-3)' },
 	{ key: 'green', label: 'Green', color: 'var(--data-4)' },

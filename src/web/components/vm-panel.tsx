@@ -244,15 +244,15 @@ export const VmPanel = memo(function VmPanel({
 					<div className="flex min-h-full items-center justify-center px-2 py-6">
 						<div className="flex w-full max-w-[520px] flex-col gap-3">
 							<div className="in-caption px-1">Open a panel</div>
-							<div className="grid gap-2 sm:grid-cols-2">
+							<div className="grid gap-x-2 gap-y-1 sm:grid-cols-2">
 								{panels.map((panel) => (
 									<button
 										type="button"
 										key={panel.name}
 										onClick={() => show(panel.name)}
-										className="in-card group/panel flex-row items-start gap-3 px-3 py-3 text-left outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+										className="group/panel flex items-start gap-3 rounded-[10px] px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 									>
-										<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong) text-(--icon-secondary) group-hover/panel:border-(--accent-border) group-hover/panel:text-(--accent-text)">
+										<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-(--bg-hover) text-(--icon-secondary) group-hover/panel:bg-(--accent-bg-subtle) group-hover/panel:text-(--accent-text)">
 											<Icon icon={panel.icon} size={14} />
 										</span>
 										<span className="flex min-w-0 flex-col gap-0.5">

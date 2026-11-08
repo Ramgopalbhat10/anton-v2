@@ -9,18 +9,18 @@ import { Btn, Icon } from '@/components/signal';
 import { useRefreshTask } from '@/components/source-bar';
 import { api, isChat, repoShort } from '@/lib/api';
 
-/** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
+/** xterm palette from the Signal tokens: inset black, secondary text, blue cursor. */
 const theme = {
 	background: '#000000',
 	foreground: '#ababab',
-	cursor: '#3fb6d8',
-	cursorAccent: '#06181f',
-	selectionBackground: 'rgba(63,182,216,0.16)',
+	cursor: '#7096fb',
+	cursorAccent: '#060a18',
+	selectionBackground: 'rgba(112,150,251,0.2)',
 	black: '#16161a',
 	red: '#f58581',
 	green: '#63dda5',
 	yellow: '#f2c173',
-	blue: '#6fcde8',
+	blue: '#7096fb',
 	magenta: '#b98be8',
 	cyan: '#6fcde8',
 	white: '#ededef',
@@ -28,7 +28,7 @@ const theme = {
 	brightRed: '#f58581',
 	brightGreen: '#63dda5',
 	brightYellow: '#f2c173',
-	brightBlue: '#9ee1f3',
+	brightBlue: '#a9c0ff',
 	brightMagenta: '#b98be8',
 	brightCyan: '#9ee1f3',
 	brightWhite: '#f7f7f8',

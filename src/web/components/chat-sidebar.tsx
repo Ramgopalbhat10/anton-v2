@@ -81,11 +81,11 @@ import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
 const NAV_ROW =
-	'group/nav relative flex h-8 items-center gap-2.5 rounded-[6px] border border-transparent pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:border-(--card-border) data-[status=active]:bg-(--card-bg-top) data-[status=active]:text-(--text-primary) data-[status=active]:shadow-(--card-highlight)';
+	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-[7px] pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text-primary)';
 
 /** A nav row's icon, lit in the accent on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
-	return <Icon icon={icon} size={15} className="shrink-0 text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--accent-text)" />;
+	return <Icon icon={icon} size={15} className="shrink-0 text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--icon-primary)" />;
 }
 
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
@@ -95,15 +95,15 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[6px] px-1.5 py-1 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
-			<span className={cn('in-num flex items-baseline justify-between gap-2 text-[11px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-				<span className="in-caption">Spent today</span>
-				<span>
-					<span className={budget.data.blocked ? undefined : 'text-(--text-primary)'}>{dollars(today)}</span>
-					{limits.dailyUsd !== null ? ` / $${limits.dailyUsd}` : ''}
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[7px] px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
+			<span className={cn('flex items-baseline justify-between gap-2 text-[11.5px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span>Spent today</span>
+				<span className="in-num">
+					<span className={budget.data.blocked ? undefined : 'text-(--text-secondary)'}>{dollars(today)}</span>
+					{limits.dailyUsd !== null ? ` of $${limits.dailyUsd}` : ''}
 				</span>
 			</span>
-			{limits.dailyUsd !== null ? <SegmentMeter label="Today's spend against the daily cap" value={used} segments={20} tone={usedTone(used)} height={5} /> : null}
+			{limits.dailyUsd !== null ? <SegmentMeter label="Today's spend against the daily cap" value={used} segments={32} tone={usedTone(used)} height={3} /> : null}
 		</Link>
 	);
 }
@@ -114,7 +114,7 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	return (
 		<nav
 			data-shown={shown}
-			className="sg-nav-rail absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) bg-(--bg-surface) py-2 md:flex"
+			className="sg-nav-rail glass-strong absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) py-2 md:flex"
 		>
 			<div className="mb-2">
 				<Logo />
@@ -459,9 +459,9 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 				data-open={menuOpen || undefined}
 				onPointerEnter={armed ? undefined : () => setArmed(true)}
 				onFocus={armed ? undefined : () => setArmed(true)}
-				className={cn('group relative flex items-center rounded-[6px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-11', arriving && 'in-row-enter')}
+				className={cn('group relative flex items-center rounded-[7px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-[42px]', arriving && 'in-row-enter')}
 			>
-				{active ? <div className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-(--card-bg-top) shadow-(--card-highlight)" /> : null}
+				{active ? <div className="absolute inset-0 rounded-[7px] bg-(--bg-active)" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -553,7 +553,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 }
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="mx-3 mt-0.5 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2 text-[12px] text-(--text-disabled)">{children}</div>;
+	return <div className="px-5 py-1 text-[12px] text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -602,22 +602,22 @@ export function ChatSidebar({
 		<aside
 			data-open={open}
 			data-collapsed={collapsed}
-			className="sg-nav flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle) bg-[linear-gradient(180deg,var(--bg-surface),color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-canvas)))]"
+			className="sg-nav glass-strong flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
 		>
-			<div className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-3.5">
-				<Logo size={22} />
-				<div className="min-w-0 truncate text-[13.5px] font-semibold tracking-[-0.01em]">Anton</div>
+			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
+				<Logo size={15} />
+				<div className="min-w-0 truncate text-[14px] font-semibold tracking-[-0.02em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
 				<NotificationsBell onOpen={onOpenNotifications} />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
 
-			<div className="flex items-center gap-1.5 px-3 pb-3">
+			<div className="flex items-center gap-1 px-3 pb-2">
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-[13px] font-medium text-(--text-primary) shadow-(--card-highlight) transition-colors duration-(--duration-micro) outline-none hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_1px_rgba(255,255,255,0.06)] transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -627,7 +627,7 @@ export function ChatSidebar({
 					onClick={onOpenPalette}
 					aria-label="Command palette"
 					title="Search or jump to"
-					className="flex h-9 shrink-0 items-center gap-1.5 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) pr-1.5 pl-2.5 text-(--icon-tertiary) outline-none hover:border-(--border-default) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] pr-1.5 pl-2 text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Search} size={14} />
 					<Kbd keys="mod+k" size="sm" />
@@ -635,7 +635,7 @@ export function ChatSidebar({
 			</div>
 
 			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
-			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px rounded-[6px] border border-(--border-subtle) bg-(--well-bg) p-1', inProject && 'hidden')}>
+			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px', inProject && 'hidden')}>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
 					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
@@ -684,17 +684,15 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="m-3 mt-1 flex shrink-0 flex-col overflow-hidden rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] shadow-(--card-highlight)">
-				<div className="flex items-center gap-2.5 px-2.5 py-2">
+			<div className="flex shrink-0 flex-col gap-1 border-t border-(--border-subtle) px-3 pt-2 pb-3">
+				<div className="flex items-center gap-2.5 px-1.5">
 					<Avatar name={name} />
 					<div className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)">{name}</div>
 					<Link to="/settings" onClick={onNavigate} aria-label="Settings" title="Settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
 						<Icon icon={Settings} size={14} />
 					</Link>
 				</div>
-				<div className="border-t border-(--border-subtle) p-1">
-					<SpentToday />
-				</div>
+				<SpentToday />
 			</div>
 		</aside>
 	);

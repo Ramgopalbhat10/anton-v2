@@ -350,7 +350,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 	}
 }
 
-/** What kind of work a tool call was, as a colour: commands cyan, edits violet, the browser amber, failures red. */
+/** What kind of work a tool call was, as a colour: commands blue, edits violet, the browser amber, failures red. */
 export function toolTone(toolName: string, failed: boolean): string {
 	if (failed) return 'var(--danger-base)';
 	switch (toolName) {

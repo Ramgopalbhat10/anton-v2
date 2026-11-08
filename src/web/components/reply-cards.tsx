@@ -93,7 +93,7 @@ export const AskCard = memo(function AskCard({
   return (
     <section className="in-card overflow-hidden" aria-label="Question">
       <header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5">
-        <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--accent-border) text-(--accent-text)">
+        <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] bg-(--accent-bg-subtle) text-(--accent-text)">
           <Icon icon={MessageCircleQuestion} size={12} />
         </span>
         <h3 className="m-0 min-w-0 flex-1 text-[13px] leading-[20px] font-medium text-(--text-primary)">

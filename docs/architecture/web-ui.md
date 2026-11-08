@@ -3,6 +3,8 @@
 Linked from [AGENTS.md](../../AGENTS.md).
 
 - `src/web/` — TanStack Router UI; shadcn components in `components/ui/`, motion tokens in `instrument.css`.
+- Look: near-black glass over a sky, one ion-blue accent (`--blue-*` in `styles/signal-tokens.css`). The sky is an hourly NASA picture (`lib/sky.ts`, crops in `public/sky/`) drawn as a dithered pixel mesh (`components/sky.tsx`); `<main data-sky>` veils it per page, Settings › General turns it off, and `?sky=<slug>` pins one.
+- Illustrations, the mark (`Logo`) and the loader are drawn on one pixel grid (`components/pixel-art.tsx`, `illustrations.tsx`): a few greys, one accent cell, labels in mono. Run `node scripts/make-icons.ts` after changing the mark.
 - New tasks and threads open the moment you send, by an id the page chose (`src/web/lib/starting.ts`, `starting-task.tsx` draws the skeleton).
 - Pages refetch on server events mapped in `src/web/lib/live-updates.ts`; keep sidebar rows cheap (`sameRow`).
 - On a phone-width screen (`useOnePane`) a task opens on its conversation; side panels open on demand.

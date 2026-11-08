@@ -53,7 +53,7 @@ function ProjectCard({ space }: { space: Space }) {
 					</span>
 				))}
 				{space.repos.length === 0 ? (
-					<span className="flex h-5 items-center rounded-[6px] border border-dashed border-(--border-subtle) px-1.5 font-mono text-[10.5px] text-(--text-tertiary)">no repository</span>
+					<span className="flex h-5 items-center rounded-[6px] bg-(--bg-hover) px-1.5 font-mono text-[10.5px] text-(--text-tertiary)">no repository</span>
 				) : null}
 			</div>
 			{/* The split and the list below say what needs you and what runs; no figures to repeat them. */}
@@ -230,7 +230,7 @@ export function ProjectsPage() {
 					<button
 						type="button"
 						onClick={() => setCreating(true)}
-						className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[6px] border border-dashed border-(--border-default) text-[13px] text-(--text-tertiary) outline-none hover:border-(--accent-border) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+						className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-(--border-default) text-[13px] text-(--text-tertiary) outline-none hover:border-(--accent-border) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 					>
 						<Icon icon={Plus} size={16} />
 						New project

@@ -191,7 +191,7 @@ function Sealed() {
 						))}
 					</List>
 				) : view.isSuccess && !editing ? (
-					<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No sealed secrets yet.</p>
+					<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No sealed secrets yet.</p>
 				) : null}
 			</div>
 		</Block>
@@ -235,7 +235,7 @@ export function SecretsPage() {
 								))}
 							</List>
 						) : (
-							<p className="m-0 rounded-[6px] border border-dashed border-(--border-default) px-3 py-2.5 text-[12px] text-(--text-disabled)">No repository has variables of its own.</p>
+							<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No repository has variables of its own.</p>
 						)}
 					</Block>
 				</>

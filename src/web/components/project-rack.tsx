@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, Server } from 'lucide-react';
+import { ArrowUpRight, LayoutGrid } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { DETAIL } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection } from '@/components/instrument';
 import { SpaceMark } from '@/components/project-sidebar';
 import { Btn, Icon } from '@/components/signal';
@@ -15,7 +14,7 @@ import { stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 /* Projects in the rack: each project a bay, its threads the blades, lit as the
-   glyphs are (cyan works, amber waits on you, green is ready, grey is done).
+   glyphs are (blue works, amber waits on you, green is ready, grey is done).
    Pointing at a blade draws the thread out with its card: what it asks or last
    said, a line to send it, its next steps and the way into it. */
 
@@ -35,11 +34,11 @@ export function bayThreads(threads: Session[]): Session[] {
 	return [...threads].sort((a, b) => rank(a) - rank(b) || threadActiveAt(b).localeCompare(threadActiveAt(a))).slice(0, PER_BAY);
 }
 
-/** A bay's light: amber while a thread waits on you, cyan while one works, dark when quiet. */
+/** A bay's light: amber while a thread waits on you, blue while one works, dark when quiet. */
 function bayLed(threads: Session[]): string {
 	if (threads.some((thread) => ['waiting', 'failed'].includes(glyphKind(thread)))) return 'var(--warning-base)';
-	if (threads.some((thread) => stateOf(thread) === 'working')) return 'var(--cyan-300)';
-	return DETAIL;
+	if (threads.some((thread) => stateOf(thread) === 'working')) return 'var(--blue-300)';
+	return 'var(--neutral-600)';
 }
 
 /** A thread's card in the rack: its state, what it asks or last said, a line to send it, and its next steps. */
@@ -181,7 +180,7 @@ export function ProjectRack({ spaces, threads }: { spaces: Space[]; threads: Ses
 	});
 	return (
 		<Card
-			icon={Server}
+			icon={LayoutGrid}
 			title="Rack"
 			sub="each project a bay, its threads the blades"
 			status={

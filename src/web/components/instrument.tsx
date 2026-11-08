@@ -45,7 +45,7 @@ export function Status({ tone = 'neutral', pulse, children }: { tone?: Tone; pul
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] border border-dashed border-(--border-strong)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
+			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] bg-(--bg-hover)', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
 			style={{ width: size, height: size }}
 		>
 			<Icon icon={icon} size={13} />

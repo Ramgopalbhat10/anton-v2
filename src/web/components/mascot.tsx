@@ -21,10 +21,10 @@ const TORSO = [
 	'.FFFFF..FFFFD.',
 ];
 const FILL: Record<string, string> = {
-	T: 'var(--cyan-200)',
-	H: 'var(--cyan-300)',
-	F: 'var(--cyan-400)',
-	D: 'var(--cyan-600)',
+	T: 'var(--blue-200)',
+	H: 'var(--blue-300)',
+	F: 'var(--blue-400)',
+	D: 'var(--blue-600)',
 };
 const INK = '#06181F';
 
@@ -124,10 +124,10 @@ export function Mascot({ mood, className }: { mood: MascotMood; className?: stri
 				<g key={hop} className={hop ? 'am-hopper' : undefined}>
 					<Pixels className="am-question" px={QUESTION} fill="var(--amber-400)" />
 					<g className="am-zzz">
-						<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
-						<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
+						<Pixels className="am-z" px={ZZZ} fill="var(--blue-200)" />
+						<Pixels className="am-z am-z2" px={ZZZ} fill="var(--blue-200)" />
 					</g>
-					<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
+					<Pixels className="am-spark" px={SPARK} fill="var(--blue-200)" />
 					<g className="am-body">
 						<g className="am-upper">
 							<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
@@ -138,11 +138,11 @@ export function Mascot({ mood, className }: { mood: MascotMood; className?: stri
 							<Pixels className="am-eyes" px={EYES} fill={INK} />
 							<Pixels className="am-happy" px={HAPPY} fill={INK} />
 							<Pixels className="am-shut" px={SHUT} fill={INK} />
-							<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
-							<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
+							<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--blue-500)" />
+							<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--blue-600)" />
 						</g>
-						<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
-						<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
+						<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--blue-700)" />
+						<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--blue-700)" />
 					</g>
 				</g>
 			</g>
