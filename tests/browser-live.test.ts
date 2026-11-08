@@ -97,3 +97,68 @@ test('the sandbox browser runs headless, streams its tab to a viewer, and takes 
 	t.after(() => late.socket.close());
 	await until(() => late.frames.length > 0, 3_000);
 });
+
+test('a run in the sandbox browser waits on the answer about a risky click, and goes on or stops by it', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const app = createServer((_request, response) => {
+		response.setHeader('content-type', 'text/html');
+		response.end('<title>Run</title><button onclick="document.querySelector(\'p\').textContent=\'Sent\'">Send message</button><p></p>');
+	});
+	await new Promise<void>((resolve) => app.listen(0, '127.0.0.1', resolve));
+	const machine = await machineFor('live');
+	t.after(async () => {
+		app.close();
+		await closeBrowser(machine);
+	});
+	const url = `http://127.0.0.1:${(app.address() as AddressInfo).port}/`;
+	const asked: string[] = [];
+	const sent = await browse(machine, {
+		action: 'run',
+		code: `await page.goto(${JSON.stringify(url)}); await page.getByRole('button').click(); return page.locator('p').innerText();`,
+		ask: async (name) => {
+			asked.push(name);
+			// The run waits in the sandbox meanwhile.
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			return true;
+		},
+	});
+	assert.equal(sent.problem, null);
+	assert.equal(sent.result, 'Sent');
+	assert.deepEqual(asked, ['Send message']);
+
+	const held = await browse(machine, { action: 'run', code: `await page.reload(); await page.getByRole('button').click(); return 'clicked';`, ask: async () => false });
+	assert.match(held.problem ?? '', /^Not clicked: "Send message"/);
+	const seen = await browse(machine, { action: 'look' });
+	assert.doesNotMatch(seen.snapshot, /Sent/);
+});
+
+test('steps after the first go over the command connection, which takes only commands that carry the server’s token', { skip: !hasBrowser && 'needs Playwright Chromium' }, async (t) => {
+	const app = createServer((_request, response) => {
+		response.setHeader('content-type', 'text/html');
+		response.end('<title>Channel</title><button onclick="this.textContent=\'Pressed\'">Press</button>');
+	});
+	await new Promise<void>((resolve) => app.listen(0, '127.0.0.1', resolve));
+	const real = await machineFor('live');
+	const commands: string[] = [];
+	const machine = { ...real, exec: (command: string, options?: Parameters<typeof real.exec>[1]) => (commands.push(command), real.exec(command, options)) };
+	t.after(async () => {
+		app.close();
+		await closeBrowser(real);
+	});
+	await closeBrowser(machine);
+	await browse(machine, { action: 'open', url: `http://127.0.0.1:${(app.address() as AddressInfo).port}/` });
+	const before = commands.length;
+	const pressed = await browse(machine, { action: 'click', target: 'role=button[name="Press"]' });
+	assert.match(pressed.snapshot, /button "Pressed"/);
+	await browse(machine, { action: 'look' });
+	assert.equal(commands.length, before, 'no process was started in the machine for these steps');
+
+	// Without the token, a command on the live view's port is ignored.
+	const socket = new WebSocket(`${(await browserLiveUrl(machine))!}/?anton=command`);
+	await new Promise((resolve) => socket.addEventListener('open', resolve));
+	const answers: string[] = [];
+	socket.addEventListener('message', (event) => typeof event.data === 'string' && answers.push(event.data));
+	socket.send(JSON.stringify({ type: 'command', token: 'wrong', id: 1, body: { action: 'look' } }));
+	await new Promise((resolve) => setTimeout(resolve, 800));
+	socket.close();
+	assert.deepEqual(answers, []);
+});

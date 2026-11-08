@@ -1,5 +1,6 @@
 import type { Answer, Question } from '../core/ports.ts';
 import type { BrowserInput, BrowserState } from './browser.ts';
+import { RISKY_WORDS } from './browser-step.ts';
 import { choiceOf, consult, yesOf } from './decisions.ts';
 
 /*
@@ -74,10 +75,6 @@ const RISKY = 0.5;
  */
 const NAVIGATES = new Set(['link', 'tab', 'treeitem']);
 
-/** Words on a link that make it worth asking about before clicking; any other kind of control is always asked about. */
-const RISKY_WORDS =
-	/\b(buy|pay|purchase|order|checkout|check out|place|submit|send|post|publish|delete|remove|destroy|confirm|subscribe|unsubscribe|book|reserve|transfer|donate|sign up|register|create|save|apply|accept|tweet|reply|comment|invite|share|cancel|archive|merge|deploy|approve|install|withdraw|deposit|logout|log out|sign out)\b/i;
-
 /** Whether a click on this, named by its label or selector, could be one to confirm first. */
 export const mayBeIrreversible = (text: string) => RISKY_WORDS.test(text);
 
@@ -104,7 +101,10 @@ export function candidatesOf(snapshot: string): Candidate[] {
 		if (frame && line.length - line.trimStart().length <= frame.at) frame = null;
 		const match = LINE.exec(line);
 		if (!match) continue;
-		const [, role, quoted, states = '', rest = ''] = match;
+		const [, role, quoted, marks = '', rest = ''] = match;
+		// A ref from an AI snapshot finds exactly this element, in an iframe too; it is not a state to show.
+		const ref = /\[ref=([a-z0-9]+)\]/.exec(marks)?.[1];
+		const states = marks.replace(/\s*\[ref=[^\]]*\]/g, '');
 		const kind = FIELDS.has(role) ? 'field' : CLICKABLE.has(role) ? 'click' : null;
 		const scope = frame?.prefix ?? '';
 		// Every control of a role counts toward an unnamed one's position, as `role=x` matches them all.
@@ -115,7 +115,7 @@ export function candidatesOf(snapshot: string): Candidate[] {
 		const key = `${scope}${role}\n${name}`;
 		const nth = name ? (seen.get(key) ?? 0) : roleCount;
 		if (name) seen.set(key, nth + 1);
-		const selector = scope + (name ? `role=${role}[name=${JSON.stringify(name)} s] >> nth=${nth}` : `role=${role} >> nth=${nth}`);
+		const selector = ref ? `aria-ref=${ref}` : scope + (name ? `role=${role}[name=${JSON.stringify(name)} s] >> nth=${nth}` : `role=${role} >> nth=${nth}`);
 		const value = rest.trim().replace(/^"(.*)"$/, '$1');
 		const shown = `${role}${name ? ` "${name.length > 80 ? `${name.slice(0, 80)}…` : name}"` : ''}${states.trim() ? ` ${states.trim()}` : ''}${frame ? ' (in an embedded frame)' : ''}`;
 		const label = kind === 'field' ? `${shown}${value ? ` holding "${value.slice(0, 60)}"` : ' (empty)'}` : shown;
