@@ -34,6 +34,8 @@ import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox
 import { imageModels, imagesAvailable } from './services/images.ts';
 import { backgroundDefaults, COMPACT_AT, DEFAULT_CLAUDE_CODE_COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
 import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
+import { releaseSpare, wakeSpare } from './services/spares.ts';
+import { wakeMachine } from './services/workspace.ts';
 import { reviewQueue } from './services/reviews.ts';
 import { reviewPullRequest } from './services/review-tasks.ts';
 import { MAX_MEMORY, saveMemory } from './services/memory.ts';
@@ -444,6 +446,15 @@ app.put('/api/secrets/sealed/:name', async (c) => {
 	return c.json({ secrets: await saveSealedSecret({ name: c.req.param('name'), ...input }) });
 });
 app.delete('/api/secrets/sealed/:name', async (c) => c.json({ secrets: await deleteSealedSecret(c.req.param('name')) }));
+// A new task's composer wakes a sandbox for it while you type (`spares.ts`), asks again while the draft stays, and lets it go when cleared.
+app.post('/api/projects/:id/wake', async (c) => {
+	const input = await body(c, v.object({ taskId: v.pipe(v.string(), v.uuid()), branch: v.optional(v.pipe(v.string(), v.maxLength(255))) }));
+	return c.json(await wakeSpare({ projectId: c.req.param('id'), ...input }));
+});
+app.delete('/api/drafts/:taskId/wake', (c) => {
+	releaseSpare(c.req.param('taskId'));
+	return c.json({ released: true });
+});
 app.post('/api/projects/:id/prepared-image/rebuild', async (c) => c.json(await rebuildPreparedImage(c.req.param('id'))));
 app.get('/api/reviews', async (c) => c.json({ reviews: await reviewQueue() }));
 // Reviews any pull request by its link, in a task of its own unless Anton opened it.
@@ -890,6 +901,8 @@ app.post('/api/sessions/:id/stop', async (c) => {
 	const id = c.req.param('id');
 	return c.json(await answerWithin(stopSession(id), () => getSession(id), 'Stopping the sandbox', id));
 });
+// Typing to a task starts its sandbox, so it is up, or nearly, when the message is sent.
+app.post('/api/sessions/:id/wake', async (c) => c.json(await wakeMachine(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 app.get('/api/sessions/:id/checkpoints', async (c) => {
 	const { id } = await getSession(c.req.param('id'));

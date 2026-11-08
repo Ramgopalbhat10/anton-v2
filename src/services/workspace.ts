@@ -2,119 +2,55 @@ import type { Acquired, Machine, MachineOrigin } from '../core/ports.ts';
 import { config } from '../config.ts';
 import { announce } from '../core/changes.ts';
 import { withEnv } from '../core/machine-env.ts';
-import { quote, run, text } from '../core/shell.ts';
 import type { Project, SessionRecord } from '../core/types.ts';
-import { DEFAULT_PREVIEW_PORTS, getProject, setWarmImage } from '../db/projects.ts';
+import { getProject } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
-import { getProviders } from '../providers/index.ts';
 import { applyFiles, copyLibrary, readCheckpoint } from './checkpoints.ts';
-import { checkoutTaskBranch, cloneRepo, initScratch, repoDir } from './git.ts';
 import { isWorking } from './activity.ts';
 import { logProblem } from './log.ts';
+import { machineRequest, previewEnv, readMarker, setUpMachine } from './machine-setup.ts';
+import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';
 import { copySpaceFiles } from './space-files.ts';
-import { resourcesFrom, type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
+import { sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from './secrets.ts';
+import { claimSpare, finishSpare, parseSpareMarker } from './spares.ts';
 import { runnerFor, runnerOf } from './runners.ts';
 
-/** First lockfile found decides how dependencies are installed. */
-const INSTALLERS: Array<[lockfile: string, command: string]> = [
-	['pnpm-lock.yaml', 'pnpm install'],
-	['yarn.lock', 'yarn install'],
-	['package-lock.json', 'npm install --no-audit --no-fund'],
-	['package.json', 'npm install --no-audit --no-fund'],
-];
-
-async function installDependencies(machine: Machine): Promise<void> {
-	const script = INSTALLERS.map(([file, command]) => `if [ -f ${quote(file)} ]; then ${command}; exit $?; fi`).join('\n');
-	const result = await machine.exec(script, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
-	if (result.exitCode !== 0) logProblem('warn', 'Dependency install failed', result.stderr.slice(-500));
-}
-
-/** The repo's warm image while it is younger than `share` of its days, else null. */
-function warmImageFor(project: Project, settings: SandboxSettings, share = 1): string | null {
-	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < share * settings.warmImageDays * 86_400_000;
-	return fresh ? project.warmImage : null;
-}
-
-/**
- * A task that starts from an image past this share of its days saves a new one,
- * so the image is renewed while tasks still use it and no task meets an expired
- * one and waits on clone, install and snapshot.
- */
-const RENEW_SHARE = 0.75;
-
-/**
- * Saves a reusable image of the set-up repo once setup has finished. Waited
- * for, so nothing the agent does can end up in the image: later tasks start
- * from it, and their setup runs there with Anton's credentials.
- */
-async function refreshWarmImage(machine: Machine, project: Project): Promise<void> {
-	if (warmImageFor(project, await sandboxSettings(), RENEW_SHARE)) return;
-	await getProviders()
-		.sandbox.snapshot(machine)
-		.then((image) => setWarmImage(project.id, image, project.baseImage))
-		.catch((error: unknown) => logProblem('warn', 'Warm image failed', error));
-}
+export { previewHosts, previewPortsFor } from './machine-setup.ts';
 
 /** A chat's project is null: it has no repository, so its sandbox starts from an empty scratch folder. */
 type Context = { machine: Machine; session: SessionRecord; project: Project | null };
 
-/** The repo's own setup, after dependencies and on the task branch. A failure fails the task's setup. */
-async function runSetupScript(machine: Machine, project: Project | null): Promise<void> {
-	if (!project?.setupScript.trim()) return;
-	await run(machine, project.setupScript, { cwd: repoDir(machine), timeoutMs: 15 * 60_000 });
-}
-
-/** Puts the repo on the task branch: from a prepared image, or cloned from scratch; a chat gets its empty folder. */
-const setup: Record<'image' | 'clone' | 'scratch', (context: Context) => Promise<void>> = {
-	async scratch({ machine }) {
-		await initScratch(machine);
-	},
-	async image({ machine, session }) {
-		await checkoutTaskBranch(machine, session.branch, session.baseSha, getProviders().git.gitAuthEnv());
-		await installDependencies(machine);
-	},
-	async clone({ machine, session, project }) {
-		if (!project) throw new Error('A chat has no repository to clone');
-		const { git } = getProviders();
-		await cloneRepo(machine, git.cloneUrl(project.repoFullName), git.gitAuthEnv());
-		await installDependencies(machine);
-		await checkoutTaskBranch(machine, session.branch, session.baseSha, git.gitAuthEnv());
-	},
-};
-
 /**
- * Written when setup finishes, holding the task id. A machine without it was
- * interrupted mid-setup (a failure or a restart), so setup runs again rather
- * than handing the agent a half-cloned repo. Images made from another task
- * carry that task's id, so they never count.
- */
-const readyFile = (machine: Machine) => `${machine.root}/.anton-ready`;
-
-/**
- * Machines of tasks created before the marker existed: their own machine,
+ * Machines of tasks created before the ready marker existed: their own machine,
  * once it has saved a checkpoint. Newer tasks always get the marker, so a
  * checkpoint saved after a failed or stopped setup never counts as ready.
  */
 const setUpBeforeMarker = (session: SessionRecord, origin: MachineOrigin) =>
 	session.legacySetup && (origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
 
-async function isReady(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<boolean> {
-	const marker = await machine.exec(`cat ${quote(readyFile(machine))}`);
-	if (marker.exitCode !== 0) return setUpBeforeMarker(session, origin);
-	return text(marker.stdout).trim() === session.id;
+/**
+ * Whether the machine is the task's own and set up (its marker holds the task id), a spare set up for it while it
+ * was typed, or neither. Images carry the marker of the machine they were made in, so they never count.
+ */
+type Readiness = { state: 'ready' } | { state: 'spare'; marker: string } | { state: 'unready' };
+
+async function readinessOf(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<Readiness> {
+	const marker = await readMarker(machine);
+	if (marker === null) return { state: setUpBeforeMarker(session, origin) ? 'ready' : 'unready' };
+	if (marker === session.id) return { state: 'ready' };
+	return parseSpareMarker(marker)?.taskId === session.id ? { state: 'spare', marker } : { state: 'unready' };
 }
 
 /** Sets up a machine that is not ready yet: one fresh from an image or the toolchain. */
 async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
-	const { machine, session } = context;
-	await setup[!context.project ? 'scratch' : origin === 'image' ? 'image' : 'clone'](context);
-	await runSetupScript(machine, context.project);
-	await run(machine, `printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`);
-	// Taken only now, so the image never holds a half-run setup. Its marker names this task, so other tasks still set up.
-	// A task on this server makes none: warm images belong to the sandbox, where the next task on the repo starts.
-	// A task started from an image renews it only once it is old (`RENEW_SHARE`), so most image starts take none.
-	if (context.project && session.runOn !== 'host') await refreshWarmImage(machine, context.project);
+	const { machine, session, project } = context;
+	const from = !project ? 'scratch' : origin === 'image' ? 'image' : 'clone';
+	const installed = await setUpMachine(machine, project, { marker: session.id, branch: session.branch, sha: session.baseSha }, from);
+	// The repo's image is built in a sandbox of its own, in the background, so no task waits on a snapshot: when it is
+	// missing or old, or when this task found the lockfile changed and had to install. A task on this server makes
+	// none, as images belong to the sandbox, where the next task on the repo starts.
+	if (project && session.runOn !== 'host') renewPreparedImage(project.id, from === 'image' && installed);
 	await putBackSavedFiles(machine, session.id);
 }
 
@@ -140,16 +76,6 @@ async function load(id: string): Promise<{ session: SessionRecord; project: Proj
 	return { session, project };
 }
 
-/** The ports a task's sandbox serves previews on: its repository's, or the usual ones for a chat. */
-export const previewPortsFor = (project: Project | null) => project?.previewPorts ?? DEFAULT_PREVIEW_PORTS;
-
-/** The hostnames the user's browser opens the machine's previews on, comma-separated, or null when all are localhost. */
-export async function previewHosts(machine: Machine, ports: number[]): Promise<string | null> {
-	const urls = await Promise.all(ports.map((port) => machine.previewUrl(port).catch(() => null)));
-	const hosts = new Set(urls.flatMap((url) => (url ? [new URL(url).hostname] : [])).filter((host) => host !== 'localhost'));
-	return hosts.size > 0 ? [...hosts].join(',') : null;
-}
-
 const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resumed';
 
 /**
@@ -157,33 +83,28 @@ const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resum
  * the marker may have been used by the agent or the terminal since, and
  * setup runs with Anton's credentials, so it is set aside for a fresh one.
  */
-async function acquireReady(session: SessionRecord, project: Project | null): Promise<{ acquired: Acquired; ready: boolean }> {
+async function acquireReady(session: SessionRecord, project: Project | null): Promise<{ acquired: Acquired; readiness: Readiness }> {
 	const sandbox = runnerFor(session.runOn);
 	const settings = await sandboxSettings();
-	const request = {
-		key: session.id,
-		image: project && session.runOn !== 'host' ? warmImageFor(project, settings) : null,
-		baseImage: project?.baseImage ?? settings.baseImage,
-		ports: previewPortsFor(project),
-		resources: resourcesFrom(settings, project?.fullVm ? 'vm' : 'container'),
-	};
+	const request = machineRequest(session.id, project, settings, project && session.runOn !== 'host' ? preparedImageFor(project, settings) : null);
 	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
-	const ready = await isReady(acquired.machine, session, acquired.origin);
-	if (ready || !isUsed(acquired.origin)) return { acquired, ready };
+	const readiness = await readinessOf(acquired.machine, session, acquired.origin);
+	if (readiness.state !== 'unready' || !isUsed(acquired.origin)) return { acquired, readiness };
 	await sandbox.stop(acquired.state);
-	return { acquired: await sandbox.acquire({ ...request, state: null }), ready: false };
+	return { acquired: await sandbox.acquire({ ...request, state: null }), readiness: { state: 'unready' } };
 }
 
 async function provision(id: string): Promise<Machine> {
+	const startedAt = Date.now();
 	const { session, project } = await load(id);
-	const { acquired, ready } = await acquireReady(session, project);
-	// The agent reads ANTON_PREVIEW_PORTS to pick a port the user can preview.
-	// Vite's dev server turns away hosts it was not told of, so its first Preview check would fail without the tunnels' names.
-	const hosts = await previewHosts(acquired.machine, previewPortsFor(project));
-	const ports = {
-		ANTON_PREVIEW_PORTS: previewPortsFor(project).join(' '),
-		...(hosts && { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: hosts }),
-	};
+	// A sandbox woken while the task was typed is set up, or nearly: wait for it rather than start a second one, and
+	// keep its open connection rather than look it up again.
+	const spare = await claimSpare(session).catch((error: unknown) => {
+		logProblem('warn', 'The sandbox woken for this task could not be used', error, id);
+		return null;
+	});
+	const { acquired, readiness } = spare ? { acquired: spare.acquired, readiness: { state: 'spare', marker: spare.marker } as const } : await acquireReady(session, project);
+	const ports = await previewEnv(acquired.machine, project);
 	// A review task may be on a repo added only by pasting a link, whose own install scripts are its owner's code:
 	// it gets the repo's own variables (none unless you set some), never the shared ones, and the code of a
 	// pull request whose author cannot push to the repo gets none at all.
@@ -191,8 +112,12 @@ async function provision(id: string): Promise<Machine> {
 	const setupMachine = withEnv(acquired.machine, { ...ports, ...variables });
 	const machine = session.review && !session.review.trusted ? withEnv(acquired.machine, ports) : setupMachine;
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
+	const acquiredAt = Date.now();
 	try {
-		if (!ready) await prepare({ machine: setupMachine, session, project }, acquired.origin);
+		const context = { machine: setupMachine, session, project };
+		if (readiness.state === 'spare') {
+			if (!(await finishSpare(setupMachine, readiness.marker, session))) await prepare(context, 'image');
+		} else if (readiness.state === 'unready') await prepare(context, acquired.origin);
 	} catch (error) {
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		throw error;
@@ -203,6 +128,8 @@ async function provision(id: string): Promise<Machine> {
 		// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
 		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
 	]);
+	const how = readiness.state === 'spare' ? 'woken while typed' : readiness.state === 'ready' ? acquired.origin : `${acquired.origin}, set up`;
+	console.info(`[anton] Sandbox for ${id} ready in ${Date.now() - startedAt} ms (${how}; machine ${acquiredAt - startedAt} ms, setup ${Date.now() - acquiredAt} ms)`);
 	return machine;
 }
 
@@ -251,6 +178,22 @@ export async function prewarmMachine(id: string): Promise<void> {
 	const session = await getSessionRecord(id);
 	if (!session || (!session.projectId && !session.automationId) || session.machineState || session.planMode || session.review || session.runOn === 'host' || machines.has(id)) return;
 	await machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
+}
+
+/**
+ * Starts a task's machine while a message to it is being typed, so it is up, or nearly, when the message is sent.
+ * For a task that has had a machine (it is likely to need it again, and comes back from its saved state), or one
+ * `prewarmMachine` would start as the agent replies. Never for a review or a task on this server. One that stays
+ * unused stops after its idle minutes. Returns whether a start is under way.
+ */
+export async function wakeMachine(id: string): Promise<{ waking: boolean }> {
+	if (!config.wakeSandbox) return { waking: false };
+	if (machines.has(id)) return { waking: true };
+	const session = await getSessionRecord(id);
+	if (!session || session.review || session.runOn === 'host') return { waking: false };
+	if (!session.machineState && ((!session.projectId && !session.automationId) || session.planMode)) return { waking: false };
+	void machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start while the message was typed', error, id));
+	return { waking: true };
 }
 
 /** The task's machine only if it is already running. */

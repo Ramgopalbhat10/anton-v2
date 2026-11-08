@@ -56,7 +56,7 @@ function Defaults({ view }: { view: SandboxView }) {
 							options={MAX_AGE}
 							fallback={`${warmImageDays} days`}
 							onChange={setWarmImageDays}
-							info="An older one is rebuilt by the next task, so new dependencies are picked up."
+							info="An older one is rebuilt in the background, so new dependencies are picked up. A changed lockfile rebuilds it sooner."
 						/>
 					</div>
 				</SubBlock>
@@ -80,14 +80,12 @@ function Prepared({ project, view }: { project: Project; view: SandboxView }) {
 					{project.repoFullName}
 				</Link>
 				<div className="truncate text-[12px] text-(--text-tertiary)">
-					{project.warmedAt ? `Built ${age(project.warmedAt)} ago from ${base}` : `None yet. The next task builds one from ${base}.`}
+					{project.warmedAt ? `Built ${age(project.warmedAt)} ago from ${base}` : `None yet. One is built in the background from ${base}.`}
 				</div>
 			</div>
-			{project.warmedAt ? (
-				<Btn size="sm" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>
-					{rebuild.isPending ? 'Dropping…' : 'Rebuild'}
-				</Btn>
-			) : null}
+			<Btn size="sm" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>
+				{rebuild.isPending ? 'Starting…' : project.warmedAt ? 'Rebuild' : 'Build'}
+			</Btn>
 		</div>
 	);
 }
@@ -100,7 +98,7 @@ export function ImagesPage() {
 		<>
 			<PageHeading
 				title="Images"
-				info="A prepared image is the repo cloned, dependencies installed and the setup script run, saved after the first task sets it up. Without one, setup runs from the base image."
+				info="A prepared image is the repo cloned, dependencies installed and the setup script run. It is built in a sandbox of its own when the repo is added, so no task waits for it. Without one, setup runs from the base image."
 			>
 				New tasks start from their repository's prepared image.
 			</PageHeading>
@@ -110,7 +108,7 @@ export function ImagesPage() {
 					title="Prepared images"
 					icon={Package}
 					aside={<Status>{`${projects.data.projects.filter((project) => project.warmedAt).length} of ${projects.data.projects.length} built`}</Status>}
-					info="Rebuild drops one, so the next task sets up from scratch and saves a fresh image."
+					info="Rebuild drops one and builds a fresh one from scratch in the background. Tasks set up from the base image until it is ready."
 				>
 					<List>
 						{projects.data.projects.map((project) => (

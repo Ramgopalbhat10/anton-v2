@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { Issue, Reasoning } from '../core/ports.ts';
 import type { Project } from '../core/types.ts';
@@ -27,6 +28,7 @@ import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
 import { logProblem } from './log.ts';
 import { gateProblem, runGate } from './routine-gate.ts';
+import { wakeSpare } from './spares.ts';
 import { threadStarted } from './thread-reports.ts';
 import { type ShortTitle, shortTitle, titleFrom } from './titles.ts';
 import { recordUsage } from './usage.ts';
@@ -163,9 +165,10 @@ function issuePrompt(issue: Issue, extra: string): string {
  * Creates a task and gives its agent the instructions, the same as typing them on the launcher. A project's
  * routine starts it as one of the project's threads instead, which waits its turn when the project is busy.
  */
-async function startTask(automation: Automation, title: string, prompt: string): Promise<string> {
+async function startTask(automation: Automation, title: string, prompt: string, id?: string): Promise<string> {
 	if (automation.spaceId) {
 		const thread = await startThread(automation.spaceId, {
+			id,
 			projectId: automation.projectId || null,
 			title,
 			brief: prompt,
@@ -180,6 +183,7 @@ async function startTask(automation: Automation, title: string, prompt: string):
 	}
 	if (!automation.projectId) throw new NotFoundError('Project not found');
 	const session = await createSession({
+		id,
 		projectId: automation.projectId,
 		title,
 		automationId: automation.id,
@@ -238,6 +242,23 @@ async function gated(automation: Automation & { gate: string }, now: number): Pr
 
 type Run = { now: number; force: boolean };
 
+/**
+ * A routine's sandbox starts this long before its run, under the id its task will have (`spares.ts`), so the run
+ * starts on a set-up machine. Schedules are looked at each minute, so it is woken one or two looks ahead. Not for a
+ * routine with a gate (most of its runs may be skipped), one that plans first (it reads first), or one without a repo.
+ */
+const WAKE_AHEAD_MS = 90_000;
+/** The task id each routine's coming run was woken under. */
+const wokenRuns = new Map<string, string>();
+
+function wakeAhead(automation: Automation, due: number, now: number): void {
+	if (!automation.projectId || automation.gate || automation.planFirst || due - now > WAKE_AHEAD_MS) return;
+	const taskId = wokenRuns.get(automation.id) ?? randomUUID();
+	wokenRuns.set(automation.id, taskId);
+	// Asked again on each look until the run, so the sandbox waits for it.
+	void wakeSpare({ projectId: automation.projectId, taskId }).catch((error: unknown) => logProblem('warn', "Could not start a routine's sandbox ahead of its run", error));
+}
+
 const running = new Set<string>();
 
 /** Each kind starts what is due and returns what to remember about this run. */
@@ -264,14 +285,20 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
 		const { schedule } = automation;
 		if (!schedule) throw new InvalidInputError('Pick when the routine runs');
 		// Run now starts one early; the schedule's next time stands. A run missed while Anton was down starts once.
-		if (!force && dueAt({ ...automation, schedule }) > now) return {};
+		const due = dueAt({ ...automation, schedule });
+		if (!force && due > now) {
+			wakeAhead(automation, due, now);
+			return {};
+		}
 		// A gate can skip a due run before anything starts; Run now always runs. A gate that fails lets the run start.
 		const { gate } = automation;
 		const answer = gate && !force ? await gated({ ...automation, gate }, now) : null;
 		if (answer && !answer.run) return { lastGate: answer, nextRunAt: upcoming(schedule, now) };
 		const { name, spent } = await routineName(automation);
 		const prompt = answer?.reason ? `${automation.prompt}\n\n(Started because: ${answer.reason})` : automation.prompt;
-		const id = await startTask(automation, `${name} · ${runDay(now, schedule.timeZone)}`, prompt).catch(async (error: unknown) => {
+		const woken = wokenRuns.get(automation.id);
+		wokenRuns.delete(automation.id);
+		const id = await startTask(automation, `${name} · ${runDay(now, schedule.timeZone)}`, prompt, woken).catch(async (error: unknown) => {
 			if (!force) await updateAutomation(automation.id, { nextRunAt: new Date(now + RETRY_MS).toISOString() });
 			throw error;
 		});

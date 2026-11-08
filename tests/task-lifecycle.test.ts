@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -200,6 +200,12 @@ const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
 const { addAutomation, removeAutomation, runAutomation, runDueAutomations, setAutomationEnabled } = await import('../src/services/automations.ts');
 const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/follow-ups.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
+const { config: settings } = await import('../src/config.ts');
+const { buildPreparedImage } = await import('../src/services/prepared-images.ts');
+const { releaseSpare, sparesWaiting, wakeSpare } = await import('../src/services/spares.ts');
+// Image builds and sandboxes woken while typing run in the background; the tests that cover them turn them on.
+settings.prepareImages = false;
+settings.wakeSandbox = false;
 
 const database = createClient({ url: `file:${path.join(dir, 'anton.db')}` });
 useDatabase(database);
@@ -2265,29 +2271,121 @@ test('a repository task or a routine run starts its sandbox ahead of the agent, 
 	await sessions.stopSession(routine.id);
 });
 
-test('a task that starts from an old warm image renews it, and one from a young image does not', async () => {
-	const project = await addProject('acme/renew');
-	const imageNow = async () => (await getProject(project.id))?.warmImage;
-	const first = await sessions.createSession({ projectId: project.id, title: 'Clone' });
-	await machineFor(first.id);
-	const cloned = await imageNow();
-	assert.ok(cloned, 'the first task saves an image');
-	await sessions.stopSession(first.id);
+test('a repo\'s prepared image is built in a sandbox of its own, renewed when old, and no task waits for it', async () => {
+	settings.prepareImages = true;
+	try {
+		const project = await addProject('acme/renew');
+		const imageNow = async () => (await getProject(project.id))?.warmImage;
+		// Adding the repo starts the build; asking again waits for the same one.
+		const built = await buildPreparedImage(project.id);
+		assert.ok(built && built === (await imageNow()), 'adding the repo builds its image');
+		assert.equal(await buildPreparedImage(project.id), built, 'a fresh image is not built again');
 
-	const young = await sessions.createSession({ projectId: project.id, title: 'Young image' });
-	await machineFor(young.id);
-	assert.equal(await imageNow(), cloned, 'a young image is used as it is');
-	await sessions.stopSession(young.id);
+		const young = await sessions.createSession({ projectId: project.id, title: 'Young image' });
+		const machine = await machineFor(young.id);
+		assert.equal((await run(machine, 'git branch --show-current')).trim(), young.branch, 'a task starts from it on its own branch');
+		assert.equal((await run(machine, 'cat ../.anton-ready')).trim(), young.id);
+		await buildPreparedImage(project.id);
+		assert.equal(await imageNow(), built, 'a young image is used as it is');
+		await sessions.stopSession(young.id);
 
-	const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000).toISOString();
-	await database.execute({ sql: 'UPDATE projects SET warmed_at = ? WHERE id = ?', args: [sixDaysAgo, project.id] });
-	const old = await sessions.createSession({ projectId: project.id, title: 'Old image' });
-	const machine = await machineFor(old.id);
-	assert.equal((await run(machine, 'git branch --show-current')).trim(), old.branch, 'it still starts from the old image');
-	const renewed = await getProject(project.id);
-	assert.ok(renewed?.warmImage && renewed.warmImage !== cloned, 'it saves a new image');
-	assert.ok(Date.parse(renewed.warmedAt!) > Date.parse(sixDaysAgo));
-	await sessions.stopSession(old.id);
+		const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000).toISOString();
+		await database.execute({ sql: 'UPDATE projects SET warmed_at = ? WHERE id = ?', args: [sixDaysAgo, project.id] });
+		const old = await sessions.createSession({ projectId: project.id, title: 'Old image' });
+		const oldMachine = await machineFor(old.id);
+		assert.equal((await run(oldMachine, 'git branch --show-current')).trim(), old.branch, 'it still starts from the old image');
+		await buildPreparedImage(project.id);
+		const renewed = await getProject(project.id);
+		assert.ok(renewed?.warmImage && renewed.warmImage !== built, 'and a new image is built beside it');
+		assert.ok(Date.parse(renewed.warmedAt!) > Date.parse(sixDaysAgo));
+		await sessions.stopSession(old.id);
+		assert.ok(!(await local.running()).has(`image-${project.id}`), 'the build sandbox stops');
+	} finally {
+		settings.prepareImages = false;
+	}
+});
+
+test('a sandbox woken while a new task is typed is set up for it, and one let go stops', async () => {
+	settings.wakeSandbox = true;
+	try {
+		const project = await addProject('acme/demo');
+		const taskId = randomUUID();
+		assert.deepEqual(await wakeSpare({ projectId: project.id, taskId }), { waking: true });
+		assert.deepEqual(await wakeSpare({ projectId: project.id, taskId }), { waking: true }, 'asking again keeps it');
+		const root = path.join(dir, 'data', 'machines', taskId);
+		await waitFor(() => existsSync(path.join(root, '.anton-ready')));
+		assert.match(readFileSync(path.join(root, '.anton-ready'), 'utf8'), new RegExp(`^spare:${taskId}:`));
+		writeFileSync(path.join(root, 'probe.txt'), 'same machine');
+
+		// Sent: the task is made under the draft's id, and takes the spare rather than starting another.
+		const session = await sessions.createSession({ id: taskId, projectId: project.id, title: 'Typed fast' });
+		const machine = await machineFor(session.id);
+		assert.equal(readFileSync(path.join(machine.root, 'probe.txt'), 'utf8'), 'same machine');
+		assert.equal((await run(machine, 'git branch --show-current')).trim(), session.branch);
+		assert.equal((await run(machine, 'git rev-parse HEAD')).trim(), session.baseSha);
+		assert.equal((await run(machine, 'cat ../.anton-ready')).trim(), session.id, 'it is now the task\'s own');
+		assert.deepEqual(sparesWaiting(), []);
+		await sessions.stopSession(session.id);
+
+		// Cleared: the draft's sandbox stops, and a late ask for that id starts nothing.
+		const dropped = randomUUID();
+		await wakeSpare({ projectId: project.id, taskId: dropped });
+		releaseSpare(dropped);
+		await waitFor(() => !existsSync(path.join(dir, 'data', 'machines', dropped, '.anton-running')));
+		assert.deepEqual(await wakeSpare({ projectId: project.id, taskId: dropped }), { waking: false });
+		assert.deepEqual(await wakeSpare({ projectId: project.id, taskId: session.id }), { waking: false }, 'nor for an id a task has');
+		await waitFor(() => sparesWaiting().length === 0);
+	} finally {
+		settings.wakeSandbox = false;
+	}
+});
+
+test("a routine's sandbox wakes shortly before its run, and the run starts on it", async () => {
+	settings.wakeSandbox = true;
+	try {
+		const project = await addProject('acme/demo');
+		const routine = await addAutomation(project.id, { kind: 'schedule', schedule: { frequency: 'daily', time: '06:00', timeZone: 'UTC' }, prompt: 'Check the build.' });
+		const due = Date.parse(routine.nextRunAt!);
+		await runAutomation(routine.id, { now: due - 10 * 60_000 });
+		assert.deepEqual(sparesWaiting(), [], 'not ten minutes ahead');
+		await runAutomation(routine.id, { now: due - 60_000 });
+		const [woken] = sparesWaiting();
+		assert.ok(woken, 'a minute ahead it wakes');
+		await waitFor(() => existsSync(path.join(dir, 'data', 'machines', woken, '.anton-ready')));
+		const before = delivered.length;
+		await runAutomation(routine.id, { now: due });
+		assert.equal(delivered.length, before + 1);
+		assert.equal(delivered.at(-1)?.id, woken, 'the run is made under the woken id');
+		const machine = await machineFor(woken);
+		assert.equal((await run(machine, 'cat ../.anton-ready')).trim(), woken);
+		await sessions.stopSession(woken);
+		await removeAutomation(routine.id);
+	} finally {
+		settings.wakeSandbox = false;
+	}
+});
+
+test('typing to a stopped task starts its sandbox, but not for a chat or a plan that never had one', async () => {
+	settings.wakeSandbox = true;
+	try {
+		const { wakeMachine, liveMachine } = await import('../src/services/workspace.ts');
+		const project = await addProject('acme/demo');
+		const task = await sessions.createSession({ projectId: project.id, title: 'Come back' });
+		await machineFor(task.id);
+		await sessions.stopSession(task.id);
+		assert.equal(await liveMachine(task.id), null);
+		assert.deepEqual(await wakeMachine(task.id), { waking: true });
+		await machineFor(task.id);
+		assert.ok(await liveMachine(task.id), 'it is up for the message');
+		await sessions.stopSession(task.id);
+
+		const chat = await sessions.createSession({ title: 'Just asking' });
+		const plan = await sessions.createSession({ projectId: project.id, title: 'Plan first', planMode: true });
+		assert.deepEqual(await wakeMachine(chat.id), { waking: false });
+		assert.deepEqual(await wakeMachine(plan.id), { waking: false });
+	} finally {
+		settings.wakeSandbox = false;
+	}
 });
 
 test('preview hostnames reach the sandbox for Vite, but localhost does not', async () => {

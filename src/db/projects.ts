@@ -81,7 +81,7 @@ export async function retireDefaultWarmImages(): Promise<void> {
 	await db.execute('UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE base_image IS NULL');
 }
 
-/** Drops one repo's prepared image, so its next task builds a fresh one. */
+/** Drops one repo's prepared image, so a fresh one is built. */
 export async function clearWarmImage(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE id = ?', args: [id] });
