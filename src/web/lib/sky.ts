@@ -293,3 +293,51 @@ export function useSkyOn(): boolean {
 	}, []);
 	return on;
 }
+
+/*
+ * How bright the sky looks, 0 to 100, kept in this browser. The default (60)
+ * is the picture as drawn; below it the sky fades toward the canvas, above it
+ * the picture brightens and its colour lifts.
+ */
+const BRIGHTNESS_KEY = 'anton.sky.brightness';
+export const SKY_BRIGHTNESS_DEFAULT = 60;
+
+export function readSkyBrightness(): number {
+	try {
+		const stored = localStorage.getItem(BRIGHTNESS_KEY);
+		const value = stored === null ? Number.NaN : Number(stored);
+		return Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : SKY_BRIGHTNESS_DEFAULT;
+	} catch {
+		return SKY_BRIGHTNESS_DEFAULT;
+	}
+}
+
+let brightness: number | null = null;
+const brightnessListeners = new Set<(value: number) => void>();
+
+export function setSkyBrightness(value: number) {
+	const next = Math.min(100, Math.max(0, Math.round(value)));
+	brightness = next;
+	try {
+		localStorage.setItem(BRIGHTNESS_KEY, String(next));
+	} catch {
+		// Storage is a convenience; the choice still holds for this page.
+	}
+	for (const listener of brightnessListeners) listener(next);
+}
+
+export function useSkyBrightness(): number {
+	const [value, setValue] = useState(() => brightness ?? readSkyBrightness());
+	useEffect(() => {
+		brightnessListeners.add(setValue);
+		return () => void brightnessListeners.delete(setValue);
+	}, []);
+	return value;
+}
+
+/** What a brightness does to the sky: fade it in up to the default, then brighten and saturate it. */
+export function skyLook(value: number): { opacity: number; filter?: string } {
+	if (value <= SKY_BRIGHTNESS_DEFAULT) return { opacity: Number((0.1 + 0.9 * (value / SKY_BRIGHTNESS_DEFAULT)).toFixed(3)) };
+	const lift = (value - SKY_BRIGHTNESS_DEFAULT) / (100 - SKY_BRIGHTNESS_DEFAULT);
+	return { opacity: 1, filter: `brightness(${(1 + 0.5 * lift).toFixed(3)}) saturate(${(1 + 0.25 * lift).toFixed(3)})` };
+}

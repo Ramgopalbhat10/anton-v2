@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { type SkyImage, skySource } from '@/lib/sky';
+import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
+import { SKY_BRIGHTNESS_DEFAULT, setSkyBrightness, type SkyImage, skyLook, skySource, useSkyBrightness } from '@/lib/sky';
+import { cn } from '@/lib/utils';
 
 /** CSS pixels per cell of the mesh. */
 const CELL = 5;
@@ -71,6 +72,7 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
  */
 export function Sky({ image }: { image: SkyImage }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
+	const look = skyLook(useSkyBrightness());
 	const [shown, setShown] = useState<string | null>(null);
 	useEffect(() => {
 		const element = canvas.current;
@@ -106,9 +108,45 @@ export function Sky({ image }: { image: SkyImage }) {
 		};
 	}, [image]);
 	return (
-		<div aria-hidden className="sky pointer-events-none fixed inset-0 z-0 overflow-hidden">
+		<div aria-hidden className="sky pointer-events-none fixed inset-0 z-0 overflow-hidden" style={look}>
 			<canvas ref={canvas} className="sky-canvas absolute inset-0 size-full" data-shown={shown === image.slug} />
 			<div className="sky-shade absolute inset-0" />
+		</div>
+	);
+}
+
+/**
+ * The sky's brightness as a slider, from dim to bright, with the default
+ * marked. Used in the sky's menu on Home and in Settings › General; keys
+ * stay with the slider so a menu around it does not take them.
+ */
+export function SkyBrightnessSlider({ className }: { className?: string }) {
+	const value = useSkyBrightness();
+	const id = useId();
+	const word = value < 25 ? 'Faint' : value < 50 ? 'Dim' : value <= 70 ? 'As drawn' : value < 90 ? 'Bright' : 'Vivid';
+	return (
+		<div className={cn('flex flex-col gap-1.5', className)}>
+			<div className="flex items-center justify-between text-[12px]">
+				<label htmlFor={id} className="text-(--text-secondary)">
+					Brightness
+				</label>
+				<span className="in-num text-(--text-tertiary)">{word}</span>
+			</div>
+			<input
+				id={id}
+				type="range"
+				min={0}
+				max={100}
+				step={1}
+				value={value}
+				aria-valuetext={`${value} percent, ${word.toLowerCase()}`}
+				onChange={(event) => setSkyBrightness(Number(event.target.value))}
+				onKeyDown={(event) => event.stopPropagation()}
+				onDoubleClick={() => setSkyBrightness(SKY_BRIGHTNESS_DEFAULT)}
+				title="Double-click to reset"
+				className="sky-range"
+				style={{ '--range-fill': `${value}%`, '--range-mark': `${SKY_BRIGHTNESS_DEFAULT}%` } as CSSProperties}
+			/>
 		</div>
 	);
 }

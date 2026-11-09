@@ -6,6 +6,7 @@ import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
+import { SkyBrightnessSlider } from '@/components/sky';
 import { setSkyMode, setSkyOn, type SkyMode, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
@@ -433,6 +434,11 @@ function Appearance() {
 							</SegmentedItem>
 						))}
 					</Segmented>
+				</SettingRow>
+			) : null}
+			{on ? (
+				<SettingRow title="Brightness" help="How bright or dim the picture looks behind the app. Double-click the slider to reset.">
+					<SkyBrightnessSlider className="w-[220px] max-w-full [&_label]:sr-only" />
 				</SettingRow>
 			) : null}
 		</Block>

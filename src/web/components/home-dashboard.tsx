@@ -7,6 +7,7 @@ import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigge
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
+import { SkyBrightnessSlider } from '@/components/sky';
 import { setSkyMode, setSkyOn, shuffleSky, type SkyImage, skyLink, untilNextHour, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
 
@@ -415,6 +416,8 @@ export function SkyCredit() {
 				<MenuItem icon={Shuffle} onSelect={(event) => { event.preventDefault(); shuffleSky(); }}>
 					Show a random picture
 				</MenuItem>
+				<MenuSeparator />
+				<SkyBrightnessSlider className="px-2 pt-1 pb-2" />
 				<MenuSeparator />
 				<MenuItem icon={ArrowUpRight} onSelect={() => window.open(skyLink(image), '_blank', 'noopener')}>
 					Open at NASA
