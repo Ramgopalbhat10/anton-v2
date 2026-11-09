@@ -915,7 +915,7 @@ export const ModelPicker = memo(function ModelPicker({
 								const priced = section.models.some((model) => !model.subscription);
 								return (
 									<div key={section.title} role="group" aria-label={section.title} className="flex flex-col">
-										<div className={cn(COLUMNS, 'sticky-veil sticky top-0 z-[1] pt-2.5 pb-1')}>
+										<div className={cn(COLUMNS, 'sticky-veil sticky top-0 z-[1] pt-2.5 pb-1 shadow-[0_1px_0_var(--border-subtle)]')}>
 											<span className="col-span-2 flex min-w-0 items-center gap-1.5">
 												{section.plan ? <span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" /> : null}
 												<span className={cn('in-caption truncate', section.plan && 'text-(--accent-text)')}>{section.title}</span>

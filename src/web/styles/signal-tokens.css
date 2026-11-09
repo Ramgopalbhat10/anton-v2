@@ -346,18 +346,20 @@
 }
 
 
-/* App-level palette: "Observatory". Black and plain greys, no hue cast, so
-   the sky behind the app and the cyan accent are the only colour. Text steps
-   are spaced for 13px on glass; the sky's veils live in styles.css. */
+/* App-level palette: "Observatory". Charcoal greys with no hue cast, so the
+   sky behind the app and the cyan accent are the only colour. Surfaces step up
+   in fill (canvas, surface, raised, overlay) instead of drawing edges, so a
+   card reads by its tone alone. Text steps are spaced for 13px on glass; the
+   sky's veils live in styles.css. */
 :root,
 [data-theme='dark'] {
-	--bg-canvas: #080808;
-	--bg-surface: #0e0e0e;
-	--bg-raised: #141414;
-	--bg-overlay: #1b1b1b;
-	--bg-inset: #050505;
-	--bg-hover: rgba(255, 255, 255, 0.05);
-	--bg-active: rgba(255, 255, 255, 0.08);
+	--bg-canvas: #0f0f10;
+	--bg-surface: #131314;
+	--bg-raised: #19191b;
+	--bg-overlay: #1f1f21;
+	--bg-inset: #0b0b0c;
+	--bg-hover: rgba(255, 255, 255, 0.055);
+	--bg-active: rgba(255, 255, 255, 0.085);
 	--text-primary: #ededed;
 	--text-secondary: #a8a8a8;
 	--text-tertiary: #808080;
@@ -367,27 +369,28 @@
 	--icon-secondary: #a3a3a3;
 	--icon-tertiary: #7a7a7a;
 	--icon-disabled: #5a5a5a;
-	--neutral-600: #353535;
-	--neutral-700: #272727;
-	--neutral-750: #202020;
-	--neutral-800: #1b1b1b;
+	--neutral-600: #38383b;
+	--neutral-700: #2a2a2d;
+	--neutral-750: #232325;
+	--neutral-800: #1f1f21;
 	--border-subtle: rgba(255, 255, 255, 0.06);
 	--border-default: rgba(255, 255, 255, 0.09);
 	--border-strong: rgba(255, 255, 255, 0.15);
 
-	/* Glass: what floats over the sky. A dark tint, a blur that turns the
-	   mesh into colour, and a hairline all round; no lit top edge. */
-	--glass-bg: rgba(10, 10, 10, 0.62);
-	--glass-bg-strong: rgba(9, 9, 9, 0.82);
-	--glass-border: rgba(255, 255, 255, 0.08);
+	/* Glass: what floats over the sky. A charcoal tint and a wide blur that
+	   turns the mesh into soft colour; no edge of its own, only a soft drop. */
+	--glass-bg: rgba(22, 22, 24, 0.68);
+	--glass-bg-strong: rgba(17, 17, 19, 0.9);
+	--glass-border: transparent;
 	--glass-highlight: 0 0 #0000;
-	--glass-blur: blur(18px) saturate(140%);
+	--glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 12px 32px -18px rgba(0, 0, 0, 0.55);
+	--glass-blur: blur(26px) saturate(165%);
 
 	/* The primary action is light on dark, as a lit key: the accent stays for
 	   what is live, selected or focused. */
 	--primary-bg: #ededed;
 	--primary-bg-hover: #ffffff;
-	--primary-fg: #080808;
+	--primary-fg: #0f0f10;
 }
 
 /* Radius: small for what you press, medium for what holds things. */

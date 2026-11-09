@@ -126,13 +126,12 @@ textarea::placeholder {
 	cursor: pointer;
 }
 
-/* A sticky header over a list in a glass card (a picker's sections, a page's
-   tabs): no fill of its own, so at rest it is the card's own colour, and what
-   scrolls under it blurs away. */
+/* A sticky header over a list (a picker's sections, a page's tabs): the fill of
+   the surface it sits on (`--surface-fill`, set by .in-pop and .settings-card),
+   so it is the same colour as the rest of that surface and hides what scrolls
+   under it. */
 .sticky-veil {
-	background: transparent;
-	-webkit-backdrop-filter: blur(14px);
-	backdrop-filter: blur(14px);
+	background: var(--surface-fill, var(--bg-surface));
 }
 
 /* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
@@ -223,8 +222,8 @@ textarea::placeholder {
 }
 .sky-shade {
 	background:
-		radial-gradient(120% 90% at 60% 30%, transparent 0%, rgba(8, 8, 8, 0.35) 55%, rgba(8, 8, 8, 0.85) 100%),
-		linear-gradient(180deg, rgba(8, 8, 8, 0.25) 0%, transparent 30%, rgba(8, 8, 8, 0.55) 100%);
+		radial-gradient(130% 100% at 60% 30%, transparent 0%, rgba(15, 15, 16, 0.2) 55%, rgba(15, 15, 16, 0.7) 100%),
+		linear-gradient(180deg, rgba(15, 15, 16, 0.15) 0%, transparent 30%, rgba(15, 15, 16, 0.45) 100%);
 }
 
 /*
@@ -241,10 +240,10 @@ textarea::placeholder {
 	background: transparent;
 }
 .app-main[data-sky='dim'] {
-	background: color-mix(in srgb, var(--bg-canvas) 84%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 76%, transparent);
 }
 .app-main[data-sky='faint'] {
-	background: color-mix(in srgb, var(--bg-canvas) 95%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
 }
 
 /* Glass: a panel over the sky. */
@@ -252,7 +251,7 @@ textarea::placeholder {
 	background: var(--glass-bg);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border);
+	box-shadow: var(--glass-shadow);
 }
 .glass-strong {
 	background: var(--glass-bg-strong);
@@ -261,8 +260,9 @@ textarea::placeholder {
 }
 
 /* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
-.app-main:is([data-sky='full'], [data-sky='dim']) .in-card {
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
 	background: var(--glass-bg);
+	box-shadow: var(--glass-shadow);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 }
@@ -274,23 +274,23 @@ textarea::placeholder {
 	background: var(--glass-bg);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border);
+	box-shadow: var(--glass-shadow);
 }
 .home-composer {
 	border-radius: 14px;
-	background: color-mix(in srgb, var(--glass-bg-strong) 92%, transparent);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border), 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
+	box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.2);
 	transition: box-shadow var(--transition-standard);
 }
 .home-composer:focus-within {
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--border-strong), 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+	box-shadow: 0 0 0 1px var(--accent-border), 0 24px 60px -30px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 .home-panel {
 	border-radius: 12px;
 	min-height: 176px;
 }
 .sky-credit {
-	background: rgba(8, 8, 8, 0.5);
+	background: rgba(15, 15, 16, 0.5);
 }
 :root {
 	--heat-0: rgba(255, 255, 255, 0.055);
@@ -309,7 +309,8 @@ textarea::placeholder {
 	animation: settings-fade 160ms var(--ease-out, ease-out);
 }
 .settings-card {
-	background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+	--surface-fill: var(--bg-surface);
+	background: var(--bg-surface);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 	animation: settings-rise 200ms var(--ease-out, ease-out);
@@ -348,4 +349,62 @@ textarea::placeholder {
 }
 .project-card:hover {
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), 0 18px 40px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* The sky's brightness slider: a thin track filled in the accent up to the
+   thumb, a tick at the default, and a round thumb. */
+.sky-range {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 100%;
+	height: 18px;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+}
+.sky-range:focus-visible {
+	outline: none;
+}
+.sky-range::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: 999px;
+	background:
+		linear-gradient(90deg, transparent calc(var(--range-mark) - 1px), rgba(255, 255, 255, 0.35) calc(var(--range-mark) - 1px), rgba(255, 255, 255, 0.35) calc(var(--range-mark) + 1px), transparent calc(var(--range-mark) + 1px)),
+		linear-gradient(90deg, var(--accent-base) var(--range-fill), rgba(255, 255, 255, 0.1) var(--range-fill));
+}
+.sky-range::-moz-range-track {
+	height: 4px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.1);
+}
+.sky-range::-moz-range-progress {
+	height: 4px;
+	border-radius: 999px;
+	background: var(--accent-base);
+}
+.sky-range::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 14px;
+	height: 14px;
+	margin-top: -5px;
+	border-radius: 999px;
+	background: #f2f2f2;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+	transition: transform var(--transition-micro);
+}
+.sky-range::-moz-range-thumb {
+	width: 14px;
+	height: 14px;
+	border: 0;
+	border-radius: 999px;
+	background: #f2f2f2;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.sky-range:hover::-webkit-slider-thumb,
+.sky-range:active::-webkit-slider-thumb {
+	transform: scale(1.12);
+}
+.sky-range:focus-visible::-webkit-slider-thumb {
+	box-shadow: 0 0 0 3px var(--accent-bg-subtle), 0 0 0 1px var(--accent-base);
 }

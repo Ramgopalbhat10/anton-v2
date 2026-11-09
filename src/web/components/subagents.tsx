@@ -331,7 +331,7 @@ export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Del
 	return (
 		<section
 			aria-label={calls.length === 1 ? '1 agent on this reply' : `${calls.length} agents on this reply`}
-			className="flex flex-col divide-y divide-(--border-subtle) overflow-hidden rounded-[6px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)"
+			className="in-tile flex flex-col divide-y divide-(--border-subtle) overflow-hidden"
 		>
 			{matched.map(({ call, run }) => (
 				<AgentRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} />

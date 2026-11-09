@@ -131,7 +131,7 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 			<div
 				role="listitem"
 				title={`${item.path} was deleted`}
-				className="flex w-[156px] flex-col overflow-hidden rounded-[6px] border border-dashed border-(--border-default) bg-transparent text-left"
+				className="flex w-[156px] flex-col overflow-hidden rounded-[8px] border border-dashed border-(--border-default) bg-transparent text-left"
 			>
 				{face}
 			</div>
@@ -143,7 +143,7 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 			role="listitem"
 			title={`Open ${item.path}`}
 			onClick={() => openViewer(item, items, composer)}
-			className="group/out flex w-[156px] flex-col overflow-hidden rounded-[6px] border border-(--card-border) bg-(--card-bg) text-left shadow-(--card-highlight) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
+			className="group/out in-tile flex w-[156px] flex-col overflow-hidden text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)"
 		>
 			{face}
 		</button>
@@ -170,7 +170,7 @@ export function OutputCards({ items, composer }: { items: ViewerItem[]; composer
 				<button
 					type="button"
 					onClick={() => openViewer(items[shown.length], items, composer)}
-					className="flex w-[72px] flex-col items-center justify-center gap-0.5 rounded-[6px] border border-dashed border-(--border-default) text-(--text-tertiary) outline-none hover:border-(--border-strong) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex w-[72px] flex-col items-center justify-center gap-0.5 rounded-[8px] border border-dashed border-(--border-default) text-(--text-tertiary) outline-none hover:border-(--border-strong) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 					title={`${rest} more`}
 				>
 					<span className="in-num text-[13px]">+{rest}</span>

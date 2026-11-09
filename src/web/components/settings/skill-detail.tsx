@@ -217,7 +217,7 @@ function Facts({ preview }: { preview: PluginPreview }) {
 					{rows.map(([label, value]) => (
 						<div key={label} className="flex min-h-9 items-center gap-3 border-t border-(--border-subtle) text-[12px]">
 							<dt className="in-caption w-[84px] shrink-0">{label}</dt>
-							<dd className="m-0 flex min-w-0 flex-1 justify-end truncate text-(--text-secondary)">{value}</dd>
+							<dd className="m-0 min-w-0 flex-1 truncate text-right text-(--text-secondary)" title={typeof value === 'string' ? value : undefined}>{value}</dd>
 						</div>
 					))}
 				</dl>

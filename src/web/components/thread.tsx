@@ -415,7 +415,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
-		<div className="overflow-hidden rounded-[6px] border border-(--card-border) bg-(--card-bg) shadow-(--card-highlight)">
+		<div className="in-tile overflow-hidden">
 			<button
 				type="button"
 				aria-expanded={open}
@@ -1115,7 +1115,7 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
-		<div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[6px] border border-(--card-border) bg-(--card-bg) px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
+		<div role="status" className="in-tile flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-[12px] leading-[18px] text-(--text-secondary)">
 			<Spinner size={12} />
 			<span className="min-w-0 flex-1">
 				Anton reads your message when {who} {running.length === 1 ? 'finishes' : 'finish'}. Stop {running.length === 1 ? 'it' : 'them'} to have it read now.
