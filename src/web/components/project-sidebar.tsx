@@ -209,7 +209,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex flex-col rounded-[10px] bg-(--bg-hover) p-2 text-left shadow-[0_0_0_1px_rgba(255,255,255,0.06)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active)"
+							className="flex flex-col rounded-[10px] border border-(--card-border) bg-(--bg-hover) p-2 text-left outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active)"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
 								{space ? <SpaceMark space={space} size={30} /> : <span className="size-[30px]" />}

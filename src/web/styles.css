@@ -126,13 +126,12 @@ textarea::placeholder {
 	cursor: pointer;
 }
 
-/* A sticky header over a list in a glass card (a picker's sections, a page's
-   tabs): no fill of its own, so at rest it is the card's own colour, and what
-   scrolls under it blurs away. */
+/* A sticky header over a list (a picker's sections, a page's tabs): the fill of
+   the surface it sits on (`--surface-fill`, set by .in-pop and .settings-card),
+   so it is the same colour as the rest of that surface and hides what scrolls
+   under it. */
 .sticky-veil {
-	background: transparent;
-	-webkit-backdrop-filter: blur(14px);
-	backdrop-filter: blur(14px);
+	background: var(--surface-fill, var(--bg-surface));
 }
 
 /* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
@@ -261,7 +260,7 @@ textarea::placeholder {
 }
 
 /* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
-.app-main:is([data-sky='full'], [data-sky='dim']) .in-card {
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
 	background: var(--glass-bg);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
@@ -309,7 +308,8 @@ textarea::placeholder {
 	animation: settings-fade 160ms var(--ease-out, ease-out);
 }
 .settings-card {
-	background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+	--surface-fill: var(--bg-surface);
+	background: var(--bg-surface);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 	animation: settings-rise 200ms var(--ease-out, ease-out);

@@ -378,7 +378,7 @@ function LiveLine({ text, live, className }: { text: string; live: ThreadNow | n
 }
 
 /** A thread's card in the feed: its own border, as wide as what it says. */
-export const THREAD_CARD = 'flex w-fit max-w-full min-w-0 flex-col rounded-[6px] border border-(--card-border) bg-(--card-bg) px-3 py-1.5';
+export const THREAD_CARD = 'in-tile flex w-fit max-w-full min-w-0 flex-col px-3 py-1.5';
 
 /**
  * A thread in a reply, as a card that follows it live: its glyph, title and

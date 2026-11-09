@@ -310,9 +310,10 @@ function Toolbar({
 		onQuery('');
 		setSearching(false);
 	};
-	if (searching || query) {
-		return (
-			<div className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-[6px] border border-input bg-(--well-bg) px-2.5">
+	// While searching, the box sits under the group's heading, so Tasks still heads what it filters.
+	const search =
+		searching || query ? (
+			<div className="mx-3 mt-1 mb-1 flex h-8 items-center gap-2 rounded-[8px] border border-(--border-default) bg-(--bg-hover) px-2.5 focus-within:border-(--accent-border)">
 				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
 				<input
 					autoFocus
@@ -327,8 +328,7 @@ function Toolbar({
 					<Icon icon={X} size={12} />
 				</button>
 			</div>
-		);
-	}
+		) : null;
 	const active = filterCount(view.filters);
 	const actions = (
 		<>
@@ -338,17 +338,23 @@ function Toolbar({
 	);
 	if (active) {
 		return (
-			<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
-				<FilterChips view={view} onChange={onChange} tasks={tasks} />
-				<span className="flex shrink-0 items-center">{actions}</span>
-			</div>
+			<>
+				<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
+					<FilterChips view={view} onChange={onChange} tasks={tasks} />
+					<span className="flex shrink-0 items-center">{actions}</span>
+				</div>
+				{search}
+			</>
 		);
 	}
 	// The group's heading: Pinned, Running and Recent are its sections.
 	return (
-		<GroupHeading label="Tasks" count={tasks.length}>
-			{actions}
-		</GroupHeading>
+		<>
+			<GroupHeading label="Tasks" count={tasks.length}>
+				{actions}
+			</GroupHeading>
+			{search}
+		</>
 	);
 }
 
@@ -634,7 +640,7 @@ export function ChatSidebar({
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-(--card-border) bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -671,7 +677,7 @@ export function ChatSidebar({
 				</Link>
 			</nav>
 
-			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto pt-1', inProject && 'hidden')}>
+			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto pt-1 *:shrink-0', inProject && 'hidden')}>
 				<ProjectsSection onNavigate={onNavigate} />
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
