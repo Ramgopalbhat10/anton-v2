@@ -26,7 +26,7 @@ describe('A sent message', () => {
 		const link = screen.getByRole('link', { name: 'https://example.com/spec' });
 		expect(link.getAttribute('href')).toBe('https://example.com/spec');
 		expect(link.getAttribute('target')).toBe('_blank');
-		expect(screen.getByText('/review').className).toContain('font-mono');
+		expect(screen.getByText('/review').className).toContain('text-(--accent-text)');
 		expect(screen.getByText('@docs/missing.md').tagName).toBe('SPAN');
 		fireEvent.click(screen.getByRole('button', { name: '@src/app.ts:12' }));
 		expect(open).toHaveBeenCalledWith('src/app.ts', 12);

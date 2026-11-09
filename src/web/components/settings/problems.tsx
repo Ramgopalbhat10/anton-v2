@@ -39,7 +39,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 								×{count}
 							</span>
 						) : null}
-						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-(--text-tertiary)">{entry.detail}</span> : <span className="flex-1" />}
+						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{entry.detail}</span> : <span className="flex-1" />}
 						{entry.detail ? <Icon icon={ChevronDown} size={12} className={cn('shrink-0 text-(--icon-tertiary) transition-transform', open && 'rotate-180')} /> : null}
 					</button>
 					<span className="in-num w-[64px] shrink-0 text-right text-[11px] text-(--text-disabled)">{count > 1 ? `${age(entry.at)} – ${age(first)}` : age(entry.at)}</span>

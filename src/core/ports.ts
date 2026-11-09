@@ -802,3 +802,25 @@ export type AppsConnector = {
 	revokeConnectedAccount(id: string): Promise<void>;
 	runTool(toolSlug: string, input: { userId: string; connectedAccountId?: string | null; args: Record<string, unknown> }, signal?: AbortSignal): Promise<AppsExecution>;
 };
+
+/** One day's picture from a picture-of-the-day service: what it is, who made it, where to read about it, and the image to draw. */
+export type DailyPictureInfo = {
+	/** The day it is the picture for, `YYYY-MM-DD`. */
+	date: string;
+	title: string;
+	credit: string;
+	/** Its page at the source. */
+	link: string;
+	/** A web-sized image of it, to download once. */
+	imageUrl: string;
+};
+
+/**
+ * A picture of the day (NASA's Astronomy Picture of the Day): the sky behind
+ * the app can show it in place of the hourly ones. Null when the day's entry
+ * is not a picture (a video) or the service cannot be read.
+ */
+export type DailyPicture = {
+	today(signal?: AbortSignal): Promise<DailyPictureInfo | null>;
+	image(url: string, signal?: AbortSignal): Promise<{ bytes: Uint8Array; type: string }>;
+};

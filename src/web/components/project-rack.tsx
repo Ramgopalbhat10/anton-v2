@@ -37,7 +37,7 @@ export function bayThreads(threads: Session[]): Session[] {
 /** A bay's light: amber while a thread waits on you, blue while one works, dark when quiet. */
 function bayLed(threads: Session[]): string {
 	if (threads.some((thread) => ['waiting', 'failed'].includes(glyphKind(thread)))) return 'var(--warning-base)';
-	if (threads.some((thread) => stateOf(thread) === 'working')) return 'var(--blue-300)';
+	if (threads.some((thread) => stateOf(thread) === 'working')) return 'var(--cyan-300)';
 	return 'var(--neutral-600)';
 }
 
@@ -90,7 +90,7 @@ function ThreadDetails({ thread }: { thread: Session }) {
 						<p className={cn('m-0 line-clamp-3 text-[12.5px] leading-[18px] text-pretty', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-primary)')}>{line}</p>
 					</div>
 				) : null}
-				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-[11px] text-(--text-tertiary)">
 					{repoShort(thread)} · {branchLabel(thread)}
 				</div>
 			</div>

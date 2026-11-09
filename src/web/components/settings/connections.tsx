@@ -24,7 +24,7 @@ function Tile({ connection }: { connection: Connection }) {
 			as="div"
 			icon={ICONS[connection.id] ?? (connection.id.startsWith('subscription-') ? CreditCard : Link)}
 			title={connection.name}
-			sub={<span className="font-mono text-[11px]">{connection.provider}</span>}
+			sub={<span className="text-[11px]">{connection.provider}</span>}
 			status={<Status tone={TONE[connection.state]}>{state.label}</Status>}
 			label={connection.name}
 		>

@@ -336,7 +336,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						) : (
 							groups.map((group) => (
 								<section key={group.label} aria-label={group.label} className="px-2 pb-1.5">
-									<div className="sticky top-0 z-[1] bg-(--pop-bg) px-2 pt-2.5 pb-1 text-[11px] font-medium tracking-[0.06em] text-(--text-disabled) uppercase">{group.label}</div>
+									<div className="sticky-veil sticky top-0 z-[1] px-2 pt-2.5 pb-1 text-[11px] font-medium tracking-[0.06em] text-(--text-disabled) uppercase">{group.label}</div>
 									<ul className="flex flex-col gap-px">
 										{group.rows.map((notification) => (
 											<Row

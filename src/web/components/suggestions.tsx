@@ -152,7 +152,7 @@ export function useSuggestions({
 						)}
 					>
 						<Icon icon={item.skill ? Blocks : trigger.kind === '/' ? SquareSlash : FileText} size={12} className="shrink-0 text-(--icon-tertiary)" />
-						<span className="shrink-0 font-mono">{item.label}</span>
+						<span className="shrink-0">{item.label}</span>
 						<span className="min-w-0 truncate text-(--text-tertiary)">{item.detail}</span>
 					</button>
 				))}

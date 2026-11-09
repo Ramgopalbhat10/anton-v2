@@ -164,7 +164,7 @@ const BY_KEY = new Map(PROJECT_ICONS.map((entry) => [entry.key, entry]));
 
 /** The tints a mark can take: a project's own colour, the one place the page lets you pick one. */
 export const ICON_TINTS = [
-	{ key: 'cyan', label: 'Blue', color: '#7096fb' },
+	{ key: 'cyan', label: 'Cyan', color: '#3fb6d8' },
 	{ key: 'violet', label: 'Violet', color: '#a78bfa' },
 	{ key: 'amber', label: 'Amber', color: '#e3a63f' },
 	{ key: 'green', label: 'Green', color: '#35c88a' },
@@ -175,6 +175,12 @@ export const ICON_TINTS = [
 export type IconTint = (typeof ICON_TINTS)[number]['key'];
 
 const tintColor = (tint: string) => ICON_TINTS.find((item) => item.key === tint)?.color ?? ICON_TINTS[0].color;
+
+/** The colour a project's mark is drawn in, for tinting what belongs to it; the accent when it has no icon. */
+export function iconTint(value: string | null | undefined): string {
+	const parsed = parseIcon(value);
+	return parsed ? tintColor(parsed.tint) : 'var(--accent-base)';
+}
 
 /** What a saved icon names: the drawn icon and its tint, or nothing to draw. */
 export function parseIcon(value: string | null | undefined): { entry: ProjectIconEntry; tint: IconTint } | null {
@@ -223,7 +229,6 @@ export function ProjectIcon({ value, name, size = 24, className }: { value: stri
 				borderRadius: radius,
 				color,
 				background: `linear-gradient(180deg, color-mix(in srgb, ${color} 22%, var(--well-bg)), color-mix(in srgb, ${color} 10%, var(--well-bg)))`,
-				boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 18%, transparent)`,
 			}}
 		>
 			<parsed.entry.icon size={Math.round(size * 0.56)} strokeWidth={size >= 28 ? 1.75 : 2} />

@@ -32,7 +32,7 @@ function StatePill({ state, size = 'md' }: { state: PullRequestState | null; siz
 function BranchChip({ name }: { name: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
-		<span className="inline-flex h-5 min-w-0 items-center gap-1 rounded-md bg-(--alpha-white-6) pr-0.5 pl-1.5 font-mono text-[11px] text-(--text-secondary)">
+		<span className="inline-flex h-5 min-w-0 items-center gap-1 rounded-md bg-(--alpha-white-6) pr-0.5 pl-1.5 text-[11px] text-(--text-secondary)">
 			<span className="truncate">{name}</span>
 			<button
 				type="button"
@@ -113,7 +113,7 @@ function Discussion({ pull }: { pull: PullRequestDetail }) {
 							<span className="font-medium text-(--text-primary)">{entry.author}</span>
 							<span className="text-(--text-tertiary)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
 							{entry.path ? (
-								<span className="min-w-0 truncate font-mono text-[11px] text-(--text-secondary)">
+								<span className="min-w-0 truncate text-[11px] text-(--text-secondary)">
 									{entry.path}
 									{entry.line ? `:${entry.line}` : ''}
 								</span>

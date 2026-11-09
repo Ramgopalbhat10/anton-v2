@@ -60,7 +60,7 @@ function Row({ item }: { item: ReviewItem }) {
 					{item.draft ? <PrFlag tone="draft">Draft</PrFlag> : null}
 					{open && item.conflicts ? <PrFlag tone="conflicts">Conflicts</PrFlag> : null}
 				</div>
-				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-[11px] text-(--text-tertiary)">
 					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: state === 'unknown' ? null : { state, checks: null, runs: [] } }} full /> · {age(item.createdAt)}
 					{open ? ` · ${checksText(item.checks)}` : ''}
 				</div>

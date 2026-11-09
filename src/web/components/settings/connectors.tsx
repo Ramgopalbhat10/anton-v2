@@ -303,7 +303,7 @@ function ToolChips({ tools }: { tools: Array<{ name: string; about: string }> })
 		<ul className="m-0 grid list-none grid-cols-1 gap-1.5 p-0 sm:grid-cols-2">
 			{tools.map((tool) => (
 				<li key={tool.name} className="min-w-0" title={tool.about || undefined}>
-					<span className="inline-flex max-w-full items-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-2 py-1 font-mono text-[12px] text-(--text-secondary)">
+					<span className="inline-flex max-w-full items-center rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-2 py-1 text-[12px] text-(--text-secondary)">
 						<span className="truncate">{tool.name}</span>
 					</span>
 				</li>
@@ -357,7 +357,7 @@ function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; 
 					search={open}
 					className={cn(
 						'truncate text-[13.5px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[6px] focus-visible:after:shadow-(--focus-ring)',
-						mono && 'font-mono text-[13px]',
+						mono && 'text-[13px]',
 					)}
 				>
 					{title}
@@ -553,7 +553,7 @@ function DetailFrame({ mark, title, mono, tagline, actions, facts, children }: {
 			<div className="flex flex-wrap items-center gap-4 border-b border-(--border-subtle) pb-5">
 				<MarkTile mark={mark} size={64} label={mark.title} className="rounded-[6px]" />
 				<div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-1">
-					<h1 className={cn('m-0 truncate text-[26px] leading-[32px] font-semibold tracking-[-0.022em]', mono && 'font-mono text-[22px]')}>{title}</h1>
+					<h1 className={cn('m-0 truncate text-[26px] leading-[32px] font-semibold tracking-[-0.022em]', mono && 'text-[22px]')}>{title}</h1>
 					<p className="m-0 text-[13px] leading-[19px] text-pretty text-(--text-tertiary)">{tagline}</p>
 				</div>
 				{actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -604,9 +604,9 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 		{ label: 'Made by', value: GMAIL_ENTRY.by },
 		{ label: 'Category', value: GMAIL_ENTRY.category },
 		{ label: 'Sign-in', value: connected ? (account.problem ? 'Needs signing in again' : 'Signed in') : 'Required, on your own Google OAuth client' },
-		...(connected ? [{ label: 'Account', value: <span className="inline-flex items-center gap-1.5 font-mono text-[12px]"><Icon icon={GOOGLE.icon} size={12} />{account.email ?? 'Google account'}</span> }] : []),
+		...(connected ? [{ label: 'Account', value: <span className="inline-flex items-center gap-1.5 text-[12px]"><Icon icon={GOOGLE.icon} size={12} />{account.email ?? 'Google account'}</span> }] : []),
 		...(connected ? [{ label: 'Connected', value: since(account.connectedAt) }] : []),
-		...(account.client ? [{ label: 'OAuth client', value: <span className="font-mono text-[11.5px]">{account.client.clientId.slice(0, 18)}…{account.client.fromEnv ? ' (environment)' : ''}</span> }] : []),
+		...(account.client ? [{ label: 'OAuth client', value: <span className="text-[11.5px]">{account.client.clientId.slice(0, 18)}…{account.client.fromEnv ? ' (environment)' : ''}</span> }] : []),
 		{ label: 'More info', value: <DocsLink href={GMAIL_ENTRY.docs!} /> },
 	];
 	return (
@@ -740,7 +740,7 @@ function ServerDetail({ server, search }: { server: McpServer; search: Opened })
 		{ label: 'Made by', value: entry?.by ?? hostOf(server.url) },
 		...(entry ? [{ label: 'Category', value: entry.category }] : []),
 		{ label: 'Sign-in', value: signedIn ? `Signed in${server.signIn.since ? ` since ${since(server.signIn.since)}` : ''}` : server.hasAuth ? 'Token' : needsSignIn ? 'Needs signing in again' : 'None yet' },
-		{ label: 'Connector URL', value: <span className="font-mono text-[11.5px] break-all">{server.url}</span> },
+		{ label: 'Connector URL', value: <span className="text-[11.5px] break-all">{server.url}</span> },
 		{ label: 'Tools allowed', value: server.tools.length ? server.tools.join(', ') : 'All' },
 		{ label: 'Added', value: since(server.addedAt) },
 		...(entry?.docs ? [{ label: 'More info', value: <DocsLink href={entry.docs} /> }] : []),
@@ -847,7 +847,7 @@ function OfferedServer({ entry }: { entry: CatalogEntry }) {
 				{ label: 'Made by', value: entry.by },
 				{ label: 'Category', value: entry.category },
 				{ label: 'Sign-in', value: 'OAuth, in a new page' },
-				{ label: 'Connector URL', value: <span className="font-mono text-[11.5px] break-all">{entry.url}</span> },
+				{ label: 'Connector URL', value: <span className="text-[11.5px] break-all">{entry.url}</span> },
 				...(entry.docs ? [{ label: 'More info', value: <DocsLink href={entry.docs} /> }] : []),
 			]}
 			actions={

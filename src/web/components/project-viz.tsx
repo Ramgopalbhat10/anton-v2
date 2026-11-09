@@ -403,7 +403,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 								type="button"
 								onClick={() => open(thread)}
 								title={thread.title}
-								className={cn('flex h-6 min-w-0 items-center gap-1 text-left font-mono text-[11px] whitespace-nowrap outline-none hover:text-(--text-primary)', state === 'resolved' || state === 'queued' ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}
+								className={cn('flex h-6 min-w-0 items-center gap-1 text-left text-[11px] whitespace-nowrap outline-none hover:text-(--text-primary)', state === 'resolved' || state === 'queued' ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}
 							>
 								<TitleWithTail title={thread.title} />
 							</button>

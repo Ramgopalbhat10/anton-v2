@@ -614,7 +614,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						<>
 							{scope === 'branch' && branch ? (
 								<div className="mb-1.5 flex min-w-0 flex-col gap-0.5 px-1.5 pt-0.5">
-									<span className="truncate font-mono text-[11.5px] text-(--text-secondary)" title={branch}>
+									<span className="truncate text-[11.5px] text-(--text-secondary)" title={branch}>
 										{branch}
 									</span>
 									{base ? <span className="text-[11px] text-(--text-disabled)">compared with {base}</span> : null}

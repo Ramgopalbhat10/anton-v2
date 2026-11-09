@@ -25,6 +25,7 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { ProjectSettingsModal } from '@/components/project-settings';
 import { SettingsModal } from '@/components/settings/modal';
 import { Sky } from '@/components/sky';
 import { useSky, useSkyOn } from '@/lib/sky';
@@ -53,10 +54,11 @@ function TaskNotifications() {
 	return null;
 }
 
-/** How much of the sky a page lets through: all of it on Home, a hint behind a conversation, a little elsewhere. */
+/** How much of the sky a page lets through: all of it on Home, a hint behind an artifact you read, a little everywhere else. */
 export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
 	if (pathname === '/') return 'full';
-	if (pathname.startsWith('/agents/') || /^\/projects\/[^/]+\/threads\//.test(pathname) || pathname.startsWith('/artifacts/')) return 'faint';
+	// A conversation (a task, a thread, a project's coordinator) lets the sky through as much as a list does; an artifact you read stays nearly opaque.
+	if (pathname.startsWith('/artifacts/')) return 'faint';
 	return 'dim';
 }
 
@@ -137,6 +139,7 @@ export function AppShell() {
 				<CommandPalette open={paletteOpen} onClose={closePalette} />
 				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
 				<SettingsModal />
+				<ProjectSettingsModal />
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>

@@ -14,6 +14,7 @@ import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
 type ProjectPanelState = { open: boolean; tab: ProjectTab };
@@ -123,9 +124,7 @@ export function ProjectPage() {
 					<Btn size="sm" variant="ghost" icon={Waypoints} aria-label="New thread" onClick={() => setStarting(true)}>
 						<span className="hidden sm:inline">New thread</span>
 					</Btn>
-					<Link to="/projects/$spaceId/settings" params={{ spaceId }} aria-label="Project settings" title="Project settings" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
-						<Icon icon={Settings} size={14} />
-					</Link>
+					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
 					{!panel.open ? <IconBtn icon={PanelRight} size="sm" label="Show the project panel" onClick={() => changePanel({ open: true })} /> : null}
 				</header>
 				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} />

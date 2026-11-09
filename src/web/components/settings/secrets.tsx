@@ -153,7 +153,7 @@ function SealedRow({ secret, onEdit }: { secret: SealedSecret; onEdit: () => voi
 		<div className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5">
 			<RowIcon icon={LockKeyhole} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<div className="truncate font-mono text-[12.5px] font-medium">{secret.name}</div>
+				<div className="truncate text-[12.5px] font-medium">{secret.name}</div>
 				<div className="truncate text-[11px] text-(--text-tertiary)">
 					To {secret.hosts.join(', ')}
 					{secret.proxy ? ` · ${secret.readsDirect ? 'changes ' : ''}through ${secret.proxy}` : ''} · {from} {age(secret.updatedAt)}
@@ -210,7 +210,7 @@ function RepoRow({ repo }: { repo: SecretsView['repos'][number] }) {
 			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="truncate text-[13px] font-medium">{repo.repo}</div>
-				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">{repo.names.join(' · ')}</div>
+				<div className="truncate text-[11px] text-(--text-tertiary)">{repo.names.join(' · ')}</div>
 			</div>
 			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
 		</Link>

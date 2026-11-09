@@ -384,7 +384,7 @@ function Breakdown({
 								sub={`${tokens(row.tokens)} tokens · ${totalTokens ? Math.round((row.tokens / totalTokens) * 100) : 0}%`}
 								share={row.tokens / top}
 								color={DATA_COLORS[index] ?? DATA_COLORS[DATA_COLORS.length - 1]}
-								value={row.cost > 0 || !planOf?.(row.key) ? dollars(row.cost) : <span className="font-mono text-[10px] tracking-[0.06em] text-(--accent-text)">PLAN</span>}
+								value={row.cost > 0 || !planOf?.(row.key) ? dollars(row.cost) : <span className="text-[10px] tracking-[0.06em] text-(--accent-text)">PLAN</span>}
 							/>
 						))}
 						{tail.length ? (

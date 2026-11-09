@@ -33,7 +33,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { ProjectSettingsPage } = await import('@/components/project-settings');
+const { ProjectSettingsModal } = await import('@/components/project-settings');
+const { closeProjectSettings, openProjectSettings } = await import('@/lib/project-settings-modal');
 
 const general = {
 	model: null,
@@ -79,12 +80,14 @@ function page(current: Space) {
 	api.space.mockResolvedValue(current);
 	api.generalSettings.mockResolvedValue(general);
 	api.editSpace.mockImplementation(async (_id: string, change: object) => ({ ...current, ...change }));
-	const root = createRootRoute({ component: () => <ProjectSettingsPage /> });
+	closeProjectSettings();
+	openProjectSettings('space_1');
+	const root = createRootRoute({ component: () => <ProjectSettingsModal /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId', component: () => null }),
 		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/settings', component: () => null }),
 	]);
-	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/projects/space_1/settings'] }) });
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/projects/space_1'] }) });
 	render(
 		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
 			<RouterProvider router={router} />
@@ -93,6 +96,17 @@ function page(current: Space) {
 }
 
 describe('Project settings', () => {
+	it('opens as a card with its sections beside it, and moves between them', async () => {
+		page(space({ instructions: 'Keep pull requests small.' }));
+		expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeTruthy();
+		const nav = screen.getByRole('navigation', { name: 'Project settings' });
+		expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe('General');
+		fireEvent.click(screen.getByRole('button', { name: 'Instructions' }));
+		expect(await screen.findByDisplayValue('Keep pull requests small.')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Close project settings' }));
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project settings' })).toBeNull());
+	});
+
 	it.each(['coordinator', 'thread', 'explorer', 'tester', 'browser', 'computer', 'reviewer'])('saves %s routing in its own project field only', async (caller) => {
 		const id = 'openrouter/acme/model';
 		const agentModels = Object.fromEntries(['explorer', 'tester', 'browser', 'computer', 'reviewer'].map((agent) => [agent, { model: id, reasoning: 'low' }])) as Space['agentModels'];

@@ -77,7 +77,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 		<section className="in-card overflow-hidden" aria-label="Tool call to run">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h3 className="m-0 truncate font-mono text-[13px] leading-[20px] font-medium text-(--text-primary)">{approval.tool}</h3>
+					<h3 className="m-0 truncate text-[13px] leading-[20px] font-medium text-(--text-primary)">{approval.tool}</h3>
 					<span className="text-[11.5px] text-(--text-tertiary)">{pending ? `The agent asks to run this on ${connectorName(approval.connector)}` : `Tool call on ${connectorName(approval.connector)}`}</span>
 				</div>
 			</header>

@@ -247,7 +247,7 @@ function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
 	return (
 		<ul className="flex min-w-0 flex-col gap-0.5 pt-1 pr-1 pl-6">
 			{calls.map((call, index) => (
-				<li key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] leading-[18px] text-(--text-tertiary)">
+				<li key={index} className="flex min-w-0 items-center gap-1.5 text-[11.5px] leading-[18px] text-(--text-tertiary)">
 					{call.state === 'running' ? (
 						<Spinner size={10} />
 					) : (
@@ -635,7 +635,7 @@ function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 }
 
 /** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
-const USAGE_COLORS = { cached: 'var(--blue-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
+const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
 /** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
 function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {

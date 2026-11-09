@@ -39,7 +39,7 @@ export function splitRich(text: string, start: number, end: number, ranges: Rich
 /** The look of each kind, shared by the composer's draft and a sent message, so they read the same. */
 export const RICH_CLASS: Record<RichKind | 'chip', string> = {
 	link: 'text-(--accent-text) underline decoration-(--accent-border) underline-offset-2',
-	command: 'font-mono text-[12px] text-(--accent-text)',
-	file: 'font-mono text-[12px] text-(--accent-text)',
-	chip: 'inline-block max-w-full rounded-md border border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 align-baseline font-mono text-[12px] leading-[18px] text-(--accent-text)',
+	command: 'text-(--accent-text)',
+	file: 'text-(--accent-text)',
+	chip: 'inline-block max-w-full rounded-md border border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 align-baseline text-[12.5px] leading-[18px] text-(--accent-text)',
 };

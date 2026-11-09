@@ -16,7 +16,7 @@ export const used = (session: Session) => session.usage.inputTokens + session.us
 /** A fact on the row's second line: an icon and a few words. */
 function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
 	return (
-		<span title={title} className={cn('inline-flex min-w-0 shrink items-center gap-1 text-[11.5px] text-(--text-tertiary)', mono && 'font-mono text-[11px]')}>
+		<span title={title} className={cn('inline-flex min-w-0 shrink items-center gap-1 text-[11.5px] text-(--text-tertiary)', mono && 'in-num')}>
 			{icon ? <Icon icon={icon} size={12} className="text-(--icon-tertiary)" /> : null}
 			<span className="truncate">{children}</span>
 		</span>

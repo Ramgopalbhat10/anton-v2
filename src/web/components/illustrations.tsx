@@ -31,8 +31,16 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 					<stop offset="1" style={{ stopColor: '#fff', stopOpacity: 0.035 }} />
 				</linearGradient>
 				<linearGradient id={`${id}-lit`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: 'var(--blue-300)', stopOpacity: 0.34 }} />
-					<stop offset="1" style={{ stopColor: 'var(--blue-300)', stopOpacity: 0.1 }} />
+					<stop offset="0" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.34 }} />
+					<stop offset="1" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.1 }} />
+				</linearGradient>
+				<radialGradient id={`${id}-glow`} cx="0.5" cy="0.5" r="0.5">
+					<stop offset="0" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0.28 }} />
+					<stop offset="1" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0 }} />
+				</radialGradient>
+				<linearGradient id={`${id}-screen`} x1="0" y1="0" x2="0" y2="1">
+					<stop offset="0" style={{ stopColor: '#000', stopOpacity: 0.5 }} />
+					<stop offset="1" style={{ stopColor: '#000', stopOpacity: 0.28 }} />
 				</linearGradient>
 			</defs>
 			<Ids.Provider value={id}>{children}</Ids.Provider>
@@ -50,13 +58,44 @@ function Slot({ x, y, w, h, r = 4 }: { x: number; y: number; w: number; h: numbe
 	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke="rgba(255, 255, 255, 0.11)" strokeDasharray="1.5 2.5" />;
 }
 
-/** A tile: soft white, or lit in the accent, with a highlight along its top. */
+/** A tile: soft white, or lit in the accent, with a hairline all round. */
 function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: number; w: number; h: number; r?: number; lit?: boolean; className?: string; style?: CSSProperties }) {
 	const id = useContext(Ids);
 	return (
 		<g className={className} style={style}>
 			<rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-${lit ? 'lit' : 'tile'})`} stroke={lit ? 'var(--accent-border)' : EDGE} />
-			<line x1={x + r} x2={x + w - r} y1={y + 1.5} y2={y + 1.5} stroke="#fff" strokeOpacity={lit ? 0.16 : 0.08} />
+		</g>
+	);
+}
+
+/** A recessed screen, darker than the tile it is set in. */
+function Screen({ x, y, w, h, r = 5 }: { x: number; y: number; w: number; h: number; r?: number }) {
+	const id = useContext(Ids);
+	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-screen)`} stroke={EDGE} />;
+}
+
+/** A soft pool of the accent behind something lit. */
+function Glow({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+	const id = useContext(Ids);
+	return <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-glow)`} />;
+}
+
+/** A meter of a few cells, `level` of them lit (or grey when the unit is off). */
+function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: number; level: number; on: boolean }) {
+	return (
+		<g>
+			{Array.from({ length: cells }, (_, index) => (
+				<rect
+					key={index}
+					x={x + index * 5}
+					y={y}
+					width={3.5}
+					height={6}
+					rx={0.8}
+					fill={index < level ? (on ? ACCENT : 'var(--neutral-500)') : 'rgba(255, 255, 255, 0.07)'}
+					fillOpacity={index < level && on ? 0.55 + (index / cells) * 0.45 : 1}
+				/>
+			))}
 		</g>
 	);
 }
@@ -65,7 +104,7 @@ function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: numb
 function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number; w: number | number[]; n?: number; gap?: number; faint?: boolean; lit?: boolean }) {
 	const widths = Array.isArray(w) ? w : Array.from({ length: n }, () => w);
 	return (
-		<g stroke={lit ? 'var(--blue-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
+		<g stroke={lit ? 'var(--cyan-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
 			{widths.map((width, index) => (
 				<line key={index} x1={x} x2={x + width} y1={y + index * gap + 0.5} y2={y + index * gap + 0.5} />
 			))}
@@ -92,7 +131,7 @@ function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }
 
 function Caption({ x, y, children, accent, anchor = 'start' }: { x: number; y: number; children: ReactNode; accent?: boolean; anchor?: 'start' | 'middle' | 'end' }) {
 	return (
-		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font-mono)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-tertiary)'}>
+		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font-sans)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-tertiary)'}>
 			{children}
 		</text>
 	);
@@ -148,24 +187,52 @@ export function ProjectArt({ className }: { className?: string }) {
 	);
 }
 
-/** A sandbox: a unit with a terminal inside, and its state on a lead. */
+/**
+ * A sandbox: a terminal window wired to the compute unit it runs on, whose
+ * meters (processor, memory, disk) and light say its state. Lit and at work
+ * when ready or running; grey and still when idle or stopped.
+ */
 export function SandboxArt({ className, label = 'idle' }: { className?: string; label?: string }) {
 	const on = label === 'ready' || label === 'running';
+	const prompt = on ? ACCENT : 'var(--neutral-500)';
 	return (
-		<Art w={250} h={100} label={`A compute unit with a terminal, ${label}`} className={className}>
-			<Tile x={16} y={12} w={156} h={76} r={8} />
-			{[26, 33, 40].map((x) => (
-				<rect key={x} x={x - 1.5} y={19.5} width={3} height={3} rx={1} fill={RULE} />
+		<Art w={260} h={116} label={`A terminal on a compute unit, ${label}`} className={className}>
+			{on ? <Glow cx={208} cy={58} r={56} /> : null}
+			{/* The terminal. */}
+			<Tile x={10} y={10} w={150} h={96} r={9} />
+			{[21, 28, 35].map((x) => (
+				<circle key={x} cx={x} cy={21} r={2} fill={RULE} />
 			))}
-			<line x1={17} x2={171} y1={28.5} y2={28.5} stroke={EDGE} />
-			<path d="M27 40 l4 3.5 l-4 3.5" stroke={on ? ACCENT : 'var(--neutral-500)'} strokeLinecap="round" strokeLinejoin="round" />
-			<Rules x={38} y={43} w={[64]} n={1} />
-			<Rules x={27} y={56} w={[96, 72, 84]} faint gap={6} />
-			<path d="M27 76 l4 3.5 l-4 3.5" stroke={on ? ACCENT : 'var(--neutral-500)'} strokeLinecap="round" strokeLinejoin="round" transform="translate(0 -4)" />
-			<rect x={37} y={73} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--neutral-600)'} className={on ? 'fa-blink' : undefined} />
-			<Wire d="M172 50 H192" lit={on} broken={!on} />
-			<Light x={197} y={50} on={on} />
-			<Caption x={206} y={53} accent={on}>
+			<Rules x={64} y={20.5} w={[42]} n={1} faint />
+			<Screen x={16} y={30} w={138} h={70} />
+			<path d="M24 41 l3.5 3 l-3.5 3" stroke={prompt} strokeLinecap="round" strokeLinejoin="round" />
+			<Rules x={33} y={43.5} w={[46]} n={1} />
+			<Rules x={24} y={55} w={[104, 82, 94, 60]} faint gap={6} />
+			<path d="M24 82 l3.5 3 l-3.5 3" stroke={prompt} strokeLinecap="round" strokeLinejoin="round" />
+			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--neutral-600)'} className={on ? 'fa-blink' : undefined} />
+			{/* Two leads to the unit. */}
+			<Wire d="M160 46 H180" lit={on} broken={!on} />
+			<Wire d="M160 70 H180" lit={on} broken={!on} />
+			{/* The compute unit. */}
+			<Tile x={180} y={14} w={68} h={88} r={9} lit={on} />
+			<Rules x={190} y={24} w={[22, 14]} gap={4} lit={on} />
+			<Light x={238} y={26} on={on} live={on} />
+			{(
+				[
+					['cpu', on ? 6 : 1],
+					['mem', on ? 4 : 2],
+					['disk', on ? 3 : 3],
+				] as const
+			).map(([name, level], index) => (
+				<g key={name}>
+					<text x={190} y={46 + index * 14} fontFamily="var(--font-sans)" fontSize={6.5} letterSpacing="0.04em" fill="var(--text-disabled)">
+						{name}
+					</text>
+					<Meter x={208} y={40.5 + index * 14} cells={7} level={level} on={on} />
+				</g>
+			))}
+			<line x1={190} x2={238} y1={84.5} y2={84.5} stroke={on ? 'var(--accent-border)' : EDGE} />
+			<Caption x={214} y={96} anchor="middle" accent={on}>
 				{label}
 			</Caption>
 		</Art>
@@ -288,36 +355,69 @@ function MarkShapes() {
 	);
 }
 
-/** Anton on the left, your plan on the right (its vendor's logo when there is one), and the wire between them: live when linked, broken when not. */
+/**
+ * Anton on the left, your plan on the right (its vendor's logo when there is
+ * one), joined through a key in the middle: lit, with the wire carrying a flow
+ * both ways, when you are signed in; open, the plug pulled, when you are not.
+ */
 export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
 	return (
-		<Art w={260} h={100} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
-			{linked ? <Wire d="M80 42 H180" lit /> : <Wire d="M80 42 H120 M140 42 H180" broken />}
-			{linked ? null : <rect x={127} y={38} width={6} height={8} rx={1.5} fill="var(--neutral-600)" />}
-			<Tile x={28} y={16} w={52} h={52} r={9} />
-			<g transform="translate(37.5 25) scale(2) translate(-3.5 -5.7)">
+		<Art w={280} h={112} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
+			{linked ? (
+				<>
+					<Glow cx={140} cy={46} r={70} />
+					<Wire d="M86 46 H124" lit />
+					<Wire d="M156 46 H194" lit />
+				</>
+			) : (
+				<>
+					<Wire d="M86 46 H118" broken />
+					<Wire d="M162 46 H194" broken />
+				</>
+			)}
+			{/* The key between them: a check when signed in, an open plug when not. */}
+			{linked ? (
+				<g>
+					<rect x={124.5} y={34.5} width={31} height={23} rx={11.5} fill="var(--cyan-alpha-16)" stroke="var(--accent-border)" />
+					<path d="M133.5 46 l4 4 l9 -8.5" stroke="var(--accent-text)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+				</g>
+			) : (
+				<g>
+					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--neutral-700)" stroke={EDGE} />
+					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--neutral-500)" strokeLinecap="round" />
+					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--neutral-500)" strokeLinecap="round" />
+					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeDasharray="2 2" />
+				</g>
+			)}
+			{/* Anton. */}
+			<Tile x={30} y={18} w={56} h={56} r={12} lit={linked} />
+			<g transform="translate(40 28) scale(2.15) translate(-3.5 -5.7)">
 				<MarkShapes />
 			</g>
-			<Tile x={180} y={16} w={52} h={52} r={9} lit={linked} />
+			{/* The plan. */}
+			<Tile x={194} y={18} w={56} h={56} r={12} lit={linked} />
 			{logo ? (
 				// The vendor's own logo, as its tab shows it; one-colour logos take the text colour.
-				<foreignObject x={180} y={16} width={52} height={52}>
+				<foreignObject x={194} y={18} width={56} height={56}>
 					<div
 						aria-hidden
-						className={cn('flex size-full items-center justify-center text-[26px] [&_svg]:block', linked ? 'text-(--text-primary)' : 'text-(--text-secondary)')}
+						className={cn('flex size-full items-center justify-center text-[28px] [&_svg]:block', linked ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}
 						dangerouslySetInnerHTML={{ __html: logo }}
 					/>
 				</foreignObject>
 			) : (
 				<>
-					<Rules x={192} y={30} w={[26, 18, 22]} gap={5} lit={linked} />
-					<Light x={222} y={58} on={linked} />
+					<Rules x={206} y={32} w={[28, 20, 24]} gap={5} lit={linked} />
+					<Light x={238} y={62} on={linked} />
 				</>
 			)}
-			<Caption x={54} y={88} anchor="middle">
+			<Caption x={58} y={92} anchor="middle">
 				Anton
 			</Caption>
-			<Caption x={206} y={88} anchor="middle" accent={linked}>
+			<Caption x={140} y={76} anchor="middle" accent={linked}>
+				{linked ? 'signed in' : 'not connected'}
+			</Caption>
+			<Caption x={222} y={92} anchor="middle" accent={linked}>
 				{shortName(plan, 18)}
 			</Caption>
 		</Art>
@@ -414,7 +514,7 @@ export function ProjectRouteArt({ className, active }: { className?: string; act
 							style={{ '--stage': index, opacity: active ? (lit ? 1 : 0) : undefined } as CSSProperties}
 						>
 							<Tile x={x} y={8} w={44} h={44} r={9} lit />
-							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--blue-200)" />
+							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--cyan-200)" />
 						</g>
 					</g>
 				);

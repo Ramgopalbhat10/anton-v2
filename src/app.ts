@@ -126,6 +126,7 @@ import {
 } from './services/subscriptions.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
+import { dailySky, dailySkyImage } from './services/sky.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
 import { recordWebCall } from './services/web-digest.ts';
 import { markNotifications, notificationsView, notifyFailedReply } from './services/notifications.ts';
@@ -301,6 +302,14 @@ const RUN_ON = v.picklist(['sandbox', 'host']);
 
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
 app.get('/api/usage', async (c) => c.json(await usageView()));
+// NASA's picture of the day for the sky, read once a day on the server (services/sky.ts); null while there is none.
+app.get('/api/sky/today', async (c) => c.json({ picture: await dailySky() }));
+app.get('/api/sky/today/image', async (c) => {
+	const image = await dailySkyImage();
+	if (!image) return c.json({ error: 'Not found' }, 404);
+	// The address names the day (`?d=`), so a browser may keep it.
+	return c.body(image.bytes as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': image.type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=86400, immutable' });
+});
 const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
 app.put('/api/settings/limits', async (c) => {
 	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));

@@ -76,7 +76,7 @@ export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: numbe
 		<span
 			aria-hidden
 			title={model.vendor}
-			className="relative inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
+			className="relative inline-flex shrink-0 items-center justify-center rounded-[6px] font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -103,7 +103,7 @@ export function ModelLogo({ model, size = 16, title }: { model: string; size?: n
 		<span
 			aria-hidden={title ? undefined : true}
 			title={title}
-			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
+			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -184,7 +184,7 @@ const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-c
 function PriceCells({ model }: { model: ModelInfo }) {
 	if (model.subscription) return <span className="col-span-2" />;
 	if (model.price.input === 0 && model.price.output === 0) {
-		return <span className="col-span-2 text-right font-mono text-[9.5px] tracking-[0.06em] text-(--success-text)">FREE</span>;
+		return <span className="col-span-2 text-right text-[9.5px] tracking-[0.06em] text-(--success-text)">FREE</span>;
 	}
 	return (
 		<>
@@ -342,7 +342,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 						</span>
 						<span
 							className={cn(
-								'flex items-center justify-center gap-1 truncate font-mono text-[9.5px] tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
+								'flex items-center justify-center gap-1 truncate text-[9.5px] tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
 								index === chosen ? 'text-(--text-primary)' : 'text-(--text-disabled) group-hover/level:text-(--text-secondary)',
 							)}
 						>
@@ -915,7 +915,7 @@ export const ModelPicker = memo(function ModelPicker({
 								const priced = section.models.some((model) => !model.subscription);
 								return (
 									<div key={section.title} role="group" aria-label={section.title} className="flex flex-col">
-										<div className={cn(COLUMNS, 'sticky top-0 z-[1] bg-(--pop-bg) pt-2.5 pb-1')}>
+										<div className={cn(COLUMNS, 'sticky-veil sticky top-0 z-[1] pt-2.5 pb-1')}>
 											<span className="col-span-2 flex min-w-0 items-center gap-1.5">
 												{section.plan ? <span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" /> : null}
 												<span className={cn('in-caption truncate', section.plan && 'text-(--accent-text)')}>{section.title}</span>

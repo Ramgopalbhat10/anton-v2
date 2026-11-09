@@ -106,7 +106,7 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	let body: ReactNode = (
 		<span className="flex h-full flex-col items-center justify-center gap-2">
 			<Icon icon={info.icon} size={22} className={info.tone} />
-			<span className="font-mono text-[10px] tracking-[0.08em] text-(--text-tertiary)">{extensionOf(artifact.path)}</span>
+			<span className="text-[10px] tracking-[0.08em] text-(--text-tertiary)">{extensionOf(artifact.path)}</span>
 			{category === 'app' ? <span className="text-[11px] text-(--text-tertiary)">Open to run app</span> : null}
 		</span>
 	);
@@ -157,7 +157,7 @@ function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolea
 						install.error.message
 					) : (
 						<>
-							Installed as <span className="font-mono">{installedAs?.skills[0]?.name ?? installedAs?.name}</span>, in{' '}
+							Installed as <span className="font-sans">{installedAs?.skills[0]?.name ?? installedAs?.name}</span>, in{' '}
 							<Link to="/settings/$section" params={{ section: 'skills' }} className="underline underline-offset-2">
 								Settings › Skills
 							</Link>

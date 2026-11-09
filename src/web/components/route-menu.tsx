@@ -28,7 +28,7 @@ export function HostMark({ slug, name, size = 14 }: { slug: string; name: string
 	return (
 		<span
 			aria-hidden
-			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-mono font-semibold uppercase"
+			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }

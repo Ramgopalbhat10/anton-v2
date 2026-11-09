@@ -6,7 +6,7 @@ import { Segmented, SegmentedItem } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
-import { setSkyOn, useSky, useSkyOn } from '@/lib/sky';
+import { setSkyMode, setSkyOn, type SkyMode, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
 /** Web reading and screen reading go through Anton's OpenRouter ports; a compaction summary can come from any model. */
@@ -401,19 +401,40 @@ export function GeneralPage() {
 	);
 }
 
-/** How Anton looks in this browser: the hourly sky behind it. Kept in the browser, not on the server. */
+/** How Anton looks in this browser: the sky behind it, and which pictures it shows. Kept in the browser, not on the server. */
 function Appearance() {
 	const on = useSkyOn();
+	const mode = useSkyMode();
 	const image = useSky();
 	return (
 		<Block title="Appearance" icon={Telescope}>
 			<SettingRow
 				title="Sky"
-				help={`A NASA picture behind Anton, as a pixel mesh, new every hour. Now: ${image.title}.`}
-				info="Twenty-four public-domain pictures from NASA's Image and Video Library ship with Anton, so nothing is fetched. It shows in full on Home and dimmed elsewhere. This setting is kept in this browser."
+				help={`A NASA picture behind Anton, as a pixel mesh. Now: ${image.title}.`}
+				info="It shows in full on Home and dimmed elsewhere. This setting is kept in this browser."
 			>
 				<Switch checked={on} onChange={setSkyOn} label={<span className="sr-only">Show the sky</span>} />
 			</SettingRow>
+			{on ? (
+				<SettingRow
+					title="Pictures"
+					help={mode === 'daily' ? 'NASA’s Astronomy Picture of the Day, the same all day.' : 'A new one of 24 pictures every hour.'}
+					info="The 24 hourly pictures are public-domain pictures from NASA's Image and Video Library that ship with Anton, so nothing is fetched. The picture of the day is read once a day by Anton's server from NASA and kept there; on a day it is a video, the hourly pictures show."
+				>
+					<Segmented label="Pictures" role="radiogroup">
+						{(
+							[
+								['hourly', 'Every hour'],
+								['daily', 'Picture of the day'],
+							] as Array<[SkyMode, string]>
+						).map(([value, label]) => (
+							<SegmentedItem key={value} role="radio" on={mode === value} onClick={() => setSkyMode(value)}>
+								{label}
+							</SegmentedItem>
+						))}
+					</Segmented>
+				</SettingRow>
+			) : null}
 		</Block>
 	);
 }

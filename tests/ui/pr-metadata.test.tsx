@@ -56,9 +56,9 @@ describe('compact PR metadata', () => {
 			const tooltip = await screen.findByRole('tooltip');
 			expect(tooltip.textContent).toBe(name);
 			const surface = tooltip.closest('[data-slot="tooltip-content"]')!;
-			expect(surface.className).toContain('bg-(--bg-overlay)');
-			expect(surface.className).toContain('text-(--text-primary)');
-			expect(surface.querySelector('svg')?.getAttribute('class')).toContain('fill-(--bg-overlay)');
+			// The shared dark tip: its own surface, and no arrow.
+			expect(surface.className).toContain('tip');
+			expect(surface.querySelector('svg')).toBeNull();
 			expect(surface.className).not.toContain('bg-foreground');
 			await user.keyboard('{Escape}');
 			await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
