@@ -360,11 +360,11 @@
    sky's veils live in styles.css. */
 :root,
 [data-theme='dark'] {
-	--bg-canvas: #0f0f10;
-	--bg-surface: #131314;
-	--bg-raised: #19191b;
-	--bg-overlay: #1f1f21;
-	--bg-inset: #0b0b0c;
+	--bg-canvas: #0e0e0e;
+	--bg-surface: #121212;
+	--bg-raised: #181818;
+	--bg-overlay: #1e1e1e;
+	--bg-inset: #0a0a0a;
 	--bg-hover: rgba(255, 255, 255, 0.055);
 	--bg-active: rgba(255, 255, 255, 0.085);
 	--text-primary: #ededed;
@@ -376,18 +376,18 @@
 	--icon-secondary: #a3a3a3;
 	--icon-tertiary: #7a7a7a;
 	--icon-disabled: #5a5a5a;
-	--neutral-600: #38383b;
-	--neutral-700: #2a2a2d;
-	--neutral-750: #232325;
-	--neutral-800: #1f1f21;
+	--neutral-600: #383838;
+	--neutral-700: #2a2a2a;
+	--neutral-750: #232323;
+	--neutral-800: #1e1e1e;
 	--border-subtle: rgba(255, 255, 255, 0.06);
 	--border-default: rgba(255, 255, 255, 0.09);
 	--border-strong: rgba(255, 255, 255, 0.15);
 
 	/* Glass: what floats over the sky. A charcoal tint and a wide blur that
 	   turns the mesh into soft colour; no edge of its own, a little lift. */
-	--glass-bg: rgba(22, 22, 24, 0.68);
-	--glass-bg-strong: rgba(17, 17, 19, 0.9);
+	--glass-bg: rgba(22, 22, 22, 0.68);
+	--glass-bg-strong: rgba(17, 17, 17, 0.9);
 	--glass-border: transparent;
 	--glass-highlight: 0 0 #0000;
 	--glass-shadow: var(--elev-2);
@@ -397,7 +397,7 @@
 	   what is live, selected or focused. */
 	--primary-bg: #ededed;
 	--primary-bg-hover: #ffffff;
-	--primary-fg: #0f0f10;
+	--primary-fg: #0e0e0e;
 }
 
 /* Radius: small for what you press, medium for what holds things. */

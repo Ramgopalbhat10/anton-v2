@@ -6,13 +6,13 @@
 [data-theme='dark'] {
 	/* Cards have no edge: they read by fill, one step above what they sit on,
 	   and a slight lift (a faint top light, a tight contact shadow). The border stays (transparent) so sizes never shift. */
-	--card-bg: #161618;
-	--card-bg-top: #19191b;
+	--card-bg: #151515;
+	--card-bg-top: #181818;
 	--card-border: transparent;
 	--card-highlight: 0 0 #0000;
 	--card-shadow: var(--elev-1);
 	--card-radius: 10px;
-	--well-bg: #111113;
+	--well-bg: #101010;
 	--well-border: transparent;
 	--well-radius: 8px;
 	--grid-line: rgba(255, 255, 255, 0.035);
@@ -472,8 +472,8 @@
    so they read as the same object as the cards beneath them. */
 :root,
 [data-theme='dark'] {
-	--pop-bg: #1d1d1f;
-	--pop-bg-top: #202022;
+	--pop-bg: #1c1c1c;
+	--pop-bg-top: #1f1f1f;
 	--pop-border: rgba(255, 255, 255, 0.06);
 	--pop-shadow: var(--elev-3);
 }

@@ -226,8 +226,8 @@ textarea::placeholder {
 }
 .sky-shade {
 	background:
-		radial-gradient(130% 100% at 60% 30%, transparent 0%, rgba(15, 15, 16, 0.2) 55%, rgba(15, 15, 16, 0.7) 100%),
-		linear-gradient(180deg, rgba(15, 15, 16, 0.15) 0%, transparent 30%, rgba(15, 15, 16, 0.45) 100%);
+		radial-gradient(130% 100% at 60% 30%, transparent 0%, rgba(14, 14, 14, 0.2) 55%, rgba(14, 14, 14, 0.7) 100%),
+		linear-gradient(180deg, rgba(14, 14, 14, 0.15) 0%, transparent 30%, rgba(14, 14, 14, 0.45) 100%);
 }
 
 /*
@@ -294,7 +294,7 @@ textarea::placeholder {
 	min-height: 176px;
 }
 .sky-credit {
-	background: rgba(15, 15, 16, 0.5);
+	background: rgba(14, 14, 14, 0.5);
 }
 :root {
 	--heat-0: rgba(255, 255, 255, 0.055);
