@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Dialog } from 'radix-ui';
 import { useEffect, useMemo, useState } from 'react';
+import { Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
 import { age } from '@/lib/format';
@@ -53,12 +54,13 @@ const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; tone: To
 	'sandbox-failed': { label: 'Sandbox failed', icon: ServerCrash, tone: 'danger' },
 };
 
-const TONE: Record<Tone, { text: string; well: string }> = {
-	warning: { text: 'text-(--warning-text)', well: 'bg-(--warning-bg) text-(--warning-text) shadow-[inset_0_0_0_1px_var(--warning-border)]' },
-	danger: { text: 'text-(--danger-text)', well: 'bg-(--danger-bg) text-(--danger-text) shadow-[inset_0_0_0_1px_var(--danger-border)]' },
-	success: { text: 'text-(--success-text)', well: 'bg-(--success-bg) text-(--success-text) shadow-[inset_0_0_0_1px_var(--success-border)]' },
-	accent: { text: 'text-(--accent-text)', well: 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]' },
-	neutral: { text: 'text-(--text-tertiary)', well: 'bg-(--alpha-white-4) text-(--icon-secondary) shadow-[inset_0_0_0_1px_var(--border-subtle)]' },
+/** A kind's colour, on its label and its bare icon: no tile behind either, like every other icon in the app. */
+const TONE: Record<Tone, { text: string; icon: string }> = {
+	warning: { text: 'text-(--warning-text)', icon: 'text-(--warning-text)' },
+	danger: { text: 'text-(--danger-text)', icon: 'text-(--danger-text)' },
+	success: { text: 'text-(--success-text)', icon: 'text-(--success-text)' },
+	accent: { text: 'text-(--accent-text)', icon: 'text-(--accent-text)' },
+	neutral: { text: 'text-(--text-tertiary)', icon: 'text-(--icon-tertiary)' },
 };
 
 /** The filters, in the order they matter: what waits on you first, what went wrong, what finished, what was said, and the machines. */
@@ -228,24 +230,14 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 
 					<div className="flex shrink-0 flex-col gap-2 px-4 pt-3 pb-2.5 shadow-[inset_0_-1px_0_var(--border-subtle)]">
 						<div className="flex items-center gap-2">
-							<div role="radiogroup" aria-label="Show" className="flex h-7 items-center gap-0.5 rounded-lg bg-(--well-bg) p-0.5 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+							<Segmented label="Show" role="radiogroup">
 								{([false, true] as const).map((unreadOnly) => (
-									<button
-										key={String(unreadOnly)}
-										type="button"
-										role="radio"
-										aria-checked={filters.unreadOnly === unreadOnly}
-										onClick={() => change({ unreadOnly })}
-										className={cn(
-											'flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
-											filters.unreadOnly === unreadOnly ? 'bg-(--bg-selected) text-(--text-primary) shadow-(--card-highlight)' : 'text-(--text-tertiary) hover:text-(--text-secondary)',
-										)}
-									>
+									<SegmentedItem key={String(unreadOnly)} role="radio" size="sm" on={filters.unreadOnly === unreadOnly} onClick={() => change({ unreadOnly })} className="px-2.5 text-[12px]">
 										{unreadOnly ? 'Unread' : 'All'}
 										{unreadOnly ? <span className="text-(--text-disabled) tabular-nums">{unreadCount}</span> : null}
-									</button>
+									</SegmentedItem>
 								))}
-							</div>
+							</Segmented>
 							<div className="flex-1" />
 							<Menu>
 								<MenuTrigger asChild>
@@ -287,14 +279,14 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 										className={cn(
 											'flex h-[24px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
 											on
-												? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
-												: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',
+												? 'bg-(--accent-bg-subtle) text-(--accent-text) hover:bg-(--bg-selected-hover)'
+												: 'bg-(--bg-hover) text-(--text-secondary) hover:bg-(--bg-active) hover:text-(--text-primary)',
 										)}
 									>
 										{category.id === 'needs-you' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--warning-base)" /> : null}
 										{category.id === 'failures' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--danger-base)" /> : null}
 										{category.label}
-										<span className={cn('tabular-nums', on ? 'text-(--accent-text)' : 'text-(--text-disabled)')}>{count}</span>
+										<span className={cn('tabular-nums', on ? 'text-(--accent-text) opacity-75' : 'text-(--text-tertiary)')}>{count}</span>
 									</button>
 								);
 							})}
@@ -302,7 +294,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 								<button
 									type="button"
 									onClick={() => change(DEFAULT_FILTERS)}
-									className="ml-auto h-[24px] shrink-0 rounded-md px-1.5 text-[11.5px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+									className="ml-auto h-[24px] shrink-0 rounded-full px-2.5 text-[11.5px] text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 								>
 									Clear
 								</button>
@@ -355,7 +347,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 
 					<footer className="flex h-9 shrink-0 items-center gap-2 px-4 text-[11.5px] text-(--text-disabled) shadow-[inset_0_1px_0_var(--border-subtle)]">
 						<span className="min-w-0 flex-1 truncate">Only what needs a look. Opening a task marks its notifications read.</span>
-						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="shrink-0 text-(--text-tertiary) hover:text-(--text-primary)">
+						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="-mr-1.5 shrink-0 rounded-[6px] px-1.5 py-0.5 text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
 							Phone alerts
 						</Link>
 					</footer>
@@ -378,8 +370,8 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 					notification.read && 'opacity-[0.72] hover:opacity-100',
 				)}
 			>
-				<span className={cn('mt-px inline-flex size-7 shrink-0 items-center justify-center rounded-[6px]', tone.well)}>
-					<Icon icon={look.icon} size={14} />
+				<span className={cn('mt-[3px] inline-flex size-4 shrink-0 items-center justify-center', tone.icon)}>
+					<Icon icon={look.icon} size={15} />
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="flex min-w-0 items-center gap-2">

@@ -379,7 +379,7 @@ export function PickerChip({
 		<button
 			type="button"
 			className={cn(
-				'flex shrink-0 items-center gap-1.5 rounded-lg bg-(--bg-overlay) whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+				'flex shrink-0 items-center gap-1.5 rounded-lg bg-(--bg-hover) whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active) data-[state=open]:text-(--text-primary)',
 				height === 28 ? 'h-7 px-2.5' : 'h-[26px] px-2',
 			)}
 			{...rest}
