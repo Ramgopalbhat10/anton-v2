@@ -137,6 +137,10 @@ textarea::placeholder {
 /* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
    as one dark tip with no arrow. */
 .tip {
+	/* Its own width, not what is left of the window: a fixed tip near the right
+	   edge would otherwise shrink to a sliver and wrap letter by letter before
+	   it is nudged back in. */
+	width: max-content;
 	max-width: min(320px, calc(100vw - 16px));
 	padding: 5px 8px;
 	border-radius: 6px;
@@ -262,7 +266,7 @@ textarea::placeholder {
 /* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
 .app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
 	background: var(--glass-bg);
-	box-shadow: var(--glass-shadow);
+	box-shadow: var(--card-shadow);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 }
