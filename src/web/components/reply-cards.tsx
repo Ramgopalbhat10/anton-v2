@@ -340,13 +340,13 @@ export const PullRequestCard = memo(function PullRequestCard({
   const pull = session.data?.prUrl === url ? session.data.pullRequest : null;
   // .in-card lays itself out as a column, so the row is a link inside it.
   return (
-    <div className="in-card @container/pr">
+    <div className="in-card @container/pr overflow-hidden">
       <div className="flex min-w-0 flex-col @min-[540px]/pr:flex-row @min-[540px]/pr:items-center">
       <a
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="group/pr flex min-w-0 flex-1 items-center gap-3 rounded-[inherit] px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+        className="group/pr flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
