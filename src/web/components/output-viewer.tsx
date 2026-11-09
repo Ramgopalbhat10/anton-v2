@@ -233,7 +233,7 @@ function ImageStage({ item }: { item: ViewerItem }) {
 				onError={() => setBroken(true)}
 				onClick={() => setActual((current) => !current)}
 				className={cn(
-					'block rounded-[6px] shadow-[0_0_0_1px_var(--border-subtle),0_12px_32px_-12px_rgba(0,0,0,0.6)]',
+					'block rounded-[6px] shadow-[0_0_0_1px_var(--border-subtle),var(--elev-2)]',
 					actual ? 'm-auto max-w-none cursor-zoom-out' : 'max-h-full max-w-full cursor-zoom-in object-contain',
 				)}
 			/>
@@ -369,7 +369,7 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 		<aside
 			aria-label={`Viewing ${nameOf(item.path)}`}
 			style={dock}
-			className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-(--border-default) bg-(--bg-surface) shadow-[-24px_0_60px_-24px_rgba(0,0,0,0.7)] duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]"
+			className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-(--border-default) bg-(--bg-surface) shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.55)] duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]"
 		>
 			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-3">
 				<span className="inline-flex size-[26px] shrink-0 items-center justify-center">

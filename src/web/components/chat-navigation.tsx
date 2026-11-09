@@ -30,7 +30,7 @@ export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavi
 			onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setActive(null); } }}
 			onKeyDown={(event) => { if (event.key === 'Escape') { setActive(null); setOpen(false); handle.current?.focus(); } }}>
 			{selected ? (
-				<div id={previewId} role="tooltip" className="absolute right-full w-[min(280px,65vw)] rounded-xl border border-(--border) bg-(--bg-overlay) p-3 text-[12px] leading-[18px] shadow-lg">
+				<div id={previewId} role="tooltip" className="absolute right-full w-[min(280px,65vw)] rounded-xl border border-(--border) bg-(--bg-overlay) p-3 text-[12px] leading-[18px] shadow-(--elev-3)">
 					<div className="line-clamp-2 break-words font-semibold text-(--text-primary)">{selected.input}</div>
 				</div>
 			) : null}

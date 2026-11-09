@@ -137,7 +137,7 @@ export function useSuggestions({
 
 	const list =
 		trigger && items.length > 0 ? (
-			<div role="listbox" className="flex flex-col gap-px rounded-lg border border-(--border-subtle) bg-(--bg-overlay) p-1 shadow-lg">
+			<div role="listbox" className="flex flex-col gap-px rounded-lg border border-(--border-subtle) bg-(--bg-overlay) p-1 shadow-(--elev-3)">
 				{items.map((item, index) => (
 					<button
 						key={item.key}
@@ -168,7 +168,7 @@ export function useSuggestions({
 					: 'No files match.'
 			: null;
 	const statusList = fileStatus ? (
-		<div role="status" className="rounded-lg border border-(--border-subtle) bg-(--bg-overlay) px-3 py-2 text-[12px] text-(--text-tertiary) shadow-lg">
+		<div role="status" className="rounded-lg border border-(--border-subtle) bg-(--bg-overlay) px-3 py-2 text-[12px] text-(--text-tertiary) shadow-(--elev-3)">
 			{fileStatus}
 		</div>
 	) : null;

@@ -59,7 +59,7 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
 	const cell = CELL * ratio;
 	ctx.drawImage(small, 0, 0, cols * cell, rows * cell);
 	// The mesh: a hairline between cells.
-	ctx.fillStyle = 'rgba(12, 12, 13, 0.5)';
+	ctx.fillStyle = 'rgba(12, 12, 12, 0.5)';
 	const line = Math.max(1, Math.round(ratio));
 	for (let x = 0; x < cols; x++) ctx.fillRect(Math.round(x * cell), 0, line, canvas.height);
 	for (let y = 0; y < rows; y++) ctx.fillRect(0, Math.round(y * cell), canvas.width, line);
