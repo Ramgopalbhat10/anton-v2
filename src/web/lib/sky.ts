@@ -4,14 +4,22 @@ import { useEffect, useState } from 'react';
  * The sky behind Anton: 24 public-domain pictures from NASA's Image and Video
  * Library, one an hour. Each is a 320×200 crop in `public/sky/`, small enough to
  * ship with the app; the page draws it as a pixel mesh (`components/sky.tsx`).
+ * Or, chosen in its menu or Settings › General, NASA's Astronomy Picture of the
+ * Day, which the server reads once a day (`/api/sky/today`) and which stays all day.
  */
 export type SkyImage = {
-	/** File in `public/sky/`, without `.jpg`. */
+	/** File in `public/sky/`, without `.jpg`; `apod-<date>` for a picture of the day. */
 	slug: string;
 	title: string;
 	credit: string;
 	/** Its page in NASA's library. */
 	nasaId: string;
+	/** Where the picture is, when it is not one of the 24 in `public/sky/`. */
+	src?: string;
+	/** Its page, when it is not in NASA's library. */
+	link?: string;
+	/** The day it is the picture for (`YYYY-MM-DD`), for a picture of the day. */
+	day?: string;
 };
 
 export const SKY: SkyImage[] = [
@@ -62,11 +70,101 @@ export function skyAt(at: Date): SkyImage {
 }
 
 export function skySource(image: SkyImage): string {
-	return `/sky/${image.slug}.jpg`;
+	return image.src ?? `/sky/${image.slug}.jpg`;
 }
 
 export function skyLink(image: SkyImage): string {
-	return `https://images.nasa.gov/details/${encodeURIComponent(image.nasaId)}`;
+	return image.link ?? `https://images.nasa.gov/details/${encodeURIComponent(image.nasaId)}`;
+}
+
+/** Milliseconds until the next local midnight, when a picture of the day gives way to the next. */
+export function untilTomorrow(at: Date): number {
+	const next = new Date(at);
+	next.setHours(24, 0, 0, 0);
+	return next.getTime() - at.getTime();
+}
+
+/*
+ * Which pictures the sky shows: `hourly`, a new one of the 24 each hour, or
+ * `daily`, NASA's picture of the day, the same all day. Kept in this browser.
+ */
+export type SkyMode = 'hourly' | 'daily';
+
+const MODE_KEY = 'anton.sky.mode';
+
+export function readSkyMode(): SkyMode {
+	try {
+		return localStorage.getItem(MODE_KEY) === 'daily' ? 'daily' : 'hourly';
+	} catch {
+		return 'hourly';
+	}
+}
+
+let mode: SkyMode | null = null;
+const modeListeners = new Set<() => void>();
+
+export function setSkyMode(next: SkyMode) {
+	mode = next;
+	try {
+		localStorage.setItem(MODE_KEY, next);
+		// A random pick belongs to the hourly pictures; choosing a mode shows that mode's picture.
+		localStorage.removeItem(PICK_KEY);
+	} catch {
+		// Storage is a convenience; the choice still holds for this page.
+	}
+	held = null;
+	for (const listener of modeListeners) listener();
+	if (next === 'daily') void loadDaily();
+}
+
+export function useSkyMode(): SkyMode {
+	const [value, setValue] = useState(() => mode ?? readSkyMode());
+	useEffect(() => {
+		const update = () => setValue(mode ?? readSkyMode());
+		modeListeners.add(update);
+		return () => void modeListeners.delete(update);
+	}, []);
+	return value;
+}
+
+type DailyAnswer = { date: string; title: string; credit: string; link: string; image: string };
+
+/** The picture of the day as the server last gave it, for the local day it was asked on. */
+let daily: { asked: string; image: SkyImage | null } | null = null;
+let loading: Promise<void> | null = null;
+
+const localDate = (at: Date) => `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+
+/** Asks the server for today's picture once a local day; until it answers, or when there is none, the hourly picture shows. */
+export function loadDaily(now = new Date()): Promise<void> {
+	const asked = localDate(now);
+	if (daily?.asked === asked) return Promise.resolve();
+	loading ??= fetch('/api/sky/today')
+		.then((response) => (response.ok ? (response.json() as Promise<{ picture: DailyAnswer | null }>) : { picture: null }))
+		.then(({ picture }) => {
+			daily = {
+				asked,
+				image: picture
+					? { slug: `apod-${picture.date}`, title: picture.title, credit: picture.credit, nasaId: '', src: picture.image, link: picture.link, day: picture.date }
+					: null,
+			};
+		})
+		.catch(() => {
+			daily = { asked, image: null };
+		})
+		.finally(() => {
+			loading = null;
+			for (const listener of pickListeners) listener();
+		});
+	return loading;
+}
+
+/** For tests: forget the picture of the day and the chosen mode. */
+export function resetSky() {
+	daily = null;
+	loading = null;
+	mode = null;
+	held = null;
 }
 
 /** Milliseconds until the next local hour. */
@@ -107,11 +205,12 @@ function readPick(now: number): SkyImage | undefined {
 let held: Pick | null = null;
 const pickListeners = new Set<() => void>();
 
-/** The picture to show at `now`: one asked for in the address, one picked at random this hour, or the hour's own. */
+/** The picture to show at `now`: one asked for in the address, one picked at random this hour, the picture of the day when chosen, or the hour's own. */
 function current(now: Date): SkyImage {
 	const time = now.getTime();
 	const fromMemory = held && held.until > time ? SKY.find((image) => image.slug === held?.slug) : undefined;
-	return pinned() ?? fromMemory ?? readPick(time) ?? skyAt(now);
+	const ofTheDay = (mode ?? readSkyMode()) === 'daily' && daily?.asked === localDate(now) ? daily.image : null;
+	return pinned() ?? fromMemory ?? readPick(time) ?? ofTheDay ?? skyAt(now);
 }
 
 /** A different one of the pictures, at random, and that `random` picks it (for tests). */
@@ -133,25 +232,34 @@ export function shuffleSky() {
 	for (const listener of pickListeners) listener();
 }
 
-/** This hour's picture (or one picked at random), moving on by itself at the top of each hour. */
+/** This hour's picture (or one picked at random, or the picture of the day), moving on by itself at the top of each hour. */
 export function useSky(): SkyImage {
 	const [image, setImage] = useState(() => current(new Date()));
 	useEffect(() => {
 		let timer: ReturnType<typeof setTimeout>;
+		const update = () => {
+			const now = new Date();
+			// A new local day asks for the new picture of the day; the hourly one shows until it comes.
+			if ((mode ?? readSkyMode()) === 'daily') void loadDaily(now);
+			setImage(current(now));
+		};
 		const schedule = () => {
 			timer = setTimeout(() => {
-				setImage(current(new Date()));
+				update();
 				schedule();
 			}, untilNextHour(new Date()) + 500);
 		};
 		schedule();
-		const onPick = () => setImage(current(new Date()));
-		pickListeners.add(onPick);
+		update();
+		pickListeners.add(update);
+		modeListeners.add(update);
 		return () => {
 			clearTimeout(timer);
-			pickListeners.delete(onPick);
+			pickListeners.delete(update);
+			modeListeners.delete(update);
 		};
 	}, []);
+	// The same picture keeps the same object, so the sky does not redraw it.
 	return image;
 }
 

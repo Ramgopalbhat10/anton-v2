@@ -39,7 +39,7 @@ export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	return (
 		<span className="flex size-full flex-col items-center justify-center gap-1.5">
 			<Icon icon={info.icon} size={size} className={info.tone} />
-			{size >= 16 ? <span className="font-mono text-[9.5px] tracking-[0.08em] text-(--text-disabled)">{extensionOf(path)}</span> : null}
+			{size >= 16 ? <span className="text-[9.5px] tracking-[0.08em] text-(--text-disabled)">{extensionOf(path)}</span> : null}
 		</span>
 	);
 }
@@ -75,7 +75,7 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 			</span>
 			<span className={cn('flex min-w-0 flex-col gap-0.5', stage && 'items-center')}>
 				<span className="text-[13px] leading-[18px] text-(--text-secondary)">This {noun} was deleted</span>
-				<span className="truncate font-mono text-[11px] leading-[16px] text-(--text-disabled)" title={path}>
+				<span className="truncate text-[11px] leading-[16px] text-(--text-disabled)" title={path}>
 					{nameOf(path)}
 				</span>
 				{stage ? <span className="mt-1 max-w-[360px] text-[12px] leading-[17px] text-(--text-tertiary)">It was removed from the task's Library, so there is nothing to show here any more.</span> : null}
@@ -112,7 +112,7 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 		<>
 			<span className="relative block h-[96px] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
 				<OutputThumb item={item} />
-				<span className="absolute top-1.5 left-1.5 rounded-[6px] border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px font-mono text-[9.5px] leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
+				<span className="absolute top-1.5 left-1.5 rounded-[6px] border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px text-[9.5px] leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
 					{extensionOf(item.path)}
 				</span>
 			</span>

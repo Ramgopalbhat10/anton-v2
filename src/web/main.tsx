@@ -15,14 +15,15 @@ import { SettingsOverview } from '@/components/settings/overview';
 import { SkillDetailPage } from '@/components/settings/skill-detail';
 import { ConnectorDetailPage } from '@/components/settings/connectors';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
+import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
 import { OutputViewerHost } from '@/components/output-viewer';
 import { ProjectPage, ThreadPage } from '@/components/project-page';
-import { ProjectSettingsPage } from '@/components/project-settings';
 import { ProjectsPage } from '@/components/projects-page';
 import { ReviewsPage } from '@/components/reviews-page';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
+import { TitleTips } from '@/components/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/vm-panel';
 import { CATEGORIES } from '@/lib/artifacts';
@@ -37,6 +38,7 @@ const rootRoute = createRootRoute({
 			<TooltipProvider>
 				<AppShell />
 				<OutputViewerHost />
+				<TitleTips />
 			</TooltipProvider>
 		</QueryClientProvider>
 	),
@@ -90,10 +92,15 @@ const threadRoute = createRoute({
 	component: ThreadPage,
 });
 
+/** A project's settings open as a card over its page (ProjectSettingsModal in the shell), not as a page of their own. */
 const projectSettingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/projects/$spaceId/settings',
-	component: ProjectSettingsPage,
+	beforeLoad: ({ params, preload }) => {
+		if (preload) return;
+		openProjectSettings(params.spaceId);
+		throw redirect({ to: '/projects/$spaceId', params: { spaceId: params.spaceId }, replace: true });
+	},
 });
 
 const tasksRoute = createRoute({

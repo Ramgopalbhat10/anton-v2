@@ -3,22 +3,22 @@
    TIER 1 — PRIMITIVES. Raw scales. Components never touch these.
    ============================================================ */
 :root{
-  /* Neutral ramp — hue 265 at very low chroma: cool enough to read as
-     "screen", warm enough not to look blue. Never pure black. */
+  /* Neutral ramp — plain greys with no hue, so black reads as black and the
+     cyan accent is the only colour on the screen. */
   --neutral-1000:#000000;
-  --neutral-950:#0A0A0B;
-  --neutral-900:#101012;
-  --neutral-850:#16161A;
-  --neutral-800:#1C1C21;
-  --neutral-750:#23232A;
-  --neutral-700:#2C2C34;
-  --neutral-600:#3A3A43;
-  --neutral-500:#4A4A52;
-  --neutral-400:#6E6E78;
-  --neutral-300:#A0A0A8;
-  --neutral-200:#C8C8CE;
-  --neutral-100:#EDEDEF;
-  --neutral-50:#F7F7F8;
+  --neutral-950:#0A0A0A;
+  --neutral-900:#101010;
+  --neutral-850:#161616;
+  --neutral-800:#1C1C1C;
+  --neutral-750:#232323;
+  --neutral-700:#2C2C2C;
+  --neutral-600:#3A3A3A;
+  --neutral-500:#4A4A4A;
+  --neutral-400:#737373;
+  --neutral-300:#A3A3A3;
+  --neutral-200:#CACACA;
+  --neutral-100:#EDEDED;
+  --neutral-50:#F7F7F7;
 
   /* Alpha whites — the depth system. Hover, active, and every hairline
      are alpha, not solid, so they hold up on any surface level. */
@@ -32,32 +32,23 @@
   --alpha-black-40:rgba(0,0,0,0.40);
   --alpha-black-60:rgba(0,0,0,0.60);
 
-  /* The mark's own cyan: Anton's cube (Logo) and the mascot on the composer
-     are drawn in it. It is not an interface colour; the accent is blue. */
+  /* Accent ramp — SIGNAL CYAN, the only accent hue in the system and the
+     colour of Anton's own cube. Calm on black, and far enough from
+     emerald / amber / red to tell apart at 11px on a 1px border. */
+  --cyan-100:#CBEEF8;
   --cyan-200:#9EE1F3;
   --cyan-300:#6FCDE8;
   --cyan-400:#3FB6D8;
   --cyan-500:#2C9BBD;
   --cyan-600:#1F7F9E;
   --cyan-700:#17627A;
-
-  /* Accent ramp — ION BLUE, the only accent hue in the system: the blue of
-     an atmosphere's limb seen from orbit. Calm on near-black, and far enough
-     from emerald / amber / red to tell apart at 11px on a 1px border. */
-  --blue-100:#DDE6FF;
-  --blue-200:#BACCFF;
-  --blue-300:#93AFFF;
-  --blue-400:#7096FB;
-  --blue-500:#557BE8;
-  --blue-600:#4262C4;
-  --blue-700:#334D9B;
-  --blue-800:#253874;
-  --blue-900:#192651;
-  --blue-alpha-8:rgba(112,150,251,0.08);
-  --blue-alpha-12:rgba(112,150,251,0.12);
-  --blue-alpha-16:rgba(112,150,251,0.16);
-  --blue-alpha-30:rgba(112,150,251,0.30);
-  --blue-alpha-40:rgba(112,150,251,0.40);
+  --cyan-800:#114A5C;
+  --cyan-900:#0D3644;
+  --cyan-alpha-8:rgba(63,182,216,0.08);
+  --cyan-alpha-12:rgba(63,182,216,0.12);
+  --cyan-alpha-16:rgba(63,182,216,0.16);
+  --cyan-alpha-30:rgba(63,182,216,0.30);
+  --cyan-alpha-40:rgba(63,182,216,0.40);
 
   /* Semantic ramps. Three hues only — INFO IS THE ACCENT (see below),
      so the system carries four hues total, not five. */
@@ -101,8 +92,8 @@
   --bg-inset:var(--neutral-1000);
   --bg-hover:var(--alpha-white-4);
   --bg-active:var(--alpha-white-7);
-  --bg-selected:var(--blue-alpha-12);
-  --bg-selected-hover:var(--blue-alpha-16);
+  --bg-selected:var(--cyan-alpha-12);
+  --bg-selected-hover:var(--cyan-alpha-16);
   --bg-disabled:var(--alpha-white-3);
   --bg-skeleton:var(--alpha-white-6);
   --bg-scrim:var(--alpha-black-60);
@@ -111,7 +102,7 @@
   --border-subtle:var(--alpha-white-6);
   --border-default:var(--alpha-white-9);
   --border-strong:var(--alpha-white-14);
-  --border-selected:var(--blue-alpha-40);
+  --border-selected:var(--cyan-alpha-40);
 
   /* Text */
   --text-primary:var(--neutral-100);
@@ -119,7 +110,7 @@
   --text-tertiary:var(--neutral-400);
   --text-disabled:var(--neutral-500);
   --text-placeholder:var(--neutral-400);
-  --text-on-accent:#060A18;
+  --text-on-accent:#06181F;
 
   /* Icons — one step quieter than the text they sit beside. */
   --icon-primary:var(--neutral-200);
@@ -128,14 +119,14 @@
   --icon-disabled:var(--neutral-500);
 
   /* Accent — interactive, selected, focused, active nav. Nothing else. */
-  --accent-base:var(--blue-400);
-  --accent-hover:var(--blue-300);
-  --accent-active:var(--blue-500);
-  --accent-text:var(--blue-300);
-  --accent-bg-subtle:var(--blue-alpha-12);
-  --accent-bg-subtle-hover:var(--blue-alpha-16);
-  --accent-border:var(--blue-alpha-40);
-  --accent-ring:var(--blue-alpha-30);
+  --accent-base:var(--cyan-400);
+  --accent-hover:var(--cyan-300);
+  --accent-active:var(--cyan-500);
+  --accent-text:var(--cyan-300);
+  --accent-bg-subtle:var(--cyan-alpha-12);
+  --accent-bg-subtle-hover:var(--cyan-alpha-16);
+  --accent-border:var(--cyan-alpha-40);
+  --accent-ring:var(--cyan-alpha-30);
   --accent-fg:var(--text-on-accent);
 
   /* Semantic states — each has text / subtle bg / border, so one state
@@ -147,10 +138,10 @@
   --success-bg:rgba(255,255,255,0.06);
   --success-border:rgba(255,255,255,0.14);
 
-  --warning-text:var(--blue-200);
-  --warning-base:var(--blue-300);
-  --warning-bg:var(--blue-alpha-12);
-  --warning-border:var(--blue-alpha-30);
+  --warning-text:var(--cyan-200);
+  --warning-base:var(--cyan-300);
+  --warning-bg:var(--cyan-alpha-12);
+  --warning-border:var(--cyan-alpha-30);
 
   --diff-add-text:var(--emerald-300);
   --diff-add-base:var(--emerald-400);
@@ -190,7 +181,7 @@
   --info-border:var(--accent-border);
 }
 
-/* Syntax palette. Rule: syntax never uses blue — the accent hue is
+/* Syntax palette. Rule: syntax never uses cyan — the accent hue is
    reserved for interaction, so a highlighted keyword can never be
    mistaken for a link. Hues run violet → sage → amber → rose, all held
    at moderate chroma so they stay legible at 12px on --bg-inset. */
@@ -216,13 +207,13 @@
   --syntax-removed-bg:var(--red-alpha-12);
   --syntax-line-number:var(--neutral-500);
   --syntax-line-highlight:var(--alpha-white-4);
-  --syntax-selection:var(--blue-alpha-16);
+  --syntax-selection:var(--cyan-alpha-16);
 }
 
-/* Type. Geist for everything a human wrote. Geist Mono for everything a
-   machine knows: labels, counts, keys, IDs, timestamps, units, aligned
-   numbers, paths, code. That split is the system's signature — see
-   --font-mono roles in readme.md. Three weights, never more. */
+/* Type. Geist everywhere: words, labels, counts, keys, IDs, timestamps and
+   paths, with tabular figures where numbers line up (.in-num). Geist Mono is
+   for code alone: code blocks, inline code, diffs, the terminal, and fields
+   you type code into. Three weights, never more. */
 :root{
   --font-sans:'Geist Variable','Geist','Geist Fallback',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --font-mono:'Geist Mono Variable','Geist Mono','Geist Mono Fallback',ui-monospace,'SFMono-Regular','Menlo',monospace;
@@ -355,48 +346,48 @@
 }
 
 
-/* App-level palette: "Observatory". Near-black with a faint cool cast, so the
-   sky behind the app and the panels in front of it read as one night. Text
-   steps are spaced for 13px on glass; the sky's veils live in styles.css. */
+/* App-level palette: "Observatory". Black and plain greys, no hue cast, so
+   the sky behind the app and the cyan accent are the only colour. Text steps
+   are spaced for 13px on glass; the sky's veils live in styles.css. */
 :root,
 [data-theme='dark'] {
-	--bg-canvas: #07080a;
-	--bg-surface: #0d0e11;
-	--bg-raised: #131418;
-	--bg-overlay: #1a1b20;
-	--bg-inset: #050608;
-	--bg-hover: rgba(255, 255, 255, 0.045);
-	--bg-active: rgba(255, 255, 255, 0.075);
-	--text-primary: #ececf0;
-	--text-secondary: #a9abb4;
-	--text-tertiary: #80838e;
-	--text-disabled: #60636d;
-	--text-placeholder: #6c6f7a;
-	--icon-primary: #d4d5db;
-	--icon-secondary: #a2a4ad;
-	--icon-tertiary: #7a7d88;
-	--icon-disabled: #5a5d66;
-	--neutral-600: #34353d;
-	--neutral-700: #26272d;
-	--neutral-750: #1f2025;
-	--neutral-800: #1a1b20;
+	--bg-canvas: #080808;
+	--bg-surface: #0e0e0e;
+	--bg-raised: #141414;
+	--bg-overlay: #1b1b1b;
+	--bg-inset: #050505;
+	--bg-hover: rgba(255, 255, 255, 0.05);
+	--bg-active: rgba(255, 255, 255, 0.08);
+	--text-primary: #ededed;
+	--text-secondary: #a8a8a8;
+	--text-tertiary: #808080;
+	--text-disabled: #5f5f5f;
+	--text-placeholder: #6b6b6b;
+	--icon-primary: #d4d4d4;
+	--icon-secondary: #a3a3a3;
+	--icon-tertiary: #7a7a7a;
+	--icon-disabled: #5a5a5a;
+	--neutral-600: #353535;
+	--neutral-700: #272727;
+	--neutral-750: #202020;
+	--neutral-800: #1b1b1b;
 	--border-subtle: rgba(255, 255, 255, 0.06);
 	--border-default: rgba(255, 255, 255, 0.09);
 	--border-strong: rgba(255, 255, 255, 0.15);
 
 	/* Glass: what floats over the sky. A dark tint, a blur that turns the
-	   mesh into colour, and a hairline that catches light along the top. */
-	--glass-bg: rgba(12, 13, 17, 0.62);
-	--glass-bg-strong: rgba(10, 11, 14, 0.82);
+	   mesh into colour, and a hairline all round; no lit top edge. */
+	--glass-bg: rgba(10, 10, 10, 0.62);
+	--glass-bg-strong: rgba(9, 9, 9, 0.82);
 	--glass-border: rgba(255, 255, 255, 0.08);
-	--glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	--glass-highlight: 0 0 #0000;
 	--glass-blur: blur(18px) saturate(140%);
 
 	/* The primary action is light on dark, as a lit key: the accent stays for
 	   what is live, selected or focused. */
-	--primary-bg: #ececf0;
+	--primary-bg: #ededed;
 	--primary-bg-hover: #ffffff;
-	--primary-fg: #08090c;
+	--primary-fg: #080808;
 }
 
 /* Radius: small for what you press, medium for what holds things. */

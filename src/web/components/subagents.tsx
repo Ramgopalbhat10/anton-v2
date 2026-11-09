@@ -231,7 +231,7 @@ function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; cal
 		<>
 			<div className="flex items-center gap-2">
 				<AgentTile agent={call.agent} running={live} size={18} />
-				<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
+				<span className="text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
 					{look.label}
 				</span>
 				<span className={cn('ml-auto flex items-center gap-1.5 text-[11px]', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>

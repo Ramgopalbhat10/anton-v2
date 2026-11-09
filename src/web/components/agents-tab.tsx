@@ -290,7 +290,7 @@ function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 		return (
 			<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
 				{detail.actions.map((action, index) => (
-					<span key={index} className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-(--text-tertiary)">
+					<span key={index} className="flex min-w-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
 						<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
 						<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
 							{action.what}
@@ -374,7 +374,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				<IconBtn icon={ArrowLeft} size="sm" label="All agents" onClick={() => focusRun(sessionId, null)} />
 				<AgentTile agent={run.agent} running={live} size={26} />
 				<div className="flex min-w-0 flex-1 flex-col">
-					<span className="font-mono text-[10.5px] tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
+					<span className="text-[10.5px] tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
 						{lookOf(run.agent).label}
 					</span>
 					<span className="truncate text-[13px] font-medium text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>

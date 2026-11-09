@@ -598,7 +598,7 @@ describe('OpenRouter', () => {
 		expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true);
 
 		fireEvent.change(screen.getByLabelText('Search OpenRouter models'), { target: { value: 'model-4' } });
-		expect(rows().map((row) => row.querySelector('.font-mono')?.textContent)).toEqual([
+		expect(rows().map((row) => [...row.querySelectorAll('span')].find((span) => span.textContent?.startsWith('lab/'))?.textContent)).toEqual([
 			'lab/model-4',
 			'lab/model-40',
 			'lab/model-41',

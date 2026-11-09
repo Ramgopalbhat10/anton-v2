@@ -114,7 +114,7 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 					key={skill.name}
 					title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
 					className={cn(
-						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md border border-(--border-subtle) bg-(--well-bg) px-1.5 font-mono text-[11px]',
+						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md border border-(--border-subtle) bg-(--well-bg) px-1.5 text-[11px]',
 						skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
 					)}
 				>
@@ -150,7 +150,7 @@ function InstalledCard({ plugin }: { plugin: Plugin }) {
 						<span className="truncate">{plugin.marketplace}</span>
 					</>
 				) : (
-					<span className="truncate font-mono">{[plugin.source.repo, plugin.source.path].filter(Boolean).join('/')}</span>
+					<span className="truncate">{[plugin.source.repo, plugin.source.path].filter(Boolean).join('/')}</span>
 				)
 			}
 			description={plugin.description}
@@ -271,7 +271,7 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 						{saved.map((marketplace) => (
 							<div key={marketplace} className="flex h-7 items-center gap-2 rounded-md pr-0.5 pl-2 hover:bg-(--bg-hover)">
 								<Icon icon={Store} size={12} className="text-(--icon-tertiary)" />
-								<span className="min-w-0 flex-1 truncate font-mono text-[12px]">{marketplace}</span>
+								<span className="min-w-0 flex-1 truncate text-[12px]">{marketplace}</span>
 								<IconBtn icon={X} size="xs" label={`Remove ${marketplace}`} onClick={() => save.mutate(saved.filter((item) => item !== marketplace))} />
 							</div>
 						))}
@@ -382,7 +382,7 @@ function GitHubResults({ query }: { query: string }) {
 							open={{ address: skill.address }}
 							bundle={false}
 							title={skill.name}
-							caption={<span className="truncate font-mono">{skill.address}</span>}
+							caption={<span className="truncate">{skill.address}</span>}
 							description={skill.description}
 							action={<InstallButton pick={{ address: skill.address }} name={skill.name} />}
 						/>
@@ -400,7 +400,7 @@ function GitHubResults({ query }: { query: string }) {
 						>
 							<Icon icon={Github} size={14} className="text-(--icon-tertiary)" />
 							<div className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate font-mono text-[12px] text-(--text-primary)">{repo.address}</span>
+								<span className="truncate text-[12px] text-(--text-primary)">{repo.address}</span>
 								{repo.description ? <span className="truncate text-[12px] text-(--text-tertiary)">{repo.description}</span> : null}
 							</div>
 							<span className="in-num flex shrink-0 items-center gap-1 text-[11px] text-(--text-disabled)">

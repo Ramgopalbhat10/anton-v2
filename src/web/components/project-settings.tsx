@@ -1,21 +1,23 @@
 import { unrouted } from '../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, BookOpen, Coins, FolderGit2, Gauge, Layers, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { BookOpen, ChevronRight, Coins, FolderGit2, Gauge, Layers, type LucideIcon, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from 'lucide-react';
+import { Dialog } from 'radix-ui';
 import { useEffect, useState } from 'react';
 import { Caption, ShareRow, StatRow } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { MenuButton } from '@/components/nav';
 import { IconPicker } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
 import { AREA } from '@/components/repo-settings';
 import { Block, FIELD, HelperModel, HELPERS, PageHeading, SaveState, Select, SettingRow, SubBlock } from '@/components/settings/parts';
 import { useGeneralSettings } from '@/components/settings/general';
-import { Btn, EmptyState, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Spinner } from '@/components/signal';
 import { api, type Autonomy, type HelperAgent, type ModelChoice, type Space, type SpaceChange } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
+import { closeProjectSettings, openProjectSettings, type ProjectSection, useProjectSettings } from '@/lib/project-settings-modal';
 import { useSpace } from '@/lib/spaces';
+import { cn } from '@/lib/utils';
 
 const AUTONOMY: Array<{ value: Autonomy; label: string }> = [
 	{ value: 'start', label: 'Starts threads on its own' },
@@ -292,6 +294,7 @@ function Lifecycle({ space }: { space: Space }) {
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: ['spaces'] });
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+			closeProjectSettings();
 			void navigate({ to: '/projects' });
 		},
 	});
@@ -320,55 +323,148 @@ function Lifecycle({ space }: { space: Space }) {
 	);
 }
 
-export function ProjectSettingsPage() {
-	const { spaceId } = useParams({ from: '/projects/$spaceId/settings' });
+const SECTIONS: Array<{ id: ProjectSection; label: string; icon: LucideIcon }> = [
+	{ id: 'general', label: 'General', icon: Settings2 },
+	{ id: 'instructions', label: 'Instructions', icon: ScrollText },
+	{ id: 'memory', label: 'Memory', icon: BookOpen },
+	{ id: 'repositories', label: 'Repositories', icon: FolderGit2 },
+	{ id: 'usage', label: 'Usage', icon: Coins },
+	{ id: 'lifecycle', label: 'Pause, archive or delete', icon: Trash2 },
+];
+
+const NAV_ITEM =
+	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-[6px] pr-2 pl-1 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[active=true]:bg-(--alpha-white-6) data-[active=true]:text-(--text-primary)';
+
+function Section({ space, section }: { space: Space; section: ProjectSection }) {
+	switch (section) {
+		case 'general':
+			return (
+				<>
+					<PageHeading title="General" info="Threads already running keep their model until their next message.">
+						For the coordinator and every thread in this project.
+					</PageHeading>
+					<General key={`general-${space.id}`} space={space} />
+				</>
+			);
+		case 'instructions':
+			return (
+				<TextBlock
+					space={space}
+					field="instructions"
+					title="Instructions"
+					icon={ScrollText}
+					help="Read by the coordinator and every thread."
+					info="After each repository's own AGENTS.md."
+					placeholder="- Keep pull requests small; one concern each."
+				/>
+			);
+		case 'memory':
+			return (
+				<TextBlock
+					space={space}
+					field="memory"
+					title="Memory"
+					icon={BookOpen}
+					help="What the coordinator and threads learned."
+					info="They add to it; edit or remove anything."
+					placeholder="Decisions, conventions and facts a new thread should know."
+				/>
+			);
+		case 'repositories':
+			return <Repositories space={space} />;
+		case 'usage':
+			return <Usage space={space} />;
+		case 'lifecycle':
+			return <Lifecycle space={space} />;
+	}
+}
+
+/** The card's frame: the project and section as crumbs with a close button, the sections on the left, the section beside them. */
+function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: ProjectSection }) {
 	const space = useSpace(spaceId);
+	const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-4 pl-2 text-[13px] md:pl-4">
-				<MenuButton />
-				<Link to="/projects/$spaceId" params={{ spaceId }} className="flex items-center gap-1.5 text-(--text-secondary) hover:text-(--text-primary)">
-					<ArrowLeft aria-hidden size={13} strokeWidth={1.5} />
-					{space.data ? <SpaceMark space={space.data} size={18} /> : null}
-					<span className="truncate">{space.data?.name ?? 'Project'}</span>
-				</Link>
-				<span className="text-(--text-disabled)">/</span>
-				<span className="font-medium">Settings</span>
+			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-4 text-[13px] font-medium">
+				{space.data ? <SpaceMark space={space.data} size={20} /> : null}
+				<span className="min-w-0 truncate text-(--text-secondary)">{space.data?.name ?? 'Project'}</span>
+				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--icon-disabled)" />
+				<span className="shrink-0 text-(--text-secondary)">Settings</span>
+				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--icon-disabled)" />
+				<span className="min-w-0 truncate text-(--text-primary)">{current.label}</span>
+				<span className="flex-1" />
+				<IconBtn icon={X} size="sm" label="Close project settings" onClick={closeProjectSettings} />
 			</header>
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-12 md:px-6">
-				<div className="mx-auto flex max-w-[820px] flex-col gap-6">
-					{space.isError ? <EmptyState icon={Gauge} title="No such project" body={space.error.message} /> : null}
-					{space.data ? (
-						<>
-							<PageHeading title={space.data.name} info="Threads already running keep their model until their next message.">
-								For the coordinator and every thread in this project.
-							</PageHeading>
-							<General key={`general-${space.data.id}`} space={space.data} />
-							<TextBlock
-								space={space.data}
-								field="instructions"
-								title="Instructions"
-								icon={ScrollText}
-								help="Read by the coordinator and every thread."
-								info="After each repository's own AGENTS.md."
-								placeholder="- Keep pull requests small; one concern each."
-							/>
-							<TextBlock
-								space={space.data}
-								field="memory"
-								title="Memory"
-								icon={BookOpen}
-								help="What the coordinator and threads learned."
-								info="They add to it; edit or remove anything."
-								placeholder="Decisions, conventions and facts a new thread should know."
-							/>
-							<Repositories space={space.data} />
-							<Usage space={space.data} />
-							<Lifecycle space={space.data} />
-						</>
-					) : null}
+			<div className="flex min-h-0 flex-1 flex-col md:flex-row">
+				<nav
+					aria-label="Project settings"
+					data-noscrollbar
+					className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-(--border-subtle) px-2.5 py-2 md:w-[232px] md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:pt-2.5 md:pb-4"
+				>
+					<div className="hidden items-center gap-2 px-2 pt-1 pb-1.5 md:flex">
+						<SectionLabel className="shrink-0">Project</SectionLabel>
+						<span aria-hidden className="h-px flex-1 bg-(--border-subtle)" />
+					</div>
+					{SECTIONS.map((item) => (
+						<button
+							key={item.id}
+							type="button"
+							data-active={item.id === current.id}
+							aria-current={item.id === current.id ? 'page' : undefined}
+							onClick={() => openProjectSettings(spaceId, item.id)}
+							className={cn(NAV_ITEM, item.id === 'lifecycle' && 'md:mt-3')}
+						>
+							<span
+								className={cn(
+									'inline-flex size-6 shrink-0 items-center justify-center text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary)',
+									item.id === current.id && 'text-(--accent-text) group-hover/nav:text-(--accent-text)',
+									item.id === 'lifecycle' && item.id === current.id && 'text-(--danger-text) group-hover/nav:text-(--danger-text)',
+								)}
+							>
+								<Icon icon={item.icon} size={15} />
+							</span>
+							<span className="min-w-0 truncate whitespace-nowrap">{item.label}</span>
+						</button>
+					))}
+				</nav>
+				<div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-12 md:px-6">
+					<div className="flex max-w-[880px] flex-col gap-6 pt-4">
+						{space.isError ? <EmptyState icon={Gauge} title="No such project" body={space.error.message} /> : null}
+						{space.data ? <Section key={current.id} space={space.data} section={current.id} /> : <Spinner size={12} />}
+					</div>
 				</div>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * A project's settings, as a card over the page you are on, like the app's
+ * Settings. A link inside it to anywhere else closes it and goes there.
+ */
+export function ProjectSettingsModal() {
+	const at = useProjectSettings();
+	return (
+		<Dialog.Root open={at !== null} onOpenChange={(next) => (next ? undefined : closeProjectSettings())}>
+			<Dialog.Portal>
+				<Dialog.Overlay className="settings-overlay fixed inset-0 z-50" />
+				<Dialog.Content
+					aria-describedby={undefined}
+					// Focus the card itself, not its first control, so opening it draws no focus ring.
+					onOpenAutoFocus={(event) => {
+						event.preventDefault();
+						(event.currentTarget as HTMLElement | null)?.focus();
+					}}
+					tabIndex={-1}
+					onClickCapture={(event) => {
+						if ((event.target as Element).closest('a[href]')) closeProjectSettings();
+					}}
+					className="settings-card fixed inset-0 z-50 flex flex-col overflow-hidden outline-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(820px,calc(100dvh-64px))] md:w-[min(1180px,calc(100vw-64px))] md:-translate-x-1/2 md:-translate-y-1/2"
+				>
+					<Dialog.Title className="sr-only">Project settings</Dialog.Title>
+					{at ? <ProjectSettingsCard spaceId={at.spaceId} section={at.section} /> : null}
+				</Dialog.Content>
+			</Dialog.Portal>
+		</Dialog.Root>
 	);
 }

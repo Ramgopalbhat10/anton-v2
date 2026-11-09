@@ -9,29 +9,29 @@ import { Btn, Icon } from '@/components/signal';
 import { useRefreshTask } from '@/components/source-bar';
 import { api, isChat, repoShort } from '@/lib/api';
 
-/** xterm palette from the Signal tokens: inset black, secondary text, blue cursor. */
+/** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
 const theme = {
 	background: '#000000',
 	foreground: '#ababab',
-	cursor: '#7096fb',
-	cursorAccent: '#060a18',
-	selectionBackground: 'rgba(112,150,251,0.2)',
-	black: '#16161a',
+	cursor: '#3fb6d8',
+	cursorAccent: '#06181f',
+	selectionBackground: 'rgba(63,182,216,0.2)',
+	black: '#161616',
 	red: '#f58581',
 	green: '#63dda5',
 	yellow: '#f2c173',
-	blue: '#7096fb',
+	blue: '#6fcde8',
 	magenta: '#b98be8',
 	cyan: '#6fcde8',
-	white: '#ededef',
-	brightBlack: '#6e6e78',
+	white: '#ededed',
+	brightBlack: '#737373',
 	brightRed: '#f58581',
 	brightGreen: '#63dda5',
 	brightYellow: '#f2c173',
-	brightBlue: '#a9c0ff',
+	brightBlue: '#9ee1f3',
 	brightMagenta: '#b98be8',
 	brightCyan: '#9ee1f3',
-	brightWhite: '#f7f7f8',
+	brightWhite: '#f7f7f7',
 };
 
 type Link = 'connecting' | 'connected' | 'closed';

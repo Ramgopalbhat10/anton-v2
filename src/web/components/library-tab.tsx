@@ -448,7 +448,7 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
-				<span className="rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
+				<span className="rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
 				{kind === 'page' && place.sessionId ? (
 					<span className="min-w-0 truncate rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 text-[11px] text-(--text-primary) backdrop-blur-sm">{name}</span>
@@ -500,7 +500,7 @@ const TREE_STYLE = {
  * Modified and size as columns: fixed-width text in Anton's mono type, kept on
  * one line with its spaces, and kept whole while a long name gives way.
  */
-const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }`;
+const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font-sans); font-size: 11px; font-variant-numeric: tabular-nums; }`;
 const COLUMN_GAP = 3;
 
 /**
@@ -570,7 +570,7 @@ function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: O
 			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--border-subtle) pl-2" style={{ paddingRight: `calc(2rem + ${lane}px)` }}>
 				<span className="in-caption">Name</span>
 				{/* Measured in the rows' own type, so each heading ends where its column does. */}
-				<span className="flex font-mono text-[11px]">
+				<span className="flex text-[11px]">
 					<span className="flex justify-end" style={{ width: `${widths.date}ch` }}>
 						<span className="in-caption">Modified</span>
 					</span>

@@ -199,12 +199,12 @@ function Facts({ preview }: { preview: PluginPreview }) {
 			? ['Source', <AddedFileLink path={preview.added} />]
 			: [
 					'Source',
-					<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 font-mono outline-none hover:underline">
+					<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 outline-none hover:underline">
 						<span className="truncate">{[preview.source.repo, preview.source.path].filter(Boolean).join('/')}</span>
 						<Icon icon={ArrowUpRight} size={11} />
 					</a>,
 				],
-		...(preview.added ? [] : [['Commit', <span className="font-mono">{preview.sha.slice(0, 7)}</span>] as [string, ReactNode]]),
+		...(preview.added ? [] : [['Commit', <span className="font-sans">{preview.sha.slice(0, 7)}</span>] as [string, ReactNode]]),
 		...(preview.marketplace ? [['Marketplace', preview.marketplace] as [string, ReactNode]] : []),
 		['Skills', String(preview.skills.length)],
 		['Files', `${preview.files.length.toLocaleString()}${preview.truncated ? '+' : ''}`],
@@ -279,7 +279,7 @@ function Skills({ preview, onView }: { preview: PluginPreview; onView: (path: st
 				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-[6px] px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
 					<Glyph bundle={false} />
 					<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-						<span className="font-mono text-[13px] text-(--text-primary)">/{skill.name}</span>
+						<span className="text-[13px] text-(--text-primary)">/{skill.name}</span>
 						<p className="m-0 line-clamp-3 max-w-[90ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)" title={skill.description}>
 							{skill.description || 'No description.'}
 						</p>
@@ -452,7 +452,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 						{preview.added ? (
 							<AddedFileLink path={preview.added} />
 						) : (
-							<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono outline-none hover:text-(--text-primary)">
+							<a href={githubUrl(preview)} target="_blank" rel="noreferrer" className="in-num inline-flex items-center gap-1 outline-none hover:text-(--text-primary)">
 								{preview.sha.slice(0, 7)}
 								<Icon icon={ArrowUpRight} size={11} />
 							</a>
@@ -462,7 +462,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 				<div className="col-span-2 @min-[700px]/settings:col-span-1"><Actions preview={preview} /></div>
 				{preview.description ? <p className="col-span-full m-0 text-[13px] leading-[19px] text-pretty text-(--text-secondary) @min-[700px]/settings:col-start-2">{preview.description}</p> : null}
 			</header>
-			<div role="tablist" aria-label="Plugin" className="sticky top-0 z-20 flex gap-1 border-b border-(--border-subtle) bg-(--bg-canvas) @min-[260px]/settings:gap-5">
+			<div role="tablist" aria-label="Plugin" className="sticky-veil sticky top-0 z-20 flex gap-1 border-b border-(--border-subtle) @min-[260px]/settings:gap-5">
 				<TabButton on={tab === 'overview'} onClick={() => setTab('overview')}>
 					Overview
 				</TabButton>

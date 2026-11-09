@@ -44,12 +44,11 @@ import {
 	MenuSubContent,
 	MenuSubTrigger,
 	MenuTrigger,
-	SectionLabel,
 } from '@/components/signal';
 import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
 import { NotificationsBell } from '@/components/notifications';
-import { ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
+import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
@@ -331,25 +330,41 @@ function Toolbar({
 		);
 	}
 	const active = filterCount(view.filters);
-	return (
-		<div className="group/tools flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
-			{active ? (
+	const actions = (
+		<>
+			<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
+			<ViewMenu view={view} onChange={onChange} tasks={tasks} />
+		</>
+	);
+	if (active) {
+		return (
+			<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
 				<FilterChips view={view} onChange={onChange} tasks={tasks} />
-			) : (
-				<span className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5">
-					<SectionLabel className="truncate">Tasks</SectionLabel>
-				</span>
-			)}
-			{/* Out of the way until wanted: on hover or focus, and always while a filter is on. */}
-			<span className={cn('flex shrink-0 items-center', !active && 'opacity-0 group-focus-within/tools:opacity-100 group-hover/tools:opacity-100 has-data-[state=open]:opacity-100')}>
-				<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
-				<ViewMenu view={view} onChange={onChange} tasks={tasks} />
-			</span>
-		</div>
+				<span className="flex shrink-0 items-center">{actions}</span>
+			</div>
+		);
+	}
+	// The group's heading: Pinned, Running and Recent are its sections.
+	return (
+		<GroupHeading label="Tasks" count={tasks.length}>
+			{actions}
+		</GroupHeading>
 	);
 }
 
-/** A section's heading: click it to fold the section away. Its actions show while the pointer is on it. */
+/** How each section of Tasks is marked beside its name: live work in the accent, the rest quiet. */
+function SectionMark({ place, count }: { place: Place; count: number }) {
+	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--icon-tertiary)" />;
+	const live = place === 'running' && count > 0;
+	return (
+		<span aria-hidden className="relative inline-flex size-[11px] shrink-0 items-center justify-center">
+			{live ? <span className="absolute inset-0 animate-ping rounded-full bg-(--accent-base) opacity-30" /> : null}
+			<span className={cn('size-[5px] rounded-full', live ? 'bg-(--accent-base)' : 'bg-(--text-disabled)')} />
+		</span>
+	);
+}
+
+/** A section's heading inside Tasks: click it to fold the section away. Its actions show while the pointer is on it. */
 function SectionHeader({
 	place,
 	label,
@@ -366,14 +381,15 @@ function SectionHeader({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="group/header mt-2 flex h-7 items-center gap-1 pr-2.5 pl-3">
+		<div className="group/header mt-1.5 flex h-7 items-center gap-1 pr-2.5 pl-3">
 			<button
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="group/fold flex h-6 min-w-0 items-center gap-1.5 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
-				<SectionLabel className="truncate">{label}</SectionLabel>
+				<SectionMark place={place} count={count} />
+				<span className="truncate text-[12px] font-medium">{label}</span>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
@@ -543,7 +559,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 		<div className="flex flex-col gap-0.5 px-3">
 			{groups(tasks, view.group).map((group) => (
 				<div key={group.key} className="flex flex-col gap-0.5">
-					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 font-mono text-[11px] text-(--text-disabled)">{group.label}</div> : null}
+					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-[11px] text-(--text-disabled)">{group.label}</div> : null}
 					{group.tasks.map((session) => (
 						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
 					))}
@@ -618,7 +634,7 @@ export function ChatSidebar({
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_1px_rgba(255,255,255,0.06)] transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>

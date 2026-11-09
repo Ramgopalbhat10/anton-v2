@@ -230,12 +230,12 @@ function Models({ subscription }: { subscription: Subscription }) {
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span className="truncate text-[12.5px] text-(--text-primary)">{model.name}</span>
 								{model.options?.map((option) => (
-									<span key={option} className="shrink-0 rounded-[6px] bg-(--alpha-white-6) px-1 py-px font-mono text-[9.5px] tracking-[0.04em] text-(--text-tertiary)">
+									<span key={option} className="shrink-0 rounded-[6px] bg-(--alpha-white-6) px-1 py-px text-[9.5px] tracking-[0.04em] text-(--text-tertiary)">
 										{option}
 									</span>
 								))}
 							</span>
-							<span className="truncate font-mono text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+							<span className="truncate text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 						</div>
 						<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
 						<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
@@ -802,7 +802,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 									{model.vendor ? <span className="text-(--text-tertiary)">{model.vendor}: </span> : null}
 									{model.name}
 								</span>
-								<span className="truncate font-mono text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+								<span className="truncate text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 							</div>
 							<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
 							<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>

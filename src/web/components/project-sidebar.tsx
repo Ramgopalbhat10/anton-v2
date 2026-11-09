@@ -9,6 +9,7 @@ import { Glyph } from '@/components/thread-glyph';
 import { repoShort, type Session, type Space, type ThreadState } from '@/lib/api';
 import { age } from '@/lib/format';
 import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
+import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
 /** A project's mark: its icon on a tinted tile, or its initial when it has none. */
@@ -55,6 +56,43 @@ export function SidebarHeading({ label, count, open, onToggle, tone, children }:
 	);
 }
 
+/**
+ * A top-level group of the sidebar (Projects, Tasks): its name in small
+ * capitals, its count, and a hairline running to its actions, so the sections
+ * inside it (Running, Recent) read as its children. With `onToggle` the name
+ * folds the group away.
+ */
+export function GroupHeading({ label, count, open = true, onToggle, children, className }: { label: string; count?: number; open?: boolean; onToggle?: () => void; children?: ReactNode; className?: string }) {
+	const name = (
+		<>
+			<span className="truncate">{label}</span>
+			{count ? <span className="in-num font-medium tracking-normal text-(--text-disabled)">{count}</span> : null}
+			{onToggle ? (
+				<Icon
+					icon={ChevronRight}
+					size={11}
+					className="text-(--icon-disabled) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) group-hover/group:opacity-100 group-focus-within/group:opacity-100"
+					style={{ transform: open ? 'rotate(90deg)' : undefined }}
+				/>
+			) : null}
+		</>
+	);
+	const look = 'flex h-6 min-w-0 shrink-0 items-center gap-1.5 text-[10.5px] font-semibold tracking-[0.09em] text-(--text-secondary) uppercase';
+	return (
+		<div className={cn('group/group mt-4 flex h-7 items-center gap-2 pr-2.5 pl-5', className)}>
+			{onToggle ? (
+				<button type="button" aria-expanded={open} onClick={onToggle} className={cn(look, 'rounded-md outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)')}>
+					{name}
+				</button>
+			) : (
+				<h2 className={cn(look, 'm-0')}>{name}</h2>
+			)}
+			<span aria-hidden className="h-px min-w-3 flex-1 bg-(--border-subtle)" />
+			{children ? <span className="-my-1 flex shrink-0 items-center">{children}</span> : null}
+		</div>
+	);
+}
+
 /** The projects in the main sidebar, under Tasks and Reviews: each with what waits on you. */
 export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	const spaces = useSpaces();
@@ -63,13 +101,13 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	if (!spaces.data) return null;
 	return (
 		<section aria-label="Projects" className="flex flex-col">
-			<SidebarHeading label="Projects" count={list.length} open={open} onToggle={() => setOpen((current) => !current)}>
+			<GroupHeading label="Projects" count={list.length} open={open} onToggle={() => setOpen((current) => !current)} className="mt-3">
 				<Link to="/projects" search={{ create: true }} onClick={onNavigate} aria-label="New project" title="New project" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs">
 					<Icon icon={Plus} size={12} />
 				</Link>
-			</SidebarHeading>
+			</GroupHeading>
 			{open ? (
-				<div className="flex flex-col gap-0.5 px-3">
+				<div className="flex flex-col gap-0.5 px-3 pt-1">
 					{list.map((space) => (
 						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-9 pl-1.5')}>
 							<SpaceMark space={space} size={24} />
@@ -171,7 +209,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex flex-col rounded-[10px] bg-(--bg-hover) p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_1px_rgba(255,255,255,0.06)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active)"
+							className="flex flex-col rounded-[10px] bg-(--bg-hover) p-2 text-left shadow-[0_0_0_1px_rgba(255,255,255,0.06)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active)"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
 								{space ? <SpaceMark space={space} size={30} /> : <span className="size-[30px]" />}
@@ -203,7 +241,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						<MenuItem icon={Plus} onSelect={() => void navigate({ to: '/projects', search: { create: true } })}>
 							New project
 						</MenuItem>
-						<MenuItem icon={Settings} onSelect={() => void navigate({ to: '/projects/$spaceId/settings', params: { spaceId } })}>
+						<MenuItem icon={Settings} onSelect={() => openProjectSettings(spaceId)}>
 							Project settings
 						</MenuItem>
 					</MenuContent>

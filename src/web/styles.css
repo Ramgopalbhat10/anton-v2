@@ -82,7 +82,7 @@ body {
 }
 
 ::selection {
-	background: var(--blue-alpha-30);
+	background: var(--cyan-alpha-30);
 }
 
 ::placeholder,
@@ -92,6 +92,72 @@ textarea::placeholder {
 
 :where(button, [role='button']) {
 	cursor: default;
+}
+
+/* Whatever you can press says so: buttons, links, tabs, menu items, options,
+   switches, summaries and labels of a control. Unlayered, so it wins over a
+   component's own cursor-default; what is disabled, or asks for another
+   cursor (resize, grab, text, zoom, help), keeps its own. */
+:is(
+		button,
+		a[href],
+		summary,
+		select,
+		label[for],
+		[role='button'],
+		[role='link'],
+		[role='tab'],
+		[role='menuitem'],
+		[role='menuitemradio'],
+		[role='menuitemcheckbox'],
+		[role='option'],
+		[role='switch'],
+		[role='checkbox'],
+		[role='radio'],
+		[role='combobox'],
+		[role='treeitem'],
+		[data-slot='select-trigger'],
+		input[type='checkbox'],
+		input[type='radio'],
+		input[type='range'],
+		input[type='color'],
+		input[type='file']
+	):not(:disabled, [aria-disabled='true'], [data-disabled], [class*='cursor-col'], [class*='cursor-row'], [class*='cursor-ew'], [class*='cursor-ns'], [class*='cursor-grab'], [class*='cursor-text'], [class*='cursor-zoom'], [class*='cursor-help'], [class*='cursor-crosshair'], [class*='cursor-wait'], [class*='cursor-not-allowed'], [class*='cursor-move']) {
+	cursor: pointer;
+}
+
+/* A sticky header over a list in a glass card (a picker's sections, a page's
+   tabs): no fill of its own, so at rest it is the card's own colour, and what
+   scrolls under it blurs away. */
+.sticky-veil {
+	background: transparent;
+	-webkit-backdrop-filter: blur(14px);
+	backdrop-filter: blur(14px);
+}
+
+/* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
+   as one dark tip with no arrow. */
+.tip {
+	max-width: min(320px, calc(100vw - 16px));
+	padding: 5px 8px;
+	border-radius: 6px;
+	background: rgba(6, 6, 6, 0.96);
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 10px 28px -10px rgba(0, 0, 0, 0.85);
+	color: var(--text-primary);
+	font-family: var(--font-sans);
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 16px;
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: pre-line;
+	overflow-wrap: anywhere;
+	animation: tip-in 120ms var(--ease-out);
+}
+@keyframes tip-in {
+	from {
+		opacity: 0;
+	}
 }
 
 * {
@@ -157,14 +223,14 @@ textarea::placeholder {
 }
 .sky-shade {
 	background:
-		radial-gradient(120% 90% at 60% 30%, transparent 0%, rgba(7, 8, 10, 0.35) 55%, rgba(7, 8, 10, 0.85) 100%),
-		linear-gradient(180deg, rgba(7, 8, 10, 0.25) 0%, transparent 30%, rgba(7, 8, 10, 0.55) 100%);
+		radial-gradient(120% 90% at 60% 30%, transparent 0%, rgba(8, 8, 8, 0.35) 55%, rgba(8, 8, 8, 0.85) 100%),
+		linear-gradient(180deg, rgba(8, 8, 8, 0.25) 0%, transparent 30%, rgba(8, 8, 8, 0.55) 100%);
 }
 
 /*
  * How much of the sky a page lets through, set on <main> by the route:
- * all of it on Home, a little behind lists and settings, a hint behind a
- * conversation, where reading comes first.
+ * all of it on Home, a little behind lists, settings and every conversation
+ * (a task, a thread, a coordinator, alike), a hint behind an artifact you read.
  */
 .app-main {
 	position: relative;
@@ -224,20 +290,20 @@ textarea::placeholder {
 	min-height: 176px;
 }
 .sky-credit {
-	background: rgba(8, 9, 12, 0.5);
+	background: rgba(8, 8, 8, 0.5);
 }
 :root {
 	--heat-0: rgba(255, 255, 255, 0.055);
-	--heat-1: rgba(112, 150, 251, 0.28);
-	--heat-2: rgba(112, 150, 251, 0.48);
-	--heat-3: rgba(112, 150, 251, 0.72);
-	--heat-4: #a9c0ff;
+	--heat-1: rgba(63, 182, 216, 0.3);
+	--heat-2: rgba(63, 182, 216, 0.5);
+	--heat-3: rgba(63, 182, 216, 0.75);
+	--heat-4: #9ee1f3;
 }
 
 /* The Settings card (settings/modal.tsx): a glass card over a dimmed, blurred
    app, full screen on a phone. */
 .settings-overlay {
-	background: rgba(3, 4, 6, 0.62);
+	background: rgba(3, 3, 3, 0.62);
 	-webkit-backdrop-filter: blur(6px);
 	backdrop-filter: blur(6px);
 	animation: settings-fade 160ms var(--ease-out, ease-out);
@@ -270,4 +336,16 @@ textarea::placeholder {
 	.settings-card {
 		animation: none;
 	}
+}
+
+/* A project's card on the Projects page: a wash of the project's own colour
+   behind its mark, and a ring in that colour on hover. */
+.project-card {
+	transition: box-shadow var(--transition-standard), transform var(--transition-standard);
+}
+.project-card__wash {
+	background: radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--tint) 16%, transparent), transparent 70%);
+}
+.project-card:hover {
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), 0 18px 40px -24px rgba(0, 0, 0, 0.9);
 }

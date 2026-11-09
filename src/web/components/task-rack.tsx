@@ -192,7 +192,7 @@ function TaskDetails({ session }: { session: Session }) {
 					</div>
 					<p className="m-0 line-clamp-3 text-[13px] leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
 				</div>
-				<div className="truncate font-mono text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-[11px] text-(--text-tertiary)">
 					{repoShort(session)} · {branchLabel(session)}
 				</div>
 			</div>

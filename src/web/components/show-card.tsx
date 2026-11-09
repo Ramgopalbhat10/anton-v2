@@ -387,11 +387,11 @@ function FileRef({ node }: { node: Extract<UiNode, { type: "file" }> }) {
         size={13}
         className="shrink-0 text-(--icon-tertiary)"
       />
-      <span className="min-w-0 truncate font-mono text-[12px]">
+      <span className="min-w-0 truncate text-[12px]">
         {node.label ?? text}
       </span>
       {node.label ? (
-        <span className="min-w-0 truncate font-mono text-[11px] text-(--text-tertiary)">
+        <span className="min-w-0 truncate text-[11px] text-(--text-tertiary)">
           {text}
         </span>
       ) : null}
