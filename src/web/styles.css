@@ -222,8 +222,8 @@ textarea::placeholder {
 }
 .sky-shade {
 	background:
-		radial-gradient(120% 90% at 60% 30%, transparent 0%, rgba(8, 8, 8, 0.35) 55%, rgba(8, 8, 8, 0.85) 100%),
-		linear-gradient(180deg, rgba(8, 8, 8, 0.25) 0%, transparent 30%, rgba(8, 8, 8, 0.55) 100%);
+		radial-gradient(130% 100% at 60% 30%, transparent 0%, rgba(15, 15, 16, 0.2) 55%, rgba(15, 15, 16, 0.7) 100%),
+		linear-gradient(180deg, rgba(15, 15, 16, 0.15) 0%, transparent 30%, rgba(15, 15, 16, 0.45) 100%);
 }
 
 /*
@@ -240,10 +240,10 @@ textarea::placeholder {
 	background: transparent;
 }
 .app-main[data-sky='dim'] {
-	background: color-mix(in srgb, var(--bg-canvas) 84%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 76%, transparent);
 }
 .app-main[data-sky='faint'] {
-	background: color-mix(in srgb, var(--bg-canvas) 95%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
 }
 
 /* Glass: a panel over the sky. */
@@ -251,7 +251,7 @@ textarea::placeholder {
 	background: var(--glass-bg);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border);
+	box-shadow: var(--glass-shadow);
 }
 .glass-strong {
 	background: var(--glass-bg-strong);
@@ -262,6 +262,7 @@ textarea::placeholder {
 /* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
 .app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
 	background: var(--glass-bg);
+	box-shadow: var(--glass-shadow);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 }
@@ -273,23 +274,23 @@ textarea::placeholder {
 	background: var(--glass-bg);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border);
+	box-shadow: var(--glass-shadow);
 }
 .home-composer {
 	border-radius: 14px;
-	background: color-mix(in srgb, var(--glass-bg-strong) 92%, transparent);
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--glass-border), 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
+	box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.2);
 	transition: box-shadow var(--transition-standard);
 }
 .home-composer:focus-within {
-	box-shadow: var(--glass-highlight), 0 0 0 1px var(--border-strong), 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+	box-shadow: 0 0 0 1px var(--accent-border), 0 24px 60px -30px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 .home-panel {
 	border-radius: 12px;
 	min-height: 176px;
 }
 .sky-credit {
-	background: rgba(8, 8, 8, 0.5);
+	background: rgba(15, 15, 16, 0.5);
 }
 :root {
 	--heat-0: rgba(255, 255, 255, 0.055);

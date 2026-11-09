@@ -3,8 +3,8 @@ import { type SkyImage, skySource } from '@/lib/sky';
 
 /** CSS pixels per cell of the mesh. */
 const CELL = 5;
-/** Levels per colour channel after dithering: few enough to read as pixels, enough to keep the picture. */
-const LEVELS = 7;
+/** Levels per colour channel after dithering: enough to keep the picture's gradients smooth, few enough to read as pixels. */
+const LEVELS = 12;
 /** A 4×4 Bayer matrix, scaled to -0.5…0.5. */
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((value) => value / 16 - 0.5);
 
@@ -41,7 +41,7 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
 			const at = (y * cols + x) * 4;
 			const threshold = BAYER[(y % 4) * 4 + (x % 4)];
 			// A little grain per cell, the same for all three channels, so the sparkle stays in the picture's hues.
-			const grain = (Math.random() - 0.5) * 0.35;
+			const grain = (Math.random() - 0.5) * 0.18;
 			for (let channel = 0; channel < 3; channel++) {
 				const value = px[at + channel] / step + threshold + grain;
 				px[at + channel] = Math.max(0, Math.min(255, Math.round(value) * step));
@@ -58,7 +58,7 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
 	const cell = CELL * ratio;
 	ctx.drawImage(small, 0, 0, cols * cell, rows * cell);
 	// The mesh: a hairline between cells.
-	ctx.fillStyle = 'rgba(5, 5, 5, 0.62)';
+	ctx.fillStyle = 'rgba(12, 12, 13, 0.5)';
 	const line = Math.max(1, Math.round(ratio));
 	for (let x = 0; x < cols; x++) ctx.fillRect(Math.round(x * cell), 0, line, canvas.height);
 	for (let y = 0; y < rows; y++) ctx.fillRect(0, Math.round(y * cell), canvas.width, line);

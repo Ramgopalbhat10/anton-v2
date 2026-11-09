@@ -4,15 +4,16 @@
    a footer with a mono caption and the actions that change it. */
 :root,
 [data-theme='dark'] {
-	--card-bg: #0f0f0f;
-	--card-bg-top: #121212;
-	--card-border: rgba(255, 255, 255, 0.07);
-	/* No highlight and no outer ring: a card's edge is its border, so a scroll
-	   container never clips it and a bordered card never doubles it. */
+	/* Cards have no edge: they read by fill, one step above what they sit on,
+	   and a soft drop. The border stays (transparent) so sizes never shift. */
+	--card-bg: #161618;
+	--card-bg-top: #19191b;
+	--card-border: transparent;
 	--card-highlight: 0 0 #0000;
+	--card-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
 	--card-radius: 10px;
-	--well-bg: #0a0a0a;
-	--well-border: rgba(255, 255, 255, 0.05);
+	--well-bg: #111113;
+	--well-border: transparent;
 	--well-radius: 8px;
 	--grid-line: rgba(255, 255, 255, 0.035);
 	--grid-mark: rgba(255, 255, 255, 0.14);
@@ -55,6 +56,7 @@
 	border: 1px solid var(--card-border);
 	background: linear-gradient(180deg, var(--card-bg-top), var(--card-bg) 72px);
 	background-clip: padding-box;
+	box-shadow: var(--card-shadow);
 }
 
 /* A small card: a file a reply made, a thread's card, a status box. The same
@@ -64,6 +66,7 @@
 	border: 1px solid var(--card-border);
 	background: var(--card-bg);
 	background-clip: padding-box;
+	box-shadow: var(--card-shadow);
 }
 
 .in-well {
@@ -469,9 +472,9 @@
    so they read as the same object as the cards beneath them. */
 :root,
 [data-theme='dark'] {
-	--pop-bg: #161616;
-	--pop-bg-top: #1a1a1a;
-	--pop-border: rgba(255, 255, 255, 0.09);
+	--pop-bg: #1d1d1f;
+	--pop-bg-top: #202022;
+	--pop-border: rgba(255, 255, 255, 0.06);
 	--pop-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.75), 0 3px 10px -3px rgba(0, 0, 0, 0.5);
 }
 /* Solid, so a sticky header inside (.sticky-veil) is the very same fill and
