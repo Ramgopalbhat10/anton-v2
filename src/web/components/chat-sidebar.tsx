@@ -310,51 +310,52 @@ function Toolbar({
 		onQuery('');
 		setSearching(false);
 	};
-	// While searching, the box sits under the group's heading, so Tasks still heads what it filters.
-	const search =
-		searching || query ? (
-			<div className="mx-3 mt-1 mb-1 flex h-8 items-center gap-2 rounded-[8px] border border-(--border-default) bg-(--bg-hover) px-2.5 focus-within:border-(--accent-border)">
-				<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-				<input
-					autoFocus
-					value={query}
-					onChange={(event) => onQuery(event.target.value)}
-					onKeyDown={(event) => event.key === 'Escape' && close()}
-					placeholder="Search tasks"
-					aria-label="Search tasks"
-					className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none"
-				/>
-				<button type="button" aria-label="Close search" onClick={close} className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)">
-					<Icon icon={X} size={12} />
-				</button>
-			</div>
-		) : null;
+	const open = searching || Boolean(query);
 	const active = filterCount(view.filters);
+	// Search turns into Close in the same spot, so the buttons never move.
 	const actions = (
 		<>
-			<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
+			{open ? (
+				<IconBtn icon={X} size="xs" label="Close search" onClick={close} />
+			) : (
+				<IconBtn icon={Search} size="xs" label="Search tasks" onClick={() => setSearching(true)} />
+			)}
 			<ViewMenu view={view} onChange={onChange} tasks={tasks} />
 		</>
 	);
+	if (open) {
+		// The search takes the heading's own row: same height, same place, the field where the name and rule were.
+		return (
+			<div className="mt-4 flex h-7 shrink-0 items-center gap-2 pr-2.5 pl-5">
+				<label className="flex h-6 min-w-0 flex-1 items-center gap-1.5 border-b border-(--accent-border)">
+					<Icon icon={Search} size={11} className="shrink-0 text-(--icon-tertiary)" />
+					<input
+						autoFocus
+						value={query}
+						onChange={(event) => onQuery(event.target.value)}
+						onKeyDown={(event) => event.key === 'Escape' && close()}
+						placeholder="Search tasks"
+						aria-label="Search tasks"
+						className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
+					/>
+				</label>
+				<span className="-my-1 flex shrink-0 items-center">{actions}</span>
+			</div>
+		);
+	}
 	if (active) {
 		return (
-			<>
-				<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
-					<FilterChips view={view} onChange={onChange} tasks={tasks} />
-					<span className="flex shrink-0 items-center">{actions}</span>
-				</div>
-				{search}
-			</>
+			<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
+				<FilterChips view={view} onChange={onChange} tasks={tasks} />
+				<span className="flex shrink-0 items-center">{actions}</span>
+			</div>
 		);
 	}
 	// The group's heading: Pinned, Running and Recent are its sections.
 	return (
-		<>
-			<GroupHeading label="Tasks" count={tasks.length}>
-				{actions}
-			</GroupHeading>
-			{search}
-		</>
+		<GroupHeading label="Tasks" count={tasks.length}>
+			{actions}
+		</GroupHeading>
 	);
 }
 
