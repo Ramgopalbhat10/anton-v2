@@ -101,9 +101,12 @@ test('the browser turns away raw GitHub files, which web_fetch reads in a second
 	assert.ok(!isRawFile(undefined));
 });
 
-test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default', () => {
+test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as long as ANTON_REPLY_TIMEOUT_HOURS says', async () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /Coder\.durability = \{ timeoutMs: 4 \* 3_600_000 \};/);
+	assert.match(source, /Coder\.durability = \{ timeoutMs: config\.replyTimeoutMs \};/);
+	const { config } = await import('../src/config.ts');
+	assert.equal(config.replyTimeoutMs, 4 * 3_600_000);
+	assert.match(readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8'), /replyTimeoutMs: .*read\('ANTON_REPLY_TIMEOUT_HOURS', '4'\)/);
 });
 
 test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
@@ -116,6 +119,7 @@ test('Coder checks a change against the whole request and a whole test suite bef
 	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/** Links to the outputs folder'));
 	assert.match(finish, /whole test suite of the package or module you changed/);
 	assert.match(finish, /Do not end on part of the request left undone/);
+	assert.match(finish, /A doubt you would report as a caveat or a judgement call/);
 	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
 	assert.match(source, /startStallCheck\(id\);/);
 });
@@ -127,4 +131,10 @@ test('Coder lists the request’s requirements as todos, and has a change read a
 	assert.match(source, /noteRequest\(id, delivery\.body\);/);
 	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
 	assert.match(source, /startFinishReview\(id\);/);
+});
+
+test('Coder tells a long reply how long it has run, with a command’s result', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\)\)/);
+	assert.match(source, /startReplyClock\(id\);/);
 });

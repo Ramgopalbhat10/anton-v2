@@ -19,6 +19,7 @@ import {
 	useTool,
 } from '@flue/runtime';
 import * as v from 'valibot';
+import { config } from '../config.ts';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { sandboxTools } from '../flue/sandbox-tools.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
@@ -96,6 +97,7 @@ import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { elapsedNote, startReplyClock } from '../services/reply-clock.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { replyNotification } from '../services/notifications.ts';
@@ -291,7 +293,7 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
 			// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
 			copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets);
+			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id));
 		},
 		// `read` shows an image, as a picture or in the vision model's words.
 		tools: sandboxTools({
@@ -1259,7 +1261,8 @@ const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
 	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
 	'Start it in the background with its output in a log under /tmp (independent suites side by side), go on with what is left while it runs, and read its summary and failures from the log rather than its whole output. ' +
-	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user.';
+	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +
+	'A doubt you would report as a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of) is such a part: settle it first from the data, documents, examples, existing code and tests you have, trying each reading against them where that can decide it.';
 
 /** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
 const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
@@ -1495,7 +1498,8 @@ export function Coder({ id }: AgentProps) {
 			append({ kind: 'signal', type: 'reminder', body: stalled });
 			return;
 		}
-		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed.
+		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
+		// or, when its work left no diff, by the agent itself against what it made.
 		// A task that started its workspace during this reply has one now, though this render began without it.
 		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 		if (missed) {
@@ -1521,6 +1525,7 @@ export function Coder({ id }: AgentProps) {
 		startTodoReply(id);
 		startStallCheck(id);
 		startFinishReview(id);
+		startReplyClock(id);
 		// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
 		if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
 		return { startedAt: Date.now() };
@@ -1550,5 +1555,5 @@ export function Coder({ id }: AgentProps) {
 	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
 }
 
-/** A turn may run up to 4 hours before it is stopped; Flue's default of 1 hour cuts off long features mid-work. */
-Coder.durability = { timeoutMs: 4 * 3_600_000 };
+/** A turn may run up to 4 hours before it is stopped, or `ANTON_REPLY_TIMEOUT_HOURS`; Flue's default of 1 hour cuts off long features mid-work. */
+Coder.durability = { timeoutMs: config.replyTimeoutMs };

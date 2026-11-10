@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, noteRequest, reviewPatch, startFinishReview } = await import('../src/services/finish-review.ts');
+const { findingsOf, finishReview, noteRequest, reviewPatch, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -91,6 +91,42 @@ test('on a model no reviewer runs, such as a plan model, the agent is given the 
 	startFinishReview('q');
 	assert.match((await finishReview('q', edit, undefined, deps(DIFF))) ?? '', /<request>\nFix it\.\n<\/request>/);
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: writer });
+});
+
+test('a chat whose reply worked in its sandbox and left no diff checks what it made against the request itself', async () => {
+	asked = [];
+	const chat = (patch: string | null, isChat = true) => ({ patch: async () => patch, chat: async () => isChat });
+	const job = [{ tool: 'start_workspace' }, { tool: 'bash' }, { tool: 'bash' }, { tool: 'write' }, { tool: 'bash' }, { tool: 'bash' }];
+	noteRequest('c', 'Write the five values to /app/results.txt, each rounded to two decimals.');
+	startFinishReview('c');
+	const reminder = await finishReview('c', job, undefined, chat(''));
+	assert.match(reminder ?? '', /check your work against the request/);
+	assert.match(reminder ?? '', /<request>\nWrite the five values to \/app\/results\.txt, each rounded to two decimals\.\n<\/request>/);
+	assert.match(reminder ?? '', /each named path, file name, format, field, unit, rounding/);
+	assert.match(reminder ?? '', /a caveat or a judgement call/);
+	assert.equal(asked.length, 0, 'the agent makes the check itself: there is no diff for a reviewer to read');
+	// Once a reply.
+	assert.equal(await finishReview('c', job, undefined, chat('')), null);
+	// A reply that ran a command or two answered a question; it is not sent back.
+	startFinishReview('c');
+	assert.equal(await finishReview('c', [{ tool: 'bash' }, { tool: 'bash' }, { tool: 'mcp__web__web_search' }, { tool: 'show' }, { tool: 'read' }, { tool: 'read' }], undefined, chat('')), null);
+	// Nor one that ends asking the user, nor a repository task, whose work is its diff.
+	startFinishReview('c');
+	assert.equal(await finishReview('c', [...job, { tool: 'ask' }], undefined, chat('')), null);
+	startFinishReview('c');
+	assert.equal(await finishReview('c', job, undefined, chat('', false)), null);
+	startFinishReview('c');
+	assert.equal(await finishReview('c', job, undefined, deps('')), null);
+	// A chat that changed a repository is still reviewed on that diff.
+	startFinishReview('c');
+	answer = 'NONE';
+	assert.equal(await finishReview('c', job, undefined, chat(DIFF)), null);
+	assert.equal(asked.length, 1);
+});
+
+test('the agent’s own check asks it to settle a doubt rather than report it', () => {
+	assert.match(selfCheck('Fix it.'), /settle it first from what you have/);
+	assert.match(selfCheck('Fix it.'), /Read your diff \(git diff, new files included\)/);
 });
 
 test('the reviewer reads binary files as one line and a long diff cut, and NONE in any form as nothing found', () => {

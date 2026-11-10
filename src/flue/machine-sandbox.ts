@@ -15,6 +15,8 @@ export const COMMAND_TIMEOUT_MS = 10 * 60_000;
  * The values of `secrets` are replaced by their names in command output, so
  * the agent does not read them back by accident and repeat them; files are
  * read as they are, so an edit never writes a placeholder over a real value.
+ * `clock` gives a line to end a command's result with, or nothing: how long
+ * the reply has run (`reply-clock.ts`).
  */
 export function machineSandbox(
 	machine: Machine,
@@ -22,6 +24,7 @@ export function machineSandbox(
 	canWrite: () => boolean = () => true,
 	secrets: Record<string, string> = {},
 	refusal = 'Plan mode is on: nothing can be changed until the user approves your plan. Call propose_plan instead.',
+	clock: () => string = () => '',
 ): Sandbox {
 	const hide = redactor(secrets);
 	function writable(): void {
@@ -41,7 +44,7 @@ export function machineSandbox(
 			const result = await machine.exec(command, { ...options, timeoutMs });
 			const stopped = options?.timeoutMs === undefined && result.exitCode === 124 && Date.now() - started >= timeoutMs;
 			const note = stopped ? `\n[anton] Stopped after ${timeoutMs / 60_000} minutes. Pass a timeout (in seconds) for a command that needs longer.` : '';
-			return { stdout: hide(text(result.stdout)), stderr: hide(result.stderr) + note, exitCode: result.exitCode };
+			return { stdout: hide(text(result.stdout)), stderr: hide(result.stderr) + note + clock(), exitCode: result.exitCode };
 		},
 		readFile: async (path) => text(await readMachineFile(machine, path)),
 		readFileBuffer: (path) => readMachineFile(machine, path),

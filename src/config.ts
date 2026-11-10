@@ -112,6 +112,11 @@ export const config = {
 	 * model is not one: GPT Image 2.5's speed tier, which edits images and leaves backgrounds transparent.
 	 */
 	imageModel: read('ANTON_IMAGE_MODEL', 'openrouter/openai/gpt-image-2.5-flare'),
+	/**
+	 * How long one reply of the coding agent may run before it is stopped. Flue's default of 1 hour cuts off long
+	 * features mid-work; a headless run of a job that is given longer (a benchmark task with an 8-hour limit) raises it.
+	 */
+	replyTimeoutMs: Math.max(1, Number(read('ANTON_REPLY_TIMEOUT_HOURS', '4')) || 4) * 3_600_000,
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.63.0',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */

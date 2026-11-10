@@ -24,6 +24,14 @@ import { liveMachine } from './workspace.ts';
  * called on its own here, and a reviewer billed on another key would cost
  * where the plan did not. The agent itself is then given the request again,
  * whole, and asked to make that check, on its own plan.
+ *
+ * A chat's job often leaves no diff at all: its work is files in a folder
+ * that is no repository (a report, a dataset, a script and its results), so
+ * there is nothing for a reviewer to read. A reply that did real work there
+ * (`WORKED` commands and file writes or more) gets the same check from the
+ * agent itself, against what it made rather than a diff. Without it such a
+ * job ended on the agent's first belief that it was done, and most that fell
+ * short did so by one named detail the request spelled out.
  */
 
 /** A request is kept up to this long; a task's whole brief fits. */
@@ -41,6 +49,11 @@ const REVIEW_MS = 120_000;
 const MAX_FINDINGS = 3_000;
 /** The request as the agent is shown it again for its own check; a brief past this is cut, with a note. */
 const MAX_SELF_REQUEST = 12_000;
+
+/** A chat reply with at least this many commands and file writes did a job, not a lookup, and is checked though it left no diff. */
+const WORKED = 5;
+/** The tools that work in the sandbox. */
+const SANDBOX_TOOLS = new Set(['bash', 'write', 'edit']);
 
 /** Each task's latest request, whole: the latest input kept on the task is cut for its card. */
 const requests = new Map<string, string>();
@@ -102,21 +115,47 @@ export function findingsOf(answer: string): string | null {
 	return text.length > MAX_FINDINGS ? `${text.slice(0, MAX_FINDINGS)}…` : text;
 }
 
+const again = (request: string) => [
+	'<request>',
+	request.length > MAX_SELF_REQUEST ? `${request.slice(0, MAX_SELF_REQUEST)}\n[The request goes on; read it whole in the conversation.]` : request,
+	'</request>',
+];
+
+/** A doubt the agent would hand back as a footnote is the likeliest thing to be wrong, and it is the one who can still settle it. */
+const SETTLE =
+	'If you are about to report a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of), settle it first from what you have: ' +
+	'the data, documents, examples, existing code and tests, trying each reading against them where that can decide it. Report as open only what nothing there settles.';
+
 /** What the agent is asked when no reviewer can read the change: the request again, whole, and the check the reviewer would make. */
 export const selfCheck = (request: string) =>
 	[
 		'Before you end, check your change against the request with fresh eyes. Here it is again:',
 		'',
-		'<request>',
-		request.length > MAX_SELF_REQUEST ? `${request.slice(0, MAX_SELF_REQUEST)}\n[The request goes on; read it whole in the conversation.]` : request,
-		'</request>',
+		...again(request),
 		'',
 		'Read your diff (git diff, new files included) against it, item by item: each named function, option, flag, field, message, output format, default, error or fallback path and edge case. ' +
-			'Do whatever is missing or done differently from what the request says, and run the tests that cover it. If the change already does everything, end your reply without repeating your answer.',
+			`Do whatever is missing or done differently from what the request says, and run the tests that cover it. ${SETTLE} If the change already does everything, end your reply without repeating your answer.`,
+	].join('\n');
+
+/** The same check for work that left no diff: files and results in a folder that is no repository. */
+export const selfCheckWork = (request: string) =>
+	[
+		'Before you end, check your work against the request with fresh eyes. Here it is again:',
+		'',
+		...again(request),
+		'',
+		'Go through what you are handing back (each file, output and value, where the request says it goes) against it, item by item: each named path, file name, format, field, unit, rounding, option, default, limit, error or fallback path and edge case. ' +
+			`Do whatever is missing or done differently from what the request says, and run the check that covers it again. ${SETTLE} If the work already does everything, end your reply without repeating your answer.`,
 	].join('\n');
 
 type Call = { tool: string };
-type Deps = { patch: (id: string) => Promise<string | null> };
+/** `chat` says whether the task is one whose work can sit outside any repository; a repository task's is its diff. */
+type Deps = { patch: (id: string) => Promise<string | null>; chat?: (id: string) => Promise<boolean> };
+
+const isChat = async (id: string): Promise<boolean> => {
+	const session = await getSessionRecord(id);
+	return Boolean(session && !session.projectId);
+};
 
 /**
  * A task's change; a chat's is what it changed in repositories it worked in, not the files it made in its scratch
@@ -135,8 +174,9 @@ async function livePatch(id: string): Promise<string | null> {
  * finds something the request asks that the change does not do; null otherwise. Once a reply, never on a reply that
  * ends asking the user or proposing a plan, nor on a diff already reviewed. The review counts on the task's spend.
  * On a model no reviewer here runs, the agent is sent back once with the request to make that check itself.
+ * So is a chat whose reply worked in its sandbox and left no diff, against what it made (`selfCheckWork`).
  */
-export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: livePatch }): Promise<string | null> {
+export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: livePatch, chat: isChat }): Promise<string | null> {
 	const request = requests.get(id);
 	if (!request || reviewed.has(id)) return null;
 	const last = calls[calls.length - 1]?.tool;
@@ -147,7 +187,10 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 	reviewed.add(id);
 	try {
 		const patch = await deps.patch(id);
-		if (!patch?.trim()) return null;
+		if (!patch?.trim()) {
+			const worked = calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length >= WORKED;
+			return worked && (await deps.chat?.(id)) ? selfCheckWork(request) : null;
+		}
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
 		if (lastPatch.get(id) === digest) return null;
 		remember(lastPatch, id, digest);
