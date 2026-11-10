@@ -94,7 +94,7 @@ function IncognitoComposer({
 					className="min-h-[72px]"
 				/>
 				{attachments.notice || blind ? (
-					<div className="px-1 text-[12px] text-(--warning-text)">
+					<div className="px-1 text-micro text-(--warning-text)">
 						{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 					</div>
 				) : null}
