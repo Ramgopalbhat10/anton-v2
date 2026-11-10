@@ -188,6 +188,7 @@ function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 }
 
 export function Launcher() {
+	const navigate = useNavigate();
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
