@@ -39,6 +39,22 @@ export async function attachToProject(spaceId: string, name: string, bytes: Uint
 	return described(file.path, file.path, bytes);
 }
 
+const INCOGNITO_CHARS = 60_000;
+
+/**
+ * A file attached to an incognito message: read as text for the message and nothing more.
+ * It is never stored, so there is no original for the agent to open and no read_attachment.
+ */
+export async function incognitoAttachment(name: string, bytes: Uint8Array): Promise<AttachedFile> {
+	const doc = await cachedDocumentText(name, bytes).catch((error: unknown) => {
+		logProblem('warn', `Could not read ${name} as text`, error);
+		return null;
+	});
+	const full = doc?.text ?? null;
+	const text = full === null ? null : full.length > INCOGNITO_CHARS ? `${full.slice(0, INCOGNITO_CHARS)}\n[The rest of this file is not included: incognito attachments are not stored.]` : full;
+	return { name, path: name, size: bytes.length, kind: doc?.kind ?? documentKind(name), text, cut: null };
+}
+
 /** A file attached to one of the task's messages, as text from `offset`: for `read_attachment`. */
 export async function readAttachment(id: string, rawPath: string, offset = 0): Promise<string> {
 	// The agent may name it as its sandbox sees it, under the outputs folder.

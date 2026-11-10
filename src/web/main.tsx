@@ -21,6 +21,7 @@ import { OutputViewerHost } from '@/components/output-viewer';
 import { ProjectPage, ThreadPage } from '@/components/project-page';
 import { ProjectsPage } from '@/components/projects-page';
 import { ReviewsPage } from '@/components/reviews-page';
+import { IncognitoPage } from '@/components/incognito';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TasksPage } from '@/components/tasks-page';
 import { TitleTips } from '@/components/title-tips';
@@ -48,6 +49,13 @@ const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/',
 	component: HomePage,
+});
+
+// A throwaway chat inside a dark frame: each visit is a new conversation, and leaving ends it.
+const incognitoRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/incognito',
+	component: IncognitoPage,
 });
 
 const sessionRoute = createRoute({
@@ -195,6 +203,7 @@ const oldRepoSettingsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
 	indexRoute,
+	incognitoRoute,
 	sessionRoute,
 	tasksRoute,
 	projectsRoute,

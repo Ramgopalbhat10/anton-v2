@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, BookOpen, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
+import { ArrowUp, BookOpen, EyeOff, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { HomeDashboard, SkyCredit } from '@/components/home-dashboard';
@@ -11,7 +11,7 @@ import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general';
 import { MenuButton } from '@/components/nav';
-import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
+import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
@@ -188,6 +188,7 @@ function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 }
 
 export function Launcher() {
+	const navigate = useNavigate();
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
@@ -254,6 +255,7 @@ export function Launcher() {
 			<header className="flex h-11 shrink-0 items-center gap-1 pr-4 pl-2 md:hidden">
 				<MenuButton />
 			</header>
+			<IconBtn icon={EyeOff} size="sm" label="Incognito chat" className="absolute top-4 right-4 z-10" onClick={() => void navigate({ to: '/incognito' })} />
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-16 md:px-6">
 				<div className="mx-auto flex max-w-[880px] flex-col gap-10 pt-6 md:pt-[min(16vh,148px)]">
 					<div className="mx-auto flex w-full max-w-[680px] flex-col gap-4">
