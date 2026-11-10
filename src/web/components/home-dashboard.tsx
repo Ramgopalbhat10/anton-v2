@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, CalendarRange, Clock, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle, Telescope } from 'lucide-react';
+import { ArrowUpRight, CalendarRange, Clock, Eye, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle, Telescope } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { PR_ICON, prColor, prTone } from '@/components/pr-status';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/signal';
@@ -380,13 +380,25 @@ function useNextIn(): string {
 	return `${minutes} min`;
 }
 
-/** The picture, credited, in Home's corner: where it comes from and when it changes, which pictures to show (a new one every hour, or NASA's picture of the day), a random other one, and a way to turn the sky off. */
+/** The picture, credited, in Home's corner: where it comes from and when it changes, which pictures to show (a new one every hour, or NASA's picture of the day), a random other one, and a way to turn the sky off; with the sky off, a button that turns it back on. */
 export function SkyCredit() {
 	const on = useSkyOn();
 	const image: SkyImage = useSky();
 	const mode = useSkyMode();
 	const next = useNextIn();
-	if (!on) return null;
+	if (!on) {
+		// Off is a look of its own, not a dead end: the way back stays where the credit was.
+		return (
+			<button
+				type="button"
+				onClick={() => setSkyOn(true)}
+				className="sky-credit inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-micro text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+			>
+				<Icon icon={Eye} size={11} />
+				Show the sky
+			</button>
+		);
+	}
 	const day = image.day ? new Date(`${image.day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
 	return (
 		<Menu>

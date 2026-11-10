@@ -70,9 +70,10 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
  * (`data-sky` on the page, see `.sky` in styles) sets how much shows through:
  * all of it on Home, a little behind lists, almost none behind a conversation.
  */
-export function Sky({ image }: { image: SkyImage }) {
+export function Sky({ image, capped }: { image: SkyImage; /** Holds the picture at its drawn brightness or below, for pages you read. */ capped?: boolean }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
-	const look = skyLook(useSkyBrightness());
+	const brightness = useSkyBrightness();
+	const look = skyLook(capped ? Math.min(brightness, SKY_BRIGHTNESS_DEFAULT) : brightness);
 	const [shown, setShown] = useState<string | null>(null);
 	useEffect(() => {
 		const element = canvas.current;

@@ -62,15 +62,19 @@ export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
 	return 'dim';
 }
 
-/** This hour's sky behind the app, unless it is turned off in this browser. */
-function AppSky() {
+/**
+ * This hour's sky behind the app, unless it is turned off in this browser.
+ * Brightening it is for Home; a page you read keeps it at most as drawn.
+ */
+function AppSky({ home }: { home: boolean }) {
 	const on = useSkyOn();
 	const image = useSky();
-	return on ? <Sky image={image} /> : null;
+	return on ? <Sky image={image} capped={!home} /> : null;
 }
 
 export function AppShell() {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
+	const skyOn = useSkyOn();
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
@@ -112,7 +116,7 @@ export function AppShell() {
 		<NavContext.Provider value={() => setNavOpen(true)}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
 			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text-primary)">
-				<AppSky />
+				<AppSky home={pathname === '/'} />
 				<button
 					type="button"
 					aria-label="Close sidebar"
@@ -133,7 +137,7 @@ export function AppShell() {
 						onOpenNotifications={openNotifications}
 					/>
 				</div>
-				<main data-sky={skyVeil(pathname)} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
+				<main data-sky={skyOn ? skyVeil(pathname) : 'off'} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
 					<Outlet />
 				</main>
 				<CommandPalette open={paletteOpen} onClose={closePalette} />

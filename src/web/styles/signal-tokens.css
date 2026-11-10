@@ -18,6 +18,7 @@
   --neutral-500:#5F5F5F;
   --neutral-450:#6B6B6B;
   --neutral-400:#808080;
+  --neutral-350:#959595;
   --neutral-300:#A8A8A8;
   --neutral-200:#D4D4D4;
   --neutral-100:#EDEDED;
@@ -110,7 +111,7 @@
 
   /* Glass: what floats over the sky. A charcoal tint and a wide blur that
      turns the mesh into soft colour; no edge of its own, a little lift. */
-  --glass-bg:rgba(22,22,22,0.68);
+  --glass-bg:rgba(22,22,22,0.8);
   --glass-bg-strong:rgba(17,17,17,0.9);
   --glass-border:transparent;
   --glass-highlight:0 0 #0000;

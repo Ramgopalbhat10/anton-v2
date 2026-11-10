@@ -228,6 +228,7 @@ textarea::placeholder {
  * How much of the sky a page lets through, set on <main> by the route:
  * all of it on Home, a little behind lists, settings and every conversation
  * (a task, a thread, a coordinator, alike), a hint behind an artifact you read.
+ * With the sky off it is 'off', and every surface is the plain one.
  */
 .app-main {
 	position: relative;
@@ -238,7 +239,7 @@ textarea::placeholder {
 	background: transparent;
 }
 .app-main[data-sky='dim'] {
-	background: color-mix(in srgb, var(--bg-canvas) 76%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 84%, transparent);
 }
 .app-main[data-sky='faint'] {
 	background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
@@ -257,26 +258,14 @@ textarea::placeholder {
 	backdrop-filter: var(--glass-blur);
 }
 
-/* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
-.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
-	background: var(--glass-bg);
-	box-shadow: var(--card-shadow);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-}
-
-/* Home: the composer and the dashboard's cards, as glass over the sky. */
+/* Home's composer and dashboard cards: ordinary cards, until the sky is behind them. */
 .home-composer,
-.home-panel,
-.sky-credit {
-	background: var(--glass-bg);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-shadow);
+.home-panel {
+	background: var(--card-bg);
+	box-shadow: var(--card-shadow);
 }
 .home-composer {
 	border-radius: var(--radius-card);
-	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
 	box-shadow: var(--elev-2);
 	transition: box-shadow var(--transition-standard);
 }
@@ -287,9 +276,39 @@ textarea::placeholder {
 	border-radius: var(--radius-card);
 	min-height: 176px;
 }
+/* The picture's credit and the route under the composer: a pill over the sky, plain words on the canvas. */
 .sky-credit {
-	background: color-mix(in srgb, var(--bg-canvas) 50%, transparent);
+	background: transparent;
 }
+
+/* Over the sky, cards turn to glass, so the picture tints them instead of being cut out. */
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile),
+.app-main[data-sky='full'] .home-panel {
+	background: var(--glass-bg);
+	box-shadow: var(--card-shadow);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+}
+.app-main[data-sky='full'] .home-composer {
+	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+}
+.app-main[data-sky='full'] .sky-credit {
+	background: color-mix(in srgb, var(--bg-canvas) 72%, transparent);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	box-shadow: var(--glass-shadow);
+}
+
+/* Quiet text steps up one notch over the sky, where the picture under the glass lifts its background. */
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile, .home-panel, .home-composer, .sky-credit) {
+	--text-tertiary: var(--neutral-350);
+	--text-disabled: var(--neutral-400);
+	--text-placeholder: var(--neutral-400);
+	--icon-tertiary: var(--neutral-350);
+}
+
 :root {
 	--heat-0: var(--alpha-white-5);
 	--heat-1: var(--cyan-alpha-30);
