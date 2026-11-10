@@ -76,7 +76,7 @@ import {
 } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { useMemo, useState } from 'react';
-import { Icon } from '@/components/signal';
+import { EmptyLine, Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
 /* A project's mark is a drawn icon on a tinted tile, never an emoji. It is
@@ -318,7 +318,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 								</button>
 							);
 						})}
-						{shown.length === 0 ? <span className="col-span-8 px-1 py-3 text-center text-small text-(--text-disabled)">No icon matches “{query}”</span> : null}
+						{shown.length === 0 ? <EmptyLine className="col-span-8 px-1 py-3 text-center">No icon matches “{query}”</EmptyLine> : null}
 					</div>
 					<div className="flex items-center gap-2 border-t border-(--border-subtle) px-2.5 py-2">
 						<span className="in-caption">Tint</span>

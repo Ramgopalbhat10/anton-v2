@@ -497,11 +497,15 @@
 	padding: 0 8px;
 }
 
-/* The open file in a tree is raised like the chosen tab above it. */
+/* The chosen one of a set: a tab, a segment, a chip, the open file, the open
+   task. One grey fill and primary text, on any surface; the accent is kept
+   for focus and for what wants you. A hover is the lighter --bg-hover. */
+.in-chosen,
+.in-chosen:hover,
 .sg-file-row[aria-current='true'],
 .sg-file-row[aria-current='true']:hover {
-	background: linear-gradient(180deg, var(--neutral-750), var(--neutral-800));
-	box-shadow: inset 0 0 0 1px var(--card-border), var(--card-highlight);
+	background: var(--bg-active);
+	color: var(--text-primary);
 }
 
 /* Projects: thread glyphs, flowing dispatch lines, hatched waits and a typing caret. */

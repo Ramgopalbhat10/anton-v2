@@ -160,14 +160,18 @@ export function useMcpServers(enabled = true): McpServer[] | undefined {
 	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors, enabled, staleTime: 60_000 }).data?.mcpServers;
 }
 
-/** A mark on a light tile, as an app icon is drawn. With `label` it names the product to a screen reader; without, it is decoration. */
+/**
+ * A mark on a light tile, as an app icon is drawn. The tile is a soft grey,
+ * not white, so a page of them does not glare on the dark canvas. With
+ * `label` it names the product to a screen reader; without, it is decoration.
+ */
 export function MarkTile({ mark, size = 26, label, className }: { mark: Mark; size?: number; label?: string; className?: string }) {
 	const Glyph = mark.icon;
 	return (
 		<span
 			{...(label ? { role: 'img', 'aria-label': label, title: label } : { 'aria-hidden': true })}
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-control border border-black/10 text-[#1f1f1f]', className)}
-			style={{ width: size, height: size, background: mark.tile ?? '#fff' }}
+			className={cn('inline-flex shrink-0 items-center justify-center rounded-control border border-black/10 text-(--neutral-900)', className)}
+			style={{ width: size, height: size, background: mark.tile ?? 'var(--neutral-200)' }}
 		>
 			<Glyph size={Math.round(size * 0.58)} aria-hidden />
 		</span>

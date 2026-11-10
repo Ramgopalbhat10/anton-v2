@@ -10,6 +10,7 @@ import { api, branchLabel, isChat, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
+import { useModelName } from '@/components/model-picker';
 
 /** The task's pull request, refreshed independently when the header is open. */
 export function PullRequestChip({ session }: { session: Session }) {
@@ -167,9 +168,10 @@ function ProjectItems({ session }: { session: Session }) {
 /** What the task has cost so far, which model it runs on and the branch it works on. */
 function TaskFacts({ session }: { session: Session }) {
 	const { inputTokens, outputTokens, cost } = session.usage;
+	const modelName = useModelName();
 	const facts: Array<[string, string]> = [
 		['Spend', inputTokens + outputTokens > 0 ? `${dollars(cost)} · ${tokens(inputTokens + outputTokens)}` : dollars(cost)],
-		['Model', session.model.split('/').pop() ?? session.model],
+		['Model', modelName(session.model)],
 		[isChat(session) ? 'Sandbox' : 'Branch', branchLabel(session)],
 	];
 	return (

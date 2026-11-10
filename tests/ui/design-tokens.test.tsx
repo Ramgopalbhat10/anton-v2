@@ -26,7 +26,7 @@ describe('design tokens', () => {
 	});
 
 	it('rounds corners with the radius steps only', () => {
-		expect(found(/(?<!\w)rounded-(?:[trblse]{1,2}-)?\[[^\]]+\]/g, ['components/ui/scroll-area.tsx'])).toEqual([]);
+		expect(found(/(?<!\w)rounded-(?:[trblse]{1,2}-)?\[[^\]]+\]/g)).toEqual([]);
 		expect(found(/(?<!\w)rounded-(?:[trblse]{1,2}-)?(xs|sm|md|lg|xl|[2-9]xl)(?![\w-])/g)).toEqual([]);
 	});
 

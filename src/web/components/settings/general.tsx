@@ -2,7 +2,7 @@ import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Telescope, Workflow } from 'lucide-react';
-import { Segmented, SegmentedItem } from '@/components/instrument';
+import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
@@ -365,7 +365,7 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				<span className="min-w-0 flex-1 text-small">
 					{dirty ? (
 						<span className="inline-flex items-center gap-1.5 text-(--text-secondary)">
-							<span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+							<StatusDot tone="accent" />
 							Unsaved changes
 						</span>
 					) : (

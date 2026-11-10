@@ -5,6 +5,7 @@ import { ModelPicker } from '@/components/model-picker';
 import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/signal';
 import type { HelperAgent, Reasoning } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { StatusDot } from '@/components/instrument';
 
 export const FIELD =
 	'h-8 min-w-0 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
@@ -223,7 +224,7 @@ export function SaveState({ pending, success, error, saved = 'Saved.' }: { pendi
 	if (success && !pending)
 		return (
 			<span className="inline-flex items-center gap-1.5 text-small text-(--success-text)">
-				<span className="size-1.5 shrink-0 rounded-full bg-(--success-base)" />
+				<StatusDot tone="success" />
 				{saved}
 			</span>
 		);

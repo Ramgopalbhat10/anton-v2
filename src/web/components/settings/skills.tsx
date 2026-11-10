@@ -4,7 +4,7 @@ import { Blocks, FileText, Github, Plus, ScrollText, Search, Settings2, Star, St
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/instrument';
-import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
+import { Btn, EmptyLine, EmptyState, FilterChip, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { ADDED_FILES, api, type CatalogItem, type GitHubSearch, type Plugin, type PluginPick } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { FIELD, Note, PageHeading } from './parts';
@@ -301,25 +301,6 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 	);
 }
 
-function SourceChip({ label, on, onClick, icon }: { label: string; on: boolean; onClick: () => void; icon?: typeof Store }) {
-	return (
-		<button
-			type="button"
-			aria-pressed={on}
-			onClick={onClick}
-			className={cn(
-				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-small outline-none focus-visible:shadow-(--focus-ring)',
-				on
-					? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)'
-					: 'border-(--border-subtle) bg-(--well-bg) text-(--text-secondary) hover:border-(--border-default) hover:text-(--text-primary)',
-			)}
-		>
-			{icon ? <Icon icon={icon} size={12} /> : null}
-			{label}
-		</button>
-	);
-}
-
 const SKELETONS = Array.from({ length: 6 }, (_, index) => index);
 
 /** Every marketplace's catalog, read in parallel; one that fails says so on its own. */
@@ -411,7 +392,7 @@ function GitHubResults({ query }: { query: string }) {
 					))}
 				</div>
 			) : null}
-			{empty && !typing && !result.problems.length ? <p className="m-0 text-small text-(--text-tertiary)">Nothing on GitHub matches “{settled}”.</p> : null}
+			{empty && !typing && !result.problems.length ? <EmptyLine className="p-0">Nothing on GitHub matches “{settled}”.</EmptyLine> : null}
 		</section>
 	);
 }
@@ -443,9 +424,9 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 			) : null}
 			<section className="flex flex-col gap-2.5" aria-label="From your marketplaces">
 				<div className="flex items-center gap-1.5 overflow-x-auto">
-					<SourceChip label="All" on={!source} onClick={() => setSource(null)} />
+					<FilterChip label="All" on={!source} onToggle={() => setSource(null)} />
 					{marketplaces.map((marketplace) => (
-						<SourceChip key={marketplace} label={marketplace} icon={Store} on={source === marketplace} onClick={() => setSource(marketplace)} />
+						<FilterChip key={marketplace} label={marketplace} icon={Store} on={source === marketplace} onToggle={() => setSource(marketplace)} />
 					))}
 					<span className="flex-1" />
 					<ManageMarketplaces saved={marketplaces} />

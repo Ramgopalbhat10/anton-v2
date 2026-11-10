@@ -7,7 +7,7 @@ import { CodeBlock } from '@/components/code-block';
 import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
-import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, EmptyLine, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
 import { useStoredState } from '@/components/split-pane';
 import { api, type Output, outputUrl, refreshFor, spaceFileUrl } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
@@ -146,7 +146,7 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 		<TextFile sessionId={sessionId} path={path} render={(text) => <Table text={text} separator={/\.tsv$/i.test(path) ? '\t' : ','} />} />
 	),
 	text: ({ sessionId, path }) => <TextFile sessionId={sessionId} path={path} render={plain} />,
-	other: () => <div className="px-3 py-2.5 text-small text-(--text-tertiary)">No preview for this file type. Download it to open it.</div>,
+	other: () => <EmptyLine className="px-3 py-2.5">No preview for this file type. Download it to open it.</EmptyLine>,
 };
 
 /** A file's source, highlighted, as the Code side of a page or document. */
@@ -743,7 +743,7 @@ export function Library({ library }: { library: LibrarySource }) {
 						if (files.length) add.mutate(files);
 					}}
 				/>
-				<Btn size="xs" variant="primary" icon={Plus} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
+				<Btn size="xs" icon={Plus} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
 					{add.isPending ? 'Adding…' : 'Add'}
 				</Btn>
 			</div>

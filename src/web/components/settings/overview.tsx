@@ -4,7 +4,7 @@ import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lu
 import type { ReactNode } from 'react';
 import { ArcDial, DotMatrix, lastDays } from '@/components/charts';
 import { SandboxArt, StorageArt } from '@/components/illustrations';
-import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, usedTone, Well } from '@/components/instrument';
+import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, StatusDot, usedTone, Well } from '@/components/instrument';
 import { Icon } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api } from '@/lib/api';
@@ -110,7 +110,7 @@ function TasksCard() {
 									search={{ app: 'code' }}
 									className="flex min-h-8 items-center gap-2 rounded-tile px-1 text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 								>
-									<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+									<StatusDot tone="accent" pulse />
 									<span className="min-w-0 flex-1 truncate">{session.title}</span>
 									<Caption className="tracking-normal normal-case">{age(session.createdAt)}</Caption>
 								</Link>

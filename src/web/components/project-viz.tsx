@@ -24,8 +24,8 @@ export function countKinds(threads: Session[]): Record<GlyphKind, number> {
 
 const ms = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : NaN);
 const hhmm = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-/** "1h 3m" → "1H 3M", for mono captions. */
-const short = (span: number) => elapsed(span).replace(/ \d+s$/, '').toUpperCase();
+/** A span without its seconds, for captions: "1h 3m". */
+const short = (span: number) => elapsed(span).replace(/ \d+s$/, '');
 
 /**
  * The project's threads as one thin bar split by state, done ones hatched:

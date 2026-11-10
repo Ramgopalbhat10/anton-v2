@@ -3,28 +3,15 @@ import { ArrowUpRight, Globe, Monitor, Play, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { useResume } from '@/components/source-bar';
 import { LinkArt, SandboxArt } from '@/components/illustrations';
-import { Segmented } from '@/components/instrument';
+import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type Preview } from '@/lib/api';
-import { cn } from '@/lib/utils';
 
 function PortChip({ preview, active, onSelect }: { preview: Preview; active: boolean; onSelect: () => void }) {
 	return (
-		<button
-			type="button"
-			onClick={onSelect}
-			aria-pressed={active}
-			title={preview.listening ? `Port ${preview.port} is serving` : `Nothing is serving on port ${preview.port}`}
-			className={cn(
-				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-control border px-2 text-small outline-none focus-visible:shadow-(--focus-ring)',
-				active
-					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
-					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
-			)}
-		>
-			<span className={cn('size-1.5 rounded-full', preview.listening ? 'bg-(--success-base)' : 'bg-(--text-disabled)')} />
-			:{preview.port}
-		</button>
+		<SegmentedItem role="button" size="sm" on={active} onClick={onSelect} title={preview.listening ? `Port ${preview.port} is serving` : `Nothing is serving on port ${preview.port}`} className="in-num">
+			<StatusDot tone={preview.listening ? 'success' : 'off'} />:{preview.port}
+		</SegmentedItem>
 	);
 }
 

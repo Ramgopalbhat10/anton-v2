@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, Folder, GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Caption } from '@/components/instrument';
+import { Caption, StatusDot } from '@/components/instrument';
 import { AddRepo } from '@/components/launcher';
 import { Btn, EmptyState, Icon, Spinner } from '@/components/signal';
 import { api, type Project, type Session } from '@/lib/api';
@@ -38,7 +38,7 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 					<span className="hidden text-(--text-disabled) md:inline">·</span>
 					{project.warmedAt ? (
 						<span className="hidden shrink-0 items-center gap-1 text-(--text-secondary) md:inline-flex" title="A prepared image starts its sandboxes with the repository and setup already in place">
-							<span className="size-1.5 rounded-full bg-(--accent-base)" />
+							<StatusDot tone="accent" />
 							prepared {age(project.warmedAt)} ago
 						</span>
 					) : (

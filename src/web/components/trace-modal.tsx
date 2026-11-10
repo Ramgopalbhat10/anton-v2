@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Search, Sparkles, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TraceIcon } from '@/components/trace-icon';
@@ -9,7 +9,7 @@ import { HoverPeek } from '@/components/hover-peek';
 import { ModelLogo, useModels } from '@/components/model-picker';
 import { Logo } from '@/components/illustrations';
 import { Caption, Chip, Count, IconTile, Segmented, SegmentedItem, SplitBar, Status, type Tone } from '@/components/instrument';
-import { Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
+import { EmptyLine, Icon, IconBtn, Kbd, SearchField, Spinner } from '@/components/signal';
 import { AgentTile, lookOf, titleOf } from '@/components/subagents';
 import { describeTool } from '@/components/tool-describe';
 import { api } from '@/lib/api';
@@ -295,18 +295,15 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 	return (
 		<>
 			<TraceHeader sub={<ReplyModels trace={trace} names={names} when={when} />} onClose={onClose}>
-				<label className="hidden h-8 w-[260px] items-center gap-2 rounded-control border border-(--border-default) bg-(--bg-inset) px-2.5 focus-within:border-(--accent-border) sm:flex">
-					<Icon icon={Search} size={13} className="text-(--icon-tertiary)" />
-					<input
-						ref={search}
-						value={query}
-						onChange={(event) => setQuery(event.target.value)}
-						placeholder="Search steps, inputs, outputs"
-						aria-label="Search the trace"
-						className="min-w-0 flex-1 bg-transparent text-body text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
-					/>
-					{query ? <IconBtn icon={X} size="xs" label="Clear search" onClick={() => setQuery('')} /> : <Kbd keys="mod+f" size="sm" />}
-				</label>
+				<SearchField
+					inputRef={search}
+					value={query}
+					onChange={setQuery}
+					placeholder="Search steps, inputs, outputs"
+					label="Search the trace"
+					trailing={<Kbd keys="mod+f" size="sm" />}
+					className="hidden w-[260px] sm:flex"
+				/>
 			</TraceHeader>
 			<TraceStatsRow stats={stats} trace={trace} />
 			<div className="relative flex min-h-0 flex-1 flex-col">
@@ -1039,7 +1036,7 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 						</div>
 					))
 				) : (
-					<span className="text-small text-(--text-tertiary)">Nothing new: the same conversation as the call before.</span>
+					<EmptyLine className="p-0">Nothing new: the same conversation as the call before.</EmptyLine>
 				)}
 			</Section>
 			<Section title="Output">
@@ -1060,7 +1057,7 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 						))}
 					</div>
 				) : null}
-				{!span.output.text && !span.output.thinking && !span.output.toolCalls.length ? <span className="text-small text-(--text-disabled)">No output</span> : null}
+				{!span.output.text && !span.output.thinking && !span.output.toolCalls.length ? <EmptyLine className="p-0">No output</EmptyLine> : null}
 			</Section>
 		</>
 	);

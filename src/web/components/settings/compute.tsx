@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Box, Square } from 'lucide-react';
+import { Box, CircleStop } from 'lucide-react';
 import { useState } from 'react';
 import { SandboxArt } from '@/components/illustrations';
-import { Card, CardFooter, CardSection, Facts, Figure, Status, Well } from '@/components/instrument';
+import { Card, CardFooter, CardSection, Facts, Figure, Status, StatusDot, Well } from '@/components/instrument';
 import { Btn, IconBtn, Spinner } from '@/components/signal';
 import { api, type ComputeView } from '@/lib/api';
 import { age } from '@/lib/format';
@@ -43,7 +43,7 @@ function Running({ view }: { view: ComputeView }) {
 						<Btn
 							size="sm"
 							variant="dangerGhost"
-							icon={Square}
+							icon={CircleStop}
 							disabled={stopAll.isPending}
 							onClick={() => (confirming ? stopAll.mutate() : setConfirming(true))}
 							onBlur={() => setConfirming(false)}
@@ -71,7 +71,7 @@ function Running({ view }: { view: ComputeView }) {
 				<CardSection className="gap-0 px-2 py-1.5">
 					{view.running.map((task) => (
 						<div key={task.id} className="flex min-h-12 items-center gap-3 rounded-control px-2 py-1.5 hover:bg-(--bg-hover)">
-							<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+							<StatusDot tone="accent" pulse />
 							<Link
 								to="/agents/$sessionId"
 								params={{ sessionId: task.id }}
@@ -81,7 +81,7 @@ function Running({ view }: { view: ComputeView }) {
 								<span className="truncate text-body font-medium">{task.title}</span>
 								<Facts items={[task.repo, `created ${age(task.createdAt)} ago`]} className="tracking-[0.04em] normal-case" />
 							</Link>
-							<IconBtn icon={Square} size="sm" label={`Stop ${task.title}`} disabled={stop.isPending} onClick={() => stop.mutate(task.id)} />
+							<IconBtn icon={CircleStop} size="sm" label={`Stop ${task.title}`} disabled={stop.isPending} onClick={() => stop.mutate(task.id)} />
 						</div>
 					))}
 				</CardSection>

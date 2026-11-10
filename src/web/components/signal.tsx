@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Check, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Info, Search, X } from 'lucide-react';
 import { DropdownMenu as MenuPrimitive, Popover } from 'radix-ui';
-import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
@@ -218,7 +218,11 @@ export function DiffStat({ added, removed }: { added: number; removed: number })
 	);
 }
 
-/** Empty state: icon tile, title, body, optional actions. */
+/**
+ * Empty state, sized by what holds it and not by the screen: a whole panel
+ * or page takes `art` (a drawing on the drafting grid), a card or a tab takes
+ * an `icon` or just the words, and a list takes `EmptyLine`.
+ */
 export function EmptyState({
 	icon,
 	art,
@@ -263,6 +267,11 @@ export function EmptyState({
 			{children ? <div className="flex items-center gap-2">{children}</div> : null}
 		</div>
 	);
+}
+
+/** The smallest empty state: one quiet line where a list or a search's results would be. */
+export function EmptyLine({ children, className }: { children: ReactNode; className?: string }) {
+	return <p className={cn('m-0 px-2 py-1.5 text-small leading-[18px] text-(--text-tertiary)', className)}>{children}</p>;
 }
 
 /* Menus: Radix behaviour, Signal surface. */
@@ -460,21 +469,112 @@ export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADG
 	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-control px-1.5 text-micro font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
 }
 
-/** A filter that toggles on and off, in a row of them. */
-export function FilterChip({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+/**
+ * A filter that toggles on and off, in a row of them. On is the chosen fill
+ * every other pick takes; a count sits after the name, a mark before it.
+ */
+export function FilterChip({
+	label,
+	on,
+	onToggle,
+	icon,
+	mark,
+	count,
+	size = 'md',
+}: {
+	label: string;
+	on: boolean;
+	onToggle: () => void;
+	icon?: LucideIcon;
+	/** A dot or glyph of its own before the name. */
+	mark?: ReactNode;
+	count?: number;
+	size?: 'sm' | 'md';
+}) {
 	return (
 		<button
 			type="button"
 			aria-pressed={on}
+			aria-label={count === undefined ? undefined : `${label}, ${count}`}
 			onClick={onToggle}
 			className={cn(
-				'h-[22px] shrink-0 rounded-full px-2 text-micro transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
-				on
-					? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
-					: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',
+				'inline-flex shrink-0 items-center gap-1.5 rounded-full whitespace-nowrap transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
+				size === 'sm' ? 'h-[22px] px-2 text-micro' : 'h-6 px-2.5 text-small',
+				on ? 'in-chosen' : 'bg-(--bg-hover) text-(--text-secondary) hover:bg-(--bg-active) hover:text-(--text-primary)',
 			)}
 		>
+			{mark}
+			{icon ? <Icon icon={icon} size={12} /> : null}
 			{label}
+			{count === undefined ? null : <span className="in-num text-(--text-tertiary)">{count}</span>}
 		</button>
+	);
+}
+
+/**
+ * The one search field: a well with a magnifier, the query and a way to clear
+ * it. Escape clears it too, or does what `onEscape` says.
+ */
+export function SearchField({
+	value,
+	onChange,
+	placeholder,
+	label,
+	size = 'md',
+	autoFocus,
+	inputRef,
+	onEscape,
+	trailing,
+	className,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	placeholder: string;
+	/** What a screen reader calls it, when the placeholder is not enough. */
+	label?: string;
+	size?: 'sm' | 'md';
+	autoFocus?: boolean;
+	inputRef?: Ref<HTMLInputElement>;
+	onEscape?: () => void;
+	/** Shown at the end while the field is empty: a shortcut, a count. */
+	trailing?: ReactNode;
+	className?: string;
+}) {
+	return (
+		<label
+			className={cn(
+				'flex min-w-0 items-center gap-2 rounded-tile border border-(--border-subtle) bg-(--well-bg) transition-shadow duration-(--duration-micro) focus-within:shadow-(--focus-ring)',
+				size === 'sm' ? 'h-7 px-2' : 'h-8 px-2.5',
+				className,
+			)}
+		>
+			<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
+			<input
+				ref={inputRef}
+				autoFocus={autoFocus}
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key !== 'Escape') return;
+					if (onEscape) onEscape();
+					else if (value) onChange('');
+				}}
+				placeholder={placeholder}
+				aria-label={label ?? placeholder}
+				className={cn('min-w-0 flex-1 border-0 bg-transparent p-0 text-(--text-primary) outline-none placeholder:text-(--text-placeholder)', size === 'sm' ? 'text-small' : 'text-body')}
+			/>
+			{value ? (
+				<button
+					type="button"
+					aria-label="Clear the search"
+					onClick={() => onChange('')}
+					className="-mr-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-inner text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={X} size={12} />
+				</button>
+			) : (
+				trailing
+			)}
+		</label>
 	);
 }

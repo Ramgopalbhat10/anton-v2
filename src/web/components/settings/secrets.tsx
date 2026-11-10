@@ -4,7 +4,7 @@ import { ChevronRight, Folder, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } fro
 import { useState } from 'react';
 import { storedVariables, toEnv, VariablesEditor } from '@/components/repo-settings';
 import { Status } from '@/components/instrument';
-import { Btn, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Btn, EmptyLine, Icon, IconBtn, Spinner } from '@/components/signal';
 import { api, type SealedSecret, type SecretsView } from '@/lib/api';
 import { age } from '@/lib/format';
 import { Block, FIELD, List, PageHeading, RowIcon, SaveState } from './parts';
@@ -237,7 +237,7 @@ export function SecretsPage() {
 								))}
 							</List>
 						) : (
-							<p className="m-0 py-1 text-small text-(--text-tertiary)">No repository has variables of its own.</p>
+							<EmptyLine className="px-0 py-1">No repository has variables of its own.</EmptyLine>
 						)}
 					</Block>
 				</>

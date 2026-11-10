@@ -347,7 +347,7 @@ describe('Model picker', () => {
 		expect(gateway.textContent).toContain('Ac');
 	});
 
-	it('shows what a million tokens cost in and out, FREE for free models and nothing for a plan’s', async () => {
+	it('shows what a million tokens cost in and out, Free for free models and nothing for a plan’s', async () => {
 		const priced = model({ id: 'openrouter/anthropic/haiku', name: 'Haiku', vendor: 'Anthropic', price: { input: 0.1, output: 0.5 } });
 		openPicker({ model: gpt.id, reasoning: null }, [connected], [gpt, priced, routed]);
 		const list = await screen.findByRole('listbox', { name: 'Models' });
@@ -356,7 +356,7 @@ describe('Model picker', () => {
 		expect([...plan.children].slice(2, 4).map((cell) => cell.textContent)).toEqual(['', '1K']);
 		// Input and output prices sit in their own cells, so they line up under the In and Out headers.
 		expect([...gateway[0].children].slice(2, 5).map((cell) => cell.textContent)).toEqual(['1K', '$0.1', '$0.5']);
-		expect(gateway[1].textContent).toContain('FREE');
+		expect(gateway[1].textContent).toContain('Free');
 		const header = (name: string) => within(list).getByRole('group', { name }).firstElementChild as HTMLElement;
 		expect(within(header('OpenRouter')).getByTitle('US dollars per million input tokens').textContent).toBe('In');
 		expect(within(header('ChatGPT plan')).queryByTitle('US dollars per million input tokens')).toBeNull();

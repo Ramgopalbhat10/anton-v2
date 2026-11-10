@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { ArrowUpRight, ChevronDown, RotateCw, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Card, CardFooter, CardSection, SplitBar, Status } from '@/components/instrument';
-import { Btn, Icon, Spinner } from '@/components/signal';
+import { Btn, EmptyLine, Icon, Spinner } from '@/components/signal';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -109,7 +109,7 @@ function Problems() {
 				</CardSection>
 			) : null}
 			<CardSection ruled={shown.length > 0} className="gap-0 py-1">
-				{shown.length === 0 ? <p className="m-0 py-2 text-small text-(--text-tertiary)">Nothing has gone wrong since Anton started.</p> : null}
+				{shown.length === 0 ? <EmptyLine className="px-0 py-2">Nothing has gone wrong since Anton started.</EmptyLine> : null}
 				{shown.map(({ entry, count, first }, index) => (
 					<ProblemRow key={`${entry.at}-${index}`} entry={entry} count={count} first={first} last={index === shown.length - 1} />
 				))}

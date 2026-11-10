@@ -6,11 +6,10 @@ import { DocumentMarkdown } from '@/components/document-markdown';
 import { FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, FileView, IMAGE_TYPES, isMarkdown, MarkdownToggle } from '@/components/file-view';
 import { type FileImages } from '@/components/markdown';
-import { Card, Count, Status } from '@/components/instrument';
+import { Card, Count, Status, Tab, Tabs } from '@/components/instrument';
 import { useStoredState } from '@/components/split-pane';
 import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
 import { ADDED_FILES, api, type PluginPick, type PluginPreview } from '@/lib/api';
-import { cn } from '@/lib/utils';
 import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
 
 type DetailTab = 'overview' | 'skills' | 'files';
@@ -394,23 +393,6 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 	);
 }
 
-function TabButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
-	return (
-		<button
-			type="button"
-			role="tab"
-			aria-selected={on}
-			onClick={onClick}
-			className={cn(
-				'-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0 text-body @min-[260px]/settings:px-1 outline-none focus-visible:shadow-(--focus-ring)',
-				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
-			)}
-		>
-			{children}
-		</button>
-	);
-}
-
 /** The first file worth reading: the README, or the first skill's instructions. */
 function firstFile(preview: PluginPreview): string {
 	const skill = preview.files.find((path) => path.endsWith('/SKILL.md') || path === 'SKILL.md');
@@ -462,17 +444,17 @@ function Detail({ preview }: { preview: PluginPreview }) {
 				<div className="col-span-2 @min-[700px]/settings:col-span-1"><Actions preview={preview} /></div>
 				{preview.description ? <p className="col-span-full m-0 text-body leading-[19px] text-pretty text-(--text-secondary) @min-[700px]/settings:col-start-2">{preview.description}</p> : null}
 			</header>
-			<div role="tablist" aria-label="Plugin" className="sticky-veil sticky top-0 z-20 flex gap-1 border-b border-(--border-subtle) @min-[260px]/settings:gap-5">
-				<TabButton on={tab === 'overview'} onClick={() => setTab('overview')}>
+			<Tabs label="Plugin" className="sticky-veil sticky top-0 z-20 gap-3 @min-[260px]/settings:gap-5">
+				<Tab on={tab === 'overview'} onSelect={() => setTab('overview')}>
 					Overview
-				</TabButton>
-				<TabButton on={tab === 'skills'} onClick={() => setTab('skills')}>
+				</Tab>
+				<Tab on={tab === 'skills'} onSelect={() => setTab('skills')}>
 					Skills <Count>{preview.skills.length}</Count>
-				</TabButton>
-				<TabButton on={tab === 'files'} onClick={() => setTab('files')}>
+				</Tab>
+				<Tab on={tab === 'files'} onSelect={() => setTab('files')}>
 					Files <Count>{preview.files.length.toLocaleString()}</Count>
-				</TabButton>
-			</div>
+				</Tab>
+			</Tabs>
 			{tab === 'overview' ? <Overview preview={preview} onOpenFile={openFile} /> : null}
 			{tab === 'skills' ? (
 				<Skills

@@ -4,7 +4,7 @@ import { ArrowRight, Check, FolderGit2, FolderKanban, MessageSquare, Moon, Plus,
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';
-import { Caption } from '@/components/instrument';
+import { Caption, StatusDot } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { IconPicker, iconTint, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
@@ -75,7 +75,7 @@ function ProjectCard({ space }: { space: Space }) {
 						{space.state !== 'active' ? <Caption tone="warning">{space.state === 'paused' ? 'Paused' : 'Archived'}</Caption> : null}
 						{counts.waiting > 0 ? (
 							<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full bg-(--attention-bg) px-2 text-micro text-(--attention-text)">
-								<span className="size-1.5 rounded-full bg-(--attention-base)" />
+								<StatusDot tone="attention" />
 								Needs you
 							</span>
 						) : null}

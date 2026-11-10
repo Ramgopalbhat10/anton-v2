@@ -8,6 +8,7 @@ import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer, elementLabel } from '@/lib/composer-inbox';
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
+import { StatusDot } from '@/components/instrument';
 
 /*
  * The Browser panel: a real Chromium on Kernel, one per task, shown through
@@ -411,7 +412,7 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 					{needsYou ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
 							<span role="status" className="in-pop flex items-center gap-1.5 border-(--attention-border) px-2.5 py-1 text-small text-(--attention-text)">
-								<span className="in-pulse size-1.5 rounded-full bg-(--attention-base)" />
+								<StatusDot tone="attention" pulse />
 								{needsYou}
 							</span>
 						</div>
@@ -419,7 +420,7 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 					{status || agentNote ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
 							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-small text-(--text-secondary)">
-								{agentNote ? <span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" /> : null}
+								{agentNote ? <StatusDot tone="accent" pulse /> : null}
 								{status ?? 'The agent is using this browser'}
 							</span>
 						</div>

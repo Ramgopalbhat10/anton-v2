@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, useMemo, useRef, useState } from 'react';
-import { Count } from '@/components/instrument';
-import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
+import { Count, StatusDot } from '@/components/instrument';
+import { EmptyLine, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api';
 import { RouteBadge, RouteControls } from '@/components/route-menu';
 import { parseRouted, routable, routedId, routeForModel, unrouted } from '../../core/model-route';
@@ -132,7 +132,7 @@ function ReasoningMeter({ strength, className }: { strength: number; className?:
 			{[0.25, 0.5, 0.75, 1].map((step) => (
 				<span
 					key={step}
-					className={cn('w-[2px] rounded-full', strength >= step ? 'bg-(--accent-base)' : 'bg-(--alpha-white-14)')}
+					className={cn('w-[2px] rounded-full', strength >= step ? 'bg-(--accent-base)' : 'bg-(--alpha-white-15)')}
 					style={{ height: `${30 + step * 70}%` }}
 				/>
 			))}
@@ -184,7 +184,7 @@ const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-c
 function PriceCells({ model }: { model: ModelInfo }) {
 	if (model.subscription) return <span className="col-span-2" />;
 	if (model.price.input === 0 && model.price.output === 0) {
-		return <span className="col-span-2 text-right text-nano tracking-[0.06em] text-(--success-text)">FREE</span>;
+		return <span className="col-span-2 text-right text-micro text-(--success-text)">Free</span>;
 	}
 	return (
 		<>
@@ -331,7 +331,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 								return (
 									<span
 										key={tick}
-										className={cn('w-[2px] rounded-full transition-colors duration-(--duration-micro)', !lit && 'bg-(--segment-off) group-hover/level:bg-(--alpha-white-14)')}
+										className={cn('w-[2px] rounded-full transition-colors duration-(--duration-micro)', !lit && 'bg-(--segment-off) group-hover/level:bg-(--alpha-white-15)')}
 										style={{
 											height: `${22 + (at / (total - 1)) * 78}%`,
 											...(lit ? { background: 'var(--accent-base)', opacity: 0.3 + 0.7 * (at / Math.max(1, litUpTo)) } : {}),
@@ -342,7 +342,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 						</span>
 						<span
 							className={cn(
-								'flex items-center justify-center gap-1 truncate text-nano tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
+								'flex items-center justify-center gap-1 truncate text-nano transition-colors duration-(--duration-micro)',
 								index === chosen ? 'text-(--text-primary)' : 'text-(--text-disabled) group-hover/level:text-(--text-secondary)',
 							)}
 						>
@@ -907,7 +907,7 @@ export const ModelPicker = memo(function ModelPicker({
 						) : models.isError ? (
 							<div className="px-2 py-4 text-small text-(--danger-text)">Could not load models: {models.error.message}</div>
 						) : flat.length === 0 ? (
-							unconnected.length ? null : <div className="px-2 py-6 text-center text-small text-(--text-tertiary)">No models match.</div>
+							unconnected.length ? null : <EmptyLine className="px-2 py-6 text-center">No models match.</EmptyLine>
 						) : (
 							sections.map((section) => {
 								const start = offset;
@@ -917,7 +917,7 @@ export const ModelPicker = memo(function ModelPicker({
 									<div key={section.title} role="group" aria-label={section.title} className="flex flex-col">
 										<div className={cn(COLUMNS, 'sticky-veil sticky top-0 z-[1] pt-2.5 pb-1 shadow-[0_1px_0_var(--border-subtle)]')}>
 											<span className="col-span-2 flex min-w-0 items-center gap-1.5">
-												{section.plan ? <span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" /> : null}
+												{section.plan ? <StatusDot tone="accent" /> : null}
 												<span className={cn('in-caption truncate', section.plan && 'text-(--accent-text)')}>{section.title}</span>
 												<span className="in-num text-nano text-(--text-disabled)">{section.total}</span>
 											</span>

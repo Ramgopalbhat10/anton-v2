@@ -374,7 +374,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				<IconBtn icon={ArrowLeft} size="sm" label="All agents" onClick={() => focusRun(sessionId, null)} />
 				<AgentTile agent={run.agent} running={live} size={26} />
 				<div className="flex min-w-0 flex-1 flex-col">
-					<span className="text-micro tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
+					<span className="text-micro font-medium" style={{ color: lookOf(run.agent).tone }}>
 						{lookOf(run.agent).label}
 					</span>
 					<span className="truncate text-body font-medium text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>

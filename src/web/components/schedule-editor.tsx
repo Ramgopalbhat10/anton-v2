@@ -16,7 +16,7 @@ import {
 	WEEK,
 	zoneOffset,
 } from '../../core/schedule';
-import { Icon } from '@/components/signal';
+import { EmptyLine, Icon } from '@/components/signal';
 import type { Automation } from '@/lib/api';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -99,7 +99,7 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 					<InputGroupInput autoFocus aria-label="Find a time zone" placeholder="City, region or GMT+5:30" value={query} onChange={(event) => setQuery(event.target.value)} className={FIELD_TEXT} />
 				</InputGroup>
 				<div role="listbox" aria-label="Time zones" className="max-h-[260px] overflow-y-auto p-1">
-					{shown.length === 0 ? <div className="px-2 py-3 text-small text-(--text-disabled)">No time zone matches</div> : null}
+					{shown.length === 0 ? <EmptyLine className="px-2 py-3">No time zone matches</EmptyLine> : null}
 					{shown.map(({ zone, offset }) => (
 						<button
 							key={zone}

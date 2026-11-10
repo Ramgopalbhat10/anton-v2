@@ -20,7 +20,7 @@ import { Logo, SandboxArt } from '@/components/illustrations';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { HoverPeek } from '@/components/hover-peek';
 import { TraceButton, TraceModal } from '@/components/trace-modal';
-import { Caption, Chip, Figure, SplitBar } from '@/components/instrument';
+import { Caption, Chip, Figure, SplitBar, StatusDot } from '@/components/instrument';
 import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
@@ -443,7 +443,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-micro text-(--text-tertiary) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
 				<StepStrip steps={steps} live={live} />
 				<div className="in-caption shrink-0 whitespace-nowrap">
-					{steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}
+					{steps.length} {steps.length === 1 ? 'step' : 'steps'}
 				</div>
 			</button>
 			<Disclosure open={open} id={detailsId}>
@@ -497,7 +497,7 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 	};
 	return (
 		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--card-border) bg-(--card-bg) py-1 pr-1 pl-3.5 shadow-(--card-highlight)">
-			<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+			<StatusDot tone="accent" pulse />
 			<span className="min-w-0 flex-1 text-small text-(--text-secondary)">
 				The plan is ready. Approve it to let Anton build it, or reply to change it.
 			</span>

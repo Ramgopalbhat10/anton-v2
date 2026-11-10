@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
@@ -12,6 +12,7 @@ import { LibraryTab } from '@/components/library-tab';
 import { PrTab } from '@/components/pr-tab';
 import { PreviewTab } from '@/components/preview-tab';
 import { useResume } from '@/components/source-bar';
+import { Count, PanelTab, PanelTabs } from '@/components/instrument';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
 import { api } from '@/lib/api';
@@ -51,47 +52,6 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	Library: memo(LibraryTab),
 	History: memo(HistoryTab),
 };
-
-/**
- * One open panel as a button, raised when it is the one shown. Hovering it
- * swaps its icon for the close button, in the same place.
- */
-function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
-	const panel = panels.find((panel) => panel.name === name)!;
-	return (
-		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-control hover:bg-(--bg-hover)">
-			{active ? <div className="absolute inset-0 rounded-control border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={active}
-				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-control pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
-			>
-				<span
-					className={cn(
-						'inline-flex size-4 shrink-0 items-center justify-center transition-opacity duration-(--duration-micro) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
-						active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
-					)}
-				>
-					<Icon icon={panel.icon} size={12} />
-				</span>
-				<span className={cn('text-small whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
-				{count ? (
-					<span className="in-num inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--accent-bg-subtle) px-1 text-nano text-(--accent-text)">{count}</span>
-				) : null}
-			</button>
-			<button
-				type="button"
-				aria-label={`Close ${name}`}
-				onClick={onClose}
-				className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-control text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
-			>
-				<Icon icon={X} size={12} />
-			</button>
-		</div>
-	);
-}
 
 /**
  * Starts the task's sandbox from where it stopped, shown while it is not
@@ -162,18 +122,21 @@ export const VmPanel = memo(function VmPanel({
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
 				{/* On a phone the workspace covers the conversation; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
-				<div data-noscrollbar role="tablist" aria-label="Workspace panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
+				<PanelTabs label="Workspace panels">
 					{tabs.map((name) => (
 						<PanelTab
 							key={name}
-							name={name}
-							count={name === 'Changes' ? changed : undefined}
-							active={current === name}
+							on={current === name}
+							mark={<Icon icon={panels.find((panel) => panel.name === name)!.icon} size={12} />}
 							onSelect={() => onActiveChange(name)}
 							onClose={() => close(name)}
-						/>
+							closeLabel={`Close ${name}`}
+						>
+							{name}
+							{name === 'Changes' && changed ? <Count tone="accent">{changed}</Count> : null}
+						</PanelTab>
 					))}
-				</div>
+				</PanelTabs>
 				<div className="relative flex shrink-0 items-center gap-0.5">
 					<ResumeButton sessionId={sessionId} />
 					<Menu open={menuOpen} onOpenChange={setMenuOpen}>

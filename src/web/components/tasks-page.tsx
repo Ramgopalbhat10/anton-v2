@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon, Plus, Search } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
 import { Caption, Card, CardSection, Figure, type Part, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
 import { useModelName } from '@/components/model-picker';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Btn, EmptyState, IconBtn, SearchField, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
 import { TaskRow, used } from '@/components/task-row';
 import { isLive } from '@/components/task-status';
@@ -184,19 +184,15 @@ export function TasksPage() {
 							</SegmentedItem>
 						))}
 					</Segmented>
-					<div className="flex h-8 min-w-[180px] flex-1 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--well-bg) px-3 focus-within:shadow-(--focus-ring)">
-						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-						<input
-							value={query}
-							onChange={(event) => {
-								setQuery(event.target.value);
-								setPage(0);
-							}}
-							placeholder="Search tasks"
-							aria-label="Search tasks"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
-						/>
-					</div>
+					<SearchField
+						value={query}
+						onChange={(next) => {
+							setQuery(next);
+							setPage(0);
+						}}
+						placeholder="Search tasks"
+						className="min-w-[180px] flex-1"
+					/>
 				</div>
 				{sessions.isPending ? (
 					<div className="p-4">

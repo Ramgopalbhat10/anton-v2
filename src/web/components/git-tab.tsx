@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, CloudCheck, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Search, Send, Undo2, X } from 'lucide-react';
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, CloudCheck, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Send, Undo2, X } from 'lucide-react';
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { Disclosure } from '@/components/disclosure';
 import { FileIcon, FileIcons } from '@/components/file-icons';
 import { Branch, buildTree, compactTree, StatusChip } from '@/components/file-view';
 import { ChangesArt } from '@/components/illustrations';
-import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, DiffStat, EmptyLine, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
 import { api, type ChangesPayload, type ChangesScope, isChat, refreshFor } from '@/lib/api';
 import { type DiffLine, type FileDiff, parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
@@ -620,24 +620,11 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 									{base ? <span className="text-micro text-(--text-disabled)">compared with {base}</span> : null}
 								</div>
 							) : null}
-							<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-control border border-(--border-subtle) bg-(--bg-inset) px-2">
-								<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-								<input
-									value={query}
-									onChange={(event) => setQuery(event.target.value)}
-									onKeyDown={(event) => {
-										if (event.key === 'Escape') setQuery('');
-									}}
-									placeholder="Find a changed file"
-									aria-label="Find a changed file"
-									className="min-w-0 flex-1 bg-transparent text-small text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
-								/>
-								{query ? <IconBtn icon={X} size="xs" label="Clear the search" onClick={() => setQuery('')} className="-mr-1 size-5" /> : null}
-							</label>
+							<SearchField size="sm" value={query} onChange={setQuery} placeholder="Find a changed file" className="mb-1.5 shrink-0" />
 							{files.length === 0 ? (
 								<div className="px-2 py-1.5 text-small text-(--text-tertiary)">{scope === 'branch' ? 'The branch changes no files yet.' : 'No changed files.'}</div>
 							) : shown.length === 0 ? (
-								<div className="px-2 py-1.5 text-small text-(--text-tertiary)">No changed files match.</div>
+								<EmptyLine>No changed files match.</EmptyLine>
 							) : (
 								<Branch
 									selected={selected?.path ?? null}

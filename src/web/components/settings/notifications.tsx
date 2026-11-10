@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellRing, Download, ListChecks, MonitorSmartphone, Send, Smartphone, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Status } from '@/components/instrument';
-import { Btn, IconBtn, Spinner, Switch } from '@/components/signal';
+import { Btn, EmptyLine, IconBtn, Spinner, Switch } from '@/components/signal';
 import { api, type PushView } from '@/lib/api';
 import { age } from '@/lib/format';
 import { canPromptInstall, currentSubscription, deviceIdOf, isInstalled, isIos, onInstallChange, promptInstall, pushSupport, turnOffPush, turnOnPush } from '@/lib/push';
@@ -108,7 +108,7 @@ function Devices({ view, thisDevice }: { view: PushView; thisDevice: string | nu
 	return (
 		<Block title="Devices" icon={MonitorSmartphone} help="Phones and browsers with notifications on." info="Removing one stops its notifications.">
 			{view.devices.length === 0 ? (
-				<p className="m-0 text-small text-(--text-tertiary)">None yet. Turn them on above, on each device.</p>
+				<EmptyLine className="p-0">None yet. Turn them on above, on each device.</EmptyLine>
 			) : (
 				<List>
 					{view.devices.map((device) => (

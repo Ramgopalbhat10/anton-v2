@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { CircleCheck, FolderKanban, GitPullRequest, List, Loader, type LucideIcon, Plus, Search, Shapes } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SECTIONS } from '@/components/settings/sections';
-import { Icon, Kbd } from '@/components/signal';
+import { Icon, Kbd, SectionLabel } from '@/components/signal';
 import { api, repoShort } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
@@ -172,7 +172,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 						<Kbd keys="enter" />
 					</button>
 					{jumps.length > 0 ? (
-						<div className="px-2.5 pt-3 pb-1 text-micro font-medium tracking-[0.06em] text-(--text-disabled) uppercase">Jump to</div>
+						<SectionLabel className="px-2.5 pt-3 pb-1">Jump to</SectionLabel>
 					) : null}
 					{jumps.map((entry, position) => (
 						<button

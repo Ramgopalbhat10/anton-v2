@@ -2,7 +2,7 @@ import { PrStatus } from '@/components/pr-status';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
-import { Caption, Card, Chip, Pips } from '@/components/instrument';
+import { Caption, Card, Chip, PanelTab, PanelTabs, Pips } from '@/components/instrument';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
 import { ModelLogo, ModelPicker, useModelName, useModels } from '@/components/model-picker';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
@@ -29,24 +29,6 @@ export const PROJECT_TABS = [
 	{ name: 'Routines', icon: CalendarClock },
 ] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number]['name'];
-
-/** A tab like the workspace's: raised when it is the one shown. */
-function Tab({ name, icon, count, active, onSelect }: { name: string; icon: typeof Library; count?: number; active: boolean; onSelect: () => void }) {
-	return (
-		<button
-			type="button"
-			role="tab"
-			aria-selected={active}
-			onClick={onSelect}
-			className="relative flex h-7 shrink-0 items-center gap-1.5 rounded-control pr-2 pl-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-		>
-			{active ? <span className="absolute inset-0 rounded-control border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
-			<Icon icon={icon} size={12} className={cn('relative', active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)')} />
-			<span className={cn('relative text-small whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
-			{count ? <span className="in-num relative inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--attention-bg) px-1 text-nano text-(--attention-text)">{count}</span> : null}
-		</button>
-	);
-}
 
 /**
  * Overview, read top to bottom: the project's pulse (what it comes to, its
@@ -530,17 +512,13 @@ export const ProjectPanel = memo(function ProjectPanel({
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
 				{/* On a phone the panel covers the coordinator; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the coordinator" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
-				<div data-noscrollbar role="tablist" aria-label="Project panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
+				<PanelTabs label="Project panels">
 					{PROJECT_TABS.map((item) => (
-						<Tab
-							key={item.name}
-							name={item.name}
-							icon={item.icon}
-							active={tab === item.name}
-							onSelect={() => onTab(item.name)}
-						/>
+						<PanelTab key={item.name} on={tab === item.name} mark={<Icon icon={item.icon} size={12} />} onSelect={() => onTab(item.name)}>
+							{item.name}
+						</PanelTab>
 					))}
-				</div>
+				</PanelTabs>
 				<IconBtn
 					icon={expanded ? Minimize2 : Maximize2}
 					size="sm"

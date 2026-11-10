@@ -66,7 +66,7 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 	const name = (
 		<>
 			<span className="truncate">{label}</span>
-			{count ? <span className="in-num font-medium tracking-normal text-(--text-disabled)">{count}</span> : null}
+			{count ? <span className="in-num font-normal text-(--text-disabled)">{count}</span> : null}
 			{onToggle ? (
 				<Icon
 					icon={ChevronRight}
@@ -77,7 +77,7 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 			) : null}
 		</>
 	);
-	const look = 'flex h-6 min-w-0 shrink-0 items-center gap-1.5 text-micro font-semibold tracking-[0.09em] text-(--text-secondary) uppercase';
+	const look = 'flex h-6 min-w-0 shrink-0 items-center gap-1.5 text-small font-medium text-(--text-tertiary)';
 	return (
 		<div className={cn('group/group mt-4 flex h-7 items-center gap-2 pr-2.5 pl-5', className)}>
 			{onToggle ? (

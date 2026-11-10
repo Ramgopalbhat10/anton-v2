@@ -1,5 +1,6 @@
 import { ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StatusDot } from '@/components/instrument';
 
 /**
  * The way back to the newest content, shown once the reader has scrolled up
@@ -20,7 +21,7 @@ export function JumpToLatest({ show, live, onJump, className }: { show: boolean;
 			>
 				<ArrowDown aria-hidden size={13} />
 				Jump to latest
-				{live ? <span aria-hidden className="in-pulse size-1.5 rounded-full bg-(--accent-base)" /> : null}
+				{live ? <StatusDot tone="accent" pulse /> : null}
 			</button>
 		</div>
 	);

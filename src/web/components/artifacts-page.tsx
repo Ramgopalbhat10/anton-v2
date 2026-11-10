@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Sparkles, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl } from '@/components/html-frame';
@@ -10,7 +10,7 @@ import { kindOf } from '@/components/library-tab';
 import { MenuButton } from '@/components/nav';
 import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output-viewer';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
 import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf, zipFolder } from '@/lib/artifacts';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
@@ -502,22 +502,7 @@ export function ArtifactsPage() {
 				<span className="min-w-0 flex-1" />
 				{!selecting && all.length ? <Btn size="sm" variant="ghost" icon={CheckSquare} onClick={() => setSelecting(true)}>Select</Btn> : null}
 				<AddFiles />
-				<label className="flex h-8 w-full items-center gap-2 rounded-control border border-input bg-(--well-bg) px-2.5 focus-within:border-(--border-default) sm:w-[240px]">
-					<Icon icon={Search} size={12} className="shrink-0 text-(--icon-tertiary)" />
-					<input
-						value={query}
-						onChange={(event) => setSearch({ type, q: event.target.value || undefined })}
-						onKeyDown={(event) => event.key === 'Escape' && setSearch({ type })}
-						placeholder="Search artifacts"
-						aria-label="Search artifacts"
-						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none"
-					/>
-					{query ? (
-						<button type="button" aria-label="Clear search" onClick={() => setSearch({ type })} className="inline-flex shrink-0 text-(--icon-tertiary) hover:text-(--text-primary)">
-							<Icon icon={X} size={12} />
-						</button>
-					) : null}
-				</label>
+				<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" className="w-full sm:w-[240px]" />
 			</div>
 
 			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}

@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
@@ -34,11 +35,27 @@ export function Caption({ children, className, tone }: { children: ReactNode; cl
 	return <span className={cn('in-caption', tone && TEXT[tone], className)}>{children}</span>;
 }
 
-/** A small status word in a card header or row: "LIVE", "2 FAILING", "CAP 80%". */
+/**
+ * The one dot that says a state: grey for off or idle, the accent for live,
+ * attention for what waits on you, amber for a caution, red for a failure.
+ * It pulses only while something is running.
+ */
+export function StatusDot({ tone = 'neutral', color, pulse, title, className }: { tone?: Tone | 'off'; color?: string; pulse?: boolean; title?: string; className?: string }) {
+	return (
+		<span
+			title={title}
+			aria-hidden={title ? undefined : true}
+			className={cn('size-1.5 shrink-0 rounded-full', pulse && 'in-pulse', className)}
+			style={{ background: color ?? (tone === 'off' ? 'var(--text-disabled)' : FILL[tone]) }}
+		/>
+	);
+}
+
+/** A status as a dot and a word, in a card header or a row: "Live", "2 failing", "Connected". Neutral has no dot. */
 export function Status({ tone = 'neutral', color, pulse, children }: { tone?: Tone; /** A colour of its own, over the tone's (a PR state's). */ color?: string; pulse?: boolean; children: ReactNode }) {
 	return (
 		<span className={cn('in-caption inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap', !color && TEXT[tone])} style={color ? { color } : undefined}>
-			{color || tone !== 'neutral' ? <span className={cn('size-1.5 rounded-full', pulse && 'in-pulse')} style={{ background: color ?? FILL[tone] }} /> : null}
+			{color || tone !== 'neutral' ? <StatusDot tone={tone} color={color} pulse={pulse} /> : null}
 			{children}
 		</span>
 	);
@@ -474,7 +491,7 @@ export function Segmented({ children, label, className, role = 'tablist' }: { ch
 	);
 }
 
-/** One option of a segmented control: raised on the well when it is the chosen one. */
+/** One option of a segmented control: filled when it is the chosen one. For two to four ways to show the same thing. */
 export function SegmentedItem({
 	on,
 	onClick,
@@ -504,13 +521,120 @@ export function SegmentedItem({
 				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-control border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 				size === 'sm' ? 'h-[22px] px-2 text-micro' : 'h-7 px-3 text-body',
 				on
-					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
+					? 'in-chosen border-transparent'
 					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 				className,
 			)}
 		>
 			{children}
 		</button>
+	);
+}
+
+/** The row the sections of a page sit in, on a rule: a plan, a plugin's parts. Its items are `Tab`s. */
+export function Tabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+	return (
+		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex gap-5 overflow-x-auto overflow-y-hidden border-b border-(--border-subtle)', className)}>
+			{children}
+		</div>
+	);
+}
+
+/** One section of a page: primary text and a rule under it when it is the one shown. */
+export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onSelect: () => void; children: ReactNode; id?: string; controls?: string }) {
+	return (
+		<button
+			type="button"
+			role="tab"
+			id={id}
+			aria-controls={controls}
+			aria-selected={on}
+			onClick={onSelect}
+			className={cn(
+				'-mb-px inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-0.5 text-body whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				on ? 'border-(--text-primary) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s. */
+export function PanelTabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+	return (
+		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden', className)}>
+			{children}
+		</div>
+	);
+}
+
+/**
+ * One open panel or file, filled when it is the one shown. One that can be
+ * closed swaps its mark for the close button while the pointer or focus is on it.
+ */
+export function PanelTab({
+	on,
+	onSelect,
+	mark,
+	children,
+	onClose,
+	closeLabel,
+	id,
+	controls,
+	title,
+}: {
+	on: boolean;
+	onSelect: () => void;
+	/** The icon before the name: a panel's, or a file's own. */
+	mark?: ReactNode;
+	children: ReactNode;
+	onClose?: () => void;
+	closeLabel?: string;
+	id?: string;
+	controls?: string;
+	title?: string;
+}) {
+	return (
+		<div className={cn('group/tab relative flex h-7 shrink-0 items-center rounded-control transition-colors duration-(--duration-micro)', on ? 'in-chosen' : 'hover:bg-(--bg-hover)')}>
+			<button
+				type="button"
+				role="tab"
+				id={id}
+				aria-controls={controls}
+				aria-selected={on}
+				title={title}
+				onClick={onSelect}
+				className={cn(
+					'flex h-full items-center gap-1.5 rounded-control pr-2 text-small whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
+					mark ? 'pl-1.5' : 'pl-2',
+					on ? 'text-(--text-primary)' : 'text-(--text-secondary)',
+				)}
+			>
+				{mark ? (
+					<span
+						className={cn(
+							'inline-flex size-4 shrink-0 items-center justify-center',
+							on ? 'text-(--icon-primary)' : 'text-(--icon-tertiary)',
+							onClose && 'transition-opacity duration-(--duration-micro) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
+						)}
+					>
+						{mark}
+					</span>
+				) : null}
+				{children}
+			</button>
+			{onClose ? (
+				<button
+					type="button"
+					aria-label={closeLabel ?? 'Close'}
+					onClick={onClose}
+					className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-inner text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-15) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				>
+					<Icon icon={X} size={12} />
+				</button>
+			) : null}
+		</div>
 	);
 }
 

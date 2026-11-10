@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Copy, ExternalLink, Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { GMAIL, GOOGLE, type Mark, MarkTile, MCP, useComposioMark, useServerMark } from '@/components/brand-marks';
 import { Status } from '@/components/instrument';
-import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner, Switch } from '@/components/signal';
 import { api, type ComposioAccount, type ComposioToolkitHit, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer, type McpServerInput } from '@/lib/api';
 import { type CatalogEntry, catalogEntryFor, composioEntryFor, COMPOSIO_CATALOG, GMAIL_ENTRY, GMAIL_TOOLS, MCP_CATALOG } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, connectorKey, type ConnectorState, setConnectorOn } from '@/lib/connectors';
@@ -465,14 +465,7 @@ export function ConnectorsPage() {
 				info="Sign-ins and tokens stay on Anton's server and never reach a sandbox or the model. A connector that is on is offered to every task, but its tools load only when a task looks them up, so the agent's prompt and its cache stay the same whichever are on."
 				actions={
 					<div className="flex items-center gap-2">
-						<input
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Search connectors"
-							aria-label="Search connectors"
-							className={cn(FIELD, 'w-[200px]')}
-						/>
+						<SearchField value={query} onChange={setQuery} placeholder="Search connectors" className="w-[200px]" />
 						<Btn size="sm" icon={Plus} onClick={() => void navigate({ to: '/settings/connectors/view', search: { add: 'custom' } })}>
 							Add custom
 						</Btn>

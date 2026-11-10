@@ -31,20 +31,7 @@ import {
 	X,
 } from 'lucide-react';
 import { memo, type ReactNode, useState } from 'react';
-import {
-	Avatar,
-	Icon,
-	IconBtn,
-	Kbd,
-	Menu,
-	MenuContent,
-	MenuItem,
-	MenuSeparator,
-	MenuSub,
-	MenuSubContent,
-	MenuSubTrigger,
-	MenuTrigger,
-} from '@/components/signal';
+import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
 import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
 import { NotificationsBell } from '@/components/notifications';
@@ -280,7 +267,7 @@ function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (nex
 					type="button"
 					aria-label={`Remove the ${label} filter`}
 					onClick={() => onChange(toggleFilter(view, key, value))}
-					className="flex h-5 max-w-full items-center gap-1 rounded-full bg-(--accent-bg-subtle) pr-1 pl-1.5 text-micro text-(--accent-text) outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
+					className="in-chosen flex h-[22px] max-w-full items-center gap-1 rounded-full pr-1 pl-2 text-micro outline-none focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={FACET_ICON[key]} size={10} />
 					<span className="truncate">{label}</span>
@@ -327,18 +314,7 @@ function Toolbar({
 		// The search takes the heading's own row: same height, same place, the field where the name and rule were.
 		return (
 			<div className="mt-4 flex h-7 shrink-0 items-center gap-2 pr-2.5 pl-5">
-				<label className="flex h-6 min-w-0 flex-1 items-center gap-1.5 border-b border-(--accent-border)">
-					<Icon icon={Search} size={11} className="shrink-0 text-(--icon-tertiary)" />
-					<input
-						autoFocus
-						value={query}
-						onChange={(event) => onQuery(event.target.value)}
-						onKeyDown={(event) => event.key === 'Escape' && close()}
-						placeholder="Search tasks"
-						aria-label="Search tasks"
-						className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-small text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
-					/>
-				</label>
+				<SearchField size="sm" autoFocus value={query} onChange={onQuery} onEscape={close} placeholder="Search tasks" className="flex-1" />
 				<span className="-my-1 flex shrink-0 items-center">{actions}</span>
 			</div>
 		);

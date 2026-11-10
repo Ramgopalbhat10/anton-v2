@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
-import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, usedTone, Well } from '@/components/instrument';
+import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, StatusDot, Tab, Tabs, usedTone, Well } from '@/components/instrument';
 import { EffortRange, useModels } from '@/components/model-picker';
 import { AREA } from '@/components/repo-settings';
-import { Btn, Icon, InfoTip, InlineCode, Spinner, Switch } from '@/components/signal';
+import { Btn, EmptyLine, Icon, InfoTip, InlineCode, SearchField, Spinner, Switch } from '@/components/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';
 import { age, dollars, tokens, until } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
@@ -779,16 +779,15 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 	}
 	return (
 		<CardSection label={`Models · ${subscription.models.length}`} hint="Effort · context · $ per 1M in / out · tokens this month">
-			<input
-				type="search"
+			<SearchField
 				value={query}
-				onChange={(event) => {
-					setQuery(event.target.value);
+				onChange={(next) => {
+					setQuery(next);
 					setPage(0);
 				}}
 				placeholder="Search models"
-				aria-label={`Search ${subscription.name} models`}
-				className={`${FIELD} w-full max-w-[320px] text-small`}
+				label={`Search ${subscription.name} models`}
+				className="w-full max-w-[320px]"
 			/>
 			{shown.length ? (
 				<ul aria-label={`${subscription.name} models`} className="m-0 -mx-2 flex list-none flex-col p-0">
@@ -829,7 +828,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 					))}
 				</ul>
 			) : (
-				<p className="m-0 text-small text-(--text-tertiary)">No models match “{query}”.</p>
+				<EmptyLine className="p-0">No models match “{query}”.</EmptyLine>
 			)}
 			{ranked.length > GATEWAY_PAGE_SIZE ? (
 				<nav aria-label="Model pages" className="flex items-center justify-between gap-3">
@@ -994,28 +993,14 @@ function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; o
 	const logo = logoFor({ id: `${subscription.gateway}/` });
 	const connected = subscription.state === 'connected';
 	return (
-		<button
-			type="button"
-			role="tab"
-			id={`plan-tab-${subscription.id}`}
-			aria-selected={on}
-			aria-controls={`plan-panel-${subscription.id}`}
-			onClick={onSelect}
-			className={cn(
-				'inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-1 text-body whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
-				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
-			)}
-		>
+		<Tab on={on} onSelect={onSelect} id={`plan-tab-${subscription.id}`} controls={`plan-panel-${subscription.id}`}>
 			{logo ? (
 				// LobeHub's one-colour logos take the text colour, sized by the font size.
 				<span aria-hidden className={cn('flex text-h3', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
 			) : null}
 			{subscription.name}
-			<span
-				title={connected ? 'Connected' : STATUS[subscription.state].label}
-				className={cn('size-1.5 rounded-full', connected ? 'bg-(--success-base)' : subscription.state === 'expired' ? 'bg-(--danger-base)' : 'bg-(--border-strong)')}
-			/>
-		</button>
+			<StatusDot title={connected ? 'Connected' : STATUS[subscription.state].label} tone={connected ? 'success' : subscription.state === 'expired' ? 'danger' : 'off'} />
+		</Tab>
 	);
 }
 
@@ -1038,11 +1023,11 @@ export function SubscriptionsPage() {
 				<p className="m-0 text-small text-(--danger-text)">{view.error.message}</p>
 			) : current ? (
 				<div className="flex flex-col gap-5">
-					<div role="tablist" aria-label="Plans" className="flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border-subtle)] [scrollbar-width:none] sm:gap-6">
+					<Tabs label="Plans">
 						{plans.map((plan) => (
 							<PlanTab key={plan.id} subscription={plan} on={plan.id === current.id} onSelect={() => setPicked(plan.id)} />
 						))}
-					</div>
+					</Tabs>
 					<div role="tabpanel" id={`plan-panel-${current.id}`} aria-labelledby={`plan-tab-${current.id}`}>
 						{current.kind === 'runtime' ? (
 								<ClaudePlan key={current.id} subscription={current} />

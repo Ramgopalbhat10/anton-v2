@@ -24,8 +24,8 @@ import {
 } from 'lucide-react';
 import { Dialog } from 'radix-ui';
 import { useEffect, useMemo, useState } from 'react';
-import { Segmented, SegmentedItem } from '@/components/instrument';
-import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
+import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
+import { Btn, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
@@ -271,31 +271,21 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 								const count = countFor(category.id);
 								const unread = data?.unread[category.id] ?? 0;
 								return (
-									<button
+									<FilterChip
 										key={category.id}
-										type="button"
-										aria-pressed={on}
-										aria-label={`${category.label}, ${count}`}
-										onClick={() => change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] })}
-										className={cn(
-											'flex h-[24px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-small transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
-											on
-												? 'bg-(--accent-bg-subtle) text-(--accent-text) hover:bg-(--bg-selected-hover)'
-												: 'bg-(--bg-hover) text-(--text-secondary) hover:bg-(--bg-active) hover:text-(--text-primary)',
-										)}
-									>
-										{category.id === 'needs-you' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--attention-base)" /> : null}
-										{category.id === 'failures' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--danger-base)" /> : null}
-										{category.label}
-										<span className={cn('tabular-nums', on ? 'text-(--accent-text) opacity-75' : 'text-(--text-tertiary)')}>{count}</span>
-									</button>
+										label={category.label}
+										count={count}
+										on={on}
+										onToggle={() => change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] })}
+										mark={category.id === 'needs-you' && unread ? <StatusDot tone="attention" /> : category.id === 'failures' && unread ? <StatusDot tone="danger" /> : undefined}
+									/>
 								);
 							})}
 							{filtered ? (
 								<button
 									type="button"
 									onClick={() => change(DEFAULT_FILTERS)}
-									className="ml-auto h-[24px] shrink-0 rounded-full px-2.5 text-small text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+									className="ml-auto h-6 shrink-0 rounded-full px-2.5 text-small text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 								>
 									Clear
 								</button>
@@ -329,7 +319,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						) : (
 							groups.map((group) => (
 								<section key={group.label} aria-label={group.label} className="px-2 pb-1.5">
-									<div className="sticky-veil sticky top-0 z-[1] px-2 pt-2.5 pb-1 text-micro font-medium tracking-[0.06em] text-(--text-disabled) uppercase">{group.label}</div>
+									<SectionLabel className="sticky-veil sticky top-0 z-[1] px-2 pt-2.5 pb-1">{group.label}</SectionLabel>
 									<ul className="flex flex-col gap-px">
 										{group.rows.map((notification) => (
 											<Row

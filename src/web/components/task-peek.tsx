@@ -7,7 +7,8 @@ import { checksTone, PrStatus, prTone } from '@/components/pr-status';
 import { TaskStatusIcon } from '@/components/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
-import { activeAt, modelName, taskNote, type Tone } from '@/lib/task-view';
+import { useModelName } from '@/components/model-picker';
+import { activeAt, taskNote, type Tone } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 export const TONE: Record<Tone, string> = {
@@ -35,6 +36,7 @@ const ago = (iso: string) => (age(iso) === 'now' ? 'just now' : `${age(iso)} ago
 
 /** Everything worth knowing about a task at a glance: its numbers first, then where it lives. */
 function Peek({ session }: { session: Session }) {
+	const modelName = useModelName();
 	const note = taskNote(session);
 	const { inputTokens, outputTokens, cost } = session.usage;
 	const used = inputTokens + outputTokens;
@@ -80,8 +82,8 @@ function Peek({ session }: { session: Session }) {
 				<Fact label={isChat(session) ? 'Sandbox' : 'Branch'} mono>
 					{branchLabel(session)}
 				</Fact>
-				<Fact label="Model" mono>
-					{modelName(session.model)}
+				<Fact label="Model">
+					<span title={session.model}>{modelName(session.model)}</span>
 				</Fact>
 				<Fact label="Started" mono>
 					{ago(session.createdAt)}

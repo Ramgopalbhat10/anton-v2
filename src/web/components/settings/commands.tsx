@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, SquareTerminal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Status } from '@/components/instrument';
-import { Btn, IconBtn, Spinner } from '@/components/signal';
+import { Btn, EmptyLine, IconBtn, Spinner } from '@/components/signal';
 import { api, type Command } from '@/lib/api';
 import { Block, FIELD, PageHeading, SaveState } from './parts';
 
@@ -44,7 +44,7 @@ function Commands({ saved }: { saved: Command[] }) {
 				}
 			>
 				{rows.length === 0 ? (
-					<p className="m-0 py-1 text-small text-(--text-tertiary)">No commands yet. Add one, then type / and its name in any message.</p>
+					<EmptyLine className="px-0 py-1">No commands yet. Add one, then type / and its name in any message.</EmptyLine>
 				) : null}
 				{rows.map((row, index) => (
 					<div key={index} className="flex items-start gap-2">

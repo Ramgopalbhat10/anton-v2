@@ -110,10 +110,6 @@
  pointer-events: none;
 }
 
-.sg-file-search:focus-within {
- box-shadow: var(--focus-ring-inset);
-}
-
 /* The sidebar slides like a sheet: its column narrows to the rail while the
    sidebar keeps its 288px and moves out, so nothing in it reflows. On a phone
    it is a sheet over the page, slid in from the left. */
@@ -168,8 +164,6 @@
  }
 }
 
-.sg-file-row[aria-current='true'] { background: var(--bg-selected); }
-.sg-file-row[aria-current='true']:hover { background: var(--bg-selected-hover); }
 
 
 .sg-markdown .sg-code pre{padding:10px 12px}

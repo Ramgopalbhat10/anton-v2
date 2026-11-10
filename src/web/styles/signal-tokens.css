@@ -27,11 +27,11 @@
      are alpha, not solid, so they hold up on any surface level. */
   --alpha-white-3:rgba(255,255,255,0.03);
   --alpha-white-4:rgba(255,255,255,0.04);
-  --alpha-white-5:rgba(255,255,255,0.055);
+  --alpha-white-5:rgba(255,255,255,0.05);
   --alpha-white-6:rgba(255,255,255,0.06);
   --alpha-white-7:rgba(255,255,255,0.07);
-  --alpha-white-8:rgba(255,255,255,0.085);
   --alpha-white-9:rgba(255,255,255,0.09);
+  --alpha-white-11:rgba(255,255,255,0.11);
   --alpha-white-15:rgba(255,255,255,0.15);
   --alpha-white-24:rgba(255,255,255,0.24);
   --alpha-black-40:rgba(0,0,0,0.40);
@@ -101,9 +101,9 @@
   --bg-raised:var(--neutral-850);
   --bg-overlay:var(--neutral-800);
   --bg-hover:var(--alpha-white-5);
-  --bg-active:var(--alpha-white-8);
-  --bg-selected:var(--cyan-alpha-12);
-  --bg-selected-hover:var(--cyan-alpha-16);
+  --bg-active:var(--alpha-white-11);
+  --bg-selected:var(--bg-active);
+  --bg-selected-hover:var(--bg-active);
   --bg-disabled:var(--alpha-white-3);
   --bg-skeleton:var(--alpha-white-6);
   --bg-scrim:var(--alpha-black-60);

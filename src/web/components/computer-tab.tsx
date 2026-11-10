@@ -10,6 +10,7 @@ import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer } from '@/lib/composer-inbox';
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
+import { StatusDot } from '@/components/instrument';
 
 /*
  * The Computer panel: the desktop inside the task's sandbox, shown over VNC
@@ -332,7 +333,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 						</>
 					) : computer.agentBusy ? (
 						<>
-							<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+							<StatusDot tone="accent" pulse />
 							<span className="truncate">The agent is using the computer</span>
 						</>
 					) : (
