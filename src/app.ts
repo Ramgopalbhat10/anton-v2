@@ -9,10 +9,12 @@ import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
+import { purgeIncognito } from './db.ts';
 import { getSessionRecord } from './db/sessions.ts';
 import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
 import { ROUTE_SORTS } from './core/model-route.ts';
+import { isIncognitoId } from './core/incognito.ts';
 import { FREQUENCIES } from './core/schedule.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { mobileApi } from './api/mobile.ts';
@@ -65,6 +67,8 @@ import {
 	forkSession,
 	resumeSession,
 	stopSession,
+	primeIncognitoModel,
+	forgetModelChoice,
 } from './services/sessions.ts';
 import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
 import { previewsView } from './services/previews.ts';
@@ -88,7 +92,7 @@ import { streamChanges } from './services/change-stream.ts';
 import { recordReplyText } from './services/reply-check.ts';
 import { backfillLatestInputs } from './services/latest-input.ts';
 import { contextView, recordContext } from './services/context-usage.ts';
-import { type DeliveredImage, primeAgent, primeAllAgents, setAgentDelivery } from './services/agent-runner.ts';
+import { type DeliveredImage, primeAgent, primeAllAgents, primeIncognito, releaseIncognito, setAgentDelivery } from './services/agent-runner.ts';
 import { resetFollowUps } from './services/follow-ups.ts';
 import { scheduleHeadlessWork } from './services/headless.ts';
 import { scheduleIdleStops } from './services/idle-stop.ts';
@@ -97,7 +101,7 @@ import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY,
 import { threadStarted } from './services/thread-reports.ts';
 import { primeCoordinator } from './services/coordinator.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
-import { attachToProject, attachToTask } from './services/attachments.ts';
+import { attachToProject, attachToTask, incognitoAttachment } from './services/attachments.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
 import { decideSend, mailApprovals } from './services/mail.ts';
 import { addComposioToolkit, beginComposioConnect, composioToolkit, composioTools, composioView, disconnectComposioAccount, loadComposioKey, refreshComposioAccount, removeComposioAccount, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from './services/composio.ts';
@@ -263,6 +267,57 @@ app.post('/api/agents/coder/:id/abort', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
+// An incognito chat: a throwaway conversation the runtime keeps in memory only — no session record,
+// no files, nothing on disk. Its model choice lives in memory too, set by the page before it writes.
+app.post('/api/incognito/attach', async (c) => {
+	const name = (c.req.query('name') ?? 'file').slice(0, 300);
+	const bytes = new Uint8Array(await c.req.arrayBuffer());
+	if (!bytes.length) throw new InvalidInputError('The file is empty');
+	if (bytes.length > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be attached.');
+	return c.json(await incognitoAttachment(name, bytes));
+});
+app.post('/api/incognito/:id', async (c) => {
+	const id = c.req.param('id');
+	if (!isIncognitoId(id)) throw new NotFoundError('Not found');
+	const input = await body(c, v.object({ model: v.optional(v.string()), reasoning: v.optional(v.nullable(REASONING)), route: v.optional(ROUTE) }));
+	await primeIncognitoModel(id, input);
+	return c.json({ ok: true });
+});
+app.delete('/api/incognito/:id', (c) => {
+	const id = c.req.param('id');
+	if (isIncognitoId(id)) {
+		// Answer at once; aborting the reply, releasing its state and purging its rows run behind
+		// the response, so closing a chat never waits on any of it.
+		void (async () => {
+			try {
+				await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' });
+			} catch {
+				// Already gone.
+			}
+			releaseIncognito(id);
+			forgetModelChoice(id);
+			// Everything the chat wrote lives in the in-memory store; delete it now, and once more
+			// after the abort's settlement lands so its last writes go too.
+			purgeIncognito(id);
+			setTimeout(() => purgeIncognito(id), 2_000).unref();
+		})().catch(() => undefined);
+	}
+	return c.json({ ok: true });
+});
+// Its messages ride the same agent router as tasks, under their own path: the check is the incognito
+// prefix rather than a session record, since there is none.
+app.post('/api/agents/incognito/:id', async (c, next) => {
+	const id = c.req.param('id');
+	if (!isIncognitoId(id)) throw new NotFoundError('Session not found');
+	await assertWithinBudget(id);
+	await primeIncognito(id);
+	await primeIncognitoModel(id);
+	await next();
+});
+app.post('/api/agents/incognito/:id/abort', async (c, next) => {
+	await next();
+});
+app.route('/api/agents/incognito', agents as never);
 // The Android app's read surface: stable DTOs over the internal shapes, and a transcript
 // normalized from the agent router instead of flue's wire protocol.
 const coordinators = createAgentRouter(Coordinator);

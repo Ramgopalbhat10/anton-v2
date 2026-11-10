@@ -92,6 +92,7 @@ import { needsTheUser, trimToJob } from '../services/page-judge.ts';
 import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from '../services/subagent-runs.ts';
 import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
+import { isIncognitoId } from '../core/incognito.ts';
 import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
@@ -1329,6 +1330,19 @@ const CHAT_WORKSPACE_PROMPT = [
 	'Be concise.',
 ].join(' ');
 
+/**
+ * An incognito chat: the same assistant with no repository, no workspace and no sandbox —
+ * it cannot run code or change files, and nothing it does is saved. Its tools are the
+ * web, the user's connectors and ask.
+ */
+const INCOGNITO_PROMPT = [
+	'You are Anton in an incognito chat: a throwaway conversation that is never saved. There is no repository, no workspace and no sandbox — you cannot run code, change files or keep anything for later.',
+	'Answer questions directly, and do jobs on the web when asked.',
+	CHAT_WEB,
+	'Files the user attaches arrive after the message as <attachment> blocks holding their text; they are not stored, so there is no original to open — work from the text given.',
+	'Be concise.',
+].join(' ');
+
 /** A task reviewing someone else's pull request: it reads and runs their change, and posts what it finds. */
 function reviewPrompt(review: ReviewTask): string {
 	return [
@@ -1426,12 +1440,14 @@ export function Coder({ id }: AgentProps) {
 	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);
+	// An incognito chat is a chat with nothing kept: no repository, no workspace, no sandbox, no saved state.
+	const incognito = isIncognitoId(id);
 	// A chat has no repository: no snapshot to read, notes to keep or pull request to open.
-	const chat = isChat(id);
+	const chat = isChat(id) || incognito;
 	const planning = isPlanning(id);
 	const review = reviewTaskFor(id);
 	if (workspace) useWorkspace(id, planning, chat, review);
-	else {
+	else if (!incognito) {
 		// A chat reads other repositories with the same tools, named by repo.
 		useRepoSnapshot(id, chat);
 		useSnapshotExplorer(id, chat);
@@ -1439,34 +1455,35 @@ export function Coder({ id }: AgentProps) {
 	}
 	if (planning) useProposePlan(id);
 	// Code mode's repo tools read the snapshots, which a workspace does not use; it still gets MCP servers and decide().
-	const scope: ScriptScope = { repo: !workspace, mcp: true };
+	const scope: ScriptScope = { repo: !workspace && !incognito, mcp: true };
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);
 	if (scripts) useRunScript(id, scope);
 	const connectors = connectorsFor(id);
 	const scriptHint = scripts ? `${SCRIPT_HINT} ${connectors.some((connector) => connector.kind === 'mcp' && connector.codeMode) ? `${SCRIPTED_MCP_HINT} ` : ''}` : '';
 	const project = threadProjectFor(id);
-	useRemember(id, project, chat);
-	useTodos(id);
-	useAgentRuns(id);
+	if (!incognito) useRemember(id, project, chat);
+	if (!incognito) useTodos(id);
+	if (!incognito) useAgentRuns(id);
 	// Results past 50KB are cut where they join the conversation (src/flue/tool-result-cut.ts); this reads on.
 	useTool(fullResultTool(id));
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
-	const drawing = imagesAvailable();
+	// An incognito chat keeps nothing, so it is not offered image generation.
+	const drawing = imagesAvailable() && !incognito;
 	if (drawing) useGenerateImage(id);
-	if (visual !== 'off') {
+	if (visual !== 'off' && !incognito) {
 		useShow(id);
 		useRenderHtml(id);
 	}
 	// With a sandbox the files are in ../project-files too; the tool still reads PDFs and office documents as text.
 	if (project) useProjectFiles(id);
-	useReadAttachment(id);
+	if (!incognito) useReadAttachment(id);
 	if (connectors.length) useConnectorTools(id, connectors);
 	const sealed = sealedSecretsFor(id);
 	if (sealed.length) useHttpRequest(id);
-	useSkills(id, workspace);
-	useLatestInput(id);
-	const browsing = sharedBrowserAvailable();
+	if (!incognito) useSkills(id, workspace);
+	if (!incognito) useLatestInput(id);
+	const browsing = !incognito && sharedBrowserAvailable();
 	const places: BrowserPlace[] = [...(browsing ? (['panel'] as const) : []), ...(workspace ? (['sandbox'] as const) : [])];
 	if (places.length) useBrowserSubagent(id, places);
 	if (workspace) useComputerSubagent(id);
@@ -1482,70 +1499,90 @@ export function Coder({ id }: AgentProps) {
 			optional: true,
 		});
 	}
-	// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
-	// Only a running machine: a task stopped or deleted mid-response is never started again for this.
-	// The reply is also checked for whether it waits on the user, so the task can say so.
-	useAgentFinish(async ({ response, append, signal }) => {
-		// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
-		const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
-		if (reminder) {
-			append({ kind: 'signal', type: 'reminder', body: reminder });
-			return;
-		}
-		// A reply that ends by announcing a step it never took is sent back to take it, once.
-		const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
-		if (stalled) {
-			append({ kind: 'signal', type: 'reminder', body: stalled });
-			return;
-		}
-		// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
-		// or, when its work left no diff, by the agent itself against what it made.
-		// A task that started its workspace during this reply has one now, though this render began without it.
-		const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
-		if (missed) {
-			append({ kind: 'signal', type: 'reminder', body: missed });
-			return;
-		}
-		// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
-		queueCheckpoint(id);
-		// What the reply leaves (a question for you, work done) is judged by the decision model, which takes seconds:
-		// the reply settles first, so its page shows it finished as soon as it is. Replies that end together are judged once, by the last.
-		if (followingUp.has(id)) return;
-		followingUp.add(id);
-		whenIdle(id, () => {
-			followingUp.delete(id);
-			void followUp(id);
+	if (!incognito) {
+		// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
+		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
+		// The reply is also checked for whether it waits on the user, so the task can say so.
+		useAgentFinish(async ({ response, append, signal }) => {
+			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
+			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
+			if (reminder) {
+				append({ kind: 'signal', type: 'reminder', body: reminder });
+				return;
+			}
+			// A reply that ends by announcing a step it never took is sent back to take it, once.
+			const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
+			if (stalled) {
+				append({ kind: 'signal', type: 'reminder', body: stalled });
+				return;
+			}
+			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
+			// or, when its work left no diff, by the agent itself against what it made.
+			// A task that started its workspace during this reply has one now, though this render began without it.
+			const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
+			if (missed) {
+				append({ kind: 'signal', type: 'reminder', body: missed });
+				return;
+			}
+			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
+			queueCheckpoint(id);
+			// What the reply leaves (a question for you, work done) is judged by the decision model, which takes seconds:
+			// the reply settles first, so its page shows it finished as soon as it is. Replies that end together are judged once, by the last.
+			if (followingUp.has(id)) return;
+			followingUp.add(id);
+			whenIdle(id, () => {
+				followingUp.delete(id);
+				void followUp(id);
+			});
 		});
-	});
-	// These response hooks run at the true start/end, across all model and tool calls.
-	// The persisted start survives resumed responses; usage totals are still counted per model call.
-	useResponseStart(() => {
-		startReply(id);
-		startTrace(id);
-		startTodoReply(id);
-		startStallCheck(id);
-		startFinishReview(id);
-		startReplyClock(id);
-		// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
-		if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
-		return { startedAt: Date.now() };
-	});
-	useResponseFinish(({ response, metadata }) => {
-		const completedAt = Date.now();
-		const startedAt = metadata.startedAt;
-		// The runtime's usage covers this conversation only; the reply's subagents are billed too.
-		const reply = finishReply(id);
-		// Its trace is saved behind the reply; the thread asks for it only when opened.
-		const trace = finishTrace(id);
-		if (trace) void saveTrace(trace).catch((error: unknown) => logProblem('warn', 'Trace not kept', error, id));
-		return {
-			...(trace ? { traceId: trace.id } : {}),
-			usage: reply ? replyTotal(reply) : toUsage(response.usage),
-			...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
-			billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
-			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
-		};
-	});
+	}
+	if (incognito) {
+		// An incognito reply keeps only its usage and timing: no trace, no checkpoint, no review — nothing is saved.
+		useResponseStart(() => ({ startedAt: Date.now() }));
+		useResponseFinish(({ response, metadata }) => {
+			const completedAt = Date.now();
+			const startedAt = metadata.startedAt;
+			return {
+				usage: toUsage(response.usage),
+				billing: onPlan(model) ? 'plan' : 'api',
+				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
+			};
+		});
+	} else {
+		// These response hooks run at the true start/end, across all model and tool calls.
+		// The persisted start survives resumed responses; usage totals are still counted per model call.
+		useResponseStart(() => {
+			startReply(id);
+			startTrace(id);
+			startTodoReply(id);
+			startStallCheck(id);
+			startFinishReview(id);
+			startReplyClock(id);
+			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
+			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
+			return { startedAt: Date.now() };
+		});
+		useResponseFinish(({ response, metadata }) => {
+			const completedAt = Date.now();
+			const startedAt = metadata.startedAt;
+			// The runtime's usage covers this conversation only; the reply's subagents are billed too.
+			const reply = finishReply(id);
+			// Its trace is saved behind the reply; the thread asks for it only when opened.
+			const trace = finishTrace(id);
+			if (trace) void saveTrace(trace).catch((error: unknown) => logProblem('warn', 'Trace not kept', error, id));
+			return {
+				...(trace ? { traceId: trace.id } : {}),
+				usage: reply ? replyTotal(reply) : toUsage(response.usage),
+				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
+				billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
+				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
+			};
+		});
+	}
+	if (incognito) {
+		return `${INCOGNITO_PROMPT} ${connectorHint(connectors)}${sealedHint(sealed)}`;
+	}
+
 	if (chat) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
 		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;

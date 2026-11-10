@@ -1183,3 +1183,98 @@
 		animation-duration: 4s;
 	}
 }
+
+/* Incognito: a dark frame grows around the page, the chat lives inside it, and the
+   exit button sits in the padding at the top right — an eye that becomes an X on hover. */
+.incognito {
+	position: relative;
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	background: #000;
+	--inc-pad: clamp(34px, 3.4vmin, 48px);
+}
+.incognito-viewport {
+	position: absolute;
+	inset: 0;
+}
+.incognito-card {
+	position: absolute;
+	inset: var(--inc-pad);
+	overflow: hidden;
+	border-radius: 18px;
+	background: var(--bg-canvas);
+	box-shadow:
+		0 0 0 1px var(--border-subtle),
+		0 30px 90px rgb(0 0 0 / 0.55);
+	animation: incognito-frame 420ms var(--ease-out) both;
+}
+@keyframes incognito-frame {
+	from {
+		inset: 0;
+		border-radius: 0;
+	}
+}
+.incognito-stage {
+	animation: incognito-stage 260ms var(--ease-out) both;
+}
+@keyframes incognito-stage {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+.incognito-exit {
+	position: absolute;
+	top: calc((var(--inc-pad) - 36px) / 2);
+	right: calc((var(--inc-pad) - 36px) / 2);
+	z-index: 10;
+	display: flex;
+	width: 36px;
+	height: 36px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9999px;
+	background: rgb(255 255 255 / 0.08);
+	color: #fff;
+	outline: none;
+	transition: background-color var(--duration-standard) var(--ease-out);
+	animation: incognito-icon 260ms var(--ease-out) 160ms both;
+}
+.incognito-exit:hover {
+	background: rgb(255 255 255 / 0.18);
+}
+.incognito-exit:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.incognito-exit-eye {
+	opacity: 1;
+	transition: opacity var(--duration-micro) var(--ease-out);
+}
+.incognito-exit-x {
+	position: absolute;
+	opacity: 0;
+	transition: opacity var(--duration-micro) var(--ease-out);
+}
+.incognito-exit:hover .incognito-exit-eye,
+.incognito-exit:focus-visible .incognito-exit-eye {
+	opacity: 0;
+}
+.incognito-exit:hover .incognito-exit-x,
+.incognito-exit:focus-visible .incognito-exit-x {
+	opacity: 1;
+}
+@keyframes incognito-icon {
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.9);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.incognito-card,
+	.incognito-stage,
+	.incognito-exit {
+		animation: none;
+	}
+}

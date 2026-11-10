@@ -90,6 +90,25 @@ export async function primeModel(id: string): Promise<void> {
 	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning), ...(route ? { route } : {}) });
 }
 
+/**
+ * An incognito chat's model choice, kept in memory only: it has no session record.
+ * Fields left out keep what is already chosen, so the agent's own priming never
+ * resets a pick the composer made.
+ */
+export async function primeIncognitoModel(id: string, input: { model?: string; reasoning?: Reasoning | null; route?: ModelRoute | null } = {}): Promise<void> {
+	const current = choices.get(id);
+	const model = input.model ?? current?.model ?? config.model;
+	const info = await findModel(model).catch(() => undefined);
+	const reasoning = input.reasoning !== undefined ? reasoningFor(info, input.reasoning) : (current?.reasoning ?? reasoningFor(info, null));
+	const route = input.route !== undefined ? (routable(model) ? input.route : null) : (current?.route ?? null);
+	choices.set(id, { model, reasoning, ...(route ? { route } : {}) });
+}
+
+/** Forgets an incognito chat's model choice when its window closes. */
+export function forgetModelChoice(id: string): void {
+	choices.delete(id);
+}
+
 async function knownModel(model: string): Promise<string> {
 	if (!(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
 	return model;

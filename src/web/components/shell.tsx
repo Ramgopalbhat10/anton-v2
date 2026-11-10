@@ -79,6 +79,8 @@ export function AppShell() {
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [notificationsOpen, setNotificationsOpen] = useState(false);
+	// An incognito chat shows no sidebar: its frame covers the whole page.
+	const incognito = pathname === '/incognito';
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
 	const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
 	const openNotifications = useCallback(() => {
@@ -126,17 +128,19 @@ export function AppShell() {
 					onClick={() => setNavOpen(false)}
 				/>
 				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
-				<div className="sg-nav-column" data-collapsed={collapsed}>
-					<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
-					<ChatSidebar
-						open={navOpen}
-						collapsed={collapsed}
-						onNavigate={closeNav}
-						onCollapse={collapse}
-						onOpenPalette={openPalette}
-						onOpenNotifications={openNotifications}
-					/>
-				</div>
+				{incognito ? null : (
+					<div className="sg-nav-column" data-collapsed={collapsed}>
+						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
+						<ChatSidebar
+							open={navOpen}
+							collapsed={collapsed}
+							onNavigate={closeNav}
+							onCollapse={collapse}
+							onOpenPalette={openPalette}
+							onOpenNotifications={openNotifications}
+						/>
+					</div>
+				)}
 				<main data-sky={skyOn ? skyVeil(pathname) : 'off'} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
 					<Outlet />
 				</main>

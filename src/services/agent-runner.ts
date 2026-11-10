@@ -226,6 +226,35 @@ export async function primeAllAgents(file?: string): Promise<void> {
 
 /** An image handed to the agent with a message, as the runtime takes it: a thread's brief carries the pictures attached to it. */
 export type DeliveredImage = { type: 'image'; data: string; mimeType: string; filename?: string };
+
+/**
+ * Loads what an incognito chat's agent reads while it renders: the connectors set up in
+ * Settings › Connectors, the sealed secrets and the shared agent settings — the parts of
+ * primeAgent that do not need a session record. The chat counts as a chat, so the agent
+ * answers directly; nothing here is written anywhere.
+ */
+export async function primeIncognito(id: string): Promise<void> {
+	const [setUp, sealed] = await Promise.all([setUpConnectors(), sealedSecretBriefs().catch(() => [])]);
+	connectors.set(id, setUp);
+	sealedSecrets.set(id, sealed);
+	await primeAgentSettings();
+	chats.add(id);
+	if (!memories.has(id)) memories.set(id, '');
+}
+
+/** Forgets an incognito chat everywhere the agent keeps per-conversation state, when its window closes. */
+export function releaseIncognito(id: string): void {
+	connectors.delete(id);
+	sealedSecrets.delete(id);
+	memories.delete(id);
+	workspaces.delete(id);
+	onHost.delete(id);
+	chats.delete(id);
+	planning.delete(id);
+	reviewTasks.delete(id);
+	threadProjects.delete(id);
+	threadHelperModels.delete(id);
+}
 type Deliver = (id: string, text: string, images?: DeliveredImage[]) => Promise<void>;
 /**
  * The agents a task has: the coder it talks to, and the reviewer that reads its pull requests, both on the
