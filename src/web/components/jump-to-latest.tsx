@@ -14,7 +14,7 @@ export function JumpToLatest({ show, live, onJump, className }: { show: boolean;
 				tabIndex={show ? 0 : -1}
 				onClick={onJump}
 				className={cn(
-					'flex h-7 -translate-y-full items-center gap-1.5 rounded-full border border-(--card-border) bg-(--card-bg-top) pr-3 pl-2.5 text-[12px] text-(--text-secondary) shadow-(--shadow-overlay) outline-none transition-opacity duration-150 hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+					'flex h-7 -translate-y-full items-center gap-1.5 rounded-full border border-(--card-border) bg-(--card-bg-top) pr-3 pl-2.5 text-small text-(--text-secondary) shadow-(--shadow-overlay) outline-none transition-opacity duration-150 hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
 					show ? 'pointer-events-auto opacity-100' : 'opacity-0',
 				)}
 			>

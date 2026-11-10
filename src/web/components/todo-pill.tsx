@@ -123,7 +123,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 					onBlur={() => {
 						if (!pinned) setOpen(false);
 					}}
-					className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-(--border-subtle) bg-(--well-bg) pr-2.5 pl-1.5 text-[11.5px] text-(--text-secondary) outline-none hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong) data-[state=open]:text-(--text-primary)"
+					className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-(--border-subtle) bg-(--well-bg) pr-2.5 pl-1.5 text-small text-(--text-secondary) outline-none hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong) data-[state=open]:text-(--text-primary)"
 				>
 					<Progress done={done} total={list.length} />
 					<span className="in-num">
@@ -145,8 +145,8 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] origin-(--radix-popover-content-transform-origin) in-pop flex-col overflow-hidden text-(--text-primary) outline-none duration-(--duration-overlay) ease-(--ease-out) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1"
 				>
 					<header className="flex items-baseline gap-2 px-3.5 pt-3 pb-1.5">
-						<span className="text-[13px] font-medium">Todos</span>
-						<span className="in-num ml-auto text-[11px] text-(--text-tertiary)">
+						<span className="text-body font-medium">Todos</span>
+						<span className="in-num ml-auto text-micro text-(--text-tertiary)">
 							{done} of {list.length} done
 						</span>
 					</header>
@@ -155,7 +155,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 							<li
 								key={index}
 								aria-current={todo.status === 'in_progress' ? 'step' : undefined}
-								className="flex min-h-7 items-start gap-2.5 rounded-[6px] px-1.5 py-[5px] text-[12.5px] leading-[18px]"
+								className="flex min-h-7 items-start gap-2.5 rounded-control px-1.5 py-[5px] text-body leading-[18px]"
 							>
 								<span className="flex h-[18px] shrink-0 items-center">
 									<Mark status={todo.status} working={busy} />
@@ -167,7 +167,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 									)}
 								>
 									{todo.content}
-									{todo.evidence && <span className="block text-[11.5px] text-(--text-tertiary)">{todo.evidence}</span>}
+									{todo.evidence && <span className="block text-small text-(--text-tertiary)">{todo.evidence}</span>}
 								</span>
 							</li>
 						))}

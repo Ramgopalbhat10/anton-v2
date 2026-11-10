@@ -85,15 +85,15 @@ function Card({
 					<Link
 						to="/settings/skills/view"
 						search={open}
-						className="truncate text-[13px] font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-[6px] focus-visible:after:shadow-(--focus-ring)"
+						className="truncate text-body font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-control focus-visible:after:shadow-(--focus-ring)"
 					>
 						{title}
 					</Link>
-					<div className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-(--text-disabled)">{caption}</div>
+					<div className="flex min-w-0 items-center gap-1.5 truncate text-micro text-(--text-disabled)">{caption}</div>
 				</div>
 				{action ? <div className="relative z-10 flex shrink-0 items-center">{action}</div> : null}
 			</div>
-			<p className={cn('m-0 line-clamp-2 min-h-9 text-[12px] leading-[18px] text-pretty', description ? 'text-(--text-tertiary)' : 'text-(--text-disabled)')}>
+			<p className={cn('m-0 line-clamp-2 min-h-9 text-small leading-[18px] text-pretty', description ? 'text-(--text-tertiary)' : 'text-(--text-disabled)')}>
 				{description || 'No description.'}
 			</p>
 			{children ? <div className="-mx-3.5 mt-auto border-t border-(--border-subtle) px-3.5 pt-2.5">{children}</div> : null}
@@ -114,7 +114,7 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 					key={skill.name}
 					title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
 					className={cn(
-						'inline-flex h-5 max-w-[160px] items-center truncate rounded-md border border-(--border-subtle) bg-(--well-bg) px-1.5 text-[11px]',
+						'inline-flex h-5 max-w-[160px] items-center truncate rounded-control border border-(--border-subtle) bg-(--well-bg) px-1.5 text-micro',
 						skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
 					)}
 				>
@@ -122,7 +122,7 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 				</span>
 			))}
 			{plugin.skills.length > shown.length ? (
-				<span className="inline-flex h-5 items-center px-1 text-[11px] text-(--text-disabled)">+{plugin.skills.length - shown.length}</span>
+				<span className="inline-flex h-5 items-center px-1 text-micro text-(--text-disabled)">+{plugin.skills.length - shown.length}</span>
 			) : null}
 		</div>
 	);
@@ -194,14 +194,14 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					))}
 				</Grid>
 			) : (
-				<p className="m-0 text-[12px] text-(--text-tertiary)">
+				<p className="m-0 text-small text-(--text-tertiary)">
 					Nothing installed matches.{' '}
 					<button type="button" onClick={onDiscover} className="text-(--accent-text) outline-none hover:underline">
 						Search Discover instead
 					</button>
 				</p>
 			)}
-			<Note className="rounded-[8px] bg-(--bg-inset) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
+			<Note className="rounded-tile bg-(--bg-inset) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
 				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> come first.
 			</Note>
 		</div>
@@ -266,12 +266,12 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 					className="in-pop z-50 flex w-[320px] flex-col gap-2 p-3 text-(--text-primary) outline-none"
 				>
 					<Caption>Marketplaces</Caption>
-					<p className="m-0 text-[12px] leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
+					<p className="m-0 text-small leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
 					<div className="flex flex-col gap-0.5">
 						{saved.map((marketplace) => (
-							<div key={marketplace} className="flex h-7 items-center gap-2 rounded-md pr-0.5 pl-2 hover:bg-(--bg-hover)">
+							<div key={marketplace} className="flex h-7 items-center gap-2 rounded-control pr-0.5 pl-2 hover:bg-(--bg-hover)">
 								<Icon icon={Store} size={12} className="text-(--icon-tertiary)" />
-								<span className="min-w-0 flex-1 truncate text-[12px]">{marketplace}</span>
+								<span className="min-w-0 flex-1 truncate text-small">{marketplace}</span>
 								<IconBtn icon={X} size="xs" label={`Remove ${marketplace}`} onClick={() => save.mutate(saved.filter((item) => item !== marketplace))} />
 							</div>
 						))}
@@ -294,7 +294,7 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 							Add
 						</Btn>
 					</form>
-					{save.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{save.error.message}</p> : null}
+					{save.isError ? <p className="m-0 text-small text-(--danger-text)">{save.error.message}</p> : null}
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
@@ -308,7 +308,7 @@ function SourceChip({ label, on, onClick, icon }: { label: string; on: boolean; 
 			aria-pressed={on}
 			onClick={onClick}
 			className={cn(
-				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
+				'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-small outline-none focus-visible:shadow-(--focus-ring)',
 				on
 					? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--accent-text)'
 					: 'border-(--border-subtle) bg-(--well-bg) text-(--text-secondary) hover:border-(--border-default) hover:text-(--text-primary)',
@@ -368,9 +368,9 @@ function GitHubResults({ query }: { query: string }) {
 				<Caption>On GitHub</Caption>
 				{typing ? <Spinner size={12} /> : null}
 			</div>
-			{search.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{search.error.message}</p> : null}
+			{search.isError ? <p className="m-0 text-small text-(--danger-text)">{search.error.message}</p> : null}
 			{result?.problems.map((problem) => (
-				<p key={problem} className="m-0 text-[12px] text-(--warning-text)">
+				<p key={problem} className="m-0 text-small text-(--warning-text)">
 					{problem}
 				</p>
 			))}
@@ -396,14 +396,14 @@ function GitHubResults({ query }: { query: string }) {
 							key={repo.address}
 							to="/settings/skills/view"
 							search={{ address: repo.address }}
-							className="flex min-h-10 items-center gap-3 rounded-lg px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex min-h-10 items-center gap-3 rounded-tile px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 						>
 							<Icon icon={Github} size={14} className="text-(--icon-tertiary)" />
 							<div className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate text-[12px] text-(--text-primary)">{repo.address}</span>
-								{repo.description ? <span className="truncate text-[12px] text-(--text-tertiary)">{repo.description}</span> : null}
+								<span className="truncate text-small text-(--text-primary)">{repo.address}</span>
+								{repo.description ? <span className="truncate text-small text-(--text-tertiary)">{repo.description}</span> : null}
 							</div>
-							<span className="in-num flex shrink-0 items-center gap-1 text-[11px] text-(--text-disabled)">
+							<span className="in-num flex shrink-0 items-center gap-1 text-micro text-(--text-disabled)">
 								<Icon icon={Star} size={11} />
 								{repo.stars.toLocaleString()}
 							</span>
@@ -411,7 +411,7 @@ function GitHubResults({ query }: { query: string }) {
 					))}
 				</div>
 			) : null}
-			{empty && !typing && !result.problems.length ? <p className="m-0 text-[12px] text-(--text-tertiary)">Nothing on GitHub matches “{settled}”.</p> : null}
+			{empty && !typing && !result.problems.length ? <p className="m-0 text-small text-(--text-tertiary)">Nothing on GitHub matches “{settled}”.</p> : null}
 		</section>
 	);
 }
@@ -432,12 +432,12 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 				<Link
 					to="/settings/skills/view"
 					search={{ address: query.trim() }}
-					className="flex items-center gap-3 rounded-[6px] border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
+					className="flex items-center gap-3 rounded-control border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Github} size={16} className="text-(--accent-text)" />
 					<div className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate text-[13px] font-medium text-(--text-primary)">Open {query.trim()}</span>
-						<span className="text-[12px] text-(--text-tertiary)">Look through its skills and files before installing.</span>
+						<span className="truncate text-body font-medium text-(--text-primary)">Open {query.trim()}</span>
+						<span className="text-small text-(--text-tertiary)">Look through its skills and files before installing.</span>
 					</div>
 				</Link>
 			) : null}
@@ -451,7 +451,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 					<ManageMarketplaces saved={marketplaces} />
 				</div>
 				{catalogs.failures.map(({ marketplace, error, retry }) => (
-					<div key={marketplace} className="flex items-center gap-2 rounded-lg bg-(--danger-bg) px-3 py-2 text-[12px] text-(--danger-text)">
+					<div key={marketplace} className="flex items-center gap-2 rounded-tile bg-(--danger-bg) px-3 py-2 text-small text-(--danger-text)">
 						<span className="min-w-0 flex-1">
 							Could not read {marketplace}: {error.message}
 						</span>
@@ -473,7 +473,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 						))}
 					</Grid>
 				) : (
-					<p className="m-0 text-[12px] text-(--text-tertiary)">{needle ? 'Nothing in your marketplaces matches.' : 'Add a marketplace to browse it.'}</p>
+					<p className="m-0 text-small text-(--text-tertiary)">{needle ? 'Nothing in your marketplaces matches.' : 'Add a marketplace to browse it.'}</p>
 				)}
 				{shown.length > limit ? (
 					<Btn size="sm" variant="ghost" className="self-center" onClick={() => setLimit((current) => current + PAGE)}>
@@ -534,7 +534,7 @@ export function SkillsPage() {
 					<Discover marketplaces={plugins.data.marketplaces} query={query} />
 				)
 			) : plugins.isError ? (
-				<p className="m-0 text-[12px] text-(--danger-text)">{plugins.error.message}</p>
+				<p className="m-0 text-small text-(--danger-text)">{plugins.error.message}</p>
 			) : (
 				<Spinner size={12} />
 			)}

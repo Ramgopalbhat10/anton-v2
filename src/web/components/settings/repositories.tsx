@@ -18,15 +18,15 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 		<Link
 			to="/settings/repos/$projectId"
 			params={{ projectId: project.id }}
-			className="flex min-h-14 items-center gap-3 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<div className="truncate text-[13px] font-medium">
+				<div className="truncate text-body font-medium">
 					<span className="font-normal text-(--text-tertiary)">{owner}</span>
 					{name}
 				</div>
-				<div className="in-num flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+				<div className="in-num flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
 					<span className="inline-flex min-w-0 items-center gap-1" title={`Default branch ${project.defaultBranch}`}>
 						<Icon icon={GitBranch} size={11} className="shrink-0" />
 						<span className="truncate">{project.defaultBranch}</span>
@@ -49,7 +49,7 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 				</div>
 			</div>
 			<div className="hidden shrink-0 items-baseline gap-1 sm:flex">
-				<span className="in-num text-[13px] text-(--text-primary)">{tasks}</span>
+				<span className="in-num text-body text-(--text-primary)">{tasks}</span>
 				<Caption>{tasks === 1 ? 'task' : 'tasks'}</Caption>
 			</div>
 			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />

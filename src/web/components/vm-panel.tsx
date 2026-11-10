@@ -59,14 +59,14 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
 	const panel = panels.find((panel) => panel.name === name)!;
 	return (
-		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-[6px] hover:bg-(--bg-hover)">
-			{active ? <div className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
+		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-control hover:bg-(--bg-hover)">
+			{active ? <div className="absolute inset-0 rounded-control border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<button
 				type="button"
 				role="tab"
 				aria-selected={active}
 				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-[6px] pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
+				className="relative flex h-full items-center gap-1.5 rounded-control pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
 			>
 				<span
 					className={cn(
@@ -76,16 +76,16 @@ function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName;
 				>
 					<Icon icon={panel.icon} size={12} />
 				</span>
-				<span className={cn('text-[12px] whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
+				<span className={cn('text-small whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
 				{count ? (
-					<span className="in-num inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--accent-bg-subtle) px-1 text-[10px] text-(--accent-text)">{count}</span>
+					<span className="in-num inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--accent-bg-subtle) px-1 text-nano text-(--accent-text)">{count}</span>
 				) : null}
 			</button>
 			<button
 				type="button"
 				aria-label={`Close ${name}`}
 				onClick={onClose}
-				className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-control text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={X} size={12} />
 			</button>
@@ -188,12 +188,12 @@ export const VmPanel = memo(function VmPanel({
 									<div key={panel.name} className="group/row flex items-center gap-0.5">
 										<MenuPrimitive.Item
 											onSelect={() => show(panel.name)}
-											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[6px] px-2 outline-none data-highlighted:bg-(--bg-hover)"
+											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 outline-none data-highlighted:bg-(--bg-hover)"
 										>
 											<span className="inline-flex shrink-0 text-(--icon-secondary)">
 												<Icon icon={panel.icon} size={13} />
 											</span>
-											<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary)">{panel.name}</span>
+											<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{panel.name}</span>
 											{tabs.includes(panel.name) ? (
 												<span className="inline-flex shrink-0 text-(--accent-text)">
 													<Icon icon={Check} size={12} />
@@ -209,7 +209,7 @@ export const VmPanel = memo(function VmPanel({
 												togglePinnedPanel(panel.name);
 											}}
 											className={cn(
-												'inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] outline-none data-highlighted:bg-(--bg-hover)',
+												'inline-flex size-8 shrink-0 items-center justify-center rounded-control outline-none data-highlighted:bg-(--bg-hover)',
 												isPinned ? 'text-(--accent-text)' : 'text-(--icon-tertiary) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
 											)}
 										>
@@ -218,7 +218,7 @@ export const VmPanel = memo(function VmPanel({
 									</div>
 								);
 							})}
-							<div className="px-2 pt-1.5 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+							<div className="px-2 pt-1.5 pb-1 text-micro leading-[15px] text-(--text-tertiary)">
 								{pinned.length ? 'Tasks open with the pinned panels.' : 'Pin panels to open them with every task.'}
 							</div>
 						</MenuContent>
@@ -250,14 +250,14 @@ export const VmPanel = memo(function VmPanel({
 										type="button"
 										key={panel.name}
 										onClick={() => show(panel.name)}
-										className="group/panel flex items-start gap-3 rounded-[10px] px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+										className="group/panel flex items-start gap-3 rounded-card px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 									>
 										<span className="inline-flex size-7 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/panel:text-(--accent-text)">
 											<Icon icon={panel.icon} size={16} />
 										</span>
 										<span className="flex min-w-0 flex-col gap-0.5">
-											<span className="text-[13px] font-medium text-(--text-primary)">{panel.name}</span>
-											<span className="text-[12px] leading-[17px] text-pretty text-(--text-tertiary)">{panel.desc}</span>
+											<span className="text-body font-medium text-(--text-primary)">{panel.name}</span>
+											<span className="text-small leading-[17px] text-pretty text-(--text-tertiary)">{panel.desc}</span>
 										</span>
 									</button>
 								))}

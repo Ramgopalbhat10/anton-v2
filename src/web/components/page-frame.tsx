@@ -5,7 +5,7 @@ import { MenuButton } from '@/components/nav';
 export function PageFrame({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-3 pl-2 text-[13px] font-medium text-(--text-secondary) md:pl-4">
+			<header className="flex h-11 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-3 pl-2 text-body font-medium text-(--text-secondary) md:pl-4">
 				<MenuButton />
 				<span className="min-w-0 flex-1 truncate">{title}</span>
 				{actions}

@@ -13,7 +13,7 @@ export const glyphKind = (thread: Session): GlyphKind => {
 /** The colour each state draws with, in rings, bars and splits. */
 export const STATE_COLOR: Record<GlyphKind, string> = {
 	failed: 'var(--danger-base)',
-	waiting: 'var(--warning-base)',
+	waiting: 'var(--attention-base)',
 	working: 'var(--accent-base)',
 	queued: 'var(--neutral-600)',
 	review: 'var(--success-base)',

@@ -15,7 +15,7 @@ const FIELD = WELL_FIELD;
 
 /** A textarea on the same inset well as the fields. */
 export const AREA =
-	'w-full resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+	'w-full resize-y rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
 function Section({ title, help, info, children }: { title: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
@@ -139,7 +139,7 @@ function SettingsForm({ project }: { project: Project }) {
 						rows={6}
 						spellCheck={false}
 						placeholder="npm ci"
-						className={`${AREA} font-mono text-[12px] leading-[18px]`}
+						className={`${AREA} font-mono text-small leading-[18px]`}
 					/>
 				</Section>
 				<Section title="Preview ports" help="Public URLs in the Preview panel." info="Up to eight, separated by commas.">
@@ -222,7 +222,7 @@ function MemoryEditor({ project }: { project: Project }) {
 			info="The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
 			footer={
 				<>
-					{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+					{save.isError ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
 					<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
 						{save.isPending ? 'Saving…' : 'Save notes'}
 					</Btn>
@@ -234,7 +234,7 @@ function MemoryEditor({ project }: { project: Project }) {
 				onChange={(event) => setMemory(event.target.value)}
 				rows={6}
 				placeholder="- Run the tests with npm test; they need Docker."
-				className={`${AREA} text-[13px] leading-[19px]`}
+				className={`${AREA} text-body leading-[19px]`}
 			/>
 		</Block>
 	);
@@ -264,7 +264,7 @@ function RemoveRepo({ project }: { project: Project }) {
 			>
 				{remove.isPending ? 'Removing…' : confirming ? 'Click again to remove' : 'Remove repository'}
 			</Btn>
-			{remove.isError ? <span className="text-[12px] text-(--danger-text)">{remove.error.message}</span> : null}
+			{remove.isError ? <span className="text-small text-(--danger-text)">{remove.error.message}</span> : null}
 		</div>
 	);
 }
@@ -276,7 +276,7 @@ export function RepoSettingsPage() {
 	const project = projects.data?.projects.find((item) => item.id === projectId);
 	if (projects.isPending) {
 		return (
-			<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+			<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Loading
 			</div>

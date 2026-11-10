@@ -102,7 +102,7 @@ function PluginImage({ repo, sha, path, alt, className }: { repo: string; sha: s
 		return () => URL.revokeObjectURL(objectUrl);
 	}, [file.data, type]);
 	if (!type) return null;
-	if (file.isError) return <span className="text-[12px] text-(--text-tertiary)">{alt || path.split('/').pop()}</span>;
+	if (file.isError) return <span className="text-small text-(--text-tertiary)">{alt || path.split('/').pop()}</span>;
 	if (!url) return null;
 	return <img src={url} alt={alt ?? ''} loading="lazy" className={className} />;
 }
@@ -158,7 +158,7 @@ function Actions({ preview }: { preview: PluginPreview }) {
 							checked={preview.installed.enabled}
 							disabled={toggle.isPending}
 							onChange={(enabled) => toggle.mutate(enabled)}
-							label={<span className="text-[12px] text-(--text-secondary)">{preview.installed.enabled ? 'On' : 'Off'}</span>}
+							label={<span className="text-small text-(--text-secondary)">{preview.installed.enabled ? 'On' : 'Off'}</span>}
 						/>
 						{preview.update ? (
 							<Btn size="sm" icon={RefreshCw} disabled={update.isPending} onClick={() => update.mutate(undefined)}>
@@ -187,7 +187,7 @@ function Actions({ preview }: { preview: PluginPreview }) {
 					</Btn>
 				)}
 			</div>
-			{error ? <p className="m-0 max-w-[320px] text-right text-[12px] text-(--danger-text)">{error}</p> : null}
+			{error ? <p className="m-0 max-w-[320px] text-right text-small text-(--danger-text)">{error}</p> : null}
 		</div>
 	);
 }
@@ -215,7 +215,7 @@ function Facts({ preview }: { preview: PluginPreview }) {
 			<Card icon={Info} title="Details">
 				<dl className="m-0 flex flex-col px-4 pb-2">
 					{rows.map(([label, value]) => (
-						<div key={label} className="flex min-h-9 items-center gap-3 border-t border-(--border-subtle) text-[12px]">
+						<div key={label} className="flex min-h-9 items-center gap-3 border-t border-(--border-subtle) text-small">
 							<dt className="in-caption w-[84px] shrink-0">{label}</dt>
 							<dd className="m-0 min-w-0 flex-1 truncate text-right text-(--text-secondary)" title={typeof value === 'string' ? value : undefined}>{value}</dd>
 						</div>
@@ -223,12 +223,12 @@ function Facts({ preview }: { preview: PluginPreview }) {
 				</dl>
 			</Card>
 			{preview.mcpServers.length ? (
-				<p className="m-0 rounded-[8px] bg-(--bg-inset) p-3 text-[12px] leading-[18px] text-(--text-tertiary)">
+				<p className="m-0 rounded-tile bg-(--bg-inset) p-3 text-small leading-[18px] text-(--text-tertiary)">
 					Also declares MCP servers ({preview.mcpServers.join(', ')}). Anton does not run them; add one in Settings › Connectors to use it.
 				</p>
 			) : null}
 			{preview.skipped.length ? (
-				<div className="flex flex-col gap-1 rounded-[6px] border border-(--border-subtle) bg-(--warning-bg) p-3 text-[12px] leading-[18px] text-(--warning-text)">
+				<div className="flex flex-col gap-1 rounded-control border border-(--border-subtle) bg-(--warning-bg) p-3 text-small leading-[18px] text-(--warning-text)">
 					<span className="font-medium">Left out when installed</span>
 					{preview.skipped.map((note) => (
 						<span key={note}>{note}</span>
@@ -255,11 +255,11 @@ function Overview({ preview, onOpenFile }: { preview: PluginPreview; onOpenFile:
 		<div className="flex flex-col gap-4 @min-[800px]/settings:flex-row @min-[800px]/settings:items-start">
 			<div className="in-card min-w-0 flex-1 px-5 py-4">
 				{!documentPath ? (
-					<p className="m-0 text-[13px] text-(--text-tertiary)">{preview.description || 'This has no README. Its skills and files are in the tabs above.'}</p>
+					<p className="m-0 text-body text-(--text-tertiary)">{preview.description || 'This has no README. Its skills and files are in the tabs above.'}</p>
 				) : readme.isPending ? (
 					<Spinner size={12} />
 				) : readme.isError ? (
-					<p className="m-0 text-[12px] text-(--danger-text)">{readme.error.message}</p>
+					<p className="m-0 text-small text-(--danger-text)">{readme.error.message}</p>
 				) : (
 					<DocumentMarkdown text={readme.data} images={images} />
 				)}
@@ -276,14 +276,14 @@ function Skills({ preview, onView }: { preview: PluginPreview; onView: (path: st
 	return (
 		<div className="in-card p-1">
 			{preview.skills.map((skill) => (
-				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-[6px] px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
+				<div key={skill.folder || skill.name} className="flex items-start gap-3 rounded-control px-3 py-3 not-first:rounded-t-none not-first:border-t not-first:border-(--border-subtle) hover:bg-(--bg-hover)">
 					<Glyph bundle={false} />
 					<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-						<span className="text-[13px] text-(--text-primary)">/{skill.name}</span>
-						<p className="m-0 line-clamp-3 max-w-[90ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)" title={skill.description}>
+						<span className="text-body text-(--text-primary)">/{skill.name}</span>
+						<p className="m-0 line-clamp-3 max-w-[90ch] text-small leading-[18px] text-pretty text-(--text-tertiary)" title={skill.description}>
 							{skill.description || 'No description.'}
 						</p>
-						{skill.license ? <span className="in-num truncate text-[10.5px] text-(--text-disabled)">{skill.license}</span> : null}
+						{skill.license ? <span className="in-num truncate text-micro text-(--text-disabled)">{skill.license}</span> : null}
 					</div>
 					<div className="flex shrink-0 items-center gap-1">
 						<Btn size="xs" variant="ghost" onClick={() => onView(within(preview, skill.folder ? `${skill.folder}/SKILL.md` : 'SKILL.md'))}>
@@ -339,19 +339,19 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 						</div>
 						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-1.5">
 							<Branch node={tree} selected={selected} depth={0} expanded={expanded} onToggle={toggle} onOpen={onOpen} />
-							{preview.truncated ? <p className="m-0 px-2 py-1.5 text-[11px] text-(--text-disabled)">Only the first {preview.files.length.toLocaleString()} files are listed.</p> : null}
+							{preview.truncated ? <p className="m-0 px-2 py-1.5 text-micro text-(--text-disabled)">Only the first {preview.files.length.toLocaleString()} files are listed.</p> : null}
 						</div>
 					</div>
 				)}
 				<div className="flex min-w-0 flex-1 flex-col">
-					<div data-plugin-file-header className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-(--border-subtle) px-3 py-1 text-[12px]">
+					<div data-plugin-file-header className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-(--border-subtle) px-3 py-1 text-small">
 						{treeHidden ? (
 							<>
 								<IconBtn icon={PanelLeftOpen} size="xs" label="Show the file tree" aria-pressed={false} onClick={() => setTreeHidden(false)} className="-ml-1.5 shrink-0" />
 								<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
 							</>
 						) : null}
-						<span title={selected} className="in-num min-w-0 flex-1 basis-[60px] truncate text-[11.5px] text-(--text-secondary)">{selected || 'No file'}</span>
+						<span title={selected} className="in-num min-w-0 flex-1 basis-[60px] truncate text-small text-(--text-secondary)">{selected || 'No file'}</span>
 						{selected && isMarkdown(selected) ? (
 							<MarkdownToggle
 								preview={!sourceShown.has(selected)}
@@ -402,7 +402,7 @@ function TabButton({ on, onClick, children }: { on: boolean; onClick: () => void
 			aria-selected={on}
 			onClick={onClick}
 			className={cn(
-				'-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0 text-[13px] @min-[260px]/settings:px-1 outline-none focus-visible:shadow-(--focus-ring)',
+				'-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0 text-body @min-[260px]/settings:px-1 outline-none focus-visible:shadow-(--focus-ring)',
 				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 			)}
 		>
@@ -432,11 +432,11 @@ function Detail({ preview }: { preview: PluginPreview }) {
 				<Glyph bundle={preview.skills.length !== 1} size="lg" />
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex flex-wrap items-center gap-2">
-						<h1 className="m-0 min-w-0 break-words text-[20px] leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
+						<h1 className="m-0 min-w-0 break-words text-h2 leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
 						{preview.installed ? <Status tone="success">Installed</Status> : null}
 						{preview.update ? <Status tone="accent" pulse>Update available</Status> : null}
 					</div>
-					<div className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-(--text-tertiary)">
+					<div className="flex flex-wrap items-center gap-x-1.5 text-small text-(--text-tertiary)">
 						{preview.added ? <span>Added by you</span> : <span>by {by}</span>}
 						<span>·</span>
 						<span>
@@ -460,7 +460,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 					</div>
 				</div>
 				<div className="col-span-2 @min-[700px]/settings:col-span-1"><Actions preview={preview} /></div>
-				{preview.description ? <p className="col-span-full m-0 text-[13px] leading-[19px] text-pretty text-(--text-secondary) @min-[700px]/settings:col-start-2">{preview.description}</p> : null}
+				{preview.description ? <p className="col-span-full m-0 text-body leading-[19px] text-pretty text-(--text-secondary) @min-[700px]/settings:col-start-2">{preview.description}</p> : null}
 			</header>
 			<div role="tablist" aria-label="Plugin" className="sticky-veil sticky top-0 z-20 flex gap-1 border-b border-(--border-subtle) @min-[260px]/settings:gap-5">
 				<TabButton on={tab === 'overview'} onClick={() => setTab('overview')}>
@@ -502,7 +502,7 @@ export function SkillDetailPage() {
 			<button
 				type="button"
 				onClick={back}
-				className="inline-flex items-center gap-1.5 self-start text-[12px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="inline-flex items-center gap-1.5 self-start text-small text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={ArrowLeft} size={12} />
 				Skills
@@ -514,7 +514,7 @@ export function SkillDetailPage() {
 					</Link>
 				</EmptyState>
 			) : preview.isPending ? (
-				<div className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+				<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
 					<Spinner size={12} />
 					Reading…
 				</div>

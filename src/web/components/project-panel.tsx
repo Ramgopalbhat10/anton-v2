@@ -38,12 +38,12 @@ function Tab({ name, icon, count, active, onSelect }: { name: string; icon: type
 			role="tab"
 			aria-selected={active}
 			onClick={onSelect}
-			className="relative flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] pr-2 pl-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="relative flex h-7 shrink-0 items-center gap-1.5 rounded-control pr-2 pl-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
-			{active ? <span className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
+			{active ? <span className="absolute inset-0 rounded-control border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
 			<Icon icon={icon} size={12} className={cn('relative', active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)')} />
-			<span className={cn('relative text-[12px] whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
-			{count ? <span className="in-num relative inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--warning-bg) px-1 text-[10px] text-(--warning-text)">{count}</span> : null}
+			<span className={cn('relative text-small whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
+			{count ? <span className="in-num relative inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--attention-bg) px-1 text-nano text-(--attention-text)">{count}</span> : null}
 		</button>
 	);
 }
@@ -80,7 +80,7 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 								<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2">
 									<ThreadStateIcon thread={thread} size={13} />
 									<button type="button" onClick={() => openThread(thread, thread.prUrl ? 'PR' : 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
-										<span className="truncate text-[13px] hover:underline">{thread.title}</span>
+										<span className="truncate text-body hover:underline">{thread.title}</span>
 										<span className="flex items-center gap-2">
 											<PrStatus thread={thread} full />
 											{runs.length ? (
@@ -167,7 +167,7 @@ function PullRequests({ threads }: { threads: Session[] }) {
 						<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2.5">
 							<ThreadStateIcon thread={thread} size={12} />
 							<button type="button" onClick={() => openThread(thread, 'PR')} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
-								<span className="truncate text-[13px] text-(--text-primary)">{thread.title}</span>
+								<span className="truncate text-body text-(--text-primary)">{thread.title}</span>
 								<span className="flex items-center gap-2">
 									<Caption>{repoShort(thread)}</Caption><PrStatus thread={thread} full />
 									{runs.length ? (
@@ -207,7 +207,7 @@ function RunStrip({ runs }: { runs: Session[] }) {
 	return (
 		<span role="group" aria-label="Recent runs" className="flex h-3.5 items-stretch gap-[2px]">
 			{Array.from({ length: RUNS_SHOWN - shown.length }, (_, index) => (
-				<span key={`empty-${index}`} aria-hidden className="w-1 rounded-[1.5px] bg-(--segment-off)" />
+				<span key={`empty-${index}`} aria-hidden className="w-1 rounded-mark bg-(--segment-off)" />
 			))}
 			{shown.map((thread) => {
 				const kind = glyphKind(thread);
@@ -218,7 +218,7 @@ function RunStrip({ runs }: { runs: Session[] }) {
 						onClick={() => open(thread)}
 						title={`${thread.title}: ${KIND_LABEL[kind]}`}
 						aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
-						className={cn('w-1 rounded-[1.5px] outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'working' && 'in-sweep')}
+						className={cn('w-1 rounded-mark outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'working' && 'in-sweep')}
 						style={{ background: RUN_COLOR[kind] }}
 					/>
 				);
@@ -272,9 +272,9 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 							type="button"
 							aria-expanded={open}
 							onClick={() => setOpen(!open)}
-							className="flex min-w-0 items-center gap-1 rounded-[6px] text-left outline-none focus-visible:shadow-(--focus-ring)"
+							className="flex min-w-0 items-center gap-1 rounded-control text-left outline-none focus-visible:shadow-(--focus-ring)"
 						>
-							<span className={cn('min-w-0 truncate text-[13px] leading-[18px] font-medium', on ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>{routineName(automation)}</span>
+							<span className={cn('min-w-0 truncate text-body leading-[18px] font-medium', on ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>{routineName(automation)}</span>
 							<Icon icon={ChevronDown} size={12} className={cn('text-(--icon-tertiary) transition-transform duration-(--duration-micro)', open && 'rotate-180')} />
 						</button>
 						<span className="flex-1" />
@@ -287,7 +287,7 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 						</span>
 						<Switch checked={on} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Enabled</span>} className="ml-1" />
 					</div>
-					<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-[17px] text-(--text-tertiary)">
+					<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-small leading-[17px] text-(--text-tertiary)">
 						<span className="truncate">{automation.kind === 'issues' ? 'Checks every 5 minutes' : whenItRuns(automation)}</span>
 						<span className="text-(--text-disabled)">·</span>
 						{!on ? (
@@ -324,7 +324,7 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 						</Chip>
 					)}
 					{model ? (
-						<span className="inline-flex h-5 min-w-0 items-center gap-1 text-[11px] text-(--text-secondary)" title={model}>
+						<span className="inline-flex h-5 min-w-0 items-center gap-1 text-micro text-(--text-secondary)" title={model}>
 							<span aria-hidden className="mr-1 h-3 w-px bg-(--border-subtle)" />
 							<ModelLogo model={model} size={14} />
 							<span className="truncate">{modelName(model)}</span>
@@ -338,22 +338,22 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 					) : null}
 				</span>
 				<span className="ml-auto flex shrink-0 items-center gap-2.5">
-					<span className="flex items-center gap-1.5 text-[11px] text-(--text-tertiary)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
+					<span className="flex items-center gap-1.5 text-micro text-(--text-tertiary)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
 						{last ? <Glyph kind={glyphKind(last)} size={12} /> : null}
 						{automation.lastRunAt ? `${age(automation.lastRunAt) === 'now' ? 'just now' : `${age(automation.lastRunAt)} ago`}` : 'Not run yet'}
 					</span>
 					<RunStrip runs={runs} />
 				</span>
 			</div>
-			{open && automation.prompt ? <p className="m-0 ml-10 rounded-[6px] bg-(--well-bg) px-2.5 py-2 text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
+			{open && automation.prompt ? <p className="m-0 ml-10 rounded-control bg-(--well-bg) px-2.5 py-2 text-small leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
 			{automation.gate && automation.lastGate && !automation.lastGate.run ? (
-				<div className="ml-10 text-[12px] text-(--text-tertiary)">
+				<div className="ml-10 text-small text-(--text-tertiary)">
 					Skipped {age(automation.lastGate.at) === 'now' ? 'just now' : `${age(automation.lastGate.at)} ago`}
 					{automation.lastGate.reason ? `: ${automation.lastGate.reason}` : ''}
 				</div>
 			) : null}
-			{automation.lastError ? <div className="ml-10 text-[12px] text-(--danger-text)">{automation.lastError}</div> : null}
-			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-[12px] text-(--danger-text)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
+			{automation.lastError ? <div className="ml-10 text-small text-(--danger-text)">{automation.lastError}</div> : null}
+			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-small text-(--danger-text)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
 		</div>
 	);
 }
@@ -402,33 +402,33 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 			}}
 		>
 			<ToggleGroup type="single" size="sm" aria-label="Starts" value={kind} onValueChange={(next) => next && setKind(next as Automation['kind'])}>
-				<ToggleGroupItem value="schedule" className="text-[12px]">
+				<ToggleGroupItem value="schedule" className="text-small">
 					On a schedule
 				</ToggleGroupItem>
-				<ToggleGroupItem value="issues" disabled={!repoId} className="text-[12px]">
+				<ToggleGroupItem value="issues" disabled={!repoId} className="text-small">
 					From labeled issues
 				</ToggleGroupItem>
 			</ToggleGroup>
 			<div className="flex flex-wrap items-center gap-2">
 				{space.repos.length ? (
 					<Select value={repoId || NO_REPO} onValueChange={(next) => setRepoId(next === NO_REPO ? '' : next)}>
-						<SelectTrigger aria-label="Repository" className="max-w-[260px] min-w-0 text-[13px]">
+						<SelectTrigger aria-label="Repository" className="max-w-[260px] min-w-0 text-body">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent position="popper">
 							{space.repos.map((repo) => (
-								<SelectItem key={repo.id} value={repo.id} className="text-[13px]">
+								<SelectItem key={repo.id} value={repo.id} className="text-body">
 									{repo.repoFullName}
 								</SelectItem>
 							))}
 							<SelectSeparator />
-							<SelectItem value={NO_REPO} className="text-[13px]">
+							<SelectItem value={NO_REPO} className="text-body">
 								No repository
 							</SelectItem>
 						</SelectContent>
 					</Select>
 				) : null}
-				{kind === 'issues' ? <Input aria-label="Label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="label" className="w-32 text-[13px] md:text-[13px]" /> : null}
+				{kind === 'issues' ? <Input aria-label="Label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="label" className="w-32 text-body md:text-body" /> : null}
 				<ModelPicker value={{ ...choice, model: choice.model || models.data?.default || '' }} onChange={(change) => setChoice((current) => ({ ...current, ...change }))} side="bottom" />
 			</div>
 			{kind === 'schedule' ? <ScheduleEditor value={schedule} onChange={setSchedule} /> : null}
@@ -438,22 +438,22 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				onChange={(event) => setPrompt(event.target.value)}
 				rows={3}
 				placeholder={kind === 'schedule' ? 'What each run should do' : 'Anything to add to each issue (optional)'}
-				className="min-h-[72px] text-[13px] md:text-[13px]"
+				className="min-h-[72px] text-body md:text-body"
 			/>
 			{kind === 'schedule' ? (
 				<label className="flex flex-col gap-1">
-					<span className="text-[12px] text-(--text-secondary)">Run only when a skill's script says so (optional)</span>
+					<span className="text-small text-(--text-secondary)">Run only when a skill's script says so (optional)</span>
 					<Input
 						aria-label="Gate"
 						value={gate}
 						onChange={(event) => setGate(event.target.value)}
 						placeholder="skill-name/scripts/gate.js"
-						className="font-mono text-[12px] md:text-[12px]"
+						className="font-mono text-small md:text-small"
 					/>
 				</label>
 			) : null}
 			<div className="flex items-center gap-2">
-				{save.isError ? <span className="min-w-0 flex-1 text-[12px] text-(--danger-text)">{save.error.message}</span> : <span className="flex-1" />}
+				{save.isError ? <span className="min-w-0 flex-1 text-small text-(--danger-text)">{save.error.message}</span> : <span className="flex-1" />}
 				<Btn size="sm" variant="ghost" onClick={onDone}>
 					Cancel
 				</Btn>

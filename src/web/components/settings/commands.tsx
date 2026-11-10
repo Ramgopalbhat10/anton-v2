@@ -44,7 +44,7 @@ function Commands({ saved }: { saved: Command[] }) {
 				}
 			>
 				{rows.length === 0 ? (
-					<p className="m-0 py-1 text-[12px] text-(--text-tertiary)">No commands yet. Add one, then type / and its name in any message.</p>
+					<p className="m-0 py-1 text-small text-(--text-tertiary)">No commands yet. Add one, then type / and its name in any message.</p>
 				) : null}
 				{rows.map((row, index) => (
 					<div key={index} className="flex items-start gap-2">
@@ -61,7 +61,7 @@ function Commands({ saved }: { saved: Command[] }) {
 							rows={2}
 							placeholder="Review the changes on this branch for bugs and missing tests."
 							aria-label="Prompt"
-							className="min-w-0 flex-1 resize-y rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 py-1.5 text-[13px] leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+							className="min-w-0 flex-1 resize-y rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 py-1.5 text-body leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
 						/>
 						<IconBtn icon={Trash2} size="sm" label="Remove command" onClick={() => setRows((current) => current.filter((_, at) => at !== index))} />
 					</div>

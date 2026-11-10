@@ -264,7 +264,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 				<button
 					type="button"
 					aria-label={parsed ? `Project icon: ${parsed.entry.label}. Change icon` : 'Choose an icon'}
-					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-[6px] outline-none focus-visible:shadow-(--focus-ring) data-[state=open]:shadow-(--focus-ring)"
+					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-control outline-none focus-visible:shadow-(--focus-ring) data-[state=open]:shadow-(--focus-ring)"
 				>
 					<ProjectIcon value={value} name={name} size={size} className="transition-[filter] group-hover/icon:brightness-125" />
 				</button>
@@ -290,7 +290,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
 							placeholder="Search icons: billing, docs, ai…"
-							className="h-6 min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-(--text-disabled)"
+							className="h-6 min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-(--text-disabled)"
 						/>
 					</div>
 					<div role="listbox" aria-label="Icons" className="grid max-h-[212px] grid-cols-8 gap-1 overflow-y-auto p-2">
@@ -309,7 +309,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 										setOpen(false);
 									}}
 									className={cn(
-										'flex aspect-square items-center justify-center rounded-[6px] border outline-none focus-visible:shadow-(--focus-ring)',
+										'flex aspect-square items-center justify-center rounded-control border outline-none focus-visible:shadow-(--focus-ring)',
 										on ? 'border-transparent' : 'border-transparent text-(--icon-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
 									)}
 									style={on ? { color: tintColor(tint), background: `color-mix(in srgb, ${tintColor(tint)} 16%, transparent)`, borderColor: `color-mix(in srgb, ${tintColor(tint)} 40%, transparent)` } : undefined}
@@ -318,7 +318,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 								</button>
 							);
 						})}
-						{shown.length === 0 ? <span className="col-span-8 px-1 py-3 text-center text-[12px] text-(--text-disabled)">No icon matches “{query}”</span> : null}
+						{shown.length === 0 ? <span className="col-span-8 px-1 py-3 text-center text-small text-(--text-disabled)">No icon matches “{query}”</span> : null}
 					</div>
 					<div className="flex items-center gap-2 border-t border-(--border-subtle) px-2.5 py-2">
 						<span className="in-caption">Tint</span>

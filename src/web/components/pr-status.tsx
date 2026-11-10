@@ -29,7 +29,7 @@ export const prChipStyle = (tone: PrTone): CSSProperties => {
 
 /** A short PR word on a row (Conflicts, Draft, Checks failing), tinted in its tone. */
 export function PrFlag({ tone, children, className }: { tone: PrTone; children: ReactNode; className?: string }) {
-	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-[6px] border px-1.5 text-[11px] leading-none font-medium whitespace-nowrap', className)} style={prChipStyle(tone)}>{children}</span>;
+	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-control border px-1.5 text-micro leading-none font-medium whitespace-nowrap', className)} style={prChipStyle(tone)}>{children}</span>;
 }
 
 /** State remains visible even when checks or conflicts need attention. */
@@ -50,14 +50,14 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	const active = pr && (pr.state === 'open' || pr.state === 'draft');
 	const visible = full && pr?.state !== 'merged' ? summary : `#${prNumber(thread.prUrl) ?? '?'}`;
 	const content = <><Icon icon={PR_ICON[pr?.state ?? 'open']} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span style={{ color: prTone('conflicts') }}>Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span style={{ color: prTone('failing') }}>Checks failing</span> : null}</>;
-	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: prChipStyle(pr?.state ?? 'unknown') };
+	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-control border px-1.5 text-micro leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: prChipStyle(pr?.state ?? 'unknown') };
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }
 
 /** Focusable text, not a button: inspecting a branch does not perform an action. */
 function BranchName({ name, kind }: { name: string; kind: 'Source' | 'Target' }) {
 	return <Tooltip>
-		<TooltipTrigger asChild><span tabIndex={0} aria-label={`${kind} branch: ${name}`} className="min-w-0 truncate rounded-[2px] focus-visible:shadow-(--focus-ring)">{name}</span></TooltipTrigger>
+		<TooltipTrigger asChild><span tabIndex={0} aria-label={`${kind} branch: ${name}`} className="min-w-0 truncate rounded-mark focus-visible:shadow-(--focus-ring)">{name}</span></TooltipTrigger>
 		<TooltipContent sideOffset={5} className="z-[60] max-w-[min(24rem,calc(100vw-24px))] break-all">{name}</TooltipContent>
 	</Tooltip>;
 }
@@ -70,7 +70,7 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 	const detail = useQuery({ queryKey: ['pr-metadata', sessionId, number], queryFn: () => api.pullMetadata(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
 	if (!detail || detail.url !== url) return null;
 	return (
-		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-[11.5px] leading-[16px] text-(--text-tertiary)', compact ? 'flex-1' : 'flex-wrap')}>
+		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-small leading-[16px] text-(--text-tertiary)', compact ? 'flex-1' : 'flex-wrap')}>
 			{compact ? (
 				// Intrinsic tracks let a short branch keep its natural width while the
 				// longer branch uses the remaining space; both can still truncate.
@@ -95,5 +95,5 @@ export function PrChecks({ pull }: { pull: Session['pullRequest'] }) {
 	} as const;
 	const check = checks[pull.checks];
 	const failing = pull.runs.filter((run) => run.status === 'failed').length;
-	return <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px]" style={{ color: prTone(checksTone(pull.checks)) }}><Icon icon={check.icon} size={11} />{failing ? `${failing} failing` : check.label}</span>;
+	return <span className="inline-flex shrink-0 items-center gap-1 text-small" style={{ color: prTone(checksTone(pull.checks)) }}><Icon icon={check.icon} size={11} />{failing ? `${failing} failing` : check.label}</span>;
 }

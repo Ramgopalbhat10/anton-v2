@@ -79,11 +79,11 @@ function Legend({
   items: Array<{ label: string; color: string; value?: string }>;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11.5px] text-(--text-secondary)">
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-small text-(--text-secondary)">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
           <span
-            className="size-2 shrink-0 rounded-[2px]"
+            className="size-2 shrink-0 rounded-mark"
             style={{ background: item.color }}
           />
           {item.label}
@@ -193,7 +193,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
         onKeyDown={onKeyDown}
         onBlur={() => setActive(null)}
         onPointerLeave={() => setActive(null)}
-        className="in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)"
+        className="in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)"
         style={{ height: HEIGHT }}
       >
         {width > 0 ? (
@@ -415,7 +415,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
         </div>
         {current && active !== null ? (
           <div
-            className="in-pop pointer-events-none absolute z-10 flex min-w-[130px] flex-col gap-1 px-2.5 py-2 text-[11px]"
+            className="in-pop pointer-events-none absolute z-10 flex min-w-[130px] flex-col gap-1 px-2.5 py-2 text-micro"
             style={{
               left: Math.min(Math.max(x(active), 80), width - 80),
               top: GUTTER.top,
@@ -426,7 +426,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
             {series.map((item, at) => (
               <span key={item.key} className="flex items-center gap-1.5">
                 <span
-                  className="size-1.5 shrink-0 rounded-[2px]"
+                  className="size-1.5 shrink-0 rounded-mark"
                   style={{ background: SERIES[at] }}
                 />
                 <span className="min-w-0 flex-1 truncate text-(--text-secondary)">
@@ -526,10 +526,10 @@ function DonutChart({ node }: { node: ChartNode }) {
           ))}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="in-num text-[15px] text-(--text-primary)">
+          <span className="in-num text-h3 text-(--text-primary)">
             {formatValue(shown ? shown.value : total, node.format || "number")}
           </span>
-          <span className="max-w-[90px] truncate text-[11px] text-(--text-tertiary)">
+          <span className="max-w-[90px] truncate text-micro text-(--text-tertiary)">
             {shown ? shown.label : "Total"}
           </span>
         </div>
@@ -541,12 +541,12 @@ function DonutChart({ node }: { node: ChartNode }) {
             onPointerEnter={() => setActive(index)}
             onPointerLeave={() => setActive(null)}
             className={cn(
-              "flex items-center gap-2 rounded-md px-1.5 py-0.5 text-[12px]",
+              "flex items-center gap-2 rounded-control px-1.5 py-0.5 text-small",
               active === index && "bg-(--bg-hover)",
             )}
           >
             <span
-              className="size-2 shrink-0 rounded-[2px]"
+              className="size-2 shrink-0 rounded-mark"
               style={{ background: slice.color }}
             />
             <span className="min-w-0 flex-1 truncate text-(--text-secondary)">

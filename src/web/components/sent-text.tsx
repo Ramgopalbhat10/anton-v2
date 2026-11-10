@@ -48,7 +48,7 @@ export function SentText({ text, className }: { text: string; className?: string
 	return (
 		<div
 			className={cn(
-				'relative rounded-[6px_6px_3px_6px] border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-[13px] leading-[19px] shadow-(--card-highlight)',
+				'relative rounded-control rounded-br-mark border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-body leading-[19px] shadow-(--card-highlight)',
 				className,
 			)}
 		>
@@ -112,7 +112,7 @@ export function PendingMessage({ pending }: { pending: PendingSend }) {
 	return (
 		<div className="in-sent flex flex-col items-end gap-1.5">
 			{pending.text ? <SentText text={pending.text} className="max-w-[min(520px,100%)]" /> : null}
-			<div className="flex items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+			<div className="flex items-center gap-1.5 text-small text-(--text-tertiary)">
 				<Spinner size={11} tone="neutral" />
 				Attaching {pending.attaching}
 			</div>

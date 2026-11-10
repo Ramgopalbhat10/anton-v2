@@ -17,7 +17,8 @@ export type TaskView = {
 	collapsed: string[];
 };
 
-export type Tone = 'accent' | 'success' | 'warning' | 'danger' | 'muted';
+/** `attention` is what waits on you (the accent); `warning` is something off (amber). */
+export type Tone = 'accent' | 'attention' | 'success' | 'warning' | 'danger' | 'muted';
 
 /** What a task is waiting on or what happened to it, in a few words; `attention` when it waits on you. */
 export type TaskNote = { text: string; tone: Tone; attention: boolean; pullRequest?: boolean };
@@ -45,8 +46,8 @@ export function taskNote(session: Session): TaskNote | null {
 	if (session.status === 'starting') return { text: 'Starting sandbox', tone: 'accent', attention: false };
 	if (session.working) return { text: 'Working', tone: 'accent', attention: false };
 	if (session.status === 'error') return { text: 'Failed', tone: 'danger', attention: true };
-	if (planReady(session)) return { text: 'Plan ready for review', tone: 'warning', attention: true };
-	if (session.asking) return { text: 'Waiting on you', tone: 'warning', attention: true };
+	if (planReady(session)) return { text: 'Plan ready for review', tone: 'attention', attention: true };
+	if (session.asking) return { text: 'Waiting on you', tone: 'attention', attention: true };
 	return prNote(session) ?? (isLive(session) ? { text: 'Sandbox running', tone: 'muted', attention: false } : null);
 }
 

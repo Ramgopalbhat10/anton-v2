@@ -53,7 +53,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 					<IconBtn icon={ChevronLeft} size="xs" label="Previous page" disabled={page === 0} onClick={() => onPage(page - 1)} />
 					{pageNumbers(page, pages).map((index, at) =>
 						index === null ? (
-							<span key={`gap-${at}`} className="w-5 text-center text-[11px] text-(--text-disabled)">
+							<span key={`gap-${at}`} className="w-5 text-center text-micro text-(--text-disabled)">
 								…
 							</span>
 						) : (
@@ -64,7 +64,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 								aria-label={`Page ${index + 1}`}
 								onClick={() => onPage(index)}
 								className={cn(
-									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1.5 text-[11px] outline-none focus-visible:shadow-(--focus-ring)',
+									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-control px-1.5 text-micro outline-none focus-visible:shadow-(--focus-ring)',
 									index === page ? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-(--text-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
 								)}
 							>
@@ -180,7 +180,7 @@ export function TasksPage() {
 								}}
 							>
 								{TABS[key].label}
-								<span className="in-num text-[10.5px] text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
+								<span className="in-num text-micro text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
 							</SegmentedItem>
 						))}
 					</Segmented>
@@ -194,7 +194,7 @@ export function TasksPage() {
 							}}
 							placeholder="Search tasks"
 							aria-label="Search tasks"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
 						/>
 					</div>
 				</div>

@@ -31,18 +31,18 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 						disabled={!entry.detail}
 						aria-expanded={entry.detail ? open : undefined}
 						onClick={() => setOpen((value) => !value)}
-						className="group -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left outline-none enabled:cursor-pointer enabled:hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="group -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-control px-1.5 py-0.5 text-left outline-none enabled:cursor-pointer enabled:hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 					>
-						<span className="shrink-0 text-[12.5px] font-medium text-(--text-primary)">{entry.message}</span>
+						<span className="shrink-0 text-body font-medium text-(--text-primary)">{entry.message}</span>
 						{count > 1 ? (
-							<span className="in-num shrink-0 rounded-[5px] bg-(--bg-hover) px-1.5 py-px text-[10.5px] text-(--text-secondary)" title={`${count} times, first ${age(first)} ago`}>
+							<span className="in-num shrink-0 rounded-control bg-(--bg-hover) px-1.5 py-px text-micro text-(--text-secondary)" title={`${count} times, first ${age(first)} ago`}>
 								×{count}
 							</span>
 						) : null}
-						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{entry.detail}</span> : <span className="flex-1" />}
+						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate text-micro text-(--text-tertiary)">{entry.detail}</span> : <span className="flex-1" />}
 						{entry.detail ? <Icon icon={ChevronDown} size={12} className={cn('shrink-0 text-(--icon-tertiary) transition-transform', open && 'rotate-180')} /> : null}
 					</button>
-					<span className="in-num w-[64px] shrink-0 text-right text-[11px] text-(--text-disabled)">{count > 1 ? `${age(entry.at)} – ${age(first)}` : age(entry.at)}</span>
+					<span className="in-num w-[64px] shrink-0 text-right text-micro text-(--text-disabled)">{count > 1 ? `${age(entry.at)} – ${age(first)}` : age(entry.at)}</span>
 					{entry.sessionId ? (
 						<Link
 							to="/agents/$sessionId"
@@ -50,7 +50,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 							search={{ app: 'code' }}
 							title="Open the task"
 							aria-label="Open the task"
-							className="grid size-6 shrink-0 place-items-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							className="grid size-6 shrink-0 place-items-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 						>
 							<Icon icon={ArrowUpRight} size={13} />
 						</Link>
@@ -59,7 +59,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 					)}
 				</div>
 				{entry.detail && open ? (
-					<div className="mt-1 mb-1 rounded-[6px] bg-(--bg-inset) px-2.5 py-2 font-mono text-[11px] leading-[16px] break-all whitespace-pre-wrap text-(--text-secondary) select-text">{entry.detail}</div>
+					<div className="mt-1 mb-1 rounded-control bg-(--bg-inset) px-2.5 py-2 font-mono text-micro leading-[16px] break-all whitespace-pre-wrap text-(--text-secondary) select-text">{entry.detail}</div>
 				) : null}
 			</div>
 		</div>
@@ -69,7 +69,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 function Problems() {
 	const logs = useQuery({ queryKey: ['logs'], queryFn: api.logs, refetchInterval: SAFETY_NET_MS });
 	if (logs.isPending) return <Spinner size={12} />;
-	if (logs.isError) return <p className="m-0 text-[12px] text-(--danger-text)">{logs.error.message}</p>;
+	if (logs.isError) return <p className="m-0 text-small text-(--danger-text)">{logs.error.message}</p>;
 	const recent = logs.data.logs.slice(0, PROBLEMS_SHOWN);
 	const errors = recent.filter((entry) => entry.level === 'error').length;
 	// The same problem again and again (a pull request that cannot be read, checked each minute) is one row with a count.
@@ -109,7 +109,7 @@ function Problems() {
 				</CardSection>
 			) : null}
 			<CardSection ruled={shown.length > 0} className="gap-0 py-1">
-				{shown.length === 0 ? <p className="m-0 py-2 text-[12px] text-(--text-tertiary)">Nothing has gone wrong since Anton started.</p> : null}
+				{shown.length === 0 ? <p className="m-0 py-2 text-small text-(--text-tertiary)">Nothing has gone wrong since Anton started.</p> : null}
 				{shown.map(({ entry, count, first }, index) => (
 					<ProblemRow key={`${entry.at}-${index}`} entry={entry} count={count} first={first} last={index === shown.length - 1} />
 				))}

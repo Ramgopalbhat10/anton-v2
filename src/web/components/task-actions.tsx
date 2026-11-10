@@ -58,7 +58,7 @@ export function TitleInput({ session, onDone, className }: { session: Session; o
 				if (event.key === 'Enter') save(event.currentTarget.value);
 				if (event.key === 'Escape') onDone();
 			}}
-			className={cn('h-7 rounded-md bg-(--bg-raised) px-2 text-[13px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('h-7 rounded-control bg-(--bg-raised) px-2 text-body text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)', className)}
 		/>
 	);
 }
@@ -71,7 +71,7 @@ export function TaskTitle({ session, editing, onEditingChange }: { session?: Ses
 			type="button"
 			onClick={() => session && onEditingChange(true)}
 			title="Rename task"
-			className="min-w-[60px] flex-auto truncate text-left text-[13px] font-medium outline-none"
+			className="min-w-[60px] flex-auto truncate text-left text-body font-medium outline-none"
 		>
 			{session?.title ?? 'Task'}
 		</button>
@@ -173,7 +173,7 @@ function TaskFacts({ session }: { session: Session }) {
 		[isChat(session) ? 'Sandbox' : 'Branch', branchLabel(session)],
 	];
 	return (
-		<div className="flex max-w-[260px] flex-col gap-1 px-2 pt-1 pb-1.5 text-[11px]">
+		<div className="flex max-w-[260px] flex-col gap-1 px-2 pt-1 pb-1.5 text-micro">
 			{facts.map(([label, value]) => (
 				<div key={label} className="flex items-center gap-3">
 					<span className="shrink-0 text-(--text-tertiary)">{label}</span>
@@ -326,8 +326,8 @@ export function TaskMenu({
 				>
 					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : thread ? 'Delete thread' : 'Delete task'}
 				</MenuItem>
-				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">Its files stay in the project Library, in a folder named for it.</div> : null}
-				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-[11px] leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
+				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-tertiary)">Its files stay in the project Library, in a folder named for it.</div> : null}
+				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
 				<MenuSeparator />
 				<TaskFacts session={session} />
 			</MenuContent>

@@ -49,7 +49,7 @@ export function useFrontmatter(text: string) {
 export function Frontmatter({ front }: { front: ReturnType<typeof useFrontmatter> }) {
 	if (front.raw === null) return null;
 	return (
-		<section aria-label="Frontmatter" className="@container/frontmatter in-well min-w-0 text-[12px] text-(--text-secondary)">
+		<section aria-label="Frontmatter" className="@container/frontmatter in-well min-w-0 text-small text-(--text-secondary)">
 			{front.error ? (
 				<div className="p-2.5">
 					<p className="m-0 mb-2 text-(--text-tertiary)">Could not parse frontmatter. Showing its source.</p>

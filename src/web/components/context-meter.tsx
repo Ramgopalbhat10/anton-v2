@@ -51,11 +51,11 @@ function Ring({ share, size = 14 }: { share: number; size?: number }) {
 
 function Row({ color, label, value, share, help, pattern }: { color: string; label: string; value: string; share: string; help?: string; pattern?: boolean }) {
 	return (
-		<div className="flex h-6 items-center gap-2 text-[12px]" title={help}>
-			<span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: pattern ? BUFFER : color, boxShadow: pattern ? 'inset 0 0 0 1px var(--neutral-600)' : undefined }} />
+		<div className="flex h-6 items-center gap-2 text-small" title={help}>
+			<span className="size-2.5 shrink-0 rounded-mark" style={{ background: pattern ? BUFFER : color, boxShadow: pattern ? 'inset 0 0 0 1px var(--neutral-600)' : undefined }} />
 			<span className="min-w-0 flex-1 truncate text-(--text-secondary)">{label}</span>
-			<span className="in-num w-14 text-right text-[11px] text-(--text-tertiary)">{value}</span>
-			<span className="in-num w-11 text-right text-[11px] text-(--text-primary)">{share}</span>
+			<span className="in-num w-14 text-right text-micro text-(--text-tertiary)">{value}</span>
+			<span className="in-num w-11 text-right text-micro text-(--text-primary)">{share}</span>
 		</div>
 	);
 }
@@ -84,7 +84,7 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
 			<div className="flex items-center gap-2">
 				<span className="in-caption flex-1">{plan.name} plan</span>
 				{plan.usagePage ? (
-					<a href={plan.usagePage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-(--accent-text) hover:underline">
+					<a href={plan.usagePage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-micro text-(--accent-text) hover:underline">
 						Limits in {plan.name}
 						<Icon icon={ArrowUpRight} size={11} />
 					</a>
@@ -101,12 +101,12 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
 						className="flex flex-col gap-0.5"
 						title={label === 'At API prices' ? 'What these calls would cost on a paid API, cached input at its lower price. On your plan you pay nothing per token.' : undefined}
 					>
-						<span className="in-num text-[13px] text-(--text-primary)">{value}</span>
-						<span className="text-[10.5px] text-(--text-disabled)">{label}</span>
+						<span className="in-num text-body text-(--text-primary)">{value}</span>
+						<span className="text-micro text-(--text-disabled)">{label}</span>
 					</div>
 				))}
 			</div>
-			<div className={cn('flex items-center gap-1.5 text-[11px]', limitRecent ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+			<div className={cn('flex items-center gap-1.5 text-micro', limitRecent ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 				<span className={cn('size-1.5 rounded-full', limitRecent ? 'bg-(--danger-base)' : 'bg-(--success-base)')} />
 				{limitRecent ? `Usage limit reached ${age(plan.limitHitAt!)} ago` : 'No usage limit reached in the last day'}
 			</div>
@@ -131,8 +131,8 @@ function SpendSection({ sessionId }: { sessionId: string }) {
 					['Daily cap', cap ? `$${cap}` : 'None'],
 				].map(([label, value]) => (
 					<div key={label} className="flex flex-col gap-0.5">
-						<span className="in-num text-[13px] text-(--text-primary)">{value}</span>
-						<span className="text-[10.5px] text-(--text-disabled)">{label}</span>
+						<span className="in-num text-body text-(--text-primary)">{value}</span>
+						<span className="text-micro text-(--text-disabled)">{label}</span>
 					</div>
 				))}
 			</div>
@@ -164,7 +164,7 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 				<button
 					type="button"
 					aria-label={measured ? `Context window ${percent(measured.used, window)} full` : 'Context window'}
-					className="flex h-[26px] shrink-0 items-center gap-1.5 rounded-lg px-1.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)"
+					className="flex h-[26px] shrink-0 items-center gap-1.5 rounded-tile px-1.5 text-micro text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)"
 				>
 					<Ring share={share} />
 					<span className="in-num">{measured ? percent(measured.used, window) : '—'}</span>
@@ -180,8 +180,8 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 				>
 					<section className="flex flex-col gap-2.5 px-3.5 pt-3 pb-3">
 						<div className="flex items-baseline gap-2">
-							<span className="text-[13px] font-medium">Context window</span>
-							<span className="in-num ml-auto text-[11px] text-(--text-tertiary)">
+							<span className="text-body font-medium">Context window</span>
+							<span className="in-num ml-auto text-micro text-(--text-tertiary)">
 								{measured ? (
 									<>
 										<span className="text-(--text-primary)">{tokens(measured.used)}</span> / <span title={`${window.toLocaleString()} tokens`}>{windowSize(window)}</span> (
@@ -214,18 +214,18 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 										share={percent(Math.max(0, measured.autocompactAt - measured.used), window)}
 									/>
 								</div>
-								<div className="flex items-center gap-2 rounded-[6px] bg-(--well-bg) px-2.5 py-1.5 text-[11.5px]">
+								<div className="flex items-center gap-2 rounded-control bg-(--well-bg) px-2.5 py-1.5 text-small">
 									<span className="in-num text-(--text-primary)">{tokens(Math.max(0, measured.autocompactAt - measured.used))}</span>
 									<span className="text-(--text-tertiary)">until the agent compacts older turns</span>
 								</div>
 								{measured.task && measured.task.calls > 1 ? (
-									<p className="m-0 truncate text-[11px] leading-[16px] text-(--text-disabled)">
+									<p className="m-0 truncate text-micro leading-[16px] text-(--text-disabled)">
 										<span className="in-num text-(--text-tertiary)">{tokens(measured.task.tokens)}</span> tokens used this task, over {measured.task.calls} model calls
 									</p>
 								) : null}
 							</>
 						) : (
-							<p className="m-0 text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">
+							<p className="m-0 text-small leading-[18px] text-pretty text-(--text-tertiary)">
 								Measured from the agent's next reply: what its instructions, tools, skills and the conversation take of the model's window.
 							</p>
 						)}
@@ -233,7 +233,7 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 					{info?.subscription ? plan ? <PlanSection plan={plan} /> : null : <SpendSection sessionId={sessionId} />}
 					<footer className="flex items-center gap-2 border-t border-(--border-subtle) px-3.5 py-2">
 						<span className="in-caption flex-1 tracking-normal normal-case">{measured?.at ? `Measured ${age(measured.at)} ago` : 'Not measured yet'}</span>
-						<a href="/settings/usage" className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)">
+						<a href="/settings/usage" className="inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-micro text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)">
 							Usage details
 							<Icon icon={ArrowUpRight} size={11} />
 						</a>

@@ -6,15 +6,15 @@
 [data-theme='dark'] {
 	/* Cards have no edge: they read by fill, one step above what they sit on,
 	   and a slight lift (a faint top light, a tight contact shadow). The border stays (transparent) so sizes never shift. */
-	--card-bg: #151515;
-	--card-bg-top: #181818;
+	--card-bg: var(--bg-raised);
+	--card-bg-top: var(--bg-raised);
 	--card-border: transparent;
 	--card-highlight: 0 0 #0000;
 	--card-shadow: var(--elev-1);
-	--card-radius: 10px;
-	--well-bg: #101010;
+	--card-radius: var(--radius-card);
+	--well-bg: var(--bg-canvas);
 	--well-border: transparent;
-	--well-radius: 8px;
+	--well-radius: var(--radius-tile);
 	--grid-line: rgba(255, 255, 255, 0.035);
 	--grid-mark: rgba(255, 255, 255, 0.14);
 	--tick-off: rgba(255, 255, 255, 0.12);
@@ -41,7 +41,7 @@
 	--ts-chart-tooltip-background: var(--bg-overlay);
 	--ts-chart-tooltip-color: var(--text-primary);
 	--ts-chart-tooltip-border: 1px solid var(--border-strong);
-	--ts-chart-tooltip-border-radius: 6px;
+	--ts-chart-tooltip-border-radius: var(--radius-control);
 	--ts-chart-tooltip-shadow: var(--shadow-overlay);
 	--ts-chart-tooltip-font: 12px/16px var(--font-sans);
 	--ts-chart-tooltip-padding: 8px 10px;
@@ -54,7 +54,7 @@
 	min-width: 0;
 	border-radius: var(--card-radius);
 	border: 1px solid var(--card-border);
-	background: linear-gradient(180deg, var(--card-bg-top), var(--card-bg) 72px);
+	background: var(--card-bg);
 	background-clip: padding-box;
 	box-shadow: var(--card-shadow);
 }
@@ -62,7 +62,7 @@
 /* A small card: a file a reply made, a thread's card, a status box. The same
    edge and fill as .in-card at a tighter radius, and glass over the sky too. */
 .in-tile {
-	border-radius: 8px;
+	border-radius: var(--radius-tile);
 	border: 1px solid var(--card-border);
 	background: var(--card-bg);
 	background-clip: padding-box;
@@ -265,9 +265,9 @@
 /* The mono caption every card footer and gauge label uses. */
 .in-caption {
 	font-family: var(--font-sans);
-	font-size: 11.5px;
-	line-height: 16px;
-	font-weight: 450;
+	font-size: var(--text-small-size);
+	line-height: var(--text-small-line);
+	font-weight: 400;
 	letter-spacing: 0;
 	color: var(--text-tertiary);
 }
@@ -292,7 +292,7 @@
 	color: var(--text-tertiary);
 	font-family: var(--font-sans);
 	font-variant-numeric: tabular-nums;
-	font-size: 10.5px;
+	font-size: var(--text-micro-size);
 }
 .in-chart svg {
 	overflow: visible;
@@ -472,28 +472,28 @@
    so they read as the same object as the cards beneath them. */
 :root,
 [data-theme='dark'] {
-	--pop-bg: #1c1c1c;
-	--pop-bg-top: #1f1f1f;
-	--pop-border: rgba(255, 255, 255, 0.06);
+	--pop-bg: var(--bg-overlay);
+	--pop-bg-top: var(--bg-overlay);
+	--pop-border: var(--border-subtle);
 	--pop-shadow: var(--elev-3);
 }
 /* Solid, so a sticky header inside (.sticky-veil) is the very same fill and
    never reads as a band of its own over the sky. */
 .in-pop {
 	--surface-fill: var(--pop-bg);
-	border-radius: 10px;
+	border-radius: var(--radius-card);
 	border: 1px solid var(--pop-border);
 	background: var(--pop-bg);
 	background-clip: padding-box;
 	box-shadow: var(--pop-shadow);
 }
 .in-pop--modal {
-	border-radius: 14px;
+	border-radius: var(--radius-dialog);
 	box-shadow: var(--elev-4);
 }
 .in-pop .sg-menu-item {
 	height: 28px;
-	border-radius: var(--radius-sm);
+	border-radius: var(--radius-control);
 	padding: 0 8px;
 }
 
@@ -525,7 +525,7 @@
 	transform-origin: center;
 	animation: glyph-halo 2s var(--ease-out) infinite;
 }
-/* Time spent waiting on you: amber stripes, so it reads as owed rather than done. */
+/* Time spent waiting on you: accent stripes, so it reads as owed rather than done. */
 .in-hatch {
 	background-image: repeating-linear-gradient(135deg, currentColor 0 1.5px, transparent 1.5px 5px);
 }
@@ -699,9 +699,9 @@
 	}
 }
 
-/* Waiting on you: looks up, with an amber question and light. */
+/* Waiting on you: looks up, with a question and light in the attention colour. */
 .anton-mascot[data-mood='waiting'] {
-	--am-led: var(--amber-400);
+	--am-led: var(--attention-base);
 }
 .anton-mascot[data-mood='waiting'] .am-question {
 	display: inline;
@@ -712,11 +712,11 @@
 	animation: none;
 }
 .anton-mascot[data-mood='waiting'] .am-led {
-	animation: am-led-amber 1.6s steps(1, end) infinite;
+	animation: am-led-wait 1.6s steps(1, end) infinite;
 }
-@keyframes am-led-amber {
+@keyframes am-led-wait {
 	50% {
-		fill: var(--amber-500);
+		fill: var(--cyan-500);
 	}
 }
 

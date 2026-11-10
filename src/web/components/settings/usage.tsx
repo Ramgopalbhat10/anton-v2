@@ -47,7 +47,7 @@ function Caps({ limits }: { limits: Limits }) {
 					<CardFooter
 						caption={
 							invalid ? (
-								<span className="text-[12px] text-(--danger-text)">Use a dollar amount, or leave it empty for no cap.</span>
+								<span className="text-small text-(--danger-text)">Use a dollar amount, or leave it empty for no cap.</span>
 							) : save.isSuccess || save.isError ? (
 								<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} />
 							) : (
@@ -69,14 +69,14 @@ function Caps({ limits }: { limits: Limits }) {
 						<label className="flex flex-col gap-1.5">
 							<span className="in-caption">Per day, all tasks</span>
 							<span className="relative flex items-center">
-								<span className="in-num pointer-events-none absolute left-2.5 text-[13px] text-(--text-disabled)">$</span>
+								<span className="in-num pointer-events-none absolute left-2.5 text-body text-(--text-disabled)">$</span>
 								<input inputMode="decimal" value={daily} onChange={(event) => setDaily(event.target.value)} placeholder="No cap" className={`${FIELD} in-num w-full pl-6`} />
 							</span>
 						</label>
 						<label className="flex flex-col gap-1.5">
 							<span className="in-caption">Per task</span>
 							<span className="relative flex items-center">
-								<span className="in-num pointer-events-none absolute left-2.5 text-[13px] text-(--text-disabled)">$</span>
+								<span className="in-num pointer-events-none absolute left-2.5 text-body text-(--text-disabled)">$</span>
 								<input inputMode="decimal" value={task} onChange={(event) => setTask(event.target.value)} placeholder="No cap" className={`${FIELD} in-num w-full pl-6`} />
 							</span>
 						</label>
@@ -117,7 +117,7 @@ function Allowance({ usage, budget }: { usage: UsageView; budget: Budget }) {
 						<Figure size="xl" value={cap === null ? dollars(usage.today) : dollars(Math.max(0, cap - usage.today))} tone={used >= 1 ? 'danger' : undefined} />
 					</div>
 					{cap !== null ? (
-						<div className="in-num flex gap-4 text-[11px] text-(--text-tertiary)">
+						<div className="in-num flex gap-4 text-micro text-(--text-tertiary)">
 							<span>
 								SPENT <span className="text-(--text-primary)">{dollars(usage.today)}</span>
 							</span>
@@ -222,8 +222,8 @@ function Daily({ usage, cap, modelName }: { usage: UsageView; cap: number | null
 				{series.length ? (
 					<div className="flex flex-wrap gap-x-4 gap-y-1">
 						{series.map((name, index) => (
-							<span key={name} className="inline-flex items-center gap-1.5 text-[11px] text-(--text-tertiary)">
-								<span className="size-2 rounded-[2px]" style={{ background: DATA_COLORS[index] }} />
+							<span key={name} className="inline-flex items-center gap-1.5 text-micro text-(--text-tertiary)">
+								<span className="size-2 rounded-mark" style={{ background: DATA_COLORS[index] }} />
 								{name}
 							</span>
 						))}
@@ -271,7 +271,7 @@ function Plan({ plan, modelName }: { plan: PlanUsage; modelName: (id: string | n
 			footer={
 				<CardFooter
 					caption={
-						<span className="block py-0.5 text-[12px] leading-[18px] text-pretty text-(--text-disabled)">
+						<span className="block py-0.5 text-small leading-[18px] text-pretty text-(--text-disabled)">
 							{plan.name} does not tell apps how much of the plan is left; its limits are only in {plan.name}.
 						</span>
 					}
@@ -293,7 +293,7 @@ function Plan({ plan, modelName }: { plan: PlanUsage; modelName: (id: string | n
 					</div>
 					<div className="flex flex-col items-end gap-1 text-right" title="What the same calls would have cost at the vendor's API prices, cached input at its lower price. On the plan you pay nothing per token.">
 						<span className="in-caption">At API prices</span>
-						<span className="in-figure text-[18px] leading-6 text-(--success-text)">{plan.apiValue === null ? 'unknown' : `≈ ${dollars(plan.apiValue)}`}</span>
+						<span className="in-figure text-h2 leading-6 text-(--success-text)">{plan.apiValue === null ? 'unknown' : `≈ ${dollars(plan.apiValue)}`}</span>
 					</div>
 				</div>
 			</CardSection>
@@ -359,13 +359,13 @@ function Breakdown({
 			status={totalTokens > 0 ? <Status>{`${tokens(totalTokens)} tokens · ${dollars(total)}`}</Status> : undefined}
 			footer={
 				note ? (
-					<CardFooter caption={<span className="block py-0.5 text-[12px] leading-[18px] text-pretty text-(--text-disabled)">{note}</span>} />
+					<CardFooter caption={<span className="block py-0.5 text-small leading-[18px] text-pretty text-(--text-disabled)">{note}</span>} />
 				) : undefined
 			}
 		>
 			{rows.length === 0 ? (
 				<CardSection ruled={false} className="pt-1">
-					<p className="m-0 text-[12px] text-(--text-tertiary)">{empty}</p>
+					<p className="m-0 text-small text-(--text-tertiary)">{empty}</p>
 				</CardSection>
 			) : (
 				<>
@@ -384,7 +384,7 @@ function Breakdown({
 								sub={`${tokens(row.tokens)} tokens · ${totalTokens ? Math.round((row.tokens / totalTokens) * 100) : 0}%`}
 								share={row.tokens / top}
 								color={DATA_COLORS[index] ?? DATA_COLORS[DATA_COLORS.length - 1]}
-								value={row.cost > 0 || !planOf?.(row.key) ? dollars(row.cost) : <span className="text-[10px] tracking-[0.06em] text-(--accent-text)">PLAN</span>}
+								value={row.cost > 0 || !planOf?.(row.key) ? dollars(row.cost) : <span className="text-nano tracking-[0.06em] text-(--accent-text)">PLAN</span>}
 							/>
 						))}
 						{tail.length ? (
@@ -392,12 +392,12 @@ function Breakdown({
 								type="button"
 								aria-expanded={showAll}
 								onClick={() => setShowAll(!showAll)}
-								className="-mx-2 mt-1 flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[12px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+								className="-mx-2 mt-1 flex h-8 items-center gap-2 rounded-tile px-2 text-left text-small text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 							>
 								<Icon icon={ChevronDown} size={12} className={cn('transition-transform', showAll && 'rotate-180')} />
 								<span className="flex-1">{showAll ? 'Show fewer' : `${tail.length} more under 1% each`}</span>
 								{showAll ? null : (
-									<span className="in-num text-[11px]">
+									<span className="in-num text-micro">
 										{tokens(tail.reduce((sum, row) => sum + row.tokens, 0))} tokens · {dollars(tail.reduce((sum, row) => sum + row.cost, 0))}
 									</span>
 								)}

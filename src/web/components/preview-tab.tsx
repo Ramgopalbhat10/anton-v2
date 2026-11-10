@@ -16,7 +16,7 @@ function PortChip({ preview, active, onSelect }: { preview: Preview; active: boo
 			aria-pressed={active}
 			title={preview.listening ? `Port ${preview.port} is serving` : `Nothing is serving on port ${preview.port}`}
 			className={cn(
-				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-[6px] border px-2 text-[11.5px] outline-none focus-visible:shadow-(--focus-ring)',
+				'in-num flex h-[22px] shrink-0 items-center gap-1.5 rounded-control border px-2 text-small outline-none focus-visible:shadow-(--focus-ring)',
 				active
 					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
 					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
@@ -51,7 +51,7 @@ export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWa
 
 	if (previews.isPending || (starting && !previews.data?.live)) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				{starting ? 'Starting the sandbox' : 'Looking for running servers'}
 			</div>
@@ -72,7 +72,7 @@ export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWa
 						<PortChip key={item.port} preview={item} active={item.port === current.port} onSelect={() => setChosen(item.port)} />
 					))}
 				</Segmented>
-				<div className="in-num flex h-7 min-w-0 flex-auto items-center gap-1.5 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[11.5px] text-(--text-tertiary)">
+				<div className="in-num flex h-7 min-w-0 flex-auto items-center gap-1.5 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-small text-(--text-tertiary)">
 					<Icon icon={Globe} size={12} className={current.listening ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
 					<span className="min-w-0 truncate">{current.url ?? `Port ${current.port} has no public URL`}</span>
 				</div>

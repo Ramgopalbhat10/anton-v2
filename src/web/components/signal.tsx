@@ -140,7 +140,7 @@ export function Avatar({ name, size = 'sm' }: { name: string; size?: 'xs' | 'sm'
 /** Uppercase group label: "RUNNING", "RECENT", "ADD A PANEL". */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
 	return (
-		<div className={cn('text-[11.5px] leading-4 font-medium text-(--text-tertiary)', className)}>
+		<div className={cn('text-small leading-4 font-medium text-(--text-tertiary)', className)}>
 			{children}
 		</div>
 	);
@@ -195,7 +195,7 @@ export function InfoTip({ children, label = 'More about this' }: { children: Rea
 					{...hover}
 					onOpenAutoFocus={(event) => event.preventDefault()}
 					onClick={(event) => event.stopPropagation()}
-					className="in-pop z-50 w-[min(300px,calc(100vw-24px))] px-3 py-2.5 text-[12px] leading-[18px] font-normal tracking-normal text-pretty normal-case text-(--text-secondary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+					className="in-pop z-50 w-[min(300px,calc(100vw-24px))] px-3 py-2.5 text-small leading-[18px] font-normal tracking-normal text-pretty normal-case text-(--text-secondary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
 				>
 					{children}
 				</Popover.Content>
@@ -206,12 +206,12 @@ export function InfoTip({ children, label = 'More about this' }: { children: Rea
 
 /** Small meta text: timestamps, repo/branch facts, counts. */
 export function Meta({ children, className }: { children: ReactNode; className?: string }) {
-	return <span className={cn('text-[11px] tracking-[0.04em] text-(--text-disabled)', className)}>{children}</span>;
+	return <span className={cn('text-micro tracking-[0.04em] text-(--text-disabled)', className)}>{children}</span>;
 }
 
 export function DiffStat({ added, removed }: { added: number; removed: number }) {
 	return (
-		<span className="text-[11px]">
+		<span className="text-micro">
 			<span className="text-(--diff-add-text)">+{added}</span>{' '}
 			<span className={removed ? 'text-(--danger-text)' : 'text-(--text-disabled)'}>-{removed}</span>
 		</span>
@@ -242,8 +242,8 @@ export function EmptyState({
 			<div className={cn('in-well in-grid flex w-full flex-col items-center gap-5 px-6 pt-10 pb-9 text-center', className)}>
 				<div className="flex w-full justify-center">{art}</div>
 				<div className="flex flex-col items-center gap-1">
-					<div className="text-[14px] leading-[21px] font-medium text-(--text-primary)">{title}</div>
-					{body ? <div className="max-w-[48ch] text-[12px] leading-[18px] text-(--text-tertiary)">{body}</div> : null}
+					<div className="text-body-lg leading-[21px] font-medium text-(--text-primary)">{title}</div>
+					{body ? <div className="max-w-[48ch] text-small leading-[18px] text-(--text-tertiary)">{body}</div> : null}
 				</div>
 				{children ? <div className="flex items-center gap-2">{children}</div> : null}
 			</div>
@@ -257,8 +257,8 @@ export function EmptyState({
 				</span>
 			) : null}
 			<div className="flex flex-col gap-1">
-				<div className="text-[14px] leading-[21px] font-medium text-(--text-primary)">{title}</div>
-				{body ? <div className="max-w-[44ch] text-[12px] leading-[18px] text-(--text-tertiary)">{body}</div> : null}
+				<div className="text-body-lg leading-[21px] font-medium text-(--text-primary)">{title}</div>
+				{body ? <div className="max-w-[44ch] text-small leading-[18px] text-(--text-tertiary)">{body}</div> : null}
 			</div>
 			{children ? <div className="flex items-center gap-2">{children}</div> : null}
 		</div>
@@ -308,7 +308,7 @@ export function MenuItem({
 			<span className="sg-menu-item__trail">
 				{checked ? <Icon icon={Check} size={13} className="sg-menu-item__check" /> : null}
 				{/* Last, so counts line up at the right edge whether or not the item is checked. */}
-				{hint !== undefined ? <span className="min-w-4 text-right text-[11px] text-(--text-disabled) tabular-nums">{hint}</span> : null}
+				{hint !== undefined ? <span className="min-w-4 text-right text-micro text-(--text-disabled) tabular-nums">{hint}</span> : null}
 			</span>
 		</MenuPrimitive.Item>
 	);
@@ -336,7 +336,7 @@ export function MenuSubTrigger({
 			) : null}
 			<span className="sg-menu-item__label">{children}</span>
 			<span className="sg-menu-item__trail gap-1.5">
-				{hint ? <span className="text-[12px] text-(--text-tertiary)">{hint}</span> : null}
+				{hint ? <span className="text-small text-(--text-tertiary)">{hint}</span> : null}
 				<Icon icon={ChevronRight} size={13} className="text-(--icon-tertiary)" />
 			</span>
 		</MenuPrimitive.SubTrigger>
@@ -379,13 +379,13 @@ export function PickerChip({
 		<button
 			type="button"
 			className={cn(
-				'flex shrink-0 items-center gap-1.5 rounded-lg bg-(--bg-hover) whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active) data-[state=open]:text-(--text-primary)',
+				'flex shrink-0 items-center gap-1.5 rounded-tile bg-(--bg-hover) whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-active) data-[state=open]:text-(--text-primary)',
 				height === 28 ? 'h-7 px-2.5' : 'h-[26px] px-2',
 			)}
 			{...rest}
 		>
 			<Icon icon={icon} size={12} className="text-(--icon-tertiary)" />
-			<span className="text-[12px]">{label}</span>
+			<span className="text-small">{label}</span>
 			<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary)" />
 		</button>
 	);
@@ -413,7 +413,7 @@ export function Switch({
 			disabled={disabled}
 			onClick={() => onChange(!checked)}
 			className={cn(
-				'flex items-center gap-2 rounded-md text-[13px] text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring) disabled:opacity-50',
+				'flex items-center gap-2 rounded-control text-body text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring) disabled:opacity-50',
 				className,
 			)}
 		>
@@ -457,7 +457,7 @@ const BADGE_TONE = {
 
 /** A short status word on a row: Connected, Default, Failing. */
 export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
-	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
+	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-control px-1.5 text-micro font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
 }
 
 /** A filter that toggles on and off, in a row of them. */
@@ -468,7 +468,7 @@ export function FilterChip({ label, on, onToggle }: { label: string; on: boolean
 			aria-pressed={on}
 			onClick={onToggle}
 			className={cn(
-				'h-[22px] shrink-0 rounded-full px-2 text-[11px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
+				'h-[22px] shrink-0 rounded-full px-2 text-micro transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
 				on
 					? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]'
 					: 'bg-(--alpha-white-4) text-(--text-tertiary) hover:text-(--text-secondary)',

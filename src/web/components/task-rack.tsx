@@ -180,19 +180,19 @@ function TaskDetails({ session }: { session: Session }) {
 						started {age(session.createdAt)} ago
 					</span>
 				</div>
-				<div className="truncate text-[12px] text-(--text-tertiary)" title={session.title}>
+				<div className="truncate text-small text-(--text-tertiary)" title={session.title}>
 					{session.title}
 				</div>
-				<div className="flex flex-col gap-1 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
+				<div className="flex flex-col gap-1 rounded-control border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
 					<div className="flex items-center gap-1.5">
 						<span className="in-caption">{followedUp ? 'Latest input' : 'Input'}</span>
 						<span className="in-caption ml-auto tracking-normal normal-case" title={new Date(latestAt).toLocaleString()}>
 							{age(latestAt)} ago
 						</span>
 					</div>
-					<p className="m-0 line-clamp-3 text-[13px] leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
+					<p className="m-0 line-clamp-3 text-body leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
 				</div>
-				<div className="truncate text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-tertiary)">
 					{repoShort(session)} · {branchLabel(session)}
 				</div>
 			</div>
@@ -235,7 +235,7 @@ export function RackStats({ stats }: { stats: Array<[string, ReactNode]> }) {
 		<div className="grid grid-cols-[auto_auto_minmax(0,1fr)] border-t border-(--border-subtle)">
 			{stats.map(([label, value], i) => (
 				<div key={label} className={`flex min-w-0 flex-col gap-0.5 px-3.5 py-2 ${i ? 'border-l border-(--border-subtle)' : ''}`}>
-					<span className="truncate text-[12.5px] text-(--text-primary)">{value}</span>
+					<span className="truncate text-body text-(--text-primary)">{value}</span>
 					<span className="in-caption">{label}</span>
 				</div>
 			))}
@@ -246,13 +246,13 @@ export function RackStats({ stats }: { stats: Array<[string, ReactNode]> }) {
 /** The follow-up field in a card: a line to type in and a send button. */
 export function FollowUp({ value, onChange, label, submitLabel, disabled }: { value: string; onChange: (value: string) => void; label: string; submitLabel: string; disabled?: boolean }) {
 	return (
-		<div className="flex h-9 items-center gap-2 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) pr-1 pl-3 focus-within:border-(--accent-border)">
+		<div className="flex h-9 items-center gap-2 rounded-control border border-(--border-subtle) bg-(--well-bg) pr-1 pl-3 focus-within:border-(--accent-border)">
 			<input
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				placeholder="Send a follow-up…"
 				aria-label={label}
-				className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+				className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
 			/>
 			<IconBtn icon={ArrowUp} label={submitLabel} size="xs" variant={value.trim() ? 'primary' : 'ghost'} type="submit" disabled={disabled || !value.trim()} />
 		</div>

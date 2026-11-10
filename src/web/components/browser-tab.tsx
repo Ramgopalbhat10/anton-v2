@@ -80,8 +80,8 @@ function Paused({ onResume }: { onResume: () => void }) {
 	return (
 		<div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--bg-inset) px-6 text-center">
 			<Icon icon={Pause} size={16} className="text-(--icon-tertiary)" />
-			<div className="text-[12.5px] text-(--text-primary)">Paused to save browser time</div>
-			<p className="m-0 max-w-[300px] text-[11.5px] text-(--text-tertiary)">Kernel bills the browser while it plays here. Its pages and sign-ins are kept.</p>
+			<div className="text-body text-(--text-primary)">Paused to save browser time</div>
+			<p className="m-0 max-w-[300px] text-small text-(--text-tertiary)">Kernel bills the browser while it plays here. Its pages and sign-ins are kept.</p>
 			<Btn size="sm" variant="primary" onClick={onResume}>
 				Resume
 			</Btn>
@@ -163,13 +163,13 @@ function OpenForm({ sessionId, available }: { sessionId: string; available: bool
 					onChange={(event) => setAddress(event.target.value)}
 					placeholder="Address or search"
 					aria-label="Address to open"
-					className="h-7 min-w-0 flex-1 rounded-lg border border-input bg-(--well-bg) px-2.5 text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder) focus-visible:shadow-(--focus-ring)"
+					className="h-7 min-w-0 flex-1 rounded-tile border border-input bg-(--well-bg) px-2.5 text-small text-(--text-primary) outline-none placeholder:text-(--text-placeholder) focus-visible:shadow-(--focus-ring)"
 				/>
 				<Btn type="submit" size="sm" variant="primary" disabled={open.isPending}>
 					{open.isPending ? 'Opening…' : 'Open browser'}
 				</Btn>
 			</form>
-			{open.isError ? <p className="m-0 text-[12px] text-(--danger-text)">{open.error.message}</p> : null}
+			{open.isError ? <p className="m-0 text-small text-(--danger-text)">{open.error.message}</p> : null}
 		</EmptyState>
 	);
 }
@@ -193,7 +193,7 @@ function AddressBar({ sessionId, view, children }: { sessionId: string; view: No
 			<IconBtn icon={ArrowRight} size="sm" label="Forward" disabled={!page?.canGoForward || go.isPending} onClick={() => go.mutate({ action: 'forward' })} />
 			<IconBtn icon={RotateCw} size="sm" label="Reload" disabled={go.isPending} onClick={() => go.mutate({ action: 'reload' })} className={cn(go.isPending && '[&_svg]:animate-spin')} />
 			<form
-				className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-input bg-(--well-bg) px-2.5 focus-within:shadow-(--focus-ring)"
+				className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-tile border border-input bg-(--well-bg) px-2.5 focus-within:shadow-(--focus-ring)"
 				onSubmit={(event: FormEvent) => {
 					event.preventDefault();
 					if (draft?.trim()) go.mutate({ url: draft });
@@ -209,7 +209,7 @@ function AddressBar({ sessionId, view, children }: { sessionId: string; view: No
 					aria-label="Address"
 					placeholder="Address or search"
 					spellCheck={false}
-					className="in-num min-w-0 flex-1 border-0 bg-transparent p-0 text-[11.5px] text-(--text-secondary) outline-none placeholder:text-(--text-placeholder) focus:text-(--text-primary)"
+					className="in-num min-w-0 flex-1 border-0 bg-transparent p-0 text-small text-(--text-secondary) outline-none placeholder:text-(--text-placeholder) focus:text-(--text-primary)"
 				/>
 			</form>
 			{children}
@@ -337,7 +337,7 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 
 	if (view.isPending) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Checking the browser
 			</div>
@@ -386,7 +386,7 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 				<div className="in-well relative overflow-hidden" style={{ width: size.width, height: size.height }}>
 					{showing ? <LiveView url={browser.liveViewUrl} onPlaying={setPlaying} /> : <Paused onResume={wake} />}
 					{showing && !playing ? (
-						<div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-(--bg-inset) text-[12px] text-(--text-tertiary)">
+						<div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-(--bg-inset) text-small text-(--text-tertiary)">
 							<Spinner size={12} />
 							Connecting to the browser
 						</div>
@@ -410,15 +410,15 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 					) : null}
 					{needsYou ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
-							<span role="status" className="in-pop flex items-center gap-1.5 border-(--warning-border) px-2.5 py-1 text-[11.5px] text-(--warning-text)">
-								<span className="in-pulse size-1.5 rounded-full bg-(--warning-base)" />
+							<span role="status" className="in-pop flex items-center gap-1.5 border-(--attention-border) px-2.5 py-1 text-small text-(--attention-text)">
+								<span className="in-pulse size-1.5 rounded-full bg-(--attention-base)" />
 								{needsYou}
 							</span>
 						</div>
 					) : null}
 					{status || agentNote ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
-							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-(--text-secondary)">
+							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-small text-(--text-secondary)">
 								{agentNote ? <span className="in-pulse size-1.5 rounded-full bg-(--accent-base)" /> : null}
 								{status ?? 'The agent is using this browser'}
 							</span>

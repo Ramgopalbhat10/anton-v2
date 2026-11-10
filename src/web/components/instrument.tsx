@@ -3,11 +3,13 @@ import { Fragment, type ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
+/** `attention` is what waits on you (the accent); `warning` is something off (amber). */
+export type Tone = 'neutral' | 'accent' | 'attention' | 'success' | 'warning' | 'danger';
 
 const TEXT: Record<Tone, string> = {
 	neutral: 'text-(--text-tertiary)',
 	accent: 'text-(--accent-text)',
+	attention: 'text-(--attention-text)',
 	success: 'text-(--success-text)',
 	warning: 'text-(--warning-text)',
 	danger: 'text-(--danger-text)',
@@ -16,6 +18,7 @@ const TEXT: Record<Tone, string> = {
 const FILL: Record<Tone, string> = {
 	neutral: 'var(--text-tertiary)',
 	accent: 'var(--accent-base)',
+	attention: 'var(--attention-base)',
 	success: 'var(--success-base)',
 	warning: 'var(--warning-base)',
 	danger: 'var(--danger-base)',
@@ -85,11 +88,11 @@ export function Card({
 				<header className="flex min-h-12 items-center gap-2.5 px-4 pt-3 pb-2">
 					{icon ? <IconTile icon={icon} /> : null}
 					<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-						<h2 className="m-0 max-w-full shrink-0 truncate text-[13px] leading-[18px] font-medium tracking-[-0.005em] text-(--text-primary)">{title}</h2>
+						<h2 className="m-0 max-w-full shrink-0 truncate text-body leading-[18px] font-medium tracking-[-0.005em] text-(--text-primary)">{title}</h2>
 						{sub ? (
 							<>
-								<span className="text-[12px] text-(--text-disabled)">/</span>
-								<span className="min-w-0 truncate text-[12px] text-(--text-tertiary)">{sub}</span>
+								<span className="text-small text-(--text-disabled)">/</span>
+								<span className="min-w-0 truncate text-small text-(--text-tertiary)">{sub}</span>
 							</>
 						) : null}
 					</div>
@@ -156,7 +159,7 @@ export function Figure({
 	return (
 		<div className={cn('flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5', className)}>
 			<span
-				className={cn('in-figure whitespace-nowrap', size === 'xl' ? 'text-[34px] leading-[38px]' : size === 'lg' ? 'text-[26px] leading-[32px]' : 'text-[18px] leading-[24px]', tone && TEXT[tone])}
+				className={cn('in-figure whitespace-nowrap', size === 'xl' ? 'text-display leading-[38px]' : size === 'lg' ? 'text-h1 leading-[32px]' : 'text-h2 leading-[24px]', tone && TEXT[tone])}
 				aria-label={value}
 			>
 				<span aria-hidden>{whole}</span>
@@ -167,7 +170,7 @@ export function Figure({
 				) : null}
 				{rest ? <span aria-hidden>{rest}</span> : null}
 			</span>
-			{unit ? <span className="in-num text-[12px] whitespace-nowrap text-(--text-tertiary)">{unit}</span> : null}
+			{unit ? <span className="in-num text-small whitespace-nowrap text-(--text-tertiary)">{unit}</span> : null}
 			{note}
 		</div>
 	);
@@ -178,11 +181,12 @@ export function Delta({ tone = 'neutral', children }: { tone?: Tone; children: R
 	const bg: Record<Tone, string> = {
 		neutral: 'bg-(--alpha-white-6)',
 		accent: 'bg-(--accent-bg-subtle)',
+		attention: 'bg-(--attention-bg)',
 		success: 'bg-(--success-bg)',
 		warning: 'bg-(--warning-bg)',
 		danger: 'bg-(--danger-bg)',
 	};
-	return <span className={cn('in-num inline-flex h-5 items-center rounded-md px-1.5 text-[11px] whitespace-nowrap', bg[tone], TEXT[tone])}>{children}</span>;
+	return <span className={cn('in-num inline-flex h-5 items-center rounded-control px-1.5 text-micro whitespace-nowrap', bg[tone], TEXT[tone])}>{children}</span>;
 }
 
 /** Stats side by side, ruled apart: a value over a caption. */
@@ -191,8 +195,8 @@ export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode;
 		<div className={cn('grid border-t border-(--border-subtle)', className)} style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
 			{stats.map((stat, index) => (
 				<div key={index} title={stat.title} className={cn('flex min-w-0 flex-col gap-0.5 px-4 py-3', index > 0 && 'border-l border-(--border-subtle)')}>
-					<span className={cn('in-figure truncate text-[15px] leading-[20px]', !stat.color && stat.tone && TEXT[stat.tone])} style={stat.color ? { color: stat.color } : undefined}>{stat.value}</span>
-					<span className="truncate text-[11px] leading-4 text-(--text-tertiary)">{stat.label}</span>
+					<span className={cn('in-figure truncate text-h3 leading-[20px]', !stat.color && stat.tone && TEXT[stat.tone])} style={stat.color ? { color: stat.color } : undefined}>{stat.value}</span>
+					<span className="truncate text-micro leading-4 text-(--text-tertiary)">{stat.label}</span>
 				</div>
 			))}
 		</div>
@@ -208,7 +212,7 @@ export function SpecGrid({ items, className }: { items: Array<{ label: ReactNode
 					<dt>
 						<Caption>{item.label}</Caption>
 					</dt>
-					<dd className={cn('in-num m-0 truncate text-[12.5px] leading-[18px] text-(--text-primary)', item.tone && TEXT[item.tone])}>{item.value}</dd>
+					<dd className={cn('in-num m-0 truncate text-body leading-[18px] text-(--text-primary)', item.tone && TEXT[item.tone])}>{item.value}</dd>
 				</div>
 			))}
 		</dl>
@@ -315,11 +319,11 @@ export function SegmentMeter({
 			aria-valuemin={0}
 			aria-valuemax={100}
 			aria-valuenow={Math.round(fraction * 100)}
-			className={cn('flex gap-[3px]', live && lit > 0 && 'in-sweep rounded-[2px]')}
+			className={cn('flex gap-[3px]', live && lit > 0 && 'in-sweep rounded-mark')}
 			style={{ height }}
 		>
 			{Array.from({ length: segments }, (_, index) => (
-				<span key={index} className="min-w-0 flex-1 rounded-[2px]" style={{ background: index < lit ? FILL[tone] : 'var(--segment-off)' }} />
+				<span key={index} className="min-w-0 flex-1 rounded-mark" style={{ background: index < lit ? FILL[tone] : 'var(--segment-off)' }} />
 			))}
 		</div>
 	);
@@ -335,16 +339,16 @@ export function SplitBar({ parts, label, legend = true, format }: { parts: Part[
 		<div className="flex flex-col gap-2.5">
 			<div role="img" aria-label={label} className="flex h-2.5 gap-[3px]">
 				{total > 0 ? (
-					shown.map((part) => <span key={part.key} className="min-w-[3px] rounded-[2px]" style={{ flexGrow: part.value, flexBasis: 0, background: part.color }} title={part.label} />)
+					shown.map((part) => <span key={part.key} className="min-w-[3px] rounded-mark" style={{ flexGrow: part.value, flexBasis: 0, background: part.color }} title={part.label} />)
 				) : (
-					<span className="flex-1 rounded-[2px] bg-(--segment-off)" />
+					<span className="flex-1 rounded-mark bg-(--segment-off)" />
 				)}
 			</div>
 			{legend ? (
 				<div className="flex flex-wrap gap-x-4 gap-y-1">
 					{parts.map((part) => (
-						<span key={part.key} className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
-							<span className="size-2 shrink-0 rounded-[2px]" style={{ background: part.color }} />
+						<span key={part.key} className="inline-flex min-w-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
+							<span className="size-2 shrink-0 rounded-mark" style={{ background: part.color }} />
 							<span className="truncate">{part.label}</span>
 							<span className="in-num text-(--text-secondary)">{format ? format(part, total ? part.value / total : 0) : part.value}</span>
 						</span>
@@ -360,13 +364,13 @@ export function ShareRow({ label, sub, share, value, color = 'var(--accent-base)
 	return (
 		<div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-1.5 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto]">
 			<div className="flex min-w-0 flex-col">
-				<span className="truncate text-[12px] text-(--text-primary)">{label}</span>
-				{sub ? <span className="in-num truncate text-[11px] text-(--text-disabled)">{sub}</span> : null}
+				<span className="truncate text-small text-(--text-primary)">{label}</span>
+				{sub ? <span className="in-num truncate text-micro text-(--text-disabled)">{sub}</span> : null}
 			</div>
 			<div className="order-last col-span-2 h-1.5 overflow-hidden rounded-full bg-(--segment-off) sm:order-none sm:col-span-1">
 				<div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, share * 100))}%`, background: color }} />
 			</div>
-			<span className="in-num text-right text-[12px] whitespace-nowrap text-(--text-secondary)">{value}</span>
+			<span className="in-num text-right text-small whitespace-nowrap text-(--text-secondary)">{value}</span>
 		</div>
 	);
 }
@@ -399,6 +403,7 @@ export function Facts({ items, className }: { items: ReactNode[]; className?: st
 const CHIP: Record<Tone, string> = {
 	neutral: 'text-(--text-secondary)',
 	accent: 'text-(--accent-text) border-(--accent-border)',
+	attention: 'text-(--attention-text) border-(--attention-border)',
 	success: 'text-(--success-text) border-(--success-border)',
 	warning: 'text-(--warning-text) border-(--warning-border)',
 	danger: 'text-(--danger-text) border-(--danger-border)',
@@ -432,8 +437,8 @@ export function Chip({
 		<span
 			title={title}
 			className={cn(
-				'inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-[11px] leading-none whitespace-nowrap',
-				mono && 'in-num text-[10.5px]',
+				'inline-flex h-5 shrink-0 items-center gap-1 rounded-control border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-micro leading-none whitespace-nowrap',
+				mono && 'in-num text-micro',
 				CHIP[tone],
 				className,
 			)}
@@ -450,7 +455,7 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 	return (
 		<span
 			className={cn(
-				'in-num inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px]',
+				'in-num inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-micro',
 				tone === 'accent' ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'bg-(--alpha-white-6) text-(--text-tertiary)',
 				className,
 			)}
@@ -463,7 +468,7 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 /** The well a segmented control sits in; its items are `SegmentedItem`s. */
 export function Segmented({ children, label, className, role = 'tablist' }: { children: ReactNode; label: string; className?: string; role?: 'tablist' | 'radiogroup' | 'group' }) {
 	return (
-		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-[6px] border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
+		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-control border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
 			{children}
 		</div>
 	);
@@ -496,8 +501,8 @@ export function SegmentedItem({
 			title={title}
 			onClick={onClick}
 			className={cn(
-				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[6px] border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
-				size === 'sm' ? 'h-[22px] px-2 text-[11px]' : 'h-7 px-3 text-[12.5px]',
+				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-control border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				size === 'sm' ? 'h-[22px] px-2 text-micro' : 'h-7 px-3 text-body',
 				on
 					? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--text-primary) shadow-(--card-highlight)'
 					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
@@ -524,7 +529,7 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 			{Array.from({ length: blocks }, (_, index) => (
 				<span
 					key={index}
-					className="size-[7px] rounded-[2px]"
+					className="size-[7px] rounded-mark"
 					style={{ background: index < green ? 'var(--diff-add-base)' : index < green + red ? 'var(--diff-remove-base)' : 'var(--segment-off)' }}
 				/>
 			))}
@@ -536,9 +541,9 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 export function PathName({ path, className, active }: { path: string; className?: string; active?: boolean }) {
 	const slash = path.lastIndexOf('/');
 	return (
-		<span className={cn('flex min-w-0 items-baseline gap-1.5 text-[12px]', className)} title={path}>
+		<span className={cn('flex min-w-0 items-baseline gap-1.5 text-small', className)} title={path}>
 			<span className={cn('shrink-0 truncate', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
-			{slash > 0 ? <span className="min-w-0 truncate text-[11px] text-(--text-disabled)">{path.slice(0, slash)}</span> : null}
+			{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-disabled)">{path.slice(0, slash)}</span> : null}
 		</span>
 	);
 }

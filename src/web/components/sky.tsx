@@ -126,7 +126,7 @@ export function SkyBrightnessSlider({ className }: { className?: string }) {
 	const word = value < 25 ? 'Faint' : value < 50 ? 'Dim' : value <= 70 ? 'As drawn' : value < 90 ? 'Bright' : 'Vivid';
 	return (
 		<div className={cn('flex flex-col gap-1.5', className)}>
-			<div className="flex items-center justify-between text-[12px]">
+			<div className="flex items-center justify-between text-small">
 				<label htmlFor={id} className="text-(--text-secondary)">
 					Brightness
 				</label>

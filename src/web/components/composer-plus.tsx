@@ -44,8 +44,8 @@ function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: Co
 			hint={waiting ? <Icon icon={TriangleAlert} size={13} className="text-(--warning-text)" /> : <RowSwitch on={item.state === 'on'} />}
 		>
 			<span className="flex min-w-0 items-center gap-2">
-				<MarkTile mark={mark} size={18} className="rounded-[6px]" />
-				<span className={cn('truncate', item.kind === 'mcp' && name === item.name && 'text-[12.5px]')}>{name}</span>
+				<MarkTile mark={mark} size={18} className="rounded-control" />
+				<span className={cn('truncate', item.kind === 'mcp' && name === item.name && 'text-body')}>{name}</span>
 			</span>
 		</MenuItem>
 	);
@@ -77,7 +77,7 @@ function RunOnMenu({ run }: { run: RunChoice }) {
 					This server
 				</MenuItem>
 				<MenuSeparator />
-				<p className="m-0 px-2 pt-0.5 pb-1 text-[11px] leading-[15px] text-pretty text-(--text-tertiary)">
+				<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-tertiary)">
 					{run.locked ??
 						run.note ??
 						"This server runs the task's commands in a folder on the machine Anton runs on, from its address. It is not isolated from that machine, so keep it for tasks you trust."}
@@ -118,8 +118,8 @@ function ArtifactRow({ artifact, added, onAdd }: { artifact: Artifact; added: bo
 			<span className="flex min-w-0 items-start gap-2">
 				<Icon icon={info.icon} size={14} className={cn('mt-0.5 shrink-0', info.tone)} />
 				<span className="flex min-w-0 flex-col gap-0.5">
-					<span className="truncate text-[13px] leading-[17px]">{artifact.title}</span>
-					<span className="truncate text-[11px] leading-[14px] text-(--text-tertiary)">
+					<span className="truncate text-body leading-[17px]">{artifact.title}</span>
+					<span className="truncate text-micro leading-[14px] text-(--text-tertiary)">
 						{detail} · {age(new Date(artifact.mtimeMs).toISOString())}
 					</span>
 				</span>
@@ -151,7 +151,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 			setProblem(error instanceof Error ? error.message : String(error));
 		}
 	};
-	const note = (text: string) => <p className="m-0 px-2 py-1.5 text-[12px] leading-[16px] text-pretty text-(--text-tertiary)">{text}</p>;
+	const note = (text: string) => <p className="m-0 px-2 py-1.5 text-small leading-[16px] text-pretty text-(--text-tertiary)">{text}</p>;
 	return (
 		<MenuSub
 			open={open}
@@ -176,7 +176,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 							}}
 							placeholder="Search files"
 							aria-label="Search artifacts"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
 						/>
 					</div>
 				) : null}
@@ -202,7 +202,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 						</MenuGroup>
 					) : null}
 				</div>
-				{problem ? <p className="m-0 border-t border-(--border-subtle) px-3 py-1.5 text-[11px] leading-[15px] text-(--danger-text)">{problem}</p> : null}
+				{problem ? <p className="m-0 border-t border-(--border-subtle) px-3 py-1.5 text-micro leading-[15px] text-(--danger-text)">{problem}</p> : null}
 			</MenuSubContent>
 		</MenuSub>
 	);
@@ -278,7 +278,7 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 								<ConnectorRow key={item.key} item={item} onPick={pick} />
 							))}
 							<MenuSeparator />
-							<p className="m-0 px-2 pt-0.5 pb-1 text-[11px] leading-[15px] text-pretty text-(--text-tertiary)">
+							<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-tertiary)">
 								{problem ?? 'On for every task. Tools load only when a task uses them, so nothing is spent until then.'}
 							</p>
 						</MenuSubContent>

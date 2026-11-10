@@ -7,7 +7,7 @@ import type { HelperAgent, Reasoning } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export const FIELD =
-	'h-8 min-w-0 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+	'h-8 min-w-0 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
 
 /** A title with its info icon beside it, when there is more to say than its one line. */
 function Titled({ children, info }: { children: ReactNode; info?: ReactNode }) {
@@ -25,11 +25,11 @@ export function PageHeading({ title, children, info, actions }: { title: string;
 	return (
 		<div className="flex flex-wrap items-start gap-4">
 			<div className="flex min-w-0 flex-1 basis-[280px] flex-col gap-1.5">
-				<h1 className="m-0 flex min-w-0 items-center gap-2 text-[22px] leading-[28px] font-semibold tracking-[-0.02em]">
+				<h1 className="m-0 flex min-w-0 items-center gap-2 text-h1 leading-[28px] font-semibold tracking-[-0.02em]">
 					<span className="min-w-0 truncate">{title}</span>
 					{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
 				</h1>
-				{children ? <p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">{children}</p> : null}
+				{children ? <p className="m-0 max-w-[72ch] text-body leading-[20px] text-pretty text-(--text-tertiary)">{children}</p> : null}
 			</div>
 			{actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
 		</div>
@@ -71,11 +71,11 @@ export function Block({
 			<header className="flex min-h-7 items-end gap-3 px-0.5">
 				{mark ? <span className="shrink-0 self-center">{mark}</span> : null}
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h2 className="m-0 flex min-w-0 items-center gap-1.5 text-[13.5px] leading-[20px] font-medium tracking-[-0.005em]">
+					<h2 className="m-0 flex min-w-0 items-center gap-1.5 text-body-lg leading-[20px] font-medium tracking-[-0.005em]">
 						<span className="min-w-0 truncate">{title}</span>
 						{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
 					</h2>
-					{help ? <p className="m-0 max-w-[76ch] text-[12.5px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
+					{help ? <p className="m-0 max-w-[76ch] text-body leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
 				</div>
 				{aside ? <div className="flex shrink-0 items-center gap-2 self-center">{aside}</div> : null}
 			</header>
@@ -99,7 +99,7 @@ export function SubBlock({ label, help, info, children }: { label?: string; help
 					{info ? <InfoTip label={`About ${label}`}>{info}</InfoTip> : null}
 				</SectionLabel>
 			) : null}
-			{help ? <p className="m-0 max-w-[76ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
+			{help ? <p className="m-0 max-w-[76ch] text-small leading-[18px] text-pretty text-(--text-tertiary)">{help}</p> : null}
 			{children}
 		</div>
 	);
@@ -108,7 +108,7 @@ export function SubBlock({ label, help, info, children }: { label?: string; help
 /** A line of explanation in a card, with the rest behind an info icon at its end. */
 export function Note({ children, info, className }: { children: ReactNode; info?: ReactNode; className?: string }) {
 	return (
-		<p className={cn('m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)', className)}>
+		<p className={cn('m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--text-tertiary)', className)}>
 			{children}
 			{info ? (
 				<>
@@ -138,10 +138,10 @@ export function SettingRow({ title, help, info, children }: { title: ReactNode; 
 	return (
 		<div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--border-subtle) py-3 first:border-t-0 first:pt-0.5 last:pb-0.5">
 			<div className="flex min-w-0 flex-1 basis-[200px] flex-col gap-0.5">
-				<div className="text-[13px] font-medium">
+				<div className="text-body font-medium">
 					<Titled info={info}>{title}</Titled>
 				</div>
-				{help ? <div className="max-w-[68ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{help}</div> : null}
+				{help ? <div className="max-w-[68ch] text-small leading-[18px] text-pretty text-(--text-tertiary)">{help}</div> : null}
 			</div>
 			<div className="ml-auto flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
 		</div>
@@ -199,7 +199,7 @@ export function HelperModel({
 					side="bottom"
 				/>
 			) : (
-				<span className="text-[12px] text-(--text-tertiary)">{fallbackLabel}</span>
+				<span className="text-small text-(--text-tertiary)">{fallbackLabel}</span>
 			)}
 			<Switch
 				checked={value !== null}
@@ -219,10 +219,10 @@ export function size(bytes: number): string {
 
 /** Inline result of a save: saving, saved, or what went wrong. */
 export function SaveState({ pending, success, error, saved = 'Saved.' }: { pending: boolean; success: boolean; error: Error | null; saved?: string }) {
-	if (error) return <span className="text-[12px] text-(--danger-text)">{error.message}</span>;
+	if (error) return <span className="text-small text-(--danger-text)">{error.message}</span>;
 	if (success && !pending)
 		return (
-			<span className="inline-flex items-center gap-1.5 text-[12px] text-(--success-text)">
+			<span className="inline-flex items-center gap-1.5 text-small text-(--success-text)">
 				<span className="size-1.5 shrink-0 rounded-full bg-(--success-base)" />
 				{saved}
 			</span>
@@ -262,7 +262,7 @@ export function Select<T extends string | number | null>({
 					<button
 						type="button"
 						aria-label={label}
-						className="flex h-8 items-center gap-2 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-left text-[13px] whitespace-nowrap text-(--text-primary) outline-none hover:border-(--border-default) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong)"
+						className="flex h-8 items-center gap-2 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-left text-body whitespace-nowrap text-(--text-primary) outline-none hover:border-(--border-default) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong)"
 					>
 						<Icon icon={icon} size={12} className="text-(--icon-tertiary)" />
 						<span className="min-w-0 flex-1 truncate">{current?.label ?? fallback}</span>
@@ -277,7 +277,7 @@ export function Select<T extends string | number | null>({
 					))}
 				</MenuContent>
 			</Menu>
-			{help ? <div className="text-[12px] text-pretty text-(--text-disabled)">{help}</div> : null}
+			{help ? <div className="text-small text-pretty text-(--text-disabled)">{help}</div> : null}
 		</div>
 	);
 }

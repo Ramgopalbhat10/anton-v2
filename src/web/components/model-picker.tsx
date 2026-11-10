@@ -76,7 +76,7 @@ export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: numbe
 		<span
 			aria-hidden
 			title={model.vendor}
-			className="relative inline-flex shrink-0 items-center justify-center rounded-[6px] font-semibold uppercase"
+			className="relative inline-flex shrink-0 items-center justify-center rounded-control font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -103,7 +103,7 @@ export function ModelLogo({ model, size = 16, title }: { model: string; size?: n
 		<span
 			aria-hidden={title ? undefined : true}
 			title={title}
-			className="inline-flex shrink-0 items-center justify-center rounded-[6px] font-semibold uppercase"
+			className="inline-flex shrink-0 items-center justify-center rounded-control font-semibold uppercase"
 			style={
 				logo
 					? { width: size, height: size, fontSize: Math.round(size * 0.68), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
@@ -154,7 +154,7 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
 				{scale.map((level, index) => (
 					<span
 						key={level}
-						className="w-[3px] rounded-[1px]"
+						className="w-[3px] rounded-mark"
 						style={{
 							height: `${25 + (index / (scale.length - 1)) * 75}%`,
 							background: level === preferred ? 'var(--accent-base)' : levels.includes(level) ? 'var(--text-tertiary)' : 'var(--segment-off)',
@@ -162,7 +162,7 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
 					/>
 				))}
 			</span>
-			<span className="in-num text-[11px] whitespace-nowrap text-(--text-tertiary)">
+			<span className="in-num text-micro whitespace-nowrap text-(--text-tertiary)">
 				{REASONING_LABEL[on[0]].toLowerCase()} – {REASONING_LABEL[on[on.length - 1]].toLowerCase()}
 			</span>
 		</span>
@@ -184,12 +184,12 @@ const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-c
 function PriceCells({ model }: { model: ModelInfo }) {
 	if (model.subscription) return <span className="col-span-2" />;
 	if (model.price.input === 0 && model.price.output === 0) {
-		return <span className="col-span-2 text-right text-[9.5px] tracking-[0.06em] text-(--success-text)">FREE</span>;
+		return <span className="col-span-2 text-right text-nano tracking-[0.06em] text-(--success-text)">FREE</span>;
 	}
 	return (
 		<>
-			<span className="in-num text-right text-[10.5px] text-(--text-tertiary)">{dollars(model.price.input)}</span>
-			<span className="in-num text-right text-[10.5px] text-(--text-secondary)">{dollars(model.price.output)}</span>
+			<span className="in-num text-right text-micro text-(--text-tertiary)">{dollars(model.price.input)}</span>
+			<span className="in-num text-right text-micro text-(--text-secondary)">{dollars(model.price.output)}</span>
 		</>
 	);
 }
@@ -238,11 +238,11 @@ function ModelRow({
 			onClick={onPick}
 			onMouseMove={onHover}
 			title={about(model)}
-			className={cn(COLUMNS, 'group/row h-8 w-full cursor-default rounded-[6px] text-left outline-none data-active:bg-(--bg-hover)')}
+			className={cn(COLUMNS, 'group/row h-8 w-full cursor-default rounded-control text-left outline-none data-active:bg-(--bg-hover)')}
 		>
 			<ModelMark model={model} />
 			<span className="flex min-w-0 items-center gap-1">
-				<span className={cn('min-w-0 truncate text-[12.5px]', selected ? 'text-(--accent-text)' : 'text-(--text-primary)')}>{shortName(model)}</span>
+				<span className={cn('min-w-0 truncate text-body', selected ? 'text-(--accent-text)' : 'text-(--text-primary)')}>{shortName(model)}</span>
 				<button
 					type="button"
 					aria-label={`${pinned ? 'Unpin' : 'Pin'} ${model.name}`}
@@ -253,7 +253,7 @@ function ModelRow({
 						onPin();
 					}}
 					className={cn(
-						'inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] outline-none transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-6) focus-visible:opacity-100 focus-visible:shadow-(--focus-ring)',
+						'inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-6) focus-visible:opacity-100 focus-visible:shadow-(--focus-ring)',
 						pinned ? 'text-(--accent-text) opacity-100' : 'text-(--icon-tertiary) opacity-0 group-hover/row:opacity-100 group-data-active/row:opacity-100',
 					)}
 				>
@@ -262,7 +262,7 @@ function ModelRow({
 				{routing}
 			</span>
 			{priced ? null : <span className="col-span-2" />}
-			<span className="in-num text-right text-[10.5px] text-(--text-disabled)">{tokens(model.contextLength)}</span>
+			<span className="in-num text-right text-micro text-(--text-disabled)">{tokens(model.contextLength)}</span>
 			{priced ? <PriceCells model={model} /> : null}
 			<span className="flex justify-end text-(--accent-text)">{selected ? <Icon icon={Check} size={12} /> : null}</span>
 		</div>
@@ -276,7 +276,7 @@ function ModelRow({
  */
 export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; value: Reasoning; onChange: (level: Reasoning) => void }) {
 	const row = useRef<HTMLDivElement>(null);
-	if (!model?.reasoning.length) return <span className="text-[11px] text-(--text-disabled)">No reasoning step</span>;
+	if (!model?.reasoning.length) return <span className="text-micro text-(--text-disabled)">No reasoning step</span>;
 	const levels = model.reasoning;
 	const chosen = Math.max(0, levels.indexOf(value));
 
@@ -322,7 +322,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 						key={level}
 						onClick={() => onChange(level)}
 						title={isDefault ? "The model's default" : undefined}
-						className="group/level flex min-w-0 flex-col items-stretch gap-1 rounded-[6px] pt-1 pb-0.5 outline-none focus-visible:shadow-(--focus-ring)"
+						className="group/level flex min-w-0 flex-col items-stretch gap-1 rounded-control pt-1 pb-0.5 outline-none focus-visible:shadow-(--focus-ring)"
 					>
 						<span aria-hidden className="flex h-5 items-end justify-around px-[3px]">
 							{Array.from({ length: PER }, (_, tick) => {
@@ -342,7 +342,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 						</span>
 						<span
 							className={cn(
-								'flex items-center justify-center gap-1 truncate text-[9.5px] tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
+								'flex items-center justify-center gap-1 truncate text-nano tracking-[0.04em] uppercase transition-colors duration-(--duration-micro)',
 								index === chosen ? 'text-(--text-primary)' : 'text-(--text-disabled) group-hover/level:text-(--text-secondary)',
 							)}
 						>
@@ -377,7 +377,7 @@ export function ContextRuler({ options, onChange }: { options: ModelOptions; onC
 		onChange(sizes[Math.min(sizes.length - 1, Math.max(0, chosen + step))].tag);
 	}
 	return (
-		<div role="radiogroup" aria-label="Context window" onKeyDown={onKeyDown} className="inline-flex shrink-0 gap-0.5 rounded-[6px] bg-(--alpha-white-6) p-0.5">
+		<div role="radiogroup" aria-label="Context window" onKeyDown={onKeyDown} className="inline-flex shrink-0 gap-0.5 rounded-control bg-(--alpha-white-6) p-0.5">
 			{sizes.map((size, index) => {
 				const on = index === chosen;
 				const lit = Math.max(1, Math.round((size.tokens / largest) * TICKS));
@@ -391,11 +391,11 @@ export function ContextRuler({ options, onChange }: { options: ModelOptions; onC
 						onClick={() => onChange(size.tag)}
 						title={size.tag ? `Up to ${tokens(size.tokens)} tokens of context` : `The standard ${tokens(size.tokens)} window`}
 						className={cn(
-							'group/size flex flex-col items-start gap-[3px] rounded-[6px] px-2 pt-[3px] pb-1 outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+							'group/size flex flex-col items-start gap-[3px] rounded-control px-2 pt-[3px] pb-1 outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 							on ? 'bg-(--neutral-700) shadow-[inset_0_0_0_1px_var(--border-subtle)]' : 'hover:bg-(--alpha-white-6)',
 						)}
 					>
-						<span className={cn('in-num text-[10.5px] leading-none', on ? 'text-(--text-primary)' : 'text-(--text-tertiary) group-hover/size:text-(--text-secondary)')}>
+						<span className={cn('in-num text-micro leading-none', on ? 'text-(--text-primary)' : 'text-(--text-tertiary) group-hover/size:text-(--text-secondary)')}>
 							{tokens(size.tokens)}
 						</span>
 						<span aria-hidden className="flex h-[5px] items-end gap-[2px]">
@@ -428,7 +428,7 @@ export function FastToggle({ on, note, onChange }: { on: boolean; note?: string;
 			title={note}
 			onClick={() => onChange(!on)}
 			className={cn(
-				'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] pr-1.5 pl-2 text-[11.5px] outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+				'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-control pr-1.5 pl-2 text-small outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 				on ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'text-(--text-tertiary) hover:bg-(--alpha-white-6) hover:text-(--text-secondary)',
 			)}
 		>
@@ -458,7 +458,7 @@ function ProviderFilter({
 }) {
 	const picked = providers.filter((entry) => chosen.has(entry.vendor));
 	return (
-		<span className={cn('flex shrink-0 items-center rounded-[6px]', picked.length && 'bg-(--accent-bg-subtle)')}>
+		<span className={cn('flex shrink-0 items-center rounded-control', picked.length && 'bg-(--accent-bg-subtle)')}>
 			<Menu>
 				<MenuTrigger asChild>
 					<button
@@ -466,7 +466,7 @@ function ProviderFilter({
 						aria-label={picked.length ? `Providers: ${picked.map((entry) => entry.vendor).join(', ')}` : 'Filter by provider'}
 						title={picked.length ? picked.map((entry) => entry.vendor).join(', ') : 'Filter by provider'}
 						className={cn(
-							'inline-flex h-7 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
+							'inline-flex h-7 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
 							picked.length ? 'gap-1 pr-1 pl-1.5' : 'w-7',
 						)}
 					>
@@ -474,12 +474,12 @@ function ProviderFilter({
 							<>
 								<span className="flex items-center">
 									{picked.slice(0, 3).map((entry, index) => (
-										<span key={entry.vendor} className={cn('flex rounded-[6px] shadow-[0_0_0_1.5px_var(--pop-bg)]', index > 0 && '-ml-1')}>
+										<span key={entry.vendor} className={cn('flex rounded-control shadow-[0_0_0_1.5px_var(--pop-bg)]', index > 0 && '-ml-1')}>
 											<ModelMark model={{ ...entry.model, subscription: undefined }} size={15} />
 										</span>
 									))}
 								</span>
-								{picked.length > 3 ? <span className="in-num text-[10px] text-(--accent-text)">+{picked.length - 3}</span> : null}
+								{picked.length > 3 ? <span className="in-num text-nano text-(--accent-text)">+{picked.length - 3}</span> : null}
 							</>
 						) : (
 							<Icon icon={Boxes} size={13} />
@@ -493,7 +493,7 @@ function ProviderFilter({
 							<button
 								type="button"
 								onClick={onClear}
-								className="rounded-[6px] px-1.5 py-0.5 text-[11px] text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+								className="rounded-control px-1.5 py-0.5 text-micro text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 							>
 								Clear {picked.length}
 							</button>
@@ -524,7 +524,7 @@ function ProviderFilter({
 					aria-label="Clear the provider filter"
 					title="Clear"
 					onClick={onClear}
-					className="inline-flex size-6 items-center justify-center rounded-[6px] text-(--accent-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+					className="inline-flex size-6 items-center justify-center rounded-control text-(--accent-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={X} size={11} />
 				</button>
@@ -571,7 +571,7 @@ function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; n
 			{options.contexts.length > 1 ? (
 				<ContextRuler options={options} onChange={(context) => onChange({ context })} />
 			) : (
-				<span className="in-num text-[11px] text-(--text-tertiary)">{tokens(options.contexts[0].tokens)}</span>
+				<span className="in-num text-micro text-(--text-tertiary)">{tokens(options.contexts[0].tokens)}</span>
 			)}
 			<span className="flex-1" />
 			{options.fast ? <FastToggle on={options.chosen.fast} note={note} onChange={(fast) => onChange({ fast })} /> : null}
@@ -768,23 +768,23 @@ export const ModelPicker = memo(function ModelPicker({
 					aria-label="Model and reasoning"
 					title={selected?.subscription ? `${selected.name}, on your ${selected.subscription} plan` : undefined}
 					className={cn(
-						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-lg bg-(--bg-overlay) pr-1.5 pl-1 whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-tile bg-(--bg-overlay) pr-1.5 pl-1 whitespace-nowrap text-(--text-secondary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
 						height === 28 ? 'h-7' : 'h-[26px]',
 					)}
 				>
 					{selected ? <ModelMark model={selected} size={height - 10} /> : <Spinner size={12} tone="neutral" />}
-					<span className="min-w-0 truncate text-[12px]">{shown ? shortName(shown) : 'Model'}</span>
+					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : 'Model'}</span>
 					{options?.chosen.context ? (
-						<span className="in-num rounded-[6px] bg-(--alpha-white-6) px-1 py-px text-[10px] text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
+						<span className="in-num rounded-control bg-(--alpha-white-6) px-1 py-px text-nano text-(--text-secondary)" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
 						</span>
 					) : null}
 					{options?.chosen.fast ? <Icon icon={Zap} size={11} className="text-(--accent-text) [&_path]:fill-current" /> : null}
 					{routed && route ? <RouteBadge model={routed} route={route} size={height - 12} /> : null}
 					{effort && selected?.reasoning.length ? (
-						<span className="flex items-center gap-1 rounded-[6px] bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
+						<span className="flex items-center gap-1 rounded-control bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
-							<span className="text-[10px] text-(--text-tertiary)">{REASONING_LABEL[reasoning]}</span>
+							<span className="text-nano text-(--text-tertiary)">{REASONING_LABEL[reasoning]}</span>
 						</span>
 					) : null}
 					<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary)" />
@@ -810,7 +810,7 @@ export const ModelPicker = memo(function ModelPicker({
 							}}
 							placeholder="Search models"
 							aria-label="Search models"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
 						/>
 						{models.isPending ? null : <Count>{browsing && vendors.size === 0 ? fromSource.length : `${matching.length}/${fromSource.length}`}</Count>}
 						{providers.length > 1 ? (
@@ -830,7 +830,7 @@ export const ModelPicker = memo(function ModelPicker({
 									type="button"
 									aria-label="Source, filters and sort"
 									className={cn(
-										'relative inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
+										'relative inline-flex size-7 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--bg-hover)',
 										narrowed && 'text-(--accent-text)',
 									)}
 								>
@@ -891,7 +891,7 @@ export const ModelPicker = memo(function ModelPicker({
 					<div ref={list} role="listbox" aria-label="Models" className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
 						{/* One line for every plan not signed in to, so they do not push the models off a phone's screen. */}
 						{unconnected.length ? (
-							<p className="m-0 mx-1 mt-1.5 flex items-start gap-2 px-1 py-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+							<p className="m-0 mx-1 mt-1.5 flex items-start gap-2 px-1 py-1 text-micro leading-[15px] text-(--text-tertiary)">
 								<span className="mt-[4.5px] size-1.5 shrink-0 rounded-full border border-(--neutral-600)" />
 								<span>
 									{new Intl.ListFormat('en', { type: 'conjunction' }).format(unconnected.map((entry) => entry.name))} {unconnected.length === 1 ? 'is' : 'are'} not
@@ -900,14 +900,14 @@ export const ModelPicker = memo(function ModelPicker({
 							</p>
 						) : null}
 						{models.isPending ? (
-							<div className="flex h-16 items-center justify-center gap-2 text-[12px] text-(--text-tertiary)">
+							<div className="flex h-16 items-center justify-center gap-2 text-small text-(--text-tertiary)">
 								<Spinner size={12} />
 								Loading models
 							</div>
 						) : models.isError ? (
-							<div className="px-2 py-4 text-[12px] text-(--danger-text)">Could not load models: {models.error.message}</div>
+							<div className="px-2 py-4 text-small text-(--danger-text)">Could not load models: {models.error.message}</div>
 						) : flat.length === 0 ? (
-							unconnected.length ? null : <div className="px-2 py-6 text-center text-[12px] text-(--text-tertiary)">No models match.</div>
+							unconnected.length ? null : <div className="px-2 py-6 text-center text-small text-(--text-tertiary)">No models match.</div>
 						) : (
 							sections.map((section) => {
 								const start = offset;
@@ -919,7 +919,7 @@ export const ModelPicker = memo(function ModelPicker({
 											<span className="col-span-2 flex min-w-0 items-center gap-1.5">
 												{section.plan ? <span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" /> : null}
 												<span className={cn('in-caption truncate', section.plan && 'text-(--accent-text)')}>{section.title}</span>
-												<span className="in-num text-[10px] text-(--text-disabled)">{section.total}</span>
+												<span className="in-num text-nano text-(--text-disabled)">{section.total}</span>
 											</span>
 											{priced ? null : <span className="col-span-2" />}
 											<span className="in-caption text-right" title="Context window, in tokens">

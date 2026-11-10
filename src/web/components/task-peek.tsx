@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 export const TONE: Record<Tone, string> = {
 	accent: 'text-(--accent-text)',
+	attention: 'text-(--attention-text)',
 	success: 'text-(--success-text)',
 	warning: 'text-(--warning-text)',
 	danger: 'text-(--danger-text)',
@@ -23,9 +24,9 @@ const CHECKS = { passed: 'checks pass', failed: 'checks failing', pending: 'chec
 /** A fact as a spec-sheet row: what it is on the left, its value on the right. */
 function Fact({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
 	return (
-		<div className="flex min-h-7 items-center gap-3 border-t border-(--border-subtle) text-[12px] first:border-t-0">
+		<div className="flex min-h-7 items-center gap-3 border-t border-(--border-subtle) text-small first:border-t-0">
 			<span className="shrink-0 text-(--text-tertiary)">{label}</span>
-			<span className={cn('flex min-w-0 flex-1 justify-end truncate text-right text-(--text-secondary)', mono && 'in-num text-[11.5px]')}>{children}</span>
+			<span className={cn('flex min-w-0 flex-1 justify-end truncate text-right text-(--text-secondary)', mono && 'in-num text-small')}>{children}</span>
 		</div>
 	);
 }
@@ -50,18 +51,18 @@ function Peek({ session }: { session: Session }) {
 					<TaskStatusIcon session={session} size={13} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</div>
-					{note && !note.pullRequest ? <div className={cn('text-[12px]', TONE[note.tone])}>{note.text}</div> : null}
+					<div className="line-clamp-2 text-body leading-[18px] font-medium text-(--text-primary)">{session.title}</div>
+					{note && !note.pullRequest ? <div className={cn('text-small', TONE[note.tone])}>{note.text}</div> : null}
 				</div>
 			</div>
 			{session.errorMessage ? (
-				<div className="flex gap-1.5 rounded-lg bg-(--danger-bg) px-2.5 py-2 text-[12px] leading-[17px] text-(--danger-text)">
+				<div className="flex gap-1.5 rounded-tile bg-(--danger-bg) px-2.5 py-2 text-small leading-[17px] text-(--danger-text)">
 					<Icon icon={CircleAlert} size={13} className="mt-0.5" />
 					<span className="line-clamp-4 min-w-0">{session.errorMessage}</span>
 				</div>
 			) : null}
 			{session.planMode ? (
-				<div className="flex items-center gap-1.5 text-[12px] text-(--warning-text)">
+				<div className="flex items-center gap-1.5 text-small text-(--attention-text)">
 					<Icon icon={ClipboardList} size={13} />
 					Plan mode: changes nothing until you approve its plan
 				</div>
@@ -70,7 +71,7 @@ function Peek({ session }: { session: Session }) {
 				{stats.map((stat) => (
 					<div key={stat.label} title={stat.title} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
 						<dt className="in-caption">{stat.label}</dt>
-						<dd className="in-num m-0 truncate text-[12.5px] text-(--text-primary)">{stat.value}</dd>
+						<dd className="in-num m-0 truncate text-body text-(--text-primary)">{stat.value}</dd>
 					</div>
 				))}
 			</dl>

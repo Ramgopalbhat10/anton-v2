@@ -112,7 +112,7 @@ export function ProjectPage() {
 				<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 					<MenuButton />
 					<SpaceMark space={data} size={22} />
-					<h1 className="m-0 min-w-0 truncate text-[13.5px] font-medium text-(--text-primary)">{data.name}</h1>
+					<h1 className="m-0 min-w-0 truncate text-body-lg font-medium text-(--text-primary)">{data.name}</h1>
 					{busy ? (
 						<Status tone="accent" pulse>
 							Coordinating
@@ -186,7 +186,7 @@ export function ThreadPage() {
 				to="/projects/$spaceId"
 				params={{ spaceId }}
 				title="Back to the coordinator (Esc)"
-				className="flex min-w-0 shrink items-center gap-1.5 rounded-md py-0.5 pr-1 text-[12.5px] text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="flex min-w-0 shrink items-center gap-1.5 rounded-control py-0.5 pr-1 text-body text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 			>
 				{space.data ? <SpaceMark space={space.data} size={18} /> : null}
 				<span className="hidden max-w-[160px] truncate sm:inline">{space.data?.name ?? 'Project'}</span>

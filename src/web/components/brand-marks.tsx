@@ -166,7 +166,7 @@ export function MarkTile({ mark, size = 26, label, className }: { mark: Mark; si
 	return (
 		<span
 			{...(label ? { role: 'img', 'aria-label': label, title: label } : { 'aria-hidden': true })}
-			className={cn('inline-flex shrink-0 items-center justify-center rounded-[6px] border border-black/10 text-[#1f1f1f]', className)}
+			className={cn('inline-flex shrink-0 items-center justify-center rounded-control border border-black/10 text-[#1f1f1f]', className)}
 			style={{ width: size, height: size, background: mark.tile ?? '#fff' }}
 		>
 			<Glyph size={Math.round(size * 0.58)} aria-hidden />

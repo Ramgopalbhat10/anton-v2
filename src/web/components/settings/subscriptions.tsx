@@ -62,11 +62,11 @@ function useSignIn(subscription: Subscription) {
 function Lead({ title, info, children }: { title: string; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1 px-4 pt-1 pb-3.5">
-			<h3 className="m-0 flex items-center gap-1.5 text-[15px] leading-[22px] font-medium tracking-[-0.01em]">
+			<h3 className="m-0 flex items-center gap-1.5 text-h3 leading-[22px] font-medium tracking-[-0.01em]">
 				{title}
 				{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
 			</h3>
-			<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--text-tertiary)">{children}</p>
+			<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--text-tertiary)">{children}</p>
 		</div>
 	);
 }
@@ -88,7 +88,7 @@ function Pending({ subscription }: { subscription: Subscription }) {
 	return (
 		<>
 			<CardSection label="Finish signing in" hint={login.listening ? 'Listening on this computer' : 'Paste the address'}>
-				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-[12px] leading-[18px] text-(--text-secondary)">
+				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-small leading-[18px] text-(--text-secondary)">
 					<li>
 						Approve Anton in the {subscription.name} tab.{' '}
 						<a href={login.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-(--accent-text) hover:underline">
@@ -115,7 +115,7 @@ function Pending({ subscription }: { subscription: Subscription }) {
 						onChange={(event) => setAddress(event.target.value)}
 						placeholder={`${login.redirectUri}?code=…`}
 						aria-label="Address ChatGPT sent you back to"
-						className={`${FIELD} min-w-[240px] flex-1 font-mono text-[12px]`}
+						className={`${FIELD} min-w-[240px] flex-1 font-mono text-small`}
 					/>
 					<Btn type="submit" size="sm" variant="primary" disabled={!address.trim() || finish.isPending}>
 						{finish.isPending ? 'Connecting…' : 'Connect'}
@@ -178,7 +178,7 @@ function Connect({ subscription }: { subscription: Subscription }) {
 						spellCheck={false}
 						placeholder={'{ "openai": { "type": "oauth", "refresh": "…", "clientId": "oaiapp_…" } }'}
 						aria-label="Sign-in to import"
-						className={`${AREA} font-mono text-[12px] leading-[18px]`}
+						className={`${AREA} font-mono text-small leading-[18px]`}
 					/>
 					<div className="flex flex-wrap items-center justify-end gap-3">
 						<SaveState pending={importing.isPending} success={false} error={importing.error} />
@@ -214,7 +214,7 @@ function Models({ subscription }: { subscription: Subscription }) {
 	if (!subscription.models.length) {
 		return (
 			<CardSection label="By model">
-				<p className="m-0 text-[12px] text-(--text-tertiary)">{subscription.name} has not listed any models for this account yet. Check again in a minute.</p>
+				<p className="m-0 text-small text-(--text-tertiary)">{subscription.name} has not listed any models for this account yet. Check again in a minute.</p>
 			</CardSection>
 		);
 	}
@@ -224,26 +224,26 @@ function Models({ subscription }: { subscription: Subscription }) {
 				{subscription.models.map((model) => (
 					<li
 						key={model.id}
-						className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-lg px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_minmax(0,1fr)_auto]"
+						className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-tile px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_minmax(0,1fr)_auto]"
 					>
 						<div className="flex min-w-0 flex-col">
 							<span className="flex min-w-0 items-center gap-1.5">
-								<span className="truncate text-[12.5px] text-(--text-primary)">{model.name}</span>
+								<span className="truncate text-body text-(--text-primary)">{model.name}</span>
 								{model.options?.map((option) => (
-									<span key={option} className="shrink-0 rounded-[6px] bg-(--alpha-white-6) px-1 py-px text-[9.5px] tracking-[0.04em] text-(--text-tertiary)">
+									<span key={option} className="shrink-0 rounded-control bg-(--alpha-white-6) px-1 py-px text-nano tracking-[0.04em] text-(--text-tertiary)">
 										{option}
 									</span>
 								))}
 							</span>
-							<span className="truncate text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+							<span className="truncate text-micro text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 						</div>
 						<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
-						<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
+						<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
 						<div className="hidden min-w-0 items-center gap-2 sm:flex">
 							<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-(--segment-off)">
 								<div className="h-full rounded-full bg-(--accent-base)" style={{ width: `${model.tokens ? Math.max(3, (model.tokens / most) * 100) : 0}%` }} />
 							</div>
-							<span className="in-num w-10 shrink-0 text-right text-[11px] text-(--text-secondary)">{tokens(model.tokens)}</span>
+							<span className="in-num w-10 shrink-0 text-right text-micro text-(--text-secondary)">{tokens(model.tokens)}</span>
 						</div>
 						<div className="flex w-[124px] justify-end">
 							{model.id === current ? (
@@ -409,7 +409,7 @@ function Command({ text, label }: { text: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
 		<div className="flex items-start gap-2">
-			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-md bg-(--well-bg) px-3 py-2 font-mono text-[11.5px] leading-[18px] break-all whitespace-pre-wrap text-(--text-primary)">
+			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-control bg-(--well-bg) px-3 py-2 font-mono text-small leading-[18px] break-all whitespace-pre-wrap text-(--text-primary)">
 				{text}
 			</pre>
 			<Btn
@@ -491,7 +491,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					/>
 					{subscription.extraUsageAt ? (
 						<CardSection label="Extra usage">
-							<p className="m-0 max-w-[72ch] text-[12px] leading-[18px] text-pretty text-(--warning-text)">
+							<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--warning-text)">
 								Your plan's limit ran out {age(subscription.extraUsageAt)} ago and calls now bill extra usage, which costs money. Turn it off at{' '}
 								<a href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer" className="text-(--accent-text) hover:underline">
 									claude.ai/settings/usage
@@ -567,19 +567,19 @@ function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; la
 					const tone = window.limited || window.usedPercent >= 90 ? 'danger' : usedTone(window.usedPercent / 100);
 					return (
 						<li key={window.label} className="flex min-w-0 flex-col gap-1.5">
-							<div className="flex min-w-0 items-baseline gap-2 text-[12px]">
+							<div className="flex min-w-0 items-baseline gap-2 text-small">
 								<span className="min-w-0 flex-1 truncate text-(--text-secondary)" title={window.label}>
 									{window.label}
 								</span>
 								{window.resetsAt ? <Caption className="shrink-0 tracking-normal normal-case">resets {until(window.resetsAt)}</Caption> : null}
 								{window.limited ? (
-									<span className="in-num shrink-0 text-[12px] text-(--danger-text)">Limit reached</span>
+									<span className="in-num shrink-0 text-small text-(--danger-text)">Limit reached</span>
 								) : (
 									<span className="in-num shrink-0">
-										<span className={cn('text-[13px]', tone === 'accent' ? 'text-(--text-primary)' : tone === 'warning' ? 'text-(--warning-text)' : 'text-(--danger-text)')}>
+										<span className={cn('text-body', tone === 'accent' ? 'text-(--text-primary)' : tone === 'warning' ? 'text-(--warning-text)' : 'text-(--danger-text)')}>
 											{Math.round(window.usedPercent)}%
 										</span>
-										<span className="text-[11px] text-(--text-tertiary)"> used</span>
+										<span className="text-micro text-(--text-tertiary)"> used</span>
 									</span>
 								)}
 							</div>
@@ -628,7 +628,7 @@ function KeyForm({ subscription, howTo, placeholder }: { subscription: Subscript
 					onChange={(event) => setKey(event.target.value)}
 					placeholder={placeholder}
 					aria-label={`${subscription.name} key`}
-					className={`${FIELD} min-w-[240px] flex-1 font-mono text-[12px]`}
+					className={`${FIELD} min-w-[240px] flex-1 font-mono text-small`}
 				/>
 				<Btn type="submit" size="sm" variant="primary" disabled={!key.trim() || connect.isPending}>
 					{connect.isPending ? 'Checking…' : 'Connect'}
@@ -773,7 +773,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 	if (!subscription.models.length) {
 		return (
 			<CardSection label="Models">
-				<p className="m-0 text-[12px] text-(--text-tertiary)">{subscription.name} has not listed any models for this key yet. Check again in a minute.</p>
+				<p className="m-0 text-small text-(--text-tertiary)">{subscription.name} has not listed any models for this key yet. Check again in a minute.</p>
 			</CardSection>
 		);
 	}
@@ -788,28 +788,28 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 				}}
 				placeholder="Search models"
 				aria-label={`Search ${subscription.name} models`}
-				className={`${FIELD} w-full max-w-[320px] text-[12px]`}
+				className={`${FIELD} w-full max-w-[320px] text-small`}
 			/>
 			{shown.length ? (
 				<ul aria-label={`${subscription.name} models`} className="m-0 -mx-2 flex list-none flex-col p-0">
 					{shown.map((model) => (
 						<li
 							key={model.id}
-							className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-lg px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_6.5rem_2.5rem_auto]"
+							className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-tile px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_6.5rem_2.5rem_auto]"
 						>
 							<div className="flex min-w-0 flex-col">
-								<span className="truncate text-[12.5px] text-(--text-primary)">
+								<span className="truncate text-body text-(--text-primary)">
 									{model.vendor ? <span className="text-(--text-tertiary)">{model.vendor}: </span> : null}
 									{model.name}
 								</span>
-								<span className="truncate text-[10.5px] text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+								<span className="truncate text-micro text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 							</div>
 							<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
-							<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
-							<span className="in-num hidden text-right text-[11px] text-(--text-tertiary) sm:inline" title="US dollars per million tokens in and out">
+							<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
+							<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline" title="US dollars per million tokens in and out">
 								{model.price ? `${dollars(model.price.input)} / ${dollars(model.price.output)}` : '—'}
 							</span>
-							<span className="in-num hidden text-right text-[11px] text-(--text-secondary) sm:inline">{tokens(model.tokens)}</span>
+							<span className="in-num hidden text-right text-micro text-(--text-secondary) sm:inline">{tokens(model.tokens)}</span>
 							<div className="flex w-[124px] justify-end">
 								{model.id === current ? (
 									<Status tone="accent">Default</Status>
@@ -829,18 +829,18 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 					))}
 				</ul>
 			) : (
-				<p className="m-0 text-[12px] text-(--text-tertiary)">No models match “{query}”.</p>
+				<p className="m-0 text-small text-(--text-tertiary)">No models match “{query}”.</p>
 			)}
 			{ranked.length > GATEWAY_PAGE_SIZE ? (
 				<nav aria-label="Model pages" className="flex items-center justify-between gap-3">
-					<span className="in-num text-[11px] text-(--text-tertiary)">
+					<span className="in-num text-micro text-(--text-tertiary)">
 						{at * GATEWAY_PAGE_SIZE + 1}–{at * GATEWAY_PAGE_SIZE + shown.length} of {ranked.length}
 					</span>
 					<span className="flex items-center gap-2">
 						<Btn size="xs" variant="ghost" icon={ChevronLeft} disabled={at === 0} onClick={() => setPage(at - 1)}>
 							Previous
 						</Btn>
-						<span className="in-num text-[11px] text-(--text-secondary)">
+						<span className="in-num text-micro text-(--text-secondary)">
 							Page {at + 1} of {pages}
 						</span>
 						<Btn size="xs" variant="ghost" disabled={at >= pages - 1} onClick={() => setPage(at + 1)}>
@@ -1002,13 +1002,13 @@ function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; o
 			aria-controls={`plan-panel-${subscription.id}`}
 			onClick={onSelect}
 			className={cn(
-				'inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-1 text-[13px] whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
+				'inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-1 text-body whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
 				on ? 'border-(--accent-base) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
 			)}
 		>
 			{logo ? (
 				// LobeHub's one-colour logos take the text colour, sized by the font size.
-				<span aria-hidden className={cn('flex text-[15px]', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
+				<span aria-hidden className={cn('flex text-h3', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
 			) : null}
 			{subscription.name}
 			<span
@@ -1035,7 +1035,7 @@ export function SubscriptionsPage() {
 			{view.isPending ? (
 				<Spinner size={12} />
 			) : view.isError ? (
-				<p className="m-0 text-[12px] text-(--danger-text)">{view.error.message}</p>
+				<p className="m-0 text-small text-(--danger-text)">{view.error.message}</p>
 			) : current ? (
 				<div className="flex flex-col gap-5">
 					<div role="tablist" aria-label="Plans" className="flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border-subtle)] [scrollbar-width:none] sm:gap-6">

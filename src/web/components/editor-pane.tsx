@@ -42,7 +42,7 @@ function ModeSwitch({ sessionId, mode }: { sessionId: string; mode: ExplorerMode
 						if (mode === 'files') showPanel('Changes');
 					}}
 					className={cn(
-						'inline-flex size-6 items-center justify-center rounded-[6px] border outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+						'inline-flex size-6 items-center justify-center rounded-control border outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
 						mode === item.mode
 							? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] text-(--accent-text) shadow-(--card-highlight)'
 							: 'border-transparent text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--icon-secondary)',

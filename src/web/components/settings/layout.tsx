@@ -11,7 +11,7 @@ import { pickOf, usePreview } from './skill-detail';
 import type { ViewSearch } from './skills';
 
 const NAV_ITEM =
-	'group/nav relative flex h-8 items-center gap-2.5 rounded-[6px] pr-2 pl-1 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
 
 /** A nav item's bare icon, lit on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
@@ -97,7 +97,7 @@ export function SettingsLayout() {
 	const wide = path.startsWith('/settings/skills') || path.startsWith('/settings/connectors');
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-2 pl-4 text-[13px] font-medium">
+			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-2 pl-4 text-body font-medium">
 				<Crumbs />
 				<span className="flex-1" />
 				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />

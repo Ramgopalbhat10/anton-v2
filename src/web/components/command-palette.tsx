@@ -151,7 +151,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 							}
 						}}
 						placeholder="Type a command, or describe a task"
-						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-(--text-primary) outline-none"
+						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body-lg text-(--text-primary) outline-none"
 					/>
 				</div>
 				<div className="flex max-h-[52vh] flex-col gap-px overflow-y-auto p-1.5">
@@ -160,19 +160,19 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 						onMouseEnter={() => setIndex(0)}
 						onClick={start}
 						className={cn(
-							'relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left',
+							'relative flex h-9 items-center gap-2.5 rounded-tile px-2.5 text-left',
 							index === 0 ? 'bg-(--bg-selected)' : 'hover:bg-(--bg-hover)',
 						)}
 					>
 						<Icon icon={Plus} className="text-(--accent-text)" />
-						<div className="min-w-0 flex-1 truncate text-[13px]">
+						<div className="min-w-0 flex-1 truncate text-body">
 							{project || !projects.isSuccess ? 'Start a task' : 'Start a chat'}{' '}
 							<span className="text-(--text-tertiary)">{query.trim() ? `“${query.trim()}”` : 'with a prompt…'}</span>
 						</div>
 						<Kbd keys="enter" />
 					</button>
 					{jumps.length > 0 ? (
-						<div className="px-2.5 pt-3 pb-1 text-[11px] font-medium tracking-[0.06em] text-(--text-disabled) uppercase">Jump to</div>
+						<div className="px-2.5 pt-3 pb-1 text-micro font-medium tracking-[0.06em] text-(--text-disabled) uppercase">Jump to</div>
 					) : null}
 					{jumps.map((entry, position) => (
 						<button
@@ -181,27 +181,27 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 							onMouseEnter={() => setIndex(position + 1)}
 							onClick={entry.onSelect}
 							className={cn(
-								'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-left text-(--text-secondary)',
+								'flex h-8 items-center gap-2.5 rounded-tile px-2.5 text-left text-(--text-secondary)',
 								index === position + 1 && 'bg-(--bg-hover) text-(--text-primary)',
 							)}
 						>
 							<Icon icon={entry.icon} size={12} className="text-(--icon-tertiary)" />
-							<div className="min-w-0 flex-1 truncate text-[13px]">{entry.label}</div>
-							<div className="text-[11px] whitespace-nowrap text-(--text-disabled)">{entry.meta}</div>
+							<div className="min-w-0 flex-1 truncate text-body">{entry.label}</div>
+							<div className="text-micro whitespace-nowrap text-(--text-disabled)">{entry.meta}</div>
 						</button>
 					))}
 				</div>
 				<div className="flex h-9 items-center gap-3 px-3 shadow-[inset_0_1px_0_var(--border-subtle)]">
 					<div className="flex items-center gap-1.5">
 						<Kbd keys="↑+↓" />
-						<span className="text-[11px] text-(--text-disabled)">Navigate</span>
+						<span className="text-micro text-(--text-disabled)">Navigate</span>
 					</div>
 					<div className="flex items-center gap-1.5">
 						<Kbd keys="esc" />
-						<span className="text-[11px] text-(--text-disabled)">Close</span>
+						<span className="text-micro text-(--text-disabled)">Close</span>
 					</div>
 					<div className="flex-1" />
-					<span className="hidden text-[11px] text-(--text-disabled) sm:inline">Describing a task starts it in a fresh sandbox</span>
+					<span className="hidden text-micro text-(--text-disabled) sm:inline">Describing a task starts it in a fresh sandbox</span>
 				</div>
 			</div>
 		</div>

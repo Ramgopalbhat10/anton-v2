@@ -81,7 +81,7 @@ import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
 const NAV_ROW =
-	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-[7px] pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-control pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text-primary)';
 
 /** A nav row's icon, lit in the accent on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
@@ -95,8 +95,8 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-[7px] px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
-			<span className={cn('flex items-baseline justify-between gap-2 text-[11.5px]', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-control px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
+			<span className={cn('flex items-baseline justify-between gap-2 text-small', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 				<span>Spent today</span>
 				<span className="in-num">
 					<span className={budget.data.blocked ? undefined : 'text-(--text-secondary)'}>{dollars(today)}</span>
@@ -280,7 +280,7 @@ function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (nex
 					type="button"
 					aria-label={`Remove the ${label} filter`}
 					onClick={() => onChange(toggleFilter(view, key, value))}
-					className="flex h-5 max-w-full items-center gap-1 rounded-full bg-(--accent-bg-subtle) pr-1 pl-1.5 text-[11px] text-(--accent-text) outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
+					className="flex h-5 max-w-full items-center gap-1 rounded-full bg-(--accent-bg-subtle) pr-1 pl-1.5 text-micro text-(--accent-text) outline-none hover:bg-(--accent-bg) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={FACET_ICON[key]} size={10} />
 					<span className="truncate">{label}</span>
@@ -336,7 +336,7 @@ function Toolbar({
 						onKeyDown={(event) => event.key === 'Escape' && close()}
 						placeholder="Search tasks"
 						aria-label="Search tasks"
-						className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
+						className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-small text-(--text-primary) outline-none placeholder:text-(--text-placeholder)"
 					/>
 				</label>
 				<span className="-my-1 flex shrink-0 items-center">{actions}</span>
@@ -393,14 +393,14 @@ function SectionHeader({
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-md px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 			>
 				<SectionMark place={place} count={count} />
-				<span className="truncate text-[12px] font-medium">{label}</span>
+				<span className="truncate text-small font-medium">{label}</span>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
-						<span className="in-num text-[11px] text-(--text-disabled) transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
+						<span className="in-num text-micro text-(--text-disabled) transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
 					) : null}
 					<Icon
 						icon={ChevronRight}
@@ -452,7 +452,7 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 		(part): part is string => Boolean(part),
 	);
 	return (
-		<div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+		<div className="flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
 			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
@@ -483,9 +483,9 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 				data-open={menuOpen || undefined}
 				onPointerEnter={armed ? undefined : () => setArmed(true)}
 				onFocus={armed ? undefined : () => setArmed(true)}
-				className={cn('group relative flex items-center rounded-[7px] hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-[42px]', arriving && 'in-row-enter')}
+				className={cn('group relative flex items-center rounded-control hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-[42px]', arriving && 'in-row-enter')}
 			>
-				{active ? <div className="absolute inset-0 rounded-[7px] bg-(--bg-active)" /> : null}
+				{active ? <div className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
 				{renaming ? (
 					<div className="relative flex min-w-0 flex-1 px-1">
 						<TitleInput session={session} onDone={() => setRenaming(false)} className="min-w-0 flex-1" />
@@ -498,7 +498,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								params={{ spaceId: session.spaceId, threadId: session.id }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
 							/>
 						) : (
 							<Link
@@ -507,7 +507,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								search={{ app: 'code' }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-[6px] outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
 							/>
 						)}
 						<div
@@ -520,7 +520,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								<TaskStatusIcon session={session} size={view.compact ? 12 : 13} />
 							</span>
 							<div className="flex min-w-0 flex-1 flex-col gap-px">
-								<span className="truncate text-[13px]">{session.title}</span>
+								<span className="truncate text-body">{session.title}</span>
 								{view.compact ? null : <Subtitle session={session} show={view.show} onCardChange={setCardOpen} />}
 							</div>
 							{/* Compact rows have no line for what waits on you, so a dot says it; it gives way to the row's actions on hover. */}
@@ -530,7 +530,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 									aria-label={note.text}
 									className={cn(
 										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-										note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--warning-base)',
+										note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--attention-base)',
 									)}
 								/>
 							) : null}
@@ -566,7 +566,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 		<div className="flex flex-col gap-0.5 px-3">
 			{groups(tasks, view.group).map((group) => (
 				<div key={group.key} className="flex flex-col gap-0.5">
-					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-[11px] text-(--text-disabled)">{group.label}</div> : null}
+					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-micro text-(--text-disabled)">{group.label}</div> : null}
 					{group.tasks.map((session) => (
 						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
 					))}
@@ -577,7 +577,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 }
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="px-5 py-1 text-[12px] text-(--text-disabled)">{children}</div>;
+	return <div className="px-5 py-1 text-small text-(--text-disabled)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -630,7 +630,7 @@ export function ChatSidebar({
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
 				<Logo size={22} />
-				<div className="min-w-0 truncate text-[14px] font-semibold tracking-[-0.02em]">Anton</div>
+				<div className="min-w-0 truncate text-body-lg font-semibold tracking-[-0.02em]">Anton</div>
 				<div className="min-w-1 flex-[1_1_4px]" />
 				<NotificationsBell onOpen={onOpenNotifications} />
 				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
@@ -641,7 +641,7 @@ export function ChatSidebar({
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-(--card-border) bg-(--bg-hover) px-2.5 text-[13px] font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-tile border border-(--card-border) bg-(--bg-hover) px-2.5 text-body font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -651,7 +651,7 @@ export function ChatSidebar({
 					onClick={onOpenPalette}
 					aria-label="Command palette"
 					title="Search or jump to"
-					className="flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] pr-1.5 pl-2 text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 shrink-0 items-center gap-1.5 rounded-tile pr-1.5 pl-2 text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={Search} size={14} />
 					<Kbd keys="mod+k" size="sm" />
@@ -662,19 +662,19 @@ export function ChatSidebar({
 			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px', inProject && 'hidden')}>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={List} />
-					<div className="min-w-0 flex-1 truncate text-[13px]">Tasks</div>
+					<div className="min-w-0 flex-1 truncate text-body">Tasks</div>
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
-					<div className="min-w-0 flex-1 truncate text-[13px]">Reviews</div>
+					<div className="min-w-0 flex-1 truncate text-body">Reviews</div>
 				</Link>
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
-					<div className="min-w-0 flex-1 truncate text-[13px]">Projects</div>
+					<div className="min-w-0 flex-1 truncate text-body">Projects</div>
 				</Link>
 				<Link to="/artifacts" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={Shapes} />
-					<div className="min-w-0 flex-1 truncate text-[13px]">Artifacts</div>
+					<div className="min-w-0 flex-1 truncate text-body">Artifacts</div>
 				</Link>
 			</nav>
 
@@ -690,10 +690,10 @@ export function ChatSidebar({
 				<section aria-label="Running">
 					<SectionHeader {...header('running', 'Running', running.length)} />
 					{folded('running') ? null : sessionsQuery.isError ? (
-						<div className="px-5 py-1.5 text-[12px] text-(--danger-text)">Could not load tasks.</div>
+						<div className="px-5 py-1.5 text-small text-(--danger-text)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
 						<div className="px-3">
-							<div className="h-11 rounded-lg bg-(--bg-skeleton)" />
+							<div className="h-11 rounded-tile bg-(--bg-skeleton)" />
 						</div>
 					) : running.length ? (
 						rows(running, 'running')
@@ -711,7 +711,7 @@ export function ChatSidebar({
 			<div className="flex shrink-0 flex-col gap-1 border-t border-(--border-subtle) px-3 pt-2 pb-3">
 				<div className="flex items-center gap-2.5 px-1.5">
 					<Avatar name={name} />
-					<div className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary)">{name}</div>
+					<div className="min-w-0 flex-1 truncate text-body text-(--text-secondary)">{name}</div>
 					<button
 						type="button"
 						onClick={() => {
