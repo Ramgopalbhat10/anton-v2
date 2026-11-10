@@ -18,3 +18,13 @@ test("the agent's command gets a timeout when it names none, and keeps its own",
 	await sandbox.exec('make docs', { timeoutMs: 3_600_000 });
 	assert.deepEqual(seen, [COMMAND_TIMEOUT_MS, 3_600_000]);
 });
+
+test("a command's result ends with the line the clock gives, when it gives one", async () => {
+	const machine = { id: 'fake', root: '/work', exec: async () => ({ stdout: new TextEncoder().encode('ok\n'), stderr: 'warn', exitCode: 0 }) } as unknown as Machine;
+	const lines = ['', '\n[anton] 25m since this reply started.'];
+	const sandbox = machineSandbox(machine, '/work/repo', () => true, {}, undefined, () => lines.shift() ?? '');
+	assert.equal((await sandbox.exec('true')).stderr, 'warn');
+	const told = await sandbox.exec('true');
+	assert.equal(told.stderr, 'warn\n[anton] 25m since this reply started.');
+	assert.equal(told.stdout, 'ok\n');
+});
