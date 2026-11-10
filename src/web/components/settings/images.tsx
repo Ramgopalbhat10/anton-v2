@@ -73,13 +73,13 @@ function Prepared({ project, view }: { project: Project; view: SandboxView }) {
 	});
 	const base = project.baseImage ?? view.settings.baseImage ?? view.defaultBaseImage;
 	return (
-		<div className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-1.5">
+		<div className="flex min-h-12 items-center gap-3 rounded-tile px-2.5 py-1.5">
 			<RowIcon icon={Package} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<Link to="/settings/repos/$projectId" params={{ projectId: project.id }} className="truncate text-[13px] font-medium outline-none hover:underline">
+				<Link to="/settings/repos/$projectId" params={{ projectId: project.id }} className="truncate text-body font-medium outline-none hover:underline">
 					{project.repoFullName}
 				</Link>
-				<div className="truncate text-[12px] text-(--text-tertiary)">
+				<div className="truncate text-small text-(--text-tertiary)">
 					{project.warmedAt ? `Built ${age(project.warmedAt)} ago from ${base}` : `None yet. One is built in the background from ${base}.`}
 				</div>
 			</div>

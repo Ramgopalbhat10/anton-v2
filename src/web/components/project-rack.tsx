@@ -36,7 +36,7 @@ export function bayThreads(threads: Session[]): Session[] {
 
 /** A bay's light: amber while a thread waits on you, blue while one works, dark when quiet. */
 function bayLed(threads: Session[]): string {
-	if (threads.some((thread) => ['waiting', 'failed'].includes(glyphKind(thread)))) return 'var(--warning-base)';
+	if (threads.some((thread) => ['waiting', 'failed'].includes(glyphKind(thread)))) return 'var(--attention-base)';
 	if (threads.some((thread) => stateOf(thread) === 'working')) return 'var(--cyan-300)';
 	return 'var(--neutral-600)';
 }
@@ -68,29 +68,29 @@ function ThreadDetails({ thread }: { thread: Session }) {
 			<div className="flex flex-col gap-1.5 px-3.5 pt-3 pb-3">
 				<div className="flex items-center gap-1.5">
 					<Glyph kind={kind} size={12} />
-					<span className={cn('in-caption', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-secondary)')}>
+					<span className={cn('in-caption', kind === 'waiting' ? 'text-(--attention-text)' : kind === 'failed' ? 'text-(--danger-text)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-secondary)')}>
 						{KIND_LABEL[kind]}
 					</span>
 					<span className="in-caption ml-auto">started {age(thread.createdAt)} ago</span>
 				</div>
-				<div className="truncate text-[13px] text-(--text-primary)" title={thread.title}>
+				<div className="truncate text-body text-(--text-primary)" title={thread.title}>
 					{thread.title}
 				</div>
 				{line ? (
 					<div
 						className={cn(
-							'flex flex-col gap-1 rounded-[6px] border px-2.5 py-2',
-							kind === 'waiting' ? 'border-(--warning-border) bg-(--warning-bg)' : kind === 'failed' ? 'border-(--danger-border) bg-(--danger-bg)' : 'border-(--border-subtle) bg-(--well-bg)',
+							'flex flex-col gap-1 rounded-control border px-2.5 py-2',
+							kind === 'waiting' ? 'border-(--attention-border) bg-(--attention-bg)' : kind === 'failed' ? 'border-(--danger-border) bg-(--danger-bg)' : 'border-(--border-subtle) bg-(--well-bg)',
 						)}
 					>
 						<div className="flex items-center gap-1.5">
 							<span className="in-caption">{heading}</span>
 							<span className="in-caption ml-auto tracking-normal normal-case">{age(threadActiveAt(thread))} ago</span>
 						</div>
-						<p className={cn('m-0 line-clamp-3 text-[12.5px] leading-[18px] text-pretty', kind === 'waiting' ? 'text-(--warning-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-primary)')}>{line}</p>
+						<p className={cn('m-0 line-clamp-3 text-body leading-[18px] text-pretty', kind === 'waiting' ? 'text-(--attention-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-primary)')}>{line}</p>
 					</div>
 				) : null}
-				<div className="truncate text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-tertiary)">
 					{repoShort(thread)} · {branchLabel(thread)}
 				</div>
 			</div>
@@ -103,7 +103,7 @@ function ThreadDetails({ thread }: { thread: Session }) {
 				}}
 			>
 				<FollowUp value={prompt} onChange={setPrompt} label={`Send a follow-up to ${thread.title}`} submitLabel="Send to this thread" disabled={send.isPending} />
-				{send.isError ? <span className="text-[12px] text-(--danger-text)">{send.error.message}</span> : null}
+				{send.isError ? <span className="text-small text-(--danger-text)">{send.error.message}</span> : null}
 				<div className="flex items-center gap-1.5">
 					<NextSteps thread={thread} size="xs" />
 					<Btn size="sm" variant="primary" className="ml-auto" onClick={() => openThread(thread)}>
@@ -124,15 +124,15 @@ function Plate({ space, threads, shown }: { space: Space; threads: Session[]; sh
 		<Link
 			to="/projects/$spaceId"
 			params={{ spaceId: space.id }}
-			className="flex max-w-full min-w-0 flex-col items-center gap-0.5 rounded-[6px] border border-transparent px-2.5 py-1 outline-none hover:border-(--border-default) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex max-w-full min-w-0 flex-col items-center gap-0.5 rounded-control border border-transparent px-2.5 py-1 outline-none hover:border-(--border-default) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<span className="flex max-w-full min-w-0 items-center gap-1.5">
 				<SpaceMark space={space} size={16} />
-				<span className="truncate text-[12.5px] text-(--text-primary)">{space.name}</span>
+				<span className="truncate text-body text-(--text-primary)">{space.name}</span>
 			</span>
 			<span className="in-caption whitespace-nowrap">
 				{open} open
-				{needs ? <span className="text-(--warning-text)"> · {needs} need{needs === 1 ? 's' : ''} you</span> : null}
+				{needs ? <span className="text-(--attention-text)"> · {needs} need{needs === 1 ? 's' : ''} you</span> : null}
 				{threads.length > shown ? ` · +${threads.length - shown}` : ''}
 			</span>
 		</Link>

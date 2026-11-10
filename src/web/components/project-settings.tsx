@@ -98,7 +98,7 @@ function General({ space }: { space: Space }) {
 					onChange={(event) => setGoal(event.target.value)}
 					rows={2}
 					placeholder="What this project is for: ship the billing rewrite, keep the docs current…"
-					className={`${AREA} text-[13px] leading-[19px]`}
+					className={`${AREA} text-body leading-[19px]`}
 				/>
 				<SubBlock label="Models">
 					<SettingRow title="Coordinator" help="Plans, starts and tracks threads." info="A small, fast model is enough; low reasoning by default.">
@@ -175,7 +175,7 @@ function TextBlock({
 				</>
 			}
 		>
-			<textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} placeholder={placeholder} className={`${AREA} text-[13px] leading-[19px]`} />
+			<textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} placeholder={placeholder} className={`${AREA} text-body leading-[19px]`} />
 		</Block>
 	);
 }
@@ -212,7 +212,7 @@ function Repositories({ space }: { space: Space }) {
 				{space.repos.map((repo) => (
 					<div key={repo.id} className="flex h-10 items-center gap-2.5 border-t border-(--border-subtle) first:border-t-0">
 						<FolderGit2 aria-hidden size={14} strokeWidth={1.5} className="text-(--icon-tertiary)" />
-						<span className="min-w-0 flex-1 truncate text-[13px]">{repo.repoFullName}</span>
+						<span className="min-w-0 flex-1 truncate text-body">{repo.repoFullName}</span>
 						<Caption>{repo.defaultBranch}</Caption>
 						<IconBtn
 							icon={X}
@@ -224,7 +224,7 @@ function Repositories({ space }: { space: Space }) {
 					</div>
 				))}
 				{space.repos.length === 0 ? (
-					<div className="flex h-10 items-center text-[12.5px] text-(--text-tertiary)">
+					<div className="flex h-10 items-center text-body text-(--text-tertiary)">
 						{others.length || projects.isPending ? (
 							'None. Threads work as chats until you add one.'
 						) : (
@@ -239,7 +239,7 @@ function Repositories({ space }: { space: Space }) {
 					</div>
 				) : null}
 			</div>
-			{save.isError ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+			{save.isError ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
 		</Block>
 	);
 }
@@ -307,7 +307,7 @@ function Lifecycle({ space }: { space: Space }) {
 			info="Paused projects queue new threads instead of starting them. Archived ones leave the sidebar. Deleting removes the project, its coordinator conversation and its files; its threads stay as ordinary tasks."
 			footer={
 				<>
-					{remove.isError ? <span className="text-[12px] text-(--danger-text)">{remove.error.message}</span> : null}
+					{remove.isError ? <span className="text-small text-(--danger-text)">{remove.error.message}</span> : null}
 					<Btn size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate({ state: space.state === 'paused' ? 'active' : 'paused' })}>
 						{space.state === 'paused' ? 'Resume' : 'Pause'}
 					</Btn>
@@ -333,7 +333,7 @@ const SECTIONS: Array<{ id: ProjectSection; label: string; icon: LucideIcon }> =
 ];
 
 const NAV_ITEM =
-	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-[6px] pr-2 pl-1 text-[13px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[active=true]:bg-(--alpha-white-6) data-[active=true]:text-(--text-primary)';
+	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[active=true]:bg-(--alpha-white-6) data-[active=true]:text-(--text-primary)';
 
 function Section({ space, section }: { space: Space; section: ProjectSection }) {
 	switch (section) {
@@ -385,7 +385,7 @@ function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: P
 	const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-4 text-[13px] font-medium">
+			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-4 text-body font-medium">
 				{space.data ? <SpaceMark space={space.data} size={20} /> : null}
 				<span className="min-w-0 truncate text-(--text-secondary)">{space.data?.name ?? 'Project'}</span>
 				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--icon-disabled)" />

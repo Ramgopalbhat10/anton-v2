@@ -4,7 +4,7 @@ import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lu
 import type { ReactNode } from 'react';
 import { ArcDial, DotMatrix, lastDays } from '@/components/charts';
 import { SandboxArt, StorageArt } from '@/components/illustrations';
-import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, usedTone, Well } from '@/components/instrument';
+import { Caption, Card, CardFooter, CardSection, Figure, type Part, ShareRow, SplitBar, Status, StatusDot, usedTone, Well } from '@/components/instrument';
 import { Icon } from '@/components/signal';
 import { isLive } from '@/components/task-status';
 import { api } from '@/lib/api';
@@ -18,7 +18,7 @@ function Open({ section, children }: { section: string; children: ReactNode }) {
 		<Link
 			to="/settings/$section"
 			params={{ section }}
-			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-[12px] font-medium text-(--text-secondary) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-small font-medium text-(--text-secondary) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 		>
 			{children}
 			<Icon icon={ArrowUpRight} size={12} />
@@ -57,7 +57,7 @@ function SpendCard() {
 					</div>
 					{cap !== null ? (
 						<ArcDial label="Today's spend against the daily cap" value={today} max={cap}>
-							<span className="in-num text-[15px] leading-none text-(--text-primary)">{dollars(Math.max(0, cap - today))}</span>
+							<span className="in-num text-h3 leading-none text-(--text-primary)">{dollars(Math.max(0, cap - today))}</span>
 							<span className="in-caption">left</span>
 						</ArcDial>
 					) : null}
@@ -108,9 +108,9 @@ function TasksCard() {
 									to="/agents/$sessionId"
 									params={{ sessionId: session.id }}
 									search={{ app: 'code' }}
-									className="flex min-h-8 items-center gap-2 rounded-lg px-1 text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+									className="flex min-h-8 items-center gap-2 rounded-tile px-1 text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 								>
-									<span className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+									<StatusDot tone="accent" pulse />
 									<span className="min-w-0 flex-1 truncate">{session.title}</span>
 									<Caption className="tracking-normal normal-case">{age(session.createdAt)}</Caption>
 								</Link>
@@ -189,8 +189,8 @@ export function SettingsOverview() {
 	return (
 		<div className="flex flex-col gap-6">
 			<div className="flex flex-col gap-2">
-				<h1 className="m-0 text-[26px] leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
-				<p className="m-0 max-w-[72ch] text-[13px] leading-[20px] text-pretty text-(--text-tertiary)">What Anton may spend, work on and keep.</p>
+				<h1 className="m-0 text-h1 leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
+				<p className="m-0 max-w-[72ch] text-body leading-[20px] text-pretty text-(--text-tertiary)">What Anton may spend, work on and keep.</p>
 			</div>
 			<div className="grid gap-3 sm:grid-cols-2">
 				<SpendCard />
@@ -207,14 +207,14 @@ export function SettingsOverview() {
 								key={section.id}
 								to="/settings/$section"
 								params={{ section: section.id }}
-								className="group/row flex min-h-14 items-center gap-3 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+								className="group/row flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 							>
 								<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/row:text-(--accent-text)">
 									<Icon icon={section.icon} size={17} />
 								</span>
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-									<div className="truncate text-[13px] font-medium">{section.label}</div>
-									<div className="line-clamp-2 text-[12px] leading-4 text-(--text-tertiary)">{section.desc}</div>
+									<div className="truncate text-body font-medium">{section.label}</div>
+									<div className="line-clamp-2 text-small leading-4 text-(--text-tertiary)">{section.desc}</div>
 								</div>
 								<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled) group-hover/row:text-(--icon-secondary)" />
 							</Link>

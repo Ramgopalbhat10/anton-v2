@@ -36,8 +36,8 @@ const theme = {
 
 type Link = 'connecting' | 'connected' | 'closed';
 
-const LINK: Record<Link, { tone: 'warning' | 'success' | 'neutral'; label: string }> = {
-	connecting: { tone: 'warning', label: 'Connecting' },
+const LINK: Record<Link, { tone: 'accent' | 'success' | 'neutral'; label: string }> = {
+	connecting: { tone: 'accent', label: 'Connecting' },
 	connected: { tone: 'success', label: 'Connected' },
 	closed: { tone: 'neutral', label: 'Disconnected' },
 };
@@ -126,7 +126,7 @@ export function TerminalTab({ sessionId }: { sessionId: string }) {
 			<div className="in-well flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
 				<div aria-hidden className="flex h-8 shrink-0 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-3">
 					<Icon icon={SquareTerminal} size={12} className={link === 'connected' ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
-					<span className="in-num min-w-0 flex-1 truncate text-[11px] text-(--text-tertiary)">{session.data ? `${isChat(session.data) ? 'scratch' : repoShort(session.data)} — shell` : 'shell'}</span>
+					<span className="in-num min-w-0 flex-1 truncate text-micro text-(--text-tertiary)">{session.data ? `${isChat(session.data) ? 'scratch' : repoShort(session.data)} — shell` : 'shell'}</span>
 				</div>
 				<div className="min-h-0 flex-1 p-3">
 					<Shell key={generation} sessionId={sessionId} onConnected={onConnected} onLink={setLink} />

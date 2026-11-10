@@ -78,7 +78,7 @@ export function MermaidDiagram({ source }: { source: string }) {
 	}, [id, settled]);
 	if (!svg) return <CodeBlock code={source} language="mermaid" />;
 	return (
-		<figure className="sg-mermaid mb-2.5 overflow-x-auto rounded-(--radius-md) border border-(--border-subtle) bg-(--bg-inset) px-3 py-3" aria-label="Diagram" data-stale={failed || undefined}>
+		<figure className="sg-mermaid mb-2.5 overflow-x-auto rounded-tile border border-(--border-subtle) bg-(--bg-inset) px-3 py-3" aria-label="Diagram" data-stale={failed || undefined}>
 			{/* Mermaid's own output, sanitized by it at securityLevel strict. */}
 			<div className="flex justify-center [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
 		</figure>

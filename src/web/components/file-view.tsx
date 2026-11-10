@@ -69,7 +69,7 @@ const STATUS_BG: Record<string, string> = {
 /** A file's git status as a small lettered chip: A added, M modified, D deleted. */
 export function StatusChip({ status }: { status: string }) {
 	return (
-		<span className={cn('in-num inline-flex size-4 shrink-0 items-center justify-center rounded-[6px] text-[10px] font-medium', STATUS_TONE[status], STATUS_BG[status])}>
+		<span className={cn('in-num inline-flex size-4 shrink-0 items-center justify-center rounded-control text-nano font-medium', STATUS_TONE[status], STATUS_BG[status])}>
 			{status}
 		</span>
 	);
@@ -106,12 +106,12 @@ export function Branch({
 							key={child.path}
 							onClick={() => onOpen(child.path)}
 							aria-current={selected === child.path ? 'true' : undefined}
-							className="sg-file-row flex h-[26px] items-center gap-2 rounded-[6px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 						>
 							<FileIcon path={child.path} />
 							<span
 								className={cn(
-									'min-w-0 flex-1 truncate text-[12px]',
+									'min-w-0 flex-1 truncate text-small',
 									selected === child.path ? 'text-(--text-primary)' : status ? 'text-(--text-secondary)' : 'text-(--text-tertiary)',
 								)}
 							>
@@ -129,10 +129,10 @@ export function Branch({
 							type="button"
 							aria-expanded={open}
 							onClick={() => onToggle(child.path)}
-							className="flex h-[26px] items-center gap-2 rounded-[6px] pr-1.5 pl-2 text-left text-(--text-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left text-(--text-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 						>
 							<Icon icon={open ? FolderOpen : Folder} size={12} className={open ? 'text-(--icon-secondary)' : 'text-(--icon-tertiary)'} />
-							<span className="min-w-0 flex-1 truncate text-[12px]">{child.name}</span>
+							<span className="min-w-0 flex-1 truncate text-small">{child.name}</span>
 							{status ? <StatusChip status={status} /> : null}
 						</button>
 						{open ? (
@@ -260,9 +260,9 @@ export function FileView({
 			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="my-2 me-3 self-end shrink-0" /> : null}
 			<div className="min-h-0 flex-1 overflow-auto">
 				{file.isError ? (
-					<div className="px-3 py-2.5 text-[12px] text-(--danger-text)">{file.error.message || 'Could not read this file.'}</div>
+					<div className="px-3 py-2.5 text-small text-(--danger-text)">{file.error.message || 'Could not read this file.'}</div>
 				) : file.isPending ? (
-					<div className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-(--text-tertiary)">
+					<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-tertiary)">
 						<Spinner size={12} />
 						Reading
 					</div>
@@ -273,9 +273,9 @@ export function FileView({
 				) : markdown && preview && contents !== null ? (
 					<DocumentMarkdown text={contents} images={images} className="p-4" />
 				) : contents === null ? (
-					<div className="px-3 py-2.5 text-[12px] text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
+					<div className="px-3 py-2.5 text-small text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
 				) : (
-					<div className="overflow-x-auto py-1.5 font-mono text-[12px] leading-[19px]">
+					<div className="overflow-x-auto py-1.5 font-mono text-small leading-[19px]">
 						<div className="min-w-max">
 							{lines.map((line, index) => (
 								<div key={index} ref={index + 1 === markedLine ? marked : undefined} className={cn('flex', index + 1 === markedLine && 'bg-(--accent-bg-subtle)')}>

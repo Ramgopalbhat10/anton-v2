@@ -52,7 +52,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 	});
 	if (!approval) {
 		return approvals.isPending ? (
-			<div className="flex h-9 items-center gap-2 rounded-[6px] border border-dashed border-(--card-border) px-3 text-[12px] text-(--text-tertiary)">
+			<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--card-border) px-3 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Preparing the call
 			</div>
@@ -77,19 +77,19 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 		<section className="in-card overflow-hidden" aria-label="Tool call to run">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h3 className="m-0 truncate text-[13px] leading-[20px] font-medium text-(--text-primary)">{approval.tool}</h3>
-					<span className="text-[11.5px] text-(--text-tertiary)">{pending ? `The agent asks to run this on ${connectorName(approval.connector)}` : `Tool call on ${connectorName(approval.connector)}`}</span>
+					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text-primary)">{approval.tool}</h3>
+					<span className="text-small text-(--text-tertiary)">{pending ? `The agent asks to run this on ${connectorName(approval.connector)}` : `Tool call on ${connectorName(approval.connector)}`}</span>
 				</div>
 			</header>
 			<div
 				className={cn(
-					'mx-3.5 mb-3 overflow-auto rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-3 py-2 font-mono text-[12px] leading-[18px] whitespace-pre-wrap text-(--text-secondary)',
+					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--border-subtle) bg-(--well-bg) px-3 py-2 font-mono text-small leading-[18px] whitespace-pre-wrap text-(--text-secondary)',
 					pending ? 'max-h-[200px]' : 'max-h-[240px]',
 				)}
 			>
 				{approval.state === 'done' && approval.result !== null ? approval.result : argsText(approval.args) || '(no arguments)'}
 			</div>
-			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-3.5 py-2 text-[12px]">
+			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-3.5 py-2 text-small">
 				{decide.error ? <span className="mr-auto text-(--danger-text)">{decide.error.message}</span> : null}
 				{status ? <span className="mr-auto">{status}</span> : null}
 				{pending ? (

@@ -131,7 +131,7 @@ export function StackedDaysChart({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)', className)}
 			style={{ height }}
 		>
 			{width > 0 ? (
@@ -212,7 +212,7 @@ export function StackedDaysChart({
 			</div>
 			{current && shown !== null ? (
 				<div
-					className="in-pop pointer-events-none absolute z-10 flex min-w-[140px] flex-col gap-1 px-2.5 py-2 text-[11px]"
+					className="in-pop pointer-events-none absolute z-10 flex min-w-[140px] flex-col gap-1 px-2.5 py-2 text-micro"
 					style={{
 						left: Math.min(Math.max(x(shown), 80), width - 80),
 						top: Math.max(0, y(current.total) - 8),
@@ -228,7 +228,7 @@ export function StackedDaysChart({
 						.reverse()
 						.map((part) => (
 							<div key={part.series} className="flex items-center gap-1.5">
-								<span className="size-1.5 shrink-0 rounded-[2px]" style={{ background: colorOf(part.series) }} />
+								<span className="size-1.5 shrink-0 rounded-mark" style={{ background: colorOf(part.series) }} />
 								<span className="min-w-0 flex-1 truncate text-(--text-secondary)">{part.series}</span>
 								<span className="in-num text-(--text-tertiary)">{format(part.value)}</span>
 							</div>
@@ -296,7 +296,7 @@ export function DotMatrix({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-[6px] focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)', className)}
 			style={{ height }}
 		>
 			{width > 0 && cols ? (
@@ -354,7 +354,7 @@ export function DotMatrix({
 			</div>
 			{current && active !== null && lit(current.value) === 0 ? (
 				<div
-					className="in-pop pointer-events-none absolute z-10 px-2 py-1 text-[11px] whitespace-nowrap"
+					className="in-pop pointer-events-none absolute z-10 px-2 py-1 text-micro whitespace-nowrap"
 					style={{ left: Math.min(Math.max(x(active) + cell / 2, 50), width - 50), top: y(0) - 6, transform: 'translate(-50%, -100%)' }}
 				>
 					<span className="text-(--text-tertiary)">{shortDay(current.key)}</span> <span className="in-num text-(--text-secondary)">{format(current.value)}</span>

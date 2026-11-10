@@ -137,7 +137,7 @@ export function useSuggestions({
 
 	const list =
 		trigger && items.length > 0 ? (
-			<div role="listbox" className="flex flex-col gap-px rounded-lg border border-(--border-subtle) bg-(--bg-overlay) p-1 shadow-(--elev-3)">
+			<div role="listbox" className="flex flex-col gap-px rounded-tile border border-(--border-subtle) bg-(--bg-overlay) p-1 shadow-(--elev-3)">
 				{items.map((item, index) => (
 					<button
 						key={item.key}
@@ -147,7 +147,7 @@ export function useSuggestions({
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={() => choose(item)}
 						className={cn(
-							'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-left text-[12px]',
+							'flex h-7 min-w-0 items-center gap-2 rounded-control px-2 text-left text-small',
 							index === current ? 'bg-(--bg-hover) text-(--text-primary)' : 'text-(--text-secondary)',
 						)}
 					>
@@ -168,7 +168,7 @@ export function useSuggestions({
 					: 'No files match.'
 			: null;
 	const statusList = fileStatus ? (
-		<div role="status" className="rounded-lg border border-(--border-subtle) bg-(--bg-overlay) px-3 py-2 text-[12px] text-(--text-tertiary) shadow-(--elev-3)">
+		<div role="status" className="rounded-tile border border-(--border-subtle) bg-(--bg-overlay) px-3 py-2 text-small text-(--text-tertiary) shadow-(--elev-3)">
 			{fileStatus}
 		</div>
 	) : null;

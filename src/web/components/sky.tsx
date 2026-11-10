@@ -70,9 +70,10 @@ function paint(canvas: HTMLCanvasElement, picture: HTMLImageElement) {
  * (`data-sky` on the page, see `.sky` in styles) sets how much shows through:
  * all of it on Home, a little behind lists, almost none behind a conversation.
  */
-export function Sky({ image }: { image: SkyImage }) {
+export function Sky({ image, capped }: { image: SkyImage; /** Holds the picture at its drawn brightness or below, for pages you read. */ capped?: boolean }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
-	const look = skyLook(useSkyBrightness());
+	const brightness = useSkyBrightness();
+	const look = skyLook(capped ? Math.min(brightness, SKY_BRIGHTNESS_DEFAULT) : brightness);
 	const [shown, setShown] = useState<string | null>(null);
 	useEffect(() => {
 		const element = canvas.current;
@@ -126,7 +127,7 @@ export function SkyBrightnessSlider({ className }: { className?: string }) {
 	const word = value < 25 ? 'Faint' : value < 50 ? 'Dim' : value <= 70 ? 'As drawn' : value < 90 ? 'Bright' : 'Vivid';
 	return (
 		<div className={cn('flex flex-col gap-1.5', className)}>
-			<div className="flex items-center justify-between text-[12px]">
+			<div className="flex items-center justify-between text-small">
 				<label htmlFor={id} className="text-(--text-secondary)">
 					Brightness
 				</label>

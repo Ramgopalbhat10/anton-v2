@@ -24,11 +24,11 @@ function Tile({ connection }: { connection: Connection }) {
 			as="div"
 			icon={ICONS[connection.id] ?? (connection.id.startsWith('subscription-') ? CreditCard : Link)}
 			title={connection.name}
-			sub={<span className="text-[11px]">{connection.provider}</span>}
+			sub={<span className="text-micro">{connection.provider}</span>}
 			status={<Status tone={TONE[connection.state]}>{state.label}</Status>}
 			label={connection.name}
 		>
-			<div className="px-4 pt-0.5 pb-4 pl-[50px] text-[12px] leading-[18px] text-pretty break-words text-(--text-tertiary)">{connection.detail}</div>
+			<div className="px-4 pt-0.5 pb-4 pl-[50px] text-small leading-[18px] text-pretty break-words text-(--text-tertiary)">{connection.detail}</div>
 		</Card>
 	);
 }
@@ -60,7 +60,7 @@ export function ConnectionsPage() {
 			{connections.isPending ? (
 				<Spinner size={12} />
 			) : connections.isError ? (
-				<p className="m-0 text-[12px] text-(--danger-text)">{connections.error.message}</p>
+				<p className="m-0 text-small text-(--danger-text)">{connections.error.message}</p>
 			) : (
 				<>
 					<Card icon={Link} title="Health" sub="checked just now" status={failing ? <Status tone="danger">{failing} failing</Status> : <Status tone="success">All working</Status>}>

@@ -88,7 +88,7 @@ describe('Thread', () => {
 		);
 		expect(screen.getByRole('heading', { name: 'Done' })).toBeTruthy();
 		expect(screen.getAllByRole('listitem')).toHaveLength(2);
-		expect(screen.getByText('2 STEPS')).toBeTruthy();
+		expect(screen.getByText('2 steps')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
 	});
@@ -135,9 +135,8 @@ describe('Thread', () => {
 		expect(screen.queryByText(/Delegated to/)).toBeNull();
 		// The latest step, as the thread would describe it, and the run's steps.
 		expect(await screen.findByText(/Clicked/)).toBeTruthy();
-		expect(screen.getByText('1 step')).toBeTruthy();
-		// Other tools stay in the steps card.
-		expect(screen.getByText('1 STEP')).toBeTruthy();
+		// The subagent's card counts its own step, and other tools stay in the steps card.
+		expect(screen.getAllByText('1 step')).toHaveLength(2);
 	});
 
 	it('shows a proposed plan, and approving turns plan mode off before telling the agent to build', async () => {
@@ -397,11 +396,11 @@ describe('response details', () => {
 			]),
 		);
 		expect(screen.getAllByRole('button', { name: /Worked for 14s/ })).toHaveLength(1);
-		expect(screen.getByRole('button', { name: /^Worked 1 STEP$/ })).toBeTruthy();
+		expect(screen.getByRole('button', { name: /^Worked 1 step$/ })).toBeTruthy();
 	});
 	it('does not claim full response timing for legacy messages that only have tool durations', () => {
 		show(agent([assistant('a1', [{ ...tool('run_script', { code: 'text(42)' }, { output: '42' }), durationMs: 1400 }])]));
-		expect(screen.getByRole('button', { name: /^Worked 1 STEP$/ })).toBeTruthy();
+		expect(screen.getByRole('button', { name: /^Worked 1 step$/ })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: /Worked for/ })).toBeNull();
 	});
 	it('collapses script output when completed and the whole reasoning when work ends', async () => {
@@ -620,7 +619,7 @@ describe('response details', () => {
 		const failed = { ...tool('show', { children: [{ type: 'stat' }] }), state: 'output-error', errorText: 'The card is not valid' };
 		const page = tool('render_html', { title: 'Explainer', html: '<div>x</div>' }, { output: { path: 'renders/explainer-abc123.html', title: 'Explainer', height: 300 } });
 		show(agent([user('u1', 'Explain'), assistant('a1', [failed, page])]));
-		expect(screen.getByText('1 STEP')).toBeTruthy();
+		expect(screen.getByText('1 step')).toBeTruthy();
 		const frame = screen.getByTitle('Explainer') as HTMLIFrameElement;
 		expect(frame.getAttribute('src')).toBe('/api/sessions/s1/render-frame?path=renders%2Fexplainer-abc123.html');
 		expect(frame.style.height).toBe('300px');

@@ -16,7 +16,7 @@ import {
 	WEEK,
 	zoneOffset,
 } from '../../core/schedule';
-import { Icon } from '@/components/signal';
+import { EmptyLine, Icon } from '@/components/signal';
 import type { Automation } from '@/lib/api';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -33,7 +33,7 @@ const FREQUENCY_LABEL: Record<Frequency, string> = {
 	cron: 'Custom (cron)',
 };
 
-const FIELD_TEXT = 'text-[13px] md:text-[13px]';
+const FIELD_TEXT = 'text-body md:text-body';
 const ordinal = (day: number) => `${day}${day === 1 || day === 21 ? 'st' : day === 2 || day === 22 ? 'nd' : day === 3 || day === 23 ? 'rd' : 'th'}`;
 const minute = (time: string) => Number(time.slice(3));
 
@@ -54,7 +54,7 @@ export function nextRunText(automation: Automation): string {
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
 	return (
 		<div className={cn('flex min-w-0 flex-col gap-1', className)}>
-			<span className="text-[11px] text-(--text-tertiary)">{label}</span>
+			<span className="text-micro text-(--text-tertiary)">{label}</span>
 			{children}
 		</div>
 	);
@@ -81,13 +81,13 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 					type="button"
 					aria-label="Time zone"
 					className={cn(
-						'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-input/30 px-2.5 text-left outline-none transition-colors hover:bg-input/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+						'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-tile border border-input bg-input/30 px-2.5 text-left outline-none transition-colors hover:bg-input/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
 						FIELD_TEXT,
 					)}
 				>
 					<Icon icon={Globe} size={13} className="text-(--icon-tertiary)" />
 					<span className="min-w-0 flex-1 truncate text-(--text-primary)">{value.replace(/_/g, ' ')}</span>
-					<span className="in-num shrink-0 text-[11px] text-(--text-tertiary)">{zoneOffset(value)}</span>
+					<span className="in-num shrink-0 text-micro text-(--text-tertiary)">{zoneOffset(value)}</span>
 					<Icon icon={ChevronDown} size={13} className="text-(--icon-tertiary)" />
 				</button>
 			</PopoverTrigger>
@@ -99,7 +99,7 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 					<InputGroupInput autoFocus aria-label="Find a time zone" placeholder="City, region or GMT+5:30" value={query} onChange={(event) => setQuery(event.target.value)} className={FIELD_TEXT} />
 				</InputGroup>
 				<div role="listbox" aria-label="Time zones" className="max-h-[260px] overflow-y-auto p-1">
-					{shown.length === 0 ? <div className="px-2 py-3 text-[12px] text-(--text-disabled)">No time zone matches</div> : null}
+					{shown.length === 0 ? <EmptyLine className="px-2 py-3">No time zone matches</EmptyLine> : null}
 					{shown.map(({ zone, offset }) => (
 						<button
 							key={zone}
@@ -107,11 +107,11 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 							role="option"
 							aria-selected={zone === value}
 							onClick={() => pick(zone)}
-							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-(--text-primary) outline-none hover:bg-accent focus-visible:bg-accent"
+							className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-body text-(--text-primary) outline-none hover:bg-accent focus-visible:bg-accent"
 						>
 							<span className="min-w-0 flex-1 truncate">{zone.replace(/_/g, ' ')}</span>
-							{zone === local ? <span className="shrink-0 rounded-[6px] bg-(--alpha-white-6) px-1 text-[10px] text-(--text-secondary)">yours</span> : null}
-							<span className="in-num shrink-0 text-[11px] text-(--text-tertiary)">{offset}</span>
+							{zone === local ? <span className="shrink-0 rounded-control bg-(--alpha-white-6) px-1 text-nano text-(--text-secondary)">yours</span> : null}
+							<span className="in-num shrink-0 text-micro text-(--text-tertiary)">{offset}</span>
 							<Icon icon={Check} size={12} className={cn('text-(--accent-text)', zone === value ? 'opacity-100' : 'opacity-0')} />
 						</button>
 					))}
@@ -128,17 +128,17 @@ function NextRuns({ schedule }: { schedule: Schedule }) {
 	const local = localTimeZone();
 	const elsewhere = schedule.timeZone !== local && zoneOffset(schedule.timeZone) !== zoneOffset(local);
 	return (
-		<div aria-live="polite" className="flex flex-col gap-1.5 rounded-lg bg-(--bg-surface) px-3 py-2.5">
+		<div aria-live="polite" className="flex flex-col gap-1.5 rounded-tile bg-(--bg-surface) px-3 py-2.5">
 			<div className="flex items-center gap-2">
 				<Icon icon={CalendarClock} size={13} className={problem ? 'text-(--danger-text)' : 'text-(--accent-text)'} />
-				<span className={cn('min-w-0 flex-1 text-[13px]', problem ? 'text-(--danger-text)' : 'text-(--text-primary)')}>
+				<span className={cn('min-w-0 flex-1 text-body', problem ? 'text-(--danger-text)' : 'text-(--text-primary)')}>
 					{problem ?? `Runs ${describeSchedule(schedule)}`}
 				</span>
 			</div>
 			{runs.length ? (
 				<ol aria-label="Next runs" className="m-0 flex list-none flex-col gap-0.5 p-0 pl-[21px]">
 					{runs.map((run) => (
-						<li key={run.getTime()} className="in-num flex flex-wrap gap-x-2 text-[12px] text-(--text-secondary)">
+						<li key={run.getTime()} className="in-num flex flex-wrap gap-x-2 text-small text-(--text-secondary)">
 							<span>{runTime(run, schedule.timeZone)}</span>
 							{elsewhere ? <span className="text-(--text-tertiary)">· {runTime(run, local)} your time</span> : null}
 						</li>
@@ -247,7 +247,7 @@ export function ScheduleEditor({ value, onChange }: { value: Schedule; onChange:
 						className="flex-wrap"
 					>
 						{HOUR_STEPS.map((hours) => (
-							<ToggleGroupItem key={hours} value={String(hours)} aria-label={hours === 1 ? 'Every hour' : `Every ${hours} hours`} className="in-num text-[12px]">
+							<ToggleGroupItem key={hours} value={String(hours)} aria-label={hours === 1 ? 'Every hour' : `Every ${hours} hours`} className="in-num text-small">
 								{hours === 1 ? '1 hour' : `${hours} hours`}
 							</ToggleGroupItem>
 						))}
@@ -268,7 +268,7 @@ export function ScheduleEditor({ value, onChange }: { value: Schedule; onChange:
 						className="flex-wrap"
 					>
 						{WEEK.map((day) => (
-							<ToggleGroupItem key={day} value={String(day)} aria-label={DAY_NAMES[day]} className="w-11 text-[12px] data-[state=on]:border-(--accent-border) data-[state=on]:bg-(--accent-bg-subtle) data-[state=on]:text-(--accent-text)">
+							<ToggleGroupItem key={day} value={String(day)} aria-label={DAY_NAMES[day]} className="w-11 text-small data-[state=on]:border-(--accent-border) data-[state=on]:bg-(--accent-bg-subtle) data-[state=on]:text-(--accent-text)">
 								{DAY_NAMES[day].slice(0, 3)}
 							</ToggleGroupItem>
 						))}
@@ -296,7 +296,7 @@ export function ScheduleEditor({ value, onChange }: { value: Schedule; onChange:
 				</Field>
 			) : null}
 			{frequency === 'cron' ? (
-				<p className="m-0 text-[11px] leading-[16px] text-(--text-tertiary)">
+				<p className="m-0 text-micro leading-[16px] text-(--text-tertiary)">
 					Five fields on the time zone's clock: <span className="font-mono">minute hour day-of-month month day-of-week</span>. For example{' '}
 					<span className="font-mono">30 8 * * 1,3,5</span> runs at {clockTime('08:30')} on Mondays, Wednesdays and Fridays.
 				</p>

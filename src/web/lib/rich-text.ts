@@ -41,5 +41,5 @@ export const RICH_CLASS: Record<RichKind | 'chip', string> = {
 	link: 'text-(--accent-text) underline decoration-(--accent-border) underline-offset-2',
 	command: 'text-(--accent-text)',
 	file: 'text-(--accent-text)',
-	chip: 'inline-block max-w-full rounded-md border border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 align-baseline text-[12.5px] leading-[18px] text-(--accent-text)',
+	chip: 'inline-block max-w-full rounded-control border border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 align-baseline text-body leading-[18px] text-(--accent-text)',
 };

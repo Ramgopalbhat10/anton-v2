@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from 'lucide-react';
 import { type ComponentType, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { BrowserTab } from '@/components/browser-tab';
@@ -12,7 +12,8 @@ import { LibraryTab } from '@/components/library-tab';
 import { PrTab } from '@/components/pr-tab';
 import { PreviewTab } from '@/components/preview-tab';
 import { useResume } from '@/components/source-bar';
-import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
+import { Count, PanelTab, PanelTabs } from '@/components/instrument';
+import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger, SectionLabel } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
 import { api } from '@/lib/api';
 import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
@@ -51,47 +52,6 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	Library: memo(LibraryTab),
 	History: memo(HistoryTab),
 };
-
-/**
- * One open panel as a button, raised when it is the one shown. Hovering it
- * swaps its icon for the close button, in the same place.
- */
-function PanelTab({ name, count, active, onSelect, onClose }: { name: PanelName; count?: number; active: boolean; onSelect: () => void; onClose: () => void }) {
-	const panel = panels.find((panel) => panel.name === name)!;
-	return (
-		<div className="group/tab relative flex h-7 shrink-0 items-center rounded-[6px] hover:bg-(--bg-hover)">
-			{active ? <div className="absolute inset-0 rounded-[6px] border border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)" /> : null}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={active}
-				onClick={onSelect}
-				className="relative flex h-full items-center gap-1.5 rounded-[6px] pr-2 pl-1.5 outline-none focus-visible:shadow-(--focus-ring)"
-			>
-				<span
-					className={cn(
-						'inline-flex size-4 shrink-0 items-center justify-center transition-opacity duration-(--duration-micro) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
-						active ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
-					)}
-				>
-					<Icon icon={panel.icon} size={12} />
-				</span>
-				<span className={cn('text-[12px] whitespace-nowrap', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{name}</span>
-				{count ? (
-					<span className="in-num inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--accent-bg-subtle) px-1 text-[10px] text-(--accent-text)">{count}</span>
-				) : null}
-			</button>
-			<button
-				type="button"
-				aria-label={`Close ${name}`}
-				onClick={onClose}
-				className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-14) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
-			>
-				<Icon icon={X} size={12} />
-			</button>
-		</div>
-	);
-}
 
 /**
  * Starts the task's sandbox from where it stopped, shown while it is not
@@ -158,22 +118,25 @@ export const VmPanel = memo(function VmPanel({
 	const View = current ? VIEWS[current] : null;
 
 	return (
-		<WorkspacePane expanded={expanded}>
+		<WorkspacePane expanded={expanded} narrow={current === null && !expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
 				{/* On a phone the workspace covers the conversation; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
-				<div data-noscrollbar role="tablist" aria-label="Workspace panels" className="flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden">
+				<PanelTabs label="Workspace panels">
 					{tabs.map((name) => (
 						<PanelTab
 							key={name}
-							name={name}
-							count={name === 'Changes' ? changed : undefined}
-							active={current === name}
+							on={current === name}
+							mark={<Icon icon={panels.find((panel) => panel.name === name)!.icon} size={12} />}
 							onSelect={() => onActiveChange(name)}
 							onClose={() => close(name)}
-						/>
+							closeLabel={`Close ${name}`}
+						>
+							{name}
+							{name === 'Changes' && changed ? <Count tone="accent">{changed}</Count> : null}
+						</PanelTab>
 					))}
-				</div>
+				</PanelTabs>
 				<div className="relative flex shrink-0 items-center gap-0.5">
 					<ResumeButton sessionId={sessionId} />
 					<Menu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -188,12 +151,12 @@ export const VmPanel = memo(function VmPanel({
 									<div key={panel.name} className="group/row flex items-center gap-0.5">
 										<MenuPrimitive.Item
 											onSelect={() => show(panel.name)}
-											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[6px] px-2 outline-none data-highlighted:bg-(--bg-hover)"
+											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 outline-none data-highlighted:bg-(--bg-hover)"
 										>
 											<span className="inline-flex shrink-0 text-(--icon-secondary)">
 												<Icon icon={panel.icon} size={13} />
 											</span>
-											<span className="min-w-0 flex-1 truncate text-[13px] text-(--text-primary)">{panel.name}</span>
+											<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{panel.name}</span>
 											{tabs.includes(panel.name) ? (
 												<span className="inline-flex shrink-0 text-(--accent-text)">
 													<Icon icon={Check} size={12} />
@@ -209,7 +172,7 @@ export const VmPanel = memo(function VmPanel({
 												togglePinnedPanel(panel.name);
 											}}
 											className={cn(
-												'inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] outline-none data-highlighted:bg-(--bg-hover)',
+												'inline-flex size-8 shrink-0 items-center justify-center rounded-control outline-none data-highlighted:bg-(--bg-hover)',
 												isPinned ? 'text-(--accent-text)' : 'text-(--icon-tertiary) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
 											)}
 										>
@@ -218,7 +181,7 @@ export const VmPanel = memo(function VmPanel({
 									</div>
 								);
 							})}
-							<div className="px-2 pt-1.5 pb-1 text-[11px] leading-[15px] text-(--text-tertiary)">
+							<div className="px-2 pt-1.5 pb-1 text-micro leading-[15px] text-(--text-tertiary)">
 								{pinned.length ? 'Tasks open with the pinned panels.' : 'Pin panels to open them with every task.'}
 							</div>
 						</MenuContent>
@@ -241,29 +204,21 @@ export const VmPanel = memo(function VmPanel({
 				)}
 			>
 				{current === null ? (
-					<div className="flex min-h-full items-center justify-center px-2 py-6">
-						<div className="flex w-full max-w-[520px] flex-col gap-3">
-							<div className="in-caption px-1">Open a panel</div>
-							<div className="grid gap-x-2 gap-y-1 sm:grid-cols-2">
-								{panels.map((panel) => (
-									<button
-										type="button"
-										key={panel.name}
-										onClick={() => show(panel.name)}
-										className="group/panel flex items-start gap-3 rounded-[10px] px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-									>
-										<span className="inline-flex size-7 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/panel:text-(--accent-text)">
-											<Icon icon={panel.icon} size={16} />
-										</span>
-										<span className="flex min-w-0 flex-col gap-0.5">
-											<span className="text-[13px] font-medium text-(--text-primary)">{panel.name}</span>
-											<span className="text-[12px] leading-[17px] text-pretty text-(--text-tertiary)">{panel.desc}</span>
-										</span>
-									</button>
-								))}
-							</div>
-						</div>
-					</div>
+					<nav aria-label="Open a panel" className="flex flex-col gap-0.5 px-2 pt-1 pb-4">
+						<SectionLabel className="px-2 pt-1 pb-1.5">Open a panel</SectionLabel>
+						{panels.map((panel) => (
+							<button
+								type="button"
+								key={panel.name}
+								title={panel.desc}
+								onClick={() => show(panel.name)}
+								className="group/panel flex h-8 items-center gap-2.5 rounded-control px-2 text-left text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							>
+								<Icon icon={panel.icon} size={14} className="text-(--icon-tertiary) group-hover/panel:text-(--icon-secondary)" />
+								{panel.name}
+							</button>
+						))}
+					</nav>
 				) : null}
 				{current === 'Preview' ? <PreviewTab key={sessionId} sessionId={sessionId} onWatchTest={() => show('Computer')} /> : View ? <View key={sessionId} sessionId={sessionId} /> : null}
 			</div>

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, CalendarRange, Clock, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle, Telescope } from 'lucide-react';
+import { ArrowUpRight, CalendarRange, Clock, Eye, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle, Telescope } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { PR_ICON, prColor, prTone } from '@/components/pr-status';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/signal';
@@ -29,13 +29,13 @@ function localDay(at: Date): number {
 function Panel({ icon, title, aside, children, className, footer }: { icon: LucideIcon; title: string; aside?: ReactNode; children: ReactNode; className?: string; footer?: ReactNode }) {
 	return (
 		<section aria-label={title} className={cn('home-panel flex min-w-0 flex-col', className)}>
-			<header className="flex h-9 shrink-0 items-center gap-2 px-3.5 text-[12px] text-(--text-secondary)">
+			<header className="flex h-9 shrink-0 items-center gap-2 px-3.5 text-small text-(--text-secondary)">
 				<Icon icon={icon} size={13} className="text-(--icon-tertiary)" />
-				<h2 className="m-0 min-w-0 flex-1 truncate text-[12px] font-medium">{title}</h2>
+				<h2 className="m-0 min-w-0 flex-1 truncate text-small font-medium">{title}</h2>
 				{aside}
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col px-3.5 pb-3">{children}</div>
-			{footer ? <footer className="flex h-8 shrink-0 items-center gap-2 px-3.5 pb-1 text-[11.5px] text-(--text-tertiary)">{footer}</footer> : null}
+			{footer ? <footer className="flex h-8 shrink-0 items-center gap-2 px-3.5 pb-1 text-small text-(--text-tertiary)">{footer}</footer> : null}
 		</section>
 	);
 }
@@ -105,7 +105,7 @@ function Activity({ sessions }: { sessions: Session[] }) {
 						<span
 							key={cell.day}
 							title={cell.level < 0 ? undefined : `${cell.count} ${cell.count === 1 ? 'task' : 'tasks'} on ${new Date(cell.day * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}`}
-							className="aspect-square rounded-[2px]"
+							className="aspect-square rounded-mark"
 							style={{ background: cell.level < 0 ? 'transparent' : LEVEL[cell.level] }}
 						/>
 					))}
@@ -127,7 +127,7 @@ function TaskLink({ session, children, className }: { session: Session; children
 	);
 }
 
-const ROW = 'group/row -mx-1.5 flex h-[30px] min-w-0 items-center gap-2.5 rounded-[6px] px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+const ROW = 'group/row -mx-1.5 flex h-[30px] min-w-0 items-center gap-2.5 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
 
 /** The latest tasks, each a line: its state, its title and how long ago. */
 function Recent({ sessions }: { sessions: Session[] }) {
@@ -139,7 +139,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 			title="Recent"
 			footer={
 				more > 0 ? (
-					<Link to="/tasks" className="rounded-sm outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+					<Link to="/tasks" className="rounded-control outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
 						{more} more
 					</Link>
 				) : null
@@ -150,13 +150,13 @@ function Recent({ sessions }: { sessions: Session[] }) {
 					{shown.map((session) => (
 						<TaskLink key={session.id} session={session} className={ROW}>
 							<TaskStatusIcon session={session} size={12} />
-							<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
-							<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">{age(session.lastInputAt ?? session.createdAt)}</span>
+							<span className="min-w-0 flex-1 truncate text-body text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
+							<span className="in-num shrink-0 text-micro text-(--text-disabled)">{age(session.lastInputAt ?? session.createdAt)}</span>
 						</TaskLink>
 					))}
 				</div>
 			) : (
-				<p className="m-0 py-2 text-[12px] text-(--text-tertiary)">Tasks you start show up here.</p>
+				<p className="m-0 py-2 text-small text-(--text-tertiary)">Tasks you start show up here.</p>
 			)}
 		</Panel>
 	);
@@ -176,7 +176,7 @@ function PrPill({ state, conflicts, failing }: { state: PrState; conflicts?: boo
 	const tone = active && conflicts ? 'conflicts' : active && failing ? 'failing' : state;
 	const label = active && conflicts ? 'Conflicts' : active && failing ? 'Failing' : PR_LABEL[state];
 	return (
-		<span className="inline-flex h-[18px] shrink-0 items-center rounded-full px-1.5 text-[10.5px] font-medium" style={{ color: prTone(tone), background: `color-mix(in oklab, ${prTone(tone)} 13%, transparent)` }}>
+		<span className="inline-flex h-[18px] shrink-0 items-center rounded-full px-1.5 text-micro font-medium" style={{ color: prTone(tone), background: `color-mix(in oklab, ${prTone(tone)} 13%, transparent)` }}>
 			{label}
 		</span>
 	);
@@ -200,10 +200,10 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 			icon={GitPullRequest}
 			title="Pull requests"
 			className="md:col-span-2"
-			aside={open ? <span className="in-num text-[11.5px] text-(--text-tertiary)">{open} open</span> : null}
+			aside={open ? <span className="in-num text-small text-(--text-tertiary)">{open} open</span> : null}
 			footer={
 				more > 0 ? (
-					<Link to="/reviews" className="rounded-sm outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+					<Link to="/reviews" className="rounded-control outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
 						{more} more
 					</Link>
 				) : null
@@ -220,8 +220,8 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 										<Icon icon={PR_ICON[state]} size={13} />
 									</span>
 									<span className="flex min-w-0 flex-1 flex-col">
-										<span className="truncate text-[12.5px] leading-4 text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
-										<span className="truncate text-[11px] leading-4 text-(--text-disabled)">
+										<span className="truncate text-body leading-4 text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
+										<span className="truncate text-micro leading-4 text-(--text-disabled)">
 											<span className="in-num">{prNumber(session)}</span> · {session.repo.split('/').pop()} · {age(session.createdAt)}
 										</span>
 									</span>
@@ -230,10 +230,10 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 							);
 						})}
 					</div>
-					<div className="flex min-w-0 flex-col justify-between gap-3 rounded-[10px] bg-(--alpha-white-3) p-3">
+					<div className="flex min-w-0 flex-col justify-between gap-3 rounded-card bg-(--alpha-white-3) p-3">
 						<div className="flex items-baseline gap-1.5">
-							<span className="in-figure text-[24px] leading-7">{merged}</span>
-							<span className="text-[11.5px] text-(--text-tertiary)">of the last {recent.length} merged</span>
+							<span className="in-figure text-h1 leading-7">{merged}</span>
+							<span className="text-small text-(--text-tertiary)">of the last {recent.length} merged</span>
 						</div>
 						<div role="img" aria-label={`The last ${recent.length} pull requests by state, oldest first`} className="grid grid-cols-12 gap-[3px]">
 							{Array.from({ length: RIBBON }, (_, index) => {
@@ -243,13 +243,13 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 									<span
 										key={index}
 										title={session ? `${prNumber(session)} ${session.title} · ${PR_LABEL[state!].toLowerCase()}` : undefined}
-										className="h-[18px] rounded-[2px]"
+										className="h-[18px] rounded-mark"
 										style={state ? { background: `color-mix(in oklab, ${prColor(state)} 78%, transparent)` } : { background: 'var(--heat-0)' }}
 									/>
 								);
 							})}
 						</div>
-						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-(--text-tertiary)">
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-(--text-tertiary)">
 							{(['merged', 'open', 'draft', 'closed'] as const).map((state) =>
 								count(state) ? (
 									<span key={state} className="inline-flex items-center gap-1.5">
@@ -263,7 +263,7 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 					</div>
 				</div>
 			) : (
-				<p className="m-0 py-2 text-[12px] text-(--text-tertiary)">Pull requests the agent opens show up here, with their checks.</p>
+				<p className="m-0 py-2 text-small text-(--text-tertiary)">Pull requests the agent opens show up here, with their checks.</p>
 			)}
 		</Panel>
 	);
@@ -309,7 +309,7 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 			icon={CalendarRange}
 			title={now.toLocaleDateString(undefined, { month: 'long' })}
 			aside={
-				<span className="in-num text-[11.5px] text-(--text-tertiary)">
+				<span className="in-num text-small text-(--text-tertiary)">
 					Day {today} of {length}
 				</span>
 			}
@@ -317,10 +317,10 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 			<div className="flex min-h-0 flex-1 flex-col justify-between gap-3">
 				<div className="flex flex-col gap-0.5">
 					<span className="flex items-baseline gap-1.5">
-						<span className="in-figure text-[26px] leading-8">{started}</span>
-						<span className="text-[12px] text-(--text-tertiary)">{started === 1 ? 'task' : 'tasks'} so far</span>
+						<span className="in-figure text-h1 leading-8">{started}</span>
+						<span className="text-small text-(--text-tertiary)">{started === 1 ? 'task' : 'tasks'} so far</span>
 					</span>
-					<span className={cn('text-[11.5px]', started > before ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{pace(started, before, lastName)}</span>
+					<span className={cn('text-small', started > before ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{pace(started, before, lastName)}</span>
 				</div>
 				<div role="img" aria-label={`Tasks started each day of ${now.toLocaleDateString(undefined, { month: 'long' })}`} className="flex h-12 items-end gap-[2px]">
 					{perDay.map((count, index) => {
@@ -330,7 +330,7 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 							<span
 								key={day}
 								title={future ? undefined : `${count} ${count === 1 ? 'task' : 'tasks'} on ${new Date(year, month, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
-								className={cn('min-w-0 flex-1 rounded-[2px]', future && 'border border-dashed border-(--border-default)', day === today && 'shadow-[0_0_0_1px_var(--accent-border)]')}
+								className={cn('min-w-0 flex-1 rounded-mark', future && 'border border-dashed border-(--border-default)', day === today && 'shadow-[0_0_0_1px_var(--accent-border)]')}
 								style={{
 									height: future ? 6 : count ? `${Math.max(18, (count / most) * 100)}%` : 3,
 									background: future ? 'transparent' : count ? (day === today ? 'var(--accent-base)' : 'var(--heat-3)') : 'var(--heat-0)',
@@ -340,13 +340,13 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 					})}
 				</div>
 				<div className="grid grid-cols-2 gap-2">
-					<div className="flex flex-col rounded-[8px] bg-(--alpha-white-3) px-2.5 py-1.5">
-						<span className="text-[11px] text-(--text-tertiary)">Merged</span>
-						<span className="in-figure text-[15px] leading-5">{merged}</span>
+					<div className="flex flex-col rounded-tile bg-(--alpha-white-3) px-2.5 py-1.5">
+						<span className="text-micro text-(--text-tertiary)">Merged</span>
+						<span className="in-figure text-h3 leading-5">{merged}</span>
 					</div>
-					<div className="flex flex-col rounded-[8px] bg-(--alpha-white-3) px-2.5 py-1.5">
-						<span className="text-[11px] text-(--text-tertiary)">Spent</span>
-						<span className="in-figure text-[15px] leading-5">{usage.data ? dollars(usage.data.month) : '—'}</span>
+					<div className="flex flex-col rounded-tile bg-(--alpha-white-3) px-2.5 py-1.5">
+						<span className="text-micro text-(--text-tertiary)">Spent</span>
+						<span className="in-figure text-h3 leading-5">{usage.data ? dollars(usage.data.month) : '—'}</span>
 					</div>
 				</div>
 			</div>
@@ -380,13 +380,25 @@ function useNextIn(): string {
 	return `${minutes} min`;
 }
 
-/** The picture, credited, in Home's corner: where it comes from and when it changes, which pictures to show (a new one every hour, or NASA's picture of the day), a random other one, and a way to turn the sky off. */
+/** The picture, credited, in Home's corner: where it comes from and when it changes, which pictures to show (a new one every hour, or NASA's picture of the day), a random other one, and a way to turn the sky off; with the sky off, a button that turns it back on. */
 export function SkyCredit() {
 	const on = useSkyOn();
 	const image: SkyImage = useSky();
 	const mode = useSkyMode();
 	const next = useNextIn();
-	if (!on) return null;
+	if (!on) {
+		// Off is a look of its own, not a dead end: the way back stays where the credit was.
+		return (
+			<button
+				type="button"
+				onClick={() => setSkyOn(true)}
+				className="sky-credit inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-micro text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+			>
+				<Icon icon={Eye} size={11} />
+				Show the sky
+			</button>
+		);
+	}
 	const day = image.day ? new Date(`${image.day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
 	return (
 		<Menu>
@@ -394,7 +406,7 @@ export function SkyCredit() {
 				<button
 					type="button"
 					aria-label={`Sky: ${image.title}, ${image.credit}`}
-					className="sky-credit inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+					className="sky-credit inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-micro text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 				>
 					<Icon icon={image.day ? Telescope : ImageIcon} size={11} />
 					<span className="truncate">{image.title}</span>
@@ -403,7 +415,7 @@ export function SkyCredit() {
 			</MenuTrigger>
 			<MenuContent align="end" side="top" className="w-[280px]">
 				<MenuLabel>
-					<span className="block text-[12px] text-(--text-primary)">{image.title}</span>
+					<span className="block text-small text-(--text-primary)">{image.title}</span>
 					<span className="block font-normal">{image.day ? `${image.credit} · picture of the day for ${day}, until midnight` : `${image.credit} · next picture in ${next}`}</span>
 				</MenuLabel>
 				<MenuSeparator />

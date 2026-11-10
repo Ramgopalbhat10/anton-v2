@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon, Plus, Search } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
 import { Caption, Card, CardSection, Figure, type Part, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
 import { useModelName } from '@/components/model-picker';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { EmptyState, IconBtn, SearchField, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
 import { TaskRow, used } from '@/components/task-row';
 import { isLive } from '@/components/task-status';
@@ -53,7 +52,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 					<IconBtn icon={ChevronLeft} size="xs" label="Previous page" disabled={page === 0} onClick={() => onPage(page - 1)} />
 					{pageNumbers(page, pages).map((index, at) =>
 						index === null ? (
-							<span key={`gap-${at}`} className="w-5 text-center text-[11px] text-(--text-disabled)">
+							<span key={`gap-${at}`} className="w-5 text-center text-micro text-(--text-disabled)">
 								…
 							</span>
 						) : (
@@ -64,7 +63,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 								aria-label={`Page ${index + 1}`}
 								onClick={() => onPage(index)}
 								className={cn(
-									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1.5 text-[11px] outline-none focus-visible:shadow-(--focus-ring)',
+									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-control px-1.5 text-micro outline-none focus-visible:shadow-(--focus-ring)',
 									index === page ? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-(--text-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
 								)}
 							>
@@ -144,7 +143,6 @@ const SERIES_COLORS = ['var(--accent-base)', 'var(--data-2)', 'var(--neutral-500
 
 /** Every task, searchable and filtered by state, newest first, a page at a time. */
 export function TasksPage() {
-	const navigate = useNavigate();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const modelName = useModelName();
 	const [query, setQuery] = useState('');
@@ -156,14 +154,7 @@ export function TasksPage() {
 	const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
 	const page = Math.min(wantedPage, pages - 1);
 	return (
-		<PageFrame
-			title="Tasks"
-			actions={
-				<Btn size="sm" icon={Plus} onClick={() => void navigate({ to: '/' })}>
-					New task
-				</Btn>
-			}
-		>
+		<PageFrame title="Tasks" description="Every task, where it stands and what it cost. Start a new one from Home.">
 			{all.length ? <RackCard sessions={all} /> : null}
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">
@@ -180,23 +171,19 @@ export function TasksPage() {
 								}}
 							>
 								{TABS[key].label}
-								<span className="in-num text-[10.5px] text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
+								<span className="in-num text-micro text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
 							</SegmentedItem>
 						))}
 					</Segmented>
-					<div className="flex h-8 min-w-[180px] flex-1 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--well-bg) px-3 focus-within:shadow-(--focus-ring)">
-						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-						<input
-							value={query}
-							onChange={(event) => {
-								setQuery(event.target.value);
-								setPage(0);
-							}}
-							placeholder="Search tasks"
-							aria-label="Search tasks"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
-						/>
-					</div>
+					<SearchField
+						value={query}
+						onChange={(next) => {
+							setQuery(next);
+							setPage(0);
+						}}
+						placeholder="Search tasks"
+						className="min-w-[180px] flex-1"
+					/>
 				</div>
 				{sessions.isPending ? (
 					<div className="p-4">

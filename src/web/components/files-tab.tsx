@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { FileDiff, Folder, Search, X } from 'lucide-react';
+import { FileDiff, Folder, Search } from 'lucide-react';
 import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { FileIcon, FileIcons } from '@/components/file-icons';
+import { PanelTab, PanelTabs } from '@/components/instrument';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
-import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { EmptyLine, EmptyState, Icon, SearchField, Spinner } from '@/components/signal';
 import { api, isChat, refreshFor } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
@@ -22,7 +23,7 @@ function Matches({
 	onOpen: (path: string) => void;
 	statusOf: (path: string) => string | undefined;
 }) {
-	if (paths.length === 0) return <div className="px-2 py-1.5 text-[12px] text-(--text-tertiary)">No files match.</div>;
+	if (paths.length === 0) return <EmptyLine>No files match.</EmptyLine>;
 	return (
 		<div className="flex flex-col gap-px">
 			{paths.map((path) => {
@@ -34,11 +35,11 @@ function Matches({
 						key={path}
 						onClick={() => onOpen(path)}
 						aria-current={selected === path ? 'true' : undefined}
-						className="sg-file-row flex h-[26px] items-center gap-2 rounded-[6px] pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 					>
 						<FileIcon path={path} />
-						<span className={cn('shrink-0 text-[12px]', selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
-						<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+						<span className={cn('shrink-0 text-small', selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
+						<span className="min-w-0 flex-1 truncate text-micro text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
 						{status ? <StatusChip status={status} /> : null}
 					</button>
 				);
@@ -54,7 +55,7 @@ const CHANGED_SHOWN = 6;
 /** What Files shows with nothing open: the changed files to open, and where else to go. */
 function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
 	const showPanel = useContext(ShowPanel);
-	const row = 'flex h-7 items-center gap-2 rounded-[6px] px-2 text-left text-[12px] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex h-7 items-center gap-2 rounded-control px-2 text-left text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
 	return (
 		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
 			<div className="flex w-full max-w-[340px] flex-col gap-4">
@@ -67,7 +68,7 @@ function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string
 								<button type="button" key={path} onClick={() => onOpen(path)} title={path} className={row}>
 									<FileIcon path={path} />
 									<span className="shrink-0 text-(--text-secondary)">{path.slice(slash + 1)}</span>
-									<span className="min-w-0 flex-1 truncate text-[11px] text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+									<span className="min-w-0 flex-1 truncate text-micro text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
 									<StatusChip status={status} />
 								</button>
 							);
@@ -141,24 +142,11 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 				opened={selected}
 				side={
 					<>
-					<label className="sg-file-search mb-1.5 flex h-7 shrink-0 items-center gap-2 rounded-[6px] border border-input bg-(--bg-inset) px-2">
-						<Icon icon={Search} size={12} className="text-(--icon-tertiary)" />
-						<input
-							ref={search}
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === 'Escape') setQuery('');
-							}}
-							placeholder="Find a file"
-							aria-label="Find a file"
-							className="min-w-0 flex-1 bg-transparent text-[12px] text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
-						/>
-					</label>
+					<SearchField size="sm" inputRef={search} value={query} onChange={setQuery} placeholder="Find a file" className="mb-1.5 shrink-0" />
 					{listing.isError ? (
 						<EmptyState title="Files unavailable" body={listing.error.message} />
 					) : listing.isPending ? (
-						<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+						<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 							<Spinner size={12} />
 							Listing files
 						</div>
@@ -199,35 +187,23 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					<>
 					{opened.length ? (
 						<EditorBar sideToggle={sideToggle}>
-							<div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-							{opened.map((path) => (
-								<div
-									key={path}
-									className={cn(
-										'group flex shrink-0 items-center gap-1 rounded-[6px] border',
-										selected === path ? 'border-(--card-border) bg-[linear-gradient(180deg,var(--neutral-750),var(--neutral-800))] shadow-(--card-highlight)' : 'border-transparent hover:bg-(--bg-hover)',
-									)}
-								>
-									<button
-										type="button"
-										role="tab"
+							<PanelTabs label="Open files">
+								{opened.map((path) => (
+									<PanelTab
+										key={path}
+										on={selected === path}
 										id={`${viewerId}-${encodeURIComponent(path)}`}
-										aria-controls={viewerId}
-										aria-selected={selected === path}
+										controls={viewerId}
 										title={path}
-										onClick={() => setSelected(path)}
-										className={cn(
-											'flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-[12px] outline-none focus-visible:shadow-(--focus-ring)',
-											selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)',
-										)}
+										mark={<FileIcon path={path} />}
+										onSelect={() => setSelected(path)}
+										onClose={() => close(path)}
+										closeLabel={`Close ${path}`}
 									>
-										<FileIcon path={path} />
 										{path.split('/').pop()}
-									</button>
-									<IconBtn icon={X} size="xs" label={`Close ${path}`} onClick={() => close(path)} className="mr-1" />
-								</div>
-							))}
-							</div>
+									</PanelTab>
+								))}
+							</PanelTabs>
 							{selected && isMarkdown(selected) ? (
 								<MarkdownToggle
 									preview={!sourceShown.has(selected)}

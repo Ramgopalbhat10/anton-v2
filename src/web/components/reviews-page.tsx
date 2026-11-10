@@ -44,7 +44,7 @@ function Row({ item }: { item: ReviewItem }) {
 	const open = item.group !== 'merged' && item.group !== 'closed';
 	const state = item.group === 'unknown' ? 'unknown' : item.group === 'merged' || item.group === 'closed' ? item.group : item.draft ? 'draft' : 'open';
 	return (
-		<div className="flex min-h-[52px] items-center gap-3 rounded-[6px] px-2 py-1.5 hover:bg-(--bg-hover)">
+		<div className="flex min-h-[52px] items-center gap-3 rounded-control px-2 py-1.5 hover:bg-(--bg-hover)">
 			<span className="inline-flex size-7 shrink-0 items-center justify-center" style={{ color: prTone(state === 'unknown' ? 'unknown' : state) }}>
 				<Icon icon={PR_ICON[state === 'unknown' ? 'open' : state]} size={14} />
 			</span>
@@ -52,22 +52,22 @@ function Row({ item }: { item: ReviewItem }) {
 				to="/agents/$sessionId"
 				params={{ sessionId: item.sessionId }}
 				search={{ app: 'code' }}
-				className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md outline-none focus-visible:shadow-(--focus-ring)"
+				className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
 			>
 				<div className="flex min-w-0 items-center gap-2">
-					<span className="truncate text-[13px] font-medium">{item.title}</span>
+					<span className="truncate text-body font-medium">{item.title}</span>
 					{item.reviewing ? <Badge tone="accent">Reviewing @{item.reviewing}</Badge> : null}
 					{item.draft ? <PrFlag tone="draft">Draft</PrFlag> : null}
 					{open && item.conflicts ? <PrFlag tone="conflicts">Conflicts</PrFlag> : null}
 				</div>
-				<div className="truncate text-[11px] text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-tertiary)">
 					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: state === 'unknown' ? null : { state, checks: null, runs: [] } }} full /> · {age(item.createdAt)}
 					{open ? ` · ${checksText(item.checks)}` : ''}
 				</div>
 			</Link>
 			{open ? <CheckPips checks={item.checks} /> : null}
 			{open && item.comments ? (
-				<span className="in-num flex shrink-0 items-center gap-1 text-[12px] text-(--text-tertiary)" title="Comments and reviews">
+				<span className="in-num flex shrink-0 items-center gap-1 text-small text-(--text-tertiary)" title="Comments and reviews">
 					<Icon icon={MessageSquare} size={12} />
 					{item.comments}
 				</span>
@@ -115,7 +115,7 @@ function ReviewAny() {
 				<Btn type="submit" variant="primary" disabled={!url.trim() || review.isPending}>
 					{review.isPending ? 'Starting…' : 'Review'}
 				</Btn>
-				{review.isError ? <p className="m-0 w-full text-[12px] text-(--danger-text)">{review.error.message}</p> : null}
+				{review.isError ? <p className="m-0 w-full text-small text-(--danger-text)">{review.error.message}</p> : null}
 			</form>
 		</Card>
 	);
@@ -160,12 +160,12 @@ export function ReviewsPage() {
 		.map((group) => ({ group, items: items.filter((item) => item.group === group) }))
 		.filter((entry) => entry.items.length > 0);
 	return (
-		<PageFrame title="Reviews">
+		<PageFrame title="Reviews" description="The pull requests your tasks opened, grouped by what they wait on, and a review of any other by its link.">
 			<ReviewAny />
 			{reviews.isPending ? (
 				<Spinner size={12} />
 			) : reviews.isError ? (
-				<p className="m-0 text-[12px] text-(--danger-text)">Could not load pull requests: {reviews.error.message}</p>
+				<p className="m-0 text-small text-(--danger-text)">Could not load pull requests: {reviews.error.message}</p>
 			) : groups.length === 0 ? (
 				<Card as="div">
 					<div className="p-1.5">

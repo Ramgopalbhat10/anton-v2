@@ -74,7 +74,7 @@ const TONE_TEXT: Record<UiTone, string> = {
 };
 
 const FIELD =
-  "h-8 w-full min-w-0 rounded-lg border border-(--border-subtle) bg-(--well-bg) px-2.5 text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring) disabled:opacity-60";
+  "h-8 w-full min-w-0 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring) disabled:opacity-60";
 
 /** Each input's starting value: what the agent set, else the first option, nothing, or off. */
 function startingValues(spec: UiSpec): Values {
@@ -103,7 +103,7 @@ function startingValues(spec: UiSpec): Values {
 
 function Label({ children }: { children: ReactNode }) {
   return (
-    <span className="text-[12px] leading-[16px] text-(--text-secondary)">
+    <span className="text-small leading-[16px] text-(--text-secondary)">
       {children}
     </span>
   );
@@ -121,11 +121,11 @@ function Stat({ node }: { node: Extract<UiNode, { type: "stat" }> }) {
     <div className="flex min-w-0 flex-col gap-1">
       <span className="in-caption truncate">{node.label}</span>
       <span className="flex items-baseline gap-2">
-        <span className="in-num text-[20px] leading-[24px] font-medium tracking-[-0.01em] text-(--text-primary)">
+        <span className="in-num text-h2 leading-[24px] font-medium tracking-[-0.01em] text-(--text-primary)">
           {formatValue(node.value, node.format)}
         </span>
         {node.change ? (
-          <span className={cn("in-num text-[12px]", TONE_TEXT[tone])}>
+          <span className={cn("in-num text-small", TONE_TEXT[tone])}>
             {node.change}
           </span>
         ) : null}
@@ -160,8 +160,8 @@ function Table({ node }: { node: Extract<UiNode, { type: "table" }> }) {
           typeof row[key] === "number",
       ));
   return (
-    <div className="max-h-[420px] overflow-auto rounded-[6px] border border-(--border-subtle)">
-      <table className="w-full border-collapse text-[12px]">
+    <div className="max-h-[420px] overflow-auto rounded-control border border-(--border-subtle)">
+      <table className="w-full border-collapse text-small">
         <thead className="sticky top-0 z-[1] bg-(--card-bg)">
           <tr>
             {node.columns.map((column) => {
@@ -261,7 +261,7 @@ function Chart({ node }: { node: Extract<UiNode, { type: "chart" }> }) {
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center gap-2">
         {node.title ? (
-          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-(--text-primary)">
+          <span className="min-w-0 flex-1 truncate text-body font-medium text-(--text-primary)">
             {node.title}
           </span>
         ) : (
@@ -272,7 +272,7 @@ function Chart({ node }: { node: Extract<UiNode, { type: "chart" }> }) {
           onClick={() => setAsTable((current) => !current)}
           aria-label={asTable ? "Show as a chart" : "Show as a table"}
           title={asTable ? "Show as a chart" : "Show as a table"}
-          className="inline-flex size-6 items-center justify-center rounded-md text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
+          className="inline-flex size-6 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
         >
           <Icon icon={asTable ? ChartColumn : Table2} size={13} />
         </button>
@@ -319,7 +319,7 @@ function Timeline({ node }: { node: Extract<UiNode, { type: "timeline" }> }) {
             <span className="flex items-baseline gap-2">
               <span
                 className={cn(
-                  "min-w-0 flex-1 text-[12.5px] leading-[18px] [overflow-wrap:anywhere]",
+                  "min-w-0 flex-1 text-body leading-[18px] [overflow-wrap:anywhere]",
                   item.state === "pending"
                     ? "text-(--text-secondary)"
                     : "text-(--text-primary)",
@@ -328,13 +328,13 @@ function Timeline({ node }: { node: Extract<UiNode, { type: "timeline" }> }) {
                 {item.title}
               </span>
               {item.time ? (
-                <span className="in-num shrink-0 text-[11px] text-(--text-tertiary)">
+                <span className="in-num shrink-0 text-micro text-(--text-tertiary)">
                   {item.time}
                 </span>
               ) : null}
             </span>
             {item.detail ? (
-              <span className="text-[12px] leading-[17px] text-(--text-tertiary)">
+              <span className="text-small leading-[17px] text-(--text-tertiary)">
                 {item.detail}
               </span>
             ) : null}
@@ -348,13 +348,13 @@ function Timeline({ node }: { node: Extract<UiNode, { type: "timeline" }> }) {
 function Diff({ node }: { node: Extract<UiNode, { type: "diff" }> }) {
   const lines = node.patch.replace(/\n$/, "").split("\n");
   return (
-    <div className="overflow-hidden rounded-[6px] border border-(--border-subtle) bg-(--bg-inset)">
+    <div className="overflow-hidden rounded-control border border-(--border-subtle) bg-(--bg-inset)">
       {node.path ? (
         <div className="in-caption flex h-7 items-center border-b border-(--border-subtle) px-3">
           {node.path}
         </div>
       ) : null}
-      <pre className="m-0 max-h-80 overflow-auto py-1.5 font-mono text-[12px] leading-[18px]">
+      <pre className="m-0 max-h-80 overflow-auto py-1.5 font-mono text-small leading-[18px]">
         {lines.map((line, index) => (
           <div
             key={index}
@@ -387,11 +387,11 @@ function FileRef({ node }: { node: Extract<UiNode, { type: "file" }> }) {
         size={13}
         className="shrink-0 text-(--icon-tertiary)"
       />
-      <span className="min-w-0 truncate text-[12px]">
+      <span className="min-w-0 truncate text-small">
         {node.label ?? text}
       </span>
       {node.label ? (
-        <span className="min-w-0 truncate text-[11px] text-(--text-tertiary)">
+        <span className="min-w-0 truncate text-micro text-(--text-tertiary)">
           {text}
         </span>
       ) : null}
@@ -404,7 +404,7 @@ function FileRef({ node }: { node: Extract<UiNode, { type: "file" }> }) {
       type="button"
       onClick={() => links.open(node.path, node.line)}
       title={`Open ${text} in Files`}
-      className="flex h-8 max-w-full min-w-0 items-center gap-2 self-start rounded-lg border border-(--border-subtle) px-2.5 text-(--accent-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+      className="flex h-8 max-w-full min-w-0 items-center gap-2 self-start rounded-tile border border-(--border-subtle) px-2.5 text-(--accent-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
     >
       {body}
     </button>
@@ -430,7 +430,7 @@ function Formula({ node }: { node: Extract<UiNode, { type: "value" }> }) {
   return (
     <div className="flex min-w-0 flex-col gap-1" aria-live="polite">
       <span className="in-caption truncate">{node.label}</span>
-      <span className="in-num text-[20px] leading-[24px] font-medium tracking-[-0.01em] text-(--text-primary)">
+      <span className="in-num text-h2 leading-[24px] font-medium tracking-[-0.01em] text-(--text-primary)">
         {Number.isFinite(result)
           ? formatValue(result, node.format ?? "number")
           : "–"}
@@ -481,7 +481,7 @@ function Choice({ node }: { node: Extract<UiNode, { type: "choice" }> }) {
                 )
               }
               className={cn(
-                "flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-left text-[12.5px] outline-none focus-visible:shadow-(--focus-ring) disabled:cursor-default",
+                "flex min-h-8 items-center gap-1.5 rounded-tile border px-2.5 py-1 text-left text-body outline-none focus-visible:shadow-(--focus-ring) disabled:cursor-default",
                 on
                   ? "border-(--accent-border) bg-(--accent-bg-subtle) text-(--text-primary)"
                   : "border-(--border-subtle) text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)",
@@ -493,7 +493,7 @@ function Choice({ node }: { node: Extract<UiNode, { type: "choice" }> }) {
               <span className="flex flex-col">
                 <span>{option.label}</span>
                 {option.detail ? (
-                  <span className="text-[11px] text-(--text-tertiary)">
+                  <span className="text-micro text-(--text-tertiary)">
                     {option.detail}
                   </span>
                 ) : null}
@@ -518,7 +518,7 @@ function NumberInput({ node }: { node: Extract<UiNode, { type: "number" }> }) {
       <span className="flex items-baseline justify-between gap-2">
         <Label>{node.label ?? node.name}</Label>
         {node.slider ? (
-          <span className="in-num text-[12px] text-(--text-primary)">
+          <span className="in-num text-small text-(--text-primary)">
             {shown}
           </span>
         ) : null}
@@ -584,14 +584,14 @@ function Form({ node }: { node: Extract<UiNode, { type: "form" }> }) {
     state.answer.startsWith(`Submitted "${node.title}"`);
   return (
     <form
-      className="flex min-w-0 flex-col gap-3 rounded-[6px] border border-(--border-subtle) p-3"
+      className="flex min-w-0 flex-col gap-3 rounded-control border border-(--border-subtle) p-3"
       aria-label={node.title}
       onSubmit={(event) => {
         event.preventDefault();
         if (state.canSend) state.send(formMessage(node, state.values));
       }}
     >
-      <span className="text-[12.5px] font-medium text-(--text-primary)">
+      <span className="text-body font-medium text-(--text-primary)">
         {node.title}
       </span>
       <ShowState.Provider
@@ -636,7 +636,7 @@ function LibraryImage({
       <img
         src={outputUrl(sessionId, path)}
         alt={alt}
-        className="block max-h-80 max-w-full rounded-[6px] border border-(--card-border)"
+        className="block max-h-80 max-w-full rounded-control border border-(--card-border)"
       />
     </a>
   );
@@ -647,16 +647,16 @@ function NodeView({ node }: { node: UiNode }) {
   switch (node.type) {
     case "card":
       return (
-        <section className="flex min-w-0 flex-col gap-3 rounded-[6px] border border-(--border-subtle) p-3">
+        <section className="flex min-w-0 flex-col gap-3 rounded-control border border-(--border-subtle) p-3">
           {node.title || node.caption ? (
             <header className="flex flex-col gap-0.5">
               {node.title ? (
-                <span className="text-[12.5px] font-medium text-(--text-primary)">
+                <span className="text-body font-medium text-(--text-primary)">
                   {node.title}
                 </span>
               ) : null}
               {node.caption ? (
-                <span className="text-[11.5px] text-(--text-tertiary)">
+                <span className="text-small text-(--text-tertiary)">
                   {node.caption}
                 </span>
               ) : null}
@@ -755,7 +755,7 @@ function NodeView({ node }: { node: UiNode }) {
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="flex items-baseline justify-between gap-2">
             <Label>{node.label}</Label>
-            <span className="in-num text-[12px] text-(--text-primary)">
+            <span className="in-num text-small text-(--text-primary)">
               {Math.round(share * 100)}%
             </span>
           </span>
@@ -920,7 +920,7 @@ export const ShowCard = memo(function ShowCard({
         aria-label={spec.title ?? "Card"}
       >
         {spec.title ? (
-          <h3 className="m-0 text-[13px] leading-[18px] font-medium text-(--text-primary)">
+          <h3 className="m-0 text-body leading-[18px] font-medium text-(--text-primary)">
             {spec.title}
           </h3>
         ) : null}

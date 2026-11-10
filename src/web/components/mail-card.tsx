@@ -20,7 +20,7 @@ const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString([], { 
 
 function Row({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="flex min-w-0 gap-2 text-[12px] leading-[18px]">
+		<div className="flex min-w-0 gap-2 text-small leading-[18px]">
 			<span className="w-14 shrink-0 text-(--text-tertiary)">{label}</span>
 			<span className="min-w-0 flex-1 break-words text-(--text-primary)">{value}</span>
 		</div>
@@ -50,7 +50,7 @@ export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, 
 	});
 	if (!approval) {
 		return approvals.isPending ? (
-			<div className="flex h-9 items-center gap-2 rounded-[6px] border border-dashed border-(--card-border) px-3 text-[12px] text-(--text-tertiary)">
+			<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--card-border) px-3 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Preparing the email
 			</div>
@@ -74,10 +74,10 @@ export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, 
 	return (
 		<section className="in-card overflow-hidden" aria-label="Email to send">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
-				<MarkTile mark={GMAIL} size={22} className="mt-px rounded-[6px]" />
+				<MarkTile mark={GMAIL} size={22} className="mt-px rounded-control" />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h3 className="m-0 truncate text-[13px] leading-[20px] font-medium text-(--text-primary)">{approval.subject || '(no subject)'}</h3>
-					<span className="text-[11.5px] text-(--text-tertiary)">{pending ? 'The agent asks to send this from Gmail' : 'Email from Gmail'}</span>
+					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text-primary)">{approval.subject || '(no subject)'}</h3>
+					<span className="text-small text-(--text-tertiary)">{pending ? 'The agent asks to send this from Gmail' : 'Email from Gmail'}</span>
 				</div>
 			</header>
 			<div className="flex flex-col gap-0.5 px-3.5 pb-2">
@@ -87,13 +87,13 @@ export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, 
 			</div>
 			<div
 				className={cn(
-					'mx-3.5 mb-3 overflow-auto rounded-[6px] border border-(--border-subtle) bg-(--well-bg) px-3 py-2 text-[12.5px] leading-[19px] whitespace-pre-wrap text-(--text-secondary)',
+					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--border-subtle) bg-(--well-bg) px-3 py-2 text-body leading-[19px] whitespace-pre-wrap text-(--text-secondary)',
 					pending ? 'max-h-[320px]' : 'max-h-[120px]',
 				)}
 			>
 				{approval.body}
 			</div>
-			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-3.5 py-2 text-[12px]">
+			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-3.5 py-2 text-small">
 				{decide.error ? <span className="mr-auto text-(--danger-text)">{decide.error.message}</span> : null}
 				{status ? <span className="mr-auto">{status}</span> : null}
 				{pending ? (

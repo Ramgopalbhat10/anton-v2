@@ -19,7 +19,7 @@ const STATE_ICON = PR_ICON;
 function StatePill({ state, size = 'md' }: { state: PullRequestState | null; size?: 'sm' | 'md' }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border font-medium whitespace-nowrap', size === 'md' ? 'h-6 px-2.5 text-[12px]' : 'h-5 px-1.5 text-[11px]')}
+			className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border font-medium whitespace-nowrap', size === 'md' ? 'h-6 px-2.5 text-small' : 'h-5 px-1.5 text-micro')}
 			style={prChipStyle(state ?? 'unknown')}
 		>
 			<Icon icon={STATE_ICON[state ?? 'open']} size={size === 'md' ? 13 : 11} />
@@ -32,7 +32,7 @@ function StatePill({ state, size = 'md' }: { state: PullRequestState | null; siz
 function BranchChip({ name }: { name: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
-		<span className="inline-flex h-5 min-w-0 items-center gap-1 rounded-md bg-(--alpha-white-6) pr-0.5 pl-1.5 text-[11px] text-(--text-secondary)">
+		<span className="inline-flex h-5 min-w-0 items-center gap-1 rounded-control bg-(--alpha-white-6) pr-0.5 pl-1.5 text-micro text-(--text-secondary)">
 			<span className="truncate">{name}</span>
 			<button
 				type="button"
@@ -44,7 +44,7 @@ function BranchChip({ name }: { name: string }) {
 						setTimeout(() => setCopied(false), 1200);
 					})
 				}
-				className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-(--icon-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="inline-flex size-4 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 			>
 				<Icon icon={copied ? Check : Copy} size={10} />
 			</button>
@@ -54,14 +54,14 @@ function BranchChip({ name }: { name: string }) {
 
 /** The pull request's number, and a menu to pick another of the task's pull requests when it has more than one. */
 function PullPicker({ pulls, selected, onSelect }: { pulls: PullRequestItem[]; selected: PullRequestItem; onSelect: (number: number) => void }) {
-	if (pulls.length < 2) return <span className="in-num shrink-0 text-[12px] text-(--text-secondary)">#{selected.number}</span>;
+	if (pulls.length < 2) return <span className="in-num shrink-0 text-small text-(--text-secondary)">#{selected.number}</span>;
 	return (
 		<Menu>
 			<MenuTrigger asChild>
 				<button
 					type="button"
 					aria-label={`#${selected.number} of ${pulls.length} pull requests`}
-					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[6px] px-1.5 text-[12px] text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control px-1.5 text-small text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 				>
 					<span className="in-num">#{selected.number}</span>
 					<span className="text-(--text-disabled)">
@@ -109,22 +109,22 @@ function Discussion({ pull }: { pull: PullRequestDetail }) {
 				<li key={entry.id} className="flex gap-2.5 border-b border-(--border-subtle) px-3 py-2.5 last:border-b-0">
 					<Avatar name={entry.author} size="xs" />
 					<div className="flex min-w-0 flex-1 flex-col gap-1">
-						<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px]">
+						<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small">
 							<span className="font-medium text-(--text-primary)">{entry.author}</span>
 							<span className="text-(--text-tertiary)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
 							{entry.path ? (
-								<span className="min-w-0 truncate text-[11px] text-(--text-secondary)">
+								<span className="min-w-0 truncate text-micro text-(--text-secondary)">
 									{entry.path}
 									{entry.line ? `:${entry.line}` : ''}
 								</span>
 							) : null}
 							{entry.verdict ? (
-								<span className={cn('rounded-md px-1.5 py-px text-[11px]', entry.verdict === 'approved' ? 'bg-(--success-bg) text-(--success-text)' : 'bg-(--warning-bg) text-(--warning-text)')}>{entry.verdict}</span>
+								<span className={cn('rounded-control px-1.5 py-px text-micro', entry.verdict === 'approved' ? 'bg-(--success-bg) text-(--success-text)' : 'bg-(--warning-bg) text-(--warning-text)')}>{entry.verdict}</span>
 							) : null}
-							<span className="in-num ml-auto text-[11px] text-(--text-disabled)">{entry.at ? age(entry.at) : ''}</span>
+							<span className="in-num ml-auto text-micro text-(--text-disabled)">{entry.at ? age(entry.at) : ''}</span>
 						</div>
 						{entry.body ? (
-							<div className="text-[12.5px] text-(--text-secondary)">
+							<div className="text-body text-(--text-secondary)">
 								<Markdown text={entry.body} />
 							</div>
 						) : null}
@@ -142,8 +142,8 @@ function Commits({ pull }: { pull: PullRequestDetail }) {
 			{pull.commits.map((commit) => (
 				<li key={commit.sha} className="flex h-9 items-center gap-2.5 border-b border-(--border-subtle) px-3 last:border-b-0">
 					<Icon icon={GitCommitHorizontal} size={13} className="shrink-0 text-(--icon-tertiary)" />
-					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{commit.subject}</span>
-					<span className="in-num shrink-0 text-[11px] text-(--text-disabled)">{commit.sha.slice(0, 7)}</span>
+					<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{commit.subject}</span>
+					<span className="in-num shrink-0 text-micro text-(--text-disabled)">{commit.sha.slice(0, 7)}</span>
 				</li>
 			))}
 		</ol>
@@ -157,10 +157,10 @@ function Checks({ pull }: { pull: PullRequestDetail }) {
 			{pull.checks.map((check, index) => (
 				<li key={`${check.name}-${index}`} className="flex h-9 items-center gap-2.5 border-b border-(--border-subtle) px-3 last:border-b-0">
 					<Icon icon={CHECK_ICON[check.status]} size={14} className="shrink-0" style={{ color: CHECK_TONE[check.status] }} />
-					<span className="shrink-0 text-[12.5px] text-(--text-primary)">{check.name}</span>
-					<span className="min-w-0 flex-1 truncate text-[12px] text-(--text-tertiary)">{check.summary}</span>
+					<span className="shrink-0 text-body text-(--text-primary)">{check.name}</span>
+					<span className="min-w-0 flex-1 truncate text-small text-(--text-tertiary)">{check.summary}</span>
 					{check.url ? (
-						<a href={check.url} target="_blank" rel="noreferrer" className="shrink-0 text-[12px] text-(--accent-text) underline-offset-2 hover:underline">
+						<a href={check.url} target="_blank" rel="noreferrer" className="shrink-0 text-small text-(--accent-text) underline-offset-2 hover:underline">
 							Details
 						</a>
 					) : null}
@@ -172,7 +172,7 @@ function Checks({ pull }: { pull: PullRequestDetail }) {
 
 function Loading({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+		<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 			<Spinner size={12} />
 			{children}
 		</div>
@@ -187,7 +187,7 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 		<div className="flex min-w-0 items-center gap-1.5">
 			<StatePill state={pull?.state ?? item.state} size="sm" />
 			<PullPicker pulls={pulls} selected={item} onSelect={onSelect} />
-			<span className="min-w-0 truncate text-[11.5px] text-(--text-disabled)">{item.repo}</span>
+			<span className="min-w-0 truncate text-small text-(--text-disabled)">{item.repo}</span>
 			<span className="flex-1" />
 			<a href={item.url} target="_blank" rel="noreferrer" className="sg-btn sg-btn--ghost sg-btn--xs shrink-0">
 				<span>GitHub</span>
@@ -222,8 +222,8 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 		<div className="flex flex-col gap-2.5">
 			{header}
 			<div className="flex flex-col gap-1">
-				<h2 className="m-0 text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{pull.title}</h2>
-				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-(--text-tertiary)">
+				<h2 className="m-0 text-body-lg leading-[20px] font-medium text-pretty text-(--text-primary)">{pull.title}</h2>
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-tertiary)">
 					<span className="text-(--text-secondary)">{pull.author}</span>
 					<span className="flex min-w-0 items-center gap-1">
 						<BranchChip name={pull.baseBranch} />
@@ -245,7 +245,7 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
 			{section === 'changes' ? <PullChanges sessionId={sessionId} number={pull.number} /> : null}
 			{section === 'description' ? (
 				pull.body ? (
-					<div className="in-well px-3.5 py-3 text-[13px] text-(--text-secondary)">
+					<div className="in-well px-3.5 py-3 text-body text-(--text-secondary)">
 						<Markdown text={pull.body} />
 					</div>
 				) : (

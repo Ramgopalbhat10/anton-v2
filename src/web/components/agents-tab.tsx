@@ -103,22 +103,22 @@ function Phase({ step, run, next, from, span, now }: { step: SubagentStep; run: 
 			<HoverCard.Trigger asChild>
 				<span
 					tabIndex={-1}
-					className={cn('absolute inset-y-0 rounded-[2px] hover:brightness-150', step.state === 'running' && 'in-pulse')}
+					className={cn('absolute inset-y-0 rounded-mark hover:brightness-150', step.state === 'running' && 'in-pulse')}
 					style={{ left: `${((start - from) / span) * 100}%`, width: `max(calc(${((Math.max(end, start) - start) / span) * 100}% - 1px), 2px)`, background: stepTone(step) }}
 				/>
 			</HoverCard.Trigger>
 			<HoverCard.Portal>
 				<HoverCard.Content side="top" sideOffset={8} collisionPadding={12} className="in-pop z-50 flex w-[280px] flex-col gap-1.5 px-3 py-2.5 outline-none">
 					<span className="flex items-center gap-1.5">
-						<span className="size-[7px] rounded-[2px]" style={{ background: stepTone(step) }} />
+						<span className="size-[7px] rounded-mark" style={{ background: stepTone(step) }} />
 						<span className={cn('in-caption', step.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{step.state === 'failed' ? 'Failed' : kind.label}</span>
 						<span className="in-caption ml-auto">at {mark(start - from)}</span>
 					</span>
-					<span className="flex min-w-0 items-start gap-2 text-[12.5px] leading-[18px] text-(--text-primary)">
+					<span className="flex min-w-0 items-start gap-2 text-body leading-[18px] text-(--text-primary)">
 						<Icon icon={icon} size={13} className="mt-[2px] shrink-0 text-(--icon-tertiary)" />
 						<span className="line-clamp-3 min-w-0 break-words">{body}</span>
 					</span>
-					<span className="in-num text-[11px] text-(--text-tertiary)">
+					<span className="in-num text-micro text-(--text-tertiary)">
 						{[tool === null ? null : `tool ${took(tool)}`, `phase ${took(Math.max(0, end - start))}`, lookOf(run.agent).label.toLowerCase()].filter(Boolean).join(' · ')}
 					</span>
 				</HoverCard.Content>
@@ -136,7 +136,7 @@ function StatWell({ stats, label }: { stats: Stat[]; label: string }) {
 			{stats.map((stat) => (
 				<div key={stat.label} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
 					<dt className="in-caption">{stat.label}</dt>
-					<dd className="in-num m-0 truncate text-[12px] text-(--text-primary)" title={stat.title ?? stat.value}>
+					<dd className="in-num m-0 truncate text-small text-(--text-primary)" title={stat.title ?? stat.value}>
 						{stat.value}
 					</dd>
 				</div>
@@ -163,7 +163,7 @@ function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: Subagent
 	return (
 		<section aria-label="Agents overview" className="flex flex-col gap-3 px-0.5">
 			<div className="flex items-start gap-3">
-				<span className="min-w-0 flex-1 text-[14px] leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
+				<span className="min-w-0 flex-1 text-body-lg leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
 				{line.failed ? (
 					<span className="pt-0.5">
 						<Status tone="danger">{line.failed} failed</Status>
@@ -193,13 +193,13 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 		<div className="group/run flex min-w-0 flex-col gap-2 px-3 py-2.5 hover:bg-(--bg-hover)">
 			<button type="button" onClick={onOpen} className="flex min-w-0 items-center gap-2 text-left outline-none focus-visible:shadow-(--focus-ring)">
 				<AgentTile agent={run.agent} running={live} size={18} />
-				<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary) group-hover/run:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
-				<span className={cn('flex shrink-0 items-center gap-1.5 text-[11px]', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span className="min-w-0 flex-1 truncate text-body text-(--text-primary) group-hover/run:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
+				<span className={cn('flex shrink-0 items-center gap-1.5 text-micro', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 					<StatusGlyph status={run.status} />
 					<span className="in-num">{elapsed(runElapsed(run, now))}</span>
 				</span>
 			</button>
-			<span className="relative ml-[26px] h-2.5 min-w-0 rounded-[3px] bg-(--segment-off)/60">
+			<span className="relative ml-[26px] h-2.5 min-w-0 rounded-mark bg-(--segment-off)/60">
 				<span
 					aria-hidden
 					className="absolute inset-y-[4px] rounded-full bg-(--border-default)"
@@ -214,7 +214,7 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 					type="button"
 					tabIndex={-1}
 					onClick={onOpen}
-					className={cn('ml-[26px] truncate text-left text-[11.5px] outline-none', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}
+					className={cn('ml-[26px] truncate text-left text-small outline-none', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}
 				>
 					{line}
 				</button>
@@ -267,7 +267,7 @@ function RunList({ sessionId, runs, now }: { sessionId: string; runs: SubagentRu
 
 const OUTCOME: Record<string, { label: string; tone: Tone }> = {
 	done: { label: 'Done', tone: 'success' },
-	needs_confirmation: { label: 'Needs confirmation', tone: 'warning' },
+	needs_confirmation: { label: 'Needs confirmation', tone: 'attention' },
 	unsure: { label: 'Unsure', tone: 'warning' },
 	stuck: { label: 'Stuck', tone: 'warning' },
 	max_actions: { label: 'Out of actions', tone: 'warning' },
@@ -277,7 +277,7 @@ const OUTCOME: Record<string, { label: string; tone: Tone }> = {
 /** How sure the decision model was of an action, dimmer as it gets less sure. */
 function Sureness({ p }: { p: number | null }) {
 	if (p === null) return null;
-	return <span className={cn('in-num shrink-0 text-[10.5px]', p >= 0.9 ? 'text-(--success-text)' : p >= 0.7 ? 'text-(--text-tertiary)' : 'text-(--warning-text)')}>{p.toFixed(2)}</span>;
+	return <span className={cn('in-num shrink-0 text-micro', p >= 0.9 ? 'text-(--success-text)' : p >= 0.7 ? 'text-(--text-tertiary)' : 'text-(--warning-text)')}>{p.toFixed(2)}</span>;
 }
 
 /**
@@ -290,7 +290,7 @@ function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 		return (
 			<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
 				{detail.actions.map((action, index) => (
-					<span key={index} className="flex min-w-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
+					<span key={index} className="flex min-w-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
 						<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
 						<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
 							{action.what}
@@ -303,7 +303,7 @@ function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	return (
 		<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
 			{detail.actions.map((action, index) => (
-				<span key={index} className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-tertiary)">
+				<span key={index} className="flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
 					<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
 					<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
 						{action.what}
@@ -333,7 +333,7 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 	const tone = stepTone(step);
 	return (
 		<li className="flex min-w-0 flex-col border-t border-(--border-subtle) first:border-t-0">
-			<span className="flex min-h-8 min-w-0 items-center gap-2.5 text-[12px] text-(--text-tertiary)">
+			<span className="flex min-h-8 min-w-0 items-center gap-2.5 text-small text-(--text-tertiary)">
 				{/* A bare glyph, quiet: only the agent's own icon carries colour; the bar beside it keeps the kind's. */}
 				<span className="inline-flex size-[18px] shrink-0 items-center justify-center text-(--icon-tertiary)">
 					{step.state === 'running' ? <Spinner size={12} /> : <Icon icon={icon} size={13} className={step.state === 'failed' ? 'text-(--danger-text)' : undefined} />}
@@ -345,7 +345,7 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 						style={{ left: `${Math.min(100, ((start - from) / (to - from)) * 100)}%`, width: `max(${Math.min(100, (spent / (to - from)) * 100)}%, 2px)`, background: tone }}
 					/>
 				</span>
-				<span className="in-num w-9 shrink-0 text-right text-[10.5px] text-(--text-disabled)">{step.durationMs !== null || step.state === 'running' ? took(spent) : ''}</span>
+				<span className="in-num w-9 shrink-0 text-right text-micro text-(--text-disabled)">{step.durationMs !== null || step.state === 'running' ? took(spent) : ''}</span>
 			</span>
 			{step.detail ? <Decisions detail={step.detail} live={step.state === 'running'} /> : null}
 		</li>
@@ -374,14 +374,14 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				<IconBtn icon={ArrowLeft} size="sm" label="All agents" onClick={() => focusRun(sessionId, null)} />
 				<AgentTile agent={run.agent} running={live} size={26} />
 				<div className="flex min-w-0 flex-1 flex-col">
-					<span className="text-[10.5px] tracking-[0.06em] uppercase" style={{ color: lookOf(run.agent).tone }}>
+					<span className="text-micro font-medium" style={{ color: lookOf(run.agent).tone }}>
 						{lookOf(run.agent).label}
 					</span>
-					<span className="truncate text-[13px] font-medium text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>
+					<span className="truncate text-body font-medium text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>
 				</div>
 				<span
 					className={cn(
-						'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]',
+						'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-micro',
 						run.status === 'failed' ? 'border-(--danger-border) text-(--danger-text)' : live ? 'border-(--accent-border) text-(--accent-text)' : 'border-(--border-subtle) text-(--text-secondary)',
 					)}
 				>
@@ -403,7 +403,7 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 					<span className="in-caption flex-1">Brief from the agent</span>
 					<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary) transition-transform" style={{ transform: briefOpen ? 'rotate(180deg)' : undefined }} />
 				</button>
-				<div className="border-t border-(--card-border) px-3 py-2.5 text-[12px] leading-[18px] text-(--text-secondary)">
+				<div className="border-t border-(--card-border) px-3 py-2.5 text-small leading-[18px] text-(--text-secondary)">
 					<p className={cn('m-0 whitespace-pre-wrap', !briefOpen && 'line-clamp-3')}>{run.prompt}</p>
 				</div>
 			</section>
@@ -420,10 +420,10 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 						))}
 					</ol>
 				) : (
-					<p className="m-0 px-0.5 text-[12px] text-(--text-tertiary)">{live ? 'Reading the brief…' : 'No steps.'}</p>
+					<p className="m-0 px-0.5 text-small text-(--text-tertiary)">{live ? 'Reading the brief…' : 'No steps.'}</p>
 				)}
 				{live && run.writing ? (
-					<p className="agent-live-line m-0 flex gap-1.5 px-0.5 text-[12px] leading-[18px]">
+					<p className="agent-live-line m-0 flex gap-1.5 px-0.5 text-small leading-[18px]">
 						<span className="in-caption shrink-0">Writing</span>
 						<span className="line-clamp-3">{run.writing}</span>
 					</p>
@@ -448,7 +448,7 @@ export function AgentsTab({ sessionId }: { sessionId: string }) {
 	const now = useNow(runs.some((run) => run.status === 'running'));
 	if (query.isPending) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Loading the agents
 			</div>

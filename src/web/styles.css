@@ -31,13 +31,6 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	--radius-sm: 6px;
-	--radius-md: 7px;
-	--radius-lg: 8px;
-	--radius-xl: 10px;
-	--radius-2xl: 12px;
-	--radius-3xl: 14px;
-	--radius-4xl: 16px;
 }
 
 /* shadcn variables resolve to Signal semantics, so any primitive left on
@@ -60,7 +53,7 @@
 	--destructive: var(--danger-base);
 	--border: var(--border-subtle);
 	--input: var(--border-default);
-	--ring: var(--accent-ring);
+	--ring: var(--accent-base);
 	--radius: 8px;
 }
 
@@ -143,14 +136,15 @@ textarea::placeholder {
 	width: max-content;
 	max-width: min(320px, calc(100vw - 16px));
 	padding: 5px 8px;
-	border-radius: 6px;
-	background: rgba(6, 6, 6, 0.96);
-	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), var(--elev-3);
+	border-radius: var(--radius-control);
+	border: 1px solid var(--border-default);
+	background: var(--bg-inset);
+	box-shadow: var(--elev-3);
 	color: var(--text-primary);
 	font-family: var(--font-sans);
-	font-size: 12px;
+	font-size: var(--text-small-size);
 	font-weight: 400;
-	line-height: 16px;
+	line-height: var(--text-small-line);
 	letter-spacing: 0;
 	text-transform: none;
 	white-space: pre-line;
@@ -183,7 +177,7 @@ textarea::placeholder {
 
 ::-webkit-scrollbar-thumb {
 	background: var(--neutral-700);
-	border-radius: 6px;
+	border-radius: var(--radius-control);
 }
 
 ::-webkit-scrollbar-track {
@@ -208,7 +202,7 @@ textarea::placeholder {
    popovers separate by background and shadow. Semantic, dashed, form-control,
    selected and side borders (dividers, table rules) are untouched. Unlayered
    so it wins over the utilities layer. */
-:is([class~='border']):not([class*='border-dashed']):not([class*='border-input']):not([class*='border-ring']):not([class*='border-destructive']):not([class*='border-(--danger']):not([class*='border-(--warning']):not([class*='border-(--success']):not([class*='border-(--accent']):not([class*='border-(--info']):not([class*='border-(--border-selected']):not([class*='border-(--text-']):not([class*='border-white']):not([class*='border-black']):not([class*='border-current']):not([class*='border-inherit']):not([class*='border-red']):not([class*='border-amber']):not([class*='border-emerald']):not([class*='border-cyan']):not([class*='border-neutral']):not([class*='border-gray']):not([class*='border-slate']):not([class*='border-zinc']):not([class*='border-stone']):not([class*='border-blue']):not([class*='border-green']):not([class*='border-yellow']):not([class*='border-orange']):not([class*='border-rose']):not([class*='border-pink']):not([class*='border-purple']):not([class*='border-violet']):not([class*='border-fuchsia']):not([class*='border-indigo']):not([class*='border-teal']):not([class*='border-sky']):not([class*='alert']) {
+:is([class~='border']):not([class*='border-dashed']):not([class*='border-input']):not([class*='border-ring']):not([class*='border-destructive']):not([class*='border-(--danger']):not([class*='border-(--warning']):not([class*='border-(--attention']):not([class*='border-(--success']):not([class*='border-(--accent']):not([class*='border-(--info']):not([class*='border-(--border-selected']):not([class*='border-(--text-']):not([class*='border-white']):not([class*='border-black']):not([class*='border-current']):not([class*='border-inherit']):not([class*='border-red']):not([class*='border-amber']):not([class*='border-emerald']):not([class*='border-cyan']):not([class*='border-neutral']):not([class*='border-gray']):not([class*='border-slate']):not([class*='border-zinc']):not([class*='border-stone']):not([class*='border-blue']):not([class*='border-green']):not([class*='border-yellow']):not([class*='border-orange']):not([class*='border-rose']):not([class*='border-pink']):not([class*='border-purple']):not([class*='border-violet']):not([class*='border-fuchsia']):not([class*='border-indigo']):not([class*='border-teal']):not([class*='border-sky']):not([class*='alert']) {
 	border-width: 0;
 }
 
@@ -234,6 +228,7 @@ textarea::placeholder {
  * How much of the sky a page lets through, set on <main> by the route:
  * all of it on Home, a little behind lists, settings and every conversation
  * (a task, a thread, a coordinator, alike), a hint behind an artifact you read.
+ * With the sky off it is 'off', and every surface is the plain one.
  */
 .app-main {
 	position: relative;
@@ -244,7 +239,7 @@ textarea::placeholder {
 	background: transparent;
 }
 .app-main[data-sky='dim'] {
-	background: color-mix(in srgb, var(--bg-canvas) 76%, transparent);
+	background: color-mix(in srgb, var(--bg-canvas) 84%, transparent);
 }
 .app-main[data-sky='faint'] {
 	background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
@@ -263,51 +258,70 @@ textarea::placeholder {
 	backdrop-filter: var(--glass-blur);
 }
 
-/* Cards over the sky turn to glass, so the picture tints them instead of being cut out. */
-.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile) {
+/* Home's composer and dashboard cards: ordinary cards, until the sky is behind them. */
+.home-composer,
+.home-panel {
+	background: var(--card-bg);
+	box-shadow: var(--card-shadow);
+}
+.home-composer {
+	border-radius: var(--radius-card);
+	box-shadow: var(--elev-2);
+	transition: box-shadow var(--transition-standard);
+}
+.home-composer:focus-within {
+	/* A quiet edge: the composer has focus as soon as Home opens, so the accent would read as an alert at rest. */
+	box-shadow: 0 0 0 1px var(--border-strong), var(--elev-2);
+}
+.home-panel {
+	border-radius: var(--radius-card);
+	min-height: 176px;
+}
+/* The picture's credit and the route under the composer: a pill over the sky, plain words on the canvas. */
+.sky-credit {
+	background: transparent;
+}
+
+/* Over the sky, cards turn to glass, so the picture tints them instead of being cut out. */
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile),
+.app-main[data-sky='full'] .home-panel {
 	background: var(--glass-bg);
 	box-shadow: var(--card-shadow);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 }
-
-/* Home: the composer and the dashboard's cards, as glass over the sky. */
-.home-composer,
-.home-panel,
-.sky-credit {
-	background: var(--glass-bg);
+.app-main[data-sky='full'] .home-composer {
+	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+}
+.app-main[data-sky='full'] .sky-credit {
+	background: color-mix(in srgb, var(--bg-canvas) 72%, transparent);
 	-webkit-backdrop-filter: var(--glass-blur);
 	backdrop-filter: var(--glass-blur);
 	box-shadow: var(--glass-shadow);
 }
-.home-composer {
-	border-radius: 14px;
-	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
-	box-shadow: var(--elev-2);
-	transition: box-shadow var(--transition-standard);
+
+/* Quiet text steps up one notch over the sky, where the picture under the glass lifts its background. */
+.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile, .home-panel, .home-composer, .sky-credit) {
+	--text-tertiary: var(--neutral-350);
+	--text-disabled: var(--neutral-400);
+	--text-placeholder: var(--neutral-400);
+	--icon-tertiary: var(--neutral-350);
 }
-.home-composer:focus-within {
-	box-shadow: 0 0 0 1px var(--accent-border), var(--elev-2);
-}
-.home-panel {
-	border-radius: 12px;
-	min-height: 176px;
-}
-.sky-credit {
-	background: rgba(14, 14, 14, 0.5);
-}
+
 :root {
-	--heat-0: rgba(255, 255, 255, 0.055);
-	--heat-1: rgba(63, 182, 216, 0.3);
+	--heat-0: var(--alpha-white-5);
+	--heat-1: var(--cyan-alpha-30);
 	--heat-2: rgba(63, 182, 216, 0.5);
 	--heat-3: rgba(63, 182, 216, 0.75);
-	--heat-4: #9ee1f3;
+	--heat-4: var(--cyan-200);
 }
 
 /* The Settings card (settings/modal.tsx): a glass card over a dimmed, blurred
    app, full screen on a phone. */
 .settings-overlay {
-	background: rgba(3, 3, 3, 0.62);
+	background: var(--bg-scrim);
 	-webkit-backdrop-filter: blur(6px);
 	backdrop-filter: blur(6px);
 	animation: settings-fade 160ms var(--ease-out, ease-out);
@@ -321,7 +335,7 @@ textarea::placeholder {
 }
 @media (min-width: 768px) {
 	.settings-card {
-		border-radius: 16px;
+		border-radius: var(--radius-dialog);
 		box-shadow: var(--elev-4);
 	}
 }

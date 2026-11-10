@@ -16,7 +16,7 @@ export const used = (session: Session) => session.usage.inputTokens + session.us
 /** A fact on the row's second line: an icon and a few words. */
 function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
 	return (
-		<span title={title} className={cn('inline-flex min-w-0 shrink items-center gap-1 text-[11.5px] text-(--text-tertiary)', mono && 'in-num')}>
+		<span title={title} className={cn('inline-flex min-w-0 shrink items-center gap-1 text-small text-(--text-tertiary)', mono && 'in-num')}>
 			{icon ? <Icon icon={icon} size={12} className="text-(--icon-tertiary)" /> : null}
 			<span className="truncate">{children}</span>
 		</span>
@@ -38,18 +38,18 @@ export function TaskRow({ session, modelName }: { session: Session; modelName: (
 			to="/agents/$sessionId"
 			params={{ sessionId: session.id }}
 			search={{ app: 'code' }}
-			className="flex min-w-0 flex-col gap-0.5 rounded-[6px] px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-w-0 flex-col gap-0.5 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				<TaskStatusIcon session={session} size={14} />
-				<span className="min-w-0 truncate text-[13px] leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
+				<span className="min-w-0 truncate text-body leading-[18px] font-medium text-(--text-primary)">{session.title}</span>
 				<PrStatus thread={session} showFailing={!runs.some((run) => run.status === 'failed')} />
 				{runs.length ? (
 					<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
 				) : null}
 				<span className="flex-1" />
 				{live ? <span title={`Sandbox ${liveLabel(session).toLowerCase()}`} aria-label="Sandbox on" className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent-base)" /> : null}
-				<span className="in-num shrink-0 text-[11px] text-(--text-disabled)" title={new Date(session.createdAt).toLocaleString()}>
+				<span className="in-num shrink-0 text-micro text-(--text-disabled)" title={new Date(session.createdAt).toLocaleString()}>
 					{age(session.createdAt)}
 				</span>
 			</div>
@@ -63,19 +63,19 @@ export function TaskRow({ session, modelName }: { session: Session; modelName: (
 					</Fact>
 				) : null}
 				{session.model ? (
-					<span className="inline-flex min-w-0 shrink items-center gap-1 text-[11.5px] text-(--text-tertiary)" title={session.model}>
+					<span className="inline-flex min-w-0 shrink items-center gap-1 text-small text-(--text-tertiary)" title={session.model}>
 						<ModelLogo model={session.model} size={13} />
 						<span className="truncate">{modelName(session.model)}</span>
 					</span>
 				) : null}
 				{session.status === 'error' && session.errorMessage ? (
-					<span className="min-w-0 flex-1 truncate text-[11.5px] text-(--danger-text)" title={session.errorMessage}>
+					<span className="min-w-0 flex-1 truncate text-small text-(--danger-text)" title={session.errorMessage}>
 						{session.errorMessage}
 					</span>
 				) : (
 					<span className="flex-1" />
 				)}
-				<span className="in-num flex shrink-0 items-center gap-1.5 text-[11px] text-(--text-tertiary)">
+				<span className="in-num flex shrink-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
 					{tokensUsed ? (
 						<>
 							<span className="text-(--text-secondary)">{dollars(session.usage.cost)}</span>

@@ -122,7 +122,7 @@ export function Mascot({ mood, className }: { mood: MascotMood; className?: stri
 			>
 				{/* Keyed by the hop, so each one plays its animation afresh. */}
 				<g key={hop} className={hop ? 'am-hopper' : undefined}>
-					<Pixels className="am-question" px={QUESTION} fill="var(--amber-400)" />
+					<Pixels className="am-question" px={QUESTION} fill="var(--attention-base)" />
 					<g className="am-zzz">
 						<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
 						<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />

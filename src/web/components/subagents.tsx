@@ -231,26 +231,26 @@ function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; cal
 		<>
 			<div className="flex items-center gap-2">
 				<AgentTile agent={call.agent} running={live} size={18} />
-				<span className="text-[10.5px] tracking-[0.06em] uppercase" style={{ color: look.tone }}>
+				<span className="text-micro font-medium" style={{ color: look.tone }}>
 					{look.label}
 				</span>
-				<span className={cn('ml-auto flex items-center gap-1.5 text-[11px]', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span className={cn('ml-auto flex items-center gap-1.5 text-micro', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
 					<StatusGlyph status={status} />
 					{STATUS_WORD[status]}
 				</span>
 			</div>
-			<span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+			<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
 			{live ? (
-				<span className="agent-live-line flex min-w-0 items-start gap-1.5 text-[12px] leading-[17px]">
+				<span className="agent-live-line flex min-w-0 items-start gap-1.5 text-small leading-[17px]">
 					{latest && !run?.writing ? <Icon icon={stepBody(latest).icon} size={12} className="mt-[2px] shrink-0" /> : null}
 					<span className="line-clamp-2 min-w-0">{runLine(run, call)}</span>
 				</span>
 			) : answer ? (
-				<p className={cn('m-0 line-clamp-4 text-[12px] leading-[17px] text-pretty', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{answer}</p>
+				<p className={cn('m-0 line-clamp-4 text-small leading-[17px] text-pretty', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{answer}</p>
 			) : status === 'stopped' ? (
-				<p className="m-0 text-[12px] text-(--text-tertiary)">Stopped by you</p>
+				<p className="m-0 text-small text-(--text-tertiary)">Stopped by you</p>
 			) : null}
-			{facts.length ? <span className="in-num truncate text-[11px] text-(--text-tertiary)">{facts.join(' · ')}</span> : null}
+			{facts.length ? <span className="in-num truncate text-micro text-(--text-tertiary)">{facts.join(' · ')}</span> : null}
 			<div className="flex items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
 				<Btn size="xs" variant="secondary" icon={ChevronRight} onClick={onOpen}>
 					Open in Agents
@@ -292,21 +292,21 @@ function AgentRow({ sessionId, call, run, now }: { sessionId: string; call: Dele
 						<span className="inline-flex w-3.5 shrink-0 justify-center">
 							<StatusGlyph status={status} />
 						</span>
-						<span className="min-w-0 truncate text-[12.5px] text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+						<span className="min-w-0 truncate text-body text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
 						<Chip icon={look.icon} iconColor={look.tone}>
 							{look.label}
 						</Chip>
 						{status === 'failed' ? <Chip tone="danger">Failed</Chip> : status === 'stopped' ? <Chip>Stopped</Chip> : null}
 						<span className="flex-1" />
 						{run ? (
-							<span className="in-num hidden shrink-0 text-[11px] text-(--text-tertiary) sm:inline">
+							<span className="in-num hidden shrink-0 text-micro text-(--text-tertiary) sm:inline">
 								{run.steps.length} {run.steps.length === 1 ? 'step' : 'steps'}
 							</span>
 						) : null}
-						{run ? <span className={cn('in-num w-12 shrink-0 text-right text-[11px]', live ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{elapsed(runElapsed(run, now))}</span> : null}
+						{run ? <span className={cn('in-num w-12 shrink-0 text-right text-micro', live ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{elapsed(runElapsed(run, now))}</span> : null}
 					</span>
 					{live ? (
-						<span className="agent-live-line flex min-w-0 items-center gap-1.5 pl-[22px] text-[11.5px]">
+						<span className="agent-live-line flex min-w-0 items-center gap-1.5 pl-[22px] text-small">
 							{latest && !run?.writing ? <Icon icon={stepBody(latest).icon} size={11} className="shrink-0" /> : null}
 							<span className="min-w-0 truncate">{runLine(run, call)}</span>
 						</span>

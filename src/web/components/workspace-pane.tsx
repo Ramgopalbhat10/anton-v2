@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 const WIDTH_KEY = 'anton.workspace-width';
 const MIN_WIDTH = 360;
 const CONVERSATION_WIDTH = 340;
+const NARROW_WIDTH = 248;
 
 /** As long as `--duration-sheet`: how long the workspace takes to slide in or out. */
 const SLIDE_MS = 240;
@@ -41,8 +42,12 @@ function savedWidth(): number | null {
 	}
 }
 
-/** One workspace width shared by Files, Changes, Terminal and the other panels. */
-export function WorkspacePane({ expanded, children }: { expanded: boolean; children: ReactNode }) {
+/**
+ * One workspace width shared by Files, Changes, Terminal and the other panels.
+ * `narrow` is the slim column it takes while no panel is chosen yet, so the
+ * conversation keeps the room until there is something to show beside it.
+ */
+export function WorkspacePane({ expanded, narrow = false, children }: { expanded: boolean; narrow?: boolean; children: ReactNode }) {
 	const pane = useRef<HTMLElement>(null);
 	const drag = useRef<{ pointer: number; x: number; width: number } | null>(null);
 	const [available, setAvailable] = useState(0);
@@ -63,7 +68,7 @@ export function WorkspacePane({ expanded, children }: { expanded: boolean; child
 	const minimum = Math.min(MIN_WIDTH, available);
 	const maximum = Math.max(minimum, available - CONVERSATION_WIDTH);
 	const clamp = (value: number) => Math.round(Math.min(maximum, Math.max(minimum, value)));
-	const width = clamp(requested ?? available * 0.46);
+	const width = narrow ? Math.min(NARROW_WIDTH, maximum) : clamp(requested ?? available * 0.46);
 	function choose(value: number) {
 		const next = clamp(value);
 		setRequested(next);
@@ -88,7 +93,7 @@ export function WorkspacePane({ expanded, children }: { expanded: boolean; child
 			data-slide={slide}
 			style={{ '--workspace-width': available ? `${width}px` : '46%' } as CSSProperties}
 		>
-			{!expanded && !compact && slide === 'still' ? (
+			{!expanded && !compact && !narrow && slide === 'still' ? (
 				<div
 					role="separator"
 					aria-label="Resize workspace"

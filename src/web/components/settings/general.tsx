@@ -2,7 +2,7 @@ import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Telescope, Workflow } from 'lucide-react';
-import { Segmented, SegmentedItem } from '@/components/instrument';
+import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
@@ -76,7 +76,7 @@ function BackgroundModel({
 					only={only}
 				/>
 			) : (
-				<span className="text-[12px] text-(--text-tertiary)">{fallbackLabel}</span>
+				<span className="text-small text-(--text-tertiary)">{fallbackLabel}</span>
 			)}
 			<Switch
 				checked={value !== null}
@@ -104,8 +104,8 @@ const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string
 /** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
 function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {
 	const listed = useQuery({ queryKey: ['image-models'], queryFn: api.imageModels, staleTime: 5 * 60_000 });
-	if (!listed.data) return listed.error ? <span className="text-[12px] text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
-	if (!listed.data.available) return <span className="text-[12px] text-(--text-tertiary)">Needs an OpenRouter key</span>;
+	if (!listed.data) return listed.error ? <span className="text-small text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
+	if (!listed.data.available) return <span className="text-small text-(--text-tertiary)">Needs an OpenRouter key</span>;
 	const { models, default: fallback } = listed.data;
 	const label = (id: string) => models.find((model) => model.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	const vendors = new Map<string, ImageModelInfo[]>();
@@ -362,17 +362,17 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 				aria-label="Save changes"
 				className="flex items-center gap-3 self-stretch border-t border-(--border-subtle) pt-4"
 			>
-				<span className="min-w-0 flex-1 text-[12px]">
+				<span className="min-w-0 flex-1 text-small">
 					{dirty ? (
 						<span className="inline-flex items-center gap-1.5 text-(--text-secondary)">
-							<span className="size-1.5 shrink-0 rounded-full bg-(--accent-base)" />
+							<StatusDot tone="accent" />
 							Unsaved changes
 						</span>
 					) : (
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
 					)}
 				</span>
-				{dirty && save.error ? <span className="text-[12px] text-(--danger-text)">{save.error.message}</span> : null}
+				{dirty && save.error ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
 				<Btn
 					size="sm"
 					variant="ghost"

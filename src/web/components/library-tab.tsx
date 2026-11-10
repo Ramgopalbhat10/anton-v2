@@ -7,7 +7,7 @@ import { CodeBlock } from '@/components/code-block';
 import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
 import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
-import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Btn, EmptyLine, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
 import { useStoredState } from '@/components/split-pane';
 import { api, type Output, outputUrl, refreshFor, spaceFileUrl } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
@@ -82,18 +82,18 @@ function TextAt({ place, render }: { place: Place; render: (text: string) => Rea
 	const content = useQuery({ queryKey: place.textKey, queryFn: place.text });
 	if (content.isPending) {
 		return (
-			<div className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-(--text-tertiary)">
+			<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-tertiary)">
 				<Spinner size={12} />
 				Reading
 			</div>
 		);
 	}
-	if (content.isError) return <div className="px-3 py-2.5 text-[12px] text-(--danger-text)">{content.error.message}</div>;
+	if (content.isError) return <div className="px-3 py-2.5 text-small text-(--danger-text)">{content.error.message}</div>;
 	return render(content.data);
 }
 
 const plain = (text: string) => (
-	<pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-[12px] leading-[18px] whitespace-pre text-(--text-secondary)">{text}</pre>
+	<pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-secondary)">{text}</pre>
 );
 
 /** The first row is the header; a file cut at MAX_ROWS says so. */
@@ -104,7 +104,7 @@ function Table({ text, separator }: { text: string; separator: string }) {
 	const head = 'max-w-[320px] truncate border-b border-(--border-default) px-3 py-2 text-left';
 	return (
 		<div className="overflow-x-auto">
-			<table className="w-full border-collapse text-[12px]">
+			<table className="w-full border-collapse text-small">
 				<thead className="bg-(--card-bg)">
 					<tr>
 						{header.map((name, index) => (
@@ -127,7 +127,7 @@ function Table({ text, separator }: { text: string; separator: string }) {
 				</tbody>
 			</table>
 			{parsed.length > MAX_ROWS ? (
-				<div className="px-3 py-2 text-[12px] text-(--text-tertiary)">Showing the first {MAX_ROWS} rows. Download the file for the rest.</div>
+				<div className="px-3 py-2 text-small text-(--text-tertiary)">Showing the first {MAX_ROWS} rows. Download the file for the rest.</div>
 			) : null}
 		</div>
 	);
@@ -146,7 +146,7 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 		<TextFile sessionId={sessionId} path={path} render={(text) => <Table text={text} separator={/\.tsv$/i.test(path) ? '\t' : ','} />} />
 	),
 	text: ({ sessionId, path }) => <TextFile sessionId={sessionId} path={path} render={plain} />,
-	other: () => <div className="px-3 py-2.5 text-[12px] text-(--text-tertiary)">No preview for this file type. Download it to open it.</div>,
+	other: () => <EmptyLine className="px-3 py-2.5">No preview for this file type. Download it to open it.</EmptyLine>,
 };
 
 /** A file's source, highlighted, as the Code side of a page or document. */
@@ -186,8 +186,8 @@ function Preview({ library, output, onBack }: { library: LibrarySource; output: 
 			<div className="in-well overflow-hidden bg-(--bg-inset)">
 				<div className="flex h-9 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] pr-1.5 pl-3">
 					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
-					<div className="min-w-0 flex-1 truncate text-[12px] text-(--text-primary)">{output.path}</div>
-					<span className="in-num text-[11px] text-(--text-disabled)">{size(output.size)}</span>
+					<div className="min-w-0 flex-1 truncate text-small text-(--text-primary)">{output.path}</div>
+					<span className="in-num text-micro text-(--text-disabled)">{size(output.size)}</span>
 					{live ? (
 						<>
 							<Segmented label="Show" role="radiogroup" className="shrink-0">
@@ -344,7 +344,7 @@ function ItemActions({
 							if (!action.keep) onDone?.();
 						}}
 						className={cn(
-							'flex h-8 items-center gap-2 rounded-[6px] px-2 text-left text-[12.5px] outline-none hover:bg-(--bg-hover) focus-visible:bg-(--bg-hover)',
+							'flex h-8 items-center gap-2 rounded-control px-2 text-left text-body outline-none hover:bg-(--bg-hover) focus-visible:bg-(--bg-hover)',
 							action.danger ? 'text-(--danger-text)' : 'text-(--text-primary)',
 						)}
 					>
@@ -392,7 +392,7 @@ function ItemActions({
 function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folder: Folder; onOpen: () => void }) {
 	return (
 		<div className="group relative pt-2.5">
-			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-[4px] border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
+			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-inner border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
 			<div
 				role="button"
 				tabIndex={0}
@@ -401,12 +401,12 @@ function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folde
 				className="in-card relative flex h-[104px] cursor-pointer flex-col justify-between rounded-tl-none p-3 text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
 			>
 				<span className="flex min-w-0 items-start gap-2">
-					<span className="min-w-0 flex-1 truncate text-[12.5px] text-(--text-primary)">{folder.name}</span>
+					<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{folder.name}</span>
 					<span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 						<ItemActions library={library} path={folder.path} folder onOpen={onOpen} variant="menu" />
 					</span>
 				</span>
-				<span className="in-num flex items-center justify-between text-[10.5px] text-(--text-disabled)">
+				<span className="in-num flex items-center justify-between text-micro text-(--text-disabled)">
 					<span>
 						{folder.count} {folder.count === 1 ? 'item' : 'items'}
 					</span>
@@ -439,21 +439,21 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 			) : (
 				<span className="flex min-w-0 items-start gap-1.5 p-3 pr-1.5">
 					<Icon icon={ICONS[kind]} size={13} className={cn('mt-0.5 shrink-0', KIND_TONE[kind])} />
-					<span className="line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[17px] break-all text-(--text-primary)">{name}</span>
+					<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[17px] break-all text-(--text-primary)">{name}</span>
 				</span>
 			)}
 			<span className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-				<span className="inline-flex rounded-[6px] bg-(--bg-scrim)">
+				<span className="inline-flex rounded-control bg-(--bg-scrim)">
 					<ItemActions library={library} path={output.path} folder={false} onOpen={onOpen} variant="menu" />
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
-				<span className="rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 text-[9.5px] tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
+				<span className="rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-nano tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
 				{kind === 'page' && place.sessionId ? (
-					<span className="min-w-0 truncate rounded-[6px] bg-(--bg-scrim) px-1.5 py-0.5 text-[11px] text-(--text-primary) backdrop-blur-sm">{name}</span>
+					<span className="min-w-0 truncate rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-micro text-(--text-primary) backdrop-blur-sm">{name}</span>
 				) : kind === 'image' ? null : (
-					<span className="in-num ml-auto text-[10.5px] text-(--text-disabled)">{size(output.size)}</span>
+					<span className="in-num ml-auto text-micro text-(--text-disabled)">{size(output.size)}</span>
 				)}
 			</span>
 		</div>
@@ -570,7 +570,7 @@ function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: O
 			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--border-subtle) pl-2" style={{ paddingRight: `calc(2rem + ${lane}px)` }}>
 				<span className="in-caption">Name</span>
 				{/* Measured in the rows' own type, so each heading ends where its column does. */}
-				<span className="flex text-[11px]">
+				<span className="flex text-micro">
 					<span className="flex justify-end" style={{ width: `${widths.date}ch` }}>
 						<span className="in-caption">Modified</span>
 					</span>
@@ -609,11 +609,11 @@ function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: O
 function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string) => void }) {
 	const parts = folder ? folder.split('/') : [];
 	return (
-		<nav aria-label="Folder" className="flex min-w-0 items-center gap-1 text-[12.5px]">
+		<nav aria-label="Folder" className="flex min-w-0 items-center gap-1 text-body">
 			<button
 				type="button"
 				onClick={() => onFolder('')}
-				className={cn('shrink-0 rounded-[6px] px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)', parts.length ? 'text-(--text-tertiary)' : 'text-(--text-primary)')}
+				className={cn('shrink-0 rounded-control px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)', parts.length ? 'text-(--text-tertiary)' : 'text-(--text-primary)')}
 			>
 				All files
 			</button>
@@ -625,7 +625,7 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
 						onClick={() => onFolder(parts.slice(0, index + 1).join('/'))}
 						aria-current={index === parts.length - 1 ? 'page' : undefined}
 						className={cn(
-							'min-w-0 truncate rounded-[6px] px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+							'min-w-0 truncate rounded-control px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
 							index === parts.length - 1 ? 'text-(--text-primary)' : 'text-(--text-tertiary)',
 						)}
 					>
@@ -743,13 +743,13 @@ export function Library({ library }: { library: LibrarySource }) {
 						if (files.length) add.mutate(files);
 					}}
 				/>
-				<Btn size="xs" variant="primary" icon={Plus} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
+				<Btn size="xs" icon={Plus} disabled={add.isPending} onClick={() => picker.current?.click()} className="shrink-0">
 					{add.isPending ? 'Adding…' : 'Add'}
 				</Btn>
 			</div>
 
 			{notice ? (
-				<div role="status" className="shrink-0 text-[11.5px] text-(--text-tertiary)">
+				<div role="status" className="shrink-0 text-small text-(--text-tertiary)">
 					{notice}
 				</div>
 			) : null}
@@ -758,7 +758,7 @@ export function Library({ library }: { library: LibrarySource }) {
 				{library.error ? (
 					<EmptyState title="Library unavailable" body={library.error.message} />
 				) : !library.files ? (
-					<div className="flex h-7 items-center gap-2 text-[12px] text-(--text-tertiary)">
+					<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
 						<Spinner size={12} />
 						Loading the library
 					</div>

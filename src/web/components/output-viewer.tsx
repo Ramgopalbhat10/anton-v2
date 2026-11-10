@@ -39,7 +39,7 @@ export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	return (
 		<span className="flex size-full flex-col items-center justify-center gap-1.5">
 			<Icon icon={info.icon} size={size} className={info.tone} />
-			{size >= 16 ? <span className="text-[9.5px] tracking-[0.08em] text-(--text-disabled)">{extensionOf(path)}</span> : null}
+			{size >= 16 ? <span className="text-nano tracking-[0.08em] text-(--text-disabled)">{extensionOf(path)}</span> : null}
 		</span>
 	);
 }
@@ -55,7 +55,7 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 		return (
 			<span className={cn('flex size-full flex-col items-center justify-center gap-1.5 text-(--text-disabled)', className)}>
 				<Icon icon={FileX2} size={18} />
-				<span className="text-[11px]">Deleted</span>
+				<span className="text-micro">Deleted</span>
 			</span>
 		);
 	}
@@ -66,7 +66,7 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 			aria-label={`Deleted ${noun}: ${nameOf(path)}`}
 			className={cn(
 				'flex items-center gap-3 text-left',
-				stage ? 'h-full flex-col justify-center px-6 text-center' : 'max-w-[520px] self-start rounded-[6px] border border-dashed border-(--border-default) bg-(--bg-inset) px-3.5 py-3',
+				stage ? 'h-full flex-col justify-center px-6 text-center' : 'max-w-[520px] self-start rounded-control border border-dashed border-(--border-default) bg-(--bg-inset) px-3.5 py-3',
 				className,
 			)}
 		>
@@ -74,11 +74,11 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 				<Icon icon={FileX2} size={stage ? 24 : 18} />
 			</span>
 			<span className={cn('flex min-w-0 flex-col gap-0.5', stage && 'items-center')}>
-				<span className="text-[13px] leading-[18px] text-(--text-secondary)">This {noun} was deleted</span>
-				<span className="truncate text-[11px] leading-[16px] text-(--text-disabled)" title={path}>
+				<span className="text-body leading-[18px] text-(--text-secondary)">This {noun} was deleted</span>
+				<span className="truncate text-micro leading-[16px] text-(--text-disabled)" title={path}>
 					{nameOf(path)}
 				</span>
-				{stage ? <span className="mt-1 max-w-[360px] text-[12px] leading-[17px] text-(--text-tertiary)">It was removed from the task's Library, so there is nothing to show here any more.</span> : null}
+				{stage ? <span className="mt-1 max-w-[360px] text-small leading-[17px] text-(--text-tertiary)">It was removed from the task's Library, so there is nothing to show here any more.</span> : null}
 			</span>
 		</div>
 	);
@@ -112,13 +112,13 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 		<>
 			<span className="relative block h-[96px] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
 				<OutputThumb item={item} />
-				<span className="absolute top-1.5 left-1.5 rounded-[6px] border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px text-[9.5px] leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
+				<span className="absolute top-1.5 left-1.5 rounded-control border border-(--border-subtle) bg-(--bg-canvas)/80 px-1 py-px text-nano leading-[14px] tracking-[0.06em] text-(--text-tertiary) backdrop-blur-sm">
 					{extensionOf(item.path)}
 				</span>
 			</span>
 			<span
 				className={cn(
-					'line-clamp-2 px-2.5 py-2 text-[12px] leading-[16px] break-all',
+					'line-clamp-2 px-2.5 py-2 text-small leading-[16px] break-all',
 					deleted ? 'text-(--text-disabled) line-through' : 'text-(--text-secondary) group-hover/out:text-(--text-primary)',
 				)}
 			>
@@ -131,7 +131,7 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 			<div
 				role="listitem"
 				title={`${item.path} was deleted`}
-				className="flex w-[156px] flex-col overflow-hidden rounded-[8px] border border-dashed border-(--border-default) bg-transparent text-left"
+				className="flex w-[156px] flex-col overflow-hidden rounded-tile border border-dashed border-(--border-default) bg-transparent text-left"
 			>
 				{face}
 			</div>
@@ -170,11 +170,11 @@ export function OutputCards({ items, composer }: { items: ViewerItem[]; composer
 				<button
 					type="button"
 					onClick={() => openViewer(items[shown.length], items, composer)}
-					className="flex w-[72px] flex-col items-center justify-center gap-0.5 rounded-[8px] border border-dashed border-(--border-default) text-(--text-tertiary) outline-none hover:border-(--border-strong) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex w-[72px] flex-col items-center justify-center gap-0.5 rounded-tile border border-dashed border-(--border-default) text-(--text-tertiary) outline-none hover:border-(--border-strong) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
 					title={`${rest} more`}
 				>
-					<span className="in-num text-[13px]">+{rest}</span>
-					<span className="text-[11px]">more</span>
+					<span className="in-num text-body">+{rest}</span>
+					<span className="text-micro">more</span>
 				</button>
 			) : null}
 		</div>
@@ -221,8 +221,8 @@ function ImageStage({ item }: { item: ViewerItem }) {
 				<span className="size-12">
 					<FileFace path={item.path} size={22} />
 				</span>
-				<span className="text-[13px] text-(--text-secondary)">This image could not be loaded</span>
-				<span className="max-w-[360px] text-[12px] leading-[17px] text-(--text-tertiary)">It is not in the task's Library any more, or its sandbox has not saved it yet.</span>
+				<span className="text-body text-(--text-secondary)">This image could not be loaded</span>
+				<span className="max-w-[360px] text-small leading-[17px] text-(--text-tertiary)">It is not in the task's Library any more, or its sandbox has not saved it yet.</span>
 			</div>
 		);
 	return (
@@ -233,7 +233,7 @@ function ImageStage({ item }: { item: ViewerItem }) {
 				onError={() => setBroken(true)}
 				onClick={() => setActual((current) => !current)}
 				className={cn(
-					'block rounded-[6px] shadow-[0_0_0_1px_var(--border-subtle),var(--elev-2)]',
+					'block rounded-control shadow-[0_0_0_1px_var(--border-subtle),var(--elev-2)]',
 					actual ? 'm-auto max-w-none cursor-zoom-out' : 'max-h-full max-w-full cursor-zoom-in object-contain',
 				)}
 			/>
@@ -275,16 +275,16 @@ function MarkupStage({ item, composer, onDone }: { item: ViewerItem; composer: s
 	return (
 		<div ref={area} className="absolute inset-4 bottom-16 flex items-center justify-center">
 			{picture.isError ? (
-				<span className="text-[12px] text-(--danger-text)">The image could not be opened for drawing.</span>
+				<span className="text-small text-(--danger-text)">The image could not be opened for drawing.</span>
 			) : !picture.data || !fit ? (
-				<span className="flex items-center gap-2 text-[12px] text-(--text-tertiary)">
+				<span className="flex items-center gap-2 text-small text-(--text-tertiary)">
 					<Spinner size={12} />
 					Getting the image ready
 				</span>
 			) : (
 				// The box has the picture's shape, so a mark lands where the pointer is. Sketch's toolbar sits below it.
 				<div className="relative" style={{ width: picture.data.width * fit, height: picture.data.height * fit }}>
-					<div className="pointer-events-none absolute inset-0 rounded-[2px] shadow-[0_0_0_1px_var(--accent-border)]" />
+					<div className="pointer-events-none absolute inset-0 rounded-mark shadow-[0_0_0_1px_var(--accent-border)]" />
 					<Sketch
 							toolbarBelow
 							src={picture.data.src}
@@ -376,17 +376,17 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 					<Icon icon={info.icon} size={16} className={info.tone} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col">
-					<span className="truncate text-[13px] leading-[17px] font-medium text-(--text-primary)" title={item.path}>
+					<span className="truncate text-body leading-[17px] font-medium text-(--text-primary)" title={item.path}>
 						{nameOf(item.path)}
 					</span>
-					<span className="truncate text-[11px] leading-[15px] text-(--text-tertiary)">
+					<span className="truncate text-micro leading-[15px] text-(--text-tertiary)">
 						{notice ?? (item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Library')}
 					</span>
 				</div>
 				{many ? (
 					<span className="flex shrink-0 items-center gap-0.5">
 						<IconBtn icon={ChevronLeft} size="sm" label="Previous file" disabled={marking} onClick={() => stepViewer(-1)} />
-						<span className="in-num min-w-[42px] text-center text-[11px] text-(--text-tertiary)">
+						<span className="in-num min-w-[42px] text-center text-micro text-(--text-tertiary)">
 							{viewer.index + 1} of {viewer.items.length}
 						</span>
 						<IconBtn icon={ChevronRight} size="sm" label="Next file" disabled={marking} onClick={() => stepViewer(1)} />
@@ -442,7 +442,7 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 							disabled={marking}
 							onClick={() => openViewer(other, viewer.items, viewer.composer)}
 							className={cn(
-								'size-11 shrink-0 overflow-hidden rounded-[6px] border bg-(--bg-inset) outline-none focus-visible:shadow-(--focus-ring) disabled:opacity-50',
+								'size-11 shrink-0 overflow-hidden rounded-control border bg-(--bg-inset) outline-none focus-visible:shadow-(--focus-ring) disabled:opacity-50',
 								index === viewer.index ? 'border-(--accent-border) shadow-[0_0_0_1px_var(--accent-border)]' : 'border-(--border-subtle) opacity-70 hover:opacity-100',
 							)}
 						>

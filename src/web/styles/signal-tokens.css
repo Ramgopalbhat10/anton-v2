@@ -3,20 +3,24 @@
    TIER 1 — PRIMITIVES. Raw scales. Components never touch these.
    ============================================================ */
 :root{
-  /* Neutral ramp — plain greys with no hue, so black reads as black and the
-     cyan accent is the only colour on the screen. */
+  /* Neutral ramp — charcoal greys with no hue, so the sky behind the app and
+     the cyan accent are the only colour. The dark end is the surface ramp
+     (five fills, each one step of lift); the light end is text and icons. */
   --neutral-1000:#000000;
   --neutral-950:#0A0A0A;
-  --neutral-900:#101010;
-  --neutral-850:#161616;
-  --neutral-800:#1C1C1C;
+  --neutral-925:#0E0E0E;
+  --neutral-900:#121212;
+  --neutral-850:#181818;
+  --neutral-800:#1E1E1E;
   --neutral-750:#232323;
-  --neutral-700:#2C2C2C;
-  --neutral-600:#3A3A3A;
-  --neutral-500:#4A4A4A;
-  --neutral-400:#737373;
-  --neutral-300:#A3A3A3;
-  --neutral-200:#CACACA;
+  --neutral-700:#2A2A2A;
+  --neutral-600:#383838;
+  --neutral-500:#5F5F5F;
+  --neutral-450:#6B6B6B;
+  --neutral-400:#808080;
+  --neutral-350:#959595;
+  --neutral-300:#A8A8A8;
+  --neutral-200:#D4D4D4;
   --neutral-100:#EDEDED;
   --neutral-50:#F7F7F7;
 
@@ -24,10 +28,12 @@
      are alpha, not solid, so they hold up on any surface level. */
   --alpha-white-3:rgba(255,255,255,0.03);
   --alpha-white-4:rgba(255,255,255,0.04);
+  --alpha-white-5:rgba(255,255,255,0.05);
   --alpha-white-6:rgba(255,255,255,0.06);
   --alpha-white-7:rgba(255,255,255,0.07);
   --alpha-white-9:rgba(255,255,255,0.09);
-  --alpha-white-14:rgba(255,255,255,0.14);
+  --alpha-white-11:rgba(255,255,255,0.11);
+  --alpha-white-15:rgba(255,255,255,0.15);
   --alpha-white-24:rgba(255,255,255,0.24);
   --alpha-black-40:rgba(0,0,0,0.40);
   --alpha-black-60:rgba(0,0,0,0.60);
@@ -84,32 +90,46 @@
 :root,[data-theme="dark"]{
   color-scheme:dark;
 
-  /* Surfaces */
-  --bg-canvas:var(--neutral-950);
+  /* Surfaces — one ramp, five fills. Nothing else is a background:
+     inset   code, the terminal, wells inside a card
+     canvas  the page
+     surface the sidebar, the settings card, panels
+     raised  cards and tiles, one step above what they sit on
+     overlay popovers, menus, hover cards */
+  --bg-inset:var(--neutral-950);
+  --bg-canvas:var(--neutral-925);
   --bg-surface:var(--neutral-900);
   --bg-raised:var(--neutral-850);
   --bg-overlay:var(--neutral-800);
-  --bg-inset:var(--neutral-1000);
-  --bg-hover:var(--alpha-white-4);
-  --bg-active:var(--alpha-white-7);
-  --bg-selected:var(--cyan-alpha-12);
-  --bg-selected-hover:var(--cyan-alpha-16);
+  --bg-hover:var(--alpha-white-5);
+  --bg-active:var(--alpha-white-11);
+  --bg-selected:var(--bg-active);
+  --bg-selected-hover:var(--bg-active);
   --bg-disabled:var(--alpha-white-3);
   --bg-skeleton:var(--alpha-white-6);
   --bg-scrim:var(--alpha-black-60);
 
+  /* Glass: what floats over the sky. A charcoal tint and a wide blur that
+     turns the mesh into soft colour; no edge of its own, a little lift. */
+  --glass-bg:rgba(22,22,22,0.8);
+  --glass-bg-strong:rgba(17,17,17,0.9);
+  --glass-border:transparent;
+  --glass-highlight:0 0 #0000;
+  --glass-shadow:var(--elev-2);
+  --glass-blur:blur(26px) saturate(165%);
+
   /* Borders */
   --border-subtle:var(--alpha-white-6);
   --border-default:var(--alpha-white-9);
-  --border-strong:var(--alpha-white-14);
+  --border-strong:var(--alpha-white-15);
   --border-selected:var(--cyan-alpha-40);
 
-  /* Text */
+  /* Text — spaced for 13px on charcoal and on glass. */
   --text-primary:var(--neutral-100);
   --text-secondary:var(--neutral-300);
   --text-tertiary:var(--neutral-400);
   --text-disabled:var(--neutral-500);
-  --text-placeholder:var(--neutral-400);
+  --text-placeholder:var(--neutral-450);
   --text-on-accent:#06181F;
 
   /* Icons — one step quieter than the text they sit beside. */
@@ -117,6 +137,12 @@
   --icon-secondary:var(--neutral-300);
   --icon-tertiary:var(--neutral-400);
   --icon-disabled:var(--neutral-500);
+
+  /* The primary action is light on dark, as a lit key: the accent stays for
+     what is live, selected or focused. */
+  --primary-bg:var(--neutral-100);
+  --primary-bg-hover:#FFFFFF;
+  --primary-fg:var(--neutral-925);
 
   /* Accent — interactive, selected, focused, active nav. Nothing else. */
   --accent-base:var(--cyan-400);
@@ -131,17 +157,25 @@
 
   /* Semantic states — each has text / subtle bg / border, so one state
      renders as text, as a badge, and as a banner with no improvisation. */
-  /* Calm states: done reads as quiet white, anything that wants you takes the
-     one accent, and only a failure is red. Green and red are kept for diffs. */
+  /* Calm states: done reads as quiet white, anything that wants you
+     (attention) takes the one accent, a caution is amber and only a failure
+     is red. Attention and warning are different things: "needs you" is the
+     app talking to you; a warning is something off (a cap nearly reached, a
+     connection that is not set up). Green and red are kept for diffs. */
   --success-text:var(--neutral-200);
   --success-base:var(--neutral-300);
-  --success-bg:rgba(255,255,255,0.06);
-  --success-border:rgba(255,255,255,0.14);
+  --success-bg:var(--alpha-white-6);
+  --success-border:var(--alpha-white-15);
 
-  --warning-text:var(--cyan-200);
-  --warning-base:var(--cyan-300);
-  --warning-bg:var(--cyan-alpha-12);
-  --warning-border:var(--cyan-alpha-30);
+  --attention-text:var(--cyan-200);
+  --attention-base:var(--cyan-300);
+  --attention-bg:var(--cyan-alpha-12);
+  --attention-border:var(--cyan-alpha-30);
+
+  --warning-text:var(--amber-300);
+  --warning-base:var(--amber-400);
+  --warning-bg:var(--amber-alpha-12);
+  --warning-border:var(--amber-alpha-30);
 
   --diff-add-text:var(--emerald-300);
   --diff-add-base:var(--emerald-400);
@@ -210,6 +244,23 @@
   --syntax-selection:var(--cyan-alpha-16);
 }
 
+/* The type steps and the radius steps are Tailwind theme values, so each is
+   a utility (text-small, rounded-control) and Tailwind's own sizes are
+   switched off: there is no other way to set either. A size sets no line
+   height; pair it with leading-* where the body default is not wanted. */
+@theme static{
+  --text-*:initial;
+  --text-nano:10px;
+  --text-micro:11px;
+  --text-small:12px;
+  --text-body:13px;
+  --text-body-lg:14px;
+  --text-h3:16px;
+  --text-h2:20px;
+  --text-h1:24px;
+  --text-display:32px;
+}
+
 /* Type. Geist everywhere: words, labels, counts, keys, IDs, timestamps and
    paths, with tabular figures where numbers line up (.in-num). Geist Mono is
    for code alone: code blocks, inline code, diffs, the terminal, and fields
@@ -222,15 +273,19 @@
   --weight-medium:500;
   --weight-semibold:600;
 
-  /* Steps: size / line-height / weight / tracking.
+  /* Steps: size / line-height / weight / tracking. Nine sizes and no others;
+     each is a Tailwind utility (text-nano … text-display, see styles.css).
+     Nano is for count badges and chart ticks only, display for hero figures.
      Tracking tightens as size grows, loosens at 11px. */
-  --text-micro-size:11px;      --text-micro-line:16px;   --text-micro-weight:var(--weight-medium);   --text-micro-tracking:0.04em;
-  --text-small-size:12px;      --text-small-line:16px;   --text-small-weight:var(--weight-regular);  --text-small-tracking:0.005em;
-  --text-body-size:13px;       --text-body-line:18px;    --text-body-weight:var(--weight-regular);   --text-body-tracking:0em;
-  --text-body-lg-size:14px;    --text-body-lg-line:21px; --text-body-lg-weight:var(--weight-regular);--text-body-lg-tracking:-0.005em;
-  --text-h3-size:16px;         --text-h3-line:22px;      --text-h3-weight:var(--weight-semibold);    --text-h3-tracking:-0.011em;
-  --text-h2-size:20px;         --text-h2-line:26px;      --text-h2-weight:var(--weight-semibold);    --text-h2-tracking:-0.017em;
-  --text-h1-size:24px;         --text-h1-line:30px;      --text-h1-weight:var(--weight-semibold);    --text-h1-tracking:-0.022em;
+  --text-nano-size:var(--text-nano); --text-nano-line:14px;    --text-nano-weight:var(--weight-medium);    --text-nano-tracking:0.02em;
+  --text-micro-size:var(--text-micro); --text-micro-line:16px;   --text-micro-weight:var(--weight-medium);   --text-micro-tracking:0.04em;
+  --text-small-size:var(--text-small); --text-small-line:16px;   --text-small-weight:var(--weight-regular);  --text-small-tracking:0.005em;
+  --text-body-size:var(--text-body); --text-body-line:18px;    --text-body-weight:var(--weight-regular);   --text-body-tracking:0em;
+  --text-body-lg-size:var(--text-body-lg); --text-body-lg-line:21px; --text-body-lg-weight:var(--weight-regular);--text-body-lg-tracking:-0.005em;
+  --text-h3-size:var(--text-h3); --text-h3-line:22px;      --text-h3-weight:var(--weight-semibold);    --text-h3-tracking:-0.011em;
+  --text-h2-size:var(--text-h2); --text-h2-line:26px;      --text-h2-weight:var(--weight-semibold);    --text-h2-tracking:-0.017em;
+  --text-h1-size:var(--text-h1); --text-h1-line:30px;      --text-h1-weight:var(--weight-semibold);    --text-h1-tracking:-0.022em;
+  --text-display-size:var(--text-display); --text-display-line:38px; --text-display-weight:var(--weight-medium); --text-display-tracking:-0.025em;
 
   /* Mono steps. Uppercase belongs to --text-mono-label only. */
   --text-mono-label-size:11px; --text-mono-label-line:16px; --text-mono-label-weight:var(--weight-medium);  --text-mono-label-tracking:0.06em;
@@ -285,25 +340,32 @@
   --panel-header-height:38px;
 }
 
-/* Radius — one small step everywhere: 4px for anything you type into, press,
-   contain or float. --radius-full stays for what is round by nature: avatars,
-   dots, switches, pills. */
+/* Radius — six steps, named for what they round, and no others. Each is a
+   Tailwind utility (rounded-mark … rounded-dialog, see styles.css).
+   mark    swatches, bars, legend squares
+   inner   a piece nested inside a control (outer radius minus its padding)
+   control what you press or type into: buttons, inputs, chips, rows, tips
+   tile    small cards, code blocks, menus' items' containers, wells
+   card    cards, panels, popovers, the composer
+   dialog  modals and the settings card
+   --radius-full stays for what is round by nature: avatars, dots, switches, pills. */
+@theme static{
+  --radius-*:initial;
+  --radius-mark:2px;
+  --radius-inner:4px;
+  --radius-control:6px;
+  --radius-tile:8px;
+  --radius-card:12px;
+  --radius-dialog:16px;
+}
 :root{
   --radius-none:0px;
-  --radius-sm:6px;
-  --radius-md:6px;
-  --radius-lg:6px;
   --radius-full:9999px;
 }
 
-/* Elevation is a border + background pair first. Shadow is added ONLY
-   when a layer actually floats over content that is still visible. */
+/* Elevation: a fill one step up the surface ramp, plus one of four shadows.
+   Shadow is added only when a layer sits over content that is still visible. */
 :root,[data-theme="dark"]{
-  --elevation-0-bg:var(--bg-canvas);      --elevation-0-border:transparent;
-  --elevation-1-bg:var(--bg-surface);     --elevation-1-border:var(--border-subtle);
-  --elevation-2-bg:var(--bg-raised);      --elevation-2-border:var(--border-default);
-  --elevation-3-bg:var(--bg-overlay);     --elevation-3-border:var(--border-strong);
-
   /* Shadows: four small steps of lift. Each has a faint light edge along the
      top (light from above) and a tight contact shadow, and only the higher
      steps add a short, soft spread, so things look raised but never float far. */
@@ -336,11 +398,11 @@
   --transition-sheet:var(--duration-sheet) var(--ease-out);
 
   /* Focus ring — one treatment everywhere. A 1px accent edge plus a 3px
-     accent wash: the wash makes it visible on --bg-overlay, the edge
-     makes it visible against an accent-filled button. :focus-visible only. */
+     accent wash: the wash makes it visible on glass and over the sky, the
+     edge makes it visible against an accent-filled button. :focus-visible only. */
   --focus-ring-width:1px;
   --focus-ring-offset:0px;
-  --focus-ring:0 0 0 var(--focus-ring-width) var(--accent-base);
+  --focus-ring:0 0 0 var(--focus-ring-width) var(--accent-base),0 0 0 4px var(--accent-ring);
   --focus-ring-inset:inset 0 0 0 1px var(--accent-base);
 }
 @media (prefers-reduced-motion:reduce){
@@ -350,59 +412,4 @@
     --duration-overlay:0ms;
     --duration-sheet:0ms;
   }
-}
-
-
-/* App-level palette: "Observatory". Charcoal greys with no hue cast, so the
-   sky behind the app and the cyan accent are the only colour. Surfaces step up
-   in fill (canvas, surface, raised, overlay) instead of drawing edges, so a
-   card reads by its tone alone. Text steps are spaced for 13px on glass; the
-   sky's veils live in styles.css. */
-:root,
-[data-theme='dark'] {
-	--bg-canvas: #0e0e0e;
-	--bg-surface: #121212;
-	--bg-raised: #181818;
-	--bg-overlay: #1e1e1e;
-	--bg-inset: #0a0a0a;
-	--bg-hover: rgba(255, 255, 255, 0.055);
-	--bg-active: rgba(255, 255, 255, 0.085);
-	--text-primary: #ededed;
-	--text-secondary: #a8a8a8;
-	--text-tertiary: #808080;
-	--text-disabled: #5f5f5f;
-	--text-placeholder: #6b6b6b;
-	--icon-primary: #d4d4d4;
-	--icon-secondary: #a3a3a3;
-	--icon-tertiary: #7a7a7a;
-	--icon-disabled: #5a5a5a;
-	--neutral-600: #383838;
-	--neutral-700: #2a2a2a;
-	--neutral-750: #232323;
-	--neutral-800: #1e1e1e;
-	--border-subtle: rgba(255, 255, 255, 0.06);
-	--border-default: rgba(255, 255, 255, 0.09);
-	--border-strong: rgba(255, 255, 255, 0.15);
-
-	/* Glass: what floats over the sky. A charcoal tint and a wide blur that
-	   turns the mesh into soft colour; no edge of its own, a little lift. */
-	--glass-bg: rgba(22, 22, 22, 0.68);
-	--glass-bg-strong: rgba(17, 17, 17, 0.9);
-	--glass-border: transparent;
-	--glass-highlight: 0 0 #0000;
-	--glass-shadow: var(--elev-2);
-	--glass-blur: blur(26px) saturate(165%);
-
-	/* The primary action is light on dark, as a lit key: the accent stays for
-	   what is live, selected or focused. */
-	--primary-bg: #ededed;
-	--primary-bg-hover: #ffffff;
-	--primary-fg: #0e0e0e;
-}
-
-/* Radius: small for what you press, medium for what holds things. */
-:root {
-	--radius-sm: 6px;
-	--radius-md: 8px;
-	--radius-lg: 12px;
 }

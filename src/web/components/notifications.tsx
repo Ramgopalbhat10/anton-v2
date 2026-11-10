@@ -24,10 +24,10 @@ import {
 } from 'lucide-react';
 import { Dialog } from 'radix-ui';
 import { useEffect, useMemo, useState } from 'react';
-import { Segmented, SegmentedItem } from '@/components/instrument';
-import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
+import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
+import { Btn, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
-import { age } from '@/lib/format';
+import { age, plainPreview } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -37,12 +37,12 @@ import { cn } from '@/lib/utils';
  * The list updates from server events; opening a task reads its rows.
  */
 
-type Tone = 'warning' | 'danger' | 'success' | 'accent' | 'neutral';
+type Tone = 'attention' | 'warning' | 'danger' | 'success' | 'accent' | 'neutral';
 
 const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; tone: Tone }> = {
-	question: { label: 'Asked you', icon: MessageCircleQuestion, tone: 'warning' },
-	plan: { label: 'Plan ready', icon: ListChecks, tone: 'warning' },
-	approval: { label: 'Needs approval', icon: Hand, tone: 'warning' },
+	question: { label: 'Asked you', icon: MessageCircleQuestion, tone: 'attention' },
+	plan: { label: 'Plan ready', icon: ListChecks, tone: 'attention' },
+	approval: { label: 'Needs approval', icon: Hand, tone: 'attention' },
 	replied: { label: 'Replied', icon: MessageSquareText, tone: 'accent' },
 	done: { label: 'Done', icon: CircleCheck, tone: 'success' },
 	merged: { label: 'Merged', icon: GitMerge, tone: 'success' },
@@ -56,6 +56,7 @@ const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; tone: To
 
 /** A kind's colour, on its label and its bare icon: no tile behind either, like every other icon in the app. */
 const TONE: Record<Tone, { text: string; icon: string }> = {
+	attention: { text: 'text-(--attention-text)', icon: 'text-(--attention-text)' },
 	warning: { text: 'text-(--warning-text)', icon: 'text-(--warning-text)' },
 	danger: { text: 'text-(--danger-text)', icon: 'text-(--danger-text)' },
 	success: { text: 'text-(--success-text)', icon: 'text-(--success-text)' },
@@ -116,7 +117,7 @@ export const loudUnread = (unread: NotificationsView['unread'] | undefined) =>
 export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: () => void; size?: 'xs' | 'sm'; className?: string }) {
 	const { data } = useNotifications();
 	const count = loudUnread(data?.unread);
-	const tone = data?.unread.failures ? 'bg-(--danger-base)' : data?.unread['needs-you'] ? 'bg-(--warning-base)' : 'bg-(--accent-base)';
+	const tone = data?.unread.failures ? 'bg-(--danger-base)' : data?.unread['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
 	return (
 		<span className={cn('relative inline-flex shrink-0', className)}>
 			<IconBtn icon={Bell} size={size} label={count ? `Notifications, ${count} unread` : 'Notifications'} onClick={onOpen} aria-haspopup="dialog" />
@@ -124,7 +125,7 @@ export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: 
 				<span
 					aria-hidden
 					className={cn(
-						'pointer-events-none absolute -top-1 -right-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-[3px] text-[9.5px] leading-none font-semibold text-(--neutral-950) tabular-nums shadow-[0_0_0_2px_var(--bg-surface)]',
+						'pointer-events-none absolute -top-1 -right-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-[3px] text-nano leading-none font-semibold text-(--neutral-950) tabular-nums shadow-[0_0_0_2px_var(--bg-surface)]',
 						tone,
 					)}
 				>
@@ -217,8 +218,8 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 				>
 					<header className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-4 shadow-[inset_0_-1px_0_var(--border-subtle)]">
 						<Icon icon={Bell} size={14} className="text-(--icon-secondary)" />
-						<Dialog.Title className="text-[13.5px] font-medium">Notifications</Dialog.Title>
-						{unreadCount ? <span className="text-[12px] text-(--text-tertiary) tabular-nums">{unreadCount} unread</span> : null}
+						<Dialog.Title className="text-body-lg font-medium">Notifications</Dialog.Title>
+						{unreadCount ? <span className="text-small text-(--text-tertiary) tabular-nums">{unreadCount} unread</span> : null}
 						<div className="flex-1" />
 						<Btn size="sm" variant="ghost" icon={CheckCheck} disabled={!unreadCount || read.isPending} onClick={() => read.mutate({ all: true })}>
 							<span className="hidden sm:inline">Mark all read</span>
@@ -232,7 +233,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						<div className="flex items-center gap-2">
 							<Segmented label="Show" role="radiogroup">
 								{([false, true] as const).map((unreadOnly) => (
-									<SegmentedItem key={String(unreadOnly)} role="radio" size="sm" on={filters.unreadOnly === unreadOnly} onClick={() => change({ unreadOnly })} className="px-2.5 text-[12px]">
+									<SegmentedItem key={String(unreadOnly)} role="radio" size="sm" on={filters.unreadOnly === unreadOnly} onClick={() => change({ unreadOnly })} className="px-2.5 text-small">
 										{unreadOnly ? 'Unread' : 'All'}
 										{unreadOnly ? <span className="text-(--text-disabled) tabular-nums">{unreadCount}</span> : null}
 									</SegmentedItem>
@@ -270,31 +271,21 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 								const count = countFor(category.id);
 								const unread = data?.unread[category.id] ?? 0;
 								return (
-									<button
+									<FilterChip
 										key={category.id}
-										type="button"
-										aria-pressed={on}
-										aria-label={`${category.label}, ${count}`}
-										onClick={() => change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] })}
-										className={cn(
-											'flex h-[24px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] transition-colors duration-(--duration-micro) outline-none focus-visible:shadow-(--focus-ring)',
-											on
-												? 'bg-(--accent-bg-subtle) text-(--accent-text) hover:bg-(--bg-selected-hover)'
-												: 'bg-(--bg-hover) text-(--text-secondary) hover:bg-(--bg-active) hover:text-(--text-primary)',
-										)}
-									>
-										{category.id === 'needs-you' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--warning-base)" /> : null}
-										{category.id === 'failures' && unread ? <span aria-hidden className="size-1.5 rounded-full bg-(--danger-base)" /> : null}
-										{category.label}
-										<span className={cn('tabular-nums', on ? 'text-(--accent-text) opacity-75' : 'text-(--text-tertiary)')}>{count}</span>
-									</button>
+										label={category.label}
+										count={count}
+										on={on}
+										onToggle={() => change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] })}
+										mark={category.id === 'needs-you' && unread ? <StatusDot tone="attention" /> : category.id === 'failures' && unread ? <StatusDot tone="danger" /> : undefined}
+									/>
 								);
 							})}
 							{filtered ? (
 								<button
 									type="button"
 									onClick={() => change(DEFAULT_FILTERS)}
-									className="ml-auto h-[24px] shrink-0 rounded-full px-2.5 text-[11.5px] text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+									className="ml-auto h-6 shrink-0 rounded-full px-2.5 text-small text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
 								>
 									Clear
 								</button>
@@ -304,11 +295,11 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						{isError ? (
-							<div className="px-4 py-6 text-[12px] text-(--danger-text)">Could not load notifications.</div>
+							<div className="px-4 py-6 text-small text-(--danger-text)">Could not load notifications.</div>
 						) : isPending ? (
 							<div className="flex flex-col gap-1.5 p-3">
 								{[0, 1, 2].map((key) => (
-									<div key={key} className="h-14 rounded-lg bg-(--bg-skeleton)" />
+									<div key={key} className="h-14 rounded-tile bg-(--bg-skeleton)" />
 								))}
 							</div>
 						) : shown.length === 0 ? (
@@ -317,8 +308,8 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 									<Icon icon={BellOff} size={22} />
 								</span>
 								<div className="flex flex-col gap-1">
-									<div className="text-[13.5px] font-medium">{filtered ? 'Nothing matches these filters' : 'You are all caught up'}</div>
-									<div className="max-w-[44ch] text-[12px] leading-[18px] text-(--text-tertiary)">
+									<div className="text-body-lg font-medium">{filtered ? 'Nothing matches these filters' : 'You are all caught up'}</div>
+									<div className="max-w-[44ch] text-small leading-[18px] text-(--text-tertiary)">
 										{filtered
 											? 'Try another kind or place, or clear the filters.'
 											: 'Questions, approvals, finished work, failures and sandboxes starting or stopping show up here.'}
@@ -328,7 +319,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						) : (
 							groups.map((group) => (
 								<section key={group.label} aria-label={group.label} className="px-2 pb-1.5">
-									<div className="sticky-veil sticky top-0 z-[1] px-2 pt-2.5 pb-1 text-[11px] font-medium tracking-[0.06em] text-(--text-disabled) uppercase">{group.label}</div>
+									<SectionLabel className="sticky-veil sticky top-0 z-[1] px-2 pt-2.5 pb-1">{group.label}</SectionLabel>
 									<ul className="flex flex-col gap-px">
 										{group.rows.map((notification) => (
 											<Row
@@ -345,9 +336,9 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						)}
 					</div>
 
-					<footer className="flex h-9 shrink-0 items-center gap-2 px-4 text-[11.5px] text-(--text-disabled) shadow-[inset_0_1px_0_var(--border-subtle)]">
+					<footer className="flex h-9 shrink-0 items-center gap-2 px-4 text-small text-(--text-disabled) shadow-[inset_0_1px_0_var(--border-subtle)]">
 						<span className="min-w-0 flex-1 truncate">Only what needs a look. Opening a task marks its notifications read.</span>
-						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="-mr-1.5 shrink-0 rounded-[6px] px-1.5 py-0.5 text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="-mr-1.5 shrink-0 rounded-control px-1.5 py-0.5 text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
 							Phone alerts
 						</Link>
 					</footer>
@@ -366,7 +357,7 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 				type="button"
 				onClick={onOpen}
 				className={cn(
-					'flex w-full items-start gap-3 rounded-lg px-2.5 py-2.5 pr-10 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)',
+					'flex w-full items-start gap-3 rounded-tile px-2.5 py-2.5 pr-10 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)',
 					notification.read && 'opacity-[0.72] hover:opacity-100',
 				)}
 			>
@@ -375,13 +366,13 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="flex min-w-0 items-center gap-2">
-						<span className={cn('min-w-0 flex-1 truncate text-[13px]', notification.read ? 'text-(--text-secondary)' : 'font-medium text-(--text-primary)')}>{notification.title}</span>
-						<span className="shrink-0 text-[11px] text-(--text-disabled) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
+						<span className={cn('min-w-0 flex-1 truncate text-body', notification.read ? 'text-(--text-secondary)' : 'font-medium text-(--text-primary)')}>{notification.title}</span>
+						<span className="shrink-0 text-micro text-(--text-disabled) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
 							{age(notification.createdAt)}
 						</span>
 					</span>
-					<span className="line-clamp-2 text-[12px] leading-[17px] text-(--text-tertiary)">{notification.body}</span>
-					<span className="flex min-w-0 items-center gap-1.5 pt-0.5 text-[11px]">
+					<span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{plainPreview(notification.body)}</span>
+					<span className="flex min-w-0 items-center gap-1.5 pt-0.5 text-micro">
 						<span className={cn('shrink-0 font-medium', tone.text)}>{look.label}</span>
 						<span className="text-(--text-disabled)">·</span>
 						<span className="min-w-0 truncate text-(--text-disabled)">{where}</span>

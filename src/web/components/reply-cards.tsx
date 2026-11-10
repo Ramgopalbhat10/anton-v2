@@ -96,7 +96,7 @@ export const AskCard = memo(function AskCard({
         <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center text-(--accent-text)">
           <Icon icon={MessageCircleQuestion} size={15} />
         </span>
-        <h3 className="m-0 min-w-0 flex-1 text-[13px] leading-[20px] font-medium text-(--text-primary)">
+        <h3 className="m-0 min-w-0 flex-1 text-body leading-[20px] font-medium text-(--text-primary)">
           {question}
         </h3>
       </header>
@@ -115,7 +115,7 @@ export const AskCard = memo(function AskCard({
               aria-pressed={chosen}
               onClick={() => send(option.label)}
               className={cn(
-                "group/option flex min-h-9 items-center gap-2.5 rounded-[6px] border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus-ring)",
+                "group/option flex min-h-9 items-center gap-2.5 rounded-control border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus-ring)",
                 chosen
                   ? "border-(--accent-border) bg-(--accent-bg-subtle)"
                   : "border-(--border-subtle)",
@@ -127,7 +127,7 @@ export const AskCard = memo(function AskCard({
             >
               <span
                 className={cn(
-                  "in-num inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] border text-[10.5px]",
+                  "in-num inline-flex size-5 shrink-0 items-center justify-center rounded-control border text-micro",
                   chosen
                     ? "border-(--accent-border) text-(--accent-text)"
                     : "border-(--border-default) text-(--text-tertiary)",
@@ -136,11 +136,11 @@ export const AskCard = memo(function AskCard({
                 {chosen ? <Icon icon={Check} size={11} /> : index + 1}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-[12.5px] leading-[18px] text-(--text-primary)">
+                <span className="text-body leading-[18px] text-(--text-primary)">
                   {option.label}
                 </span>
                 {option.detail ? (
-                  <span className="text-[11.5px] leading-[16px] text-(--text-tertiary)">
+                  <span className="text-small leading-[16px] text-(--text-tertiary)">
                     {option.detail}
                   </span>
                 ) : null}
@@ -153,7 +153,7 @@ export const AskCard = memo(function AskCard({
         })}
       </div>
       {open ? (
-        <div className="border-t border-(--border-subtle) px-3.5 py-2 text-[11.5px] text-(--text-tertiary)">
+        <div className="border-t border-(--border-subtle) px-3.5 py-2 text-small text-(--text-tertiary)">
           Pick one, or type your own answer below.
         </div>
       ) : null}
@@ -180,17 +180,17 @@ function AnsweredCard({
       className="in-card flex flex-col gap-1.5 px-3.5 py-2.5"
       aria-label="Answered question"
     >
-      <span className="text-[11.5px] leading-[16px] text-(--text-tertiary)">
+      <span className="text-small leading-[16px] text-(--text-tertiary)">
         Question
       </span>
-      <h3 className="m-0 text-[13px] leading-[19px] font-normal text-(--text-primary)">
+      <h3 className="m-0 text-body leading-[19px] font-normal text-(--text-primary)">
         {question}
       </h3>
-      <p className="m-0 flex min-w-0 items-center gap-2 text-[12.5px] leading-[18px]">
+      <p className="m-0 flex min-w-0 items-center gap-2 text-body leading-[18px]">
         <span className="inline-flex shrink-0 items-center gap-1 text-(--success-text)">
           <Icon icon={Check} size={12} />
           {index >= 0 ? (
-            <span className="in-num text-[11.5px]">
+            <span className="in-num text-small">
               {String.fromCharCode(65 + index)}
             </span>
           ) : null}
@@ -198,7 +198,7 @@ function AnsweredCard({
         <span className="min-w-0 truncate font-medium text-(--text-primary)">
           {answer}
         </span>
-        <span className="shrink-0 text-[11.5px] text-(--text-tertiary)">
+        <span className="shrink-0 text-small text-(--text-tertiary)">
           {index >= 0 ? "You chose" : "You answered"}
         </span>
       </p>
@@ -232,10 +232,10 @@ export const ChangesCard = memo(function ChangesCard({
       <section className="in-card overflow-hidden" aria-label={paths ? "Files changed" : "Unpushed changes"}>
         <header className="flex h-9 items-center gap-2 px-3">
           <Icon icon={FileDiff} size={13} className="text-(--icon-tertiary)" />
-          <span className="min-w-0 flex-1 truncate text-[12px] text-(--text-secondary)">
+          <span className="min-w-0 flex-1 truncate text-small text-(--text-secondary)">
             {paths ? (files.length === 1 ? "1 file changed" : `${files.length} files changed`) : (files.length === 1 ? "1 unpushed file" : `${files.length} unpushed files`)}
           </span>
-          <span className="in-num text-[11.5px]">
+          <span className="in-num text-small">
             <DiffStat added={added} removed={removed} />
           </span>
         </header>
@@ -246,11 +246,11 @@ export const ChangesCard = memo(function ChangesCard({
               type="button"
               onClick={() => open(file.path)}
               title={`Open ${file.path} in Changes`}
-              className="flex h-7 items-center gap-2 rounded-[6px] px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+              className="flex h-7 items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
             >
               <FileIcon path={file.path} />
               <PathName path={file.path} className="flex-1" />
-              <span className="in-num shrink-0 text-[11px]">
+              <span className="in-num shrink-0 text-micro">
                 <DiffStat added={file.added} removed={file.removed} />
               </span>
               <DiffBars added={file.added} removed={file.removed} />
@@ -260,7 +260,7 @@ export const ChangesCard = memo(function ChangesCard({
             <button
               type="button"
               onClick={() => showPanel("Changes")}
-              className="h-7 rounded-[6px] px-2 text-left text-[12px] text-(--text-tertiary) hover:bg-(--bg-hover)"
+              className="h-7 rounded-control px-2 text-left text-small text-(--text-tertiary) hover:bg-(--bg-hover)"
             >
               {files.length - 12} more in Changes
             </button>
@@ -319,7 +319,7 @@ function ChatMerge({ sessionId, url }: { sessionId: string; url: string }) {
   if (detail) return <div className="px-3.5 pb-2.5 @min-[540px]/pr:py-2.5"><MergeBox sessionId={sessionId} pull={detail} ownWork compact initialConfirming initialMethod={method} onMerged={setDetail} /></div>;
   return <div className="flex min-w-0 flex-wrap items-center gap-2 px-3.5 pb-2.5 @min-[540px]/pr:py-2.5">
     <div className="flex shrink-0 items-center"><Btn size="sm" variant="secondary" icon={GitMerge} disabled={load.isPending} className="rounded-r-none" onClick={() => load.mutate()}>{load.isPending ? 'Checking pull request…' : mergeLabel[method]}</Btn><MergeMethodMenu method={method} onChange={setMethod} disabled={load.isPending} /></div>
-    {load.isError ? <span role="alert" className="text-[12px] text-(--danger-text)">{load.error.message}</span> : null}
+    {load.isError ? <span role="alert" className="text-small text-(--danger-text)">{load.error.message}</span> : null}
   </div>;
 }
 
@@ -349,8 +349,8 @@ export const PullRequestCard = memo(function PullRequestCard({
         className="group/pr flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-[13px] leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
-          <span className="flex flex-wrap items-center gap-2 text-[11.5px] leading-[16px] text-(--text-tertiary)">
+          <span className="truncate text-body leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
+          <span className="flex flex-wrap items-center gap-2 text-small leading-[16px] text-(--text-tertiary)">
             <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
             <PrMetadata sessionId={sessionId} url={url} />
             <PrChecks pull={pull ?? null} />
