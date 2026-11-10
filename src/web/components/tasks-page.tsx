@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List as ListIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { dayKey, lastDays, StackedDaysChart, type StackRow } from '@/components/charts';
 import { TasksArt } from '@/components/illustrations';
 import { Caption, Card, CardSection, Figure, type Part, Segmented, SegmentedItem, SplitBar, StatRow, Status } from '@/components/instrument';
 import { useModelName } from '@/components/model-picker';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, IconBtn, SearchField, Spinner } from '@/components/signal';
+import { EmptyState, IconBtn, SearchField, Spinner } from '@/components/signal';
 import { RackCard } from '@/components/task-rack';
 import { TaskRow, used } from '@/components/task-row';
 import { isLive } from '@/components/task-status';
@@ -144,7 +143,6 @@ const SERIES_COLORS = ['var(--accent-base)', 'var(--data-2)', 'var(--neutral-500
 
 /** Every task, searchable and filtered by state, newest first, a page at a time. */
 export function TasksPage() {
-	const navigate = useNavigate();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const modelName = useModelName();
 	const [query, setQuery] = useState('');
@@ -156,14 +154,7 @@ export function TasksPage() {
 	const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
 	const page = Math.min(wantedPage, pages - 1);
 	return (
-		<PageFrame
-			title="Tasks"
-			actions={
-				<Btn size="sm" icon={Plus} onClick={() => void navigate({ to: '/' })}>
-					New task
-				</Btn>
-			}
-		>
+		<PageFrame title="Tasks" description="Every task, where it stands and what it cost. Start a new one from Home.">
 			{all.length ? <RackCard sessions={all} /> : null}
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">

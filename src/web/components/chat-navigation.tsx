@@ -30,14 +30,14 @@ export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavi
 			onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setActive(null); } }}
 			onKeyDown={(event) => { if (event.key === 'Escape') { setActive(null); setOpen(false); handle.current?.focus(); } }}>
 			{selected ? (
-				<div id={previewId} role="tooltip" className="absolute right-full w-[min(280px,65vw)] rounded-card border border-(--border) bg-(--bg-overlay) p-3 text-small leading-[18px] shadow-(--elev-3)">
+				<div id={previewId} role="tooltip" className="in-pop absolute right-full w-[min(280px,65vw)] p-3 text-small leading-[18px]">
 					<div className="line-clamp-2 break-words font-semibold text-(--text-primary)">{selected.input}</div>
 				</div>
 			) : null}
 			{/* One visible handle opens the rail on both touch and pointer devices. */}
 			<button ref={handle} type="button" aria-label={open ? 'Hide chat navigation' : 'Show chat navigation'} aria-expanded={open}
 				onClick={() => { setOpen(!open); setActive(null); }}
-				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-5 items-center justify-center rounded-l-control border border-r-0 border-(--border) bg-(--bg-overlay) text-(--text-secondary) outline-none focus-visible:ring-2 focus-visible:ring-(--accent-base) [@media(hover:hover)]:group-hover/nav:pointer-events-none [@media(hover:hover)]:group-hover/nav:opacity-0 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100`}>
+				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-4 items-center justify-center rounded-l-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring) [@media(hover:hover)]:group-hover/nav:pointer-events-none [@media(hover:hover)]:group-hover/nav:opacity-0 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100`}>
 				<span aria-hidden="true">⋮</span>
 			</button>
 			<div className={`flex max-h-[50vh] flex-col overflow-x-hidden overflow-y-auto py-1 transition-[opacity,width] duration-200 motion-reduce:transition-none [@media(hover:hover)]:group-hover/nav:w-10 [@media(hover:hover)]:group-hover/nav:opacity-100 [@media(hover:hover)]:group-hover/nav:pointer-events-auto ${open ? 'w-10 opacity-100' : 'pointer-events-none w-5 opacity-0'}`}>
@@ -46,7 +46,7 @@ export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavi
 						onMouseEnter={() => setActive(turn.id)}
 						onFocus={() => setActive(turn.id)} onBlur={() => setActive((current) => current === turn.id ? null : current)}
 						onClick={(event) => { onNavigate(turn.id); setOpen(false); setActive(null); if (event.detail === 0) handle.current?.focus(); else event.currentTarget.blur(); }}
-						className="group flex h-3 w-10 shrink-0 items-center justify-end rounded-inner outline-none focus-visible:ring-2 focus-visible:ring-(--accent-base)">
+						className="group flex h-3 w-10 shrink-0 items-center justify-end rounded-inner outline-none focus-visible:shadow-(--focus-ring)">
 						<span className="h-[3px] w-4 rounded-full bg-(--text-tertiary) transition-[width,background-color] duration-200 group-hover:w-8 group-hover:bg-(--accent-base) group-focus-visible:w-8 group-focus-visible:bg-(--accent-base) motion-reduce:transition-none" />
 					</button>
 				))}

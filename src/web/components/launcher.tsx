@@ -4,7 +4,6 @@ import { ArrowUp, BookOpen, Folder, GitBranch, GitPullRequest, Globe, ListChecks
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { HomeDashboard, SkyCredit } from '@/components/home-dashboard';
-import { Logo } from '@/components/illustrations';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
@@ -258,11 +257,8 @@ export function Launcher() {
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-16 md:px-6">
 				<div className="mx-auto flex max-w-[880px] flex-col gap-10 pt-6 md:pt-[min(16vh,148px)]">
 					<div className="mx-auto flex w-full max-w-[680px] flex-col gap-4">
-						<h1 className="m-0 flex items-center gap-2.5 text-h1 leading-7 font-semibold tracking-[-0.03em]">
-							<Logo size={25} />
-							<span>Anton</span>
-							<span className="sr-only">New task</span>
-						</h1>
+						{/* The sidebar already names the product; Home asks the one question it is for. */}
+						<h1 className="m-0 text-h2 leading-7 font-medium tracking-[-0.02em] text-(--text-primary)">{chat ? 'What should Anton look into?' : 'What should Anton work on?'}</h1>
 
 						<form
 							className="home-composer relative flex flex-col"

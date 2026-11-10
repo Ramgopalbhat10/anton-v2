@@ -163,7 +163,7 @@ export async function replyOutcome(task: SessionRecord, reply: string | null): P
 	const approval = await waitingApproval(task.id);
 	if (approval) return { kind: 'approval', body: approval };
 	if (task.planMode && task.plan) return { kind: 'plan', body: 'Plan ready. Approve it or ask for changes.' };
-	if (task.resolvedAt) return { kind: 'done', body: reply ? `Done: ${reply}` : 'Done.' };
+	if (task.resolvedAt) return { kind: 'done', body: !reply ? 'Done.' : /^done\b/i.test(reply) ? reply : `Done: ${reply}` };
 	if (!reply) return null;
 	return { kind: 'replied', body: reply };
 }

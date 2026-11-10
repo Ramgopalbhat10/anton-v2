@@ -130,7 +130,7 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 				))}
 				{file.lines.map((line, index) =>
 					line.kind === 'hunk' ? (
-						<div key={`hunk-${index}`} className="my-1 flex bg-(--accent-bg-subtle) py-0.5 text-(--accent-text) first:mt-0">
+						<div key={`hunk-${index}`} className="my-1 flex bg-(--alpha-white-4) py-0.5 text-(--text-tertiary) first:mt-0">
 							<span className="w-12 shrink-0 border-r border-(--accent-border) pr-2.5 text-right opacity-70 select-none">@@</span>
 							<span className="pl-2 whitespace-pre opacity-80">{line.text}</span>
 						</div>

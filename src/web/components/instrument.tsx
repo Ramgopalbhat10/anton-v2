@@ -365,7 +365,8 @@ export function SplitBar({ parts, label, legend = true, format }: { parts: Part[
 				<div className="flex flex-wrap gap-x-4 gap-y-1">
 					{parts.map((part) => (
 						<span key={part.key} className="inline-flex min-w-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
-							<span className="size-2 shrink-0 rounded-mark" style={{ background: part.color }} />
+							{/* A part with nothing in it keeps its place but not its colour, so an empty "Failed" does not read as a failure. */}
+							<span className="size-2 shrink-0 rounded-mark" style={{ background: part.value ? part.color : 'var(--segment-off)' }} />
 							<span className="truncate">{part.label}</span>
 							<span className="in-num text-(--text-secondary)">{format ? format(part, total ? part.value / total : 0) : part.value}</span>
 						</span>

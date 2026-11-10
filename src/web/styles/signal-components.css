@@ -67,7 +67,7 @@
 .sg-btn svg{stroke-width:1.5}
 
 /* Agent replies rendered from markdown, in body type. */
-.sg-markdown{font-size:var(--text-body-size);line-height:20px;color:var(--text-primary);text-wrap:pretty;overflow-wrap:anywhere}
+.sg-markdown{font-size:var(--text-body-size);line-height:20px;color:var(--text-primary);text-wrap:pretty;overflow-wrap:break-word}
 .sg-markdown>:first-child{margin-top:0}
 .sg-markdown>:last-child{margin-bottom:0}
 .sg-markdown p,.sg-markdown ul,.sg-markdown ol,.sg-markdown pre,.sg-markdown table,.sg-markdown blockquote{margin:0 0 10px}
@@ -86,7 +86,9 @@
 .sg-markdown :not(pre)>code{font-family:var(--font-mono);font-size:var(--text-mono-size);padding:1px 4px;border-radius:var(--radius-control);background:var(--alpha-white-6);border:1px solid transparent}
 .sg-markdown pre{overflow-x:auto;padding:10px 12px;border-radius:var(--radius-tile);background:var(--bg-inset);font-family:var(--font-mono);font-size:var(--text-mono-code-size);line-height:var(--text-mono-code-line);color:var(--text-secondary)}
 .sg-markdown table{display:block;overflow-x:auto;border-collapse:collapse;font-size:var(--text-small-size)}
-.sg-markdown th,.sg-markdown td{padding:5px 10px;border:1px solid var(--border-subtle);text-align:left;vertical-align:top}
+/* A table keeps its columns: a cell wraps between words, never inside a path or a token, and the table scrolls sideways when it is wider than the reply. */
+.sg-markdown th,.sg-markdown td{padding:5px 10px;border:1px solid var(--border-subtle);text-align:left;vertical-align:top;min-width:10ch;overflow-wrap:normal}
+.sg-markdown td code,.sg-markdown th code{white-space:nowrap}
 .sg-markdown th{font-weight:var(--weight-medium);background:var(--alpha-white-4)}
 .sg-markdown input[type=checkbox]{margin-right:6px;vertical-align:-1px}
 
@@ -168,7 +170,7 @@
 
 .sg-markdown .sg-code pre{padding:10px 12px}
 .sg-markdown .sg-file-ref{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer}
-.sg-markdown .sg-file-ref code{color:var(--accent-text);border-color:var(--accent-border)}
+.sg-markdown .sg-file-ref code{color:var(--accent-text)}
 .sg-markdown .sg-file-ref:hover code{background:var(--accent-bg-subtle)}
 .sg-markdown .sg-file-ref:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-control)}
 /* An image the agent saved, drawn in its reply: a click opens it in the viewer. */

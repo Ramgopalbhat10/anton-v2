@@ -160,7 +160,7 @@ export function ReviewsPage() {
 		.map((group) => ({ group, items: items.filter((item) => item.group === group) }))
 		.filter((entry) => entry.items.length > 0);
 	return (
-		<PageFrame title="Reviews">
+		<PageFrame title="Reviews" description="The pull requests your tasks opened, grouped by what they wait on, and a review of any other by its link.">
 			<ReviewAny />
 			{reviews.isPending ? (
 				<Spinner size={12} />

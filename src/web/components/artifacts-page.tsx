@@ -485,7 +485,7 @@ export function ArtifactsPage() {
 	const setSearch = (next: ArtifactsSearch) => void navigate({ to: '/artifacts', search: next, replace: true });
 
 	return (
-		<PageFrame title="Artifacts">
+		<PageFrame title="Artifacts" description="What the agent made and saved across every task: reports, pages, images and files.">
 			<div className="flex flex-wrap items-center gap-2">
 				<Segmented label="Kind" className="max-w-full flex-wrap [&>button]:shrink-0">
 					<SegmentedItem size="sm" on={!type} onClick={() => setSearch({ q: query || undefined })}>

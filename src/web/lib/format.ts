@@ -58,3 +58,19 @@ export function fileSize(bytes: number): string {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * Markdown read as one line of plain words, for a preview: no emphasis marks,
+ * code ticks, headings, list markers or link targets, and no doubled "Done".
+ */
+export function plainPreview(markdown: string): string {
+	return markdown
+		.replace(/```[\s\S]*?```/g, ' ')
+		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+		.replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+		.replace(/(?<!\w)(\*\*|__|\*|_|`)(?=\S)([^*`]*?\S)\1(?!\w)/g, '$2')
+		.replace(/[`*]|#{2,}/g, '')
+		.replace(/^(Done|Failed):\s+\1\b[.:]?\s*/i, '$1: ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}

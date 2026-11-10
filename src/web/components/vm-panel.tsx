@@ -13,7 +13,7 @@ import { PrTab } from '@/components/pr-tab';
 import { PreviewTab } from '@/components/preview-tab';
 import { useResume } from '@/components/source-bar';
 import { Count, PanelTab, PanelTabs } from '@/components/instrument';
-import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger } from '@/components/signal';
+import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger, SectionLabel } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
 import { api } from '@/lib/api';
 import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
@@ -118,7 +118,7 @@ export const VmPanel = memo(function VmPanel({
 	const View = current ? VIEWS[current] : null;
 
 	return (
-		<WorkspacePane expanded={expanded}>
+		<WorkspacePane expanded={expanded} narrow={current === null && !expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
 				{/* On a phone the workspace covers the conversation; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
@@ -204,29 +204,21 @@ export const VmPanel = memo(function VmPanel({
 				)}
 			>
 				{current === null ? (
-					<div className="flex min-h-full items-center justify-center px-2 py-6">
-						<div className="flex w-full max-w-[520px] flex-col gap-3">
-							<div className="in-caption px-1">Open a panel</div>
-							<div className="grid gap-x-2 gap-y-1 sm:grid-cols-2">
-								{panels.map((panel) => (
-									<button
-										type="button"
-										key={panel.name}
-										onClick={() => show(panel.name)}
-										className="group/panel flex items-start gap-3 rounded-card px-2.5 py-2.5 text-left transition-colors outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
-									>
-										<span className="inline-flex size-7 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/panel:text-(--accent-text)">
-											<Icon icon={panel.icon} size={16} />
-										</span>
-										<span className="flex min-w-0 flex-col gap-0.5">
-											<span className="text-body font-medium text-(--text-primary)">{panel.name}</span>
-											<span className="text-small leading-[17px] text-pretty text-(--text-tertiary)">{panel.desc}</span>
-										</span>
-									</button>
-								))}
-							</div>
-						</div>
-					</div>
+					<nav aria-label="Open a panel" className="flex flex-col gap-0.5 px-2 pt-1 pb-4">
+						<SectionLabel className="px-2 pt-1 pb-1.5">Open a panel</SectionLabel>
+						{panels.map((panel) => (
+							<button
+								type="button"
+								key={panel.name}
+								title={panel.desc}
+								onClick={() => show(panel.name)}
+								className="group/panel flex h-8 items-center gap-2.5 rounded-control px-2 text-left text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							>
+								<Icon icon={panel.icon} size={14} className="text-(--icon-tertiary) group-hover/panel:text-(--icon-secondary)" />
+								{panel.name}
+							</button>
+						))}
+					</nav>
 				) : null}
 				{current === 'Preview' ? <PreviewTab key={sessionId} sessionId={sessionId} onWatchTest={() => show('Computer')} /> : View ? <View key={sessionId} sessionId={sessionId} /> : null}
 			</div>

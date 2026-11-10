@@ -784,7 +784,8 @@ export const ModelPicker = memo(function ModelPicker({
 					{effort && selected?.reasoning.length ? (
 						<span className="flex items-center gap-1 rounded-control bg-(--alpha-white-6) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
-							<span className="text-nano text-(--text-tertiary)">{REASONING_LABEL[reasoning]}</span>
+							{/* On a phone the meter says it alone, so the model keeps its name. */}
+							<span className="hidden text-nano text-(--text-tertiary) sm:inline">{REASONING_LABEL[reasoning]}</span>
 						</span>
 					) : null}
 					<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary)" />

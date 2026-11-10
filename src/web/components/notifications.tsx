@@ -27,7 +27,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { Btn, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
-import { age } from '@/lib/format';
+import { age, plainPreview } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -371,7 +371,7 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 							{age(notification.createdAt)}
 						</span>
 					</span>
-					<span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{notification.body}</span>
+					<span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{plainPreview(notification.body)}</span>
 					<span className="flex min-w-0 items-center gap-1.5 pt-0.5 text-micro">
 						<span className={cn('shrink-0 font-medium', tone.text)}>{look.label}</span>
 						<span className="text-(--text-disabled)">·</span>

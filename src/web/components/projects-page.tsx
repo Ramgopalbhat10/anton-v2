@@ -4,7 +4,7 @@ import { ArrowRight, Check, FolderGit2, FolderKanban, MessageSquare, Moon, Plus,
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';
-import { Caption, StatusDot } from '@/components/instrument';
+import { Caption, Status, StatusDot } from '@/components/instrument';
 import { PageFrame } from '@/components/page-frame';
 import { IconPicker, iconTint, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
@@ -20,25 +20,6 @@ import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { stateOf, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
-
-/** One figure on a project card: a count over its word, lit when it asks for you. */
-function Figure({ label, value, tone }: { label: string; value: number; tone?: 'attention' | 'accent' }) {
-	return (
-		<div className="flex min-w-0 flex-col gap-px rounded-tile bg-(--alpha-white-3) px-2.5 py-1.5">
-			<span
-				className={cn(
-					'in-figure text-h3 leading-5',
-					value === 0 && 'text-(--text-disabled)',
-					value > 0 && tone === 'attention' && 'text-(--attention-text)',
-					value > 0 && tone === 'accent' && 'text-(--accent-text)',
-				)}
-			>
-				{value}
-			</span>
-			<span className="truncate text-micro text-(--text-tertiary)">{label}</span>
-		</div>
-	);
-}
 
 /** Rows a card keeps room for, so cards in a row line up whatever each holds. */
 const CARD_ROWS = 3;
@@ -73,20 +54,10 @@ function ProjectCard({ space }: { space: Space }) {
 					<div className="flex items-center gap-2">
 						<span className="min-w-0 flex-1 truncate text-body-lg font-semibold tracking-[-0.01em] text-(--text-primary)">{space.name}</span>
 						{space.state !== 'active' ? <Caption tone="warning">{space.state === 'paused' ? 'Paused' : 'Archived'}</Caption> : null}
-						{counts.waiting > 0 ? (
-							<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full bg-(--attention-bg) px-2 text-micro text-(--attention-text)">
-								<StatusDot tone="attention" />
-								Needs you
-							</span>
-						) : null}
+						{counts.waiting > 0 ? <Status tone="attention">{counts.waiting === 1 ? 'Needs you' : `${counts.waiting} need you`}</Status> : counts.working > 0 ? <Status tone="accent" pulse>Working</Status> : null}
 					</div>
 					<span className="line-clamp-2 min-h-[34px] text-small leading-[17px] text-(--text-tertiary)">{space.goal || 'No goal yet. Tell the coordinator what this project is for.'}</span>
 				</div>
-			</div>
-			<div className="relative grid grid-cols-3 gap-1.5 px-4 pt-3.5">
-				<Figure label="Open" value={open.length} />
-				<Figure label="Needs you" value={counts.waiting} tone="attention" />
-				<Figure label="Working" value={counts.working} tone="accent" />
 			</div>
 			<div className="flex min-h-[22px] flex-wrap items-center gap-1 px-4 pt-3">
 				{repos.map((repo) => (
@@ -137,10 +108,10 @@ function Summary({ spaces }: { spaces: Space[] }) {
 	const working = sum((space) => space.counts.working);
 	const open = sum((space) => space.counts.waiting + space.counts.working + space.counts.queued + space.counts.review + space.counts.landing + space.counts.idle);
 	const items: Array<[string, number, string?]> = [
-		['projects', spaces.length],
-		['open threads', open],
+		[spaces.length === 1 ? 'project' : 'projects', spaces.length],
+		[open === 1 ? 'open thread' : 'open threads', open],
 		['working', working, 'text-(--accent-text)'],
-		['need you', waiting, 'text-(--attention-text)'],
+		[waiting === 1 ? 'needs you' : 'need you', waiting, 'text-(--attention-text)'],
 	];
 	return (
 		<div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
@@ -271,6 +242,7 @@ export function ProjectsPage() {
 	return (
 		<PageFrame
 			title="Projects"
+			description="Work under one goal, split into threads that run at once by a coordinator."
 			actions={
 				<Btn size="sm" icon={Plus} onClick={() => setCreating(true)}>
 					New project

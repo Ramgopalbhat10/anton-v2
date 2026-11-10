@@ -234,7 +234,7 @@ export const Composer = memo(function Composer({
 					onChange={setText}
 					sessionId={sessionId}
 					onPaste={attachments.onPaste}
-					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Ask Anton to change the workspace'}
+					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Reply to Anton'}
 				/>
 				{blocked || blind || attachments.limitError || attachments.notice ? (
 					<div className={blocked ? 'text-small text-(--danger-text)' : 'text-small text-(--warning-text)'}>
