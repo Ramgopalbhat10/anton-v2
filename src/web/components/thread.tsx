@@ -773,6 +773,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	answer,
 	segment,
 	showWorkspaceChanges,
+	enter,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
@@ -782,6 +783,8 @@ const AssistantMessage = memo(function AssistantMessage({
 	/** The stretch shown, when a message sent while it worked cut the reply: the header goes on its first, the cards and usage on its last. */
 	segment?: ThreadRow['segment'];
 	showWorkspaceChanges: boolean;
+	/** A conversation born on this page: each reply fades in as it arrives, history does not replay it. */
+	enter?: boolean;
 }) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
@@ -822,7 +825,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	if (blocks.length === 0 && !(live && foot)) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
-		<div className="group/reply flex flex-col gap-3">
+		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter')}>
 			{head ? (
 				<div className="flex items-center gap-2">
 					<Logo size={18} />
@@ -1170,7 +1173,7 @@ function useThreadFileLinks(sessionId: string): FileLinks {
 	);
 }
 
-export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlueAgentResult }) {
+export function Thread({ sessionId, agent, composer, fresh }: { sessionId: string; agent: UseFlueAgentResult; composer?: ReactNode; fresh?: boolean }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
 	const scroller = useRef<HTMLDivElement>(null);
@@ -1388,13 +1391,14 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
-								<div key={row.message.id} data-chat-input={row.message.id} className={rises(row.message.id, row === rows[0]) ? 'in-sent' : undefined}>
+								<div key={row.message.id} data-chat-input={row.message.id} className={rises(row.message.id, row === rows[0] && !fresh) ? 'in-sent' : undefined}>
 									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
 								</div>
 							) : (
 								<AssistantMessage
 									key={rowKey(row)}
 									message={row.message}
+									enter={fresh}
 									segment={row.segment}
 									live={row.message === liveReply && (!row.segment || row.segment.last)}
 									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
@@ -1425,7 +1429,7 @@ export function Thread({ sessionId, agent }: { sessionId: string; agent: UseFlue
 						}}
 					/>
 				) : null}
-				<Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} />
+				{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
 			</div>
 			</FileLinks.Provider>
 			</ReplyActions.Provider>

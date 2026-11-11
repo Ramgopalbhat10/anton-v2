@@ -263,7 +263,7 @@ export function Launcher() {
 						<h1 className="m-0 text-h2 leading-7 font-medium tracking-[-0.02em] text-(--text-primary)">{chat ? 'What should Anton look into?' : 'What should Anton work on?'}</h1>
 
 						<form
-							className="home-composer relative flex flex-col"
+							className="home-composer in-enter relative flex flex-col"
 							onSubmit={(event) => {
 								event.preventDefault();
 								void start();

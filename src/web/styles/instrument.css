@@ -1278,3 +1278,12 @@
 		animation: none;
 	}
 }
+
+/* Inside incognito the frame is quiet, so arrivals take a beat longer: the sent message
+   rises a touch slower and each reply fades in gently instead of stamping into place. */
+.incognito .in-sent {
+	animation-duration: 520ms;
+}
+.incognito .in-enter {
+	animation-duration: 440ms;
+}
