@@ -1753,6 +1753,9 @@ export function Coder({ id }: AgentProps) {
 			startReplyClock(id);
 			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
 			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
+			// A repository task that has its workspace reads and works in its machine, which may have stopped since its last reply:
+			// it starts now, behind the first model call, as it did when the runtime read the repository's instructions from it.
+			else if (repoTask) void machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
 			return { startedAt: Date.now() };
 		});
 		useResponseFinish(({ response, metadata }) => {
