@@ -17,11 +17,14 @@ import {
 	useSkill,
 	useSubagent,
 	useTool,
+	type Sandbox,
 } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config.ts';
+import type { Machine } from '../core/ports.ts';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
-import { sandboxTools } from '../flue/sandbox-tools.ts';
+import { type ImageSight, sandboxTools } from '../flue/sandbox-tools.ts';
+import { taskSandbox, taskTools } from '../flue/task-sandbox.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
@@ -43,6 +46,7 @@ import {
 	hasWorkspace,
 	isChat,
 	isPlanning,
+	noteWorkspace,
 	connectorsFor,
 	runsOnHost,
 	sealedSecretsFor,
@@ -73,6 +77,7 @@ import { secretsToHide } from '../services/secrets.ts';
 import { httpRequest } from '../services/http-request.ts';
 import type { SealedSecretBrief } from '../services/sealed-secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
+import { globTask, grepTask, readTaskFile, taskFileBytes, taskRoot, workMachine } from '../services/task-files.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { findModel, loadedModels } from '../services/models.ts';
 import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
@@ -174,8 +179,9 @@ function withSettingsModel(id: string, subagent: typeof explorer, name: 'explore
 }
 
 /**
- * Tools for answering from the repo at the task's base commit, with no sandbox, clone or branch; given `repo`,
- * from any GitHub repository instead, which is how a chat reads code at all.
+ * A chat's and a plan's or review's tools before its sandbox, answering from the repo at the task's base commit,
+ * with no sandbox, clone or branch; given `repo`, from any GitHub repository instead, which is how a chat reads code
+ * at all. A repository task's read, grep and glob (`useTaskWorkspace`) read the same snapshot until it has its workspace.
  */
 function useRepoSnapshot(id: string, chat: boolean) {
 	const repo = v.optional(
@@ -241,10 +247,10 @@ function SnapshotExplorer(scripts: boolean, chat: boolean) {
 }
 
 /**
- * Before the task has a sandbox, the explorer reads the same snapshot the
- * agent answers from, so reading many files stays out of the agent's context
- * without starting a machine. With a sandbox, `useWorkspace` mounts the
- * explorer that works there instead.
+ * Before a chat, plan or review has a sandbox, the explorer reads the same
+ * snapshot the agent answers from, so reading many files stays out of the
+ * agent's context without starting a machine. With a sandbox, `useWorkspace`
+ * mounts the explorer that works there instead.
  */
 function useSnapshotExplorer(id: string, chat: boolean) {
 	const subagent = defineSubagent({
@@ -284,38 +290,120 @@ function useStartWorkspace(id: string, chat: boolean, startWorkspace: () => void
 	);
 }
 
+/** How the agent's model takes an image `read` shows: as a picture, or in the vision model's words. */
+function sightOf(id: string): ImageSight {
+	return {
+		sees: async () => (await findModel(modelFor(id).model).catch(() => undefined))?.vision === true,
+		describe: (bytes, mimeType) => describeImage(id, bytes, mimeType),
+	};
+}
+
+/** The task's machine as its agent's sandbox. */
+async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
+	const secrets = await secretsToHide(id);
+	// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
+	copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
+	// A command's result also says when a background job ended, once a job.
+	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id));
+}
+
 /**
- * The sandbox and everything that needs it: shell and file tools, subagents,
- * pull requests, and a browser to use web apps in. In plan mode the file tools cannot write and
- * there is no pull request. A chat's sandbox is a scratch folder: no repository to investigate,
- * test or open a pull request on.
+ * A chat's or a plan's or review's sandbox, once it has one, and everything that needs it: shell and file tools,
+ * subagents and a browser to use web apps in. In plan mode the file tools cannot write. A chat's sandbox is a
+ * scratch folder: no repository to investigate or test. Someone else's pull request is reviewed, never pushed to.
+ * A repository task outside plan mode and review has `useTaskWorkspace` instead, from its first model call.
  */
-function useWorkspace(id: string, planning: boolean, chat: boolean, review: ReviewTask | null) {
+function useWorkspace(id: string, chat: boolean, review: ReviewTask | null) {
 	useSandbox({
-		async createSandbox() {
-			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
-			// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
-			copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-			// A command's result also says when a background job ended, once a job.
-			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id));
-		},
-		// `read` shows an image, as a picture or in the vision model's words.
-		tools: sandboxTools({
-			sees: async () => (await findModel(modelFor(id).model).catch(() => undefined))?.vision === true,
-			describe: (bytes, mimeType) => describeImage(id, bytes, mimeType),
-		}),
+		createSandbox: async () => sandboxOf(id, await machineFor(id)),
+		tools: sandboxTools(sightOf(id)),
 	});
 	useBackgroundJobs(id);
 	if (!chat) {
 		useSubagent(withSettingsModel(id, explorer, 'explorer'));
 		useSubagent(withSettingsModel(id, tester, 'tester'));
-		// Someone else's pull request is reviewed, never pushed to.
 		if (review) useTool(postReviewTool(id));
-		else if (!planning) {
-			useOpenPullRequest(id);
-			useMergeBaseBranch(id);
-		}
 	}
+	useSandboxChecks(id);
+}
+
+/**
+ * A repository task's explorer, one definition for the whole task: it reads with read, grep and glob, which answer
+ * from the snapshot until the task has its workspace and from the sandbox after, so reading never starts a machine.
+ * It shares the sandbox's tools as every subagent does, bash among them, for what reading cannot answer.
+ */
+function TaskExplorer(id: string, scripts: boolean) {
+	return (
+		[
+			'You are the explorer specialist.',
+			"Investigate with read, grep and glob, which show the task's files (or, given repo, another GitHub repository's) and need no sandbox; you change nothing.",
+			'Read as much as the brief needs, searching before reading whole files. Use bash only for what reading cannot answer, such as git history: it starts the sandbox.',
+			...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
+			`Answer with concise findings (files, lines and what they show), then stop. Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report.`,
+			'Do not commit, push, or open a pull request.',
+		].join(' ') + repoInstructionsPrompt(repoInstructionsFor(id))
+	);
+}
+
+/** A repository task's explorer and tester; the runtime gives them no repository instructions of its own here, so they get the task's. */
+function useTaskSubagents(id: string) {
+	const taskExplorer = defineSubagent({
+		name: 'explorer',
+		description: 'Read-only investigation of the repository, or of another GitHub repository the brief names as owner/name, answering with its findings with files and lines. Use it for questions that need many files read.',
+		agent: () => {
+			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
+			const scripts = agentSettingsNow().codeMode;
+			if (scripts) useRunScript(id, { repo: 'task', mcp: false });
+			return TaskExplorer(id, scripts);
+		},
+	});
+	const taskTester = defineSubagent({ ...tester, agent: () => `${Tester()}${repoInstructionsPrompt(repoInstructionsFor(id))}` });
+	useSubagent(withSettingsModel(id, taskExplorer, 'explorer'));
+	useSubagent(withSettingsModel(id, taskTester, 'tester'));
+}
+
+/**
+ * A repository task's sandbox and everything that needs it, from its first model call, so its tools and system
+ * prompt never change: read, grep and glob answer from the snapshot until the task has its workspace, and the
+ * first command, write, edit or job gets the machine (the one `prewarmMachine` started, or a new one) and gives it
+ * its workspace, as `start_workspace` used to. Nothing here starts a machine before a tool needs one.
+ */
+function useTaskWorkspace(id: string) {
+	useSandbox({
+		async createSandbox() {
+			let started: Promise<Sandbox> | undefined;
+			const machine = async (work: boolean): Promise<Sandbox> => {
+				started ??= machineFor(id)
+					.then((found) => sandboxOf(id, found))
+					.catch((error: unknown) => {
+						started = undefined;
+						throw error;
+					});
+				const sandbox = await started;
+				if (work) noteWorkspace(id);
+				return sandbox;
+			};
+			return taskSandbox(await taskRoot(id), machine);
+		},
+		tools: taskTools(
+			{
+				read: (input) => readTaskFile(id, input),
+				bytes: (path, repo) => taskFileBytes(id, path, repo),
+				grep: (input) => grepTask(id, input),
+				glob: (input) => globTask(id, input),
+			},
+			sightOf(id),
+		),
+	});
+	useBackgroundJobs(id, (task) => workMachine(task));
+	useTaskSubagents(id);
+	useOpenPullRequest(id);
+	useMergeBaseBranch(id);
+	useSandboxChecks(id);
+}
+
+/** Checks of what runs in the sandbox: a Preview port, and a screenshot of a page. */
+function useSandboxChecks(id: string) {
 	useTool(
 		defineTool({
 			name: 'check_preview',
@@ -350,7 +438,7 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
  * Commands that end (test suites, builds) run without holding the reply: the agent goes on working, is told when
  * one ends with its next command's result, and reads its exit code and failures in one call (`background-jobs.ts`).
  */
-function useBackgroundJobs(id: string) {
+function useBackgroundJobs(id: string, machine?: (id: string) => Promise<Machine>) {
 	useTool(
 		defineTool({
 			name: 'run_in_background',
@@ -363,7 +451,7 @@ function useBackgroundJobs(id: string) {
 			}),
 			async run({ data }) {
 				try {
-					return { output: (await startJob(id, data.command, data.timeout)).output };
+					return { output: (await startJob(id, data.command, data.timeout, machine ? { machine } : {})).output };
 				} catch (error) {
 					return { output: `The job did not start. ${error instanceof Error ? error.message : String(error)}` };
 				}
@@ -764,6 +852,8 @@ function useMergeBaseBranch(id: string) {
 				'Commit your own changes first. Conflicts are left in the files for you to resolve, git add and commit; then call open_pull_request.',
 			input: v.object({}),
 			async run() {
+				// It changes the files, so the task's reads come from its sandbox from now on.
+				noteWorkspace(id);
 				return { output: await mergeBaseBranch(id) };
 			},
 		}),
@@ -1164,7 +1254,10 @@ function useSkills(id: string, workspace: boolean) {
 	for (const skill of skillsFor(id, workspace)) useSkill(skill);
 }
 
-/** The repo's AGENTS.md and CLAUDE.md while read-only; with a sandbox, the runtime reads them from the repo itself. */
+/**
+ * The repo's AGENTS.md and CLAUDE.md at the task's base commit: a repository task's from start to end, a plan's or
+ * review's while read-only; in a plan's or review's sandbox the runtime reads them from the repo itself.
+ */
 function repoInstructionsPrompt(instructions: string): string {
 	return instructions ? `\n\nThe repository's own instructions for agents (AGENTS.md, CLAUDE.md):\n${instructions}` : '';
 }
@@ -1269,8 +1362,11 @@ const WORKSPACE_OTHER_REPO_HINT =
 const WEB_OBJECTIVE = 'Give each call an objective naming exactly what you need; leave full_content off unless you need a page whole.';
 const WEB = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
 const CHAT_WEB = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
+const TASK_OTHER_REPO_HINT =
+	"To read another GitHub repository's code, pass it as repo (owner/name, optionally @branch, tag or commit) to read, grep and glob, or name it in the explorer's brief: one download, then each read is local. Never the browser.";
 const WEB_HINT = `${WEB} ${OTHER_REPO_HINT}`;
 const WORKSPACE_WEB_HINT = `${WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
+const TASK_WEB_HINT = `${WEB} ${TASK_OTHER_REPO_HINT}`;
 const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
 const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
@@ -1286,6 +1382,19 @@ const SCRATCH_HINT =
 const READ_HINT =
 	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
+
+/**
+ * A repository task's read, grep and glob number lines, page and need no sandbox; in a benchmark the agent read with
+ * `sed -n` and searched with `rg` in bash 487 times against 31 calls of the file tools it had then.
+ */
+const TASK_READ_HINT =
+	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
+	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
+
+/** What a repository task's prompt says of its sandbox, which it gets on first use rather than by asking. */
+const TASK_START_HINT =
+	'read, grep and glob need no sandbox: until your first command or file change they show the repository as this task started, and after it the sandbox. ' +
+	'Your first command or edit starts the sandbox, which can take a minute or two the first time. Answer a question about the code by reading, not by running commands.';
 
 /** Each step is a model call over the whole conversation, so changes the agent already knows go in one step, not one step each. */
 const EDIT_HINT =
@@ -1332,15 +1441,21 @@ const PREVIEW_HINT =
 	'When the work also needs its UI checked in a browser, point that check (your script, or the browser subagent in the sandbox browser, in: sandbox) at the exact Preview URL rather than localhost, so one run checks the rendered app, its console errors and Preview together. Do not start a browser run only to look at Preview once check_preview passes. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
 	'The HTTP check does not execute JavaScript or prove iframe embedding; report any unverified part honestly. A local-provider localhost URL points to the viewer’s computer, so remote reachability is not established. Never ask the user to run commands to fix Preview when you can do it yourself.';
 
-const WORKSPACE_PROMPT = [
+/**
+ * The prompt of a task with a repository and a sandbox. A repository task has it from its first model call, saying
+ * how its sandbox starts (`start`) and reading through its own read, grep and glob (`read`, `web`); a plan or review
+ * gets it once its sandbox runs.
+ */
+const workspacePrompt = ({ start = [], read, web }: { start?: string[]; read: string; web: string }) => [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
+	...start,
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	'Delegate an investigation across many files or areas to the explorer subagent, and build on its report, reading again only the lines you will change; when the change sits in a few files you can name, read them yourself instead.',
 	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
-	READ_HINT,
+	read,
 	EDIT_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
@@ -1351,9 +1466,12 @@ const WORKSPACE_PROMPT = [
 	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
-	WORKSPACE_WEB_HINT,
+	web,
 	'Be concise. Explain what you changed.',
 ].join(' ');
+
+const WORKSPACE_PROMPT = workspacePrompt({ read: READ_HINT, web: WORKSPACE_WEB_HINT });
+const TASK_PROMPT = workspacePrompt({ start: [TASK_START_HINT], read: TASK_READ_HINT, web: TASK_WEB_HINT });
 
 const CHAT_PROMPT = [
 	'You are Anton, a capable assistant. This chat is not tied to any repository: answer questions directly, and do jobs on the web when asked.',
@@ -1414,13 +1532,6 @@ const PLAN_PROMPT = [
 	'If they ask for changes, revise the plan and propose it again.',
 ].join(' ');
 
-/**
- * A task starts read-only: questions are answered from a copy of the repo
- * on Anton's side, with no sandbox, clone or branch. The agent opens the
- * workspace when the work needs one, and a task that has had a machine
- * (from the agent, the terminal, Resume or a restore) keeps working there.
- * In plan mode it may look but not change anything until its plan is approved.
- */
 /**
  * Keeps the task's latest input for its card: each message the agent is given, typed, a follow-up or an
  * automation's, as it starts a reply or joins one already running, and where in that reply a joining one
@@ -1483,6 +1594,13 @@ async function followUp(id: string): Promise<void> {
 	await replyNotice(id, reply);
 }
 
+/**
+ * A repository task has its whole tool list and one system prompt from its first model call: it reads from a copy
+ * of the repo on Anton's side, with no sandbox, clone or branch, until its first command or change starts the
+ * machine, and a task that has had a machine (from the agent, the terminal, Resume or a restore) reads there. A
+ * chat, and a plan or review before its sandbox, read the copy with their own tools and open the workspace with
+ * `start_workspace`. In plan mode the agent may look but not change anything until its plan is approved.
+ */
 export function Coder({ id }: AgentProps) {
 	// With a route, the gateway tries the task's provider first or ranks them by its sort.
 	const { model, reasoning } = agentModelFor(id);
@@ -1496,7 +1614,12 @@ export function Coder({ id }: AgentProps) {
 	const chat = isChat(id) || incognito;
 	const planning = isPlanning(id);
 	const review = reviewTaskFor(id);
-	if (workspace) useWorkspace(id, planning, chat, review);
+	// A repository task outside plan mode and review: one system prompt and one tool list from its first model call to its last.
+	const repoTask = !chat && !planning && !review;
+	// Whether the prompt and tools offer the sandbox: a repository task gets it on first use, so from the start; the rest once they have it.
+	const sandboxed = repoTask || workspace;
+	if (repoTask) useTaskWorkspace(id);
+	else if (workspace) useWorkspace(id, chat, review);
 	else if (!incognito) {
 		// A chat reads other repositories with the same tools, named by repo.
 		useRepoSnapshot(id, chat);
@@ -1504,8 +1627,9 @@ export function Coder({ id }: AgentProps) {
 		if (!planning) useStartWorkspace(id, chat, () => setStarted(true));
 	}
 	if (planning) useProposePlan(id);
-	// Code mode's repo tools read the snapshots, which a workspace does not use; it still gets MCP servers and decide().
-	const scope: ScriptScope = { repo: !workspace && !incognito, mcp: true };
+	// Code mode's repo tools read what the task's read, grep and glob read; before a chat's or plan's workspace, the snapshots,
+	// and nothing once it has one. It still gets MCP servers and decide().
+	const scope: ScriptScope = repoTask ? { repo: 'task', mcp: true } : { repo: !workspace && !incognito, mcp: true };
 	const scripts = agentSettingsNow().codeMode && hasScriptTools(id, scope);
 	if (scripts) useRunScript(id, scope);
 	const connectors = connectorsFor(id);
@@ -1531,12 +1655,13 @@ export function Coder({ id }: AgentProps) {
 	if (connectors.length) useConnectorTools(id, connectors);
 	const sealed = sealedSecretsFor(id);
 	if (sealed.length) useHttpRequest(id);
-	if (!incognito) useSkills(id, workspace);
+	// The runtime finds a repository's .agents/skills itself only in a chat's, plan's or review's sandbox; a repository task's are mounted here.
+	if (!incognito) useSkills(id, workspace && !repoTask);
 	if (!incognito) useLatestInput(id);
 	const browsing = !incognito && sharedBrowserAvailable();
-	const places: BrowserPlace[] = [...(browsing ? (['panel'] as const) : []), ...(workspace ? (['sandbox'] as const) : [])];
+	const places: BrowserPlace[] = [...(browsing ? (['panel'] as const) : []), ...(sandboxed ? (['sandbox'] as const) : [])];
 	if (places.length) useBrowserSubagent(id, places);
-	if (workspace) useComputerSubagent(id);
+	if (sandboxed) useComputerSubagent(id);
 	// Web search; one that cannot be reached leaves its tools out rather than failing the reply.
 	// Connectors' servers are not connected here: connector_tools and run_script reach the ones that are on, as they run.
 	for (const server of mcpServersFor(id)) {
@@ -1655,9 +1780,11 @@ export function Coder({ id }: AgentProps) {
 		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
 		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
-	const prompt = workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
-	const instructions = workspace ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
-	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, workspace)}`;
+	const prompt = repoTask ? TASK_PROMPT : workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
+	// The repository's instructions at the commit the task started from, the same before and after its sandbox starts;
+	// a plan's or review's sandbox has the runtime read them from its files.
+	const instructions = workspace && !repoTask ? '' : repoInstructionsPrompt(repoInstructionsFor(id));
+	return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${review ? `${reviewPrompt(review)} ` : ''}${browsing ? `${BROWSER_HINT} ` : ''}${sandboxed ? `${COMPUTER_HINT} ` : ''}${scriptHint}${MENTION_HINT} ${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${REMEMBER_HINT} ${skillHint(id, sandboxed)} ${sandboxed && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(sandboxed, Boolean(project))}${instructions}${memoryPrompt(memoryFor(id))}${projectPrompt(project, sandboxed)}`;
 }
 
 /** A turn may run up to 4 hours before it is stopped, or `ANTON_REPLY_TIMEOUT_HOURS`; Flue's default of 1 hour cuts off long features mid-work. */

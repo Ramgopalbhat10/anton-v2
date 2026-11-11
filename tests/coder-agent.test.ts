@@ -51,7 +51,7 @@ test('the sandbox browser needs no desktop, and do keeps the opening notice afte
 test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /name: 'computer'/);
-	assert.match(source, /if \(workspace\) useComputerSubagent\(id\);/);
+	assert.match(source, /if \(sandboxed\) useComputerSubagent\(id\);/);
 	const tool = source.slice(source.indexOf('function computerTool'), source.indexOf('function Computer()'));
 	// A model prompted through the harness keeps the subagent's tools and may act instead of answering.
 	assert.doesNotMatch(tool, /harness/);
@@ -111,7 +111,7 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as lon
 
 test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+	for (const prompt of ['const workspacePrompt', 'const CHAT_WORKSPACE_PROMPT']) {
 		const start = source.indexOf(prompt);
 		assert.ok(start >= 0, prompt);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /FINISH_HINT/, prompt);
@@ -139,7 +139,7 @@ test('Coder tells a reply how long it may run, the same on every render, and sen
 	// From config alone, never the clock: it sits in the cached system prompt.
 	assert.match(budget, /`A reply may run for up to \$\{hoursText\(config\.replyTimeoutMs\)\}, so do a large job in full rather than scope it down or hand it back part-done\.`/);
 	assert.doesNotMatch(budget, /Date|now\(/);
-	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+	for (const prompt of ['const workspacePrompt', 'const CHAT_WORKSPACE_PROMPT']) {
 		const start = source.indexOf(prompt);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,\n\tBUDGET_HINT,/, prompt);
 	}
@@ -169,16 +169,21 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	assert.match(finish, /Start it with run_in_background \(independent suites side by side\) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures\./);
 	assert.doesNotMatch(finish, /log under \/tmp/);
 	const named = [...source.matchAll(/^const ([A-Z_]+) =[\s\S]*?(?=\n(?:const|function|\/\*\*) )/gm)].filter((match) => /run_in_background|check_job/.test(match[0])).map((match) => match[1]);
-	assert.deepEqual(named, ['FINISH_HINT', 'WORKSPACE_PROMPT']);
-	for (const prompt of ['WORKSPACE_PROMPT', 'CHAT_WORKSPACE_PROMPT']) {
+	assert.deepEqual(named, ['FINISH_HINT']);
+	const builder = source.slice(source.indexOf('const workspacePrompt'), source.indexOf(".join(' ')", source.indexOf('const workspacePrompt')));
+	assert.match(builder, /run_in_background/);
+	for (const prompt of ['workspacePrompt', 'CHAT_WORKSPACE_PROMPT']) {
 		const start = source.indexOf(`const ${prompt}`);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,/, prompt);
 	}
 	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.
 	assert.equal(source.match(/\bFINISH_HINT\b/g)?.length, 3);
 	assert.match(source, /const prompt = workspace \? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;/);
-	assert.match(source, /const prompt = workspace \? WORKSPACE_PROMPT : READ_ONLY_PROMPT;/);
-	assert.match(source, /if \(workspace\) useWorkspace\(id, planning, chat, review\);/);
+	assert.match(source, /const prompt = repoTask \? TASK_PROMPT : workspace \? WORKSPACE_PROMPT : READ_ONLY_PROMPT;/);
+	// A repository task has the tools from its first model call, as it has the prompt; the rest once they have a sandbox.
+	assert.match(source, /if \(repoTask\) useTaskWorkspace\(id\);\n\telse if \(workspace\) useWorkspace\(id, chat, review\);/);
+	const task = source.slice(source.indexOf('function useTaskWorkspace'), source.indexOf('function useSandboxChecks'));
+	assert.match(task, /\n\tuseBackgroundJobs\(id, \(task\) => workMachine\(task\)\);\n/);
 	// The tester stays, for a failure set too large to triage in the agent's own context.
 	assert.match(source, /Give a suite to the tester subagent only when triaging its failures would flood your own context/);
 	// After the todo reminder and the stall check, before the finish review; reset with each reply; a stopped reply stops its jobs.
