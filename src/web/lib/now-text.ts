@@ -44,7 +44,9 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 		case 'running':
 			if (now.tool === 'task') return `Waiting on ${agent}`;
 			if ((now.tool === 'write' || now.tool === 'edit') && file) return `Saving ${file}`;
-			if (now.tool === 'read' && file) return `Reading ${file}`;
+			if ((now.tool === 'read' || now.tool === 'read_file') && file) return `Reading ${file}`;
+			if (now.tool === 'grep' || now.tool === 'search_code') return 'Searching the code';
+			if (now.tool === 'glob' || now.tool === 'list_files') return 'Listing files';
 			if (now.tool === 'bash') return 'Running a command';
 			if (now.tool === 'run_in_background') return 'Starting a background job';
 			if (now.tool === 'check_job') return 'Checking a background job';
