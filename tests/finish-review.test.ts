@@ -124,6 +124,35 @@ test('a chat whose reply worked in its sandbox and left no diff checks what it m
 	assert.equal(asked.length, 1);
 });
 
+test('the review reads the whole change since the task began, not only what is unpushed, and not a change the reply left as it found it', async () => {
+	const { readFileSync } = await import('node:fs');
+	const source = readFileSync(new URL('../src/services/finish-review.ts', import.meta.url), 'utf8');
+	// Once the pull request holds everything, the unpushed diff is empty: the review would read nothing.
+	assert.match(source, /return \(await changesView\(id, 'branch'\)\)\.patch;/);
+	asked = [];
+	answer = 'NONE';
+	noteRequest('b', 'Add sortBy(keys).');
+	startFinishReview('b');
+	assert.equal(await finishReview('b', edit, undefined, deps(DIFF)), null);
+	assert.equal(asked.length, 1);
+	// A later reply answers a question on the open pull request and changes nothing: the branch is not reviewed against the question.
+	noteRequest('b', 'What does sortBy do with an empty list?');
+	startFinishReview('b');
+	assert.equal(await finishReview('b', [{ tool: 'bash' }], undefined, deps(DIFF)), null);
+	assert.equal(asked.length, 1);
+	// One that changes it is.
+	noteRequest('b', 'Make sortBy keep the order of equal keys.');
+	startFinishReview('b');
+	assert.equal(await finishReview('b', edit, undefined, deps(`${DIFF}+stable\n`)), null);
+	assert.equal(asked.length, 2);
+	// A machine that is not running says nothing of the change, so the next reply still compares with the one last seen.
+	startFinishReview('b');
+	assert.equal(await finishReview('b', edit, undefined, deps(null)), null);
+	startFinishReview('b');
+	assert.equal(await finishReview('b', edit, undefined, deps(`${DIFF}+stable\n`)), null);
+	assert.equal(asked.length, 2);
+});
+
 test('the agent’s own check asks it to settle a doubt rather than report it', () => {
 	assert.match(selfCheck('Fix it.'), /settle it first from what you have/);
 	assert.match(selfCheck('Fix it.'), /Read your diff \(git diff, new files included\)/);
