@@ -94,6 +94,8 @@ export type SandboxProvider = {
 	acquire(request: AcquireRequest): Promise<Acquired>;
 	/** The task's machine if it is running; never starts one. */
 	find(key: string): Promise<Machine | null>;
+	/** Where the machine for `key` keeps `repo/` and `outputs/` (its `root`), known before it starts. */
+	rootOf(key: string): string;
 	/** Keys of machines running right now. */
 	running(): Promise<Set<string>>;
 	stop(state: string): Promise<void>;

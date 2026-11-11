@@ -55,6 +55,7 @@ export function localSandboxProvider(dataDir: string): SandboxProvider {
 			await writeFile(path.join(root, RUNNING_MARKER), '');
 			return { machine: localMachine(root), origin, state: JSON.stringify({ key }) };
 		},
+		rootOf: (key) => path.join(machinesDir, key),
 		async find(key) {
 			const root = path.join(machinesDir, key);
 			return (await exists(path.join(root, RUNNING_MARKER))) ? localMachine(root) : null;

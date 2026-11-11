@@ -62,6 +62,7 @@ export function dockerSandboxProvider(options: DockerOptions): SandboxProvider {
 
 	return {
 		name: 'docker',
+		rootOf: () => ROOT,
 		async acquire({ key, state, image, baseImage, ports, resources }) {
 			const now = await status(key);
 			if (now === 'running') return acquired(key, 'live');
