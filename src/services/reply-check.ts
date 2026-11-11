@@ -119,10 +119,16 @@ export function closingOf(texts: string[]): string | null {
 /**
  * What the reply in hand ends on so far (`closingOf` its messages), read without clearing it, for the checks made
  * before a reply ends; empty when its last message had no words, so an earlier message is not read as its end.
+ * Given `from`, only its messages from that one on: what it said since a check sent it back.
  */
-export function replyEnding(id: string): string {
+export function replyEnding(id: string, from = 0): string {
 	if (!lastWords.get(id)) return '';
-	return closingOf(replyTexts.get(id) ?? []) ?? '';
+	return closingOf((replyTexts.get(id) ?? []).slice(from)) ?? '';
+}
+
+/** How many messages with words the reply in hand has said so far. */
+export function replyMessages(id: string): number {
+	return replyTexts.get(id)?.length ?? 0;
 }
 
 /**
