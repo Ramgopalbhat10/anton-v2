@@ -171,17 +171,26 @@ test('grep searches the same on both sides, with context, files only and a cap t
 
 test('without rg the sandbox searches with grep and lists with git, to the same answers', async () => {
 	const input = { pattern: 'answer', path: 'src' };
-	assert.equal(await files.searchMachine(machine, root, `${root}/src`, input, {}, 'grep'), await files.searchMachine(machine, root, `${root}/src`, input, {}, 'rg'));
+	const found = 'src/app.ts:1: import { answer } from "./deep";\nsrc/app.ts:2: console.log(answer, "changed in the sandbox");\nsrc/components/button.tsx:1: export const Button = () => "answer";';
+	assert.equal(await files.searchMachine(machine, root, `${root}/src`, input, {}, 'grep'), found);
 	const context = { pattern: 'line 20$', context: 2 };
-	assert.equal(await files.searchMachine(machine, root, `${root}/src/long.txt`, context, {}, 'grep'), await files.searchMachine(machine, root, `${root}/src/long.txt`, context, {}, 'rg'));
+	const around = 'src/long.txt-18- line 18\nsrc/long.txt-19- line 19\nsrc/long.txt:20: line 20\nsrc/long.txt-21- line 21\nsrc/long.txt-22- line 22';
+	assert.equal(await files.searchMachine(machine, root, `${root}/src/long.txt`, context, {}, 'grep'), around);
 	const only = { pattern: 'answer', filesOnly: true, glob: 'components/*.tsx' };
 	assert.equal(await files.searchMachine(machine, root, `${root}/src`, only, {}, 'grep'), 'src/components/button.tsx');
-	for (const pattern of ['*.ts', '**/*.tsx', 'src/**', '*.yml', '*.js']) {
-		assert.equal(await files.globMachine(machine, root, root, pattern, 'list'), await files.globMachine(machine, root, root, pattern, 'rg'), pattern);
-	}
+	// A class such as \d is read as rg reads it, not as the letter d.
+	assert.equal(await files.searchMachine(machine, root, `${root}/src/long.txt`, { pattern: 'line 45\\d$', filesOnly: true }, {}, 'grep'), 'src/long.txt');
 	assert.equal(await files.globMachine(machine, root, root, '*.js', 'list'), 'No files match.', 'node_modules is left out');
+	// Against rg itself, where this machine has it (a test machine may not).
+	if ((await machine.exec('command -v rg')).exitCode === 0) {
+		assert.equal(await files.searchMachine(machine, root, `${root}/src`, input, {}, 'rg'), found);
+		assert.equal(await files.searchMachine(machine, root, `${root}/src/long.txt`, context, {}, 'rg'), around);
+		for (const pattern of ['*.ts', '**/*.tsx', 'src/**', '*.yml', '*.js']) {
+			assert.equal(await files.globMachine(machine, root, root, pattern, 'list'), await files.globMachine(machine, root, root, pattern, 'rg'), pattern);
+		}
+	}
 	// The command picks rg itself when the machine has it.
-	assert.match(files.searchCommand(input, 'src'), /if command -v rg >\/dev\/null 2>&1; then echo @rg; rg .*; else echo @grep; grep -rIHnE/);
+	assert.match(files.searchCommand(input, 'src'), /if command -v rg >\/dev\/null 2>&1; then echo @rg; rg .*; else echo @grep; p=E; echo \| grep -qP '' 2>\/dev\/null && p=P; grep -rIHn\$p/);
 });
 
 test('glob lists the same paths from the snapshot and the sandbox, and leaves out node_modules and .git', async () => {

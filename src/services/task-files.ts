@@ -152,8 +152,9 @@ export function searchCommand(input: GrepInput, target: string, tool: 'auto' | '
 	const rg = input.glob
 		? `rg --files --hidden -g '!.git' -- "\${@:-.}" | sed 's|^\\./||' | grep -E ${quote(globPattern(input.glob))} | xargs -d '\\n' -r ${rgSearch}`
 		: `${rgSearch} "\${@:-.}"`;
+	// Perl's expressions where grep has them, as models write \d and \w, which grep -E reads as letters and so finds nothing.
 	const grep = [
-		'grep -rIHnE --exclude-dir=.git --exclude-dir=node_modules',
+		"p=E; echo | grep -qP '' 2>/dev/null && p=P; grep -rIHn$p --exclude-dir=.git --exclude-dir=node_modules",
 		input.filesOnly ? ' -l' : ' -Z',
 		input.ignoreCase ? ' -i' : '',
 		context,
