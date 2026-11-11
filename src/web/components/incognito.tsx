@@ -1,12 +1,13 @@
 import { useFlueAgent } from '@flue/react';
 import { useNavigate } from '@tanstack/react-router';
 import { EyeOff, Send, Square, X } from 'lucide-react';
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withAttachments } from '../../core/attachments';
 import { newIncognitoId } from '../../core/incognito';
 import { parseRouted } from '../../core/model-route';
 import { api, type ModelChoice, type ModelRoute, type Reasoning } from '@/lib/api';
 import { deliveredImages, MAX_IMAGES } from '@/lib/attachments';
+import { flyFrom } from '@/lib/flight';
 import { cn } from '@/lib/utils';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
@@ -26,17 +27,25 @@ function IncognitoComposer({
 	id,
 	agent,
 	className,
+	formRef,
 	onSend,
+	choice,
+	onChoice,
+	route,
+	onRoute,
 }: {
 	id: string;
 	agent: ReturnType<typeof useFlueAgent>;
 	className?: string;
+	formRef?: Ref<HTMLFormElement>;
 	onSend: () => void;
+	choice: Partial<ModelChoice>;
+	onChoice: (change: Partial<ModelChoice>) => void;
+	route: ModelRoute | null;
+	onRoute: (route: ModelRoute | null) => void;
 }) {
 	const [text, setText] = useState('');
 	const [sending, setSending] = useState(false);
-	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
-	const [route, setRoute] = useState<ModelRoute | null>(null);
 	const attachments = useAttachments();
 	const models = useModels();
 	const specifier = choice.model ?? models.data?.default ?? '';
@@ -81,7 +90,7 @@ function IncognitoComposer({
 	}
 
 	return (
-		<form className={cn('relative mx-auto flex w-full max-w-[680px] flex-col gap-2', className)} onSubmit={submit} {...attachments.dropZone}>
+		<form ref={formRef} className={cn('relative mx-auto flex w-full max-w-[680px] flex-col gap-2 px-4 pt-1 pb-4', className)} onSubmit={submit} {...attachments.dropZone}>
 			<AttachmentTray attachments={attachments} />
 			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)">
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
@@ -91,7 +100,6 @@ function IncognitoComposer({
 					onChange={setText}
 					onPaste={attachments.onPaste}
 					placeholder={busy ? 'Add to what Anton is doing' : 'Ask anything — this chat is never saved'}
-					className="min-h-[72px]"
 				/>
 				{attachments.notice || blind ? (
 					<div className="px-1 text-micro text-(--warning-text)">
@@ -102,9 +110,9 @@ function IncognitoComposer({
 					<ComposerPlus attachments={attachments} side="bottom" />
 					<ModelPicker
 						value={{ model: specifier, reasoning }}
-						onChange={(change) => setChoice((current) => ({ ...current, ...change }))}
+						onChange={onChoice}
 						route={route}
-						onRoute={(next) => setRoute(next)}
+						onRoute={onRoute}
 						height={28}
 						side="bottom"
 					/>
@@ -127,10 +135,30 @@ export function IncognitoPage() {
 	const agent = useFlueAgent({ url: `/api/agents/incognito/${id}` });
 	const navigate = useNavigate();
 	const [started, setStarted] = useState(false);
+	// The model pick lives here so it survives the composer moving into the thread.
+	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
+	const [route, setRoute] = useState<ModelRoute | null>(null);
 	// Only a chat that actually ran has anything to delete; closing it — the X, leaving the
 	// page, or the app itself closing — kicks the deletion off without waiting on it.
 	const used = useRef(false);
-	const chatting = started || agent.messages.length > 0 || agent.status === 'submitted' || agent.status === 'streaming';
+	const busy = agent.status === 'submitted' || agent.status === 'streaming';
+	const chatting = started || agent.messages.length > 0 || busy;
+	// One composer for the whole page: it sits dead-center until the first send, then glides
+	// down to dock under the thread — the same element, so focus and text survive the move.
+	const formRef = useRef<HTMLFormElement>(null);
+	const lastRect = useRef<DOMRect | null>(null);
+	const wasChatting = useRef(chatting);
+
+	useLayoutEffect(() => {
+		const form = formRef.current;
+		if (!form) return;
+		const before = lastRect.current;
+		// Mid-flight the box is transformed; only settled boxes are worth remembering.
+		if (form.getAnimations().length === 0) lastRect.current = form.getBoundingClientRect();
+		if (wasChatting.current === chatting) return;
+		wasChatting.current = chatting;
+		if (before) flyFrom(form, before);
+	});
 
 	const destroy = useCallback(() => {
 		if (!used.current) return;
@@ -148,39 +176,37 @@ export function IncognitoPage() {
 	}, [destroy]);
 
 	const close = useCallback(() => void navigate({ to: '/' }), [navigate]);
+	const markStarted = useCallback(() => {
+		used.current = true;
+		setStarted(true);
+	}, []);
+	const composer = (
+		<IncognitoComposer
+			id={id}
+			agent={agent}
+			formRef={formRef}
+			choice={choice}
+			onChoice={(change) => setChoice((current) => ({ ...current, ...change }))}
+			route={route}
+			onRoute={setRoute}
+			onSend={markStarted}
+		/>
+	);
 
 	return (
 		<div className="incognito flex min-h-0 flex-1 flex-col">
 			<div className="incognito-viewport">
 				<div className="incognito-card">
-					{chatting ? (
-						<div className="incognito-stage flex h-full min-h-0 flex-col">
-							<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-								<Thread sessionId={id} agent={agent} />
+					<div className="incognito-stage flex h-full min-h-0 flex-col">
+						{chatting ? (
+							// The thread waits for something to show: mounting it on send would flash
+							// its empty state during the beat before the message lands.
+							<div className="min-h-0 min-w-0 flex-1">
+								{agent.messages.length > 0 || busy ? <Thread sessionId={id} agent={agent} composer={null} fresh /> : null}
 							</div>
-							<div className="px-4 pt-2 pb-4">
-								<IncognitoComposer
-									id={id}
-									agent={agent}
-									onSend={() => {
-										used.current = true;
-										setStarted(true);
-									}}
-								/>
-							</div>
-						</div>
-					) : (
-						<div className="incognito-stage flex h-full items-center justify-center px-6">
-							<IncognitoComposer
-								id={id}
-								agent={agent}
-								onSend={() => {
-									used.current = true;
-									setStarted(true);
-								}}
-							/>
-						</div>
-					)}
+						) : null}
+						<div className={cn('min-w-0', chatting ? 'shrink-0' : 'flex min-h-0 flex-1 items-center justify-center px-6')}>{composer}</div>
+					</div>
 				</div>
 			</div>
 			<button type="button" onClick={close} aria-label="Close incognito chat" title="Close incognito chat" className="incognito-exit">

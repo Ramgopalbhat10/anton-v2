@@ -947,6 +947,27 @@ app.post('/api/sessions', async (c) => {
 	);
 	return c.json(await createSession(input));
 });
+// An incognito chat has no session record: the thread's session lookups get empty views
+// rather than a 404 on every poll.
+const INCOGNITO_SESSION_VIEWS: Record<string, unknown> = {
+	'': null,
+	'/waiting': { messages: [] },
+	'/joins': { joins: [] },
+	'/files': { paths: [] },
+	'/now': { now: null },
+	'/subagents': { runs: [] },
+	'/outputs': { source: null, at: null, outputs: [], deleted: [] },
+};
+app.use('/api/sessions/*', async (c, next) => {
+	if (c.req.method === 'GET') {
+		const rest = c.req.path.slice('/api/sessions/'.length);
+		const slash = rest.indexOf('/');
+		const id = slash === -1 ? rest : rest.slice(0, slash);
+		const sub = slash === -1 ? '' : rest.slice(slash);
+		if (isIncognitoId(id) && Object.hasOwn(INCOGNITO_SESSION_VIEWS, sub)) return c.json(INCOGNITO_SESSION_VIEWS[sub]);
+	}
+	await next();
+});
 app.get('/api/sessions/:id', async (c) => c.json(await getSession(c.req.param('id'))));
 app.patch('/api/sessions/:id', async (c) => {
 	const change = await body(
