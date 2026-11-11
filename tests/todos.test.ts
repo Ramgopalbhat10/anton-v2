@@ -8,7 +8,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-todos-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { startTodoReply, todoReminder, todosFor, writeTodos } = await import('../src/services/todos.ts');
+const { startTodoReply, todoReminded, todoReminder, todosFor, writeTodos } = await import('../src/services/todos.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
@@ -60,10 +60,15 @@ test('a reply that wrote a list and ends with steps open is reminded once to bri
 	startTodoReply('t');
 	const reminder = await todoReminder('t', calls);
 	assert.match(reminder ?? '', /still shows 2 of 3 steps not done: "Build the app", "Test it"/);
-	assert.match(reminder ?? '', /Do any of them you can still do without the user now. .*call update_todos/);
+	assert.match(reminder ?? '', /Do the ones you can still do now: a step that is only large or slow is still yours to finish\. .*call update_todos/);
+	// A step is left open only for something the user must give, and the reply says what; never because it "cannot be done".
+	assert.match(reminder ?? '', /Leave a step open only when it needs something from the user \(a decision, access, a file\), and then say in your reply exactly what it needs\./);
+	assert.doesNotMatch(reminder ?? '', /cannot be done/);
+	assert.equal(todoReminded('t'), true);
 	// Once per reply, so a list the agent leaves open on purpose does not hold the reply up.
 	assert.equal(await todoReminder('t', calls), null);
 	startTodoReply('t');
+	assert.equal(todoReminded('t'), false);
 	assert.ok(await todoReminder('t', calls));
 });
 

@@ -133,6 +133,23 @@ test('Coder lists the request’s requirements as todos, and has a change read a
 	assert.match(source, /startFinishReview\(id\);/);
 });
 
+test('Coder tells a reply how long it may run, the same on every render, and sends a reply that ends with work undone back to do it', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const budget = source.slice(source.indexOf('const BUDGET_HINT'), source.indexOf('/** Links to the outputs folder'));
+	// From config alone, never the clock: it sits in the cached system prompt.
+	assert.match(budget, /`A reply may run for up to \$\{hoursText\(config\.replyTimeoutMs\)\}, so do a large job in full rather than scope it down or hand it back part-done\.`/);
+	assert.doesNotMatch(budget, /Date|now\(/);
+	for (const prompt of ['const WORKSPACE_PROMPT', 'const CHAT_WORKSPACE_PROMPT']) {
+		const start = source.indexOf(prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,\n\tBUDGET_HINT,/, prompt);
+	}
+	// After the todo reminder, the stall check and the finish review, and never in plan mode or on a review task.
+	const finish = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
+	assert.ok(finish.indexOf('finishReview(') < finish.indexOf('completionGate('));
+	assert.match(finish, /!planning && !review && !signal\.aborted \? await completionGate\(id, response\.toolCalls, \{ chat, workspace: workspace \|\| hasWorkspace\(id\), signal \}\) : null/);
+	assert.match(source, /startCompletionGate\(id\);/);
+});
+
 test('Coder tells a long reply how long it has run, with a command’s result', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\)\)/);

@@ -32,6 +32,13 @@ import { liveMachine } from './workspace.ts';
  * agent itself, against what it made rather than a diff. Without it such a
  * job ended on the agent's first belief that it was done, and most that fell
  * short did so by one named detail the request spelled out.
+ *
+ * The diff read is the whole change the task made since it began, pushed or
+ * not. The agent opens its pull request as soon as the change works, so what
+ * is left unpushed at the end of that reply is most often nothing, and a
+ * review of only that was skipped in the normal flow. A reply that leaves the
+ * change as it found it (a question answered on a task whose pull request is
+ * open) is not reviewed: it changed nothing to review.
  */
 
 /** A request is kept up to this long; a task's whole brief fits. */
@@ -61,6 +68,10 @@ const requests = new Map<string, string>();
 const reviewed = new Set<string>();
 /** The diff each task's last review read, so a later reply that changed nothing is not reviewed again. */
 const lastPatch = new Map<string, string>();
+/** Each task's change as the review last read it, by hash, whether or not it was reviewed. */
+const seenPatch = new Map<string, string>();
+/** The change as the reply in hand found it, when known: a reply that ends with the same one changed no code. */
+const startPatch = new Map<string, string>();
 const KEEP_TASKS = 200;
 
 const remember = <T>(map: Map<string, T>, id: string, value: T) => {
@@ -75,8 +86,22 @@ export function noteRequest(id: string, text: string): void {
 	if (request) remember(requests, id, request.slice(0, MAX_REQUEST));
 }
 
+/** The request the reply in hand answers, whole, or undefined when none was seen since the server started. */
+export const requestFor = (id: string): string | undefined => requests.get(id);
+
 /** A new reply may be reviewed again. */
 export function startFinishReview(id: string): void {
+	reviewed.delete(id);
+	const seen = seenPatch.get(id);
+	if (seen === undefined) startPatch.delete(id);
+	else remember(startPatch, id, seen);
+}
+
+/**
+ * The reply in hand may be reviewed once more, on a change it has not reviewed: after it was sent back to finish
+ * work it had left undone (`completion-gate.ts`), the change it then makes is read like any other.
+ */
+export function reopenFinishReview(id: string): void {
 	reviewed.delete(id);
 }
 
@@ -158,25 +183,27 @@ const isChat = async (id: string): Promise<boolean> => {
 };
 
 /**
- * A task's change; a chat's is what it changed in repositories it worked in, not the files it made in its scratch
- * folder, which are its deliverables rather than a change to code.
+ * A task's change since it began, pushed or not (null without a running machine, which is never started for this);
+ * a chat's is what it changed in repositories it worked in, not the files it made in its scratch folder, which are
+ * its deliverables rather than a change to code.
  */
-async function livePatch(id: string): Promise<string | null> {
+export async function taskPatch(id: string): Promise<string | null> {
 	const machine = await liveMachine(id);
 	if (!machine) return null;
 	const session = await getSessionRecord(id);
 	if (session && !session.projectId) return otherRepoChanges(machine, new Date(session.createdAt));
-	return (await changesView(id)).patch;
+	return (await changesView(id, 'branch')).patch;
 }
 
 /**
  * At the end of a reply that changed the code: what to tell the agent when a fresh read of the request and the diff
- * finds something the request asks that the change does not do; null otherwise. Once a reply, never on a reply that
- * ends asking the user or proposing a plan, nor on a diff already reviewed. The review counts on the task's spend.
+ * finds something the request asks that the change does not do; null otherwise. Once a reply (unless reopened), never
+ * on a reply that ends asking the user or proposing a plan, nor on a diff already reviewed or one the reply left as it
+ * was. The review counts on the task's spend.
  * On a model no reviewer here runs, the agent is sent back once with the request to make that check itself.
  * So is a chat whose reply worked in its sandbox and left no diff, against what it made (`selfCheckWork`).
  */
-export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: livePatch, chat: isChat }): Promise<string | null> {
+export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat }): Promise<string | null> {
 	const request = requests.get(id);
 	if (!request || reviewed.has(id)) return null;
 	const last = calls[calls.length - 1]?.tool;
@@ -187,10 +214,14 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 	reviewed.add(id);
 	try {
 		const patch = await deps.patch(id);
+		// A machine that is not running says nothing of the change, so what was seen last stands.
+		const change = patch === null ? null : createHash('sha256').update(patch.trim()).digest('hex');
+		if (change) remember(seenPatch, id, change);
 		if (!patch?.trim()) {
 			const worked = calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length >= WORKED;
 			return worked && (await deps.chat?.(id)) ? selfCheckWork(request) : null;
 		}
+		if (startPatch.get(id) === change) return null;
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
 		if (lastPatch.get(id) === digest) return null;
 		remember(lastPatch, id, digest);

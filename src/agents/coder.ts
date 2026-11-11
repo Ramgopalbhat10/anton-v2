@@ -98,7 +98,8 @@ import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
-import { elapsedNote, startReplyClock } from '../services/reply-clock.ts';
+import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
+import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { replyNotification } from '../services/notifications.ts';
@@ -1265,6 +1266,12 @@ const FINISH_HINT =
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +
 	'A doubt you would report as a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of) is such a part: settle it first from the data, documents, examples, existing code and tests you have, trying each reading against them where that can decide it.';
 
+/**
+ * A model with no word of its budget judged jobs too large for the time it thought it had and handed them back part-done,
+ * minutes into replies that may run hours. From config only, never the clock: it sits in the cached system prompt.
+ */
+const BUDGET_HINT = `A reply may run for up to ${hoursText(config.replyTimeoutMs)}, so do a large job in full rather than scope it down or hand it back part-done.`;
+
 /** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
 const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
 
@@ -1295,6 +1302,7 @@ const WORKSPACE_PROMPT = [
 	READ_HINT,
 	EDIT_HINT,
 	FINISH_HINT,
+	BUDGET_HINT,
 	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials: open_pull_request commits and pushes for you.',
 	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
@@ -1320,6 +1328,7 @@ const CHAT_WORKSPACE_PROMPT = [
 	EDIT_HINT,
 	READ_HINT,
 	FINISH_HINT,
+	BUDGET_HINT,
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
@@ -1524,6 +1533,13 @@ export function Coder({ id }: AgentProps) {
 				append({ kind: 'signal', type: 'reminder', body: missed });
 				return;
 			}
+			// A reply that ends with requested work left undone, and not for something only the user can give, is sent back to do it:
+			// a few rounds at most, each after the first only when the last changed something. Each round lets the review read the new change.
+			const undone = !planning && !review && !signal.aborted ? await completionGate(id, response.toolCalls, { chat, workspace: workspace || hasWorkspace(id), signal }) : null;
+			if (undone) {
+				append({ kind: 'signal', type: 'reminder', body: undone });
+				return;
+			}
 			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 			queueCheckpoint(id);
 			// What the reply leaves (a question for you, work done) is judged by the decision model, which takes seconds:
@@ -1557,6 +1573,7 @@ export function Coder({ id }: AgentProps) {
 			startTodoReply(id);
 			startStallCheck(id);
 			startFinishReview(id);
+			startCompletionGate(id);
 			startReplyClock(id);
 			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
 			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);

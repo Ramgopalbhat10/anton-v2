@@ -55,6 +55,9 @@ export function startTodoReply(id: string): void {
 	reminded.delete(id);
 }
 
+/** Whether the reply in hand was reminded of its list already: steps still open after that were left open on purpose. */
+export const todoReminded = (id: string): boolean => reminded.has(id);
+
 type Call = { tool: string; isError: boolean };
 
 /**
@@ -63,6 +66,9 @@ type Call = { tool: string; isError: boolean };
  * there is nothing to say. The user reads the list as the agent's progress,
  * and a list left at "0/3" after the work is done reads as work not done.
  * A reply that ends on a question or a plan leaves its steps for the answer.
+ * A step is left open only for something the user must give: told it may leave
+ * open what "cannot be done", a model that judged a job too large for the time
+ * it thought it had marked the rest open and stopped.
  */
 export async function todoReminder(id: string, calls: readonly Call[]): Promise<string | null> {
 	if (reminded.has(id) || !calls.some((call) => call.tool === 'update_todos' && !call.isError)) return null;
@@ -74,7 +80,7 @@ export async function todoReminder(id: string, calls: readonly Call[]): Promise<
 	reminded.add(id);
 	return (
 		`Your todo list still shows ${open.length} of ${list.todos.length} steps not done: ${open.map((todo) => `"${todo.content}"`).join(', ')}. ` +
-		'Do any of them you can still do without the user now. The user follows the list as your progress, so then call update_todos to match where the work stands: mark each step you finished completed, ' +
-		'and leave open only what waits on the user or cannot be done. Then end your reply without repeating your answer.'
+		'Do the ones you can still do now: a step that is only large or slow is still yours to finish. The user follows the list as your progress, so then call update_todos to match where the work stands, marking each step you finished completed. ' +
+		'Leave a step open only when it needs something from the user (a decision, access, a file), and then say in your reply exactly what it needs. Then end your reply without repeating your answer.'
 	);
 }
