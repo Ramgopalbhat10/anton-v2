@@ -88,6 +88,11 @@ export function hasWorkspace(id: string): boolean {
 	return workspaces.has(id);
 }
 
+/** A repository task's agent used its machine this reply (a command, a write): its reads come from there from now on. */
+export function noteWorkspace(id: string): void {
+	workspaces.add(id);
+}
+
 /** Chats: tasks with no repository, which answer, browse and use a scratch sandbox rather than read and change code. */
 const chats = new Set<string>();
 

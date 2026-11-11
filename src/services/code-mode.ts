@@ -14,6 +14,7 @@ import { callServerTool, type McpCallResult, type McpTool, serverTools } from '.
 import { repoPaths, repoText, searchRepo } from './repo-snapshot.ts';
 import type { ScriptCall } from './script-runs.ts';
 import { secretsToHide } from './secrets.ts';
+import { grepTask, taskPaths, taskText } from './task-files.ts';
 import { liveMachine } from './workspace.ts';
 
 /**
@@ -42,8 +43,11 @@ const MAX_RESULT_CHARS = 20_000;
 const DECISIONS_AT_ONCE = 4;
 const SEARCH_RESULTS = 8;
 
-/** Where a program runs: before a workspace it can read the repo; a subagent may have no MCP servers. */
-export type ScriptScope = { repo: boolean; mcp: boolean };
+/**
+ * Where a program runs: a chat or plan before its workspace reads the repo's snapshot (`true`), a repository task its
+ * files wherever its read, grep and glob read them (`'task'`); a subagent may have no MCP servers.
+ */
+export type ScriptScope = { repo: boolean | 'task'; mcp: boolean };
 
 const REPO = { type: 'string', description: "Another GitHub repository to read (a chat's only one), as owner/name, optionally @branch, tag or commit" };
 const FILTER = {
@@ -78,6 +82,40 @@ function repoTools(id: string): CodemodeTool[] {
 		},
 	];
 }
+
+/** A repository task's files, read where its read, grep and glob read them now (`task-files.ts`), under the same names. */
+function taskRepoTools(id: string): CodemodeTool[] {
+	return [
+		{
+			name: 'glob',
+			description: 'Every file path matching a glob, such as **/*.ts, optionally under a folder, from the repository root.',
+			inputSchema: { type: 'object', properties: { pattern: { type: 'string' }, path: { type: 'string', description: 'Only under this folder' }, repo: REPO }, required: ['pattern'] },
+			outputSchema: { type: 'array', items: { type: 'string' } },
+			execute: (args) => taskPaths(id, args as { pattern: string; path?: string; repo?: string }),
+		},
+		{
+			name: 'read',
+			description: "A file's whole text. Throws when it does not exist, is binary or is too large.",
+			inputSchema: { type: 'object', properties: { path: { type: 'string' }, repo: REPO }, required: ['path'] },
+			outputSchema: { type: 'string' },
+			execute: (args) => taskText(id, (args as { path: string }).path, (args as { repo?: string }).repo),
+		},
+		{
+			name: 'grep',
+			description: 'Lines matching a regular expression, as "path:line: text" lines, the same as the grep tool.',
+			inputSchema: {
+				type: 'object',
+				properties: { pattern: { type: 'string' }, ignoreCase: { type: 'boolean' }, context: { type: 'number' }, filesOnly: { type: 'boolean' }, ...FILTER },
+				required: ['pattern'],
+			},
+			outputSchema: { type: 'string' },
+			execute: (args) => grepTask(id, args as { pattern: string; ignoreCase?: boolean; context?: number; filesOnly?: boolean; path?: string; glob?: string; repo?: string }),
+		},
+	];
+}
+
+/** The repository tools a program has in `scope`. */
+const repoToolsIn = (id: string, scope: ScriptScope['repo']): CodemodeTool[] => (scope === 'task' ? taskRepoTools(id) : scope ? repoTools(id) : []);
 
 /** http_request, the same tool as the agent's own, for a task with sealed secrets: several reads in one program. */
 function httpTools(id: string): CodemodeTool[] {
@@ -229,7 +267,7 @@ function searchGlobal(tools: () => CodemodeTool[]): CodemodeTool {
 
 /** Whether run_script has anything to offer: the repo, the decision model or an MCP server. */
 export function hasScriptTools(id: string, scope: ScriptScope): boolean {
-	return scope.repo || hasDecisionModel() || (scope.mcp && reachesServers(id)) || httpTools(id).length > 0;
+	return Boolean(scope.repo) || hasDecisionModel() || (scope.mcp && reachesServers(id)) || httpTools(id).length > 0;
 }
 
 /**
@@ -238,7 +276,7 @@ export function hasScriptTools(id: string, scope: ScriptScope): boolean {
  */
 export function scriptToolDescription(id: string, scope: ScriptScope): string {
 	const globals = [...(hasDecisionModel() ? [decideGlobal(id)] : []), ...(scope.mcp ? [searchGlobal(() => [])] : [])];
-	const declared = renderDeclarations({ tools: [...(scope.repo ? repoTools(id) : []), ...httpTools(id)], globals });
+	const declared = renderDeclarations({ tools: [...repoToolsIn(id, scope.repo), ...httpTools(id)], globals });
 	const web = scope.mcp && mcpServersFor(id).some(isWebServer) ? ['The web search tools in your tool list (mcp__web__…) can be called here too, as tools.<that name>(args).'] : [];
 	const connected = scope.mcp && connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.codeMode);
 	const connectors = connected
@@ -300,7 +338,7 @@ function watched(tool: CodemodeTool, calls: ScriptCall[], told: () => void): Cod
  */
 export async function scriptFromFile(id: string, file: string, args: Record<string, unknown> = {}): Promise<string> {
 	const machine = await liveMachine(id);
-	if (!machine) throw new Error('A file runs only in a running workspace. Start the workspace first, or pass the program as code.');
+	if (!machine) throw new Error('A file runs only in a running workspace. Start it first (any command does, or start_workspace in a chat), or pass the program as code.');
 	const path = workspacePath(machine.root, repoDir(machine), file);
 	const text = new TextDecoder().decode(await readMachineFile(machine, path));
 	return `const args = ${JSON.stringify(args)};\n${text}`;
@@ -327,7 +365,7 @@ export async function runScript(id: string, code: string, { repo, mcp, signal, o
 	const told = () => onCalls?.(calls.map((call) => ({ ...call })));
 	// Listing MCP tools may mean connecting, so only for programs that name one or search for one.
 	const reachesMcp = mcp && /mcp__|search_tools/.test(code);
-	const tools = [...(repo ? repoTools(id) : []), ...httpTools(id), ...(reachesMcp ? await mcpTools(id) : [])];
+	const tools = [...repoToolsIn(id, repo), ...httpTools(id), ...(reachesMcp ? await mcpTools(id) : [])];
 	const sandbox = new CodemodeSandbox({
 		tools: tools.map((tool) => watched(tool, calls, told)),
 		globals: [...(hasDecisionModel() ? [watched(decideGlobal(id), calls, told)] : []), ...(mcp ? [searchGlobal(() => tools)] : [])],
