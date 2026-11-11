@@ -117,6 +117,15 @@ export function closingOf(texts: string[]): string | null {
 }
 
 /**
+ * What the reply in hand ends on so far (`closingOf` its messages), read without clearing it, for the checks made
+ * before a reply ends; empty when its last message had no words, so an earlier message is not read as its end.
+ */
+export function replyEnding(id: string): string {
+	if (!lastWords.get(id)) return '';
+	return closingOf(replyTexts.get(id) ?? []) ?? '';
+}
+
+/**
  * At the end of a reply: notes what it asks the user, or that it asks nothing, and the plan it proposed for
  * approval, or that none waits. Returns what the reply comes to (`closingOf`), when it had any text.
  */

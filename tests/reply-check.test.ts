@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-reply-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { checkReply, closingOf, questionOf, recordReplyText, stallReminder, startStallCheck } = await import('../src/services/reply-check.ts');
+const { checkReply, closingOf, questionOf, recordReplyText, replyEnding, stallReminder, startStallCheck } = await import('../src/services/reply-check.ts');
 const { recordLatestInput } = await import('../src/services/latest-input.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -70,6 +70,21 @@ test('a reply in several messages comes back whole, while only its last words ar
 	assert.equal(await checkReply('a'), 'The routes, grouped by area: ...\n\nReported above.');
 	assert.equal((await getSessionRecord('a'))?.asking, null);
 	assert.equal(await checkReply('a'), null, 'the next reply starts empty');
+});
+
+test('what a reply ends on is read before it ends, without clearing it, and is nothing when its last message had no words', async () => {
+	providers(null);
+	const report = `Summary of the work. ${'The parser handles each case. '.repeat(10)}`.trim();
+	reply('e', 'Let me read the entry point.');
+	reply('e', report);
+	reply('e', 'The rest is not complete.');
+	assert.equal(replyEnding('e'), `${report}\n\nThe rest is not complete.`);
+	assert.equal(replyEnding('e'), `${report}\n\nThe rest is not complete.`, 'reading it leaves it');
+	reply('e', '', { message: { role: 'assistant', content: [] } });
+	assert.equal(replyEnding('e'), '');
+	assert.equal(replyEnding('never'), '');
+	await checkReply('e');
+	assert.equal(replyEnding('e'), '');
 });
 
 test('a reply comes to its last message of substance and what follows it, not the narration before', () => {
