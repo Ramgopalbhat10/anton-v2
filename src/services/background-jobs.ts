@@ -480,7 +480,10 @@ export function jobNotice(id: string, now = Date.now()): string {
 				? `ended: exit ${job.exitCode} after ${ran}. check_job ${job.number} has its ${job.exitCode === 0 ? 'summary' : 'failures'}.`
 				: job.status === 'timed out'
 					? `timed out after ${ran} and was stopped. check_job ${job.number} has its log.`
-					: `ended in an unknown state (${job.lost}). check_job ${job.number} has what is known.`;
+					: job.status === 'stopped'
+						? // A command run beside the check_job that stops the job can end before that call has its result.
+							`was stopped after ${ran}.`
+						: `ended in an unknown state (${job.lost}). check_job ${job.number} has what is known.`;
 		lines.push(`\n[anton] Job ${job.number} (${shortCommand(job)}) ${what}`);
 	}
 	return lines.join('');
