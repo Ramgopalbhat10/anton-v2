@@ -12,7 +12,7 @@ This file is an index. Read the doc for the area you change, not all of them.
 | Plans, gateways, model variants, background and decision models | `src/services/subscriptions.ts`, `general.ts`, `decisions.ts` | [models-and-plans](docs/architecture/models-and-plans.md) |
 | Task lifecycle, sandboxes, chats, run on host, headless runs | `src/services/sessions.ts`, `workspace.ts`, `agent-now.ts`, `scripts/anton-run.ts` | [tasks-and-sandboxes](docs/architecture/tasks-and-sandboxes.md) |
 | Context window, cuts, pruning, compaction, reply traces | `src/services/context-usage.ts`, `context-prune.ts`, `response-trace.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
-| Coder, subagents, finish review, Reviewer, skills and plugins | `src/agents/`, `src/services/subagent-runs.ts`, `finish-review.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
+| Coder, subagents, finish review, background jobs, Reviewer, skills and plugins | `src/agents/`, `src/services/subagent-runs.ts`, `finish-review.ts`, `background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
 | Browser and Computer panels | `src/services/live-browser.ts`, `browser*.ts`, `computer.ts` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
 | What replies draw, Artifacts page, attachments | `src/web/components/thread.tsx`, `artifacts-page.tsx`, `attachments.tsx` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
 | Projects, coordinator, threads, project files | `src/services/spaces.ts`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |

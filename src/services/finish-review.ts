@@ -60,7 +60,7 @@ const MAX_SELF_REQUEST = 12_000;
 /** A chat reply with at least this many commands and file writes did a job, not a lookup, and is checked though it left no diff. */
 const WORKED = 5;
 /** The tools that work in the sandbox. */
-const SANDBOX_TOOLS = new Set(['bash', 'write', 'edit']);
+const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', 'write', 'edit']);
 
 /** Each task's latest request, whole: the latest input kept on the task is cut for its card. */
 const requests = new Map<string, string>();

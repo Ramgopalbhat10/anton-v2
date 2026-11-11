@@ -1,5 +1,6 @@
 import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
+import { hasRunningJob } from './background-jobs.ts';
 import { userHasControl } from './computer.ts';
 import { logProblem } from './log.ts';
 import { notifySandboxStopped } from './notifications.ts';
@@ -13,8 +14,9 @@ import { isStarting } from './workspace.ts';
  * idle timeout counts every command as use, and an open Files, Changes or
  * Library panel reads a running machine every few seconds, so on its own a
  * finished task's sandbox could run for as long as a page shows it. Here the
- * task is in use only while its agent works, a terminal is open on it, or you
- * have taken over its computer; reading its files is not use.
+ * task is in use only while its agent works, a background job it started runs,
+ * a terminal is open on it, or you have taken over its computer; reading its
+ * files is not use.
  */
 
 /** When each running task's sandbox went quiet. */
@@ -45,7 +47,8 @@ export function holdTerminal(id: string): () => void {
 	};
 }
 
-const inUse = (id: string) => isWorking(id) || isStarting(id) || terminals.has(id) || userHasControl(id);
+/** A background job the agent started counts as use until it ends or its time is up, so a job never holds the sandbox for good. */
+const inUse = (id: string) => isWorking(id) || isStarting(id) || terminals.has(id) || userHasControl(id) || hasRunningJob(id);
 
 /** Stops the sandboxes quiet for the idle minutes; returns the tasks stopped. Only this Anton's tasks, never another install's sandboxes. */
 export async function stopIdleSandboxes(now = Date.now()): Promise<string[]> {

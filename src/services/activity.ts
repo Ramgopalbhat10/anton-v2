@@ -1,4 +1,5 @@
 import { announce } from '../core/changes.ts';
+import { stopReplyJobs } from './background-jobs.ts';
 import { liveMachine } from './workspace.ts';
 import { logProblem } from './log.ts';
 import { noteRepliesStopping } from './subagent-runs.ts';
@@ -99,6 +100,8 @@ export function setAgentAbort(abort: Abort): void {
 export async function stopAgent(id: string): Promise<void> {
 	if (!inFlight.has(id)) return;
 	noteRepliesStopping(id);
+	// Its suites and builds stop with it, so a stopped reply leaves nothing running in the sandbox.
+	void stopReplyJobs(id).catch((error: unknown) => logProblem('warn', 'Could not stop the background jobs', error, id));
 	await abortAgent(id).catch((error: unknown) => logProblem('warn', 'Could not stop the agent', error, id));
 }
 

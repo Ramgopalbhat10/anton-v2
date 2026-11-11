@@ -13,6 +13,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const { setProviders } = await import('../src/providers/index.ts');
 const { carryOn, completionGate, MAX_ROUNDS, startCompletionGate, undoneByRule } = await import('../src/services/completion-gate.ts');
 const { finishReview, noteRequest, startFinishReview } = await import('../src/services/finish-review.ts');
+const { checkReply, recordReplyText } = await import('../src/services/reply-check.ts');
 
 const providers = (decisions: DecisionModel | null) =>
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'x', list: async () => [] }, text: null, decisions });
@@ -163,6 +164,30 @@ test('after a send-back, the finish review reads the new change in the same repl
 	diff = 'diff --git a/wait.ts b/wait.ts\n+export function waitUntil() {}\n';
 	assert.match((await finishReview('fr', edit, undefined, patch)) ?? '', /check your change against the request/);
 	assert.equal(await finishReview('fr', edit, undefined, patch), null, 'once for that change');
+});
+
+test('after a send-back, only what the reply said since is judged, so a short closing line is not read with the stale one', async () => {
+	providers(null);
+	const say = (text: string) => recordReplyText({ type: 'message_end', instanceId: 'stale', session: 'default', message: { role: 'assistant', content: text } });
+	let diff = '';
+	let todos = list(['Add wait_for_event', 'in_progress'], ['Add durable timers', 'pending']);
+	// The reply's end is read from its messages as the runtime reports them; only the rest is faked.
+	const { ending: _ending, ...rest } = pebble(() => diff);
+	const deps = { ...rest, todos: async () => todos };
+	startCompletionGate('stale');
+	// A message of substance that says the work is not done: sent back.
+	say(`${PEBBLE_END} ${'The timers need a table and a sweeper. '.repeat(6)}`);
+	assert.ok(await completionGate('stale', pebbleCalls, repo, deps));
+	// The agent does the work and closes with one short line; read with the message before the send-back, it would go back again.
+	diff = 'diff --git a/wait.ts b/wait.ts\n+export function waitUntil() {}\n';
+	todos = list(['Add wait_for_event', 'completed'], ['Add durable timers', 'completed']);
+	say('Done; all steps are complete.');
+	assert.equal(await completionGate('stale', [...pebbleCalls, { tool: 'edit' }], repo, deps), null);
+	// What it says after the send-back still counts: a new admission is sent back.
+	diff += '+more\n';
+	say('The durable timers are still unimplemented.');
+	assert.ok(await completionGate('stale', [...pebbleCalls, { tool: 'edit' }], repo, deps));
+	await checkReply('stale').catch(() => undefined);
 });
 
 test('the message names the limit when the reply’s start is not known', () => {

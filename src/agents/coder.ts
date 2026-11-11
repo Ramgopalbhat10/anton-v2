@@ -100,6 +100,7 @@ import { checkReply, stallReminder, startStallCheck } from '../services/reply-ch
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
+import { checkJob, jobNotice, jobsGate, MAX_WAIT_S, startJob, startJobsGate, stopReplyJobs } from '../services/background-jobs.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { replyNotification } from '../services/notifications.ts';
@@ -295,7 +296,8 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
 			// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
 			copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id));
+			// A command's result also says when a background job ended, once a job.
+			return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id));
 		},
 		// `read` shows an image, as a picture or in the vision model's words.
 		tools: sandboxTools({
@@ -303,6 +305,7 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			describe: (bytes, mimeType) => describeImage(id, bytes, mimeType),
 		}),
 	});
+	useBackgroundJobs(id);
 	if (!chat) {
 		useSubagent(withSettingsModel(id, explorer, 'explorer'));
 		useSubagent(withSettingsModel(id, tester, 'tester'));
@@ -339,6 +342,44 @@ function useWorkspace(id: string, planning: boolean, chat: boolean, review: Revi
 			async run({ data }) {
 				return { output: await takeScreenshot(await machineFor(id), data) };
 			},
+		}),
+	);
+}
+
+/**
+ * Commands that end (test suites, builds) run without holding the reply: the agent goes on working, is told when
+ * one ends with its next command's result, and reads its exit code and failures in one call (`background-jobs.ts`).
+ */
+function useBackgroundJobs(id: string) {
+	useTool(
+		defineTool({
+			name: 'run_in_background',
+			description:
+				'Run a command that ends (a test suite, build, type check or long script) in the background in the working folder; returns at once with its job number and log. ' +
+				'You are told when it ends. A server that should keep running is started with nohup instead.',
+			input: v.object({
+				command: v.pipe(v.string(), v.minLength(1)),
+				timeout: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.description('Seconds before it is stopped (default 1800)'))),
+			}),
+			async run({ data }) {
+				try {
+					return { output: (await startJob(id, data.command, data.timeout)).output };
+				} catch (error) {
+					return { output: `The job did not start. ${error instanceof Error ? error.message : String(error)}` };
+				}
+			},
+		}),
+	);
+	useTool(
+		defineTool({
+			name: 'check_job',
+			description: "A background job's status, exit code and time, with its log's failure lines and last lines. wait blocks up to that many seconds for it to end; stop kills it.",
+			input: v.object({
+				job: v.pipe(v.number(), v.integer(), v.minValue(1)),
+				wait: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_WAIT_S))),
+				stop: v.optional(v.boolean()),
+			}),
+			run: async ({ data, signal }) => ({ output: await checkJob(id, data.job, { wait: data.wait, stop: data.stop, signal }) }),
 		}),
 	);
 }
@@ -1262,7 +1303,7 @@ const REQUIREMENTS_HINT =
 const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
 	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
-	'Start it in the background with its output in a log under /tmp (independent suites side by side), go on with what is left while it runs, and read its summary and failures from the log rather than its whole output. ' +
+	'Start it with run_in_background (independent suites side by side) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures. ' +
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +
 	'A doubt you would report as a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of) is such a part: settle it first from the data, documents, examples, existing code and tests you have, trying each reading against them where that can decide it.';
 
@@ -1298,7 +1339,7 @@ const WORKSPACE_PROMPT = [
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
 	'Delegate an investigation across many files or areas to the explorer subagent, and build on its report, reading again only the lines you will change; when the change sits in a few files you can name, read them yourself instead.',
-	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites in the background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
+	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
 	READ_HINT,
 	EDIT_HINT,
 	FINISH_HINT,
@@ -1513,6 +1554,8 @@ export function Coder({ id }: AgentProps) {
 		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 		// The reply is also checked for whether it waits on the user, so the task can say so.
 		useAgentFinish(async ({ response, append, signal }) => {
+			// A stopped reply leaves no job of its own running.
+			if (signal.aborted) void stopReplyJobs(id);
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
 			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
 			if (reminder) {
@@ -1523,6 +1566,13 @@ export function Coder({ id }: AgentProps) {
 			const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
 			if (stalled) {
 				append({ kind: 'signal', type: 'reminder', body: stalled });
+				return;
+			}
+			// A job this reply started that still runs, or that ended with its result unread, sends it back: once a job each way.
+			// Before the review, so the review reads the change as the job's result left it.
+			const jobs = signal.aborted ? null : await jobsGate(id, response.toolCalls, { signal });
+			if (jobs) {
+				append({ kind: 'signal', type: 'reminder', body: jobs });
 				return;
 			}
 			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
@@ -1574,6 +1624,7 @@ export function Coder({ id }: AgentProps) {
 			startStallCheck(id);
 			startFinishReview(id);
 			startCompletionGate(id);
+			startJobsGate(id);
 			startReplyClock(id);
 			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
 			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);

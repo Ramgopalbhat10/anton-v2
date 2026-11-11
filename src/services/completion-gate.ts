@@ -4,7 +4,7 @@ import { isIncognitoId } from '../core/incognito.ts';
 import { decide, yesOf } from './decisions.ts';
 import { reopenFinishReview, requestFor, taskPatch } from './finish-review.ts';
 import { logProblem } from './log.ts';
-import { replyEnding } from './reply-check.ts';
+import { replyEnding, replyMessages } from './reply-check.ts';
 import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';
 import { type TodoList, todoReminded, todosFor } from './todos.ts';
 
@@ -33,7 +33,7 @@ export const MAX_ROUNDS = 3;
 /** How sure the decision model must be that the reply leaves work undone. */
 const UNDONE = 0.6;
 /** The tools that work in the sandbox; their count is a chat's progress, as it has no diff. */
-const SANDBOX_TOOLS = new Set(['bash', 'write', 'edit']);
+const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', 'write', 'edit']);
 /** Tools that show a reply did work, not only read and answer. */
 const WORK_TOOLS = new Set([...SANDBOX_TOOLS, 'update_todos', 'start_workspace', 'open_pull_request', 'task']);
 /** What the decision model reads of the request and the reply. */
@@ -65,7 +65,8 @@ const NEEDS_USER = new RegExp(
 );
 
 type Call = { tool: string };
-type Round = { rounds: number; mark: string };
+/** `seen`: how many messages the reply had said when last sent back; only those after it are its end now. */
+type Round = { rounds: number; mark: string; seen: number };
 export type GateContext = {
 	/** A task with no repository: its progress is its sandbox work, as it has no diff. */
 	chat: boolean;
@@ -76,14 +77,15 @@ export type GateContext = {
 type Deps = {
 	patch: (id: string) => Promise<string | null>;
 	todos: (id: string) => Promise<TodoList | null>;
-	ending: (id: string) => string;
+	ending: (id: string, from: number) => string;
+	messages: (id: string) => number;
 	reminded: (id: string) => boolean;
 	request: (id: string) => string | undefined;
 	elapsed: (id: string) => number | null;
 	limitMs: number;
 };
 
-const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), limitMs: config.replyTimeoutMs };
+const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, messages: replyMessages, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), limitMs: config.replyTimeoutMs };
 
 /** Each task's rounds in the reply in hand, and what its work stood at when last sent back. */
 const rounds = new Map<string, Round>();
@@ -152,7 +154,9 @@ export async function completionGate(id: string, calls: readonly Call[], context
 	const round = rounds.get(id);
 	if (round && round.rounds >= MAX_ROUNDS) return null;
 	try {
-		const text = d.ending(id);
+		// After a send-back, what the reply said before it is stale: a short "Done." would otherwise be read with the
+		// earlier message that said the work was not done, and the reply sent back again for words it had moved past.
+		const text = d.ending(id, round?.seen ?? 0);
 		const list = await d.todos(id);
 		const open = list?.todos.filter((todo) => todo.status !== 'completed').map((todo) => todo.content) ?? [];
 		// A todo list from an earlier reply is the agent's, but only this reply's open steps say anything of this reply.
@@ -166,7 +170,7 @@ export async function completionGate(id: string, calls: readonly Call[], context
 		// A round that changed nothing will not be followed by one that does.
 		if (round && round.mark === mark) return null;
 		rounds.delete(id);
-		rounds.set(id, { rounds: (round?.rounds ?? 0) + 1, mark });
+		rounds.set(id, { rounds: (round?.rounds ?? 0) + 1, mark, seen: d.messages(id) });
 		if (rounds.size > KEEP_TASKS) rounds.delete(rounds.keys().next().value!);
 		reopenFinishReview(id);
 		return carryOn(d.elapsed(id), d.limitMs, steps.length);
