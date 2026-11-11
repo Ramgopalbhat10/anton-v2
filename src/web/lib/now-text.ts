@@ -32,7 +32,7 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 			const size = now.chars >= 200 ? ` · ${written(now.chars)}` : '';
 			if (now.tool === 'write' && file) return `Writing ${file}${size}`;
 			if (now.tool === 'edit' && file) return `Editing ${file}${size}`;
-			if (now.tool === 'bash') return 'Writing a command';
+			if (now.tool === 'bash' || now.tool === 'run_in_background') return 'Writing a command';
 			if (now.tool === 'run_script') return `Writing a script${size}`;
 			if (now.tool === 'task') return `Briefing ${agent}`;
 			if (now.tool === 'update_todos') return 'Updating the todo list';
@@ -46,6 +46,8 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 			if ((now.tool === 'write' || now.tool === 'edit') && file) return `Saving ${file}`;
 			if (now.tool === 'read' && file) return `Reading ${file}`;
 			if (now.tool === 'bash') return 'Running a command';
+			if (now.tool === 'run_in_background') return 'Starting a background job';
+			if (now.tool === 'check_job') return 'Checking a background job';
 			if (now.tool === 'start_workspace') return 'Starting the sandbox';
 			if (now.tool === IMAGE_TOOL) return 'Making an image';
 			return `Running ${now.tool ?? 'a step'}`;

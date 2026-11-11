@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 
@@ -210,6 +210,20 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 					</>
 				),
 			};
+		case 'run_in_background':
+			return {
+				icon: SquareTerminal,
+				body: (
+					<>
+						Started <Em>{field(input, 'command').split('\n')[0]}</Em> in the background
+					</>
+				),
+			};
+		case 'check_job': {
+			const job = <Em>job {field(input, 'job')}</Em>;
+			if (field(input, 'stop') === 'true') return { icon: Hourglass, body: <>Stopped {job}</> };
+			return { icon: Hourglass, body: Number(field(input, 'wait')) > 0 ? <>Waited for {job}</> : <>Checked {job}</> };
+		}
 		case 'run_script': {
 			const file = field(input, 'file').split('/').pop();
 			return { icon: Braces, body: file ? <>Ran <Em>{file}</Em></> : <>Ran a script</> };
@@ -355,6 +369,8 @@ export function toolTone(toolName: string, failed: boolean): string {
 	if (failed) return 'var(--danger-base)';
 	switch (toolName) {
 		case 'bash':
+		case 'run_in_background':
+		case 'check_job':
 		case 'run_script':
 			return 'var(--data-1)';
 		case 'edit':
