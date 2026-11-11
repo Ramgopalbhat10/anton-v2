@@ -176,7 +176,8 @@ export function machineFor(id: string): Promise<Machine> {
 }
 
 /**
- * Starts a repository task's machine as its agent starts a reply, so `start_workspace` finds it started or starting.
+ * Starts a repository task's machine as its agent starts a reply, so its first command or edit (or a routine chat's
+ * `start_workspace`) finds it started or starting; its reads need none.
  * Not for a chat (most never need one) unless a routine started it (routine runs mostly run a skill's scripts, and
  * nobody is waiting to see whether they will), a task planning or reviewing (they read first), one that runs on this
  * server, or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.

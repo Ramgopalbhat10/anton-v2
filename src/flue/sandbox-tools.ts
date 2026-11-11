@@ -1,7 +1,7 @@
 import { Type } from '@earendil-works/pi-ai';
 import { createBashTool, createGlobTool, createGrepTool, createReadTool, createWriteTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
 
-type Tool = ReturnType<SandboxToolFactory>[number];
+export type Tool = ReturnType<SandboxToolFactory>[number];
 
 const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
 /** As the composer sends images. */
@@ -12,7 +12,7 @@ export const imageType = (path: string): string | undefined => IMAGE_TYPES[/\.(\
 /** How the agent's model takes an image: as a picture, or in words from the vision model when it cannot see. */
 export type ImageSight = { sees: () => Promise<boolean>; describe: (bytes: Uint8Array, mimeType: string) => Promise<string> };
 
-const text = (value: string) => ({ type: 'text' as const, text: value });
+export const text = (value: string) => ({ type: 'text' as const, text: value });
 
 const ascii = (bytes: Uint8Array, from: number, length: number) => String.fromCharCode(...bytes.subarray(from, from + length));
 
@@ -104,7 +104,7 @@ function oneAtATime<T>(sandbox: Sandbox, path: string, work: () => Promise<T>): 
  * files. Now the changes it already knows go in one call, made in order and
  * written once, or not at all if one of them does not fit.
  */
-function createMultiEditTool(sandbox: Sandbox): Tool {
+export function createMultiEditTool(sandbox: Sandbox): Tool {
 	return {
 		name: 'edit',
 		label: 'Edit File',
@@ -130,6 +130,26 @@ function createMultiEditTool(sandbox: Sandbox): Tool {
 	};
 }
 
+/** An image's bytes as the model takes them: the picture for a model that sees, the vision model's words for one that does not. */
+export async function imageResult(path: string, bytes: Uint8Array, mimeType: string, sight: ImageSight): Promise<Awaited<ReturnType<Tool['execute']>>> {
+	const details = { path, size: bytes.length };
+	if (bytes.length > MAX_IMAGE_BYTES) {
+		return { content: [text(`${path} is an image of ${(bytes.length / 1024 / 1024).toFixed(1)} MB, too large to look at. Make a smaller copy (with ImageMagick or Python) and read that.`)], details };
+	}
+	if (!isWholeImage(bytes, mimeType)) {
+		return { content: [text(`${path} is not a whole ${mimeType.slice(6).toUpperCase()} (${bytes.length} bytes): it may still be being written, or is damaged. Read it again in a moment, or take the screenshot again.`)], details };
+	}
+	if (await sight.sees()) return { content: [text(`${path}, an image:`), { type: 'image', data: Buffer.from(bytes).toString('base64'), mimeType }], details };
+	const words = await sight.describe(bytes, mimeType).catch((error: unknown) => `No vision model could describe it: ${error instanceof Error ? error.message : String(error)}`);
+	return { content: [text(`${path} is an image, and your model cannot see images, so a vision model described it:\n\n${words}`)], details };
+}
+
+/** Flue's `write`, waiting on the edits to the same file as they wait on each other, which Flue's own lock no longer covers. */
+export function queuedWriteTool(sandbox: Sandbox): Tool {
+	const write = createWriteTool(sandbox);
+	return { ...write, execute: (toolCallId, params, signal, onUpdate) => oneAtATime(sandbox, (params as { path: string }).path, () => write.execute(toolCallId, params as Parameters<typeof write.execute>[1], signal, onUpdate)) };
+}
+
 /**
  * Flue's standard file and shell tools, with a `read` that shows an image and an `edit` that takes several changes.
  * The standard one reads every file as text, so the agent could never look at
@@ -145,25 +165,11 @@ export function sandboxTools(sight: ImageSight): SandboxToolFactory {
 			description: `${read.description} An image (PNG, JPEG, GIF or WebP) comes back as the picture itself, to look at.`,
 			async execute(toolCallId, params, signal, onUpdate) {
 				const input = params as Parameters<typeof read.execute>[1];
-				const { path } = input;
-				const mimeType = imageType(path);
+				const mimeType = imageType(input.path);
 				if (!mimeType) return read.execute(toolCallId, input, signal, onUpdate);
-				const bytes = await sandbox.readFileBuffer(path);
-				const details = { path, size: bytes.length };
-				if (bytes.length > MAX_IMAGE_BYTES) {
-					return { content: [text(`${path} is an image of ${(bytes.length / 1024 / 1024).toFixed(1)} MB, too large to look at. Make a smaller copy (with ImageMagick or Python) and read that.`)], details };
-				}
-				if (!isWholeImage(bytes, mimeType)) {
-					return { content: [text(`${path} is not a whole ${mimeType.slice(6).toUpperCase()} (${bytes.length} bytes): it may still be being written, or is damaged. Read it again in a moment, or take the screenshot again.`)], details };
-				}
-				if (await sight.sees()) return { content: [text(`${path}, an image:`), { type: 'image', data: Buffer.from(bytes).toString('base64'), mimeType }], details };
-				const words = await sight.describe(bytes, mimeType).catch((error: unknown) => `No vision model could describe it: ${error instanceof Error ? error.message : String(error)}`);
-				return { content: [text(`${path} is an image, and your model cannot see images, so a vision model described it:\n\n${words}`)], details };
+				return imageResult(input.path, await sandbox.readFileBuffer(input.path), mimeType, sight);
 			},
 		};
-		const write = createWriteTool(sandbox);
-		// Waits on the edits as they wait on each other, which Flue's own lock no longer covers.
-		const queuedWrite: Tool = { ...write, execute: (toolCallId, params, signal, onUpdate) => oneAtATime(sandbox, (params as { path: string }).path, () => write.execute(toolCallId, params as Parameters<typeof write.execute>[1], signal, onUpdate)) };
-		return [readImage, queuedWrite, createMultiEditTool(sandbox), createBashTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
+		return [readImage, queuedWriteTool(sandbox), createMultiEditTool(sandbox), createBashTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
 	};
 }

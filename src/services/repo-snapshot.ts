@@ -24,8 +24,7 @@ const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
 /** Snapshots kept on disk, most recently used first. */
 const KEEP = 10;
 const SEARCH_TIMEOUT_MS = 20_000;
-const MAX_MATCHES = 200;
-const MAX_LISTED = 500;
+export const MAX_LISTED = 500;
 
 const root = () => path.join(config.dataDir, 'snapshots');
 const INDEX = 'index.json';
@@ -186,10 +185,14 @@ export function globToRegExp(glob: string): RegExp {
 
 type Filter = { path?: string; glob?: string; repo?: string };
 
+/** Entries under `folder` (or that file), matching `glob` from that folder down, as a search run in that folder matches it. */
 function select(entries: Entry[], { path: folder, glob }: Filter): Entry[] {
-	const prefix = folder ? `${safeRelativePath(folder)}/` : '';
+	const relative = folder ? safeRelativePath(folder) : '';
+	const prefix = relative && relative !== '.' ? `${relative}/` : '';
 	const pattern = glob ? globToRegExp(glob) : null;
-	return entries.filter((entry) => entry.path.startsWith(prefix) && (!pattern || pattern.test(entry.path)));
+	return entries.filter((entry) =>
+		entry.path === relative ? !pattern || pattern.test(entry.path) : entry.path.startsWith(prefix) && (!pattern || pattern.test(entry.path.slice(prefix.length))),
+	);
 }
 
 /** Paths in the repo at the task's base commit, optionally under a folder or matching a glob. */
@@ -201,16 +204,33 @@ export async function listRepoFiles(id: string, filter: Filter): Promise<string>
 	return more > 0 ? `${lines.join('\n')}\n(${more} more; narrow it with path or glob)` : lines.join('\n');
 }
 
-/** A file's whole text, or why it cannot be read. */
-async function fileText(id: string, file: string, repo?: string): Promise<{ text: string } | { problem: string }> {
+/** A file's bytes, or why it cannot be read. */
+async function fileBytes(id: string, file: string, repo?: string): Promise<{ bytes: Uint8Array } | { problem: string }> {
 	const { dir, entries } = await snapshotFor(id, repo);
 	const wanted = safeRelativePath(file);
 	const entry = entries.find((item) => item.path === wanted);
-	if (!entry) return { problem: `${wanted} does not exist. List files to find the right path.` };
+	if (!entry) {
+		const folder = entries.some((item) => item.path.startsWith(`${wanted}/`));
+		return { problem: folder ? `${wanted} is a folder. List its files with glob.` : `${wanted} does not exist. List files to find the right path.` };
+	}
 	if (entry.kind === 'symlink') return { problem: `${wanted} is a link to ${entry.target}.` };
 	if (!entry.stored) return { problem: `${wanted} is ${entry.size} bytes, too large to read without a workspace.` };
-	const text = await readFile(path.join(dir, 'files', wanted), 'utf8');
-	return text.includes('\0') ? { problem: `${wanted} is a binary file.` } : { text };
+	return { bytes: new Uint8Array(await readFile(path.join(dir, 'files', wanted))) };
+}
+
+/** A file's whole text, or why it cannot be read. */
+async function fileText(id: string, file: string, repo?: string): Promise<{ text: string } | { problem: string }> {
+	const read = await fileBytes(id, file, repo);
+	if ('problem' in read) return read;
+	const text = new TextDecoder().decode(read.bytes);
+	return text.includes('\0') ? { problem: `${safeRelativePath(file)} is a binary file.` } : { text };
+}
+
+/** A file of the snapshot as bytes, for an image; throws with why it cannot be read. */
+export async function repoBytes(id: string, file: string, repo?: string): Promise<Uint8Array> {
+	const read = await fileBytes(id, file, repo);
+	if ('problem' in read) throw new Error(read.problem);
+	return read.bytes;
 }
 
 /** For run_script programs: every matching path, as a list. */
@@ -225,47 +245,89 @@ export async function repoText(id: string, file: string, repo?: string): Promise
 	return read.text;
 }
 
-/** A file's lines, numbered from `offset`. */
-export async function readRepoFile(id: string, file: string, offset = 1, limit = 400, repo?: string): Promise<string> {
-	const read = await fileText(id, file, repo);
-	if ('problem' in read) return read.problem;
-	const lines = read.text.split('\n');
+/** Lines a read shows when it names no limit, and at most. */
+export const READ_LINES = 400;
+export const MAX_READ_LINES = 2000;
+/** A longer line (minified code, a data blob) is cut, so one line cannot fill the context. */
+const MAX_LINE_CHARS = 2000;
+
+/** A text's lines numbered from `offset`, number and tab first, saying how to read on when more follow: the same for the snapshot and the sandbox. */
+export function numberedLines(text: string, offset = 1, limit = READ_LINES): string {
+	const lines = text.split('\n');
 	const start = Math.max(1, offset);
+	if (start > lines.length) return `(the file has ${lines.length} lines; offset ${start} is past its end)`;
 	const shown = lines.slice(start - 1, start - 1 + limit);
-	const numbered = shown.map((line, index) => `${start + index}\t${line}`).join('\n');
+	const cut = (line: string) => (line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS)}… (line cut at ${MAX_LINE_CHARS} characters)` : line);
+	const numbered = shown.map((line, index) => `${start + index}\t${cut(line)}`).join('\n');
 	const end = start + shown.length - 1;
 	return end < lines.length ? `${numbered}\n(lines ${start}-${end} of ${lines.length}; read on with offset ${end + 1})` : numbered;
 }
 
+/** A file's lines, numbered from `offset`. */
+export async function readRepoFile(id: string, file: string, offset = 1, limit = READ_LINES, repo?: string): Promise<string> {
+	const read = await fileText(id, file, repo);
+	if ('problem' in read) return read.problem;
+	return numberedLines(read.text, offset, limit);
+}
+
 /**
  * Runs in a worker thread, so a pattern that backtracks without end can be
- * stopped without stalling Anton.
+ * stopped without stalling Anton. Matches come as `path:line: text`; with
+ * context, the lines around them as `path-line- text` and `--` between groups,
+ * as rg and grep print them.
  */
 const SEARCH_WORKER = `
 const { parentPort, workerData } = require('node:worker_threads');
 const { readFileSync } = require('node:fs');
-const { dir, files, pattern, flags, max } = workerData;
+const { dir, files, pattern, flags, max, context, filesOnly } = workerData;
 const regex = new RegExp(pattern, flags);
-const matches = [];
+const show = (line) => (context ? line.trimEnd() : line.trim()).slice(0, 300);
+const out = [];
+let found = 0;
 let more = false;
 for (const file of files) {
 	let text;
 	try { text = readFileSync(dir + '/files/' + file, 'utf8'); } catch { continue; }
 	if (text.includes('\\u0000')) continue;
 	const lines = text.split('\\n');
-	for (let index = 0; index < lines.length && !more; index += 1) {
-		const line = lines[index].slice(0, 2000);
-		if (!regex.test(line)) continue;
-		if (matches.length === max) more = true;
-		else matches.push(file + ':' + (index + 1) + ': ' + line.trim().slice(0, 300));
+	const hits = new Set();
+	for (let index = 0; index < lines.length; index += 1) if (regex.test(lines[index].slice(0, 2000))) hits.add(index);
+	if (!hits.size) continue;
+	if (filesOnly) {
+		if (found === max) { more = true; break; }
+		found += 1;
+		out.push(file);
+		continue;
+	}
+	let last = -1;
+	for (const hit of hits) {
+		if (found === max) { more = true; break; }
+		found += 1;
+		const from = Math.max(hit - context, last + 1);
+		if (context && out.length && (last === -1 || from > last + 1)) out.push('--');
+		for (let index = from; index < hit; index += 1) out.push(file + '-' + (index + 1) + '- ' + show(lines[index]));
+		out.push(file + ':' + (hit + 1) + ': ' + show(lines[hit]));
+		last = hit;
+		for (let index = hit + 1; index <= Math.min(lines.length - 1, hit + context) && !hits.has(index); index += 1) {
+			out.push(file + '-' + (index + 1) + '- ' + show(lines[index]));
+			last = index;
+		}
 	}
 	if (more) break;
 }
-parentPort.postMessage({ matches, more });
+parentPort.postMessage({ lines: out, more });
 `;
 
-/** Lines matching a regular expression, as `path:line: text`. */
-export async function searchRepo(id: string, input: Filter & { pattern: string; ignoreCase?: boolean }): Promise<string> {
+/** Matches a search shows at most, or files with filesOnly; past them it says how to narrow it. */
+export const MAX_MATCHES = 200;
+export const MAX_FILES = 500;
+export const NARROW_SEARCH = '(more matches; narrow the search with path or glob)';
+export const NARROW_FILES = '(more files match; narrow the search with path or glob)';
+
+export type SearchInput = Filter & { pattern: string; ignoreCase?: boolean; context?: number; filesOnly?: boolean };
+
+/** Lines matching a regular expression, as `path:line: text`, with `context` lines around each; or, with `filesOnly`, the files that have one. */
+export async function searchRepo(id: string, input: SearchInput): Promise<string> {
 	const { dir, entries } = await snapshotFor(id, input.repo);
 	const flags = input.ignoreCase ? 'i' : '';
 	try {
@@ -276,10 +338,12 @@ export async function searchRepo(id: string, input: Filter & { pattern: string; 
 	const files = select(entries, input)
 		.filter((entry) => entry.stored)
 		.map((entry) => entry.path);
-	const worker = new Worker(SEARCH_WORKER, { eval: true, workerData: { dir, files, pattern: input.pattern, flags, max: MAX_MATCHES } });
-	const result = await new Promise<{ matches: string[]; more: boolean } | null>((resolve, reject) => {
+	const filesOnly = Boolean(input.filesOnly);
+	const workerData = { dir, files, pattern: input.pattern, flags, max: filesOnly ? MAX_FILES : MAX_MATCHES, context: filesOnly ? 0 : (input.context ?? 0), filesOnly };
+	const worker = new Worker(SEARCH_WORKER, { eval: true, workerData });
+	const result = await new Promise<{ lines: string[]; more: boolean } | null>((resolve, reject) => {
 		const timer = setTimeout(() => resolve(null), SEARCH_TIMEOUT_MS);
-		worker.once('message', (message: { matches: string[]; more: boolean }) => {
+		worker.once('message', (message: { lines: string[]; more: boolean }) => {
 			clearTimeout(timer);
 			resolve(message);
 		});
@@ -289,6 +353,6 @@ export async function searchRepo(id: string, input: Filter & { pattern: string; 
 		});
 	}).finally(() => void worker.terminate());
 	if (!result) return 'The search took too long. Use a simpler pattern, or narrow it with path or glob.';
-	if (result.matches.length === 0) return 'No matches.';
-	return result.more ? `${result.matches.join('\n')}\n(more matches; narrow the search)` : result.matches.join('\n');
+	if (result.lines.length === 0) return 'No matches.';
+	return result.more ? `${result.lines.join('\n')}\n${filesOnly ? NARROW_FILES : NARROW_SEARCH}` : result.lines.join('\n');
 }

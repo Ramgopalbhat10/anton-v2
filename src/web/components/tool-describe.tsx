@@ -139,9 +139,22 @@ export function Em({ children }: { children: ReactNode }) {
 	return <span className="text-(--text-secondary)">{children}</span>;
 }
 
+/** Where a read was from when it named another repository (`repo`), else nothing. */
+function inRepo(input: unknown): ReactNode {
+	const repo = field(input, 'repo');
+	return repo ? (
+		<>
+			{' '}
+			in <Em>{repo}</Em>
+		</>
+	) : null;
+}
+
 export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNode } {
 	const input = part.input;
 	switch (part.toolName) {
+		// read_file, search_code and list_files are the read-only tools of chats, plans and reviews before their sandbox,
+		// and of every repository task begun before its read, grep and glob read the snapshot too.
 		case 'read':
 		case 'read_file': {
 			const offset = Number(field(input, 'offset')) || 0;
@@ -152,6 +165,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				body: (
 					<>
 						Read <Em>{field(input, 'path') + range}</Em>
+						{inRepo(input)}
 					</>
 				),
 			};
@@ -163,6 +177,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				body: (
 					<>
 						Searched <Em>{field(input, 'pattern')}</Em>
+						{inRepo(input)}
 					</>
 				),
 			};
@@ -173,6 +188,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				body: (
 					<>
 						Listed <Em>{field(input, 'pattern') || field(input, 'glob') || field(input, 'path') || 'the repository'}</Em>
+						{inRepo(input)}
 					</>
 				),
 			};

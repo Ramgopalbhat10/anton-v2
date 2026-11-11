@@ -2,7 +2,7 @@
 
 The rules in [AGENTS.md](../../AGENTS.md), and why they hold.
 
-- Viewing a task never starts a sandbox. A task answers from a repo snapshot (`repo-snapshot.ts`) and starts its sandbox with `start_workspace` only to edit or run code. Sandboxes cost money and time.
+- Viewing a task never starts a sandbox, and neither does reading. A repository task's `read`, `grep` and `glob` answer from a repo snapshot (`repo-snapshot.ts`) until it has its workspace, and its sandbox starts with its first command or change (a chat's with `start_workspace`). Sandboxes cost money and time.
 - Git credentials stay out of machines: `gitAuthEnv()` is only for setup before the agent or terminal gets the machine, and pushes go through the git host's API (`pushCommits`). The agent can run anything in its sandbox.
 - New outside services go behind a port in `src/core/ports.ts`, so providers stay swappable and testable.
 - Pages update from `GET /api/events` (`announce()` in `src/core/changes.ts`); polling is only a slow safety net.

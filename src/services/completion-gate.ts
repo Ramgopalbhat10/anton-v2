@@ -34,7 +34,10 @@ export const MAX_ROUNDS = 3;
 const UNDONE = 0.6;
 /** The tools that work in the sandbox; their count is a chat's progress, as it has no diff. */
 const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', 'write', 'edit']);
-/** Tools that show a reply did work, not only read and answer. */
+/**
+ * Tools that show a reply did work, not only read and answer. A repository task has no start_workspace (its first
+ * command starts its sandbox); chats and reviews still do. Reading, with any of the read tools, is not work.
+ */
 const WORK_TOOLS = new Set([...SANDBOX_TOOLS, 'update_todos', 'start_workspace', 'open_pull_request', 'task']);
 /** What the decision model reads of the request and the reply. */
 const REQUEST_CHARS = 2_000;

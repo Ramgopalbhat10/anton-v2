@@ -91,6 +91,7 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 			const running = await findRunning(key);
 			return running && modalMachine(running);
 		},
+		rootOf: () => ROOT,
 		async running() {
 			const keys = new Set<string>();
 			for await (const sandbox of client.sandboxes.list({ appId: (await appRef()).appId })) {
