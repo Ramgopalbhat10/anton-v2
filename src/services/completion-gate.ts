@@ -33,7 +33,7 @@ export const MAX_ROUNDS = 3;
 /** How sure the decision model must be that the reply leaves work undone. */
 const UNDONE = 0.6;
 /** The tools that work in the sandbox; their count is a chat's progress, as it has no diff. */
-const SANDBOX_TOOLS = new Set(['bash', 'write', 'edit']);
+const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', 'write', 'edit']);
 /** Tools that show a reply did work, not only read and answer. */
 const WORK_TOOLS = new Set([...SANDBOX_TOOLS, 'update_todos', 'start_workspace', 'open_pull_request', 'task']);
 /** What the decision model reads of the request and the reply. */

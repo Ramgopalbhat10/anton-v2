@@ -152,6 +152,40 @@ test('Coder tells a reply how long it may run, the same on every render, and sen
 
 test('Coder tells a long reply how long it has run, with a command’s result', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\)\)/);
+	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\) \+ jobNotice\(id\)\)/);
 	assert.match(source, /startReplyClock\(id\);/);
+});
+
+test('Coder runs suites as background jobs wherever its prompt names them, and sends a reply back for a job left running or unread', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	// The tools are on wherever the workspace is, and the workspace prompts are the only ones that name them.
+	const workspace = source.slice(source.indexOf('function useWorkspace'), source.indexOf('function useBackgroundJobs'));
+	assert.match(workspace, /\n\tuseBackgroundJobs\(id\);\n/);
+	const jobs = source.slice(source.indexOf('function useBackgroundJobs'), source.indexOf('const BROWSER_ACTIONS'));
+	assert.match(jobs, /name: 'run_in_background'/);
+	assert.match(jobs, /name: 'check_job'/);
+	assert.match(jobs, /A server that should keep running is started with nohup instead/);
+	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/**', source.indexOf('const FINISH_HINT')));
+	assert.match(finish, /Start it with run_in_background \(independent suites side by side\) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures\./);
+	assert.doesNotMatch(finish, /log under \/tmp/);
+	const named = [...source.matchAll(/^const ([A-Z_]+) =[\s\S]*?(?=\n(?:const|function|\/\*\*) )/gm)].filter((match) => /run_in_background|check_job/.test(match[0])).map((match) => match[1]);
+	assert.deepEqual(named, ['FINISH_HINT', 'WORKSPACE_PROMPT']);
+	for (const prompt of ['WORKSPACE_PROMPT', 'CHAT_WORKSPACE_PROMPT']) {
+		const start = source.indexOf(`const ${prompt}`);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,/, prompt);
+	}
+	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.
+	assert.equal(source.match(/\bFINISH_HINT\b/g)?.length, 3);
+	assert.match(source, /const prompt = workspace \? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;/);
+	assert.match(source, /const prompt = workspace \? WORKSPACE_PROMPT : READ_ONLY_PROMPT;/);
+	assert.match(source, /if \(workspace\) useWorkspace\(id, planning, chat, review\);/);
+	// The tester stays, for a failure set too large to triage in the agent's own context.
+	assert.match(source, /Give a suite to the tester subagent only when triaging its failures would flood your own context/);
+	// After the todo reminder and the stall check, before the finish review; reset with each reply; a stopped reply stops its jobs.
+	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
+	assert.ok(gates.indexOf('stallReminder(') < gates.indexOf('jobsGate('));
+	assert.ok(gates.indexOf('jobsGate(') < gates.indexOf('finishReview('));
+	assert.match(gates, /signal\.aborted \? null : await jobsGate\(id, response\.toolCalls, \{ signal \}\)/);
+	assert.match(gates, /if \(signal\.aborted\) void stopReplyJobs\(id\);/);
+	assert.match(source, /startJobsGate\(id\);/);
 });
