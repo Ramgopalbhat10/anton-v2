@@ -1379,11 +1379,12 @@ const SCRATCH_HINT =
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
 
 /**
- * Everything the agent reads rides along on every later model call, and a tool result past the runtime's cut (about
- * 50KB) loses its end, so reading is progressive: search, then the part that matters, then follow the links.
+ * Everything the agent reads rides along on every later model call, and a long tool result is cut (`read` pages, `grep`
+ * caps its matches, `bash` keeps a long output's start and end), so reading is progressive: search, then the part that
+ * matters, then follow the links.
  */
 const READ_HINT =
-	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
+	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a long result is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
 
 /**
@@ -1391,7 +1392,7 @@ const READ_HINT =
  * `sed -n` and searched with `rg` in bash 487 times against 31 calls of the file tools it had then.
  */
 const TASK_READ_HINT =
-	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
+	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a long result is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
 
 /** What a repository task's prompt says of its sandbox, which it gets on first use rather than by asking; `change` is how its tools change a file. */

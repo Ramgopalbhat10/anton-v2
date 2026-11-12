@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ExecOptions, Machine } from '../src/core/ports.ts';
-import { COMMAND_TIMEOUT_MS, machineSandbox } from '../src/flue/machine-sandbox.ts';
+import { EXEC_TIMEOUT_MS, machineSandbox } from '../src/flue/machine-sandbox.ts';
 
-test("the agent's command gets a timeout when it names none, and keeps its own", async () => {
+test('a command through the sandbox gets a timeout when it names none, and keeps its own', async () => {
 	const seen: Array<number | undefined> = [];
 	const machine = {
 		id: 'fake',
@@ -16,7 +16,7 @@ test("the agent's command gets a timeout when it names none, and keeps its own",
 	const sandbox = machineSandbox(machine, '/work/repo');
 	await sandbox.exec('grep -rl 10723 /');
 	await sandbox.exec('make docs', { timeoutMs: 3_600_000 });
-	assert.deepEqual(seen, [COMMAND_TIMEOUT_MS, 3_600_000]);
+	assert.deepEqual(seen, [EXEC_TIMEOUT_MS, 3_600_000]);
 });
 
 test("a command's result ends with the line the clock gives, when it gives one", async () => {

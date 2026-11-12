@@ -51,7 +51,7 @@ import { webPushSender } from './webpush/sender.ts';
 
 /** Add a provider by adding one entry; choose it with ANTON_SANDBOX / ANTON_STORE. */
 const sandboxes: Record<string, () => SandboxProvider> = {
-	modal: () => modalSandboxProvider({ ...config.modal, browserPackage: config.browserPackage }),
+	modal: () => modalSandboxProvider({ ...config.modal, browserPackage: config.browserPackage, fileApi: config.sandboxFileApi }),
 	local: () => localSandboxProvider(config.dataDir),
 	docker: () => dockerSandboxProvider({ baseImage: config.modal.baseImage, network: config.dockerNetwork }),
 };

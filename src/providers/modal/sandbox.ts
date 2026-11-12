@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { type App, type Image, ModalClient, type Sandbox } from 'modal';
+import {
+	type App,
+	type Image,
+	ModalClient,
+	type Sandbox,
+	SandboxFilesystemIsADirectoryError,
+	SandboxFilesystemNotADirectoryError,
+	SandboxFilesystemNotFoundError,
+	SandboxFilesystemPermissionError,
+} from 'modal';
 import type { Acquired, AcquireRequest, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider, SandboxResources } from '../../core/ports.ts';
+import { fileError } from '../../core/machine-fs.ts';
 import { quote } from '../../core/shell.ts';
 import { DESKTOP_PACKAGES } from '../../core/desktop.ts';
 
@@ -9,6 +19,8 @@ export type ModalOptions = {
 	baseImage: string;
 	/** Installed into every new image so the agent's screenshot tool starts fast. */
 	browserPackage: string;
+	/** Read and write whole files through the SDK's file API rather than a login shell (`ANTON_SANDBOX_FILE_API`); off until tried on a real sandbox. */
+	fileApi?: boolean;
 };
 
 type State = { sandboxId: string };
@@ -76,7 +88,7 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	}
 
 	function acquired(sandbox: Sandbox, origin: MachineOrigin): Acquired {
-		return { machine: modalMachine(sandbox), origin, state: JSON.stringify({ sandboxId: sandbox.sandboxId } satisfies State) };
+		return { machine: modalMachine(sandbox, options.fileApi), origin, state: JSON.stringify({ sandboxId: sandbox.sandboxId } satisfies State) };
 	}
 
 	return {
@@ -89,7 +101,7 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 		},
 		async find(key) {
 			const running = await findRunning(key);
-			return running && modalMachine(running);
+			return running && modalMachine(running, options.fileApi);
 		},
 		rootOf: () => ROOT,
 		async running() {
@@ -160,10 +172,51 @@ async function killTagged(sandbox: Sandbox, tag: string): Promise<void> {
 		.catch(() => undefined);
 }
 
-function modalMachine(sandbox: Sandbox): Machine {
+/** The shell's words for the file API's errors that say the file is not there or cannot be had; any other leaves the file to the shell. */
+function reasonOf(error: unknown): string | null {
+	if (error instanceof SandboxFilesystemNotFoundError) return 'No such file or directory';
+	if (error instanceof SandboxFilesystemIsADirectoryError) return 'Is a directory';
+	if (error instanceof SandboxFilesystemNotADirectoryError) return 'Not a directory';
+	if (error instanceof SandboxFilesystemPermissionError) return 'Permission denied';
+	return null;
+}
+
+/**
+ * Whole-file reads and writes through the SDK's file API (`sandbox.filesystem`), which runs Modal's own file tool
+ * rather than `bash -l`. It takes absolute paths only, and has a read size limit; a relative path, a file past the
+ * limit or an error it does not name go to the shell as before. Unlike `cat >`, its write makes missing folders.
+ */
+function fileApi(sandbox: Sandbox): Pick<Machine, 'readFile' | 'writeFile'> {
+	return {
+		async readFile(file) {
+			if (!file.startsWith('/')) return null;
+			try {
+				return await sandbox.filesystem.readBytes(file);
+			} catch (error) {
+				const reason = reasonOf(error);
+				if (reason) throw fileError('read', file, reason);
+				return null;
+			}
+		},
+		async writeFile(file, content) {
+			if (!file.startsWith('/')) return false;
+			try {
+				await sandbox.filesystem.writeBytes(content, file);
+				return true;
+			} catch (error) {
+				const reason = reasonOf(error);
+				if (reason) throw fileError('write', file, reason);
+				return false;
+			}
+		},
+	};
+}
+
+export function modalMachine(sandbox: Sandbox, files = false): Machine {
 	return {
 		id: sandbox.sandboxId,
 		root: ROOT,
+		...(files ? fileApi(sandbox) : {}),
 		async exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 			// Every process the command starts inherits the tag, so Stop can find and end them all.
 			const tag = randomUUID();

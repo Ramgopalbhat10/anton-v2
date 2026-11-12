@@ -14,6 +14,11 @@ export const config = {
 	databaseToken: read('TURSO_AUTH_TOKEN'),
 	/** Which provider backs each port; see src/providers/index.ts. */
 	sandbox: read('ANTON_SANDBOX', process.env.MODAL_TOKEN_ID ? 'modal' : 'local'),
+	/**
+	 * `1` reads and writes whole files in a Modal sandbox through Modal's file API instead of a login shell
+	 * (`fileApi` in providers/modal/sandbox.ts). Off until it has been tried on a real sandbox; Docker has no such way.
+	 */
+	sandboxFileApi: read('ANTON_SANDBOX_FILE_API') === '1',
 	/** The Docker network the docker sandbox's tasks join; `none` keeps them offline. */
 	dockerNetwork: read('ANTON_DOCKER_NETWORK') || undefined,
 	store: read('ANTON_STORE', process.env.TIGRIS_SECRET_ACCESS_KEY ? 's3' : 'disk'),
