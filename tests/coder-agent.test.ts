@@ -167,7 +167,7 @@ test('Coder tells a reply how long it may run, the same on every render, and sen
 
 test('Coder tells a long reply how long it has run, with a command’s result', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\) \+ jobNotice\(id\)\)/);
+	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\) \+ jobNotice\(id\) \+ checkNotice\(id\)\)/);
 	assert.match(source, /startReplyClock\(id\);/);
 });
 
@@ -206,6 +206,18 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	assert.ok(gates.indexOf('stallReminder(') < gates.indexOf('jobsGate('));
 	assert.ok(gates.indexOf('jobsGate(') < gates.indexOf('finishReview('));
 	assert.match(gates, /signal\.aborted \? null : await jobsGate\(id, response\.toolCalls, \{ signal \}\)/);
-	assert.match(gates, /if \(signal\.aborted\) void stopReplyJobs\(id\);/);
+	assert.match(gates, /if \(signal\.aborted\) \{\n\t\t\t\tvoid stopReplyJobs\(id\);/);
 	assert.match(source, /startJobsGate\(id\);/);
+});
+
+test('Coder runs the repository’s check only for a repository task in its sandbox, tells news with a command’s result, and waits for it at the end of a reply', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	assert.match(source, /watchRepoCheck\(id, repoTask && !runsOnHost\(id\)\);/);
+	// After the jobs gate, before the finish review; reset with each reply; a stopped reply stops its check.
+	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
+	assert.ok(gates.indexOf('jobsGate(') < gates.indexOf('checkGate('));
+	assert.ok(gates.indexOf('checkGate(') < gates.indexOf('finishReview('));
+	assert.match(gates, /signal\.aborted \? null : await checkGate\(id, response\.toolCalls, \{ signal \}\)/);
+	assert.match(gates, /if \(signal\.aborted\) \{\n\t\t\t\tvoid stopReplyJobs\(id\);\n\t\t\t\tvoid stopRepoCheck\(id\);/);
+	assert.match(source, /startCheckGate\(id\);/);
 });

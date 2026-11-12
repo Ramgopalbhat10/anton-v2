@@ -5,7 +5,7 @@ import { logProblem } from './log.ts';
 /*
  * What the checks at the end of a reply know of a task (`todos.ts`,
  * `reply-check.ts`, `finish-review.ts`, `completion-gate.ts`,
- * `reply-clock.ts`): the request, what the finish review last read, how often
+ * `reply-clock.ts`, `repo-check.ts`): the request, what the finish review last read, how often
  * each check sent the reply back, when the reply started and what it last
  * said. The runtime resumes a reply a restart interrupted, but this lived in
  * memory alone, so the resumed reply ended with no request to review against
@@ -51,20 +51,29 @@ export type GateState = {
 	/** When the reply in hand started, and when it was last told the time. */
 	clock?: { started: number; told?: number };
 	said: Said;
+	check: CheckState;
 };
+
+/**
+ * The repository's check (`repo-check.ts`): what the agent was last told of it (a failure, by its digest's hash, or
+ * that it timed out; nothing when it was told nothing or that it passes again), and in the reply in hand whether a
+ * check ran on a changed tree, the failures the reply was sent back for, and how often it was.
+ */
+export type CheckState = { told?: string; ran: boolean; sent: string[]; sends: number };
 
 const fresh = (): GateState => ({
 	review: { reviewed: [], reviews: 0, extra: 0, selfChecked: false, workChecked: false },
 	reminded: false,
 	nudged: false,
 	said: { start: 0, texts: [], silent: false },
+	check: { ran: false, sent: [], sends: 0 },
 });
 
 /** A saved state read back: anything it lacks (a field added since it was written) takes its default. */
 function parse(json: string): GateState {
 	const saved = JSON.parse(json) as Partial<GateState>;
 	const base = fresh();
-	return { ...base, ...saved, review: { ...base.review, ...saved.review }, said: { ...base.said, ...saved.said } };
+	return { ...base, ...saved, review: { ...base.review, ...saved.review }, said: { ...base.said, ...saved.said }, check: { ...base.check, ...saved.check } };
 }
 
 type Change = (state: GateState) => void;

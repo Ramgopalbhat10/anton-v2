@@ -31,7 +31,7 @@ import { pageFetch } from './services/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
 import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
 import { profileName } from './services/profile.ts';
-import { addableRepos, addProject, branches, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
+import { addableRepos, addProject, branches, MAX_CHECK_COMMAND, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
 import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
 import { imageModels, imagesAvailable } from './services/images.ts';
 import { backgroundDefaults, COMPACT_AT, DEFAULT_CLAUDE_CODE_COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
@@ -84,6 +84,7 @@ import { installSubagentStop } from './flue/subagent-stop.ts';
 import { installToolResultCut } from './flue/tool-result-cut.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { noteTodoStep, todosFor } from './services/todos.ts';
+import { noteRepoCheckEvent } from './services/repo-check.ts';
 import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { answerWithin } from './services/answer-within.ts';
 import { waitingMessages } from './services/waiting.ts';
@@ -159,6 +160,8 @@ observeRuntime((event) => {
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	// Before the step's tools run, so a todo update knows whether it was the step's only call.
 	noteTodoStep(event as Parameters<typeof noteTodoStep>[0]);
+	// A finished call that may have changed a task's files runs the repository's check after a quiet, in the background.
+	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
@@ -743,6 +746,7 @@ app.put('/api/projects/:id/settings', async (c) => {
 		v.object({
 			env: ENV,
 			setupScript: v.pipe(v.string(), v.maxLength(20_000)),
+			checkCommand: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_CHECK_COMMAND))),
 			previewPorts: v.pipe(
 				v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535))),
 				v.maxLength(8),

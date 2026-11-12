@@ -69,12 +69,16 @@ export async function branches(projectId: string): Promise<string[]> {
 	return getProviders().git.listBranches((await existing(projectId)).repoFullName);
 }
 
+/** The longest check command: one line of a command, or a short script, never a file's worth. */
+export const MAX_CHECK_COMMAND = 2_000;
+
 /**
  * A settings change from the browser. A variable set to null keeps its stored
- * value and one left out is removed. Leaving out `followUps`, `reviewOthers` or `fullVm` keeps them as they are.
+ * value and one left out is removed. Leaving out `checkCommand`, `followUps`, `reviewOthers` or `fullVm` keeps them as they are.
  */
-export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm'> & {
+export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm' | 'checkCommand'> & {
 	env: Record<string, string | null>;
+	checkCommand?: string;
 	followUps?: boolean;
 	reviewOthers?: boolean;
 	fullVm?: boolean;
@@ -82,15 +86,18 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'review
 
 /**
  * Saves the repo's settings. New tasks use them. Running tasks get variable
- * changes from their next command batch; preview ports, the base image and
- * the full VM apply once their sandbox restarts.
+ * changes from their next command batch and the check command from their next
+ * change; preview ports, the base image and the full VM apply once their sandbox restarts.
  */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
+	const checkCommand = change.checkCommand?.trim() ?? project.checkCommand;
+	if (checkCommand.length > MAX_CHECK_COMMAND) throw new InvalidInputError(`Keep the check command under ${MAX_CHECK_COMMAND.toLocaleString('en-US')} characters`);
 	const env = mergeEnv(project.env, change.env);
 	await setProjectSettings(id, {
 		...change,
 		env,
+		checkCommand,
 		followUps: change.followUps ?? project.followUps,
 		reviewOthers: change.reviewOthers ?? project.reviewOthers,
 		fullVm: change.fullVm ?? project.fullVm,

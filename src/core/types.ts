@@ -31,6 +31,11 @@ export type ProjectSettings = {
 	env: Record<string, string>;
 	/** Runs in the repo after dependencies install, before the agent starts. */
 	setupScript: string;
+	/**
+	 * A fast command (a type check or lint) run in the repo after the agent changes files; the agent hears of it only
+	 * when it fails. Empty runs none. It should not change tracked files.
+	 */
+	checkCommand: string;
 	/** Ports a dev server can listen on to get a preview URL. */
 	previewPorts: number[];
 	/** Container image to start from instead of the default, such as `python:3.12`. */
