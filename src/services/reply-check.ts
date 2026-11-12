@@ -2,6 +2,7 @@ import { updateSession } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { takeAsk, takePlan } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from './decisions.ts';
+import { changeGate, gate, loadGate, type Said } from './gate-state.ts';
 import { logProblem } from './log.ts';
 
 /**
@@ -26,11 +27,16 @@ const MAX_QUESTION = 240;
 /** How sure the decision model must be that the reply waits on the user. */
 const WAITS = 0.6;
 
-const lastReply = new Map<string, string>();
-/** The words of the agent's latest message, empty when it had none, so a reply's end is read from its last message alone. */
-const lastWords = new Map<string, string>();
-/** Everything the agent said in its current reply, as a reply can say its findings and then a closing line. */
-const replyTexts = new Map<string, string[]>();
+/**
+ * What the agent said in its current reply, as a reply can say its findings and then a closing line, and whether its
+ * latest message had no words, so a reply's end is read from its last message alone. Only the messages from the last
+ * of substance on are kept (`closingOf` reads no further back), with the count of those before, and they are kept
+ * with the task's checks (`gate-state.ts`): a reply resumed after a restart, or whose end is checked again after one,
+ * reads the same end. A long run of short messages keeps its latest `KEEP_SAID`.
+ */
+const KEEP_SAID = 100;
+
+const lastWordsOf = (said: Said): string => (said.silent ? '' : (said.texts[said.texts.length - 1] ?? ''));
 
 function textOf(content: unknown): string {
 	if (typeof content === 'string') return content;
@@ -44,10 +50,19 @@ export function recordReplyText(event: MessageEvent): void {
 	if (event.session !== undefined && event.session !== 'default') return;
 	if (event.agentName && !/^coder$/i.test(event.agentName)) return;
 	const text = textOf(event.message.content).trim();
-	lastWords.set(event.instanceId, text);
-	if (!text) return;
-	lastReply.set(event.instanceId, text);
-	replyTexts.set(event.instanceId, [...(replyTexts.get(event.instanceId) ?? []), text]);
+	changeGate(event.instanceId, ({ said }) => {
+		said.silent = !text;
+		if (!text) return;
+		if (text.length >= SUBSTANCE) {
+			said.start += said.texts.length;
+			said.texts = [];
+		}
+		said.texts.push(text);
+		if (said.texts.length > KEEP_SAID) {
+			said.start += said.texts.length - KEEP_SAID;
+			said.texts = said.texts.slice(-KEEP_SAID);
+		}
+	});
 }
 
 /** The last thing the reply asks: its last sentence ending in a question mark, else its last line. */
@@ -122,13 +137,15 @@ export function closingOf(texts: string[]): string | null {
  * Given `from`, only its messages from that one on: what it said since a check sent it back.
  */
 export function replyEnding(id: string, from = 0): string {
-	if (!lastWords.get(id)) return '';
-	return closingOf((replyTexts.get(id) ?? []).slice(from)) ?? '';
+	const { said } = gate(id);
+	if (!lastWordsOf(said)) return '';
+	return closingOf(said.texts.slice(Math.max(0, from - said.start))) ?? '';
 }
 
 /** How many messages with words the reply in hand has said so far. */
 export function replyMessages(id: string): number {
-	return replyTexts.get(id)?.length ?? 0;
+	const { said } = gate(id);
+	return said.start + said.texts.length;
 }
 
 /**
@@ -136,13 +153,15 @@ export function replyMessages(id: string): number {
  * approval, or that none waits. Returns what the reply comes to (`closingOf`), when it had any text.
  */
 export async function checkReply(id: string): Promise<string | null> {
-	const reply = lastReply.get(id);
-	const whole = closingOf(replyTexts.get(id) ?? []);
+	await loadGate(id);
+	const { said } = gate(id);
+	const reply = said.texts[said.texts.length - 1];
+	const whole = closingOf(said.texts);
 	const ask = takeAsk(id);
 	const plan = takePlan(id);
-	lastReply.delete(id);
-	lastWords.delete(id);
-	replyTexts.delete(id);
+	changeGate(id, (state) => {
+		state.said = { start: 0, texts: [], silent: false };
+	});
 	try {
 		// A question asked with the ask tool waits on the user by its nature.
 		const asking = ask ? ask.slice(0, MAX_QUESTION) : reply && (await waitsOnUser(id, reply)) ? questionOf(reply) || 'Waiting on you' : null;
@@ -155,12 +174,11 @@ export async function checkReply(id: string): Promise<string | null> {
 	return [whole ?? reply, ask, plan ? `Plan waiting for approval:\n${plan}` : null].filter(Boolean).join('\n\n') || null;
 }
 
-/** Tasks whose reply in hand was already sent back to work, so a reply is sent back once. */
-const nudged = new Set<string>();
-
-/** A new reply may be sent back again. */
+/** A new reply may be sent back again. A reply is sent back once; that it was is kept with the task's checks. */
 export function startStallCheck(id: string): void {
-	nudged.delete(id);
+	changeGate(id, (state) => {
+		state.nudged = false;
+	});
 }
 
 /** A message that only says what the agent will do next ("I'll start by exploring the repository."). */
@@ -172,11 +190,14 @@ const ANNOUNCES = /^(?:(?:ok(?:ay)?|alright|sure|great)[,.!]?\s+)?(?:i['’]ll|i
  * null otherwise. Once a reply, and never when the reply ends asking the user or proposing a plan.
  */
 export function stallReminder(id: string, calls: readonly { tool: string }[]): string | null {
-	const text = lastWords.get(id);
-	if (!text || nudged.has(id)) return null;
+	const { said, nudged } = gate(id);
+	const text = lastWordsOf(said);
+	if (!text || nudged) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
 	if (text.length >= SUBSTANCE || text.includes('?') || !ANNOUNCES.test(text)) return null;
-	nudged.add(id);
+	changeGate(id, (state) => {
+		state.nudged = true;
+	});
 	return 'Your reply ended on a step you said you would take, without taking it. Carry on with the work now, and end your reply once it is done or you need the user.';
 }

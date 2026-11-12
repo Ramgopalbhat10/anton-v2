@@ -1,4 +1,5 @@
 import { getSessionTodos, setSessionTodos } from '../db/sessions.ts';
+import { changeGate, gate, loadGate } from './gate-state.ts';
 
 /**
  * The agent's todo list for a task: the steps of the work it is on, ticked off
@@ -47,16 +48,15 @@ export async function writeTodos(id: string, todos: Todo[], at = new Date()): Pr
 	return `Todo list saved: ${done}/${list.length} done.${current ? ` Now: ${current.content}.` : ''} Update it again as soon as a step finishes.`;
 }
 
-/** Tasks whose reply in hand was already reminded of its list, so a reply is reminded once. */
-const reminded = new Set<string>();
-
-/** A new reply may be reminded again. */
+/** A new reply may be reminded again. A reply is reminded once; that it was is kept with the task's checks (`gate-state.ts`). */
 export function startTodoReply(id: string): void {
-	reminded.delete(id);
+	changeGate(id, (state) => {
+		state.reminded = false;
+	});
 }
 
 /** Whether the reply in hand was reminded of its list already: steps still open after that were left open on purpose. */
-export const todoReminded = (id: string): boolean => reminded.has(id);
+export const todoReminded = (id: string): boolean => gate(id).reminded;
 
 type Call = { tool: string; isError: boolean };
 
@@ -71,13 +71,16 @@ type Call = { tool: string; isError: boolean };
  * it thought it had marked the rest open and stopped.
  */
 export async function todoReminder(id: string, calls: readonly Call[]): Promise<string | null> {
-	if (reminded.has(id) || !calls.some((call) => call.tool === 'update_todos' && !call.isError)) return null;
+	await loadGate(id);
+	if (gate(id).reminded || !calls.some((call) => call.tool === 'update_todos' && !call.isError)) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
 	const list = await todosFor(id);
 	const open = list?.todos.filter((todo) => todo.status !== 'completed') ?? [];
 	if (!list || open.length === 0) return null;
-	reminded.add(id);
+	changeGate(id, (state) => {
+		state.reminded = true;
+	});
 	return (
 		`Your todo list still shows ${open.length} of ${list.todos.length} steps not done: ${open.map((todo) => `"${todo.content}"`).join(', ')}. ` +
 		'Do the ones you can still do now: a step that is only large or slow is still yours to finish. The user follows the list as your progress, so then call update_todos to match where the work stands, marking each step you finished completed. ' +

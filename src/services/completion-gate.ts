@@ -4,6 +4,7 @@ import { isIncognitoId } from '../core/incognito.ts';
 import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { decide, yesOf } from './decisions.ts';
 import { reopenFinishReview, requestFor, taskPatch } from './finish-review.ts';
+import { changeGate, gate, loadGate } from './gate-state.ts';
 import { logProblem } from './log.ts';
 import { replyEnding, replyMessages } from './reply-check.ts';
 import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';
@@ -69,8 +70,6 @@ const NEEDS_USER = new RegExp(
 );
 
 type Call = { tool: string };
-/** `seen`: how many messages the reply had said when last sent back; only those after it are its end now. */
-type Round = { rounds: number; mark: string; seen: number };
 export type GateContext = {
 	/** A task with no repository: its progress is its sandbox work, as it has no diff. */
 	chat: boolean;
@@ -91,13 +90,14 @@ type Deps = {
 
 const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, messages: replyMessages, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), limitMs: config.replyTimeoutMs };
 
-/** Each task's rounds in the reply in hand, and what its work stood at when last sent back. */
-const rounds = new Map<string, Round>();
-const KEEP_TASKS = 200;
-
-/** A new reply may be sent back again. */
+/**
+ * A new reply may be sent back again. Each task's rounds in the reply in hand, what its work stood at when last sent
+ * back and how many messages the reply had said then (only those after are its end now), are kept with its checks.
+ */
 export function startCompletionGate(id: string): void {
-	rounds.delete(id);
+	changeGate(id, (state) => {
+		state.round = undefined;
+	});
 }
 
 /** Whether the reply's last words end on a question, as a reply that asks the user something does. */
@@ -155,7 +155,8 @@ export async function completionGate(id: string, calls: readonly Call[], context
 	if (signal?.aborted || isIncognitoId(id) || (chat && !workspace)) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
-	const round = rounds.get(id);
+	await loadGate(id);
+	const round = gate(id).round;
 	if (round && round.rounds >= MAX_ROUNDS) return null;
 	try {
 		// After a send-back, what the reply said before it is stale: a short "Done." would otherwise be read with the
@@ -173,9 +174,10 @@ export async function completionGate(id: string, calls: readonly Call[], context
 		const mark = chat ? `calls:${calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length}` : `diff:${createHash('sha256').update((await d.patch(id))?.trim() ?? '').digest('hex')}`;
 		// A round that changed nothing will not be followed by one that does.
 		if (round && round.mark === mark) return null;
-		rounds.delete(id);
-		rounds.set(id, { rounds: (round?.rounds ?? 0) + 1, mark, seen: d.messages(id) });
-		if (rounds.size > KEEP_TASKS) rounds.delete(rounds.keys().next().value!);
+		const next = { rounds: (round?.rounds ?? 0) + 1, mark, seen: d.messages(id) };
+		changeGate(id, (state) => {
+			state.round = next;
+		});
 		reopenFinishReview(id);
 		return carryOn(d.elapsed(id), d.limitMs, steps.length);
 	} catch (error) {

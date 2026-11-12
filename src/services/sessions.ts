@@ -19,6 +19,7 @@ import { closeBrowser } from './live-browser.ts';
 import { SCRATCH_BASE, SCRATCH_BRANCH } from './git.ts';
 import { forgetScriptCalls } from './script-runs.ts';
 import { forgetResults } from './tool-results.ts';
+import { forgetGate } from './gate-state.ts';
 import { forgetSubagentRuns } from './subagent-runs.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { logProblem } from './log.ts';
@@ -379,6 +380,7 @@ export async function deleteSession(id: string): Promise<void> {
 	await forgetSubagentRuns(id);
 	await forgetScriptCalls(id);
 	forgetResults(id);
+	forgetGate(id);
 	await deleteSessionRecord(id);
 	await forgetNotificationsOf(id);
 }

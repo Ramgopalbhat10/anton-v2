@@ -104,6 +104,7 @@ import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { loadGate } from '../services/gate-state.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
 import { checkJob, jobNotice, jobsGate, MAX_WAIT_S, startJob, startJobsGate, stopReplyJobs } from '../services/background-jobs.ts';
@@ -1699,12 +1700,17 @@ export function Coder({ id }: AgentProps) {
 		});
 	}
 	if (!incognito) {
+		// What the checks at a reply's end know of the task is read from its row now, ahead of a reply the runtime resumes
+		// after a restart (which runs no start hooks), so a command's result can tell it how long it has run.
+		void loadGate(id);
 		// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 		// The reply is also checked for whether it waits on the user, so the task can say so.
 		useAgentFinish(async ({ response, append, signal }) => {
 			// A stopped reply leaves no job of its own running.
 			if (signal.aborted) void stopReplyJobs(id);
+			// The checks read what they know of the task from its row before any of them runs.
+			await loadGate(id);
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
 			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
 			if (reminder) {
