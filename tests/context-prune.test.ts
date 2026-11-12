@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import type { Context, Message } from '@earendil-works/pi-ai';
-import { compactionPoint, pruneContext, resetPruning, warmShare } from '../src/services/context-prune.ts';
+import { compactionPoint, noteSent, pruneContext, resetPruning, warmShare } from '../src/services/context-prune.ts';
 import { readFullResult } from '../src/services/tool-results.ts';
 
 const MINUTE = 60_000;
@@ -129,4 +129,97 @@ test('reasoning before the newest cleared result is left out where the API allow
 	const kept = pruneContext('k', reasoned(30, 16_000), POINT, 0);
 	assert.ok(kept.context.messages.filter((message) => message.role === 'assistant').every(thinks), 'without dropThinking, all reasoning stays');
 	assert.ok(pruned.tokens < kept.tokens);
+});
+
+test('the cache counts as gone once idle past its provider’s lifetime: ten minutes on OpenAI’s, five when not given', async () => {
+	const openAi = { cacheMs: 10 * MINUTE };
+	pruneContext('warm', conversation(2, 1_000), POINT, 0, openAi);
+	assert.equal(pruneContext('warm', conversation(28, 16_000), POINT, 7 * MINUTE, openAi).cleared, 0, 'about 112K tokens, seven minutes idle: still warm');
+	pruneContext('cold', conversation(2, 1_000), POINT, 0, openAi);
+	assert.ok(pruneContext('cold', conversation(28, 16_000), POINT, 11 * MINUTE, openAi).cleared > 0, 'eleven minutes idle');
+	pruneContext('other', conversation(2, 1_000), POINT, 0, {});
+	assert.ok(pruneContext('other', conversation(28, 16_000), POINT, 7 * MINUTE, {}).cleared > 0, 'five minutes when not given');
+
+	const { pruneModel } = await import('../src/flue/pruned-models.ts');
+	const price = { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0 };
+	assert.deepEqual(pruneModel({ provider: 'openai', id: 'gpt-6.1-terra[872k]', api: 'openai-responses', cost: price } as never), { price, dropThinking: false, cacheMs: 10 * MINUTE });
+	assert.deepEqual(pruneModel({ provider: 'openrouter', id: 'openai/gpt-5.5', api: 'openai-completions' } as never).cacheMs, 10 * MINUTE);
+	assert.deepEqual(pruneModel({ provider: 'openrouter', id: 'anthropic/claude-sonnet-5.5', api: 'openai-completions' } as never).cacheMs, 5 * MINUTE);
+	assert.deepEqual(pruneModel({ provider: 'opencode-go', id: 'glm-5.1', api: 'openai-completions' } as never).cacheMs, 5 * MINUTE);
+});
+
+test('the size is what the provider counted of the previous call, with what was added since estimated', () => {
+	// About 88K tokens by characters; the provider counted 130K, as code and JSON run to fewer characters a token.
+	const dense = pruneContext('dense', conversation(22, 16_000), POINT, 0);
+	assert.equal(dense.cleared, 0);
+	noteSent('dense', dense.call, { input: 20_000, cacheRead: 110_000, cacheWrite: 0 });
+	// Two results later and gone cold: about 96K by characters, under half the mark, but 130K and two results counted.
+	assert.ok(pruneContext('dense', conversation(24, 16_000), POINT, 7 * MINUTE).cleared > 0);
+	pruneContext('estimated', conversation(22, 16_000), POINT, 0);
+	assert.equal(pruneContext('estimated', conversation(24, 16_000), POINT, 7 * MINUTE).cleared, 0, 'without a count, the estimate decides');
+
+	// Two results later, about 104K by characters, past half the mark; the provider counted far less.
+	const sparse = pruneContext('sparse', conversation(24, 16_000), POINT, 0);
+	noteSent('sparse', sparse.call, { input: 70_000 });
+	assert.equal(pruneContext('sparse', conversation(26, 16_000), POINT, 7 * MINUTE).cleared, 0);
+	pruneContext('sparse-estimated', conversation(24, 16_000), POINT, 0);
+	assert.ok(pruneContext('sparse-estimated', conversation(26, 16_000), POINT, 7 * MINUTE).cleared > 0);
+});
+
+test('a count is not used for a call it was not of, nor once the conversation starts otherwise', () => {
+	const count = { input: 30_000, cacheRead: 100_000 };
+	// A count of an older call, or of a failed one.
+	const older = pruneContext('older', conversation(22, 16_000), POINT, 0);
+	pruneContext('older', conversation(23, 16_000), POINT, MINUTE);
+	noteSent('older', older.call, count);
+	assert.equal(pruneContext('older', conversation(24, 16_000), POINT, 7 * MINUTE).cleared, 0);
+	const failed = pruneContext('failed', conversation(22, 16_000), POINT, 0);
+	noteSent('failed', failed.call, { input: 0, cacheRead: 0, cacheWrite: 0 });
+	noteSent('failed', failed.call, undefined);
+	assert.equal(pruneContext('failed', conversation(24, 16_000), POINT, 7 * MINUTE).cleared, 0);
+	// A compaction rewrote the conversation, or the system prompt changed.
+	const compacted = pruneContext('compacted', conversation(22, 16_000), POINT, 0);
+	noteSent('compacted', compacted.call, count);
+	const rewritten = conversation(24, 16_000);
+	rewritten.messages = [{ role: 'user', content: 'Summary of the work so far.', timestamp: 1 }, ...rewritten.messages.slice(3)];
+	const after = pruneContext('compacted', rewritten, POINT, 7 * MINUTE);
+	assert.equal(after.cleared, 0);
+	assert.ok(after.tokens < 100_000, `${after.tokens} tokens, the estimate`);
+	const prompted = pruneContext('prompted', conversation(22, 16_000), POINT, 0);
+	noteSent('prompted', prompted.call, count);
+	assert.equal(pruneContext('prompted', { ...conversation(24, 16_000), systemPrompt: 'You are Anton, with a longer prompt.' }, POINT, 7 * MINUTE).cleared, 0);
+});
+
+test('a count that matches the estimate sizes the next call as the estimate does, reasoning left out counted once', () => {
+	const first = pruneContext('counted', reasoned(30, 16_000), POINT, 0, { dropThinking: true });
+	assert.ok(first.cleared > 0);
+	noteSent('counted', first.call, { input: first.tokens });
+	pruneContext('estimated', reasoned(30, 16_000), POINT, 0, { dropThinking: true });
+	const counted = pruneContext('counted', reasoned(31, 16_000), POINT, MINUTE, { dropThinking: true });
+	const estimated = pruneContext('estimated', reasoned(31, 16_000), POINT, MINUTE, { dropThinking: true });
+	assert.equal(counted.cleared, first.cleared, 'no new batch');
+	assert.equal(counted.tokens, estimated.tokens);
+	assert.ok(counted.tokens > first.tokens);
+});
+
+test('a provider hands each call’s count of what it sent to the clearing of that conversation’s next call', async () => {
+	const { withPruning } = await import('../src/flue/pruned-models.ts');
+	const sent: Context[] = [];
+	const counted = { input: 1_000, cacheRead: 169_000, cacheWrite: 0 };
+	const provider = withPruning({
+		id: 'p',
+		getModels: () => [],
+		stream: () => undefined,
+		streamSimple: (_m: unknown, context: Context) => {
+			sent.push(context);
+			return { result: () => Promise.resolve({ usage: counted }) };
+		},
+	} as never);
+	const model = { provider: 'openrouter', id: 'anthropic/claude-sonnet-5.5', api: 'openai-completions', contextWindow: 1_000_000, maxTokens: 64_000 } as never;
+	provider.streamSimple(model, conversation(22, 16_000), { sessionId: 'aff-counted' });
+	await new Promise((resolve) => setImmediate(resolve));
+	// A warm cache and no price: only past 85% of the mark, which 96K by characters is far from, and 170K and two results counted is past.
+	provider.streamSimple(model, conversation(24, 16_000), { sessionId: 'aff-counted' });
+	assert.match(resultText(sent[1], 'c0'), /^\[Cleared/);
+	assert.equal(resultText(sent[0], 'c0'), '0'.repeat(16_000));
 });
