@@ -71,9 +71,12 @@ function inputField(input: unknown, head: string, key: string): string | null {
 	}
 }
 
-/** The few words that say what a tool call is for: its file, its command's first line, or its subagent. */
+/** The first file a patch names, from its start while it streams. */
+const PATCHED_FILE = /\*\*\* (?:Add|Update|Delete) File: ([^\n]+)\n/;
+
+/** The few words that say what a tool call is for: its file (a patch's first), its command's first line, or its subagent. */
 export function detailOf(tool: string, input: unknown, head = ''): string | null {
-	const path = inputField(input, head, 'path');
+	const path = inputField(input, head, 'path') ?? (tool === 'apply_patch' ? (PATCHED_FILE.exec(inputField(input, head, 'input') ?? '')?.[1]?.trim() ?? null) : null);
 	if (path) return path.replace(/^\.\//, '');
 	if (tool === 'task') return inputField(input, head, 'agent') ?? inputField(input, head, 'description');
 	const command = inputField(input, head, 'command');

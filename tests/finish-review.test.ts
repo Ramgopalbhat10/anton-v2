@@ -110,6 +110,9 @@ test('a chat whose reply worked in its sandbox and left no diff checks what it m
 	// A reply that ran a command or two answered a question; it is not sent back.
 	startFinishReview('c');
 	assert.equal(await finishReview('c', [{ tool: 'bash' }, { tool: 'bash' }, { tool: 'mcp__web__web_search' }, { tool: 'show' }, { tool: 'read' }, { tool: 'read' }], undefined, chat('')), null);
+	// The patch profile's file changes count as work as write and edit do.
+	startFinishReview('c');
+	assert.match((await finishReview('c', [{ tool: 'bash' }, { tool: 'apply_patch' }, { tool: 'bash' }, { tool: 'apply_patch' }, { tool: 'bash' }], undefined, chat(''))) ?? '', /check your work against the request/);
 	// Nor one that ends asking the user, nor a repository task, whose work is its diff.
 	startFinishReview('c');
 	assert.equal(await finishReview('c', [...job, { tool: 'ask' }], undefined, chat('')), null);
