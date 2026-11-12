@@ -25,17 +25,22 @@ function counted(own: Machine) {
 
 const every = new Uint8Array(70_000).map((_, index) => (index * 7) % 256);
 
+/** The same bytes, said in a line: `deepEqual` on a file this size writes a difference Node runs out of memory making. */
+function sameBytes(actual: Uint8Array | undefined, expected: Uint8Array, message = 'the same bytes'): void {
+	assert.ok(actual && Buffer.from(actual).equals(Buffer.from(expected)), `${message} (${actual?.length ?? 'no'} bytes for ${expected.length})`);
+}
+
 test('the local machine reads and writes files without a command, with the same bytes as through the shell', async () => {
 	const { direct, shell, commands } = counted(machine);
 	for (const [name, bytes] of [['every-byte.bin', every], ['empty.txt', new Uint8Array()], ['text.txt', new TextEncoder().encode('one\ntwo\n')]] as const) {
 		await writeMachineFile(direct, `${machine.root}/${name}`, bytes);
-		assert.deepEqual(await readMachineFile(shell, `${machine.root}/${name}`), bytes, `${name} written directly reads the same through the shell`);
+		sameBytes(await readMachineFile(shell, `${machine.root}/${name}`), bytes, `${name} written directly reads the same through the shell`);
 		await writeMachineFile(shell, `${machine.root}/shell-${name}`, bytes);
-		assert.deepEqual(await readMachineFile(direct, `${machine.root}/shell-${name}`), bytes, `${name} written through the shell reads the same directly`);
+		sameBytes(await readMachineFile(direct, `${machine.root}/shell-${name}`), bytes, `${name} written through the shell reads the same directly`);
 	}
 	const before = commands.length;
 	await writeMachineFile(direct, `${machine.root}/again.bin`, every);
-	assert.deepEqual(await readMachineFile(direct, `${machine.root}/again.bin`), every);
+	sameBytes(await readMachineFile(direct, `${machine.root}/again.bin`), every);
 	assert.equal(commands.length, before, 'no command for a direct read or write');
 	// A relative path is from the folder commands run in, as for `cat`.
 	await writeMachineFile(direct, 'relative.txt', new TextEncoder().encode('here'));
@@ -74,7 +79,7 @@ function fakeModal(files: Record<string, Uint8Array>, failure?: Error) {
 		sandboxId: 'sb-test',
 		async exec(argv: string[]) {
 			calls.push(`exec ${argv.join(' ')}`);
-			const file = /cat (?:-- )?'([^']+)'/.exec(argv[2])?.[1] ?? '';
+			const file = /cat (?:-- |> )?'([^']+)'/.exec(argv[2])?.[1] ?? '';
 			const written: Uint8Array[] = [];
 			return {
 				stdin: new WritableStream<Uint8Array>({ write: (chunk) => void written.push(chunk), close: () => void (files[file] = new Uint8Array(Buffer.concat(written))) }),
@@ -106,14 +111,14 @@ test('a Modal machine reads and writes through a login shell, as before, unless 
 	assert.equal(machineOff.writeFile, undefined);
 	assert.equal(new TextDecoder().decode(await readMachineFile(machineOff, '/workspace/a.txt')), 'hello');
 	await writeMachineFile(machineOff, '/workspace/b.txt', every);
-	assert.deepEqual(off.files['/workspace/b.txt'], every);
+	sameBytes(off.files['/workspace/b.txt'], every);
 	assert.deepEqual(off.calls, ["exec bash -lc wc -c < '/workspace/a.txt' >&2 && cat -- '/workspace/a.txt'", "exec bash -lc cat > '/workspace/b.txt'"]);
 
 	const on = fakeModal({ '/workspace/a.txt': new TextEncoder().encode('hello') });
 	const machineOn = modalMachine(on.sandbox, true);
 	assert.equal(new TextDecoder().decode(await readMachineFile(machineOn, '/workspace/a.txt')), 'hello');
 	await writeMachineFile(machineOn, '/workspace/b.txt', every);
-	assert.deepEqual(on.files['/workspace/b.txt'], every);
+	sameBytes(on.files['/workspace/b.txt'], every);
 	assert.deepEqual(on.calls, ['readBytes /workspace/a.txt', 'writeBytes /workspace/b.txt']);
 	// The file API takes absolute paths only: a relative one goes to the shell.
 	await readMachineFile(machineOn, 'a.txt');
@@ -125,7 +130,7 @@ test("with the file API on, a missing file fails as the shell's read does, and a
 	await assert.rejects(readMachineFile(missing, '/workspace/gone'), (error: unknown) => error instanceof CommandError && error.message === '`read /workspace/gone` failed: /workspace/gone: No such file or directory');
 	await assert.rejects(writeMachineFile(missing, '/workspace/gone/x', every), /`write \/workspace\/gone\/x` failed: \/workspace\/gone\/x: No such file or directory/);
 	const large = fakeModal({ '/workspace/big.bin': every }, new SandboxFilesystemFileTooLargeError('too large'));
-	assert.deepEqual(await readMachineFile(modalMachine(large.sandbox, true), '/workspace/big.bin'), every);
+	sameBytes(await readMachineFile(modalMachine(large.sandbox, true), '/workspace/big.bin'), every);
 	assert.deepEqual(large.calls, ['readBytes /workspace/big.bin', "exec bash -lc wc -c < '/workspace/big.bin' >&2 && cat -- '/workspace/big.bin'"]);
 });
 
