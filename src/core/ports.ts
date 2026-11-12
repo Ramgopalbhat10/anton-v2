@@ -36,6 +36,15 @@ export type Machine = {
 	readonly root: string;
 	/** Runs a command through `bash -lc`. */
 	exec(command: string, options?: ExecOptions): Promise<ExecResult>;
+	/**
+	 * Reads a whole file without a shell, for a provider that has a way to: a login shell per read is slow under
+	 * gVisor, and an edit is a read and a write. Null leaves this file to `exec` (a path or size its way does not
+	 * take). A file that is not there or cannot be read throws a `CommandError`, as the read through `exec` does
+	 * (`fileError` in machine-fs.ts). `readMachineFile` uses it when it is there.
+	 */
+	readFile?(path: string): Promise<Uint8Array | null>;
+	/** Writes a whole file without a shell, likewise: false leaves it to `exec`, and an error is the one `cat >` gives. */
+	writeFile?(path: string, content: Uint8Array): Promise<boolean>;
 	openPty(options: { cols: number; rows: number; cwd: string; env?: Record<string, string> }): Promise<Pty>;
 	/** A URL the user's browser can open for a server listening on `port`, or null when none is exposed. */
 	previewUrl(port: number): Promise<string | null>;

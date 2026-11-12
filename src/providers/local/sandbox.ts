@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Acquired, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider } from '../../core/ports.ts';
+import { fileError, reasonOf } from '../../core/machine-fs.ts';
 import { quote } from '../../core/shell.ts';
 import { runProcess } from '../shell-process.ts';
 
@@ -87,6 +88,14 @@ function localMachine(root: string): Machine {
 		root,
 		exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 			return runProcess('bash', ['-lc', command], { ...options, cwd: options.cwd ?? root, env: shellEnv(options.env) });
+		},
+		// Files are this computer's own, read and written as `cat` would, from the folder commands run in.
+		async readFile(file) {
+			return new Uint8Array(await readFile(path.resolve(root, file)).catch((error: unknown) => Promise.reject(fileError('read', file, reasonOf(error)))));
+		},
+		async writeFile(file, content) {
+			await writeFile(path.resolve(root, file), content).catch((error: unknown) => Promise.reject(fileError('write', file, reasonOf(error))));
+			return true;
 		},
 		/** Dev servers in a local task listen on this computer. */
 		previewUrl: async (port) => `http://localhost:${port}`,
