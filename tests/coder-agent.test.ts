@@ -137,6 +137,17 @@ test('Coder lists the request’s requirements as todos, and has a change read a
 	assert.match(source, /startFinishReview\(id\);/);
 });
 
+test('Coder writes its todo list whole once and updates its statuses by item number, alongside other tool calls', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const tool = source.slice(source.indexOf('function useTodos'), source.indexOf('/** A question with options to tap'));
+	assert.match(tool, /input: TODOS_INPUT,/);
+	assert.match(tool, /run: async \(\{ data, toolCallId \}\) => \(\{ output: await updateTodos\(id, data, toolCallId\) \}\)/);
+	assert.match(tool, /For status updates send only changes, the items that changed by number\./);
+	assert.match(source, /mark it completed and the next one in_progress with update_todos \(only the items that changed, by number\) alongside the next step's tool calls, never as a step of its own;/);
+	// Only the main Coder keeps a todo list.
+	assert.equal(source.match(/\buseTodos\(id\)/g)?.length, 1);
+});
+
 test('Coder tells a reply how long it may run, the same on every render, and sends a reply that ends with work undone back to do it', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	const budget = source.slice(source.indexOf('const BUDGET_HINT'), source.indexOf('/** Links to the outputs folder'));

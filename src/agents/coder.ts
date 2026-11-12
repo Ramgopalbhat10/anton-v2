@@ -64,7 +64,7 @@ import { postReviewTool } from './review-tool.ts';
 import { directServer, hasScriptTools, runScript, type ScriptScope, scriptFromFile, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
-import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
+import { startTodoReply, TODOS_INPUT, todoReminder, updateTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
 import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
@@ -960,29 +960,20 @@ function useAgentRuns(id: string) {
 	);
 }
 
-/** The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer. */
+/**
+ * The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer.
+ * The list is written whole once, and its statuses then updated by item number, since sending every item with its
+ * evidence again to tick one off cost output tokens that stayed in the conversation (`TODOS_INPUT`).
+ */
 function useTodos(id: string) {
 	useTool(
 		defineTool({
 			name: 'update_todos',
 			description:
-				'Write your todo list for the work in hand: every item each time, in order, with its status. ' +
-				'It replaces the list you wrote before, so for a new piece of work write a new list. Keep one item in_progress at a time.',
-			input: v.object({
-				todos: v.pipe(
-					v.array(
-						v.object({
-							content: v.pipe(v.string(), v.minLength(1), v.description('The step, a few words in the imperative, such as "Add the migration"')),
-							status: v.picklist(['pending', 'in_progress', 'completed']),
-							evidence: v.optional(
-								v.pipe(v.string(), v.description('For a completed item: how you checked it, the command or check you ran and what it showed, in a short line')),
-							),
-						}),
-					),
-					v.maxLength(MAX_TODOS),
-				),
-			}),
-			run: async ({ data }) => ({ output: await writeTodos(id, data.todos) }),
+				'Your todo list for the work in hand. Write it whole with todos as you start, and again only to reword, reorder, add or drop items or for new work: it replaces the list before. ' +
+				'For status updates send only changes, the items that changed by number. Keep one item in_progress at a time.',
+			input: TODOS_INPUT,
+			run: async ({ data, toolCallId }) => ({ output: await updateTodos(id, data, toolCallId) }),
 		}),
 	);
 }
@@ -1293,7 +1284,7 @@ function useProposePlan(id: string) {
 
 const TODO_HINT =
 	'For work of three or more steps, write a todo list with update_todos as you start, in the same step as your first other tool call. The user follows it as your progress: once a step finishes, ' +
-	"mark it completed and the next one in_progress with update_todos alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
+	"mark it completed and the next one in_progress with update_todos (only the items that changed, by number) alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
 
 const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
 
