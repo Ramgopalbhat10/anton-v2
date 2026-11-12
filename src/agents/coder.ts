@@ -1477,7 +1477,6 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
-
 const CHAT_PROMPT = [
 	'You are Anton, a capable assistant. This chat is not tied to any repository: answer questions directly, and do jobs on the web when asked.',
 	'When a job needs code run, files made or anything installed, call start_workspace for a scratch sandbox: an empty folder with a shell, with no repository and no pull request.',

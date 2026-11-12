@@ -95,7 +95,7 @@ function oneAtATime<T>(sandbox: Sandbox, path: string, work: () => Promise<T>): 
 	return run;
 }
 
-/** Every file of one change, each path's lock taken in one order, so two calls that share files never wait on each other. */
+/** Every file of one change, each path's lock taken in turn in one order, so two calls that share files never each hold a lock the other waits for. */
 function allAtOnce<T>(sandbox: Sandbox, paths: string[], work: () => Promise<T>): Promise<T> {
 	const keys = [...new Set(paths.map((path) => resolved(sandbox, path)))].sort();
 	return keys.reduceRight<() => Promise<T>>((next, key) => () => oneAtATime(sandbox, key, next), work)();

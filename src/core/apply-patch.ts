@@ -151,10 +151,10 @@ export function parsePatch(text: string): FilePatch[] {
 /** Typographic punctuation a model may have written as plain ASCII, or the other way round, as Codex folds it. */
 function plainPunctuation(line: string): string {
 	return line
-		.replace(/[‐-―−]/g, '-')
-		.replace(/[‘’‚‛]/g, "'")
-		.replace(/[“-‟]/g, '"')
-		.replace(/[  -   　]/g, ' ');
+		.replace(/[\u2010-\u2015\u2212]/g, '-')
+		.replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+		.replace(/[\u201C-\u201F]/g, '"')
+		.replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, ' ');
 }
 
 /** How lines are compared, strictest first: exactly, then without trailing space, then without either end's, then with punctuation folded. */
