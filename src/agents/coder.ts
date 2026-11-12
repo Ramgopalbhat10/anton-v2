@@ -85,7 +85,7 @@ import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRu
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
 import { finishTrace, startTrace } from '../services/response-trace.ts';
 import { saveTrace } from '../db/traces.ts';
-import { compactionFor } from '../services/context-usage.ts';
+import { COMPACTION_SUMMARY_EFFORT, compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { liveMachine, machineFor, prewarmMachine } from '../services/workspace.ts';
 import { checkPreview } from '../services/preview-check.ts';
@@ -170,15 +170,16 @@ const tester = defineSubagent({
 
 /**
  * A subagent's own model — its project's choice when the task is a thread, else Settings › General's —
- * often a cheaper one; without one it uses the task's. One on a
+ * often a cheaper one; without one it uses the task's, and its compaction. One on a
  * Claude Code model compacts where Settings › General says Claude Code compacts (scripts/patch-flue.ts
- * reads its `compaction`), not near the end of a 1M window; others keep the runtime's default for their model.
+ * reads its `compaction`), not near the end of a 1M window; others keep the runtime's point for their model,
+ * and their own model writes their summary at the effort the task's own model writes one.
  */
 function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
 	const choice = helperModelFor(id, name);
 	if (!choice) return subagent;
-	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : undefined;
-	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, ...(compaction ? { compaction } : {}) } as typeof explorer;
+	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : { reasoning: COMPACTION_SUMMARY_EFFORT };
+	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, compaction } as typeof explorer;
 }
 
 /**

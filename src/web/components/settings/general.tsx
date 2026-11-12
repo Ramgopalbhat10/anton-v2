@@ -35,7 +35,7 @@ const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; inf
 		task: 'compaction',
 		title: 'Compaction summaries',
 		help: 'Summarizes older turns when a conversation compacts.',
-		info: "Off, each task's own model writes its summary. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
+		info: "Off, each task's own model writes its summary at low effort, so the task waits less for it. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
 	},
 ];
 
