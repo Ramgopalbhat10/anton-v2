@@ -1,9 +1,10 @@
 import { Type } from '@earendil-works/pi-ai';
-import { createBashTool, type Sandbox, type SandboxDriver, type SandboxToolFactory, sandboxFromDriver } from '@flue/runtime';
+import { type Sandbox, type SandboxDriver, type SandboxToolFactory, sandboxFromDriver } from '@flue/runtime';
 import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/repo-snapshot.ts';
 import type { ToolProfile } from '../core/tool-profile.ts';
 import type { GlobInput, GrepInput, ReadInput } from '../services/task-files.ts';
 import { changeTools, type ImageSight, imageResult, imageType, text, type Tool } from './sandbox-tools.ts';
+import { createShellTool } from './shell-tool.ts';
 
 /** What the runtime reads from a working folder for its system prompt: the repository's instructions and its skills. */
 const DISCOVERED = /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|\.agents\/skills)$/;
@@ -131,6 +132,6 @@ export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProf
 				return { content: [text(await files.glob({ ...input, path: at(input.path, input.repo) }))], details: { pattern: input.pattern } };
 			},
 		};
-		return [read, ...changeTools(sandbox, profile), createBashTool(sandbox), grep, glob];
+		return [read, ...changeTools(sandbox, profile), createShellTool(sandbox), grep, glob];
 	};
 }

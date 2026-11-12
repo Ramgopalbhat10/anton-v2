@@ -1,7 +1,8 @@
 import { Type } from '@earendil-works/pi-ai';
-import { createBashTool, createGlobTool, createGrepTool, createReadTool, createWriteTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
+import { createGlobTool, createGrepTool, createReadTool, createWriteTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
 import { changeLine, PatchError, parsePatch, type PatchState, planPatch } from '../core/apply-patch.ts';
 import type { ToolProfile } from '../core/tool-profile.ts';
+import { createShellTool } from './shell-tool.ts';
 
 export type Tool = ReturnType<SandboxToolFactory>[number];
 
@@ -240,8 +241,9 @@ export function queuedWriteTool(sandbox: Sandbox): Tool {
 }
 
 /**
- * Flue's standard file and shell tools, with a `read` that shows an image, and the tools that change files for the
- * model's family (`changeTools`): an `edit` that takes several changes, or `apply_patch`.
+ * Flue's standard file tools, with a `read` that shows an image, the tools that change files for the
+ * model's family (`changeTools`): an `edit` that takes several changes, or `apply_patch`, and Anton's `bash`
+ * (`shell-tool.ts`), which keeps a long output's start and end.
  * The standard read reads every file as text, so the agent could never look at
  * a picture in its sandbox: a reference image from the project's files, an
  * attachment, or a screenshot it took. An image comes back as a picture for a
@@ -260,6 +262,6 @@ export function sandboxTools(sight: ImageSight, profile: ToolProfile = 'edit'): 
 				return imageResult(input.path, await sandbox.readFileBuffer(input.path), mimeType, sight);
 			},
 		};
-		return [readImage, ...changeTools(sandbox, profile), createBashTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
+		return [readImage, ...changeTools(sandbox, profile), createShellTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
 	};
 }

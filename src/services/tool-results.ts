@@ -5,15 +5,15 @@ import * as v from 'valibot';
  * Long tool results, cut before they join an agent's conversation. Every model
  * call sends the whole conversation again, tool results included, and a result
  * stays in it until the conversation is compacted: one 300KB web page read early
- * in a thread is sent with every call after it. The runtime's own read and bash
- * stop at 50KB; a web fetch, a connector, a script or a subagent's answer had no
- * limit. So a result past 50KB keeps its first 50KB and a note, and the agent
+ * in a thread is sent with every call after it. The runtime's own read stops at
+ * 50KB and Anton's bash keeps a long output's start and end (src/flue/shell-tool.ts);
+ * a web fetch, a connector, a script or a subagent's answer had no limit. So a result past 50KB keeps its first 50KB and a note, and the agent
  * reads on with `read_full_result` when it needs more. A subagent has no
  * `read_full_result`, so its long results keep their start and end, and its
  * answer is cut again where it reaches the agent.
  */
 
-/** The runtime's limit for read and bash, kept for every other tool. */
+/** The runtime's limit for read, kept for every other tool. */
 export const MAX_RESULT_BYTES = 51_200;
 /**
  * Lower limits for tools whose results run long and are mostly skimmed: a web search answers with
@@ -25,7 +25,7 @@ export const limitFor = (toolName: string): number => LIMITS[toolName] ?? MAX_RE
 export const MORE_TOOL = 'read_full_result';
 /** A subagent's results, cut harder: its conversation is short-lived and it reports a summary anyway. */
 const SUBAGENT_LIMIT = 24_576;
-/** The runtime's tools that cut their own output, with notes of their own on reading the rest. */
+/** The tools that cut their own output, with notes of their own on reading the rest: bash keeps the start and end of one past 16KB, with the whole in a file. */
 const CUT_BY_RUNTIME = new Set(['read', 'bash', 'grep', 'glob']);
 /** The long results each conversation keeps for `read_full_result`, the oldest dropped first. */
 const KEEP = 20;

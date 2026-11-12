@@ -27,7 +27,7 @@ import { liveMachine, machineFor } from './workspace.ts';
 
 /** A job's time limit when the agent names none. */
 export const DEFAULT_TIMEOUT_MS = 30 * 60_000;
-/** The longest one `check_job` waits, well under the 10 minutes a command may run (`COMMAND_TIMEOUT_MS`). */
+/** The longest one `check_job` waits. The agent asks for the wait, as it names a command's timeout, so it may pass the 3 minutes a command gets without one (`COMMAND_TIMEOUT_MS`). */
 export const MAX_WAIT_S = 300;
 /** Where the logs and exit codes are, in the machine. */
 export const JOBS_DIR = '/tmp/anton-jobs';
