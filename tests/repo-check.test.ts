@@ -223,7 +223,7 @@ const alive = (pid: number) => {
 test('a check that runs past its time is stopped with every process it started, and told once as a timeout, not a failure', async () => {
 	repo('slow');
 	const pids = path.join(dir, 'slow.pids');
-	commands.set('s1', { command: `echo $$ > ${pids}; sleep 30 & echo $! >> ${pids}; wait` });
+	commands.set('s1', { command: `echo $$ > ${pids}; sleep 47 & echo $! >> ${pids}; wait` });
 	const restore = setRepoCheckDeps({ ...deps, timeoutMs: 1_000 });
 	try {
 		watchRepoCheck('s1', true);
@@ -301,7 +301,7 @@ test('stopping the reply stops a running check, which is not told, and the next 
 	repo('stop');
 	const marker = path.join(dir, 'stop.started');
 	const pids = path.join(dir, 'stop.pids');
-	commands.set('x1', { command: `sleep 30 & echo $! > ${pids}; : > ${marker}; wait` });
+	commands.set('x1', { command: `sleep 47 & echo $! > ${pids}; : > ${marker}; wait` });
 	watchRepoCheck('x1', true);
 	write('file.txt', 'changed\n');
 	tool('x1', 'edit');
