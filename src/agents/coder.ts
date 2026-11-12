@@ -30,6 +30,7 @@ import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.
 import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
+import { devinProvider } from '../flue/devin-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
@@ -127,6 +128,7 @@ setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('op
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 // Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
 setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
+setProvider(withPruning(devinProvider(loadedModels, () => planKey('devin'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */

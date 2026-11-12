@@ -25,6 +25,7 @@ import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { composioApps } from './composio/index.ts';
 import { composioKeySlot } from './composio/key.ts';
 import { cursorPlan } from './cursor/plan.ts';
+import { devinPlan } from './devin/plan.ts';
 import { diskStore } from './disk/store.ts';
 import { githubHost } from './github/host.ts';
 import { gmailMailbox } from './google/gmail.ts';
@@ -142,7 +143,7 @@ function production(): Providers {
 		},
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
-		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') })],
+		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') }), devinPlan()],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 		get vision() {
 			return openRouterKey() ? vision : null;

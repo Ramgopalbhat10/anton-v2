@@ -6,6 +6,7 @@ import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.
 import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
+import { devinProvider } from '../flue/devin-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { helperModelFor } from '../services/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
@@ -24,6 +25,7 @@ setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('ver
 setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
+setProvider(withPruning(devinProvider(loadedModels, () => planKey('devin'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 
 const PROMPT = [
