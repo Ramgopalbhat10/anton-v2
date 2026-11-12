@@ -18,6 +18,7 @@ function toProject(row: Row): Project {
 		warmedAt: optional(row.warmed_at),
 		env: parsed<Record<string, string>>(row.env_json, {}),
 		setupScript: String(row.setup_script ?? ''),
+		checkCommand: String(row.check_command ?? ''),
 		previewPorts: parsed<number[]>(row.preview_ports, DEFAULT_PREVIEW_PORTS),
 		baseImage: optional(row.base_image),
 		fullVm: Number(row.full_vm ?? 0) === 1,
@@ -91,7 +92,7 @@ export async function clearWarmImage(id: string): Promise<void> {
 export async function setProjectSettings(id: string, settings: ProjectSettings): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `UPDATE projects SET env_json = ?, setup_script = ?, preview_ports = ?, follow_ups = ?, full_vm = ?,
+		sql: `UPDATE projects SET env_json = ?, setup_script = ?, check_command = ?, preview_ports = ?, follow_ups = ?, full_vm = ?,
 			review_others_at = CASE WHEN ? THEN COALESCE(review_others_at, ?) END,
 			snapshot_image_id = CASE WHEN base_image IS ? THEN snapshot_image_id END,
 			warmed_at = CASE WHEN base_image IS ? THEN warmed_at END,
@@ -99,6 +100,7 @@ export async function setProjectSettings(id: string, settings: ProjectSettings):
 		args: [
 			JSON.stringify(settings.env),
 			settings.setupScript,
+			settings.checkCommand,
 			JSON.stringify(settings.previewPorts),
 			settings.followUps ? 1 : 0,
 			settings.fullVm ? 1 : 0,

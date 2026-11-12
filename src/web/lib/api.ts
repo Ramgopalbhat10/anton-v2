@@ -327,6 +327,8 @@ export type MailApproval = {
 export type ProjectSettings = {
 	envKeys: string[];
 	setupScript: string;
+	/** Run in the task's sandbox after the agent changes files; the agent hears of it only when it fails. Empty runs none. */
+	checkCommand: string;
 	previewPorts: number[];
 	baseImage: string | null;
 	/** Whether the agent hears about failed checks, merge conflicts and new comments on its pull requests. */

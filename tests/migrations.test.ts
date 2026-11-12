@@ -116,3 +116,14 @@ test("each task's pull request starts its list of pull requests, in the state la
 	]);
 	db.close();
 });
+
+test('repositories added before the check command have none, so nothing runs for them until one is set', async () => {
+	const db = createClient({ url: `file:${path.join(dir, 'check.db')}` });
+	const checked = migrations.findIndex((statements) => statements.some((sql) => sql.includes('ADD COLUMN check_command')));
+	await migrate(db, checked);
+	await db.execute(`INSERT INTO projects (id, user_id, repo_full_name, default_branch, workspace_path, updated_at, setup_script) VALUES ('p1', 'me', 'acme/demo', 'main', '', '2026-10-01', 'npm ci')`);
+	await migrate(db);
+	const rows = (await db.execute('SELECT id, setup_script, check_command FROM projects')).rows.map((row) => ({ ...row }));
+	assert.deepEqual(rows, [{ id: 'p1', setup_script: 'npm ci', check_command: '' }]);
+	db.close();
+});
