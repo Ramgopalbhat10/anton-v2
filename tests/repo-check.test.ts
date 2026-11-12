@@ -346,3 +346,12 @@ test('only a finished call of a tool that changes files counts, never one of the
 	forgetRepoCheck('e1');
 	assert.equal(hasRepoCheck('e1'), false);
 });
+
+test("the fingerprint's git commands take no optional locks, so they never hold the index against the agent's own git commands", () => {
+	const script = check.checkScript('npm run check:types', { dir: '/tmp/anton-check', name: 'task', cwd: '/workspace/repo', seconds: 180, base: 'abc123' });
+	const tree = script.split('\n').find((line) => line.startsWith('__anton_tree()'))!;
+	assert.match(tree, /\{ \{ export GIT_OPTIONAL_LOCKS=0; git rev-parse HEAD; git status /);
+	// Set inside the pipeline's own subshell, so the check command itself runs with git as the repository has it.
+	assert.doesNotMatch(script.replace(tree, ''), /export GIT_OPTIONAL_LOCKS/);
+	assert.match(script, /GIT_OPTIONAL_LOCKS=0 git status --porcelain 2>\/dev\/null/);
+});

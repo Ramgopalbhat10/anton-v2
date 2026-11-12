@@ -233,10 +233,11 @@ export function checkScript(command: string, options: { dir: string; name: strin
 		`f=${quote(`${dir}/${name}`)}; mkdir -p ${quote(dir)} || exit 1`,
 		`cd ${quote(cwd)} || exit 1`,
 		'h=sha1sum; command -v sha1sum >/dev/null || h=cksum',
-		"__anton_tree() { { git rev-parse HEAD; git status --porcelain=v1 -uall; git diff HEAD --binary; git ls-files -o --exclude-standard -z | xargs -0 -r stat -c '%n %s %Y' --; } 2>&1 | $h; }",
+		// Without optional locks: the check runs beside the agent's own commands, and a `git status` that took the index's lock to refresh it would make a `git add` or `git commit` of the agent's fail on it.
+		"__anton_tree() { { export GIT_OPTIONAL_LOCKS=0; git rev-parse HEAD; git status --porcelain=v1 -uall; git diff HEAD --binary; git ls-files -o --exclude-standard -z | xargs -0 -r stat -c '%n %s %Y' --; } 2>&1 | $h; }",
 		'fp=$(__anton_tree)',
 		...(mixed ? ['rm -f "$f.after"'] : []),
-		...(base ? [`if [ ! -e "$f.fp" ] && [ "$(git rev-parse HEAD 2>/dev/null)" = ${quote(base)} ] && [ -z "$(git status --porcelain 2>/dev/null)" ]; then printf '%s\\n' "$fp" > "$f.fp"; fi`] : []),
+		...(base ? [`if [ ! -e "$f.fp" ] && [ "$(git rev-parse HEAD 2>/dev/null)" = ${quote(base)} ] && [ -z "$(GIT_OPTIONAL_LOCKS=0 git status --porcelain 2>/dev/null)" ]; then printf '%s\\n' "$fp" > "$f.fp"; fi`] : []),
 		'if [ "$(cat "$f.fp" 2>/dev/null)" = "$fp" ] || [ "$(cat "$f.after" 2>/dev/null)" = "$fp" ]; then echo unchanged=1; exit 0; fi',
 		`printf '%s\\n' "$fp" > "$f.fp"; rm -f "$f.after" "$f.stopped"`,
 		'z=; command -v setsid >/dev/null && z=setsid',
