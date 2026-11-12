@@ -19,6 +19,7 @@ else if(request.mode==='bad'){console.log('not JSON');}
 else if(request.mode==='crash'){process.exitCode=2;}
 else if(request.mode==='secret'){send({type:'failure',message:'rejected '+request.key});}
 else if(request.mode==='environment'){send({type:'environment',message:process.env.ANTON_DEVIN_TEST_SECRET??'absent'});send({type:'complete'});}
+else if(request.mode==='events'){for(const event of request.events)send({type:'event',event});send({type:'complete'});}
 else{send({type:'models',models:request.mode==='empty'?[]:[{id:'swe-2',name:'SWE-2'}]});send({type:'complete'});}
 `);
 const options = { executable: process.execPath, script, timeoutMs: 5000 };
@@ -64,6 +65,33 @@ test('Devin worker fails safely on missing binary, malformed output, exit, timeo
 	controller.abort();
 	await assert.rejects(task, { name: 'AbortError' });
 	await assert.rejects(runDevinWorker({ action: 'models', key: 'test' }, () => {}, controller.signal, options), { name: 'AbortError' });
+});
+
+const jwtFixture = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.signature';
+
+test('Devin IPC preserves JWT fixtures in streamed text and executable tool arguments', async () => {
+	const content = `export const token = '${jwtFixture}';\n`;
+	const toolCall = { type: 'toolCall', id: 'write-fixture', name: 'write', arguments: { path: 'fixture.ts', content } };
+	const partial = { role: 'assistant', content: [{ type: 'text', text: content }, toolCall] };
+	const events = [
+		{ type: 'text_delta', contentIndex: 0, delta: content, partial },
+		{ type: 'toolcall_delta', contentIndex: 1, delta: JSON.stringify(toolCall.arguments), partial },
+		{ type: 'toolcall_end', contentIndex: 1, toolCall, partial },
+		{ type: 'done', reason: 'toolUse', message: partial },
+	];
+	const received: unknown[] = [];
+	await runDevinWorker({ action: 'stream', key: 'not-a-real-key', mode: 'events', events }, (m) => received.push(m.event), undefined, options);
+	assert.deepEqual(received, events, 'JSONL must not rewrite ordinary data, including serialized argument deltas');
+});
+
+test('Devin IPC still sanitizes error diagnostics without rewriting their content blocks', async () => {
+	const key = 'quote"slash\\key';
+	const diagnostic = `rejected ${key} with token ${jwtFixture}`;
+	const event = { type: 'error', reason: 'error', error: { errorMessage: diagnostic, errorClassificationMessage: diagnostic, content: [{ type: 'text', text: jwtFixture }] } };
+	const received: unknown[] = [];
+	await runDevinWorker({ action: 'stream', key, mode: 'events', events: [event] }, (m) => received.push(m.event), undefined, options);
+	assert.deepEqual(received, [{ ...event, error: { ...event.error, errorMessage: 'rejected [redacted] with token [redacted token]', errorClassificationMessage: 'rejected [redacted] with token [redacted token]' } }]);
+	await assert.rejects(runDevinWorker({ action: 'models', key, mode: 'secret' }, () => {}, undefined, options), (error: Error) => error.message === 'rejected [redacted]');
 });
 
 test('Devin adapter streams pi events, preserves tool history, and never discovers models on a call', async () => {

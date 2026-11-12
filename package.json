@@ -14,6 +14,7 @@
 		"start:backup": "scripts/start-with-backup.sh",
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
 		"setup:devin": "npm --prefix workers/devin ci --no-audit --no-fund",
+		"test:devin-worker": "npm --prefix workers/devin test",
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",

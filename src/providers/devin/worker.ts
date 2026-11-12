@@ -60,7 +60,21 @@ export function runDevinWorker(request: WorkerRequest, receive: (message: Worker
 		lines.on('line', (line) => {
 			if (settled) return;
 			try {
-				const message = JSON.parse(safe(line)) as WorkerMessage;
+				const message = JSON.parse(line) as WorkerMessage;
+				// Only diagnostics are redactable. Text, deltas and executable tool
+				// arguments may legitimately contain JWT fixtures and must be lossless.
+				if (typeof message.message === 'string' && message.type === 'failure') message.message = safe(message.message);
+				if (message.type === 'event' && message.event && typeof message.event === 'object') {
+					const event = message.event as Record<string, unknown>;
+					for (const field of ['partial', 'message', 'error']) {
+						const output = event[field];
+						if (!output || typeof output !== 'object') continue;
+						const diagnostic = output as Record<string, unknown>;
+						for (const name of ['errorMessage', 'errorClassificationMessage']) {
+							if (typeof diagnostic[name] === 'string') diagnostic[name] = safe(diagnostic[name]);
+						}
+					}
+				}
 				if (message.type === 'failure') finish(new Error(message.message ?? 'Devin worker failed.'));
 				else if (message.type === 'complete') complete = true;
 				else receive(message);
