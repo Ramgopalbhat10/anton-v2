@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, MAX_REVIEWS, noteRequest, reopenFinishReview, reviewPatch, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
+const { findingsOf, finishReview, MAX_REVIEWS, noteRequest, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -246,4 +246,84 @@ test('the reviewer reads binary files as one line and a long diff cut, and NONE 
 	assert.match(reviewPatch('+'.repeat(70_000)), /The diff goes on for 10,000 more characters/);
 	for (const none of ['NONE', 'None.', '**NONE**', 'none\n', '- sortBy: OK, the change does it.']) assert.equal(findingsOf(none), null, none);
 	assert.equal(findingsOf('MISSING: the --reverse flag.\n**MISSING:** a default of 10.\n- MISSING: the error message'), '- the --reverse flag.\n- a default of 10.\n- the error message');
+});
+
+/** A file's diff of `hunks` hunks of `lines` added lines each. */
+const fileDiff = (file: string, hunks: number, lines: number, mark = '') =>
+	`diff --git a/${file} b/${file}\nindex 1111111..2222222 100644\n--- a/${file}\n+++ b/${file}\n` +
+	Array.from({ length: hunks }, (_, hunk) => `@@ -${hunk * 100 + 1},2 +${hunk * 100 + 1},${lines + 2} @@ hunk ${hunk + 1}${mark}\n context\n${Array.from({ length: lines }, (_, line) => `+${file} line ${line} of hunk ${hunk + 1}${mark}\n`).join('')}-old line\n`).join('');
+
+test('a diff within the limit reaches the reviewer exactly as it is', () => {
+	const files = Array.from({ length: 12 }, (_, index) => fileDiff(`src/f${index}.ts`, 3, 40)).join('');
+	const patch = files;
+	assert.ok(patch.length > 40_000 && patch.length <= 60_000, `${patch.length}`);
+	assert.ok(reviewPatch(patch) === patch);
+	assert.ok(reviewPatch(patch, () => false) === patch, 'which files the reply changed makes no difference within the limit');
+	const prompt = reviewPrompt('Fix it.', reviewPatch(patch));
+	assert.ok(prompt.includes(`<diff>\n${patch}\n</diff>`));
+});
+
+test('past the limit, every file is named, the reply’s own files are read first and lock files last, and nothing named is unseen', () => {
+	const files = [
+		fileDiff('package-lock.json', 1, 1_500),
+		fileDiff('src/big.ts', 12, 120),
+		...Array.from({ length: 30 }, (_, index) => fileDiff(`src/old${index}.ts`, 2, 30)),
+		fileDiff('assets/logo.png', 0, 0).replace(/index[^\n]*\n--- [^\n]*\n\+\+\+ [^\n]*\n/, 'GIT binary patch\nliteral 5\nabcde\n\n'),
+		fileDiff('src/late.ts', 2, 10),
+	];
+	const patch = files.join('');
+	assert.ok(patch.length > 150_000);
+	const mine = new Set(['src/late.ts', 'package-lock.json', 'src/big.ts']);
+	const view = reviewPatch(patch, (file) => mine.has(file));
+	assert.ok(view.length <= 61_000, `${view.length}`);
+	assert.match(view, /^\[This diff runs to [\d,]+ characters, more than is read whole\./);
+	const list = view.slice(0, view.indexOf('\ndiff --git '));
+	for (const name of ['package-lock.json', 'src/big.ts', 'src/old0.ts', 'src/old29.ts', 'assets/logo.png', 'src/late.ts']) assert.ok(list.includes(`\n${name} `), name);
+	assert.match(list, /\nsrc\/late\.ts \+20 -2\n/);
+	assert.match(list, /\nassets\/logo\.png binary\n/);
+	// The reply's own files come first, a person's before the lock file; the rest after.
+	const at = (name: string) => view.indexOf(`diff --git a/${name} `);
+	assert.ok(at('src/big.ts') < at('src/late.ts') && at('src/late.ts') < at('package-lock.json'), 'the reply’s own files, in the diff’s order, with the lock file last');
+	assert.ok(at('src/late.ts') > 0 && at('src/late.ts') < at('src/old0.ts'));
+	assert.ok(view.includes('+src/late.ts line 9 of hunk 2\n'), 'a small file of the reply’s is read whole');
+	// A long file keeps its first hunks and its last, and says what was left out.
+	const big = view.slice(at('src/big.ts'), at('src/late.ts'));
+	assert.match(big, /@@ -1,2 \+1,122 @@ hunk 1\n/);
+	assert.match(big, /@@ -1101,2 \+1101,122 @@ hunk 12\n/);
+	assert.match(big, /\n\[[\d,]+ lines of this file's diff left out\]\n/);
+	assert.doesNotMatch(big, /hunk 6\n/);
+	// What did not fit is named at the end.
+	const closing = view.slice(view.lastIndexOf('\n') + 1);
+	assert.match(closing, /^\[Diffs left out for room, of files listed above: .*src\/old29\.ts.*\.\]$/);
+	for (const name of ['src/big.ts', 'src/late.ts']) assert.ok(!closing.includes(name), name);
+});
+
+test('a new file too long for its share is read from its start and its end', () => {
+	const patch = fileDiff('src/new.ts', 1, 3_000) + fileDiff('src/other.ts', 1, 3_000);
+	const view = reviewPatch(patch);
+	assert.ok(view.length <= 61_000, `${view.length}`);
+	assert.ok(view.includes('+src/new.ts line 0 of hunk 1\n'));
+	assert.ok(view.includes('+src/new.ts line 2999 of hunk 1\n-old line\n'));
+	assert.ok(view.includes('+src/other.ts line 0 of hunk 1\n'));
+	assert.match(view, /lines of this file's diff left out/);
+});
+
+test('on a later reply of a large branch, the files that reply changed are the ones read first', async () => {
+	asked = [];
+	answer = 'NONE';
+	const old = Array.from({ length: 40 }, (_, index) => fileDiff(`src/old${index}.ts`, 2, 40)).join('');
+	noteRequest('l', 'Add the export command.');
+	startFinishReview('l');
+	assert.equal(await finishReview('l', edit, undefined, deps(old + fileDiff('src/z-export.ts', 1, 5))), null);
+	// On the next reply the agent changes only the file at the end of the branch's diff.
+	noteRequest('l', 'Make the export command take --format.');
+	startFinishReview('l');
+	assert.equal(await finishReview('l', edit, undefined, deps(old + fileDiff('src/z-export.ts', 1, 6, ' format'))), null);
+	assert.equal(asked.length, 2);
+	const first = asked[0].prompt;
+	const second = asked[1].prompt;
+	assert.ok(first.indexOf('diff --git a/src/z-export.ts ') > first.indexOf('diff --git a/src/old0.ts '), 'on its first reply the task’s files are read in the diff’s order');
+	const at = second.indexOf('diff --git a/src/z-export.ts ');
+	assert.ok(at > 0 && at < second.indexOf('diff --git a/src/old0.ts '));
+	assert.ok(second.includes('+src/z-export.ts line 5 of hunk 1 format\n'));
 });

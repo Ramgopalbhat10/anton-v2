@@ -45,7 +45,7 @@ import { liveMachine } from './workspace.ts';
 
 /** A request is kept up to this long; a task's whole brief fits. */
 const MAX_REQUEST = 30_000;
-/** The diff the reviewer reads; past this its start is read, with a note. */
+/** The diff the reviewer reads whole; past this, every file by name and the diffs that fit (`largePatch`). */
 const MAX_PATCH = 60_000;
 /**
  * Room for the list. The reviewer answers without reasoning: at low effort DeepSeek still spent 6,000 tokens thinking
@@ -141,10 +141,144 @@ function fileHashes(patch: string): Record<string, string> {
 	return files;
 }
 
-/** The diff as the reviewer reads it: binary files as one line each, and cut past `MAX_PATCH`. */
-export function reviewPatch(patch: string, _changed?: (path: string) => boolean): string {
+/** Files a person does not write: lock files, and generated, minified, snapshot and vendored ones. Their diffs are read last. */
+const MADE = [
+	/(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|go\.sum)$/,
+	/\.lock$/,
+	/\.min\.[^/]+$/,
+	/\.snap$/,
+	/(?:^|\/)(?:dist|vendor|node_modules|__snapshots__)\//,
+];
+/** The list of files is given up to this share of the room; past it, how many more there are. */
+const LIST_SHARE = 0.25;
+/** A file's diff is given up to this share of what is left for diffs, so one large file does not crowd out the rest. */
+const FILE_SHARE = 0.25;
+/** A file's diff is not cut shorter than this to fit; it is left out and named instead. */
+const MIN_PART = 1_500;
+/** Room kept for the line naming the files whose diffs were left out. */
+const CLOSING = 1_000;
+
+const lineCount = (text: string) => text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+
+/** A file's diff cut to about `size`: its header, its first hunks and its last, and a line saying how much was left out. */
+function cutFile(text: string, size: number): string {
+	const lines = text.replace(/\n$/, '').split('\n');
+	const first = lines.findIndex((line) => line.startsWith('@@'));
+	const header = first < 0 ? lines.slice(0, 1) : lines.slice(0, first);
+	const body = lines.slice(header.length);
+	// Whole hunks where they fit, else lines: the first two thirds of the room from the start, the rest from the end.
+	const hunks: string[][] = [];
+	for (const line of body) {
+		if (line.startsWith('@@') || !hunks.length) hunks.push([]);
+		hunks[hunks.length - 1].push(line);
+	}
+	const sizeOf = (part: string[]) => part.reduce((sum, line) => sum + line.length + 1, 0);
+	let room = size - sizeOf(header);
+	const keep = (units: string[][]) => {
+		const head: string[][] = [];
+		const tail: string[][] = [];
+		let left = room;
+		let start = 0;
+		for (; start < units.length && sizeOf(units[start]) <= left - room / 3; start++) {
+			head.push(units[start]);
+			left -= sizeOf(units[start]);
+		}
+		for (let end = units.length - 1; end >= start && sizeOf(units[end]) <= left; end--) {
+			tail.unshift(units[end]);
+			left -= sizeOf(units[end]);
+		}
+		return { head: head.flat(), tail: tail.flat() };
+	};
+	let kept = keep(hunks);
+	// A first hunk too long to keep whole (a new file is one hunk) is cut by lines, so the diff's start is always read.
+	if (!kept.head.length) {
+		room = Math.max(room, 0);
+		kept = keep(body.map((line) => [line]));
+	}
+	const left = body.length - kept.head.length - kept.tail.length;
+	return [...header, ...kept.head, `[${left.toLocaleString('en-US')} lines of this file's diff left out]`, ...kept.tail].join('\n') + '\n';
+}
+
+/**
+ * A diff past `MAX_PATCH`, read in the same room: every file it changes by name with its lines added and removed,
+ * then each file's diff, the files `changed` names (the reply in hand's) first and, in each group, files a person
+ * writes before lock files and generated ones; a long diff cut to its first hunks and its last, and the files whose
+ * diffs did not fit named at the end. Cut from the start alone, a large change hid its last files whole, and on a
+ * later reply of a task whose branch was already large, often the very files that reply changed.
+ */
+function largePatch(text: string, files: Array<{ path: string; text: string }>, changed: (path: string) => boolean): string {
+	const order = files
+		.map((file, index) => ({ ...file, index, mine: changed(file.path), made: MADE.some((pattern) => pattern.test(file.path)) }))
+		.sort((a, b) => Number(!a.mine) - Number(!b.mine) || Number(a.made) - Number(b.made) || a.index - b.index);
+	const counts = (file: { text: string }) => {
+		if (/^\[binary file\]$/m.test(file.text)) return 'binary';
+		const body = file.text.split('\n').slice(1);
+		const start = body.findIndex((line) => line.startsWith('@@'));
+		const hunks = start < 0 ? [] : body.slice(start);
+		return `+${hunks.filter((line) => line.startsWith('+')).length} -${hunks.filter((line) => line.startsWith('-')).length}`;
+	};
+	const intro = `[This diff runs to ${text.length.toLocaleString('en-US')} characters, more than is read whole. Every file it changes is listed first, with its lines added and removed; then each file's diff, long ones cut.]`;
+	const listed: string[] = [];
+	let listSize = 0;
+	for (const file of order) {
+		const line = `${file.path} ${counts(file)}`;
+		if (listSize + line.length + 1 > MAX_PATCH * LIST_SHARE) {
+			listed.push(`[and ${(order.length - listed.length).toLocaleString('en-US')} more files]`);
+			break;
+		}
+		listed.push(line);
+		listSize += line.length + 1;
+	}
+	const head = [intro, 'Files changed:', ...listed, ''].join('\n');
+	const room = MAX_PATCH - head.length - CLOSING;
+	const cap = Math.max(MIN_PART, Math.floor(room * FILE_SHARE));
+	// Each file gets its share first, in order; what is left then goes to the files that were cut, in the same order.
+	const given = new Map<number, number>();
+	let left = room;
+	for (const file of order) {
+		const want = Math.min(file.text.length, cap);
+		if (want <= left) given.set(file.index, want);
+		else if (left >= MIN_PART) given.set(file.index, left);
+		else continue;
+		left -= given.get(file.index)!;
+	}
+	for (const file of order) {
+		const share = given.get(file.index);
+		if (share === undefined || share >= file.text.length || left <= 0) continue;
+		const more = Math.min(file.text.length - share, left);
+		given.set(file.index, share + more);
+		left -= more;
+	}
+	const diffs = order.flatMap((file) => {
+		const share = given.get(file.index);
+		if (share === undefined) return [];
+		return [share >= file.text.length ? file.text : cutFile(file.text, share)];
+	});
+	const out = order.filter((file) => !given.has(file.index)).map((file) => file.path);
+	let closing = '';
+	if (out.length) {
+		const names: string[] = [];
+		for (const name of out) {
+			if (names.join(', ').length + name.length > CLOSING - 200) break;
+			names.push(name);
+		}
+		const rest = out.length - names.length;
+		closing = `[Diffs left out for room, of files listed above: ${names.join(', ')}${rest ? ` and ${rest.toLocaleString('en-US')} more` : ''}.]`;
+	}
+	return `${head}\n${diffs.map((diff) => (diff.endsWith('\n') ? diff : `${diff}\n`)).join('')}${closing}`.replace(/\n$/, '');
+}
+
+/**
+ * The diff as the reviewer reads it: binary files as one line each. Within `MAX_PATCH` it is the diff itself, as the
+ * benchmark results were measured on; past it, every file by name and the diffs that fit (`largePatch`), the reply in
+ * hand's files first, as `changed` says (every file when not given).
+ */
+export function reviewPatch(patch: string, changed: (path: string) => boolean = () => true): string {
 	const text = patch.replace(/GIT binary patch\n[\s\S]*?(?=\ndiff --git |$)/g, '[binary file]');
-	return text.length > MAX_PATCH ? `${text.slice(0, MAX_PATCH)}\n[The diff goes on for ${(text.length - MAX_PATCH).toLocaleString('en-US')} more characters.]` : text;
+	if (text.length <= MAX_PATCH) return text;
+	const files = patchFiles(text);
+	if (!files.length) return `${text.slice(0, MAX_PATCH)}\n[The diff goes on for ${(text.length - MAX_PATCH).toLocaleString('en-US')} more characters.]`;
+	return largePatch(text, files, changed);
 }
 
 export const reviewPrompt = (request: string, patch: string) =>
