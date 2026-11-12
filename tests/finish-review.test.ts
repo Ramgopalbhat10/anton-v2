@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, noteRequest, reviewPatch, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
+const { findingsOf, finishReview, MAX_REVIEWS, noteRequest, reopenFinishReview, reviewPatch, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -28,7 +28,7 @@ const DIFF = 'diff --git a/src/sort.ts b/src/sort.ts\n+export function sortBy(ke
 const deps = (patch: string | null) => ({ patch: async () => patch });
 const edit = [{ tool: 'bash' }, { tool: 'edit' }];
 
-test('a change is read against the request alone, and what it misses goes back to the agent once a reply', async () => {
+test('a change is read against the request alone, and what it misses goes back to the agent', async () => {
 	noteRequest('r', 'Add sortBy(keys) with a --reverse flag that sorts descending.');
 	answer = 'I compared the two.\nMISSING: the request asks for a --reverse flag; the change adds none.\nThe sortBy function is there.';
 	startFinishReview('r');
@@ -40,9 +40,88 @@ test('a change is read against the request alone, and what it misses goes back t
 	assert.match(asked[0].prompt, /<request>\nAdd sortBy\(keys\) with a --reverse flag/);
 	assert.match(asked[0].prompt, /export function sortBy/);
 	assert.equal(asked[0].reasoning, 'off');
-	// Once a reply.
-	assert.equal(await finishReview('r', edit, undefined, deps(`${DIFF}+more\n`)), null);
+	// The same change is not read again in the reply.
+	assert.equal(await finishReview('r', edit, undefined, deps(DIFF)), null);
 	assert.equal(asked.length, 1);
+	// What the agent changes after it is sent back is read once more; past that the reply ends without another review.
+	assert.match((await finishReview('r', edit, undefined, deps(`${DIFF}+more\n`))) ?? '', /--reverse flag/);
+	assert.equal(asked.length, MAX_REVIEWS);
+	assert.equal(await finishReview('r', edit, undefined, deps(`${DIFF}+more\n+again\n`)), null);
+	assert.equal(asked.length, MAX_REVIEWS);
+});
+
+test('a reply that changes code after a review sent it back, then a reply that changes nothing: the second is not reviewed', async () => {
+	asked = [];
+	noteRequest('s', 'Add sortBy(keys) with a --reverse flag.');
+	answer = 'MISSING: the --reverse flag.';
+	startFinishReview('s');
+	assert.ok(await finishReview('s', edit, undefined, deps(DIFF)));
+	// The agent fixes it; the review reads the new change and finds nothing.
+	answer = 'NONE';
+	const fixed = `${DIFF}+export const reverse = true;\n`;
+	assert.equal(await finishReview('s', edit, undefined, deps(fixed)), null);
+	assert.equal(asked.length, 2);
+	// A question answered on the next reply leaves the change as the last reply left it.
+	noteRequest('s', 'Does sortBy keep equal keys in order?');
+	startFinishReview('s');
+	assert.equal(await finishReview('s', [{ tool: 'bash' }], undefined, deps(fixed)), null);
+	assert.equal(asked.length, 2);
+});
+
+test('a reply that reached its bound still leaves its change as seen, so the next reply that changes nothing is not reviewed', async () => {
+	asked = [];
+	noteRequest('u', 'Add sortBy(keys) with a --reverse flag.');
+	answer = 'MISSING: the --reverse flag.';
+	startFinishReview('u');
+	let diff = DIFF;
+	for (let review = 1; review <= MAX_REVIEWS; review += 1) {
+		assert.ok(await finishReview('u', edit, undefined, deps(diff)));
+		diff += `+change ${review}\n`;
+	}
+	// The bound is reached: the last change is read, not reviewed.
+	assert.equal(await finishReview('u', edit, undefined, deps(diff)), null);
+	assert.equal(asked.length, MAX_REVIEWS);
+	noteRequest('u', 'What does sortBy return for an empty list?');
+	startFinishReview('u');
+	assert.equal(await finishReview('u', [{ tool: 'bash' }], undefined, deps(diff)), null);
+	assert.equal(asked.length, MAX_REVIEWS);
+});
+
+test('a reply with no diff spends no review, and the completion gate lets one more change be read past the bound', async () => {
+	asked = [];
+	noteRequest('v', 'Add sortBy(keys).');
+	answer = 'MISSING: the keys argument.';
+	startFinishReview('v');
+	assert.equal(await finishReview('v', edit, undefined, deps('')), null);
+	assert.equal(await finishReview('v', edit, undefined, deps(null)), null);
+	assert.equal(asked.length, 0);
+	let diff = DIFF;
+	for (let review = 1; review <= MAX_REVIEWS; review += 1) {
+		assert.ok(await finishReview('v', edit, undefined, deps(diff)));
+		diff += `+change ${review}\n`;
+	}
+	assert.equal(await finishReview('v', edit, undefined, deps(diff)), null);
+	// Sent back by the completion gate: the change it then makes is read, once.
+	reopenFinishReview('v');
+	diff += '+after the gate\n';
+	assert.ok(await finishReview('v', edit, undefined, deps(diff)));
+	diff += '+more\n';
+	assert.equal(await finishReview('v', edit, undefined, deps(diff)), null);
+	assert.equal(asked.length, MAX_REVIEWS + 1);
+});
+
+test('the same request and change are never reviewed twice, across replies', async () => {
+	asked = [];
+	answer = 'NONE';
+	noteRequest('w', 'Add sortBy(keys).');
+	startFinishReview('w');
+	assert.equal(await finishReview('w', edit, undefined, deps(DIFF)), null);
+	startFinishReview('w');
+	assert.equal(await finishReview('w', edit, undefined, deps(`${DIFF}+b\n`)), null);
+	// The agent puts the change back as it was: reviewed once already for this request.
+	startFinishReview('w');
+	assert.equal(await finishReview('w', edit, undefined, deps(DIFF)), null);
+	assert.equal(asked.length, 2);
 });
 
 test('nothing goes back when the reviewer finds nothing, the diff is empty or unchanged, or the reply waits on the user', async () => {

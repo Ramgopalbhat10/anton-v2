@@ -3,7 +3,7 @@ import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { changesView } from './files.ts';
-import { changeGate, gate, loadGate } from './gate-state.ts';
+import { changeGate, type GateState, gate, loadGate } from './gate-state.ts';
 import { otherRepoChanges } from './git.ts';
 import { logProblem } from './log.ts';
 import { modelFor } from './sessions.ts';
@@ -63,6 +63,15 @@ const MAX_SELF_REQUEST = 12_000;
 const WORKED = 5;
 /** The tools that work in the sandbox. */
 const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', ...FILE_CHANGE_TOOLS]);
+/**
+ * Reviews a reply may have, each on a change it has not had reviewed: the first, and one more on what the agent
+ * changes after it is sent back. A review is a model call of up to two minutes the user waits through.
+ */
+export const MAX_REVIEWS = 2;
+/** The request-and-change pairs a task remembers having had reviewed, so none is reviewed twice. */
+const KEEP_REVIEWED = 20;
+/** The files whose diffs a task keeps a hash of, to tell what the reply in hand changed; one past these counts as changed. */
+const KEEP_FILES = 500;
 
 /*
  * What the review knows of each task (its request, the change as last read and as the reply in hand found it, and
@@ -82,26 +91,58 @@ export function noteRequest(id: string, text: string): void {
 /** The request the reply in hand answers, whole, or undefined when the task has none. */
 export const requestFor = (id: string): string | undefined => gate(id).request;
 
-/** A new reply may be reviewed again. */
+/** A new reply may be reviewed again, from the change as the last reply left it. */
 export function startFinishReview(id: string): void {
 	changeGate(id, ({ review }) => {
 		review.reviews = 0;
+		review.extra = 0;
+		review.selfChecked = false;
+		review.workChecked = false;
 		review.start = review.seen;
+		review.startFiles = review.files;
 	});
 }
 
 /**
  * The reply in hand may be reviewed once more, on a change it has not reviewed: after it was sent back to finish
- * work it had left undone (`completion-gate.ts`), the change it then makes is read like any other.
+ * work it had left undone (`completion-gate.ts`), the change it then makes is read like any other, though the reply
+ * has had its `MAX_REVIEWS`, and the agent's own check (on a plan model, or of a chat's work) may be asked again.
  */
 export function reopenFinishReview(id: string): void {
 	changeGate(id, ({ review }) => {
-		review.reviews = 0;
+		review.extra = Math.max(review.extra, review.reviews + 1 - MAX_REVIEWS);
+		review.selfChecked = false;
+		review.workChecked = false;
 	});
 }
 
+const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+
+/** The path a file's section of a diff names: the new one of a rename, the old one of a deletion. */
+function pathOf(section: string): string {
+	const line = section.split('\n', 1)[0];
+	const at = Math.max(line.lastIndexOf(' b/'), line.lastIndexOf(' "b/'));
+	return at < 0 ? line : line.slice(at + (line[at + 1] === '"' ? 4 : 3)).replace(/"$/, '');
+}
+
+/** A diff's files, each its `diff --git` section, in the diff's order. */
+export function patchFiles(patch: string): Array<{ path: string; text: string }> {
+	const starts = [...patch.matchAll(/^diff --git /gm)].map((match) => match.index);
+	return starts.map((start, index) => {
+		const text = patch.slice(start, starts[index + 1] ?? patch.length);
+		return { path: pathOf(text), text };
+	});
+}
+
+/** Each file's diff by hash, for the first `KEEP_FILES` files. */
+function fileHashes(patch: string): Record<string, string> {
+	const files: Record<string, string> = {};
+	for (const file of patchFiles(patch).slice(0, KEEP_FILES)) files[file.path] = sha(file.text).slice(0, 16);
+	return files;
+}
+
 /** The diff as the reviewer reads it: binary files as one line each, and cut past `MAX_PATCH`. */
-export function reviewPatch(patch: string): string {
+export function reviewPatch(patch: string, _changed?: (path: string) => boolean): string {
 	const text = patch.replace(/GIT binary patch\n[\s\S]*?(?=\ndiff --git |$)/g, '[binary file]');
 	return text.length > MAX_PATCH ? `${text.slice(0, MAX_PATCH)}\n[The diff goes on for ${(text.length - MAX_PATCH).toLocaleString('en-US')} more characters.]` : text;
 }
@@ -192,44 +233,71 @@ export async function taskPatch(id: string): Promise<string | null> {
 
 /**
  * At the end of a reply that changed the code: what to tell the agent when a fresh read of the request and the diff
- * finds something the request asks that the change does not do; null otherwise. Once a reply (unless reopened), never
- * on a reply that ends asking the user or proposing a plan, nor on a diff already reviewed or one the reply left as it
- * was. The review counts on the task's spend.
- * On a model no reviewer here runs, the agent is sent back once with the request to make that check itself.
+ * finds something the request asks that the change does not do; null otherwise. A change is reviewed when it is one
+ * this task has not had reviewed for this request, up to `MAX_REVIEWS` a reply (more once the completion gate reopens
+ * it), so what the agent changes after a review sent it back is read too. Never on a reply that ends asking the user
+ * or proposing a plan, nor on a change the reply left as it found it. The change is read at every end that gets here,
+ * reviewed or not, so the next reply starts from it as this one really left it. A reply with no diff spends nothing.
+ * The review counts on the task's spend.
+ * On a model no reviewer here runs, the agent is sent back once a reply with the request to make that check itself.
  * So is a chat whose reply worked in its sandbox and left no diff, against what it made (`selfCheckWork`).
  */
 export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat }): Promise<string | null> {
-	await loadGate(id);
-	const { request, review } = gate(id);
-	if (!request || review.reviews > 0) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
+	await loadGate(id);
+	const { request, review } = gate(id);
+	if (!request) return null;
 	const writer = getProviders().text;
 	const { model } = modelFor(id);
 	const own = writer?.runs(model) ? writer : null;
-	changeGate(id, (state) => {
-		state.review.reviews = 1;
-	});
 	try {
 		const patch = await deps.patch(id);
 		// A machine that is not running says nothing of the change, so what was seen last stands.
-		const change = patch === null ? null : createHash('sha256').update(patch.trim()).digest('hex');
-		if (change)
+		const change = patch === null ? null : sha(patch.trim());
+		const files = patch === null ? {} : fileHashes(patch);
+		if (change !== null)
 			changeGate(id, (state) => {
 				state.review.seen = change;
+				state.review.files = files;
 			});
 		if (!patch?.trim()) {
+			if (review.workChecked) return null;
 			const worked = calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length >= WORKED;
-			return worked && (await deps.chat?.(id)) ? selfCheckWork(request) : null;
+			if (!worked || !(await deps.chat?.(id))) return null;
+			changeGate(id, (state) => {
+				state.review.workChecked = true;
+			});
+			return selfCheckWork(request);
 		}
 		if (review.start === change) return null;
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
 		if (review.reviewed.includes(digest)) return null;
-		changeGate(id, (state) => {
-			state.review.reviewed = [digest];
-		});
-		if (!own) return selfCheck(request);
-		const answer = await own.write({ model, prompt: reviewPrompt(request, reviewPatch(patch)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
+		const remember = (state: GateState) => {
+			state.review.reviewed = [...state.review.reviewed.filter((kept) => kept !== digest), digest].slice(-KEEP_REVIEWED);
+		};
+		if (!own) {
+			if (review.selfChecked) return null;
+			changeGate(id, (state) => {
+				state.review.selfChecked = true;
+				remember(state);
+			});
+			return selfCheck(request);
+		}
+		if (review.reviews >= MAX_REVIEWS + review.extra) return null;
+		// A file whose diff is not the one the reply found, or that it did not have, is the reply's own; on a task's first reply, every file.
+		const before = review.startFiles;
+		const changed = (path: string) => !before?.[path] || before[path] !== files[path];
+		let answer: Awaited<ReturnType<typeof own.write>>;
+		try {
+			answer = await own.write({ model, prompt: reviewPrompt(request, reviewPatch(patch, changed)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
+		} finally {
+			// Counted once it has run or failed, not before: a review a restart cut short runs again when the reply's end is checked again.
+			changeGate(id, (state) => {
+				state.review.reviews += 1;
+				remember(state);
+			});
+		}
 		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
 		const findings = findingsOf(answer.text);
 		if (!findings) return null;
