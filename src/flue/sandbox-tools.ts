@@ -1,5 +1,7 @@
 import { Type } from '@earendil-works/pi-ai';
 import { createBashTool, createGlobTool, createGrepTool, createReadTool, createWriteTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
+import { changeLine, PatchError, parsePatch, type PatchState, planPatch } from '../core/apply-patch.ts';
+import type { ToolProfile } from '../core/tool-profile.ts';
 
 export type Tool = ReturnType<SandboxToolFactory>[number];
 
@@ -85,15 +87,26 @@ const fileLocks = new WeakMap<Sandbox, Map<string, Promise<unknown>>>();
 function oneAtATime<T>(sandbox: Sandbox, path: string, work: () => Promise<T>): Promise<T> {
 	const locks = fileLocks.get(sandbox) ?? new Map<string, Promise<unknown>>();
 	fileLocks.set(sandbox, locks);
-	let key = path;
-	try {
-		key = sandbox.resolvePath(path);
-	} catch {}
+	const key = resolved(sandbox, path);
 	const run = (locks.get(key) ?? Promise.resolve()).then(work);
 	const settled = run.catch(() => undefined);
 	locks.set(key, settled);
 	void settled.then(() => locks.get(key) === settled && locks.delete(key));
 	return run;
+}
+
+/** Every file of one change, each path's lock taken in turn in one order, so two calls that share files never each hold a lock the other waits for. */
+function allAtOnce<T>(sandbox: Sandbox, paths: string[], work: () => Promise<T>): Promise<T> {
+	const keys = [...new Set(paths.map((path) => resolved(sandbox, path)))].sort();
+	return keys.reduceRight<() => Promise<T>>((next, key) => () => oneAtATime(sandbox, key, next), work)();
+}
+
+function resolved(sandbox: Sandbox, path: string): string {
+	try {
+		return sandbox.resolvePath(path);
+	} catch {
+		return path;
+	}
 }
 
 /**
@@ -130,6 +143,82 @@ export function createMultiEditTool(sandbox: Sandbox): Tool {
 	};
 }
 
+const PatchParams = Type.Object({ input: Type.String({ description: 'The whole patch, from *** Begin Patch to *** End Patch' }) });
+
+/** Short, as it is sent with every call: the models it is for are trained on the format. */
+const APPLY_PATCH_DESCRIPTION = [
+	'Change files with a patch. One call can add, update, move and delete several files, with several hunks in each:',
+	'*** Begin Patch',
+	'*** Update File: src/app.ts',
+	'@@ function start',
+	' context line',
+	'-old line',
+	'+new line',
+	'*** Add File: src/new.ts',
+	'+content',
+	'*** Delete File: src/old.ts',
+	'*** End Patch',
+	'Paths are from the working folder, or absolute. *** Move to: after an Update File line renames the file.',
+].join('\n');
+
+/** Writes what a patch worked out, or, when a write fails, puts back the files already written and says whether it could. */
+async function writePatched(sandbox: Sandbox, after: PatchState, before: Map<string, string | null>): Promise<void> {
+	const done: string[] = [];
+	const order = [...after].sort(([, a], [, b]) => Number(a === null) - Number(b === null));
+	try {
+		for (const [path, content] of order) {
+			if (content === null) await sandbox.rm(path);
+			else await sandbox.writeFile(path, content);
+			done.push(path);
+		}
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		const stuck: string[] = [];
+		for (const path of done.reverse()) {
+			const was = before.get(path) ?? null;
+			await (was === null ? sandbox.rm(path) : sandbox.writeFile(path, was)).catch(() => stuck.push(path));
+		}
+		throw new Error(stuck.length ? `${message}\nThe patch was cut short, and these files could not be put back as they were: ${stuck.join(', ')}.` : `${message}\nNo file was changed.`);
+	}
+}
+
+/**
+ * `apply_patch`, the editing tool OpenAI's GPT and Codex models are trained on (the format is in
+ * src/core/apply-patch.ts). Every file's new content is worked out before anything is written, so a
+ * patch with one hunk that does not fit changes nothing; it writes through the sandbox as `write`
+ * and `edit` do, behind the same per-file locks, and plan mode refuses its writes and deletes alike.
+ */
+export function createApplyPatchTool(sandbox: Sandbox): Tool {
+	return {
+		name: 'apply_patch',
+		label: 'Apply Patch',
+		description: APPLY_PATCH_DESCRIPTION,
+		parameters: PatchParams,
+		async execute(_toolCallId, params, signal) {
+			signal?.throwIfAborted();
+			try {
+				const input = (params as { input?: unknown }).input;
+				const files = parsePatch(typeof input === 'string' ? input : '');
+				const paths = files.flatMap((file) => (file.kind === 'update' && file.moveTo ? [file.path, file.moveTo] : [file.path]));
+				return await allAtOnce(sandbox, paths, async () => {
+					signal?.throwIfAborted();
+					const { after, before } = await planPatch(files, (path) => sandbox.readFile(path), (path) => resolved(sandbox, path));
+					signal?.throwIfAborted();
+					await writePatched(sandbox, after, before);
+					const lines = files.map(changeLine);
+					return { content: [text(`Success. Updated the following files:\n${lines.join('\n')}`)], details: { files: lines } };
+				});
+			} catch (error) {
+				if (error instanceof PatchError) throw new Error(`${error.message}\nNo file was changed.`);
+				throw error;
+			}
+		},
+	};
+}
+
+/** The tools that change files for the profile: `apply_patch` alone, or `write` and `edit` in the order they always had. */
+export const changeTools = (sandbox: Sandbox, profile: ToolProfile): Tool[] => (profile === 'patch' ? [createApplyPatchTool(sandbox)] : [queuedWriteTool(sandbox), createMultiEditTool(sandbox)]);
+
 /** An image's bytes as the model takes them: the picture for a model that sees, the vision model's words for one that does not. */
 export async function imageResult(path: string, bytes: Uint8Array, mimeType: string, sight: ImageSight): Promise<Awaited<ReturnType<Tool['execute']>>> {
 	const details = { path, size: bytes.length };
@@ -151,13 +240,14 @@ export function queuedWriteTool(sandbox: Sandbox): Tool {
 }
 
 /**
- * Flue's standard file and shell tools, with a `read` that shows an image and an `edit` that takes several changes.
- * The standard one reads every file as text, so the agent could never look at
+ * Flue's standard file and shell tools, with a `read` that shows an image, and the tools that change files for the
+ * model's family (`changeTools`): an `edit` that takes several changes, or `apply_patch`.
+ * The standard read reads every file as text, so the agent could never look at
  * a picture in its sandbox: a reference image from the project's files, an
  * attachment, or a screenshot it took. An image comes back as a picture for a
  * model that sees, and described by the vision model for one that does not.
  */
-export function sandboxTools(sight: ImageSight): SandboxToolFactory {
+export function sandboxTools(sight: ImageSight, profile: ToolProfile = 'edit'): SandboxToolFactory {
 	return (sandbox) => {
 		const read = createReadTool(sandbox);
 		const readImage: Tool = {
@@ -170,6 +260,6 @@ export function sandboxTools(sight: ImageSight): SandboxToolFactory {
 				return imageResult(input.path, await sandbox.readFileBuffer(input.path), mimeType, sight);
 			},
 		};
-		return [readImage, queuedWriteTool(sandbox), createMultiEditTool(sandbox), createBashTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
+		return [readImage, ...changeTools(sandbox, profile), createBashTool(sandbox), createGrepTool(sandbox), createGlobTool(sandbox)];
 	};
 }

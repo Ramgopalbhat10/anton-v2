@@ -110,6 +110,16 @@ describe('Thread', () => {
 		fireEvent.click(header);
 		expect(screen.getByText('src/edited.ts')).toBeTruthy();
 	});
+	it('shows the files an apply_patch call changed, as edits are shown', () => {
+		const input = ['*** Begin Patch', '*** Update File: src/one.ts', '@@', '-a', '+b', '+c', '*** Add File: src/two.ts', '+x', '*** End Patch'].join('\n');
+		show(agent([assistant('a1', [tool('apply_patch', { input }, { output: 'Success.' })])]));
+		const header = screen.getByRole('button', { name: /Worked/ });
+		expect(within(header).getByText('one.ts, two.ts').getAttribute('title')).toBe('src/one.ts, src/two.ts');
+		fireEvent.click(header);
+		expect(screen.getByText('src/one.ts, src/two.ts')).toBeTruthy();
+		expect(screen.getByText('+3')).toBeTruthy();
+		expect(screen.getByText('-1')).toBeTruthy();
+	});
 	it('counts the lines of every change in one edit call', () => {
 		const edits = [{ oldText: 'a', newText: 'b\nc' }, { oldText: 'd\ne', newText: 'f\ng\nh' }];
 		show(agent([assistant('a1', [tool('edit', { path: 'src/edited.ts', edits }, { output: 'ok' })])]));

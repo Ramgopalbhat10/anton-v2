@@ -87,3 +87,15 @@ test('Cursor’s calls are counted from their text, and the reply says so', () =
 	countReplyCall(turn({ instanceId: 'cursor', request: { providerId: 'cursor', requestedModel: 'grok-4.7' } }, usage(66_000, 500)));
 	assert.equal(finishReply('cursor')!.estimated, true);
 });
+
+test('a reply counts the tool calls each model made, by tool, its subagents’ under their own model', () => {
+	const calls = (...names: string[]) => ({ output: { content: [{ type: 'text', text: 'ok' }, ...names.map((name, index) => ({ type: 'toolCall', id: `c${index}`, name, arguments: {} }))] } });
+	const gpt = { request: { providerId: 'openai', requestedModel: 'gpt-6.1-terra[872k]' } };
+	startReply('mix');
+	countReplyCall({ ...turn({ instanceId: 'mix', ...gpt }, usage(10, 1)), response: { usage: usage(10, 1), ...calls('apply_patch', 'bash', 'apply_patch') } });
+	countReplyCall({ ...turn({ instanceId: 'mix', ...gpt }, usage(10, 1)), response: { usage: usage(10, 1), ...calls('bash') } });
+	countReplyCall({ ...turn({ instanceId: 'mix', taskId: 'sub', request: { providerId: 'openrouter', requestedModel: 'anthropic/claude-haiku-5.5#via=anthropic' } }, usage(10, 1)), response: { usage: usage(10, 1), ...calls('read', 'read') } });
+	countReplyCall({ ...turn({ instanceId: 'mix', ...gpt }, usage(10, 1)), response: { usage: usage(10, 1), ...calls() } });
+	const reply = finishReply('mix')!;
+	assert.deepEqual(replyFacts(reply, []).tools, { 'openai/gpt-6.1-terra[872k]': { apply_patch: 2, bash: 2 }, 'openrouter/anthropic/claude-haiku-5.5': { read: 2 } });
+});

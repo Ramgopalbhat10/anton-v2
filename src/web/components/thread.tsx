@@ -24,6 +24,7 @@ import { Caption, Chip, Figure, SplitBar, StatusDot } from '@/components/instrum
 import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/attachments';
+import { patchedFiles } from '../../core/apply-patch';
 import { splitAttachments } from '../../core/attachments';
 import { isPlanRefusal } from '../../core/model-refusal';
 import { dollars, elapsed, tokens } from '@/lib/format';
@@ -92,13 +93,21 @@ function proposesPlan(message: FlueConversationMessage | undefined): boolean {
 	);
 }
 
+/** The files one call wrote, edited or patched: a patch's every file, a move's both paths. */
+function pathsOf(part: ToolPart): string[] {
+	if (part.toolName === 'apply_patch') return patchedFiles(field(part.input, 'input')).flatMap((file) => (file.to ? [file.path, file.to] : [file.path]));
+	return part.toolName === 'edit' || part.toolName === 'write' ? [field(part.input, 'path')] : [];
+}
+
 /** Files a reply wrote or edited, in the order it first touched them. */
 function changedPaths(parts: FlueConversationPart[]): string[] {
 	const paths: string[] = [];
 	for (const part of parts) {
-		if (part.type !== 'dynamic-tool' || part.state !== 'output-available' || (part.toolName !== 'edit' && part.toolName !== 'write')) continue;
-		const path = field(part.input, 'path').replace(/^\.\//, '');
-		if (path && !paths.includes(path)) paths.push(path);
+		if (part.type !== 'dynamic-tool' || part.state !== 'output-available') continue;
+		for (const named of pathsOf(part)) {
+			const path = named.replace(/^\.\//, '');
+			if (path && !paths.includes(path)) paths.push(path);
+		}
 	}
 	return paths;
 }
@@ -141,6 +150,7 @@ function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null, d
 		if (part.type !== 'dynamic-tool' || part.state !== 'output-available') continue;
 		if (part.toolName === 'screenshot' || part.toolName === 'browser') named.push({ path: screenshotPath(part), linked: false });
 		if (part.toolName === 'write') named.push({ path: outputLinkPath(field(part.input, 'path')) ?? '', linked: false });
+		if (part.toolName === 'apply_patch') for (const file of patchedFiles(field(part.input, 'input'))) if (file.change === 'add') named.push({ path: outputLinkPath(file.path) ?? '', linked: false });
 	}
 	const linked = new Set(named.filter((entry) => entry.linked).map((entry) => entry.path));
 	const paths: string[] = [];

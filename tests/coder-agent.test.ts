@@ -19,7 +19,7 @@ test('workspace agents can check the actual Preview URL and are instructed to ve
 	const workspace = source.slice(source.indexOf('function useWorkspace'), source.indexOf('const BROWSER_ACTIONS'));
 	assert.match(workspace, /name: 'check_preview'/);
 	assert.match(workspace, /checkPreview\(id, data\.port\)/);
-	const hint = source.slice(source.indexOf('const PREVIEW_HINT'), source.indexOf('const WORKSPACE_PROMPT'));
+	const hint = source.slice(source.indexOf('const PREVIEW_HINT'), source.indexOf('const workspacePrompt'));
 	assert.match(hint, /exact Preview URL/);
 	assert.match(hint, /in: sandbox/);
 	assert.match(hint, /or prove iframe embedding/);
@@ -32,7 +32,11 @@ test('workspace agents can check the actual Preview URL and are instructed to ve
 test('workspace agents batch the edits they know and do not run the same tests twice', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	assert.match(source, /const EDIT_HINT =\n\t'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list/);
-	assert.equal((source.match(/\n\tEDIT_HINT,/g) ?? []).length, 2);
+	assert.match(source, /const PATCH_HINT =\n\t'Make the changes you already know in one step: one apply_patch call can change several files and several places in each/);
+	// Both workspace prompts take the profile's hint in the place EDIT_HINT had.
+	assert.equal((source.match(/\n\tedit,\n\tFINISH_HINT,/g) ?? []).length, 1);
+	assert.equal((source.match(/\n\tedit,\n\tREAD_HINT,/g) ?? []).length, 1);
+	assert.match(source, /const edit = profile === 'patch' \? PATCH_HINT : EDIT_HINT;/);
 	assert.match(source, /Never run the same tests both ways/);
 });
 
@@ -111,7 +115,7 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as lon
 
 test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	for (const prompt of ['const workspacePrompt', 'const CHAT_WORKSPACE_PROMPT']) {
+	for (const prompt of ['const workspacePrompt', 'const chatWorkspacePrompt']) {
 		const start = source.indexOf(prompt);
 		assert.ok(start >= 0, prompt);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /FINISH_HINT/, prompt);
@@ -139,7 +143,7 @@ test('Coder tells a reply how long it may run, the same on every render, and sen
 	// From config alone, never the clock: it sits in the cached system prompt.
 	assert.match(budget, /`A reply may run for up to \$\{hoursText\(config\.replyTimeoutMs\)\}, so do a large job in full rather than scope it down or hand it back part-done\.`/);
 	assert.doesNotMatch(budget, /Date|now\(/);
-	for (const prompt of ['const workspacePrompt', 'const CHAT_WORKSPACE_PROMPT']) {
+	for (const prompt of ['const workspacePrompt', 'const chatWorkspacePrompt']) {
 		const start = source.indexOf(prompt);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,\n\tBUDGET_HINT,/, prompt);
 	}
@@ -172,16 +176,16 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	assert.deepEqual(named, ['FINISH_HINT']);
 	const builder = source.slice(source.indexOf('const workspacePrompt'), source.indexOf(".join(' ')", source.indexOf('const workspacePrompt')));
 	assert.match(builder, /run_in_background/);
-	for (const prompt of ['workspacePrompt', 'CHAT_WORKSPACE_PROMPT']) {
+	for (const prompt of ['workspacePrompt', 'chatWorkspacePrompt']) {
 		const start = source.indexOf(`const ${prompt}`);
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,/, prompt);
 	}
 	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.
 	assert.equal(source.match(/\bFINISH_HINT\b/g)?.length, 3);
-	assert.match(source, /const prompt = workspace \? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;/);
-	assert.match(source, /const prompt = repoTask \? TASK_PROMPT : workspace \? WORKSPACE_PROMPT : READ_ONLY_PROMPT;/);
+	assert.match(source, /const prompt = workspace \? prompts\.chatWorkspace : CHAT_PROMPT;/);
+	assert.match(source, /const prompt = repoTask \? prompts\.task : workspace \? prompts\.workspace : READ_ONLY_PROMPT;/);
 	// A repository task has the tools from its first model call, as it has the prompt; the rest once they have a sandbox.
-	assert.match(source, /if \(repoTask\) useTaskWorkspace\(id\);\n\telse if \(workspace\) useWorkspace\(id, chat, review\);/);
+	assert.match(source, /if \(repoTask\) useTaskWorkspace\(id, profile\);\n\telse if \(workspace\) useWorkspace\(id, chat, review, profile\);/);
 	const task = source.slice(source.indexOf('function useTaskWorkspace'), source.indexOf('function useSandboxChecks'));
 	assert.match(task, /\n\tuseBackgroundJobs\(id, \(task\) => workMachine\(task\)\);\n/);
 	// The tester stays, for a failure set too large to triage in the agent's own context.

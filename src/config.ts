@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { asToolProfileSetting } from './core/tool-profile.ts';
 
 const read = (name: string, fallback = ''): string => process.env[name]?.trim() || fallback;
 /** Anton's own files: both databases, local machines and disk storage. */
@@ -117,6 +118,12 @@ export const config = {
 	 * features mid-work; a headless run of a job that is given longer (a benchmark task with an 8-hour limit) raises it.
 	 */
 	replyTimeoutMs: Math.max(1, Number(read('ANTON_REPLY_TIMEOUT_HOURS', '4')) || 4) * 3_600_000,
+	/**
+	 * The coding agent's tools for changing files (`src/core/tool-profile.ts`): `auto` gives OpenAI's models
+	 * `apply_patch` and the rest `edit` and `write`; `patch` or `edit` gives every model that one, so a benchmark
+	 * can compare the two on the same model.
+	 */
+	toolProfile: asToolProfileSetting(read('ANTON_TOOL_PROFILE', 'auto')),
 	/** The browser the agent's screenshot tool drives, installed in sandboxes on first use. */
 	browserPackage: 'playwright@1.63.0',
 	/** Default for Settings › Images: prepared repo images older than this are rebuilt on the next task. */

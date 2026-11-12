@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config.ts';
 import { isIncognitoId } from '../core/incognito.ts';
+import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { decide, yesOf } from './decisions.ts';
 import { reopenFinishReview, requestFor, taskPatch } from './finish-review.ts';
 import { logProblem } from './log.ts';
@@ -33,7 +34,7 @@ export const MAX_ROUNDS = 3;
 /** How sure the decision model must be that the reply leaves work undone. */
 const UNDONE = 0.6;
 /** The tools that work in the sandbox; their count is a chat's progress, as it has no diff. */
-const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', 'write', 'edit']);
+const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', ...FILE_CHANGE_TOOLS]);
 /**
  * Tools that show a reply did work, not only read and answer. A repository task has no start_workspace (its first
  * command starts its sandbox); chats and reviews still do. Reading, with any of the read tools, is not work.

@@ -76,6 +76,7 @@ test('a chat in its sandbox counts its sandbox work as progress, as it has no di
 	assert.ok(await completionGate('chat', pebbleCalls, chat, deps));
 	assert.equal(await completionGate('chat', pebbleCalls, chat, deps), null);
 	assert.ok(await completionGate('chat', [...pebbleCalls, { tool: 'write' }], chat, deps));
+	assert.ok(await completionGate('chat', [...pebbleCalls, { tool: 'write' }, { tool: 'apply_patch' }], chat, deps));
 });
 
 test('never on a reply that asks, proposes a plan, is aborted, or is a chat with no sandbox or an incognito one', async () => {

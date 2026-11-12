@@ -34,7 +34,12 @@ export type ReplyUsage = {
 	last: number;
 	/** Some calls' tokens were estimated from their text, as their provider reports none per call. */
 	estimated: boolean;
+	/** The tool calls each model made, by tool: the agent's and its subagents', each under the model it ran on. */
+	tools: ToolCalls;
 };
+
+/** Tool calls by the model that made them (`<gateway>/<model>`), then by tool. */
+export type ToolCalls = Record<string, Record<string, number>>;
 
 /**
  * One compaction: when it finished, the context it summarized, and the context the agent's next call
@@ -51,6 +56,8 @@ export type ReplyFacts = {
 	plan: { gateway: string; name: string } | null;
 	compactions: Compaction[];
 	estimated: boolean;
+	/** Which tools each model reached for, kept with the reply so a benchmark's tool mix is read without its raw events (`npm run tool:mix`). */
+	tools: ToolCalls;
 };
 
 type CallUsage = Parameters<typeof toUsage>[0] & { totalTokens?: number };
@@ -64,7 +71,7 @@ type TurnEvent = {
 	isError?: boolean;
 	estimatedTokens?: number;
 	request?: { providerId?: string; requestedModel?: string };
-	response?: { usage?: CallUsage };
+	response?: { usage?: CallUsage; output?: { content?: Array<{ type: string; name?: string }> } };
 };
 
 /**
@@ -79,7 +86,7 @@ const open = new Map<string, ReplyUsage>();
 
 /** A reply starts: count its calls from now. */
 export function startReply(id: string): void {
-	open.set(id, { main: empty(), subagents: empty(), billing: 'plan', peak: 0, last: 0, model: null, compactions: [], compacting: null, estimated: false });
+	open.set(id, { main: empty(), subagents: empty(), billing: 'plan', peak: 0, last: 0, model: null, compactions: [], compacting: null, estimated: false, tools: {} });
 }
 
 /** A call's context as the runtime measures it to decide on compaction: all it was sent, and its reply. */
@@ -109,6 +116,11 @@ export function countReplyCall(event: TurnEvent): void {
 	const part = main ? reply.main : reply.subagents;
 	Object.assign(part, addUsage(part, toUsage(event.response.usage)), { calls: part.calls + 1 });
 	const gateway = event.request?.providerId ?? '';
+	for (const part of event.response.output?.content ?? []) {
+		if (part.type !== 'toolCall' || !event.request?.requestedModel) continue;
+		const tools = (reply.tools[unrouted(`${gateway}/${event.request.requestedModel}`)] ??= {});
+		tools[part.name ?? 'tool'] = (tools[part.name ?? 'tool'] ?? 0) + 1;
+	}
 	// Compaction's summaries are billed with the agent's calls, but the window is measured on the agent's own.
 	if (main && (event.purpose === undefined || event.purpose === 'agent')) {
 		const context = contextOf(event.response.usage);
@@ -153,5 +165,6 @@ export function replyFacts(reply: ReplyUsage, models = loadedModels()): ReplyFac
 		plan: reply.billing === 'plan' && reply.model ? planOf(reply.model) : null,
 		compactions: reply.compactions,
 		estimated: reply.estimated,
+		tools: reply.tools,
 	};
 }

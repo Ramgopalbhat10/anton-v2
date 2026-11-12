@@ -22,6 +22,7 @@ import {
 import * as v from 'valibot';
 import { config } from '../config.ts';
 import type { Machine } from '../core/ports.ts';
+import { type ToolProfile, toolProfileFor } from '../core/tool-profile.ts';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { type ImageSight, sandboxTools } from '../flue/sandbox-tools.ts';
 import { taskSandbox, taskTools } from '../flue/task-sandbox.ts';
@@ -309,14 +310,15 @@ async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 
 /**
  * A chat's or a plan's or review's sandbox, once it has one, and everything that needs it: shell and file tools,
- * subagents and a browser to use web apps in. In plan mode the file tools cannot write. A chat's sandbox is a
+ * subagents and a browser to use web apps in, the tools that change files being the model family's (`profile`).
+ * In plan mode the file tools cannot write. A chat's sandbox is a
  * scratch folder: no repository to investigate or test. Someone else's pull request is reviewed, never pushed to.
  * A repository task outside plan mode and review has `useTaskWorkspace` instead, from its first model call.
  */
-function useWorkspace(id: string, chat: boolean, review: ReviewTask | null) {
+function useWorkspace(id: string, chat: boolean, review: ReviewTask | null, profile: ToolProfile) {
 	useSandbox({
 		createSandbox: async () => sandboxOf(id, await machineFor(id)),
-		tools: sandboxTools(sightOf(id)),
+		tools: sandboxTools(sightOf(id), profile),
 	});
 	useBackgroundJobs(id);
 	if (!chat) {
@@ -365,10 +367,10 @@ function useTaskSubagents(id: string) {
 /**
  * A repository task's sandbox and everything that needs it, from its first model call, so its tools and system
  * prompt never change: read, grep and glob answer from the snapshot until the task has its workspace, and the
- * first command, write, edit or job gets the machine (the one `prewarmMachine` started, or a new one) and gives it
+ * first command, file change or job gets the machine (the one `prewarmMachine` started, or a new one) and gives it
  * its workspace, as `start_workspace` used to. Nothing here starts a machine before a tool needs one.
  */
-function useTaskWorkspace(id: string) {
+function useTaskWorkspace(id: string, profile: ToolProfile) {
 	useSandbox({
 		async createSandbox() {
 			let started: Promise<Sandbox> | undefined;
@@ -393,6 +395,7 @@ function useTaskWorkspace(id: string) {
 				glob: (input) => globTask(id, input),
 			},
 			sightOf(id),
+			profile,
 		),
 	});
 	useBackgroundJobs(id, (task) => workMachine(task));
@@ -1391,14 +1394,18 @@ const TASK_READ_HINT =
 	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a result past about 50KB is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
 
-/** What a repository task's prompt says of its sandbox, which it gets on first use rather than by asking. */
-const TASK_START_HINT =
+/** What a repository task's prompt says of its sandbox, which it gets on first use rather than by asking; `change` is how its tools change a file. */
+const taskStartHint = (change: string) =>
 	'read, grep and glob need no sandbox: until your first command or file change they show the repository as this task started, and after it the sandbox. ' +
-	'Your first command or edit starts the sandbox, which can take a minute or two the first time. Answer a question about the code by reading, not by running commands.';
+	`Your first command or ${change} starts the sandbox, which can take a minute or two the first time. Answer a question about the code by reading, not by running commands.`;
 
 /** Each step is a model call over the whole conversation, so changes the agent already knows go in one step, not one step each. */
 const EDIT_HINT =
 	'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list, and the edits to other files as calls in the same step. Read a file again only when you need lines you have not seen.';
+
+/** EDIT_HINT for the patch profile (`src/core/tool-profile.ts`), whose one apply_patch call takes changes to several files. */
+const PATCH_HINT =
+	'Make the changes you already know in one step: one apply_patch call can change several files and several places in each, so put them all in one patch. Read a file again only when you need lines you have not seen.';
 
 /** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
 /**
@@ -1446,7 +1453,7 @@ const PREVIEW_HINT =
  * how its sandbox starts (`start`) and reading through its own read, grep and glob (`read`, `web`); a plan or review
  * gets it once its sandbox runs.
  */
-const workspacePrompt = ({ start = [], read, web }: { start?: string[]; read: string; web: string }) => [
+const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; read: string; web: string; edit: string }) => [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	...start,
 	'The sandbox filesystem is the source of truth. Edit files, run commands, and inspect git there.',
@@ -1456,7 +1463,7 @@ const workspacePrompt = ({ start = [], read, web }: { start?: string[]; read: st
 	'Delegate an investigation across many files or areas to the explorer subagent, and build on its report, reading again only the lines you will change; when the change sits in a few files you can name, read them yourself instead.',
 	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
 	read,
-	EDIT_HINT,
+	edit,
 	FINISH_HINT,
 	BUDGET_HINT,
 	'Give each task a complete briefing; subagents do not see this conversation.',
@@ -1470,9 +1477,6 @@ const workspacePrompt = ({ start = [], read, web }: { start?: string[]; read: st
 	'Be concise. Explain what you changed.',
 ].join(' ');
 
-const WORKSPACE_PROMPT = workspacePrompt({ read: READ_HINT, web: WORKSPACE_WEB_HINT });
-const TASK_PROMPT = workspacePrompt({ start: [TASK_START_HINT], read: TASK_READ_HINT, web: TASK_WEB_HINT });
-
 const CHAT_PROMPT = [
 	'You are Anton, a capable assistant. This chat is not tied to any repository: answer questions directly, and do jobs on the web when asked.',
 	'When a job needs code run, files made or anything installed, call start_workspace for a scratch sandbox: an empty folder with a shell, with no repository and no pull request.',
@@ -1481,10 +1485,10 @@ const CHAT_PROMPT = [
 	'Be concise.',
 ].join(' ');
 
-const CHAT_WORKSPACE_PROMPT = [
+const chatWorkspacePrompt = (edit: string) => [
 	'You are Anton, a capable assistant with a scratch sandbox: an empty folder with a shell, not tied to any repository.',
 	'Make files, run commands and install what the job needs there.',
-	EDIT_HINT,
+	edit,
 	READ_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
@@ -1497,6 +1501,22 @@ const CHAT_WORKSPACE_PROMPT = [
 	CHAT_WORKSPACE_WEB_HINT,
 	'Be concise.',
 ].join(' ');
+
+/**
+ * The prompts that name the tools that change files, for each tool profile: the edit profile's as they always were,
+ * the patch profile's naming apply_patch. Made once each, as the cached system prompt must not change while the
+ * task's model does not.
+ */
+export function workspacePrompts(profile: ToolProfile): { task: string; workspace: string; chatWorkspace: string } {
+	const edit = profile === 'patch' ? PATCH_HINT : EDIT_HINT;
+	return {
+		task: workspacePrompt({ start: [taskStartHint(profile === 'patch' ? 'patch' : 'edit')], read: TASK_READ_HINT, web: TASK_WEB_HINT, edit }),
+		workspace: workspacePrompt({ read: READ_HINT, web: WORKSPACE_WEB_HINT, edit }),
+		chatWorkspace: chatWorkspacePrompt(edit),
+	};
+}
+
+const PROMPTS: Record<ToolProfile, ReturnType<typeof workspacePrompts>> = { edit: workspacePrompts('edit'), patch: workspacePrompts('patch') };
 
 /**
  * An incognito chat: the same assistant with no repository, no workspace and no sandbox —
@@ -1606,6 +1626,9 @@ export function Coder({ id }: AgentProps) {
 	const { model, reasoning } = agentModelFor(id);
 	// A long conversation compacts at the ceiling from Settings › General, not only once the window is nearly full.
 	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
+	// The tools that change files, and the prompts that name them, are the model family's: the same while the model is.
+	const profile = toolProfileFor(model, config.toolProfile);
+	const prompts = PROMPTS[profile];
 	const [started, setStarted] = usePersistentState('workspace', false);
 	const workspace = started || hasWorkspace(id);
 	// An incognito chat is a chat with nothing kept: no repository, no workspace, no sandbox, no saved state.
@@ -1618,8 +1641,8 @@ export function Coder({ id }: AgentProps) {
 	const repoTask = !chat && !planning && !review;
 	// Whether the prompt and tools offer the sandbox: a repository task gets it on first use, so from the start; the rest once they have it.
 	const sandboxed = repoTask || workspace;
-	if (repoTask) useTaskWorkspace(id);
-	else if (workspace) useWorkspace(id, chat, review);
+	if (repoTask) useTaskWorkspace(id, profile);
+	else if (workspace) useWorkspace(id, chat, review, profile);
 	else if (!incognito) {
 		// A chat reads other repositories with the same tools, named by repo.
 		useRepoSnapshot(id, chat);
@@ -1770,6 +1793,8 @@ export function Coder({ id }: AgentProps) {
 				...(trace ? { traceId: trace.id } : {}),
 				usage: reply ? replyTotal(reply) : toUsage(response.usage),
 				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
+				// With the reply's tool calls by model (`tools`), what a benchmark's tool mix is read from.
+				toolProfile: profile,
 				billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 			};
@@ -1780,10 +1805,10 @@ export function Coder({ id }: AgentProps) {
 	}
 
 	if (chat) {
-		const prompt = workspace ? CHAT_WORKSPACE_PROMPT : CHAT_PROMPT;
+		const prompt = workspace ? prompts.chatWorkspace : CHAT_PROMPT;
 		return `${planning ? `${prompt} ${PLAN_PROMPT}` : prompt} ${browsing ? `${BROWSER_HINT} ` : ''}${workspace ? `${COMPUTER_HINT} ` : ''}${scriptHint}${TODO_HINT} ${REQUIREMENTS_HINT} ${WHILE_WORKING_HINT} ${visualHint(visual)} ${drawing ? `${IMAGE_HINT} ` : ''}${visual !== 'off' ? `${APP_HINT} ` : ''}${skillHint(id, workspace)} ${workspace && runsOnHost(id) ? hostHint() : ''}${connectorHint(connectors)}${sealedHint(sealed)}${attachmentHint(workspace, Boolean(project))}${projectPrompt(project, workspace, true)}`;
 	}
-	const prompt = repoTask ? TASK_PROMPT : workspace ? WORKSPACE_PROMPT : READ_ONLY_PROMPT;
+	const prompt = repoTask ? prompts.task : workspace ? prompts.workspace : READ_ONLY_PROMPT;
 	// The repository's instructions at the commit the task started from, the same before and after its sandbox starts;
 	// a plan's or review's sandbox has the runtime read them from its files.
 	const instructions = workspace && !repoTask ? '' : repoInstructionsPrompt(repoInstructionsFor(id));

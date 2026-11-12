@@ -1,8 +1,9 @@
 import { Type } from '@earendil-works/pi-ai';
 import { createBashTool, type Sandbox, type SandboxDriver, type SandboxToolFactory, sandboxFromDriver } from '@flue/runtime';
 import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/repo-snapshot.ts';
+import type { ToolProfile } from '../core/tool-profile.ts';
 import type { GlobInput, GrepInput, ReadInput } from '../services/task-files.ts';
-import { createMultiEditTool, type ImageSight, imageResult, imageType, queuedWriteTool, text, type Tool } from './sandbox-tools.ts';
+import { changeTools, type ImageSight, imageResult, imageType, text, type Tool } from './sandbox-tools.ts';
 
 /** What the runtime reads from a working folder for its system prompt: the repository's instructions and its skills. */
 const DISCOVERED = /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|\.agents\/skills)$/;
@@ -10,7 +11,7 @@ const DISCOVERED = /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|\.agents\/skills)$/;
 /**
  * A repository task's sandbox from its first model call, before it has a machine. The runtime is given it at once,
  * so the tool list and the system prompt are the same before and after the machine starts. Commands and writes wait
- * for the machine (`machine(true)`, which gives the task its workspace); a file read here (an edit's) comes from
+ * for the machine (`machine(true)`, which gives the task its workspace); a file read here (an edit's or a patch's) comes from
  * the machine too, while the agent's own reads go through `taskTools`. The runtime reads AGENTS.md, CLAUDE.md,
  * `.agents/skills` and a listing of the working folder into the system prompt when a reply starts: it finds none of
  * them here, as they would come from the snapshot before the machine and from the machine after, and change the
@@ -69,23 +70,32 @@ const GlobParams = Type.Object({
 	repo: REPO,
 });
 
+/** `read`'s description, which says how its numbered lines go into the profile's editing tool. */
+const READ_DESCRIPTION: Record<ToolProfile, string> = {
+	edit:
+		"Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of edit's oldText). " +
+		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself.',
+	patch:
+		'Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of a patch). ' +
+		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself.',
+};
+
 const whole = (value: unknown, min: number, max: number) => (typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.floor(value))) : undefined);
 
 /**
  * A repository task's file and shell tools: `read`, `grep` and `glob` of its own, the same schema whether the
- * snapshot or the machine answers, so they never change; `write`, `edit` and `bash` as `sandboxTools` has them,
- * waiting for the machine. Paths are taken from the session's folder, which a subagent may be given.
+ * snapshot or the machine answers, so they never change; the profile's tools that change files (`write` and `edit`,
+ * or `apply_patch`) and `bash` as `sandboxTools` has them, waiting for the machine. Paths are taken from the
+ * session's folder, which a subagent may be given.
  */
-export function taskTools(files: TaskFiles, sight: ImageSight): SandboxToolFactory {
+export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProfile = 'edit'): SandboxToolFactory {
 	return (sandbox) => {
 		// Another repository's paths are from its root; this task's from the session's folder.
 		const at = (path: string | undefined, repo: string | undefined) => (repo ? path : sandbox.resolvePath(path ?? '.'));
 		const read: Tool = {
 			name: 'read',
 			label: 'Read File',
-			description:
-				"Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of edit's oldText). " +
-				'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself.',
+			description: READ_DESCRIPTION[profile],
 			parameters: ReadParams,
 			async execute(_toolCallId, params, signal) {
 				signal?.throwIfAborted();
@@ -121,6 +131,6 @@ export function taskTools(files: TaskFiles, sight: ImageSight): SandboxToolFacto
 				return { content: [text(await files.glob({ ...input, path: at(input.path, input.repo) }))], details: { pattern: input.pattern } };
 			},
 		};
-		return [read, queuedWriteTool(sandbox), createMultiEditTool(sandbox), createBashTool(sandbox), grep, glob];
+		return [read, ...changeTools(sandbox, profile), createBashTool(sandbox), grep, glob];
 	};
 }

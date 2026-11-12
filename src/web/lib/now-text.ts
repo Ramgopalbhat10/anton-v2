@@ -31,7 +31,8 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 		case 'writing': {
 			const size = now.chars >= 200 ? ` · ${written(now.chars)}` : '';
 			if (now.tool === 'write' && file) return `Writing ${file}${size}`;
-			if (now.tool === 'edit' && file) return `Editing ${file}${size}`;
+			if ((now.tool === 'edit' || now.tool === 'apply_patch') && file) return `Editing ${file}${size}`;
+			if (now.tool === 'apply_patch') return `Writing a patch${size}`;
 			if (now.tool === 'bash' || now.tool === 'run_in_background') return 'Writing a command';
 			if (now.tool === 'run_script') return `Writing a script${size}`;
 			if (now.tool === 'task') return `Briefing ${agent}`;
@@ -43,7 +44,8 @@ export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
 		}
 		case 'running':
 			if (now.tool === 'task') return `Waiting on ${agent}`;
-			if ((now.tool === 'write' || now.tool === 'edit') && file) return `Saving ${file}`;
+			if ((now.tool === 'write' || now.tool === 'edit' || now.tool === 'apply_patch') && file) return `Saving ${file}`;
+			if (now.tool === 'apply_patch') return 'Applying a patch';
 			if ((now.tool === 'read' || now.tool === 'read_file') && file) return `Reading ${file}`;
 			if (now.tool === 'grep' || now.tool === 'search_code') return 'Searching the code';
 			if (now.tool === 'glob' || now.tool === 'list_files') return 'Listing files';

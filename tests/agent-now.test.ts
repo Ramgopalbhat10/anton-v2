@@ -95,4 +95,8 @@ test('a tool call is named by its file, the first line of its command, or its su
 	assert.equal(detailOf('bash', undefined, '{"command":"ls -la /work'), 'ls -la /work');
 	assert.equal(detailOf('write', undefined, '{"path":"a\\"b.txt"'), 'a"b.txt');
 	assert.equal(detailOf('browser', { action: 'click' }), null);
+	// A patch by its first file, once its name is whole.
+	assert.equal(detailOf('apply_patch', { input: '*** Begin Patch\n*** Update File: src/app.ts\n@@\n-a\n+b\n*** End Patch' }), 'src/app.ts');
+	assert.equal(detailOf('apply_patch', undefined, '{"input":"*** Begin Patch\\n*** Add File: ./docs/new.md\\n+# New'), 'docs/new.md');
+	assert.equal(detailOf('apply_patch', undefined, '{"input":"*** Begin Patch\\n*** Add File: docs/ne'), null);
 });

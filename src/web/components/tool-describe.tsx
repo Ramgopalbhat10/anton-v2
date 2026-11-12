@@ -1,7 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
+import { type PatchedFile, patchedFiles } from '../../core/apply-patch';
 
 /*
  * Each tool call as a short sentence with an icon, the same in the thread and
@@ -139,6 +140,48 @@ export function Em({ children }: { children: ReactNode }) {
 	return <span className="text-(--text-secondary)">{children}</span>;
 }
 
+/** Lines added and removed, as an edit shows them. */
+function counts(added: number, removed?: number): ReactNode {
+	return (
+		<>
+			{' '}
+			<span className="text-(--diff-add-text)">+{added}</span>
+			{removed === undefined ? null : (
+				<>
+					{' '}
+					<span className="text-(--danger-text)">-{removed}</span>
+				</>
+			)}
+		</>
+	);
+}
+
+/** An apply_patch call as the files it changed: one by what happened to it, several by their names and lines in all. */
+function describePatch(files: PatchedFile[]): { icon: LucideIcon; body: ReactNode } {
+	if (files.length === 1) {
+		const [file] = files;
+		if (file.change === 'add') return { icon: FilePlus, body: <>Wrote <Em>{file.path}</Em>{counts(file.added)}</> };
+		if (file.change === 'delete') return { icon: FileMinus, body: <>Deleted <Em>{file.path}</Em></> };
+		if (file.change === 'move') return { icon: Pencil, body: <>Moved <Em>{file.path}</Em> to <Em>{file.to}</Em>{counts(file.added, file.removed)}</> };
+		return { icon: Pencil, body: <>Edited <Em>{file.path}</Em>{counts(file.added, file.removed)}</> };
+	}
+	if (!files.length) return { icon: Pencil, body: <>Applied a patch</> };
+	const shown = files.slice(0, 3).map((file) => file.to ?? file.path);
+	const more = files.length - shown.length;
+	const added = files.reduce((sum, file) => sum + file.added, 0);
+	const removed = files.reduce((sum, file) => sum + file.removed, 0);
+	return {
+		icon: Pencil,
+		body: (
+			<>
+				Edited {files.length} files <Em>{shown.join(', ')}</Em>
+				{more ? ` and ${more} more` : ''}
+				{counts(added, removed)}
+			</>
+		),
+	};
+}
+
 /** Where a read was from when it named another repository (`repo`), else nothing. */
 function inRepo(input: unknown): ReactNode {
 	const repo = field(input, 'repo');
@@ -208,6 +251,8 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				),
 			};
 		}
+		case 'apply_patch':
+			return describePatch(patchedFiles(field(input, 'input')));
 		case 'write':
 			return {
 				icon: FilePlus,
@@ -391,6 +436,7 @@ export function toolTone(toolName: string, failed: boolean): string {
 			return 'var(--data-1)';
 		case 'edit':
 		case 'write':
+		case 'apply_patch':
 			return 'var(--data-2)';
 		case 'screenshot':
 		case 'browser':
