@@ -18,6 +18,7 @@
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
 		"browser:bench": "node --experimental-strip-types scripts/browser-bench.ts",
 		"tool:mix": "node --experimental-strip-types scripts/tool-mix.ts",
+		"cache:misses": "node --experimental-strip-types scripts/cache-misses.ts",
 		"postinstall": "node --experimental-strip-types scripts/patch-flue.ts"
 	},
 	"dependencies": {
