@@ -93,6 +93,25 @@ describe('Thread', () => {
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
 	});
 
+	it('draws no step for a todo update, whether it sent the whole list or only the items that changed', () => {
+		show(
+			agent([
+				user('u1', 'Add the flag'),
+				assistant('a1', [
+					tool('update_todos', { todos: [{ content: 'Add the flag', status: 'in_progress' }, { content: 'Test it', status: 'pending' }] }, { output: 'Todo list saved: 0/2 done.' }),
+					tool('bash', { command: 'npm test' }, { output: 'ok' }),
+					tool('update_todos', { changes: [{ item: 1, status: 'completed', evidence: 'ran it' }, { item: 2, status: 'in_progress' }] }, { output: 'Todo list saved: 1/2 done.' }),
+					{ type: 'text', text: 'Added the flag.' },
+				]),
+			]),
+		);
+		// The list shows as the pill above the composer, from the saved list, not in the thread.
+		expect(screen.getByText('Added the flag.')).toBeTruthy();
+		expect(screen.getByText('1 step')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+		expect(screen.queryByText(/update_todos|Todo list saved/)).toBeNull();
+	});
+
 	it('shows the current unpushed diff even for bash edits, without assigning it to an older reply', async () => {
 		const patch = 'diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-old\n+new\n';
 		api.changes.mockResolvedValueOnce({ patch, source: 'saved' });

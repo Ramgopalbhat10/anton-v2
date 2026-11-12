@@ -83,7 +83,7 @@ import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } 
 import { installSubagentStop } from './flue/subagent-stop.ts';
 import { installToolResultCut } from './flue/tool-result-cut.ts';
 import { scriptCalls } from './services/script-runs.ts';
-import { todosFor } from './services/todos.ts';
+import { noteTodoStep, todosFor } from './services/todos.ts';
 import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { answerWithin } from './services/answer-within.ts';
 import { waitingMessages } from './services/waiting.ts';
@@ -157,6 +157,8 @@ observeRuntime((event) => {
 	recordAgentEvent(event);
 	// Before anything awaits, so a reply's last call is counted by the time the reply finishes.
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
+	// Before the step's tools run, so a todo update knows whether it was the step's only call.
+	noteTodoStep(event as Parameters<typeof noteTodoStep>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
