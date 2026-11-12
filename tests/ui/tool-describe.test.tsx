@@ -32,6 +32,23 @@ describe('background jobs in the thread', () => {
 		expect(running('list_files', null)).toBe('Listing files');
 	});
 
+	it('draws an apply_patch call as the files it changed, and the now line as the file it is writing', () => {
+		const patch = (...lines: string[]) => ({ input: ['*** Begin Patch', ...lines, '*** End Patch'].join('\n') });
+		expect(sentence('apply_patch', patch('*** Update File: src/a.ts', '@@', ' x', '-y', '+z', '+w'))).toBe('Edited src/a.ts +2 -1');
+		expect(sentence('apply_patch', patch('*** Add File: docs/new.md', '+# New', '+text'))).toBe('Wrote docs/new.md +2');
+		expect(sentence('apply_patch', patch('*** Delete File: old.ts'))).toBe('Deleted old.ts');
+		expect(sentence('apply_patch', patch('*** Update File: a.ts', '*** Move to: b.ts'))).toBe('Moved a.ts to b.ts +0 -0');
+		const many = patch('*** Add File: a', '+1', '*** Add File: b', '+2', '*** Update File: c', '@@', '-3', '+4', '*** Delete File: d');
+		expect(sentence('apply_patch', many)).toBe('Edited 4 files a, b, c and 1 more +3 -1');
+		expect(sentence('apply_patch', { input: 'not a patch' })).toBe('Applied a patch');
+		expect(toolTone('apply_patch', false)).toBe(toolTone('edit', false));
+		const now = (what: string, detail: string | null, chars = 0) => nowText({ what, tool: 'apply_patch', detail, since: '', chars } as never, 'replying');
+		expect(now('writing', 'src/a.ts', 2048)).toBe('Editing a.ts · 2.0 KB');
+		expect(now('writing', null)).toBe('Writing a patch');
+		expect(now('running', 'src/a.ts')).toBe('Saving a.ts');
+		expect(now('running', null)).toBe('Applying a patch');
+	});
+
 	it('draws a tool it does not know by its name', () => {
 		expect(sentence('some_new_tool', {})).toBe('Called some_new_tool');
 	});

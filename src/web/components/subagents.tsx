@@ -99,7 +99,7 @@ export function workKind(tool: string): WorkKind {
 	if (tool === 'read' || tool === 'read_file') return 'read';
 	if (['grep', 'search_code', 'glob', 'list_files'].includes(tool)) return 'search';
 	if (tool === 'bash' || tool === 'run_script') return 'run';
-	if (tool === 'edit' || tool === 'write') return 'edit';
+	if (tool === 'edit' || tool === 'write' || tool === 'apply_patch') return 'edit';
 	if (tool === 'browser' || tool === 'screenshot' || tool === 'computer') return 'browse';
 	return 'other';
 }
