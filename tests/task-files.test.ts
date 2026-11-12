@@ -290,6 +290,31 @@ test('a repository task has one system prompt and one tool list before and after
 	assert.ok(!started.includes(task), 'neither rendering nor composing the prompt started a machine');
 });
 
+test('a repository task on an OpenAI model has apply_patch in place of write and edit, and the prompt that names it, before and after its workspace starts', async () => {
+	const flue = await flueInternals();
+	const { Coder } = await import('../src/agents/coder.ts');
+	const task = (await sessions.createSession({ projectId: project.id, title: 'Patches' })).id;
+	// A ChatGPT plan's model, which this test's model list does not have.
+	const { updateSession } = await import('../src/db/sessions.ts');
+	await updateSession(task, { model: 'openai/gpt-5.1-codex' });
+	await runner.primeAgent(task, { warm: false });
+	const render = () => (flue.render(Coder, { snapshot: new Map(), store: flue.hookState(new Map()), delivery: { kind: 'user', body: 'hi' }, instanceId: task }) as Rendered).config;
+	const sent = async () => {
+		const rendered = render();
+		const env = await rendered.sandbox!.createSandbox({ id: task });
+		return { prompt: rendered.instructions ?? '', tools: (rendered.sandbox!.tools?.(env, { subagents: {} }) ?? []).map((tool) => JSON.stringify([tool.name, tool.description, tool.parameters])) };
+	};
+	const before = await sent();
+	assert.deepEqual(before.tools.map((tool) => JSON.parse(tool)[0]), ['read', 'apply_patch', 'bash', 'grep', 'glob']);
+	assert.match(before.prompt, /one apply_patch call can change several files/);
+	assert.doesNotMatch(before.prompt, /\bedit call\b|\bedits list\b|oldText/);
+	runner.noteWorkspace(task);
+	const after = await sent();
+	assert.equal(after.prompt, before.prompt);
+	assert.deepEqual(after.tools, before.tools);
+	assert.ok(!started.includes(task), 'neither rendering nor composing the prompt started a machine');
+});
+
 test('reading, searching and listing, and the explorer, never start a machine for a task without a workspace', async () => {
 	const flue = await flueInternals();
 	const { Coder } = await import('../src/agents/coder.ts');
