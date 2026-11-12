@@ -221,3 +221,12 @@ test('Coder runs the repository’s check only for a repository task in its sand
 	assert.match(gates, /if \(signal\.aborted\) \{\n\t\t\t\tvoid stopReplyJobs\(id\);\n\t\t\t\tvoid stopRepoCheck\(id\);/);
 	assert.match(source, /startCheckGate\(id\);/);
 });
+
+test('a subagent on its own model has its summary written by that model at the effort the task’s own model writes one', () => {
+	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const helper = source.slice(source.indexOf('function withSettingsModel'), source.indexOf('function useRepoSnapshot'));
+	// Claude Code's models compact at their own point, with the summary compactionFor names; the rest at the runtime's point.
+	assert.match(helper, /choice\.model\.startsWith\('claude-code\/'\) \? compactionFor\(choice\.model\) : \{ reasoning: COMPACTION_SUMMARY_EFFORT \}/);
+	// A subagent on the task's model takes the task's compaction, as before.
+	assert.match(helper, /if \(!choice\) return subagent;/);
+});

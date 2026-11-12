@@ -10,7 +10,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-context-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
+const { COMPACTION_SUMMARY_EFFORT, compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
 const { backfillLatestInputs, recordLatestInput } = await import('../src/services/latest-input.ts');
 const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/subscriptions.ts');
 const { setProviders } = await import('../src/providers/index.ts');
@@ -90,12 +90,29 @@ test('a ceiling compacts a large window sooner, and leaves a window that fills f
 	assert.equal(compactionReserve(1_000_000, 384_000, null), 20_000, 'no ceiling waits for the window');
 
 	const models = [model('opencode-go/deepseek-v4-pro', 1_000_000, 384_000), model('openai/gpt-6-luna', 200_000, 128_000), model('cursor/grok-4.7', 0, null)];
-	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 200_000, models), { reserveTokens: 800_000, keepRecentTokens: 40_000 });
-	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro#sort=price', 400_000, models), { reserveTokens: 600_000, keepRecentTokens: 40_000 }, 'a route is no model of its own');
-	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', null, models), { keepRecentTokens: 40_000 }, 'the runtime keeps its own point');
-	assert.deepEqual(compactionFor('openai/gpt-6-luna', 200_000, models), { keepRecentTokens: 36_000 }, 'the window fills first');
-	assert.equal(compactionFor('cursor/grok-4.7', 200_000, models), undefined, 'an unknown window is left to the runtime');
-	assert.equal(compactionFor('openrouter/unlisted', 200_000, models), undefined);
+	const low = { reasoning: COMPACTION_SUMMARY_EFFORT };
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 200_000, models), { reserveTokens: 800_000, keepRecentTokens: 40_000, ...low });
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro#sort=price', 400_000, models), { reserveTokens: 600_000, keepRecentTokens: 40_000, ...low }, 'a route is no model of its own');
+	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', null, models), { keepRecentTokens: 40_000, ...low }, 'the runtime keeps its own point');
+	assert.deepEqual(compactionFor('openai/gpt-6-luna', 200_000, models), { keepRecentTokens: 36_000, ...low }, 'the window fills first');
+	assert.deepEqual(compactionFor('cursor/grok-4.7', 200_000, models), low, 'an unknown window leaves the point to the runtime');
+	assert.deepEqual(compactionFor('openrouter/unlisted', 200_000, models), low);
+});
+
+test('with no compaction model the task’s own model writes the summary at low effort, and nothing else changes', () => {
+	assert.equal(COMPACTION_SUMMARY_EFFORT, 'low');
+	const models = [model('opencode-go/deepseek-v4-pro', 1_000_000, 384_000), model('openai/gpt-6-luna', 200_000, 128_000), model('claude-code/claude-opus-5-5', 1_000_000, 128_000)];
+	for (const [id, ceiling] of [['opencode-go/deepseek-v4-pro', 200_000], ['opencode-go/deepseek-v4-pro', null], ['openai/gpt-6-luna', 200_000], ['claude-code/claude-opus-5-5', 200_000]] as const) {
+		const own = compactionFor(id, ceiling, models, null, null);
+		// No model is named: Flue's patched summary call then uses the conversation's own model with this effort.
+		assert.equal(own.model, undefined, id);
+		assert.equal(own.reasoning, 'low', id);
+		// When and how much is kept word for word is what it was, chosen model or not.
+		const chosen = compactionFor(id, ceiling, models, 'openrouter/fast', 'medium');
+		assert.deepEqual({ reserveTokens: own.reserveTokens, keepRecentTokens: own.keepRecentTokens }, { reserveTokens: chosen.reserveTokens, keepRecentTokens: chosen.keepRecentTokens }, id);
+	}
+	// An effort with no model chosen is never stored (`backgroundReasoning` answers null), but would not displace the default either.
+	assert.equal(compactionFor('openai/gpt-6-luna', 200_000, models, null, 'high').reasoning, 'low');
 });
 
 test('Claude Code’s models compact at their own point, and a compaction model brings the effort picked with it', () => {
@@ -106,7 +123,9 @@ test('Claude Code’s models compact at their own point, and a compaction model 
 	assert.deepEqual(compactionFor('claude-code/claude-opus-5-5', compactionCeilingFor('claude-code/claude-opus-5-5', settings), models, null, null), {
 		reserveTokens: 800_000,
 		keepRecentTokens: 40_000,
+		reasoning: COMPACTION_SUMMARY_EFFORT,
 	});
+	// A compaction model chosen is used exactly as before, with its effort or with none (the runtime's high).
 	assert.deepEqual(compactionFor('opencode-go/deepseek-v4-pro', 400_000, models, 'openrouter/fast', 'low'), {
 		reserveTokens: 600_000,
 		keepRecentTokens: 40_000,

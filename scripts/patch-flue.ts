@@ -28,7 +28,10 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * `high` reasoning. A compaction model picked in Settings › General comes with
  * the effort picked beside it, which Anton passes as the compaction's
  * `reasoning`; the summary is written at that effort (`off` without reasoning),
- * and at `high` when none was picked.
+ * and at `high` when none was picked. With no compaction model the summary is
+ * the conversation's own model's, at the `reasoning` Anton passes without a
+ * model (`COMPACTION_SUMMARY_EFFORT` in src/services/context-usage.ts), else at
+ * `high`.
  *
  * Waiting on a busy database. Litestream writes to and checkpoints flue.db
  * alongside Anton (`npm run start:backup`). Flue opens it without a busy
@@ -60,13 +63,18 @@ const PATCHES: Patch[] = [
 		],
 	},
 	{
-		name: "the compaction model's effort",
+		name: "the summary's effort, with a compaction model or without",
 		dir: '',
 		marker: 'async runCompaction(',
 		fixes: [
 			[
 				'const summarizationModel = compactionConfig?.model ? this.resolveModelForCall(compactionConfig.model) : sessionModel;',
+				'const summarizationModel = compactionConfig?.model ? { ...this.resolveModelForCall(compactionConfig.model), summaryReasoning: compactionConfig.reasoning } : compactionConfig?.reasoning ? { ...sessionModel, summaryReasoning: compactionConfig.reasoning } : sessionModel;',
+			],
+			// What this patch made before the effort was read without a compaction model.
+			[
 				'const summarizationModel = compactionConfig?.model ? { ...this.resolveModelForCall(compactionConfig.model), summaryReasoning: compactionConfig.reasoning } : sessionModel;',
+				'const summarizationModel = compactionConfig?.model ? { ...this.resolveModelForCall(compactionConfig.model), summaryReasoning: compactionConfig.reasoning } : compactionConfig?.reasoning ? { ...sessionModel, summaryReasoning: compactionConfig.reasoning } : sessionModel;',
 			],
 		],
 	},
