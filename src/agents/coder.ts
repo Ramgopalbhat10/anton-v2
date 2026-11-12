@@ -104,6 +104,7 @@ import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { takePinned } from '../services/compaction-pin.ts';
 import { loadGate } from '../services/gate-state.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
@@ -1698,6 +1699,14 @@ export function Coder({ id }: AgentProps) {
 		// What the checks at a reply's end know of the task is read from its row now, ahead of a reply the runtime resumes
 		// after a restart (which runs no start hooks), so a command's result can tell it how long it has run.
 		void loadGate(id);
+		// A compaction the last reply's end let pass: the request and todo list go word for word after the message that
+		// starts this reply, before the model's first call. A user's message is the request itself, already there word for
+		// word, so only the list goes with it. Nothing is read from the database unless a compaction happened.
+		const delivery = useDelivery();
+		useAgentStart(async ({ append }) => {
+			const pinned = await takePinned(id, { request: delivery.kind !== 'user' });
+			if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
+		});
 		// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 		// The reply is also checked for whether it waits on the user, so the task can say so.
@@ -1709,30 +1718,37 @@ export function Coder({ id }: AgentProps) {
 			}
 			// The checks read what they know of the task from its row before any of them runs.
 			await loadGate(id);
+			// After a compaction the request and todo list go word for word with whatever sends the reply back, ahead of it.
+			// Never on their own: a reply sent back for them alone would pay a model call over the conversation to end again.
+			const sendBack = async (body: string) => {
+				const pinned = await takePinned(id);
+				if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
+				append({ kind: 'signal', type: 'reminder', body });
+			};
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
 			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
 			if (reminder) {
-				append({ kind: 'signal', type: 'reminder', body: reminder });
+				await sendBack(reminder);
 				return;
 			}
 			// A reply that ends by announcing a step it never took is sent back to take it, once.
 			const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
 			if (stalled) {
-				append({ kind: 'signal', type: 'reminder', body: stalled });
+				await sendBack(stalled);
 				return;
 			}
 			// A job this reply started that still runs, or that ended with its result unread, sends it back: once a job each way.
 			// Before the review, so the review reads the change as the job's result left it.
 			const jobs = signal.aborted ? null : await jobsGate(id, response.toolCalls, { signal });
 			if (jobs) {
-				append({ kind: 'signal', type: 'reminder', body: jobs });
+				await sendBack(jobs);
 				return;
 			}
 			// A reply that changed files waits for the repository's check of its last change, and a failure sends it back to fix
 			// what broke or say it was there before: once a failure, twice a reply at most. Nothing at all with no check command.
 			const broken = signal.aborted ? null : await checkGate(id, response.toolCalls, { signal });
 			if (broken) {
-				append({ kind: 'signal', type: 'reminder', body: broken });
+				await sendBack(broken);
 				return;
 			}
 			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
@@ -1740,14 +1756,14 @@ export function Coder({ id }: AgentProps) {
 			// A task that started its workspace during this reply has one now, though this render began without it.
 			const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 			if (missed) {
-				append({ kind: 'signal', type: 'reminder', body: missed });
+				await sendBack(missed);
 				return;
 			}
 			// A reply that ends with requested work left undone, and not for something only the user can give, is sent back to do it:
 			// a few rounds at most, each after the first only when the last changed something. Each round lets the review read the new change.
 			const undone = !planning && !review && !signal.aborted ? await completionGate(id, response.toolCalls, { chat, workspace: workspace || hasWorkspace(id), signal }) : null;
 			if (undone) {
-				append({ kind: 'signal', type: 'reminder', body: undone });
+				await sendBack(undone);
 				return;
 			}
 			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.

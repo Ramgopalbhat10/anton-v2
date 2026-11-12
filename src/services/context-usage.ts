@@ -85,13 +85,12 @@ export function measureRequest(input: ModelRequestInput): Record<ContextPart, nu
 /** The runtime's name for an agent's main conversation; a subagent's task gets a session of its own. */
 export const MAIN_SESSION = 'default';
 
+/** An event of the coding agent's main conversation, not a subagent's or the reviewer's. */
+export const onMainCoder = (event: Pick<ContextEvent, 'instanceId' | 'taskId' | 'session' | 'agentName'>) =>
+	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === MAIN_SESSION) && (!event.agentName || /^coder$/i.test(event.agentName));
+
 /** The coding agent's own calls in its main conversation, not a subagent's, the reviewer's, or a compaction's. */
-const isTaskCall = (event: ContextEvent) =>
-	Boolean(event.instanceId) &&
-	!event.taskId &&
-	(event.session === undefined || event.session === MAIN_SESSION) &&
-	event.purpose === 'agent' &&
-	(!event.agentName || /^coder$/i.test(event.agentName));
+const isTaskCall = (event: ContextEvent) => onMainCoder(event) && event.purpose === 'agent';
 
 /** Requests seen, waiting for their call to finish; keyed by task and turn. */
 const pending = new Map<string, Record<ContextPart, number>>();

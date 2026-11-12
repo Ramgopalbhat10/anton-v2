@@ -52,6 +52,8 @@ export type GateState = {
 	clock?: { started: number; told?: number };
 	said: Said;
 	check: CheckState;
+	/** Whether the conversation was compacted since the agent was last given its request and todo list word for word (`compaction-pin.ts`). */
+	compacted?: boolean;
 };
 
 /**

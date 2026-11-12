@@ -310,9 +310,10 @@ export function findingsOf(answer: string): string | null {
 	return text.length > MAX_FINDINGS ? `${text.slice(0, MAX_FINDINGS)}…` : text;
 }
 
-const again = (request: string) => [
+/** The request between tags, as the agent is shown it again: past `MAX_SELF_REQUEST` its start, with `note` saying so. */
+export const requestLines = (request: string, note = '[The request goes on; read it whole in the conversation.]') => [
 	'<request>',
-	request.length > MAX_SELF_REQUEST ? `${request.slice(0, MAX_SELF_REQUEST)}\n[The request goes on; read it whole in the conversation.]` : request,
+	request.length > MAX_SELF_REQUEST ? `${request.slice(0, MAX_SELF_REQUEST)}\n${note}` : request,
 	'</request>',
 ];
 
@@ -326,7 +327,7 @@ export const selfCheck = (request: string) =>
 	[
 		'Before you end, check your change against the request with fresh eyes. Here it is again:',
 		'',
-		...again(request),
+		...requestLines(request),
 		'',
 		'Read your diff (git diff, new files included) against it, item by item: each named function, option, flag, field, message, output format, default, error or fallback path and edge case. ' +
 			`Do whatever is missing or done differently from what the request says, and run the tests that cover it. ${SETTLE} If the change already does everything, end your reply without repeating your answer.`,
@@ -337,7 +338,7 @@ export const selfCheckWork = (request: string) =>
 	[
 		'Before you end, check your work against the request with fresh eyes. Here it is again:',
 		'',
-		...again(request),
+		...requestLines(request),
 		'',
 		'Go through what you are handing back (each file, output and value, where the request says it goes) against it, item by item: each named path, file name, format, field, unit, rounding, option, default, limit, error or fallback path and edge case. ' +
 			`Do whatever is missing or done differently from what the request says, and run the check that covers it again. ${SETTLE} If the work already does everything, end your reply without repeating your answer.`,

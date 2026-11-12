@@ -78,6 +78,7 @@ import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.t
 import { recordTurnUsage, usageView } from './services/usage.ts';
 import { countReplyCall } from './services/response-usage.ts';
 import { recordTraceEvent } from './services/response-trace.ts';
+import { noteCompaction } from './services/compaction-pin.ts';
 import { getTrace } from './db/traces.ts';
 import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/subagent-runs.ts';
 import { installSubagentStop } from './flue/subagent-stop.ts';
@@ -160,6 +161,8 @@ observeRuntime((event) => {
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	// Before the step's tools run, so a todo update knows whether it was the step's only call.
 	noteTodoStep(event as Parameters<typeof noteTodoStep>[0]);
+	// A compaction of a task's conversation is noted before the end-of-reply hook that follows it, which pins the request and todo list.
+	noteCompaction(event as Parameters<typeof noteCompaction>[0]);
 	// A finished call that may have changed a task's files runs the repository's check after a quiet, in the background.
 	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
