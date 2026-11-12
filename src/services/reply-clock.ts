@@ -1,4 +1,5 @@
 import { config } from '../config.ts';
+import { changeGate, gate } from './gate-state.ts';
 
 /*
  * How long the reply in hand has run, told to the agent with a command's
@@ -15,20 +16,11 @@ export const CLOCK_AFTER_MS = 10 * 60_000;
 /** The time is told again only this long after it was last told. */
 export const CLOCK_EVERY_MS = 10 * 60_000;
 
-const started = new Map<string, number>();
-const told = new Map<string, number>();
-const KEEP_TASKS = 500;
-
-/** A reply starts: its time counts from now. */
+/** A reply starts: its time counts from now. Its start is kept with the task's checks, so a reply resumed after a restart counts on. */
 export function startReplyClock(id: string, now = Date.now()): void {
-	started.delete(id);
-	started.set(id, now);
-	told.delete(id);
-	if (started.size > KEEP_TASKS) {
-		const oldest = started.keys().next().value!;
-		started.delete(oldest);
-		told.delete(oldest);
-	}
+	changeGate(id, (state) => {
+		state.clock = { started: now };
+	});
 }
 
 /** `1h 25m`, or `25m` under an hour. */
@@ -49,20 +41,23 @@ export function hoursText(ms: number): string {
 
 /** How long the reply in hand has run, or null when its start is not known here. */
 export function replyElapsed(id: string, now = Date.now()): number | null {
-	const since = started.get(id);
+	const since = gate(id).clock?.started;
 	return since === undefined ? null : Math.max(0, now - since);
 }
 
 /**
  * The line a command's result ends with when the reply has run long enough and has not been told lately; empty
- * otherwise, and for a reply whose start is not known here (one resumed after a restart), which is told nothing
- * rather than a time that starts at the restart.
+ * otherwise, and for a reply whose start is not known here, which is told nothing rather than a time that starts
+ * from some later moment.
  */
 export function elapsedNote(id: string, now = Date.now(), limitMs = config.replyTimeoutMs): string {
-	const since = started.get(id);
+	const clock = gate(id).clock;
+	const since = clock?.started;
 	if (since === undefined || now - since < CLOCK_AFTER_MS) return '';
-	const last = told.get(id);
+	const last = clock?.told;
 	if (last !== undefined && now - last < CLOCK_EVERY_MS) return '';
-	told.set(id, now);
+	changeGate(id, (state) => {
+		if (state.clock) state.clock.told = now;
+	});
 	return `\n[anton] ${elapsedText(now - since)} since this reply started, of ${hoursText(limitMs)} allowed.`;
 }

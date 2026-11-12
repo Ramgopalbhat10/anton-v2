@@ -3,6 +3,7 @@ import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { changesView } from './files.ts';
+import { changeGate, gate, loadGate } from './gate-state.ts';
 import { otherRepoChanges } from './git.ts';
 import { logProblem } from './log.ts';
 import { modelFor } from './sessions.ts';
@@ -63,39 +64,30 @@ const WORKED = 5;
 /** The tools that work in the sandbox. */
 const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', ...FILE_CHANGE_TOOLS]);
 
-/** Each task's latest request, whole: the latest input kept on the task is cut for its card. */
-const requests = new Map<string, string>();
-/** Tasks whose reply in hand was reviewed already, so a reply is reviewed once. */
-const reviewed = new Set<string>();
-/** The diff each task's last review read, so a later reply that changed nothing is not reviewed again. */
-const lastPatch = new Map<string, string>();
-/** Each task's change as the review last read it, by hash, whether or not it was reviewed. */
-const seenPatch = new Map<string, string>();
-/** The change as the reply in hand found it, when known: a reply that ends with the same one changed no code. */
-const startPatch = new Map<string, string>();
-const KEEP_TASKS = 200;
-
-const remember = <T>(map: Map<string, T>, id: string, value: T) => {
-	map.delete(id);
-	map.set(id, value);
-	if (map.size > KEEP_TASKS) map.delete(map.keys().next().value!);
-};
+/*
+ * What the review knows of each task (its request, the change as last read and as the reply in hand found it, and
+ * what it reviewed) is kept with the task's checks (`gate-state.ts`), so a reply resumed after a restart is reviewed
+ * as it would have been.
+ */
 
 /** Keeps the message the user gave the task, whole. */
 export function noteRequest(id: string, text: string): void {
-	const request = text.trim();
-	if (request) remember(requests, id, request.slice(0, MAX_REQUEST));
+	const request = text.trim().slice(0, MAX_REQUEST);
+	if (request)
+		changeGate(id, (state) => {
+			state.request = request;
+		});
 }
 
-/** The request the reply in hand answers, whole, or undefined when none was seen since the server started. */
-export const requestFor = (id: string): string | undefined => requests.get(id);
+/** The request the reply in hand answers, whole, or undefined when the task has none. */
+export const requestFor = (id: string): string | undefined => gate(id).request;
 
 /** A new reply may be reviewed again. */
 export function startFinishReview(id: string): void {
-	reviewed.delete(id);
-	const seen = seenPatch.get(id);
-	if (seen === undefined) startPatch.delete(id);
-	else remember(startPatch, id, seen);
+	changeGate(id, ({ review }) => {
+		review.reviews = 0;
+		review.start = review.seen;
+	});
 }
 
 /**
@@ -103,7 +95,9 @@ export function startFinishReview(id: string): void {
  * work it had left undone (`completion-gate.ts`), the change it then makes is read like any other.
  */
 export function reopenFinishReview(id: string): void {
-	reviewed.delete(id);
+	changeGate(id, ({ review }) => {
+		review.reviews = 0;
+	});
 }
 
 /** The diff as the reviewer reads it: binary files as one line each, and cut past `MAX_PATCH`. */
@@ -205,27 +199,35 @@ export async function taskPatch(id: string): Promise<string | null> {
  * So is a chat whose reply worked in its sandbox and left no diff, against what it made (`selfCheckWork`).
  */
 export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat }): Promise<string | null> {
-	const request = requests.get(id);
-	if (!request || reviewed.has(id)) return null;
+	await loadGate(id);
+	const { request, review } = gate(id);
+	if (!request || review.reviews > 0) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
 	const writer = getProviders().text;
 	const { model } = modelFor(id);
 	const own = writer?.runs(model) ? writer : null;
-	reviewed.add(id);
+	changeGate(id, (state) => {
+		state.review.reviews = 1;
+	});
 	try {
 		const patch = await deps.patch(id);
 		// A machine that is not running says nothing of the change, so what was seen last stands.
 		const change = patch === null ? null : createHash('sha256').update(patch.trim()).digest('hex');
-		if (change) remember(seenPatch, id, change);
+		if (change)
+			changeGate(id, (state) => {
+				state.review.seen = change;
+			});
 		if (!patch?.trim()) {
 			const worked = calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length >= WORKED;
 			return worked && (await deps.chat?.(id)) ? selfCheckWork(request) : null;
 		}
-		if (startPatch.get(id) === change) return null;
+		if (review.start === change) return null;
 		const digest = createHash('sha256').update(request).update(patch).digest('hex');
-		if (lastPatch.get(id) === digest) return null;
-		remember(lastPatch, id, digest);
+		if (review.reviewed.includes(digest)) return null;
+		changeGate(id, (state) => {
+			state.review.reviewed = [digest];
+		});
 		if (!own) return selfCheck(request);
 		const answer = await own.write({ model, prompt: reviewPrompt(request, reviewPatch(patch)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
 		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);

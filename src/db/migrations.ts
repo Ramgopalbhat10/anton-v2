@@ -226,6 +226,10 @@ export const migrations: string[][] = [
 		`CREATE INDEX IF NOT EXISTS notifications_key ON notifications (key)`,
 		`CREATE INDEX IF NOT EXISTS notifications_session ON notifications (session_id)`,
 	],
+	// 44: the state of a task's checks at the end of a reply (`src/services/gate-state.ts`): its request, what the finish
+	// review last read and how often it ran, the completion gate's rounds, the reply's clock and closing words, as JSON.
+	// A reply the runtime resumes after a restart ends with the same checks as it would have without one.
+	[`CREATE TABLE IF NOT EXISTS task_gate_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`],
 ];
 
 /** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */
