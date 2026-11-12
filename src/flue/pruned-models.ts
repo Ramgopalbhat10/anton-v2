@@ -1,5 +1,6 @@
-import type { Api, Context, Model, Provider, StreamOptions } from '@earendil-works/pi-ai';
-import { compactionPoint, pruneContext } from '../services/context-prune.ts';
+import type { Api, AssistantMessage, Context, Model, Provider, StreamOptions } from '@earendil-works/pi-ai';
+import { cacheLifetime } from '../core/prompt-cache.ts';
+import { compactionPoint, noteSent, type PruneModel, pruneContext } from '../services/context-prune.ts';
 
 /**
  * A provider whose calls send old tool results cleared once a conversation grows (src/services/context-prune.ts).
@@ -9,17 +10,28 @@ import { compactionPoint, pruneContext } from '../services/context-prune.ts';
 /** APIs that take a conversation whose older assistant messages leave their reasoning out; the Responses API wants each tool call's reasoning item. */
 const THINKING_OPTIONAL = new Set<string>(['openai-completions', 'anthropic-messages']);
 
+/** What the clearing is told of a call's model: its prices, its API, and how long its provider's cache lasts. */
+export const pruneModel = (model: Model<Api>): PruneModel => ({
+	price: model.cost,
+	dropThinking: THINKING_OPTIONAL.has(model.api),
+	cacheMs: cacheLifetime(`${model.provider}/${model.id}`),
+});
+
 export function withPruning(provider: Provider): Provider {
-	const pruned = (model: Model<Api>, context: Context, options: StreamOptions | undefined): Context =>
-		options?.sessionId
-			? pruneContext(options.sessionId, context, compactionPoint(model), Date.now(), {
-					price: model.cost,
-					dropThinking: THINKING_OPTIONAL.has(model.api),
-				}).context
-			: context;
+	const pruned = <T>(send: (model: Model<Api>, context: Context, options: StreamOptions | undefined) => T) =>
+		(model: Model<Api>, context: Context, options: StreamOptions | undefined): T => {
+			const key = options?.sessionId;
+			if (!key) return send(model, context, options);
+			const { context: sent, call } = pruneContext(key, context, compactionPoint(model), Date.now(), pruneModel(model));
+			const stream = send(model, sent, options);
+			// The provider's count of what this call sent sizes the conversation's next one; the same stream, so no lookup.
+			const result = (stream as { result?: () => Promise<AssistantMessage> } | undefined)?.result;
+			if (typeof result === 'function') result.call(stream).then((message) => noteSent(key, call, message?.usage), () => {});
+			return stream;
+		};
 	return {
 		...provider,
-		stream: (model, context, options) => provider.stream(model, pruned(model, context, options), options),
-		streamSimple: (model, context, options) => provider.streamSimple(model, pruned(model, context, options), options),
+		stream: pruned(provider.stream.bind(provider)),
+		streamSimple: pruned(provider.streamSimple.bind(provider)),
 	} as Provider;
 }

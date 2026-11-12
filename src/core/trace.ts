@@ -109,7 +109,7 @@ export type CacheVerdict = { tone: 'success' | 'warning' | 'danger' | 'neutral';
  * a prefix that held and still missed points at the cache expiring, or a
  * provider that caches nothing.
  */
-export function cacheVerdict(span: ModelSpan, previous: ModelSpan | null): CacheVerdict {
+export function cacheVerdict(span: Pick<ModelSpan, 'usage' | 'prompt' | 'toolset'>, previous: Pick<ModelSpan, 'prompt' | 'toolset'> | null): CacheVerdict {
 	if (!span.usage) return { tone: 'neutral', label: 'No usage', why: 'The provider reported no tokens for this call.' };
 	const { hit, total, read, write } = cacheShare(span.usage);
 	const changed = previous ? [previous.prompt !== span.prompt && 'system prompt', previous.toolset !== span.toolset && 'tool list'].filter(Boolean) : [];

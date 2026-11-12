@@ -1,4 +1,5 @@
 import type { Context, Message, Model, Api } from '@earendil-works/pi-ai';
+import { DEFAULT_CACHE_MS } from '../core/prompt-cache.ts';
 import { compactionReserve } from './context-usage.ts';
 import { compactionCeiling } from './general.ts';
 import { keepCleared, MORE_TOOL } from './tool-results.ts';
@@ -15,7 +16,8 @@ import { keepCleared, MORE_TOOL } from './tool-results.ts';
  * provider's prompt cache misses once, on that call. So it clears in batches
  * (never one result at a time), and while the cache is warm it waits until
  * compaction is near (85%), where it saves a summary call and its detail
- * lost; after five minutes idle, when the cache has expired anyway, it
+ * lost; once idle past the provider's cache lifetime (`cacheLifetime`, five
+ * minutes on most, ten on OpenAI's), when the cache has expired anyway, it
  * clears as soon as it passes the mark. Replayed on real tasks, clearing
  * sooner with a warm cache cost more in misses than it saved. What was cleared
  * stays cleared on every later call, so the cache holds between batches. The
@@ -29,6 +31,14 @@ import { keepCleared, MORE_TOOL } from './tool-results.ts';
  * where it takes 98% off (DeepSeek), the same replay spent 9% more, so such a
  * model still waits for 85%. A conversation clears early only once it has made
  * as many calls as the batch needs to pay back, so a short chat never does.
+ *
+ * A conversation's size is what the provider counted of its previous call,
+ * cached or not, with what was added since estimated, a token for every four
+ * characters. The estimate alone is used for a first call, after a restart,
+ * and once the conversation no longer starts as that call's did (after a
+ * compaction, or with a system prompt or tool list of another size). Code and
+ * JSON often run to fewer than four characters a token, so the estimate alone
+ * can fall short of what is sent.
  *
  * Reasoning the model wrote before the newest cleared result is left out too,
  * for APIs that take a conversation without it (Chat Completions, Anthropic
@@ -49,14 +59,14 @@ const PROTECT_TOKENS = 20_000;
 const PAYBACK_CALLS = 25;
 /** A result this small costs little more than its stub. */
 const MIN_CHARS = 2_000;
-/** Providers keep a prompt cache about this long after its last use. */
-const CACHE_MS = 5 * 60_000;
 /** Conversations whose cleared results are remembered, the least recently called dropped first. */
 const KEEP_CONVERSATIONS = 200;
 /** What a picture counts for, about what providers charge for a screenshot. */
 const IMAGE_TOKENS = 1_600;
 
-type State = { cleared: Set<string>; lastAt: number | null; calls: number };
+/** What a conversation's latest call sent: its number, how many messages, the last of them, its system prompt and tools' size, and what the provider counted. */
+type Sent = { call: number; messages: number; mark: string; fixed: number; tokens: number | null };
+type State = { cleared: Set<string>; lastAt: number | null; calls: number; sent: Sent | null };
 const conversations = new Map<string, State>();
 
 /** The runtime's rule of thumb for a size it does not measure. */
@@ -66,8 +76,11 @@ type Part = { type: string; text?: string; thinking?: string; arguments?: unknow
 
 /** A model's prices per million tokens, as pi-ai lists them. */
 export type Price = { input: number; cacheRead: number; cacheWrite: number };
-/** What a call's model tells the clearing: its prices, and whether its API takes old reasoning left out. */
-export type PruneModel = { price?: Price; dropThinking?: boolean };
+/**
+ * What a call's model tells the clearing: its prices, whether its API takes old reasoning left out, and how long its
+ * provider's cache lasts after its last use (`cacheLifetime` in src/core/prompt-cache.ts; five minutes when not given).
+ */
+export type PruneModel = { price?: Price; dropThinking?: boolean; cacheMs?: number };
 
 const missPrice = (price: Price) => Math.max(price.input, price.cacheWrite || 0) - price.cacheRead;
 const priced = (price: Price | undefined): price is Price => Boolean(price && price.cacheRead > 0 && price.input > price.cacheRead);
@@ -121,19 +134,23 @@ export function compactionPoint(model: Pick<Model<Api>, 'contextWindow' | 'maxTo
 	return window > 0 ? window - compactionReserve(window, model.maxTokens || null, ceiling) : 0;
 }
 
-export type Pruned = { context: Context; cleared: number; tokens: number };
+/** A call is the same message when it has the same role, time and tool call, as it does from one call to the next. */
+const markOf = (message: Message | undefined) => (message ? `${message.role}:${message.timestamp}:${message.role === 'toolResult' ? message.toolCallId : ''}` : '');
+
+/** The context to send, how many results it has cleared, its size in tokens, and the call's number in its conversation, for `noteSent`. */
+export type Pruned = { context: Context; cleared: number; tokens: number; call: number };
 
 /**
  * The context a model call sends for conversation `key` (the runtime's session id for it): its results cleared so
  * far given stubs, and a new batch cleared when it has grown past the mark.
  */
 export function pruneContext(key: string, context: Context, point: number, now = Date.now(), model: PruneModel = {}): Pruned {
-	const state = conversations.get(key) ?? { cleared: new Set<string>(), lastAt: null, calls: 0 };
+	const state = conversations.get(key) ?? { cleared: new Set<string>(), lastAt: null, calls: 0, sent: null };
 	state.calls += 1;
 	conversations.delete(key);
 	conversations.set(key, state);
 	if (conversations.size > KEEP_CONVERSATIONS) conversations.delete(conversations.keys().next().value!);
-	const cold = state.lastAt === null || now - state.lastAt >= CACHE_MS;
+	const cold = state.lastAt === null || now - state.lastAt >= (model.cacheMs ?? DEFAULT_CACHE_MS);
 	state.lastAt = now;
 
 	const canRead = Boolean(context.tools?.some((tool) => tool.name === MORE_TOOL));
@@ -153,7 +170,16 @@ export function pruneContext(key: string, context: Context, point: number, now =
 	const sizes = context.messages.map((message) =>
 		message.role === 'toolResult' && state.cleared.has(message.toolCallId) ? messageTokens(stubFor(message)) : messageTokens(message),
 	);
-	let tokens = fixed + sizes.reduce((sum, size) => sum + size, 0);
+	const sum = (from: number) => sizes.slice(from).reduce((total, size) => total + size, 0);
+	// What the provider counted of the previous call, where this one starts as it did, and the messages since estimated.
+	const last = state.sent;
+	const counted =
+		last?.tokens && last.fixed === fixed && last.messages <= context.messages.length && markOf(context.messages[last.messages - 1]) === last.mark ? last.tokens + sum(last.messages) : null;
+	let tokens = counted ?? fixed + sum(0);
+	state.sent = { call: state.calls, messages: context.messages.length, mark: markOf(context.messages.at(-1)), fixed, tokens: null };
+	// Reasoning before the newest result cleared by an earlier batch was left out of what the provider counted.
+	let dropped = -1;
+	if (counted !== null && model.dropThinking) context.messages.forEach((message, index) => message.role === 'toolResult' && state.cleared.has(message.toolCallId) && (dropped = index));
 
 	const { price } = model;
 	const due = cold ? tokens > point * START : tokens > point * URGENT || (priced(price) && tokens > point * warmShare(price) && paysBack(state.calls, tokens, point, price));
@@ -177,7 +203,7 @@ export function pruneContext(key: string, context: Context, point: number, now =
 		}
 	}
 
-	if (!state.cleared.size) return { context, cleared: 0, tokens };
+	if (!state.cleared.size) return { context, cleared: 0, tokens, call: state.calls };
 	// Old reasoning goes up to the newest cleared result, which moves only with a batch, so the calls between send the same start.
 	let edge = -1;
 	if (model.dropThinking) context.messages.forEach((message, index) => message.role === 'toolResult' && state.cleared.has(message.toolCallId) && (edge = index));
@@ -187,13 +213,24 @@ export function pruneContext(key: string, context: Context, point: number, now =
 			const kept = (message.content as Part[]).filter((part) => part.type !== 'thinking');
 			if (kept.length && kept.length < message.content.length) {
 				const without = { ...message, content: kept } as Message;
-				tokens -= messageTokens(message) - messageTokens(without);
+				if (index >= dropped) tokens -= messageTokens(message) - messageTokens(without);
 				return without;
 			}
 		}
 		return message;
 	});
-	return { context: { ...context, messages }, cleared: stubs.size, tokens };
+	return { context: { ...context, messages }, cleared: stubs.size, tokens, call: state.calls };
+}
+
+/**
+ * What the provider counted of call `call` of conversation `key` (its input, read from the cache, written to it, or
+ * neither), which sizes the conversation's next call. A count for any but its latest call, or of nothing (a call that
+ * failed), is not kept.
+ */
+export function noteSent(key: string, call: number, usage: { input?: number; cacheRead?: number; cacheWrite?: number } | undefined): void {
+	const sent = conversations.get(key)?.sent;
+	const tokens = (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
+	if (sent?.call === call && tokens > 0) sent.tokens = tokens;
 }
 
 /** Forgets every conversation's clearing, as a restart does. */
