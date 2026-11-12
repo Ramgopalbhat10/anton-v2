@@ -108,6 +108,7 @@ import { loadGate } from '../services/gate-state.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
 import { checkJob, jobNotice, jobsGate, MAX_WAIT_S, startJob, startJobsGate, stopReplyJobs } from '../services/background-jobs.ts';
+import { checkGate, checkNotice, startCheckGate, stopRepoCheck, watchRepoCheck } from '../services/repo-check.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { replyNotification } from '../services/notifications.ts';
@@ -305,8 +306,8 @@ async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 	const secrets = await secretsToHide(id);
 	// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
 	copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-	// A command's result also says when a background job ended, once a job.
-	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id));
+	// A command's result also says when a background job ended, once a job, and when the repository's check has news.
+	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id) + checkNotice(id));
 }
 
 /**
@@ -1634,6 +1635,8 @@ export function Coder({ id }: AgentProps) {
 	const repoTask = !chat && !planning && !review;
 	// Whether the prompt and tools offer the sandbox: a repository task gets it on first use, so from the start; the rest once they have it.
 	const sandboxed = repoTask || workspace;
+	// The repository's check runs after its changes only here: never for a chat, a plan, a review or a task on this server.
+	watchRepoCheck(id, repoTask && !runsOnHost(id));
 	if (repoTask) useTaskWorkspace(id, profile);
 	else if (workspace) useWorkspace(id, chat, review, profile);
 	else if (!incognito) {
@@ -1698,8 +1701,11 @@ export function Coder({ id }: AgentProps) {
 		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 		// The reply is also checked for whether it waits on the user, so the task can say so.
 		useAgentFinish(async ({ response, append, signal }) => {
-			// A stopped reply leaves no job of its own running.
-			if (signal.aborted) void stopReplyJobs(id);
+			// A stopped reply leaves no job of its own, nor a check of the repository, running.
+			if (signal.aborted) {
+				void stopReplyJobs(id);
+				void stopRepoCheck(id);
+			}
 			// The checks read what they know of the task from its row before any of them runs.
 			await loadGate(id);
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
@@ -1719,6 +1725,13 @@ export function Coder({ id }: AgentProps) {
 			const jobs = signal.aborted ? null : await jobsGate(id, response.toolCalls, { signal });
 			if (jobs) {
 				append({ kind: 'signal', type: 'reminder', body: jobs });
+				return;
+			}
+			// A reply that changed files waits for the repository's check of its last change, and a failure sends it back to fix
+			// what broke or say it was there before: once a failure, twice a reply at most. Nothing at all with no check command.
+			const broken = signal.aborted ? null : await checkGate(id, response.toolCalls, { signal });
+			if (broken) {
+				append({ kind: 'signal', type: 'reminder', body: broken });
 				return;
 			}
 			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
@@ -1771,6 +1784,7 @@ export function Coder({ id }: AgentProps) {
 			startFinishReview(id);
 			startCompletionGate(id);
 			startJobsGate(id);
+			startCheckGate(id);
 			startReplyClock(id);
 			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
 			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);

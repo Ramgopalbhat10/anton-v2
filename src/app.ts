@@ -84,6 +84,7 @@ import { installSubagentStop } from './flue/subagent-stop.ts';
 import { installToolResultCut } from './flue/tool-result-cut.ts';
 import { scriptCalls } from './services/script-runs.ts';
 import { noteTodoStep, todosFor } from './services/todos.ts';
+import { noteRepoCheckEvent } from './services/repo-check.ts';
 import { joinsFor, recordJoinEvent } from './services/joins.ts';
 import { answerWithin } from './services/answer-within.ts';
 import { waitingMessages } from './services/waiting.ts';
@@ -159,6 +160,8 @@ observeRuntime((event) => {
 	countReplyCall(event as Parameters<typeof countReplyCall>[0]);
 	// Before the step's tools run, so a todo update knows whether it was the step's only call.
 	noteTodoStep(event as Parameters<typeof noteTodoStep>[0]);
+	// A finished call that may have changed a task's files runs the repository's check after a quiet, in the background.
+	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
