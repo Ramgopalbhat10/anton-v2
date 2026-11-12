@@ -1794,6 +1794,8 @@ export function Coder({ id }: AgentProps) {
 				...(trace ? { traceId: trace.id } : {}),
 				usage: reply ? replyTotal(reply) : toUsage(response.usage),
 				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
+				// With the reply's tool calls by model (`tools`), what a benchmark's tool mix is read from.
+				toolProfile: profile,
 				billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 			};
