@@ -55,7 +55,9 @@ export function shellScript(command: string, seconds: number, run: Run, dir = OU
 	return [
 		`__anton_cmd=${quote(command)}`,
 		`if ! { mkdir -p ${quote(dir)} && : > ${out}; } 2>/dev/null; then eval "$__anton_cmd"; exit; fi`,
-		'set -m 2>/dev/null',
+		// The shell's own words go nowhere from here: with job control on, bash before 5.3 reports each job's end ("[1]+ Done ...") on stderr.
+		'exec 2>/dev/null',
+		'set -m',
 		`( set +m; eval "$__anton_cmd" ) > ${out} 2>&1 &`,
 		'__anton_pid=$!',
 		`( sleep ${seconds}; : > ${stop}; kill -TERM -- -$__anton_pid; sleep ${KILL_GRACE_S}; kill -KILL -- -$__anton_pid ) > /dev/null 2>&1 &`,

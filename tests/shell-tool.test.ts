@@ -112,6 +112,8 @@ test('a command that names no timeout gets the default, and the note says what t
 	assert.ok(seen[0].timeoutMs! > COMMAND_TIMEOUT_MS, "the machine's own limit is past the command's, so the script can print what it wrote");
 	assert.ok(seen[1].timeoutMs! > 900_000);
 	assert.match(seen[0].command, /\/tmp\/anton-out\/x\.log/);
+	// Bash before 5.3 reports a job's end on stderr once job control is on; the script's own stderr is shut first.
+	assert.match(seen[0].command, /\nexec 2>\/dev\/null\nset -m\n/);
 
 	// The script stopped at the default (one second here) says so, with what to do.
 	const file = `${outputs}/default.log`;

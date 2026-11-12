@@ -63,9 +63,11 @@ test('the local machine fails as the shell does: the same error, operation, path
 	for (const [name, attempt] of cases) {
 		const [byShell, byDirect] = await Promise.all([attempt(shell).then(() => null, (error: unknown) => error), attempt(direct).then(() => null, (error: unknown) => error)]);
 		assert.ok(byShell instanceof CommandError && byDirect instanceof CommandError, name);
-		const [shellOp, shellReason] = [/^`(\w+ [^`]+)` failed/.exec(byShell.message)?.[1], byShell.message.split(': ').pop()];
+		// `wc` writes the size it got to (0) before or after its own error, by its version; the reason is the last of the other lines.
+		const reason = (message: string) => message.split('\n').filter((line) => !/^\d+$/.test(line.trim())).join('\n').split(': ').pop();
+		const [shellOp, shellReason] = [/^`(\w+ [^`]+)` failed/.exec(byShell.message)?.[1], reason(byShell.message)];
 		assert.equal(/^`(\w+ [^`]+)` failed/.exec(byDirect.message)?.[1], shellOp, `${name}: the same operation and path`);
-		assert.equal(byDirect.message.split(': ').pop(), shellReason, `${name}: the same reason (${byShell.message})`);
+		assert.equal(reason(byDirect.message), shellReason, `${name}: the same reason (${byShell.message})`);
 	}
 	assert.equal(existsSync(`${machine.root}/no`), false, 'a write never makes the folders it lacks');
 	chmodSync(locked, 0o600);
