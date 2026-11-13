@@ -1166,11 +1166,23 @@ const waitingMessage = (message: WaitingMessage): FlueConversationMessage => ({
 	parts: [{ type: 'text', text: message.text, state: 'done' }],
 });
 const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
+/** How long the thread trusts a file list nothing has marked stale. */
+const FILE_LINKS_FRESH_MS = 30_000;
 
-/** File references in replies link to the task's files, and open in the Files panel at their line. */
-function useThreadFileLinks(sessionId: string): FileLinks {
+/**
+ * File references in replies link to the task's files, and open in the Files panel at their line.
+ *
+ * Every tool call marks the file list stale. The thread only reads what is cached, so it never
+ * refetches the whole list after each call: it fetches it when the page opens and when a reply
+ * starts or ends, and takes the Files panel's fresher list whenever that panel is open.
+ */
+function useThreadFileLinks(sessionId: string, busy: boolean): FileLinks {
 	const showPanel = useContext(ShowPanel);
-	const files = useQuery({ ...taskQueries.files(sessionId), staleTime: 30_000 });
+	const queryClient = useQueryClient();
+	const files = useQuery({ ...taskQueries.files(sessionId), enabled: false });
+	useEffect(() => {
+		void queryClient.prefetchQuery({ ...taskQueries.files(sessionId), staleTime: FILE_LINKS_FRESH_MS });
+	}, [queryClient, sessionId, busy]);
 	const paths = useMemo(() => new Set(files.data?.paths ?? []), [files.data?.paths]);
 	return useMemo(
 		() => ({
@@ -1277,7 +1289,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		}),
 		[send, busy, follow],
 	);
-	const fileLinks = useThreadFileLinks(sessionId);
+	const fileLinks = useThreadFileLinks(sessionId, busy);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
 	// A message you sent with files shows while they upload; the ones you send rise in.
