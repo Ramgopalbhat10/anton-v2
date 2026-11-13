@@ -8,6 +8,7 @@ import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
@@ -1426,16 +1427,17 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
 								</div>
 							) : (
-								<AssistantMessage
-									key={rowKey(row)}
-									message={row.message}
-									enter={fresh}
-									segment={row.segment}
-									live={row.message === liveReply && (!row.segment || row.segment.last)}
-									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
-									showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
-									answer={answers.get(rowKey(row)) ?? null}
-								/>
+								<ErrorBoundary key={rowKey(row)} label="This reply">
+									<AssistantMessage
+										message={row.message}
+										enter={fresh}
+										segment={row.segment}
+										live={row.message === liveReply && (!row.segment || row.segment.last)}
+										last={row.message === lastAssistant && (!row.segment || row.segment.last)}
+										showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
+										answer={answers.get(rowKey(row)) ?? null}
+									/>
+								</ErrorBoundary>
 							),
 						)}
 						{pending ? <PendingMessage pending={pending} /> : null}
@@ -1460,7 +1462,9 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 						}}
 					/>
 				) : null}
-				{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				<ErrorBoundary label="The message box" className="mx-4 mb-3">
+					{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				</ErrorBoundary>
 			</div>
 			</FileLinks.Provider>
 			</ReplyActions.Provider>

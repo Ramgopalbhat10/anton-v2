@@ -4,26 +4,17 @@ import {
 	createRootRoute,
 	createRoute,
 	createRouter,
+	lazyRouteComponent,
 	redirect,
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { type ArtifactsSearch, ArtifactsPage, ArtifactView } from '@/components/artifacts-page';
-import { RepoSettingsPage } from '@/components/repo-settings';
-import { SectionPage, SettingsLayout } from '@/components/settings/layout';
-import { SettingsOverview } from '@/components/settings/overview';
-import { SkillDetailPage } from '@/components/settings/skill-detail';
-import { ConnectorDetailPage } from '@/components/settings/connectors';
+import type { ArtifactsSearch } from '@/components/artifacts-page';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
 import { OutputViewerHost } from '@/components/output-viewer';
-import { ProjectPage, ThreadPage } from '@/components/project-page';
-import { ProjectsPage } from '@/components/projects-page';
-import { ReviewsPage } from '@/components/reviews-page';
-import { IncognitoPage } from '@/components/incognito';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
-import { TasksPage } from '@/components/tasks-page';
 import { TitleTips } from '@/components/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/vm-panel';
@@ -32,6 +23,26 @@ import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
 const queryClient = appQueryClient();
+
+/*
+ * Home and a task are in the first download; every other page loads its code
+ * the first time you go to it. Settings never draws as a page (it opens as a
+ * card, whose pages load with it), so its routes only name where they live.
+ */
+const IncognitoPage = lazyRouteComponent(() => import('@/components/incognito'), 'IncognitoPage');
+const ProjectsPage = lazyRouteComponent(() => import('@/components/projects-page'), 'ProjectsPage');
+const ProjectPage = lazyRouteComponent(() => import('@/components/project-page'), 'ProjectPage');
+const ThreadPage = lazyRouteComponent(() => import('@/components/project-page'), 'ThreadPage');
+const TasksPage = lazyRouteComponent(() => import('@/components/tasks-page'), 'TasksPage');
+const ArtifactsPage = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactsPage');
+const ArtifactView = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactView');
+const ReviewsPage = lazyRouteComponent(() => import('@/components/reviews-page'), 'ReviewsPage');
+const SettingsLayout = lazyRouteComponent(() => import('@/components/settings/layout'), 'SettingsLayout');
+const SectionPage = lazyRouteComponent(() => import('@/components/settings/layout'), 'SectionPage');
+const SettingsOverview = lazyRouteComponent(() => import('@/components/settings/overview'), 'SettingsOverview');
+const SkillDetailPage = lazyRouteComponent(() => import('@/components/settings/skill-detail'), 'SkillDetailPage');
+const ConnectorDetailPage = lazyRouteComponent(() => import('@/components/settings/connectors'), 'ConnectorDetailPage');
+const RepoSettingsPage = lazyRouteComponent(() => import('@/components/repo-settings'), 'RepoSettingsPage');
 
 const rootRoute = createRootRoute({
 	component: () => (
