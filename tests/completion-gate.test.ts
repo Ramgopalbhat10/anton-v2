@@ -195,3 +195,26 @@ test('the message names the limit when the reply’s start is not known', () => 
 	assert.match(carryOn(null, 4 * HOUR, 0), /^Your reply ended with work the request asked for not done\. A reply may run for up to 4 hours, so there is time/);
 	assert.match(carryOn(85 * 60_000, 8 * HOUR, 1), /\(your todo list has 1 step open\)\. This reply has run 1h 25m of the 8 hours it may run/);
 });
+
+test('a reply the finish review sent back is judged with the reviewer’s points and what it reported before them', async () => {
+	const asked: Array<{ state: Record<string, unknown>; instructions: string }> = [];
+	providers({
+		name: 'jev',
+		async decide(state, questions) {
+			asked.push({ state, instructions: questions.undone.instructions });
+			return { answers: { undone: { yes: 0.1 } }, inputTokens: 10, cost: 0 };
+		},
+	});
+	const reviewed = { points: '- clockTime should return 07:05 for 7:05.', before: 'All three changes are in place: clockTime, zoneName and describeSchedule, each with a test.' };
+	startCompletionGate('rv');
+	const ending = () => "The reviewer's point is wrong: the request asks for the same output the padded input gets, which is what the change does.";
+	assert.equal(await completionGate('rv', pebbleCalls, repo, { ...pebble(), ending, reviewed: () => reviewed }), null);
+	assert.equal(asked[0].state.reviewerPoints, reviewed.points);
+	assert.equal(asked[0].state.replyBeforeReview, reviewed.before);
+	assert.match(asked[0].instructions, /explaining why a point is wrong or not asked for, is not work left undone/);
+	// With no review behind it, the question is as it was.
+	startCompletionGate('rv2');
+	await completionGate('rv2', pebbleCalls, repo, { ...pebble(), reviewed: () => null });
+	assert.equal(asked[1].state.reviewerPoints, undefined);
+	assert.doesNotMatch(asked[1].instructions, /reviewerPoints/);
+});

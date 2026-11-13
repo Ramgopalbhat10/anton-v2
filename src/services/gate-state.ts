@@ -54,7 +54,19 @@ export type GateState = {
 	check: CheckState;
 	/** Whether the conversation was compacted since the agent was last given its request and todo list word for word (`compaction-pin.ts`). */
 	compacted?: boolean;
+	/** Each time a check at the reply in hand's end sent it back, and what the agent did after (`send-backs.ts`). */
+	sendBacks?: SendBack[];
 };
+
+/** The checks at a reply's end that may send it back, as `send-backs.ts` and the reply's metadata name them. */
+export type GateName = 'todo' | 'stall' | 'jobs' | 'check' | 'review' | 'completion';
+
+/**
+ * One send-back: which check, how many tool calls and messages the reply had made then, and, once the reply next
+ * comes to an end, whether the agent then changed a file (`changed`) or did any sandbox work at all (`worked`).
+ * A review's send-back also keeps the points it raised and what the reply had said before them, for the completion gate.
+ */
+export type SendBack = { gate: GateName; calls: number; said: number; changed?: boolean; worked?: boolean; points?: string; before?: string };
 
 /**
  * The repository's check (`repo-check.ts`): what the agent was last told of it (a failure, by its digest's hash, or

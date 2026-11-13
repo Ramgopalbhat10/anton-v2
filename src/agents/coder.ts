@@ -87,7 +87,8 @@ import { finishTrace, startTrace } from '../services/response-trace.ts';
 import { saveTrace } from '../db/traces.ts';
 import { COMPACTION_SUMMARY_EFFORT, compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
-import { liveMachine, machineFor, prewarmMachine } from '../services/workspace.ts';
+import { liveMachine, machineFor } from '../services/workspace.ts';
+import { prewarmFor } from '../services/prewarm-intent.ts';
 import { checkPreview } from '../services/preview-check.ts';
 import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -105,7 +106,8 @@ import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
 import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { takePinned } from '../services/compaction-pin.ts';
-import { loadGate } from '../services/gate-state.ts';
+import { type GateName, loadGate } from '../services/gate-state.ts';
+import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../services/send-backs.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
 import { checkJob, jobNotice, jobsGate, MAX_WAIT_S, startJob, startJobsGate, stopReplyJobs } from '../services/background-jobs.ts';
@@ -1720,7 +1722,10 @@ export function Coder({ id }: AgentProps) {
 			await loadGate(id);
 			// After a compaction the request and todo list go word for word with whatever sends the reply back, ahead of it.
 			// Never on their own: a reply sent back for them alone would pay a model call over the conversation to end again.
-			const sendBack = async (body: string) => {
+			// What the agent did after each earlier send-back is read from the calls it has made since.
+			settleSendBacks(id, response.toolCalls);
+			const sendBack = async (name: GateName, body: string) => {
+				noteSendBack(id, name, response.toolCalls.length, body);
 				const pinned = await takePinned(id);
 				if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
 				append({ kind: 'signal', type: 'reminder', body });
@@ -1728,27 +1733,27 @@ export function Coder({ id }: AgentProps) {
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
 			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
 			if (reminder) {
-				await sendBack(reminder);
+				await sendBack('todo', reminder);
 				return;
 			}
 			// A reply that ends by announcing a step it never took is sent back to take it, once.
 			const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
 			if (stalled) {
-				await sendBack(stalled);
+				await sendBack('stall', stalled);
 				return;
 			}
 			// A job this reply started that still runs, or that ended with its result unread, sends it back: once a job each way.
 			// Before the review, so the review reads the change as the job's result left it.
 			const jobs = signal.aborted ? null : await jobsGate(id, response.toolCalls, { signal });
 			if (jobs) {
-				await sendBack(jobs);
+				await sendBack('jobs', jobs);
 				return;
 			}
 			// A reply that changed files waits for the repository's check of its last change, and a failure sends it back to fix
 			// what broke or say it was there before: once a failure, twice a reply at most. Nothing at all with no check command.
 			const broken = signal.aborted ? null : await checkGate(id, response.toolCalls, { signal });
 			if (broken) {
-				await sendBack(broken);
+				await sendBack('check', broken);
 				return;
 			}
 			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
@@ -1756,14 +1761,14 @@ export function Coder({ id }: AgentProps) {
 			// A task that started its workspace during this reply has one now, though this render began without it.
 			const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 			if (missed) {
-				await sendBack(missed);
+				await sendBack('review', missed);
 				return;
 			}
 			// A reply that ends with requested work left undone, and not for something only the user can give, is sent back to do it:
 			// a few rounds at most, each after the first only when the last changed something. Each round lets the review read the new change.
 			const undone = !planning && !review && !signal.aborted ? await completionGate(id, response.toolCalls, { chat, workspace: workspace || hasWorkspace(id), signal }) : null;
 			if (undone) {
-				await sendBack(undone);
+				await sendBack('completion', undone);
 				return;
 			}
 			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
@@ -1791,6 +1796,8 @@ export function Coder({ id }: AgentProps) {
 			};
 		});
 	} else {
+		// The message that starts the reply, which tells whether its sandbox is worth starting ahead of the agent.
+		const opening = useDelivery();
 		// These response hooks run at the true start/end, across all model and tool calls.
 		// The persisted start survives resumed responses; usage totals are still counted per model call.
 		useResponseStart(() => {
@@ -1802,9 +1809,11 @@ export function Coder({ id }: AgentProps) {
 			startCompletionGate(id);
 			startJobsGate(id);
 			startCheckGate(id);
+			startSendBacks(id);
 			startReplyClock(id);
-			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
-			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
+			// A repository task that goes on to change code has its sandbox start now, behind the agent's first reads; a message
+			// the decision model reads as a question starts none (`prewarm-intent.ts`).
+			if (!workspace && !hasWorkspace(id)) void prewarmFor(id, opening.kind === 'user' ? opening.body : null);
 			// A repository task that has its workspace reads and works in its machine, which may have stopped since its last reply:
 			// it starts now, behind the first model call, as it did when the runtime read the repository's instructions from it.
 			else if (repoTask) void machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
@@ -1824,6 +1833,8 @@ export function Coder({ id }: AgentProps) {
 				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
 				// With the reply's tool calls by model (`tools`), what a benchmark's tool mix is read from.
 				toolProfile: profile,
+				// Which checks sent the reply back, and whether the agent then changed or ran anything (`npm run gates:report`).
+				sendBacks: sendBacksOf(id),
 				billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 			};
