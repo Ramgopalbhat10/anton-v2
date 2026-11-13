@@ -184,7 +184,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					<>
 					{opened.length ? (
 						<EditorBar sideToggle={sideToggle}>
-							<PanelTabs label="Open files">
+							<PanelTabs label="Open files" scrollbar>
 								{opened.map((path) => (
 									<PanelTab
 										key={path}
@@ -226,6 +226,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 									read={() => api.file(sessionId, selected)}
 									preview={!sourceShown.has(selected)}
 									line={focus?.path === selected ? focus.line : undefined}
+									className="bg-transparent"
 								/>
 						</div>
 					) : (

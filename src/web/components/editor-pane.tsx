@@ -116,7 +116,7 @@ export function EditorPane({
 	);
 
 	return (
-		<div ref={row} className="in-well flex min-h-0 flex-1 overflow-hidden">
+		<div ref={row} className="flex min-h-0 flex-1 overflow-hidden rounded-tile bg-(--card-bg)">
 			<div
 				aria-label={sideLabel}
 				hidden={!showSide}
@@ -134,7 +134,7 @@ export function EditorPane({
 			{showSide && !narrow ? (
 				<ResizeHandle label={`Resize the ${sideLabel.toLowerCase()}`} width={width} min={SIDE_MIN} max={sideMax} initial={SIDE_DEFAULT} onResize={setSideWidth} className="z-[2] -mx-[5px]" />
 			) : null}
-			<div className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', showMain ? 'flex' : 'hidden')}>{main(sideToggle)}</div>
+			<div className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden', showMain ? 'flex' : 'hidden')}>{main(sideToggle)}</div>
 		</div>
 	);
 }
@@ -142,7 +142,7 @@ export function EditorPane({
 /** The bar along the top of the main column: the explorer's toggle while it is away, then what the pane puts there. */
 export function EditorBar({ sideToggle, children, className }: { sideToggle: ReactNode; children: ReactNode; className?: string }) {
 	return (
-		<div className={cn('flex h-9 shrink-0 items-center gap-1.5 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-1.5', className)}>
+		<div className={cn('flex h-9 shrink-0 items-center gap-1.5 border-b border-(--border-subtle) px-1.5', className)}>
 			{sideToggle ? (
 				<>
 					{sideToggle}

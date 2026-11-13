@@ -170,6 +170,11 @@ textarea::placeholder {
 	display: none;
 }
 
+/* A tab row that scrolls sideways: a hairline scrollbar along the bar's bottom, so the bar keeps its height. */
+.sg-tab-scroll::-webkit-scrollbar {
+	height: 3px;
+}
+
 ::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
