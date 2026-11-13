@@ -295,8 +295,13 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const expandable = script || part.toolName === 'bash';
 	const running = part.state === 'input-available';
 	const [open, setOpen] = useState(running);
+	// Opens as it starts and closes as it ends, set while drawing rather than one render later from an effect.
+	const [wasRunning, setWasRunning] = useState(running);
+	if (wasRunning !== running) {
+		setWasRunning(running);
+		setOpen(running);
+	}
 	const detailsId = useId();
-	useEffect(() => setOpen(running), [running]);
 	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
 	const command = script ? scriptText(part.input) : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
@@ -422,8 +427,13 @@ const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center roun
 
 function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
+	// Open while the reply works and closed once it is done, set while drawing rather than one render later from an effect.
+	const [wasLive, setWasLive] = useState(live);
+	if (wasLive !== live) {
+		setWasLive(live);
+		setOpen(live);
+	}
 	const detailsId = useId();
-	useEffect(() => setOpen(live), [live]);
 	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
@@ -1126,7 +1136,7 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
  * Otherwise it says what the agent is doing, unless the live steps card's
  * header already does, or the reply's text streaming does.
  */
-function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
+const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
 	if (!queued || !running.length) return tail === 'steps' ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
@@ -1149,7 +1159,7 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 			</Btn>
 		</div>
 	);
-}
+});
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
 
