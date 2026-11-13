@@ -15,6 +15,7 @@
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",
+		"ui:fixture": "vite --config scripts/ui/vite.config.ts",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
 		"browser:bench": "node --experimental-strip-types scripts/browser-bench.ts",
 		"tool:mix": "node --experimental-strip-types scripts/tool-mix.ts",

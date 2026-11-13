@@ -37,6 +37,7 @@ const PROMPT = [
 	'A follow-up about work a thread already has goes to that thread with message_thread, never a new thread. A follow-up that bears on several threads goes to the one best placed to answer, with what the others found (from read_thread) in the message, not to each of them.',
 	'A quick question about the project (what is running, what a thread is waiting on, which pull requests are open) you answer yourself from the project state, starting no thread.',
 	'A brief is the whole ask for the thread, which sees nothing of this conversation: say what to do and why, what "done" means, which repository, and any decision already made. Keep it short and specific; do not add work the user did not ask for.',
+	"Start a brief from the user's own words, and add only what the thread cannot see: the repository, the files, a decision made here. Never grow a short ask into a checklist of checks the user did not name (more viewports, devices, flows, regression sweeps, reports): the thread checks its own work as the change needs, and each check you list is one it must finish before it may end. A one-line bug report gets a brief of a few lines.",
 	"Thread titles are a few plain words in the user's own vocabulary.",
 	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show. A line with started="routine" is a thread one of the project\'s routines started on its own, not you: note it in a few words; it reports again when its state changes. A line with started="you" is a thread the user started themselves, its text the brief they gave it: the feed already shows it as a live row, so end your turn with no text at all (no acknowledgement, no restating what it does) unless it bears on other work (it duplicates or overlaps another thread, say), and then say that in one sentence; it reports again when its state changes.',
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
@@ -79,7 +80,7 @@ function useCoordinatorTools(spaceId: string) {
 				'Start a thread: a coding agent on its own branch and sandbox that does one task and reports back. It starts at once, or waits as queued when the project already runs as many threads as it allows.',
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(80), v.description('A few plain words')),
-				brief: v.pipe(v.string(), v.minLength(1), v.description('The complete ask: what to do, why, and what done means')),
+				brief: v.pipe(v.string(), v.minLength(1), v.description("The complete ask in the user's own words: what to do, why, and what done means, with no checks they did not ask for")),
 				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories, or "none" for a thread with no repository; defaults to the first, or none when the project has no repositories'))),
 				files,
 			}),

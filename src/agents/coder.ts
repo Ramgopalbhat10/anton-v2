@@ -104,7 +104,7 @@ import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
-import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { finishReview, isRequest, noteRequest, startFinishReview } from '../services/finish-review.ts';
 import { takePinned } from '../services/compaction-pin.ts';
 import { type GateName, loadGate } from '../services/gate-state.ts';
 import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../services/send-backs.ts';
@@ -1468,7 +1468,7 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	'You do not have git push credentials: open_pull_request commits and pushes for you.',
 	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
-	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix.`,
+	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
 	web,
@@ -1554,12 +1554,18 @@ const PLAN_PROMPT = [
  * Keeps the task's latest input for its card: each message the agent is given, typed, a follow-up or an
  * automation's, as it starts a reply or joins one already running, and where in that reply a joining one
  * was read. The runtime emits no event for them.
+ *
+ * Only the message that starts a reply is its request, which the checks at the reply's end and the compaction
+ * pin hold the agent to. One sent while the reply runs ("are you stuck?") joins it and is answered within it:
+ * it fires `useAgentStart` again but not `useResponseStart`, so it is never taken for the request.
  */
 function useLatestInput(id: string) {
 	const delivery = useDelivery();
+	useResponseStart(() => {
+		if (delivery.kind === 'user') noteRequest(id, delivery.body);
+	});
 	useAgentStart(() => {
 		if (delivery.kind !== 'user') return;
-		noteRequest(id, delivery.body);
 		// The card's bookkeeping: the reply starts without waiting on the database, which can be busy for seconds.
 		inBackground(id, Promise.all([noteDelivery(id, delivery.body), recordLatestInput(id, delivery.body)]));
 	});
@@ -1702,11 +1708,12 @@ export function Coder({ id }: AgentProps) {
 		// after a restart (which runs no start hooks), so a command's result can tell it how long it has run.
 		void loadGate(id);
 		// A compaction the last reply's end let pass: the request and todo list go word for word after the message that
-		// starts this reply, before the model's first call. A user's message is the request itself, already there word for
-		// word, so only the list goes with it. Nothing is read from the database unless a compaction happened.
+		// starts this reply, before the model's first call. A user's message that starts the reply is the request itself,
+		// already there word for word, so only the list goes with it; one that joins a running reply is not, so the request
+		// goes too. Nothing is read from the database unless a compaction happened.
 		const delivery = useDelivery();
 		useAgentStart(async ({ append }) => {
-			const pinned = await takePinned(id, { request: delivery.kind !== 'user' });
+			const pinned = await takePinned(id, { request: !(delivery.kind === 'user' && isRequest(id, delivery.body)) });
 			if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
 		});
 		// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.

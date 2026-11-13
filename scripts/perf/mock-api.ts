@@ -108,7 +108,7 @@ export function mockApi(): Plugin {
 
 	const handle = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
 		const url = new URL(req.url ?? '/', 'http://local');
-		const path = url.pathname;
+		let path = url.pathname;
 		if (path === '/__perf/start') {
 			startedAt = Date.now();
 			return json(res, { ok: true });
@@ -122,6 +122,10 @@ export function mockApi(): Plugin {
 			return;
 		}
 		const task = `/api/sessions/${SESSION_ID}`;
+		// Any other task (an incognito chat's, one the UI fixture opens) is answered as the scripted one.
+		const other = path.match(/^\/api\/sessions\/([^/]+)(\/.*)?$/);
+		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, { ...session, id: other[1] });
+		if (other && other[1] !== SESSION_ID) path = `${task}${other[2]}`;
 		if (path === '/api/health') return json(res, { ok: true, openRouter: true, providers: { sandbox: 'local', store: 'disk', git: 'github' } });
 		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...others] });
 		if (path === task) return json(res, session);
@@ -155,9 +159,11 @@ export function mockApi(): Plugin {
 		if (path === '/api/compute') return json(res, { provider: 'local', app: null, running: [], others: 0 });
 		if (path === '/api/projects') return json(res, { projects: [] });
 		if (path === '/api/reviews') return json(res, { reviews: [] });
-		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [] });
-		if (path === `${task}/todos`) return json(res, { list: null });
+		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
+		if (path === '/api/notifications') return json(res, { notifications: [], unread: {} });
+		if (path === `${task}/waiting`) return json(res, { messages: [] });
 		if (path === `${task}/joins`) return json(res, { joins: [] });
+		if (path === `${task}/todos`) return json(res, { list: null });
 		if (path === `${task}/now`) return json(res, { now: null });
 		if (path === '/api/push/presence') return json(res, { ok: true });
 		console.warn(`[perf] unmocked ${req.method} ${path}`);
