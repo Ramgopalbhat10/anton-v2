@@ -217,6 +217,7 @@ export function FileView({
 	preview: chosen,
 	line: markedLine,
 	images,
+	className,
 }: {
 	path: string;
 	queryKey: unknown[];
@@ -226,6 +227,7 @@ export function FileView({
 	line?: number;
 	/** How the file's own images draw, as a plugin preview resolves them. */
 	images?: FileImagesValue | null;
+	className?: string;
 }) {
 	const imageType = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
 	const markdown = isMarkdown(path);
@@ -256,7 +258,7 @@ export function FileView({
 		if (markedLine && lines.length) marked.current?.scrollIntoView({ block: 'center' });
 	}, [markedLine, lines.length]);
 	return (
-		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
+		<div className={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', className)}>
 			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="my-2 me-3 self-end shrink-0" /> : null}
 			<div className="min-h-0 flex-1 overflow-auto">
 				{file.isError ? (

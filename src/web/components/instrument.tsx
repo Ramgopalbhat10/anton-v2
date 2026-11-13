@@ -561,10 +561,15 @@ export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onS
 	);
 }
 
-/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s. */
-export function PanelTabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s; `scrollbar` shows a thin one when they overflow. */
+export function PanelTabs({ label, children, scrollbar, className }: { label: string; children: ReactNode; scrollbar?: boolean; className?: string }) {
 	return (
-		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden', className)}>
+		<div
+			data-noscrollbar={scrollbar ? undefined : true}
+			role="tablist"
+			aria-label={label}
+			className={cn('flex min-w-0 flex-auto items-center gap-0.5 overflow-x-auto overflow-y-hidden', scrollbar && 'sg-tab-scroll self-stretch', className)}
+		>
 			{children}
 		</div>
 	);
