@@ -1,4 +1,4 @@
-import { type Query, QueryCache, QueryClient } from '@tanstack/react-query';
+import { hashKey, type Query, QueryCache, QueryClient } from '@tanstack/react-query';
 import type { Session } from '@/lib/api';
 
 type List = { sessions: Session[] };
@@ -15,13 +15,14 @@ export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: 
 	if (key === 'sessions' && query.queryKey.length === 1) {
 		for (const session of (data as List | undefined)?.sessions ?? []) {
 			// Only a task open somewhere; one being read on its own already will be as new.
-			const own = queryClient.getQueryCache().find({ queryKey: ['session', session.id], exact: true });
+			// By its hash, a lookup rather than a scan of the cache, since this runs for every task in the list.
+			const own = queryClient.getQueryCache().get(hashKey(['session', session.id]));
 			if (!own?.state.data || own.state.fetchStatus === 'fetching') continue;
 			queryClient.setQueryData(['session', session.id], session);
 		}
 	}
 	if (key === 'session' && typeof id === 'string' && query.queryKey.length === 2 && data) {
-		const listing = queryClient.getQueryCache().find({ queryKey: ['sessions'], exact: true });
+		const listing = queryClient.getQueryCache().get(hashKey(['sessions']));
 		if (!listing?.state.data || listing.state.fetchStatus === 'fetching') return;
 		const session = data as Session;
 		queryClient.setQueryData<List>(['sessions'], (list) =>

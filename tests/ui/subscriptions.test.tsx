@@ -297,7 +297,8 @@ describe('Model picker', () => {
 		openPicker({ model: `${routed.id}#via=removed`, reasoning: 'high' }, [], [routed, other, gpt]);
 		expect(screen.getByRole('option', { name: /Fast/ }).getAttribute('aria-selected')).toBe('true');
 		await userEvent.click(screen.getByRole('option', { name: /Other/ }));
-		expect(screen.getAllByRole('button', { name: 'Sort providers: default' })).toHaveLength(2);
+		// Only the row under the pointer and the chosen one draw routing menus: here they are the same row.
+		expect(screen.getAllByRole('button', { name: 'Sort providers: default' })).toHaveLength(1);
 		const row = screen.getByRole('option', { name: /Other/ });
 		await userEvent.click(within(row).getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));

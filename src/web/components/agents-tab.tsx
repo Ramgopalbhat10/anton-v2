@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronDown, CornerDownRight } from 'lucide-react';
 import { HoverCard } from 'radix-ui';
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { AgentsArt } from '@/components/illustrations';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -90,38 +90,90 @@ const mark = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms
 /**
  * One step of a lane as a phase: from when it started to when the next one
  * did (the tool, then the model thinking on what it returned), in its kind's
- * colour. Resting on it shows what it was, when, and how long it took.
+ * colour. A plain bar, drawn again only when its place or state changes; the
+ * lane's one hover card says what it was (`Lane`).
  */
-function Phase({ step, run, next, from, span, now }: { step: SubagentStep; run: SubagentRun; next?: SubagentStep; from: number; span: number; now: number }) {
+const PhaseBar = memo(function PhaseBar({ index, left, width, tone, running }: { index: number; left: number; width: number; tone: string; running: boolean }) {
+	return (
+		<span
+			data-step={index}
+			className={cn('absolute inset-y-0 rounded-mark hover:brightness-150', running && 'in-pulse')}
+			style={{ left: `${left}%`, width: `max(calc(${width}% - 1px), 2px)`, background: tone }}
+		/>
+	);
+});
+
+/** What a phase was, when, and how long it took: the lane's hover card. */
+function PhaseCard({ step, run, next, from, now }: { step: SubagentStep; run: SubagentRun; next?: SubagentStep; from: number; now: number }) {
 	const start = Date.parse(step.at);
 	const end = next ? Date.parse(next.at) : runEnd(run, now);
 	const kind = WORK[workKind(step.tool)];
 	const { icon, body } = stepBody(step);
 	const tool = step.durationMs ?? (step.state === 'running' ? Math.max(0, now - start) : null);
 	return (
-		<HoverCard.Root openDelay={60} closeDelay={60}>
+		<>
+			<span className="flex items-center gap-1.5">
+				<span className="size-[7px] rounded-mark" style={{ background: stepTone(step) }} />
+				<span className={cn('in-caption', step.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{step.state === 'failed' ? 'Failed' : kind.label}</span>
+				<span className="in-caption ml-auto">at {mark(start - from)}</span>
+			</span>
+			<span className="flex min-w-0 items-start gap-2 text-body leading-[18px] text-(--text-primary)">
+				<Icon icon={icon} size={13} className="mt-[2px] shrink-0 text-(--icon-tertiary)" />
+				<span className="line-clamp-3 min-w-0 break-words">{body}</span>
+			</span>
+			<span className="in-num text-micro text-(--text-tertiary)">
+				{[tool === null ? null : `tool ${took(tool)}`, `phase ${took(Math.max(0, end - start))}`, lookOf(run.agent).label.toLowerCase()].filter(Boolean).join(' · ')}
+			</span>
+		</>
+	);
+}
+
+/**
+ * A run's lane on the burst's shared time axis, each step a phase in its
+ * kind's colour. One hover card serves the whole lane and follows the phase
+ * under the pointer, so a lane of many steps is many plain bars, not a card each.
+ */
+function Lane({ run, from, span, now }: { run: SubagentRun; from: number; span: number; now: number }) {
+	const [hover, setHover] = useState<{ index: number; left: number } | null>(null);
+	const step = hover ? run.steps[hover.index] : undefined;
+	const at = (ms: number) => ((ms - from) / span) * 100;
+	return (
+		<HoverCard.Root open={Boolean(step)} onOpenChange={(open) => (open ? undefined : setHover(null))}>
 			<HoverCard.Trigger asChild>
 				<span
-					tabIndex={-1}
-					className={cn('absolute inset-y-0 rounded-mark hover:brightness-150', step.state === 'running' && 'in-pulse')}
-					style={{ left: `${((start - from) / span) * 100}%`, width: `max(calc(${((Math.max(end, start) - start) / span) * 100}% - 1px), 2px)`, background: stepTone(step) }}
-				/>
+					className="relative ml-[26px] h-2.5 min-w-0 rounded-mark bg-(--segment-off)/60"
+					onPointerOver={(event) => {
+						const bar = (event.target as HTMLElement).closest<HTMLElement>('[data-step]');
+						if (bar && Number(bar.dataset.step) !== hover?.index) setHover({ index: Number(bar.dataset.step), left: bar.offsetLeft });
+					}}
+					onPointerLeave={() => setHover(null)}
+				>
+					<span
+						aria-hidden
+						className="absolute inset-y-[4px] rounded-full bg-(--border-default)"
+						style={{ left: `${at(Date.parse(run.startedAt))}%`, width: `${((runEnd(run, now) - Date.parse(run.startedAt)) / span) * 100}%` }}
+					/>
+					{run.steps.map((entry, index) => {
+						const start = Date.parse(entry.at);
+						const next = run.steps[index + 1];
+						const end = next ? Date.parse(next.at) : runEnd(run, now);
+						return <PhaseBar key={entry.id} index={index} left={at(start)} width={((Math.max(end, start) - start) / span) * 100} tone={stepTone(entry)} running={entry.state === 'running'} />;
+					})}
+				</span>
 			</HoverCard.Trigger>
 			<HoverCard.Portal>
-				<HoverCard.Content side="top" sideOffset={8} collisionPadding={12} className="in-pop z-50 flex w-[280px] flex-col gap-1.5 px-3 py-2.5 outline-none">
-					<span className="flex items-center gap-1.5">
-						<span className="size-[7px] rounded-mark" style={{ background: stepTone(step) }} />
-						<span className={cn('in-caption', step.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{step.state === 'failed' ? 'Failed' : kind.label}</span>
-						<span className="in-caption ml-auto">at {mark(start - from)}</span>
-					</span>
-					<span className="flex min-w-0 items-start gap-2 text-body leading-[18px] text-(--text-primary)">
-						<Icon icon={icon} size={13} className="mt-[2px] shrink-0 text-(--icon-tertiary)" />
-						<span className="line-clamp-3 min-w-0 break-words">{body}</span>
-					</span>
-					<span className="in-num text-micro text-(--text-tertiary)">
-						{[tool === null ? null : `tool ${took(tool)}`, `phase ${took(Math.max(0, end - start))}`, lookOf(run.agent).label.toLowerCase()].filter(Boolean).join(' · ')}
-					</span>
-				</HoverCard.Content>
+				{step && hover ? (
+					<HoverCard.Content
+						side="top"
+						align="start"
+						alignOffset={hover.left}
+						sideOffset={8}
+						collisionPadding={12}
+						className="in-pop z-50 flex w-[280px] flex-col gap-1.5 px-3 py-2.5 outline-none"
+					>
+						<PhaseCard step={step} run={run} next={run.steps[hover.index + 1]} from={from} now={now} />
+					</HoverCard.Content>
+				) : null}
 			</HoverCard.Portal>
 		</HoverCard.Root>
 	);
@@ -199,16 +251,7 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 					<span className="in-num">{elapsed(runElapsed(run, now))}</span>
 				</span>
 			</button>
-			<span className="relative ml-[26px] h-2.5 min-w-0 rounded-mark bg-(--segment-off)/60">
-				<span
-					aria-hidden
-					className="absolute inset-y-[4px] rounded-full bg-(--border-default)"
-					style={{ left: `${((Date.parse(run.startedAt) - from) / span) * 100}%`, width: `${((runEnd(run, now) - Date.parse(run.startedAt)) / span) * 100}%` }}
-				/>
-				{run.steps.map((entry, index) => (
-					<Phase key={entry.id} step={entry} run={run} next={run.steps[index + 1]} from={from} span={span} now={now} />
-				))}
-			</span>
+			<Lane run={run} from={from} span={span} now={now} />
 			{line ? (
 				<button
 					type="button"

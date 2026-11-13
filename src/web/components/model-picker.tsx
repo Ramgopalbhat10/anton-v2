@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Count, StatusDot } from '@/components/instrument';
 import { EmptyLine, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api';
@@ -174,6 +174,9 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
  * line up down the list: mark, name, context, input price, output price,
  * check. Fixed widths fit the longest labels ("262K", "$0.435").
  */
+/** Rows drawn when the list opens: a few screens, before the rest follow. */
+const FIRST_ROWS = 40;
+
 const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-1 px-2 @min-[350px]/picker:gap-x-2';
 
 /**
@@ -208,8 +211,9 @@ function about(model: ModelInfo): string {
  * A model on a gateway has its routing menus after the pin: on hover, and
  * always on the chosen model.
  */
-function ModelRow({
+const ModelRow = memo(function ModelRow({
 	model,
+	index,
 	selected,
 	active,
 	pinned,
@@ -220,13 +224,16 @@ function ModelRow({
 	routing,
 }: {
 	model: ModelInfo;
+	/** Its place in the whole list, which the keys and the pointer move through. */
+	index: number;
 	selected: boolean;
 	active: boolean;
 	pinned: boolean;
 	priced: boolean;
-	onPick: () => void;
-	onHover: () => void;
-	onPin: () => void;
+	/** The same functions for every row and every render, so moving the pointer redraws only the two rows it moves between. */
+	onPick: (model: ModelInfo) => void;
+	onHover: (index: number) => void;
+	onPin: (model: ModelInfo) => void;
 	routing?: ReactNode;
 }) {
 	return (
@@ -235,8 +242,8 @@ function ModelRow({
 			role="option"
 			aria-selected={selected}
 			data-active={active || undefined}
-			onClick={onPick}
-			onMouseMove={onHover}
+			onClick={() => onPick(model)}
+			onMouseMove={active ? undefined : () => onHover(index)}
 			title={about(model)}
 			className={cn(COLUMNS, 'group/row h-8 w-full cursor-default rounded-control text-left outline-none data-active:bg-(--bg-hover)')}
 		>
@@ -250,7 +257,7 @@ function ModelRow({
 					title={pinned ? 'Unpin' : 'Pin to the top'}
 					onClick={(event) => {
 						event.stopPropagation();
-						onPin();
+						onPin(model);
 					}}
 					className={cn(
 						'inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-opacity duration-(--duration-micro) hover:bg-(--alpha-white-6) focus-visible:opacity-100 focus-visible:shadow-(--focus-ring)',
@@ -267,7 +274,7 @@ function ModelRow({
 			<span className="flex justify-end text-(--accent-text)">{selected ? <Icon icon={Check} size={12} /> : null}</span>
 		</div>
 	);
-}
+});
 
 /**
  * The model's efforts along one ramp of thin ticks rising left to right, lit
@@ -735,6 +742,22 @@ export const ModelPicker = memo(function ModelPicker({
 		requestAnimationFrame(() => list.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }));
 	}
 
+	// The rows call the latest pick and pin through these, which never change, so a row redraws only when what it shows does.
+	const latest = useRef({ pick, togglePin });
+	useLayoutEffect(() => {
+		latest.current = { pick, togglePin };
+	});
+	const onPickRow = useCallback((model: ModelInfo) => latest.current.pick(model, false), []);
+	const onPinRow = useCallback((model: ModelInfo) => latest.current.togglePin(model), []);
+	// The list opens on its first screens of rows, and draws the rest just after without holding up the opening.
+	const [drawAll, setDrawAll] = useState(false);
+	useEffect(() => {
+		if (!open) return setDrawAll(false);
+		const frame = requestAnimationFrame(() => startTransition(() => setDrawAll(true)));
+		return () => cancelAnimationFrame(frame);
+	}, [open]);
+	const drawn = drawAll ? Number.POSITIVE_INFINITY : FIRST_ROWS;
+
 	let offset = 0;
 	const routed = selected && !selected.subscription && routable(selected.id) ? selected : undefined;
 
@@ -938,18 +961,20 @@ export const ModelPicker = memo(function ModelPicker({
 											) : null}
 											<span />
 										</div>
-										{section.models.map((model, index) => (
+										{section.models.slice(0, Math.max(0, drawn - start)).map((model, index) => (
 											<ModelRow
 												key={`${section.title}-${model.id}`}
 												model={model}
+												index={start + index}
 												selected={model.id === shown?.id}
 												active={start + index === cursor}
 												pinned={pinnedIds.includes(model.id)}
 												priced={priced}
-												onPick={() => pick(model, false)}
-												onHover={() => setCursor(start + index)}
-												onPin={() => togglePin(model)}
-												routing={!model.subscription && routable(model.id) ? routingFor(model) : undefined}
+												onPick={onPickRow}
+												onHover={setCursor}
+												onPin={onPinRow}
+												// The routing menus show on the row under the pointer or the keys, and on the chosen one.
+												routing={!model.subscription && routable(model.id) && (start + index === cursor || model.id === shown?.id) ? routingFor(model) : undefined}
 											/>
 										))}
 									</div>
