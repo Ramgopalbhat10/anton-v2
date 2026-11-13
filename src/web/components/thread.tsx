@@ -778,15 +778,7 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-const AssistantMessage = memo(function AssistantMessage({
-	message,
-	live,
-	last,
-	answer,
-	segment,
-	showWorkspaceChanges,
-	enter,
-}: {
+type AssistantMessageProps = {
 	message: FlueConversationMessage;
 	live: boolean;
 	last: boolean;
@@ -797,7 +789,18 @@ const AssistantMessage = memo(function AssistantMessage({
 	showWorkspaceChanges: boolean;
 	/** A conversation born on this page: each reply fades in as it arrives, history does not replay it. */
 	enter?: boolean;
-}) {
+};
+
+/** A reply, drawn again only when its props change; one that fails to draw says so in its place, and the rest of the conversation stays. */
+const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageProps) {
+	return (
+		<ErrorBoundary label="This reply">
+			<Reply {...props} />
+		</ErrorBoundary>
+	);
+});
+
+function Reply({ message, live, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
 	const foot = !segment || segment.last;
@@ -898,7 +901,7 @@ const AssistantMessage = memo(function AssistantMessage({
 		</div>
 		</OutputLinks.Provider>
 	);
-});
+}
 
 /** The text a drawn block adds to Copy response: the question and its options, or what a card says. */
 function copiedText(block: Block): string[] {
@@ -1427,17 +1430,16 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
 								</div>
 							) : (
-								<ErrorBoundary key={rowKey(row)} label="This reply">
-									<AssistantMessage
-										message={row.message}
-										enter={fresh}
-										segment={row.segment}
-										live={row.message === liveReply && (!row.segment || row.segment.last)}
-										last={row.message === lastAssistant && (!row.segment || row.segment.last)}
-										showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
-										answer={answers.get(rowKey(row)) ?? null}
-									/>
-								</ErrorBoundary>
+								<AssistantMessage
+									key={rowKey(row)}
+									message={row.message}
+									enter={fresh}
+									segment={row.segment}
+									live={row.message === liveReply && (!row.segment || row.segment.last)}
+									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
+									showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
+									answer={answers.get(rowKey(row)) ?? null}
+								/>
 							),
 						)}
 						{pending ? <PendingMessage pending={pending} /> : null}
