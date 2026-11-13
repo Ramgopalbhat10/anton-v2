@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SubagentRun } from '@/lib/api';
 import { renderWithQueries } from './render';
@@ -94,6 +94,18 @@ describe('Agents card in the thread', () => {
 });
 
 describe('Agents panel', () => {
+	it('says what a phase of a lane was when the pointer rests on it, from one card per lane', async () => {
+		focusRun('s8', null);
+		const { container } = renderWithQueries(<AgentsTab sessionId="s8" />, [[['subagents', 's8'], { runs: [run({})] }]]);
+		const bars = container.querySelectorAll<HTMLElement>('[data-step]');
+		expect(bars).toHaveLength(2);
+		const card = () => document.querySelector('.in-pop')?.textContent ?? '';
+		fireEvent.pointerOver(bars[0]);
+		await waitFor(() => expect(card()).toContain('Opened https://news.ycombinator.com'));
+		fireEvent.pointerOver(bars[1]);
+		await waitFor(() => expect(card()).toContain('Went back'));
+		expect(document.querySelectorAll('.in-pop')).toHaveLength(1);
+	});
 	it('lists the runs once, a line and a lane each, and opens one into its live transcript', () => {
 		focusRun('s2', null);
 		renderWithQueries(<AgentsTab sessionId="s2" />, [[['subagents', 's2'], { runs: [run({}), finished] }]]);

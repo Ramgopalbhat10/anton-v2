@@ -105,6 +105,8 @@ describe('Composer', () => {
 		]);
 		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
 		const row = screen.getByRole('option', { name: /Other model/ });
+		// A row's routing menus show once the pointer is on it.
+		await userEvent.hover(row);
 		await userEvent.click(within(row).getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
 		await waitFor(() => expect(api.editSession).toHaveBeenCalledWith('s1', { model: 'openrouter/test/other', reasoning: null, route: { sort: 'latency' } }));

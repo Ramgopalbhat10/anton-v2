@@ -30,7 +30,7 @@ import {
 	Waypoints,
 	X,
 } from 'lucide-react';
-import { memo, type ReactNode, useState } from 'react';
+import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
 import { SegmentMeter, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
@@ -552,6 +552,9 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 	);
 }
 
+/** Rows of Recent drawn at first, and added by each Show more. */
+const RECENT_PAGE = 50;
+
 function Empty({ children }: { children: ReactNode }) {
 	return <div className="px-5 py-1 text-small text-(--text-disabled)">{children}</div>;
 }
@@ -586,7 +589,9 @@ export function ChatSidebar({
 		saveView(next);
 	};
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	const { pinned, running, recent } = sections(sessions, view, query);
+	const { pinned, running, recent } = useMemo(() => sections(sessions, view, query), [sessions, view, query]);
+	// Recent draws a page of rows at a time, so a long history costs what it shows; the Tasks page lists them all.
+	const [recentShown, setRecentShown] = useState(RECENT_PAGE);
 	const narrowed = filterCount(view.filters) > 0 || query.trim() !== '';
 	const folded = (place: Place) => view.collapsed.includes(place);
 	const header = (place: Place, label: string, count: number) => ({
@@ -679,7 +684,18 @@ export function ChatSidebar({
 				</section>
 				<section aria-label="Recent">
 					<SectionHeader {...header('recent', 'Recent', recent.length)} />
-					{folded('recent') ? null : recent.length ? rows(recent, 'recent') : <Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>}
+					{folded('recent') ? null : recent.length ? (
+						<>
+							{rows(recent.length > recentShown ? recent.slice(0, recentShown) : recent, 'recent')}
+							{recent.length > recentShown ? (
+								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mx-3 mt-0.5 text-(--text-tertiary)')}>
+									Show {Math.min(RECENT_PAGE, recent.length - recentShown)} more
+								</button>
+							) : null}
+						</>
+					) : (
+						<Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>
+					)}
 				</section>
 				<div className="h-3 shrink-0" />
 			</div>
