@@ -93,6 +93,8 @@ export function AppShell() {
 		setNotificationsOpen(true);
 	}, []);
 	const closeNav = useCallback(() => setNavOpen(false), []);
+	// The same function on every render, so nothing that opens the sidebar draws again when the shell does.
+	const openNav = useCallback(() => setNavOpen(true), []);
 	const collapse = useCallback(() => setCollapsed(true), []);
 	const openPalette = useCallback(() => {
 		setNavOpen(false);
@@ -120,7 +122,7 @@ export function AppShell() {
 	}, []);
 
 	return (
-		<NavContext.Provider value={() => setNavOpen(true)}>
+		<NavContext.Provider value={openNav}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
 			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text-primary)">
 				<AppSky home={pathname === '/'} />

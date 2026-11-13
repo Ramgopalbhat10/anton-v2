@@ -16,7 +16,7 @@
  * `--still` turns animations off (reduced motion), to tell their cost apart.
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { PHASES, SESSION_ID } from './scenario.ts';
 
@@ -114,7 +114,24 @@ function instrument() {
 	(window as any).__perf = { counts, state, longTasks, events };
 }
 
-const browser = await chromium.launch({ executablePath: process.env.PERF_CHROMIUM ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+/** The Chromium to drive: PERF_CHROMIUM, else the newest one installed under /opt/pw-browsers, else playwright-core's own. */
+function chromiumPath(): string | undefined {
+	if (process.env.PERF_CHROMIUM) return process.env.PERF_CHROMIUM;
+	const base = '/opt/pw-browsers';
+	if (!existsSync(base)) return undefined;
+	const builds = readdirSync(base)
+		.filter((name) => /^chromium-\d+$/.test(name))
+		.sort((a, b) => Number(b.slice(9)) - Number(a.slice(9)));
+	for (const build of builds) {
+		for (const dir of ['chrome-linux64', 'chrome-linux']) {
+			const path = `${base}/${build}/${dir}/chrome`;
+			if (existsSync(path)) return path;
+		}
+	}
+	return undefined;
+}
+
+const browser = await chromium.launch({ executablePath: chromiumPath() });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 const cdp = await page.context().newCDPSession(page);
 await page.addInitScript(instrument);
@@ -125,10 +142,15 @@ step('opening the task');
 await page.goto(`http://127.0.0.1:${port}/agents/${SESSION_ID}`);
 
 // The workspace as the report describes it: a panel open on the task's files.
-await page.getByRole('tab', { name: panel, exact: true }).first().click().catch(async () => {
-	await page.getByRole('button', { name: 'Add a panel' }).click();
-	await page.getByRole('menuitem', { name: new RegExp(panel) }).click();
-});
+// Exact names: the Add a panel menu also has a Pin and an Unpin item for each panel.
+await page
+	.getByRole('navigation', { name: 'Open a panel' })
+	.getByRole('button', { name: panel, exact: true })
+	.click({ timeout: 5000 })
+	.catch(async () => {
+		await page.getByRole('button', { name: 'Add a panel' }).click();
+		await page.getByRole('menuitem', { name: panel, exact: true }).click();
+	});
 if (panel === 'Files') {
 	const tree = page.getByLabel('File tree', { exact: true });
 	for (const folder of ['src', 'web', 'components', 'node_modules', '@tanstack']) await tree.getByRole('button', { name: new RegExp(`^${folder.replace('.', '\\.')}( M)?$`) }).first().click();

@@ -51,6 +51,37 @@ const QUESTION: Px[] = [[1, -6], [2, -6], [3, -6], [3, -5], [2, -4], [2, -2]];
 const ZZZ: Px[] = [[12, -6], [13, -6], [14, -6], [13, -5], [12, -4], [13, -4], [14, -4]];
 const SPARK: Px[] = [[1, -4], [0, -3], [1, -3], [2, -3], [1, -2]];
 
+/**
+ * The figure itself never changes: the mood shows by CSS on the classes, so it is made once
+ * here and every render of the mascot (a keystroke can stir it) passes the same element.
+ */
+const FIGURE = (
+	<>
+		<Pixels className="am-question" px={QUESTION} fill="var(--attention-base)" />
+		<g className="am-zzz">
+			<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
+			<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
+		</g>
+		<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
+		<g className="am-body">
+			<g className="am-upper">
+				<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
+				<rect className="am-led" x={10} y={-2} width={1.02} height={1.02} />
+				{torso.map(({ x, y, fill }) => (
+					<rect key={`${x},${y}`} x={x} y={y} width={1.02} height={1.02} fill={fill} />
+				))}
+				<Pixels className="am-eyes" px={EYES} fill={INK} />
+				<Pixels className="am-happy" px={HAPPY} fill={INK} />
+				<Pixels className="am-shut" px={SHUT} fill={INK} />
+				<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
+				<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
+			</g>
+			<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
+			<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
+		</g>
+	</>
+);
+
 /** How far it wanders while working, in grid pixels from where it stands: mostly left, along the composer. */
 const ROAM_LEFT = 48;
 const ROAM_RIGHT = 6;
@@ -122,28 +153,7 @@ export function Mascot({ mood, className }: { mood: MascotMood; className?: stri
 			>
 				{/* Keyed by the hop, so each one plays its animation afresh. */}
 				<g key={hop} className={hop ? 'am-hopper' : undefined}>
-					<Pixels className="am-question" px={QUESTION} fill="var(--attention-base)" />
-					<g className="am-zzz">
-						<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
-						<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
-					</g>
-					<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
-					<g className="am-body">
-						<g className="am-upper">
-							<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
-							<rect className="am-led" x={10} y={-2} width={1.02} height={1.02} />
-							{torso.map(({ x, y, fill }) => (
-								<rect key={`${x},${y}`} x={x} y={y} width={1.02} height={1.02} fill={fill} />
-							))}
-							<Pixels className="am-eyes" px={EYES} fill={INK} />
-							<Pixels className="am-happy" px={HAPPY} fill={INK} />
-							<Pixels className="am-shut" px={SHUT} fill={INK} />
-							<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
-							<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
-						</g>
-						<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
-						<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
-					</g>
+					{FIGURE}
 				</g>
 			</g>
 		</svg>

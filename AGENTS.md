@@ -35,7 +35,7 @@ Reasons and details: [rules](docs/architecture/rules.md).
 ## Commands
 
 - `npm test` (server) and `npm run test:ui` (React components, in `tests/ui/`)
-- `npm run check:types`
+- `npm run check:types`, and `npm run lint:hooks` (the rules of hooks fail it; missing effect dependencies are warnings)
 - `npm run dev` — UI on :43127, API on :43128
 - `npm run ui:fixture` — the real UI with scripted, streaming conversations and a mocked API, for checking a page in a browser (no server, keys or sandbox; `window.__chat` drives it). Use it rather than building a fake backend; see [development](docs/architecture/development.md)
 - `npm run build && npm start` — production; more in [development](docs/architecture/development.md)

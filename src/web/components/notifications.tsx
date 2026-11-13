@@ -23,7 +23,7 @@ import {
 	X,
 } from 'lucide-react';
 import { Dialog } from 'radix-ui';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { Btn, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
@@ -393,7 +393,8 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 }
 
 /** Opening a task reads its rows, and a row that arrives while you look at it is read at once. A component of its own, so the list changing never re-renders the task. */
-export function ReadNotificationsOf({ sessionId }: { sessionId: string }): null {
+/** Marks a task's notifications read while you look at it. Memoized: the task page around it draws on every chunk of a reply. */
+export const ReadNotificationsOf = memo(function ReadNotificationsOf({ sessionId }: { sessionId: string }): null {
 	const queryClient = useQueryClient();
 	const { data } = useNotifications();
 	const unread = data?.notifications.some((notification) => notification.sessionId === sessionId && !notification.read) ?? false;
@@ -411,4 +412,4 @@ export function ReadNotificationsOf({ sessionId }: { sessionId: string }): null 
 		return () => document.removeEventListener('visibilitychange', onVisible);
 	}, [unread, sessionId, queryClient]);
 	return null;
-}
+});
