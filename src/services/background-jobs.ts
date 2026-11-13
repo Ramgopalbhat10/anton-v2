@@ -156,7 +156,8 @@ function startScript(dir: string, first: number, id: string, cwd: string, comman
 		'set -C; until { : > "$d/$n.log"; } 2>/dev/null; do n=$((n+1)); [ "$n" -gt 99999 ] && exit 1; done; set +C',
 		'b="$d/$n"',
 		`printf '%s %s %s\\n' ${quote(id)} "$(date +%s)" ${seconds} > "$b.info"`,
-		`printf 'cd %s || exit 1\\n%s\\n' ${quote(quote(cwd))} ${quote(command)} > "$b.sh"`,
+		// A pipeline's failure is the job's: `npm test | tail -400` ends with tail's 0 otherwise, and a failing suite reads as passing.
+		`printf 'cd %s || exit 1\\nset -o pipefail\\n%s\\n' ${quote(quote(cwd))} ${quote(command)} > "$b.sh"`,
 		'z=; command -v setsid >/dev/null && z=setsid',
 		`$z nohup bash -c ${quote(RUNNER)} anton-job "$b" ${seconds} < /dev/null > /dev/null 2>&1 &`,
 		// Its pid is written before this returns, so a stop that comes at once finds it.

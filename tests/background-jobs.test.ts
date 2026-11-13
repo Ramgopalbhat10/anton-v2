@@ -147,3 +147,10 @@ test('a digest keeps failures and the end within a few KB', () => {
 	assert.equal(durationText(3 * 60_000 + 12_000), '3m 12s');
 	assert.equal(durationText(65 * 60_000), '1h 5m');
 });
+
+test('a job whose pipeline fails ends with the failure, not the exit code of its last command', async () => {
+	startJobsGate('pipe');
+	const job = await startJob('pipe', 'echo "not ok 1 - x"; false | tail -5', undefined, deps);
+	await settledJobs('pipe');
+	assert.match(await checkJob('pipe', job.job, {}, deps), /exited with code 1 after/);
+});

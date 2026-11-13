@@ -92,3 +92,29 @@ test('a reply whose start was not seen has no trace', () => {
 	startTrace('quiet');
 	assert.equal(finishTrace('quiet'), null, 'nor one that did nothing');
 });
+
+test('a reply resumed after a restart, which ran no start hook, is traced from its next model call and marked resumed', () => {
+	const id = 'resumed-task';
+	const base = { instanceId: id, agentName: 'Coder', session: 'default' };
+	record({ ...base, type: 'turn_request', turnId: 'r1', purpose: 'agent', request: request([{ role: 'user', content: 'Go on.' }]), timestamp: at(0) });
+	record({ ...base, type: 'turn', turnId: 'r1', purpose: 'agent', durationMs: 500, timestamp: at(500), request: { providerId: 'openrouter', requestedModel: 'anthropic/claude-sonnet-5.5' }, response: { usage: usage(100, 10) } });
+	const trace = finishTrace(id);
+	assert.ok(trace);
+	assert.equal(trace.resumed, true);
+	assert.equal(trace.spans.length, 1);
+	// Never for an incognito chat, the reviewer, a subagent's call or an agent that is not the Coder.
+	for (const event of [
+		{ ...base, instanceId: 'inco_x' },
+		{ ...base, agentName: 'reviewer' },
+		{ ...base, taskId: 'sub' },
+		{ ...base, agentName: 'Coordinator' },
+		{ instanceId: id, session: 'default' },
+	]) {
+		record({ ...event, type: 'turn_request', turnId: 'r2', purpose: 'agent', request: request([{ role: 'user', content: 'x' }]), timestamp: at(0) });
+		assert.equal(finishTrace(event.instanceId), null);
+	}
+	// A reply that started as usual is not marked.
+	startTrace('fresh');
+	record({ ...base, instanceId: 'fresh', type: 'turn_request', turnId: 'f1', purpose: 'agent', request: request([{ role: 'user', content: 'Hi' }]), timestamp: at(0) });
+	assert.equal(finishTrace('fresh')?.resumed, undefined);
+});

@@ -295,6 +295,9 @@ export const reviewPrompt = (request: string, patch: string) =>
 		'',
 		'Find each thing the request asks for that the change does not do, or does differently from what the request says: a named function, option, flag, field, message, output format, default or edge case.',
 		'Write each as one line starting with MISSING: and saying what the request asks and what the change does instead. Only what the request itself asks: no style, naming, refactoring or extra features, and nothing you are unsure the request asks.',
+		// A live run's reviewer sent back a reply asked to run the suite and report its failures, because no diff can show a
+		// report; and one that read "format it like '07:05' does" as "return '07:05'" where the change followed the plain reading.
+		'Judge only what a diff can show. A request to run commands or tests, report results, explain or answer something is not missing from the change. Where the request can be read more than one way and the change follows a reasonable reading, it is not missing.',
 		'Do not list what the change already does. If it does everything the request asks, answer with the single word NONE.',
 	].join('\n');
 

@@ -92,6 +92,8 @@ export type Trace = {
 	toolsets: Record<string, Array<{ name: string; tokens: number }>>;
 	/** Spans left out once the trace held as many as it keeps. */
 	dropped: number;
+	/** Begun at its first model call after a restart, for a reply the runtime resumed: what came before is not in it. */
+	resumed?: boolean;
 };
 
 /** What a call's input was, by where it came from: read from the cache, written to it, or sent fresh. */

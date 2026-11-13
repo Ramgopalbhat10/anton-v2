@@ -327,3 +327,10 @@ test('on a later reply of a large branch, the files that reply changed are the o
 	assert.ok(at > 0 && at < second.indexOf('diff --git a/src/old0.ts '));
 	assert.ok(second.includes('+src/z-export.ts line 5 of hunk 1 format\n'));
 });
+
+test('the reviewer judges only what a diff can show, and a reasonable reading of the request', async () => {
+	const { reviewPrompt } = await import('../src/services/finish-review.ts');
+	const prompt = reviewPrompt('Run the whole suite and report which tests fail.', 'diff --git a/x b/x');
+	assert.match(prompt, /Judge only what a diff can show\. A request to run commands or tests, report results, explain or answer something is not missing from the change\./);
+	assert.match(prompt, /follows a reasonable reading, it is not missing/);
+});
