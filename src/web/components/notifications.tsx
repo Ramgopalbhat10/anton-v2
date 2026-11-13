@@ -111,13 +111,14 @@ export function useNotifications() {
 
 /** Unread rows that call you over: everything but sandboxes starting and stopping. */
 export const loudUnread = (unread: NotificationsView['unread'] | undefined) =>
-	unread ? CATEGORIES.filter((category) => !QUIET.includes(category.id)).reduce((sum, category) => sum + unread[category.id], 0) : 0;
+	unread ? CATEGORIES.filter((category) => !QUIET.includes(category.id)).reduce((sum, category) => sum + (unread[category.id] ?? 0), 0) : 0;
 
 /** The bell: a count of unread rows, amber while something waits on you and red when something failed. */
 export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: () => void; size?: 'xs' | 'sm'; className?: string }) {
 	const { data } = useNotifications();
 	const count = loudUnread(data?.unread);
-	const tone = data?.unread.failures ? 'bg-(--danger-base)' : data?.unread['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
+	// An answer from an older server may carry no counts; the bell then shows none rather than taking the page down.
+	const tone = data?.unread?.failures ? 'bg-(--danger-base)' : data?.unread?.['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
 	return (
 		<span className={cn('relative inline-flex shrink-0', className)}>
 			<IconBtn icon={Bell} size={size} label={count ? `Notifications, ${count} unread` : 'Notifications'} onClick={onOpen} aria-haspopup="dialog" />

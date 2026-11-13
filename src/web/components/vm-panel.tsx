@@ -1,20 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from 'lucide-react';
-import { type ComponentType, memo, useState } from 'react';
+import { type ComponentType, lazy, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
-import { BrowserTab } from '@/components/browser-tab';
-import { ComputerTab } from '@/components/computer-tab';
-import { AgentsTab } from '@/components/agents-tab';
-import { FilesTab } from '@/components/files-tab';
-import { HistoryTab } from '@/components/history-tab';
+import { LazyPart } from '@/components/error-boundary';
 import { GitTab, useChanges } from '@/components/git-tab';
 import { LibraryTab } from '@/components/library-tab';
-import { PrTab } from '@/components/pr-tab';
-import { PreviewTab } from '@/components/preview-tab';
 import { useResume } from '@/components/source-bar';
 import { Count, PanelTab, PanelTabs } from '@/components/instrument';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger, SectionLabel } from '@/components/signal';
-import { TerminalTab } from '@/components/terminal-tab';
 import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
@@ -39,7 +32,21 @@ export type PanelName = (typeof panels)[number]['name'];
  * Each panel takes only the task's id and keeps itself current from its own
  * queries, so it is memoized: nothing the conversation beside it does, such
  * as streaming a reply, re-renders a file tree or a diff.
+ *
+ * Most panels load their code the first time one is opened, so a page that
+ * never opens the terminal or the desktop never downloads xterm or noVNC.
+ * Changes and Library are in the page already: the header and the file
+ * viewer use their parts.
  */
+const PrTab = lazy(() => import('@/components/pr-tab').then((module) => ({ default: module.PrTab })));
+const AgentsTab = lazy(() => import('@/components/agents-tab').then((module) => ({ default: module.AgentsTab })));
+const TerminalTab = lazy(() => import('@/components/terminal-tab').then((module) => ({ default: module.TerminalTab })));
+const FilesTab = lazy(() => import('@/components/files-tab').then((module) => ({ default: module.FilesTab })));
+const PreviewTab = lazy(() => import('@/components/preview-tab').then((module) => ({ default: module.PreviewTab })));
+const BrowserTab = lazy(() => import('@/components/browser-tab').then((module) => ({ default: module.BrowserTab })));
+const ComputerTab = lazy(() => import('@/components/computer-tab').then((module) => ({ default: module.ComputerTab })));
+const HistoryTab = lazy(() => import('@/components/history-tab').then((module) => ({ default: module.HistoryTab })));
+
 const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	Changes: memo(GitTab),
 	PR: memo(PrTab),
@@ -220,7 +227,11 @@ export const VmPanel = memo(function VmPanel({
 						))}
 					</nav>
 				) : null}
-				{current === 'Preview' ? <PreviewTab key={sessionId} sessionId={sessionId} onWatchTest={() => show('Computer')} /> : View ? <View key={sessionId} sessionId={sessionId} /> : null}
+				{current ? (
+					<LazyPart key={`${sessionId} ${current}`} label={`The ${current} panel`} className="m-3">
+						{current === 'Preview' ? <PreviewTab sessionId={sessionId} onWatchTest={() => show('Computer')} /> : View ? <View sessionId={sessionId} /> : null}
+					</LazyPart>
+				) : null}
 			</div>
 		</WorkspacePane>
 	);

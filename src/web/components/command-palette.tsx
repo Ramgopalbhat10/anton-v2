@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { CircleCheck, FolderKanban, GitPullRequest, List, type LucideIcon, Plus, Search, Shapes } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { SECTIONS } from '@/components/settings/sections';
+import { SECTION_LIST } from '@/components/settings/section-list';
 import { Icon, Kbd, SectionLabel } from '@/components/signal';
 import { api, repoShort } from '@/lib/api';
 import { age } from '@/lib/format';
@@ -84,7 +84,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				},
 			}));
 		// Settings pages only once something is typed, so the list stays about tasks.
-		const settings = SECTIONS.filter((section) => needle && section.label.toLowerCase().includes(needle)).map((section) => ({
+		const settings = SECTION_LIST.filter((section) => needle && section.label.toLowerCase().includes(needle)).map((section) => ({
 			id: `settings-${section.id}`,
 			label: section.label,
 			meta: 'Settings',

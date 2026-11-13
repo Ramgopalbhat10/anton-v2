@@ -2,7 +2,6 @@ import { unrouted } from '../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { BookOpen, ChevronRight, Coins, FolderGit2, Gauge, Layers, type LucideIcon, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from 'lucide-react';
-import { Dialog } from 'radix-ui';
 import { useEffect, useState } from 'react';
 import { Caption, ShareRow, StatRow } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -15,7 +14,7 @@ import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigge
 import { api, type Autonomy, type HelperAgent, type ModelChoice, type Space, type SpaceChange } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
-import { closeProjectSettings, openProjectSettings, type ProjectSection, useProjectSettings } from '@/lib/project-settings-modal';
+import { closeProjectSettings, openProjectSettings, type ProjectSection } from '@/lib/project-settings-modal';
 import { useSpace } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -380,7 +379,7 @@ function Section({ space, section }: { space: Space; section: ProjectSection }) 
 }
 
 /** The card's frame: the project and section as crumbs with a close button, the sections on the left, the section beside them. */
-function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: ProjectSection }) {
+export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: ProjectSection }) {
 	const space = useSpace(spaceId);
 	const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
 	return (
@@ -435,36 +434,5 @@ function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: P
 				</div>
 			</div>
 		</div>
-	);
-}
-
-/**
- * A project's settings, as a card over the page you are on, like the app's
- * Settings. A link inside it to anywhere else closes it and goes there.
- */
-export function ProjectSettingsModal() {
-	const at = useProjectSettings();
-	return (
-		<Dialog.Root open={at !== null} onOpenChange={(next) => (next ? undefined : closeProjectSettings())}>
-			<Dialog.Portal>
-				<Dialog.Overlay className="settings-overlay fixed inset-0 z-50" />
-				<Dialog.Content
-					aria-describedby={undefined}
-					// Focus the card itself, not its first control, so opening it draws no focus ring.
-					onOpenAutoFocus={(event) => {
-						event.preventDefault();
-						(event.currentTarget as HTMLElement | null)?.focus();
-					}}
-					tabIndex={-1}
-					onClickCapture={(event) => {
-						if ((event.target as Element).closest('a[href]')) closeProjectSettings();
-					}}
-					className="settings-card fixed inset-0 z-50 flex flex-col overflow-hidden outline-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(820px,calc(100dvh-64px))] md:w-[min(1180px,calc(100vw-64px))] md:-translate-x-1/2 md:-translate-y-1/2"
-				>
-					<Dialog.Title className="sr-only">Project settings</Dialog.Title>
-					{at ? <ProjectSettingsCard spaceId={at.spaceId} section={at.section} /> : null}
-				</Dialog.Content>
-			</Dialog.Portal>
-		</Dialog.Root>
 	);
 }

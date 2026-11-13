@@ -8,6 +8,7 @@ import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigg
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
 import { SkyBrightnessSlider } from '@/components/sky';
 import { setSkyMode, setSkyOn, type SkyMode, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
+import { useGeneralSettings } from './general-settings';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
 /** Web reading and screen reading go through Anton's OpenRouter ports; a compaction summary can come from any model. */
@@ -136,7 +137,7 @@ function ImageModelPicker({ value, onChange, disabled }: { value: string | null;
 	);
 }
 
-export const useGeneralSettings = () => useQuery({ queryKey: ['general-settings'], queryFn: api.generalSettings });
+export { useGeneralSettings };
 
 /**
  * Changes gather in a draft until Save sends them all, and Cancel puts the

@@ -5,6 +5,7 @@ import { FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
@@ -25,7 +26,7 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
-import { ProjectSettingsModal } from '@/components/project-settings';
+import { ProjectSettingsModal } from '@/components/project-settings-modal';
 import { SettingsModal } from '@/components/settings/modal';
 import { Sky } from '@/components/sky';
 import { useSky, useSkyOn } from '@/lib/sky';
@@ -56,6 +57,9 @@ function TaskNotifications() {
 }
 
 /** How much of the sky a page lets through: all of it on Home, a hint behind an artifact you read, a little everywhere else. */
+/** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
+const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--elev-2)';
+
 export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
 	if (pathname === '/') return 'full';
 	// A conversation (a task, a thread, a project's coordinator) lets the sky through as much as a list does; an artifact you read stays nearly opaque.
@@ -132,23 +136,33 @@ export function AppShell() {
 				{incognito ? null : (
 					<div className="sg-nav-column" data-collapsed={collapsed}>
 						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
-						<ChatSidebar
-							open={navOpen}
-							collapsed={collapsed}
-							onNavigate={closeNav}
-							onCollapse={collapse}
-							onOpenPalette={openPalette}
-							onOpenNotifications={openNotifications}
-						/>
+						<ErrorBoundary label="The sidebar" className="m-3">
+							<ChatSidebar
+								open={navOpen}
+								collapsed={collapsed}
+								onNavigate={closeNav}
+								onCollapse={collapse}
+								onOpenPalette={openPalette}
+								onOpenNotifications={openNotifications}
+							/>
+						</ErrorBoundary>
 					</div>
 				)}
 				<main data-sky={skyOn ? skyVeil(pathname) : 'off'} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
 					<Outlet />
 				</main>
-				<CommandPalette open={paletteOpen} onClose={closePalette} />
-				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
-				<SettingsModal />
-				<ProjectSettingsModal />
+				<ErrorBoundary label="The command palette" className={FLOATING}>
+					<CommandPalette open={paletteOpen} onClose={closePalette} />
+				</ErrorBoundary>
+				<ErrorBoundary label="Notifications" className={FLOATING}>
+					<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
+				</ErrorBoundary>
+				<ErrorBoundary label="Settings" className={FLOATING}>
+					<SettingsModal />
+				</ErrorBoundary>
+				<ErrorBoundary label="Project settings" className={FLOATING}>
+					<ProjectSettingsModal />
+				</ErrorBoundary>
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>

@@ -8,6 +8,7 @@ import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
@@ -777,15 +778,7 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-const AssistantMessage = memo(function AssistantMessage({
-	message,
-	live,
-	last,
-	answer,
-	segment,
-	showWorkspaceChanges,
-	enter,
-}: {
+type AssistantMessageProps = {
 	message: FlueConversationMessage;
 	live: boolean;
 	last: boolean;
@@ -796,7 +789,18 @@ const AssistantMessage = memo(function AssistantMessage({
 	showWorkspaceChanges: boolean;
 	/** A conversation born on this page: each reply fades in as it arrives, history does not replay it. */
 	enter?: boolean;
-}) {
+};
+
+/** A reply, drawn again only when its props change; one that fails to draw says so in its place, and the rest of the conversation stays. */
+const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageProps) {
+	return (
+		<ErrorBoundary label="This reply">
+			<Reply {...props} />
+		</ErrorBoundary>
+	);
+});
+
+function Reply({ message, live, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
 	const foot = !segment || segment.last;
@@ -897,7 +901,7 @@ const AssistantMessage = memo(function AssistantMessage({
 		</div>
 		</OutputLinks.Provider>
 	);
-});
+}
 
 /** The text a drawn block adds to Copy response: the question and its options, or what a card says. */
 function copiedText(block: Block): string[] {
@@ -1460,7 +1464,9 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 						}}
 					/>
 				) : null}
-				{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				<ErrorBoundary label="The message box" className="mx-4 mb-3">
+					{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				</ErrorBoundary>
 			</div>
 			</FileLinks.Provider>
 			</ReplyActions.Provider>
