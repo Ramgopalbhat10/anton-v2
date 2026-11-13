@@ -6,10 +6,11 @@ import { FileIcon, FileIcons } from '@/components/file-icons';
 import { PanelTab, PanelTabs } from '@/components/instrument';
 import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/file-view';
 import { EmptyLine, EmptyState, Icon, SearchField, Spinner } from '@/components/signal';
-import { api, isChat, refreshFor } from '@/lib/api';
+import { api, isChat } from '@/lib/api';
 import { matchPaths } from '@/lib/completion';
 import { cn } from '@/lib/utils';
 import { ShowPanel, useFocusedFile } from '@/lib/workspace';
+import { refreshBySource, taskQueries } from '@/lib/task-queries';
 
 /** Paths that match a search, as a flat list. */
 function Matches({
@@ -115,13 +116,9 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
 	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const chat = session.data ? isChat(session.data) : false;
-	const listing = useQuery({
-		queryKey: ['files', sessionId],
-		queryFn: () => api.files(sessionId),
-		refetchInterval: (query) => refreshFor(query.state.data?.source),
-	});
+	const listing = useQuery({ ...taskQueries.files(sessionId), refetchInterval: refreshBySource });
 	const tree = useMemo(() => buildTree(listing.data?.paths ?? []), [listing.data?.paths]);
 	const changes = useMemo(() => new Map((listing.data?.changes ?? []).map((change) => [change.path, change.status])), [listing.data?.changes]);
 

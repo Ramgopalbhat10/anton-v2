@@ -10,6 +10,7 @@ import { api, type SubagentRun, type SubagentStep } from '@/lib/api';
 import { elapsed, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { focusRun, ShowPanel } from '@/lib/workspace';
+import { taskQueries } from '@/lib/task-queries';
 
 /*
  * Subagents as the user sees them: who each one is (an icon and a colour per
@@ -60,7 +61,7 @@ export function AgentTile({ agent, running, size = 22 }: { agent: string; runnin
 
 /** The task's subagent runs, kept current from the server's announcements. */
 export function useSubagentRuns(sessionId: string) {
-	return useQuery({ queryKey: ['subagents', sessionId], queryFn: () => api.subagents(sessionId) });
+	return useQuery(taskQueries.subagents(sessionId));
 }
 
 /** The time now, ticking each second while `on`, so a running subagent's elapsed time moves. */

@@ -138,9 +138,15 @@ export const config = {
 	/**
 	 * A repository task's sandbox starts as its agent starts a reply, behind the agent's first steps, rather than when
 	 * the agent asks for it: most such tasks change code, and the start (a clone and an install on a cold image) is
-	 * then under way while the agent reads. One that only answers leaves it to stop after its idle minutes. `0` turns it off.
+	 * then under way while the agent reads. `0` turns it off.
 	 */
 	prewarmSandbox: read('ANTON_PREWARM_SANDBOX', '1') !== '0',
+	/**
+	 * Whether the decision model first reads the message to tell a question from work (`prewarm-intent.ts`): a message it
+	 * judges needs no command or change starts no sandbox and lets go of the one woken while it was typed. `always`
+	 * prewarms every repository task's sandbox, as before; without a decision model every one is prewarmed too.
+	 */
+	prewarmByIntent: read('ANTON_PREWARM_SANDBOX', '1') !== 'always',
 	/**
 	 * A repo's prepared image is built in the background (`prepared-images.ts`): when the repo is added, when a task
 	 * finds it missing, old or out of date with the lockfile. `0` leaves repos to start without one until asked.

@@ -5,7 +5,8 @@ import { useResume } from '@/components/source-bar';
 import { LinkArt, SandboxArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, type Preview } from '@/lib/api';
+import type { Preview } from '@/lib/api';
+import { taskQueries } from '@/lib/task-queries';
 
 function PortChip({ preview, active, onSelect }: { preview: Preview; active: boolean; onSelect: () => void }) {
 	return (
@@ -30,11 +31,11 @@ function NotRunning({ sessionId }: { sessionId: string }) {
 export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWatchTest?: () => void }) {
 	const [chosen, setChosen] = useState<number | null>(null);
 	const [reloads, setReloads] = useState(0);
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const starting = session.data?.status === 'starting';
 	// Checking ports runs a command in the sandbox, and any command keeps it from stopping when idle.
 	// So no polling: the list is checked again when the agent runs a tool (that is how servers start), or on Reload.
-	const previews = useQuery({ queryKey: ['previews', sessionId], queryFn: () => api.previews(sessionId) });
+	const previews = useQuery(taskQueries.previews(sessionId));
 
 	if (previews.isPending || (starting && !previews.data?.live)) {
 		return (

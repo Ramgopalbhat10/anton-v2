@@ -13,6 +13,7 @@ import { age } from '@/lib/format';
 import { type ReviewComment, reviewMessage, SendToAgent, useReviewComments } from '@/lib/review';
 import { cn } from '@/lib/utils';
 import { focusFile, setChangesScope, ShowPanel, useChangesScope, useFocusedChange } from '@/lib/workspace';
+import { taskQueries } from '@/lib/task-queries';
 
 /** Draft comments on one file of the diff; absent where the diff is read-only. */
 export type Commenting = {
@@ -540,7 +541,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 	const { changes, files } = useChanges(sessionId, scope);
 	const open = useOpenFiles(files);
 	const review = useReviewComments(sessionId);
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data;
+	const session = useQuery(taskQueries.session(sessionId)).data;
 	const [selected, setSelected] = useState<{ path: string; at: number } | null>(null);
 	const [query, setQuery] = useState('');
 	const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());

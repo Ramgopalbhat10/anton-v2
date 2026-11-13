@@ -85,13 +85,12 @@ export function measureRequest(input: ModelRequestInput): Record<ContextPart, nu
 /** The runtime's name for an agent's main conversation; a subagent's task gets a session of its own. */
 export const MAIN_SESSION = 'default';
 
+/** An event of the coding agent's main conversation, not a subagent's or the reviewer's. */
+export const onMainCoder = (event: Pick<ContextEvent, 'instanceId' | 'taskId' | 'session' | 'agentName'>) =>
+	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === MAIN_SESSION) && (!event.agentName || /^coder$/i.test(event.agentName));
+
 /** The coding agent's own calls in its main conversation, not a subagent's, the reviewer's, or a compaction's. */
-const isTaskCall = (event: ContextEvent) =>
-	Boolean(event.instanceId) &&
-	!event.taskId &&
-	(event.session === undefined || event.session === MAIN_SESSION) &&
-	event.purpose === 'agent' &&
-	(!event.agentName || /^coder$/i.test(event.agentName));
+const isTaskCall = (event: ContextEvent) => onMainCoder(event) && event.purpose === 'agent';
 
 /** Requests seen, waiting for their call to finish; keyed by task and turn. */
 const pending = new Map<string, Record<ContextPart, number>>();
@@ -119,7 +118,8 @@ export async function recordContext(event: ContextEvent): Promise<void> {
 		at: new Date().toISOString(),
 	};
 	await setSetting(key(id), snapshot).catch((error: unknown) => logProblem('warn', 'Context usage not kept', error, id));
-	announce({ kind: 'task', id, what: 'state' });
+	// Each model turn: its context and its spend moved, nothing else about the task did.
+	announce({ kind: 'task', id, what: 'usage' });
 }
 
 /**
@@ -145,12 +145,22 @@ export function keptAfterCompaction(compactsAt: number): number {
 }
 
 /**
+ * The effort a compaction summary is written at by the conversation's own model, when Settings › General names
+ * no compaction model. Flue writes it at `high`. The summary call shares no prefix with the conversation, so none
+ * of it is read from the prompt cache, and the reply waits for it: a frontier model thinking hard over 200K
+ * tokens kept a task still for minutes in the middle of its work. A summary extracts what happened and decides
+ * nothing, so it needs little thinking. The task's own model still writes it, as the one model certain to be
+ * reachable on the task's plan or gateway and billed where the task is.
+ */
+export const COMPACTION_SUMMARY_EFFORT: Reasoning = 'low';
+
+/**
  * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
  * comes before the window fills (Claude Code's models have a ceiling of their own), else at the runtime's
  * own point, keeping what `keptAfterCompaction` says; and the summary written by the compaction model
  * chosen there (a faster one makes compacting quicker) at the effort chosen with it, else by the agent's
- * own. For a model of unknown window the point is left to the runtime. Undefined leaves both to the
- * runtime. Read while the agent renders, from the model list last fetched.
+ * own at `COMPACTION_SUMMARY_EFFORT`. For a model of unknown window the point is left to the runtime.
+ * Read while the agent renders, from the model list last fetched.
  */
 export function compactionFor(
 	model: string,
@@ -158,11 +168,12 @@ export function compactionFor(
 	models = loadedModels(),
 	summarizer = backgroundModel('compaction'),
 	effort = backgroundReasoning('compaction'),
-): { reserveTokens?: number; keepRecentTokens?: number; model?: string; reasoning?: Reasoning } | undefined {
-	// `reasoning` is read by Anton's patch to Flue's summary call (scripts/patch-flue.ts); without it the summary thinks at high.
-	const summary = summarizer ? { model: summarizer, ...(effort ? { reasoning: effort } : {}) } : {};
+): { reserveTokens?: number; keepRecentTokens?: number; model?: string; reasoning?: Reasoning } {
+	// `reasoning` is read by Anton's patch to Flue's summary call (scripts/patch-flue.ts), with a compaction model or
+	// without one; a compaction model chosen with no effort beside it writes at the runtime's high, as it always has.
+	const summary = summarizer ? { model: summarizer, ...(effort ? { reasoning: effort } : {}) } : { reasoning: COMPACTION_SUMMARY_EFFORT };
 	const info = models.find((entry) => entry.id === unrouted(model));
-	if (!info?.contextLength) return summarizer ? summary : undefined;
+	if (!info?.contextLength) return summary;
 	const reserve = compactionReserve(info.contextLength, info.maxOutput, ceiling);
 	const keepRecentTokens = keptAfterCompaction(info.contextLength - reserve);
 	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens, ...summary } : { reserveTokens: reserve, keepRecentTokens, ...summary };

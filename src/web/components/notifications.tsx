@@ -23,7 +23,7 @@ import {
 	X,
 } from 'lucide-react';
 import { Dialog } from 'radix-ui';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { Btn, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip, SectionLabel } from '@/components/signal';
 import { type AppNotification, api, type NotificationCategory, type NotificationKind, type NotificationsView, repoShort, SAFETY_NET_MS } from '@/lib/api';
@@ -111,13 +111,14 @@ export function useNotifications() {
 
 /** Unread rows that call you over: everything but sandboxes starting and stopping. */
 export const loudUnread = (unread: NotificationsView['unread'] | undefined) =>
-	unread ? CATEGORIES.filter((category) => !QUIET.includes(category.id)).reduce((sum, category) => sum + unread[category.id], 0) : 0;
+	unread ? CATEGORIES.filter((category) => !QUIET.includes(category.id)).reduce((sum, category) => sum + (unread[category.id] ?? 0), 0) : 0;
 
 /** The bell: a count of unread rows, amber while something waits on you and red when something failed. */
 export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: () => void; size?: 'xs' | 'sm'; className?: string }) {
 	const { data } = useNotifications();
 	const count = loudUnread(data?.unread);
-	const tone = data?.unread.failures ? 'bg-(--danger-base)' : data?.unread['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
+	// An answer from an older server may carry no counts; the bell then shows none rather than taking the page down.
+	const tone = data?.unread?.failures ? 'bg-(--danger-base)' : data?.unread?.['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
 	return (
 		<span className={cn('relative inline-flex shrink-0', className)}>
 			<IconBtn icon={Bell} size={size} label={count ? `Notifications, ${count} unread` : 'Notifications'} onClick={onOpen} aria-haspopup="dialog" />
@@ -392,7 +393,8 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 }
 
 /** Opening a task reads its rows, and a row that arrives while you look at it is read at once. A component of its own, so the list changing never re-renders the task. */
-export function ReadNotificationsOf({ sessionId }: { sessionId: string }): null {
+/** Marks a task's notifications read while you look at it. Memoized: the task page around it draws on every chunk of a reply. */
+export const ReadNotificationsOf = memo(function ReadNotificationsOf({ sessionId }: { sessionId: string }): null {
 	const queryClient = useQueryClient();
 	const { data } = useNotifications();
 	const unread = data?.notifications.some((notification) => notification.sessionId === sessionId && !notification.read) ?? false;
@@ -410,4 +412,4 @@ export function ReadNotificationsOf({ sessionId }: { sessionId: string }): null 
 		return () => document.removeEventListener('visibilitychange', onVisible);
 	}, [unread, sessionId, queryClient]);
 	return null;
-}
+});

@@ -8,6 +8,7 @@ import { describeTool, field, toolTone } from '@/components/tool-describe';
 import { toolServerMark, useBrands, useMcpServers } from '@/components/brand-marks';
 import { AgentsCard, delegationOf, lookOf, useStopRun, useSubagentRuns } from '@/components/subagents';
 import { Composer } from '@/components/composer';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { FileLinks, Markdown, OutputLinks } from '@/components/markdown';
 import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/sent-text';
 import { DeletedArtifact, OutputCards } from '@/components/output-viewer';
@@ -44,6 +45,7 @@ import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { IMAGE_TOOL, nowText, type ReplyPhase } from '@/lib/now-text';
 import { outputLinkPath, outputLinksIn } from '../../core/outputs';
 import { asConnectorTool } from '@/lib/connector-calls';
+import { taskQueries } from '@/lib/task-queries';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
@@ -245,7 +247,7 @@ function scriptText(input: unknown): string {
 
 /** The calls a run_script program made, read from Anton (the runtime only has the program and its result); live while it runs. */
 function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean): ScriptCall[] {
-	const { data } = useQuery({ queryKey: ['scripts', sessionId], queryFn: () => api.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
+	const { data } = useQuery({ ...taskQueries.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
 	return data?.scripts[toolCallId] ?? [];
 }
 
@@ -293,8 +295,13 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const expandable = script || part.toolName === 'bash';
 	const running = part.state === 'input-available';
 	const [open, setOpen] = useState(running);
+	// Opens as it starts and closes as it ends, set while drawing rather than one render later from an effect.
+	const [wasRunning, setWasRunning] = useState(running);
+	if (wasRunning !== running) {
+		setWasRunning(running);
+		setOpen(running);
+	}
 	const detailsId = useId();
-	useEffect(() => setOpen(running), [running]);
 	const output = (part.toolName === 'bash' || script) && part.state === 'output-available' ? outputText(part.output).trimEnd() : '';
 	const command = script ? scriptText(part.input) : `$ ${field(part.input, 'command')}`;
 	const sessionId = useContext(SessionId);
@@ -420,8 +427,13 @@ const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center roun
 
 function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
+	// Open while the reply works and closed once it is done, set while drawing rather than one render later from an effect.
+	const [wasLive, setWasLive] = useState(live);
+	if (wasLive !== live) {
+		setWasLive(live);
+		setOpen(live);
+	}
 	const detailsId = useId();
-	useEffect(() => setOpen(live), [live]);
 	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
@@ -776,15 +788,7 @@ function CopyResponse({ text }: { text: string }) {
 	);
 }
 
-const AssistantMessage = memo(function AssistantMessage({
-	message,
-	live,
-	last,
-	answer,
-	segment,
-	showWorkspaceChanges,
-	enter,
-}: {
+type AssistantMessageProps = {
 	message: FlueConversationMessage;
 	live: boolean;
 	last: boolean;
@@ -795,7 +799,18 @@ const AssistantMessage = memo(function AssistantMessage({
 	showWorkspaceChanges: boolean;
 	/** A conversation born on this page: each reply fades in as it arrives, history does not replay it. */
 	enter?: boolean;
-}) {
+};
+
+/** A reply, drawn again only when its props change; one that fails to draw says so in its place, and the rest of the conversation stays. */
+const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageProps) {
+	return (
+		<ErrorBoundary label="This reply">
+			<Reply {...props} />
+		</ErrorBoundary>
+	);
+});
+
+function Reply({ message, live, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
 	const foot = !segment || segment.last;
@@ -804,7 +819,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
 	const sessionId = useContext(SessionId);
 	// The files it made show as cards once it is whole, so a half-written link never loads.
-	const library = useQuery({ queryKey: ['outputs', sessionId], queryFn: () => api.outputs(sessionId), staleTime: 30_000, enabled: !live });
+	const library = useQuery({ ...taskQueries.outputs(sessionId), staleTime: 30_000, enabled: !live });
 	const kept = useMemo(() => (library.data ? new Set(library.data.outputs.map((output) => output.path)) : null), [library.data]);
 	const deleted = useMemo(() => new Set(library.data?.deleted ?? []), [library.data]);
 	const made = useMemo<ViewerItem[]>(
@@ -835,7 +850,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	if (blocks.length === 0 && !(live && foot)) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
-		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter')}>
+		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter', !live && !last && 'thread-row-settled')}>
 			{head ? (
 				<div className="flex items-center gap-2">
 					<Logo size={18} />
@@ -896,7 +911,7 @@ const AssistantMessage = memo(function AssistantMessage({
 		</div>
 		</OutputLinks.Provider>
 	);
-});
+}
 
 /** The text a drawn block adds to Copy response: the question and its options, or what a card says. */
 function copiedText(block: Block): string[] {
@@ -1008,7 +1023,7 @@ function Notice({ children }: { children: ReactNode }) {
 function RetryOnDefault({ refused, onRetry }: { refused: boolean; onRetry: (text: string) => void }) {
 	const sessionId = useContext(SessionId);
 	const queryClient = useQueryClient();
-	const fallback = useQuery({ queryKey: ['fallback', sessionId], queryFn: () => api.fallbackModel(sessionId) }).data?.fallback ?? null;
+	const fallback = useQuery(taskQueries.fallback(sessionId)).data?.fallback ?? null;
 	const [switching, setSwitching] = useState(false);
 	if (!fallback) return null;
 	const retry = async () => {
@@ -1068,7 +1083,7 @@ function useSince(since: string | null): number {
 
 /** What the agent is doing this moment and for how long, from the task's latest `now`. */
 function useNow(sessionId: string) {
-	const now = useQuery({ queryKey: ['now', sessionId], queryFn: () => api.now(sessionId) }).data?.now ?? null;
+	const now = useQuery(taskQueries.now(sessionId)).data?.now ?? null;
 	return { now, took: useSince(now?.since ?? null) };
 }
 
@@ -1121,7 +1136,7 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
  * Otherwise it says what the agent is doing, unless the live steps card's
  * header already does, or the reply's text streaming does.
  */
-function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
+const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
 	if (!queued || !running.length) return tail === 'steps' ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
@@ -1144,7 +1159,7 @@ function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued
 			</Btn>
 		</div>
 	);
-}
+});
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
 
@@ -1165,11 +1180,23 @@ const waitingMessage = (message: WaitingMessage): FlueConversationMessage => ({
 	parts: [{ type: 'text', text: message.text, state: 'done' }],
 });
 const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
+/** How long the thread trusts a file list nothing has marked stale. */
+const FILE_LINKS_FRESH_MS = 30_000;
 
-/** File references in replies link to the task's files, and open in the Files panel at their line. */
-function useThreadFileLinks(sessionId: string): FileLinks {
+/**
+ * File references in replies link to the task's files, and open in the Files panel at their line.
+ *
+ * Every tool call marks the file list stale. The thread only reads what is cached, so it never
+ * refetches the whole list after each call: it fetches it when the page opens and when a reply
+ * starts or ends, and takes the Files panel's fresher list whenever that panel is open.
+ */
+function useThreadFileLinks(sessionId: string, busy: boolean): FileLinks {
 	const showPanel = useContext(ShowPanel);
-	const files = useQuery({ queryKey: ['files', sessionId], queryFn: () => api.files(sessionId), staleTime: 30_000 });
+	const queryClient = useQueryClient();
+	const files = useQuery({ ...taskQueries.files(sessionId), enabled: false });
+	useEffect(() => {
+		void queryClient.prefetchQuery({ ...taskQueries.files(sessionId), staleTime: FILE_LINKS_FRESH_MS });
+	}, [queryClient, sessionId, busy]);
 	const paths = useMemo(() => new Set(files.data?.paths ?? []), [files.data?.paths]);
 	return useMemo(
 		() => ({
@@ -1185,14 +1212,14 @@ function useThreadFileLinks(sessionId: string): FileLinks {
 
 export function Thread({ sessionId, agent, composer, fresh }: { sessionId: string; agent: UseFlueAgentResult; composer?: ReactNode; fresh?: boolean }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const scroller = useRef<HTMLDivElement>(null);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
 	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
 	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
-	const unreadByServer = useQuery({ queryKey: ['waiting', sessionId], queryFn: () => api.waiting(sessionId) }).data?.messages ?? NO_WAITING;
+	const unreadByServer = useQuery(taskQueries.waiting(sessionId)).data?.messages ?? NO_WAITING;
 	const messages = useMemo(() => {
 		const shown = conversation
 			.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
@@ -1213,7 +1240,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	// What the reply being written ends on: a steps card's header says what the agent is doing, and streaming text shows itself.
 	const tail = useMemo(() => (liveReply ? (toBlocks(liveReply.parts).at(-1)?.kind ?? null) : null), [liveReply?.parts]);
 	const settlements = agent.settlements;
-	const joins = useQuery({ queryKey: ['joins', sessionId], queryFn: () => api.joins(sessionId) }).data?.joins ?? NO_JOINS;
+	const joins = useQuery(taskQueries.joins(sessionId)).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
 	// Messages sent while Anton worked, moved into the reply where it read them.
 	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, liveReply), [messages, joins, answeredBy, liveReply]);
@@ -1264,6 +1291,14 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		release();
 		const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 		el.scrollTo({ top, behavior: reduced ? 'auto' : 'smooth' });
+		// Rows that were never on screen count at an estimate until drawn (`.thread-row-settled`); once the
+		// scroll ends among them, land on the message itself.
+		const land = () => {
+			const off = target.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+			if (Math.abs(off) > 2) el.scrollTo({ top: el.scrollTop + off });
+		};
+		el.addEventListener('scrollend', land, { once: true });
+		setTimeout(() => el.removeEventListener('scrollend', land), 3000);
 	}, [follow, release]);
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(
@@ -1276,7 +1311,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		}),
 		[send, busy, follow],
 	);
-	const fileLinks = useThreadFileLinks(sessionId);
+	const fileLinks = useThreadFileLinks(sessionId, busy);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
 	// A message you sent with files shows while they upload; the ones you send rise in.
@@ -1353,7 +1388,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 				<div className="relative min-h-0 flex-1">
 				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
 				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-1 pl-4">
-					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
+					<div className="thread-rows mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-tile border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-small leading-[18px] text-(--warning-text)">
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
@@ -1401,7 +1436,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
-								<div key={row.message.id} data-chat-input={row.message.id} className={rises(row.message.id, row === rows[0] && !fresh) ? 'in-sent' : undefined}>
+								<div key={row.message.id} data-chat-input={row.message.id} className={cn(rises(row.message.id, row === rows[0] && !fresh) && 'in-sent', row !== rows[rows.length - 1] && 'thread-row-settled')}>
 									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
 								</div>
 							) : (
@@ -1439,7 +1474,9 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 						}}
 					/>
 				) : null}
-				{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				<ErrorBoundary label="The message box" className="mx-4 mb-3">
+					{composer === undefined ? <Composer busy={busy} onSend={onSend} onStop={onStop} onPending={showPending} sessionId={sessionId} /> : composer}
+				</ErrorBoundary>
 			</div>
 			</FileLinks.Provider>
 			</ReplyActions.Provider>

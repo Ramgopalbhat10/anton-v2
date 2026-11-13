@@ -4,8 +4,10 @@ import { isIncognitoId } from '../core/incognito.ts';
 import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { decide, yesOf } from './decisions.ts';
 import { reopenFinishReview, requestFor, taskPatch } from './finish-review.ts';
+import { changeGate, gate, loadGate } from './gate-state.ts';
 import { logProblem } from './log.ts';
 import { replyEnding, replyMessages } from './reply-check.ts';
+import { lastSendBack } from './send-backs.ts';
 import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';
 import { type TodoList, todoReminded, todosFor } from './todos.ts';
 
@@ -43,6 +45,7 @@ const WORK_TOOLS = new Set([...SANDBOX_TOOLS, 'update_todos', 'start_workspace',
 /** What the decision model reads of the request and the reply. */
 const REQUEST_CHARS = 2_000;
 const REPLY_CHARS = 3_000;
+const REVIEW_CHARS = 2_000;
 
 /** Words that declare requested work not done. Narrow on purpose: a final line such as "the pull request remains open" is not one. */
 const INCOMPLETE = new RegExp(
@@ -69,8 +72,6 @@ const NEEDS_USER = new RegExp(
 );
 
 type Call = { tool: string };
-/** `seen`: how many messages the reply had said when last sent back; only those after it are its end now. */
-type Round = { rounds: number; mark: string; seen: number };
 export type GateContext = {
 	/** A task with no repository: its progress is its sandbox work, as it has no diff. */
 	chat: boolean;
@@ -86,18 +87,29 @@ type Deps = {
 	reminded: (id: string) => boolean;
 	request: (id: string) => string | undefined;
 	elapsed: (id: string) => number | null;
+	/** The reviewer's points and what the reply had said before them, when the finish review was the last to send it back. */
+	reviewed: (id: string) => Reviewed | null;
 	limitMs: number;
 };
 
-const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, messages: replyMessages, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), limitMs: config.replyTimeoutMs };
+type Reviewed = { points: string; before: string };
 
-/** Each task's rounds in the reply in hand, and what its work stood at when last sent back. */
-const rounds = new Map<string, Round>();
-const KEEP_TASKS = 200;
+/** The last send-back's review points and the reply's report before them, when the finish review sent the reply back last. */
+function lastReview(id: string): Reviewed | null {
+	const last = lastSendBack(id);
+	return last?.gate === 'review' ? { points: last.points ?? '', before: last.before ?? '' } : null;
+}
 
-/** A new reply may be sent back again. */
+const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, messages: replyMessages, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), reviewed: lastReview, limitMs: config.replyTimeoutMs };
+
+/**
+ * A new reply may be sent back again. Each task's rounds in the reply in hand, what its work stood at when last sent
+ * back and how many messages the reply had said then (only those after are its end now), are kept with its checks.
+ */
 export function startCompletionGate(id: string): void {
-	rounds.delete(id);
+	changeGate(id, (state) => {
+		state.round = undefined;
+	});
 }
 
 /** Whether the reply's last words end on a question, as a reply that asks the user something does. */
@@ -114,16 +126,28 @@ export function undoneByRule(text: string, open: number, reminded: boolean, work
 }
 
 /** The decision model's verdict, or null when there is none or it failed. */
-async function undoneByModel(id: string, request: string | undefined, text: string, open: string[]): Promise<boolean | null> {
+async function undoneByModel(id: string, request: string | undefined, text: string, open: string[], reviewed: Reviewed | null): Promise<boolean | null> {
 	const answers = await decide(
 		id,
-		{ request: request?.slice(0, REQUEST_CHARS) ?? '', reply: text.slice(-REPLY_CHARS), openTodoSteps: open.join('\n') },
+		{
+			request: request?.slice(0, REQUEST_CHARS) ?? '',
+			reply: text.slice(-REPLY_CHARS),
+			openTodoSteps: open.join('\n'),
+			// A reply the finish review sent back ends on its answer to the reviewer, which says little of the whole request:
+			// what the reply had reported before the review is read with it. A live run's reply that had done all three parts
+			// of its request, and ended explaining why it turned down a reviewer's point, was otherwise judged as work undone.
+			...(reviewed ? { reviewerPoints: reviewed.points.slice(0, REVIEW_CHARS), replyBeforeReview: reviewed.before.slice(-REPLY_CHARS) } : {}),
+		},
 		{
 			undone: {
 				type: 'yes-no',
 				instructions:
 					"This is the end of a coding agent's reply to the request. Does it say, or do its open todo steps show, that work the request asked for was not done, is only partly done or remains open, for a reason other than needing the user to decide, provide or do something? " +
-					'A report of the work done, an answer to a question, an offer of optional extras, or a stop for something only the user can give is no.',
+					'A report of the work done, an answer to a question, an offer of optional extras, or a stop for something only the user can give is no. ' +
+					(reviewed
+						? "Here a reviewer sent the reply back with reviewerPoints, and the reply's end answers them; replyBeforeReview is what it reported before. " +
+							'Judge the whole request from both. Fixing a point, or explaining why a point is wrong or not asked for, is not work left undone.'
+						: ''),
 			},
 		},
 	);
@@ -155,7 +179,8 @@ export async function completionGate(id: string, calls: readonly Call[], context
 	if (signal?.aborted || isIncognitoId(id) || (chat && !workspace)) return null;
 	const last = calls[calls.length - 1]?.tool;
 	if (last === 'ask' || last === 'propose_plan') return null;
-	const round = rounds.get(id);
+	await loadGate(id);
+	const round = gate(id).round;
 	if (round && round.rounds >= MAX_ROUNDS) return null;
 	try {
 		// After a send-back, what the reply said before it is stale: a short "Done." would otherwise be read with the
@@ -168,14 +193,15 @@ export async function completionGate(id: string, calls: readonly Call[], context
 		const steps = wrote ? open : [];
 		if (!text && !steps.length) return null;
 		const worked = calls.some((call) => WORK_TOOLS.has(call.tool));
-		const verdict = (await undoneByModel(id, d.request(id), text, steps)) ?? undoneByRule(text, steps.length, d.reminded(id), worked);
+		const verdict = (await undoneByModel(id, d.request(id), text, steps, d.reviewed(id))) ?? undoneByRule(text, steps.length, d.reminded(id), worked);
 		if (!verdict || signal?.aborted) return null;
 		const mark = chat ? `calls:${calls.filter((call) => SANDBOX_TOOLS.has(call.tool)).length}` : `diff:${createHash('sha256').update((await d.patch(id))?.trim() ?? '').digest('hex')}`;
 		// A round that changed nothing will not be followed by one that does.
 		if (round && round.mark === mark) return null;
-		rounds.delete(id);
-		rounds.set(id, { rounds: (round?.rounds ?? 0) + 1, mark, seen: d.messages(id) });
-		if (rounds.size > KEEP_TASKS) rounds.delete(rounds.keys().next().value!);
+		const next = { rounds: (round?.rounds ?? 0) + 1, mark, seen: d.messages(id) };
+		changeGate(id, (state) => {
+			state.round = next;
+		});
 		reopenFinishReview(id);
 		return carryOn(d.elapsed(id), d.limitMs, steps.length);
 	} catch (error) {

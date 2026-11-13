@@ -8,6 +8,7 @@ import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigg
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
 import { SkyBrightnessSlider } from '@/components/sky';
 import { setSkyMode, setSkyOn, type SkyMode, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
+import { useGeneralSettings } from './general-settings';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
 /** Web reading and screen reading go through Anton's OpenRouter ports; a compaction summary can come from any model. */
@@ -35,7 +36,7 @@ const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; inf
 		task: 'compaction',
 		title: 'Compaction summaries',
 		help: 'Summarizes older turns when a conversation compacts.',
-		info: "Off, each task's own model writes its summary. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
+		info: "Off, each task's own model writes its summary at low effort, so the task waits less for it. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
 	},
 ];
 
@@ -136,7 +137,7 @@ function ImageModelPicker({ value, onChange, disabled }: { value: string | null;
 	);
 }
 
-export const useGeneralSettings = () => useQuery({ queryKey: ['general-settings'], queryFn: api.generalSettings });
+export { useGeneralSettings };
 
 /**
  * Changes gather in a draft until Save sends them all, and Cancel puts the

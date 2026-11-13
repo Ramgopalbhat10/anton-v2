@@ -5,6 +5,7 @@ import { FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
@@ -14,7 +15,7 @@ import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions'
 import { Thread } from '@/components/thread';
 import { type PanelName, panels, VmPanel } from '@/components/vm-panel';
 import { PaneSlideContext, usePaneSlide } from '@/components/workspace-pane';
-import { api, isChat, type Session } from '@/lib/api';
+import { isChat, type Session } from '@/lib/api';
 import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useOnePane } from '@/lib/one-pane';
@@ -25,11 +26,12 @@ import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
-import { ProjectSettingsModal } from '@/components/project-settings';
+import { ProjectSettingsModal } from '@/components/project-settings-modal';
 import { SettingsModal } from '@/components/settings/modal';
 import { Sky } from '@/components/sky';
 import { useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 function readCollapsed() {
 	try {
@@ -55,6 +57,9 @@ function TaskNotifications() {
 }
 
 /** How much of the sky a page lets through: all of it on Home, a hint behind an artifact you read, a little everywhere else. */
+/** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
+const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--elev-2)';
+
 export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
 	if (pathname === '/') return 'full';
 	// A conversation (a task, a thread, a project's coordinator) lets the sky through as much as a list does; an artifact you read stays nearly opaque.
@@ -88,6 +93,8 @@ export function AppShell() {
 		setNotificationsOpen(true);
 	}, []);
 	const closeNav = useCallback(() => setNavOpen(false), []);
+	// The same function on every render, so nothing that opens the sidebar draws again when the shell does.
+	const openNav = useCallback(() => setNavOpen(true), []);
 	const collapse = useCallback(() => setCollapsed(true), []);
 	const openPalette = useCallback(() => {
 		setNavOpen(false);
@@ -115,7 +122,7 @@ export function AppShell() {
 	}, []);
 
 	return (
-		<NavContext.Provider value={() => setNavOpen(true)}>
+		<NavContext.Provider value={openNav}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
 			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text-primary)">
 				<AppSky home={pathname === '/'} />
@@ -131,23 +138,33 @@ export function AppShell() {
 				{incognito ? null : (
 					<div className="sg-nav-column" data-collapsed={collapsed}>
 						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
-						<ChatSidebar
-							open={navOpen}
-							collapsed={collapsed}
-							onNavigate={closeNav}
-							onCollapse={collapse}
-							onOpenPalette={openPalette}
-							onOpenNotifications={openNotifications}
-						/>
+						<ErrorBoundary label="The sidebar" className="m-3">
+							<ChatSidebar
+								open={navOpen}
+								collapsed={collapsed}
+								onNavigate={closeNav}
+								onCollapse={collapse}
+								onOpenPalette={openPalette}
+								onOpenNotifications={openNotifications}
+							/>
+						</ErrorBoundary>
 					</div>
 				)}
 				<main data-sky={skyOn ? skyVeil(pathname) : 'off'} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
 					<Outlet />
 				</main>
-				<CommandPalette open={paletteOpen} onClose={closePalette} />
-				<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
-				<SettingsModal />
-				<ProjectSettingsModal />
+				<ErrorBoundary label="The command palette" className={FLOATING}>
+					<CommandPalette open={paletteOpen} onClose={closePalette} />
+				</ErrorBoundary>
+				<ErrorBoundary label="Notifications" className={FLOATING}>
+					<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
+				</ErrorBoundary>
+				<ErrorBoundary label="Settings" className={FLOATING}>
+					<SettingsModal />
+				</ErrorBoundary>
+				<ErrorBoundary label="Project settings" className={FLOATING}>
+					<ProjectSettingsModal />
+				</ErrorBoundary>
 				<TaskNotifications />
 			</div>
 		</NavContext.Provider>
@@ -282,7 +299,7 @@ export function usePanelChange(
 function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const queryClient = useQueryClient();
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const working = session.data?.working ?? false;
 	useFollowOnceStarted(agent, session.dataUpdatedAt);
 	const status = taskStatus(agent.status, working);
@@ -326,10 +343,7 @@ export function TaskWorkspace({
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const [renaming, setRenaming] = useState(false);
-	const session = useQuery({
-		queryKey: ['session', sessionId],
-		queryFn: () => api.session(sessionId),
-	});
+	const session = useQuery(taskQueries.session(sessionId));
 	const agent = useTaskAgent(sessionId);
 	const status = statusFor(agent);
 	const { tabs, active } = panels;
@@ -429,7 +443,7 @@ export function SessionPage() {
 	const open = search.app !== 'closed';
 	// A task you just started opens at once, as a skeleton until the server has made it.
 	const starting = useStarting(sessionId);
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId), enabled: !starting });
+	const session = useQuery({ ...taskQueries.session(sessionId), enabled: !starting });
 	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {

@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
 	waiting: vi.fn(async (): Promise<{ messages: unknown[] }> => ({ messages: [] })),
 	fallbackModel: vi.fn(async (): Promise<{ fallback: { model: string; name: string } | null }> => ({ fallback: null })),
 	switchToFallbackModel: vi.fn(async () => ({})),
+	files: vi.fn(async () => ({ source: 'live', at: null, paths: ['src/app.ts'], changes: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -91,6 +92,25 @@ describe('Thread', () => {
 		expect(screen.getByText('2 steps')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
 		expect(screen.getByRole('link', { name: 'acme/demo/pull/7' }).getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
+	});
+
+	it('draws no step for a todo update, whether it sent the whole list or only the items that changed', () => {
+		show(
+			agent([
+				user('u1', 'Add the flag'),
+				assistant('a1', [
+					tool('update_todos', { todos: [{ content: 'Add the flag', status: 'in_progress' }, { content: 'Test it', status: 'pending' }] }, { output: 'Todo list saved: 0/2 done.' }),
+					tool('bash', { command: 'npm test' }, { output: 'ok' }),
+					tool('update_todos', { changes: [{ item: 1, status: 'completed', evidence: 'ran it' }, { item: 2, status: 'in_progress' }] }, { output: 'Todo list saved: 1/2 done.' }),
+					{ type: 'text', text: 'Added the flag.' },
+				]),
+			]),
+		);
+		// The list shows as the pill above the composer, from the saved list, not in the thread.
+		expect(screen.getByText('Added the flag.')).toBeTruthy();
+		expect(screen.getByText('1 step')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+		expect(screen.queryByText(/update_todos|Todo list saved/)).toBeNull();
 	});
 
 	it('shows the current unpushed diff even for bash edits, without assigning it to an older reply', async () => {
@@ -772,5 +792,33 @@ describe('chat navigation scrolling', () => {
 		fireEvent.click(screen.getByRole('button', { name: /Go to input 1/ }));
 		expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
 		expect(scroll).toHaveBeenCalledWith({ top: 488, behavior: 'smooth' });
+	});
+	it('fetches the file list for its links when it opens and when a reply starts or ends, not after every tool call', async () => {
+		const messages = [assistant('a1', [{ type: 'text', text: 'See `src/app.ts`.' }])];
+		const view = show(agent(messages));
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(1));
+		// A tool call marks the list stale; the thread waits for the reply to end.
+		await act(() => view.client.invalidateQueries({ queryKey: ['files', 's1'] }));
+		expect(api.files).toHaveBeenCalledTimes(1);
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent(messages, { status: 'streaming' })} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(2));
+		await act(() => view.client.invalidateQueries({ queryKey: ['files', 's1'] }));
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent(messages)} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(3));
+	});
+	it('lets finished rows skip drawing off screen, but never the latest reply or the one being written', () => {
+		show(agent([user('u1', 'First'), assistant('a1', [{ type: 'text', text: 'Old reply' }]), user('u2', 'Second'), assistant('a2', [{ type: 'text', text: 'Writing' }])], { status: 'streaming' }));
+		const settled = (text: string) => Boolean(screen.getByText(text).closest('.thread-row-settled'));
+		expect(settled('First')).toBe(true);
+		expect(settled('Old reply')).toBe(true);
+		expect(settled('Writing')).toBe(false);
 	});
 });

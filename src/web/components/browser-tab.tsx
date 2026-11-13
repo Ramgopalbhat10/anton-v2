@@ -9,6 +9,7 @@ import { addToComposer, elementLabel } from '@/lib/composer-inbox';
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
+import { taskQueries } from '@/lib/task-queries';
 
 /*
  * The Browser panel: a real Chromium on Kernel, one per task, shown through
@@ -291,7 +292,7 @@ function PickLayer({ sessionId, viewport, onPicked, onCancel }: { sessionId: str
 
 export function BrowserTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
-	const view = useQuery({ queryKey: ['browser', sessionId], queryFn: () => api.browser(sessionId) });
+	const view = useQuery(taskQueries.browser(sessionId));
 	const browser = view.data?.browser ?? null;
 	const viewport = browser?.viewport ?? { width: 1280, height: 800 };
 	// The largest box with the page's proportions that fits the area, so a point in it maps straight to the page.

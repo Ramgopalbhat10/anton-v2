@@ -65,7 +65,7 @@ import { postReviewTool } from './review-tool.ts';
 import { directServer, hasScriptTools, runScript, type ScriptScope, scriptFromFile, scriptToolDescription } from '../services/code-mode.ts';
 import { noteScriptCalls, type ScriptCall, shortInput } from '../services/script-runs.ts';
 import { remember } from '../services/memory.ts';
-import { MAX_TODOS, startTodoReply, todoReminder, writeTodos } from '../services/todos.ts';
+import { startTodoReply, TODOS_INPUT, todoReminder, updateTodos } from '../services/todos.ts';
 import { noteAsk, notePlan } from '../services/asks.ts';
 import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../services/show.ts';
 import { readOutputFile } from '../services/files.ts';
@@ -86,9 +86,10 @@ import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRu
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
 import { finishTrace, startTrace } from '../services/response-trace.ts';
 import { saveTrace } from '../db/traces.ts';
-import { compactionFor } from '../services/context-usage.ts';
+import { COMPACTION_SUMMARY_EFFORT, compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
-import { liveMachine, machineFor, prewarmMachine } from '../services/workspace.ts';
+import { liveMachine, machineFor } from '../services/workspace.ts';
+import { prewarmFor } from '../services/prewarm-intent.ts';
 import { checkPreview } from '../services/preview-check.ts';
 import { act, asAgentStep, browseOnComputer, captureScreen, COMPUTER_ACTIONS, type ComputerInput, ensureDesktop, saveScreen, userHasControl } from '../services/computer.ts';
 import { SCREEN } from '../core/desktop.ts';
@@ -104,10 +105,14 @@ import { logProblem } from '../services/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
-import { finishReview, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { finishReview, isRequest, noteRequest, startFinishReview } from '../services/finish-review.ts';
+import { takePinned } from '../services/compaction-pin.ts';
+import { type GateName, loadGate } from '../services/gate-state.ts';
+import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../services/send-backs.ts';
 import { elapsedNote, hoursText, startReplyClock } from '../services/reply-clock.ts';
 import { completionGate, startCompletionGate } from '../services/completion-gate.ts';
 import { checkJob, jobNotice, jobsGate, MAX_WAIT_S, startJob, startJobsGate, stopReplyJobs } from '../services/background-jobs.ts';
+import { checkGate, checkNotice, startCheckGate, stopRepoCheck, watchRepoCheck } from '../services/repo-check.ts';
 import { whenIdle } from '../services/activity.ts';
 import { replyNotice } from '../services/push.ts';
 import { replyNotification } from '../services/notifications.ts';
@@ -170,15 +175,16 @@ const tester = defineSubagent({
 
 /**
  * A subagent's own model — its project's choice when the task is a thread, else Settings › General's —
- * often a cheaper one; without one it uses the task's. One on a
+ * often a cheaper one; without one it uses the task's, and its compaction. One on a
  * Claude Code model compacts where Settings › General says Claude Code compacts (scripts/patch-flue.ts
- * reads its `compaction`), not near the end of a 1M window; others keep the runtime's default for their model.
+ * reads its `compaction`), not near the end of a 1M window; others keep the runtime's point for their model,
+ * and their own model writes their summary at the effort the task's own model writes one.
  */
 function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
 	const choice = helperModelFor(id, name);
 	if (!choice) return subagent;
-	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : undefined;
-	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, ...(compaction ? { compaction } : {}) } as typeof explorer;
+	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : { reasoning: COMPACTION_SUMMARY_EFFORT };
+	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, compaction } as typeof explorer;
 }
 
 /**
@@ -306,8 +312,8 @@ async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 	const secrets = await secretsToHide(id);
 	// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
 	copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-	// A command's result also says when a background job ended, once a job.
-	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id));
+	// A command's result also says when a background job ended, once a job, and when the repository's check has news.
+	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id) + checkNotice(id));
 }
 
 /**
@@ -961,29 +967,20 @@ function useAgentRuns(id: string) {
 	);
 }
 
-/** The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer. */
+/**
+ * The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer.
+ * The list is written whole once, and its statuses then updated by item number, since sending every item with its
+ * evidence again to tick one off cost output tokens that stayed in the conversation (`TODOS_INPUT`).
+ */
 function useTodos(id: string) {
 	useTool(
 		defineTool({
 			name: 'update_todos',
 			description:
-				'Write your todo list for the work in hand: every item each time, in order, with its status. ' +
-				'It replaces the list you wrote before, so for a new piece of work write a new list. Keep one item in_progress at a time.',
-			input: v.object({
-				todos: v.pipe(
-					v.array(
-						v.object({
-							content: v.pipe(v.string(), v.minLength(1), v.description('The step, a few words in the imperative, such as "Add the migration"')),
-							status: v.picklist(['pending', 'in_progress', 'completed']),
-							evidence: v.optional(
-								v.pipe(v.string(), v.description('For a completed item: how you checked it, the command or check you ran and what it showed, in a short line')),
-							),
-						}),
-					),
-					v.maxLength(MAX_TODOS),
-				),
-			}),
-			run: async ({ data }) => ({ output: await writeTodos(id, data.todos) }),
+				'Your todo list for the work in hand. Write it whole with todos as you start, and again only to reword, reorder, add or drop items or for new work: it replaces the list before. ' +
+				'For status updates send only changes, the items that changed by number. Keep one item in_progress at a time.',
+			input: TODOS_INPUT,
+			run: async ({ data, toolCallId }) => ({ output: await updateTodos(id, data, toolCallId) }),
 		}),
 	);
 }
@@ -1294,7 +1291,7 @@ function useProposePlan(id: string) {
 
 const TODO_HINT =
 	'For work of three or more steps, write a todo list with update_todos as you start, in the same step as your first other tool call. The user follows it as your progress: once a step finishes, ' +
-	"mark it completed and the next one in_progress with update_todos alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
+	"mark it completed and the next one in_progress with update_todos (only the items that changed, by number) alongside the next step's tool calls, never as a step of its own; when you finish, every step you did is marked completed. Skip it for quick questions and one-step changes.";
 
 const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
 
@@ -1473,7 +1470,7 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	'You do not have git push credentials: open_pull_request commits and pushes for you.',
 	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
-	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix.`,
+	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
 	web,
@@ -1559,12 +1556,18 @@ const PLAN_PROMPT = [
  * Keeps the task's latest input for its card: each message the agent is given, typed, a follow-up or an
  * automation's, as it starts a reply or joins one already running, and where in that reply a joining one
  * was read. The runtime emits no event for them.
+ *
+ * Only the message that starts a reply is its request, which the checks at the reply's end and the compaction
+ * pin hold the agent to. One sent while the reply runs ("are you stuck?") joins it and is answered within it:
+ * it fires `useAgentStart` again but not `useResponseStart`, so it is never taken for the request.
  */
 function useLatestInput(id: string) {
 	const delivery = useDelivery();
+	useResponseStart(() => {
+		if (delivery.kind === 'user') noteRequest(id, delivery.body);
+	});
 	useAgentStart(() => {
 		if (delivery.kind !== 'user') return;
-		noteRequest(id, delivery.body);
 		// The card's bookkeeping: the reply starts without waiting on the database, which can be busy for seconds.
 		inBackground(id, Promise.all([noteDelivery(id, delivery.body), recordLatestInput(id, delivery.body)]));
 	});
@@ -1644,6 +1647,8 @@ export function Coder({ id }: AgentProps) {
 	const repoTask = !chat && !planning && !review;
 	// Whether the prompt and tools offer the sandbox: a repository task gets it on first use, so from the start; the rest once they have it.
 	const sandboxed = repoTask || workspace;
+	// The repository's check runs after its changes only here: never for a chat, a plan, a review or a task on this server.
+	watchRepoCheck(id, repoTask && !runsOnHost(id));
 	if (repoTask) useTaskWorkspace(id, profile);
 	else if (workspace) useWorkspace(id, chat, review, profile);
 	else if (!incognito) {
@@ -1701,29 +1706,63 @@ export function Coder({ id }: AgentProps) {
 		});
 	}
 	if (!incognito) {
+		// What the checks at a reply's end know of the task is read from its row now, ahead of a reply the runtime resumes
+		// after a restart (which runs no start hooks), so a command's result can tell it how long it has run.
+		void loadGate(id);
+		// A compaction the last reply's end let pass: the request and todo list go word for word after the message that
+		// starts this reply, before the model's first call. A user's message that starts the reply is the request itself,
+		// already there word for word, so only the list goes with it; one that joins a running reply is not, so the request
+		// goes too. Nothing is read from the database unless a compaction happened.
+		const delivery = useDelivery();
+		useAgentStart(async ({ append }) => {
+			const pinned = await takePinned(id, { request: !(delivery.kind === 'user' && isRequest(id, delivery.body)) });
+			if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
+		});
 		// Every finished response leaves a checkpoint, so the task can be viewed after its machine stops.
 		// Only a running machine: a task stopped or deleted mid-response is never started again for this.
 		// The reply is also checked for whether it waits on the user, so the task can say so.
 		useAgentFinish(async ({ response, append, signal }) => {
-			// A stopped reply leaves no job of its own running.
-			if (signal.aborted) void stopReplyJobs(id);
+			// A stopped reply leaves no job of its own, nor a check of the repository, running.
+			if (signal.aborted) {
+				void stopReplyJobs(id);
+				void stopRepoCheck(id);
+			}
+			// The checks read what they know of the task from its row before any of them runs.
+			await loadGate(id);
+			// After a compaction the request and todo list go word for word with whatever sends the reply back, ahead of it.
+			// Never on their own: a reply sent back for them alone would pay a model call over the conversation to end again.
+			// What the agent did after each earlier send-back is read from the calls it has made since.
+			settleSendBacks(id, response.toolCalls);
+			const sendBack = async (name: GateName, body: string) => {
+				noteSendBack(id, name, response.toolCalls.length, body);
+				const pinned = await takePinned(id);
+				if (pinned) append({ kind: 'signal', type: 'reminder', body: pinned });
+				append({ kind: 'signal', type: 'reminder', body });
+			};
 			// A todo list this reply wrote but left with steps open is brought up to date first; the reply then ends as usual.
 			const reminder = signal.aborted ? null : await todoReminder(id, response.toolCalls);
 			if (reminder) {
-				append({ kind: 'signal', type: 'reminder', body: reminder });
+				await sendBack('todo', reminder);
 				return;
 			}
 			// A reply that ends by announcing a step it never took is sent back to take it, once.
 			const stalled = signal.aborted ? null : stallReminder(id, response.toolCalls);
 			if (stalled) {
-				append({ kind: 'signal', type: 'reminder', body: stalled });
+				await sendBack('stall', stalled);
 				return;
 			}
 			// A job this reply started that still runs, or that ended with its result unread, sends it back: once a job each way.
 			// Before the review, so the review reads the change as the job's result left it.
 			const jobs = signal.aborted ? null : await jobsGate(id, response.toolCalls, { signal });
 			if (jobs) {
-				append({ kind: 'signal', type: 'reminder', body: jobs });
+				await sendBack('jobs', jobs);
+				return;
+			}
+			// A reply that changed files waits for the repository's check of its last change, and a failure sends it back to fix
+			// what broke or say it was there before: once a failure, twice a reply at most. Nothing at all with no check command.
+			const broken = signal.aborted ? null : await checkGate(id, response.toolCalls, { signal });
+			if (broken) {
+				await sendBack('check', broken);
 				return;
 			}
 			// A change is read once more against the request alone, and points it missed are sent back to check; a chat's, in the repositories it changed,
@@ -1731,14 +1770,14 @@ export function Coder({ id }: AgentProps) {
 			// A task that started its workspace during this reply has one now, though this render began without it.
 			const missed = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await finishReview(id, response.toolCalls, signal) : null;
 			if (missed) {
-				append({ kind: 'signal', type: 'reminder', body: missed });
+				await sendBack('review', missed);
 				return;
 			}
 			// A reply that ends with requested work left undone, and not for something only the user can give, is sent back to do it:
 			// a few rounds at most, each after the first only when the last changed something. Each round lets the review read the new change.
 			const undone = !planning && !review && !signal.aborted ? await completionGate(id, response.toolCalls, { chat, workspace: workspace || hasWorkspace(id), signal }) : null;
 			if (undone) {
-				append({ kind: 'signal', type: 'reminder', body: undone });
+				await sendBack('completion', undone);
 				return;
 			}
 			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
@@ -1766,6 +1805,8 @@ export function Coder({ id }: AgentProps) {
 			};
 		});
 	} else {
+		// The message that starts the reply, which tells whether its sandbox is worth starting ahead of the agent.
+		const opening = useDelivery();
 		// These response hooks run at the true start/end, across all model and tool calls.
 		// The persisted start survives resumed responses; usage totals are still counted per model call.
 		useResponseStart(() => {
@@ -1776,9 +1817,12 @@ export function Coder({ id }: AgentProps) {
 			startFinishReview(id);
 			startCompletionGate(id);
 			startJobsGate(id);
+			startCheckGate(id);
+			startSendBacks(id);
 			startReplyClock(id);
-			// A repository task most often goes on to change code: its sandbox starts now, behind the agent's first reads.
-			if (!workspace && !hasWorkspace(id)) void prewarmMachine(id);
+			// A repository task that goes on to change code has its sandbox start now, behind the agent's first reads; a message
+			// the decision model reads as a question starts none (`prewarm-intent.ts`).
+			if (!workspace && !hasWorkspace(id)) void prewarmFor(id, opening.kind === 'user' ? opening.body : null);
 			// A repository task that has its workspace reads and works in its machine, which may have stopped since its last reply:
 			// it starts now, behind the first model call, as it did when the runtime read the repository's instructions from it.
 			else if (repoTask) void machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
@@ -1798,6 +1842,8 @@ export function Coder({ id }: AgentProps) {
 				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
 				// With the reply's tool calls by model (`tools`), what a benchmark's tool mix is read from.
 				toolProfile: profile,
+				// Which checks sent the reply back, and whether the agent then changed or ran anything (`npm run gates:report`).
+				sendBacks: sendBacksOf(id),
 				billing: reply?.billing ?? (onPlan(model) ? 'plan' : 'api'),
 				...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 			};

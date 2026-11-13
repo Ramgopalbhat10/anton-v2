@@ -33,7 +33,9 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { ProjectSettingsModal } = await import('@/components/project-settings');
+const { ProjectSettingsModal } = await import('@/components/project-settings-modal');
+// The card loads its sections on first open; loaded here, so a test waits for a render, not a module.
+await import('@/components/project-settings');
 const { closeProjectSettings, openProjectSettings } = await import('@/lib/project-settings-modal');
 
 const general = {
@@ -99,7 +101,8 @@ describe('Project settings', () => {
 	it('opens as a card with its sections beside it, and moves between them', async () => {
 		page(space({ instructions: 'Keep pull requests small.' }));
 		expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeTruthy();
-		const nav = screen.getByRole('navigation', { name: 'Project settings' });
+		// The card's sections load the first time it opens.
+		const nav = await screen.findByRole('navigation', { name: 'Project settings' });
 		expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe('General');
 		fireEvent.click(screen.getByRole('button', { name: 'Instructions' }));
 		expect(await screen.findByDisplayValue('Keep pull requests small.')).toBeTruthy();

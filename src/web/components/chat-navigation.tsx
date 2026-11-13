@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { memo, useId, useRef, useState } from 'react';
 import { splitAttachments } from '../../core/attachments';
 import { messageText, type ThreadRow } from '@/lib/joined';
 
@@ -16,7 +16,18 @@ export function chatTurns(rows: ThreadRow[]) {
 		: []);
 }
 
-export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavigate: (id: string) => void }) {
+type Props = { rows: ThreadRow[]; onNavigate: (id: string) => void };
+
+/** Whether two lists of rows hold the same inputs. A streamed reply makes new rows on every chunk, but your messages keep theirs. */
+function sameInputs(before: ThreadRow[], after: ThreadRow[]): boolean {
+	const inputs = (rows: ThreadRow[]) => rows.filter((row) => row.message.role === 'user' && !row.message.settlement).map((row) => row.message);
+	const a = inputs(before);
+	const b = inputs(after);
+	return a.length === b.length && a.every((message, index) => message === b[index]);
+}
+
+/** The rail of your messages beside the conversation; drawn again only when they change, not on each chunk of a reply. */
+export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }: Props) {
 	const [active, setActive] = useState<string | null>(null);
 	const [open, setOpen] = useState(false);
 	const previewId = useId();
@@ -53,4 +64,4 @@ export function ChatNavigation({ rows, onNavigate }: { rows: ThreadRow[]; onNavi
 			</div>
 		</nav>
 	);
-}
+}, (before, after) => before.onNavigate === after.onNavigate && sameInputs(before.rows, after.rows));

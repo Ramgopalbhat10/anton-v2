@@ -29,7 +29,7 @@ function parsePorts(text: string): number[] {
 	return [...new Set(text.split(/[\s,]+/).filter(Boolean).map(Number))];
 }
 
-type Draft = { variables: Variable[]; setupScript: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean };
+type Draft = { variables: Variable[]; setupScript: string; checkCommand: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean };
 
 export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
 
@@ -41,8 +41,8 @@ export function toEnv(variables: Variable[]): Record<string, string | null> {
 	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
 }
 
-function toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers }: Draft): SettingsChange {
-	return { env: toEnv(variables), setupScript, previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers };
+function toChange({ variables, setupScript, checkCommand, ports, baseImage, fullVm, followUps, reviewOthers }: Draft): SettingsChange {
+	return { env: toEnv(variables), setupScript, checkCommand: checkCommand.trim(), previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers };
 }
 
 export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
@@ -88,13 +88,14 @@ function SettingsForm({ project }: { project: Project }) {
 	const queryClient = useQueryClient();
 	const [variables, setVariables] = useState(() => storedVariables(project.envKeys));
 	const [setupScript, setSetupScript] = useState(project.setupScript);
+	const [checkCommand, setCheckCommand] = useState(project.checkCommand ?? '');
 	const [ports, setPorts] = useState(project.previewPorts.join(', '));
 	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
 	const [fullVm, setFullVm] = useState(project.fullVm);
 	const [followUps, setFollowUps] = useState(project.followUps);
 	const [reviewOthers, setReviewOthers] = useState(project.reviewOthers);
 	const save = useMutation({
-		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, ports, baseImage, fullVm, followUps, reviewOthers })),
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, checkCommand, ports, baseImage, fullVm, followUps, reviewOthers })),
 		onSuccess: (saved) => {
 			setVariables(storedVariables(saved.envKeys));
 			void queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -140,6 +141,20 @@ function SettingsForm({ project }: { project: Project }) {
 						spellCheck={false}
 						placeholder="npm ci"
 						className={`${AREA} font-mono text-small leading-[18px]`}
+					/>
+				</Section>
+				<Section
+					title="Check command"
+					help="Runs after the agent changes files and tells it only of failures. A fast one works best, such as npm run check:types."
+					info="A type check or lint rather than the whole test suite: it runs in the task's sandbox after each change, for up to three minutes. It should not change tracked files. Leave it empty to run none."
+				>
+					<input
+						value={checkCommand}
+						onChange={(event) => setCheckCommand(event.target.value)}
+						spellCheck={false}
+						placeholder="npm run check:types"
+						aria-label="Check command"
+						className={`${FIELD} font-mono`}
 					/>
 				</Section>
 				<Section title="Preview ports" help="Public URLs in the Preview panel." info="Up to eight, separated by commas.">

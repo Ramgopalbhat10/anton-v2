@@ -92,6 +92,8 @@ export type Trace = {
 	toolsets: Record<string, Array<{ name: string; tokens: number }>>;
 	/** Spans left out once the trace held as many as it keeps. */
 	dropped: number;
+	/** Begun at its first model call after a restart, for a reply the runtime resumed: what came before is not in it. */
+	resumed?: boolean;
 };
 
 /** What a call's input was, by where it came from: read from the cache, written to it, or sent fresh. */
@@ -109,7 +111,7 @@ export type CacheVerdict = { tone: 'success' | 'warning' | 'danger' | 'neutral';
  * a prefix that held and still missed points at the cache expiring, or a
  * provider that caches nothing.
  */
-export function cacheVerdict(span: ModelSpan, previous: ModelSpan | null): CacheVerdict {
+export function cacheVerdict(span: Pick<ModelSpan, 'usage' | 'prompt' | 'toolset'>, previous: Pick<ModelSpan, 'prompt' | 'toolset'> | null): CacheVerdict {
 	if (!span.usage) return { tone: 'neutral', label: 'No usage', why: 'The provider reported no tokens for this call.' };
 	const { hit, total, read, write } = cacheShare(span.usage);
 	const changed = previous ? [previous.prompt !== span.prompt && 'system prompt', previous.toolset !== span.toolset && 'tool list'].filter(Boolean) : [];

@@ -152,6 +152,24 @@ describe('sidebar', () => {
 		expect(titles('Recent')).toHaveLength(3);
 	});
 
+	it('draws Recent a page at a time, and the rest on Show more', async () => {
+		const many = Array.from({ length: 120 }, (_, index) =>
+			session({ id: `t${index}`, title: `Stopped ${index}`, createdAt: new Date(Date.UTC(2026, 9, 1) - index * 60_000).toISOString() }),
+		);
+		api.sessions.mockResolvedValue({ sessions: many });
+		open();
+		await screen.findByText('Stopped 0');
+		const recent = () => within(screen.getByRole('region', { name: 'Recent' }));
+		expect(recent().getByText('120')).toBeTruthy();
+		expect(recent().queryByText('Stopped 49')).toBeTruthy();
+		expect(recent().queryByText('Stopped 50')).toBeNull();
+		await userEvent.click(recent().getByRole('button', { name: 'Show 50 more' }));
+		expect(recent().queryByText('Stopped 99')).toBeTruthy();
+		await userEvent.click(recent().getByRole('button', { name: 'Show 20 more' }));
+		expect(recent().queryByText('Stopped 119')).toBeTruthy();
+		expect(recent().queryByRole('button', { name: /Show \d+ more/ })).toBeNull();
+	});
+
 	it('stops every sandbox from the view menu, asking twice, with no menu of its own on Running', async () => {
 		open();
 		await screen.findByText('Busy task');

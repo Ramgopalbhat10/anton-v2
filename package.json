@@ -15,11 +15,15 @@
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
 		"setup:devin": "npm --prefix workers/devin ci --no-audit --no-fund",
 		"test:devin-worker": "npm --prefix workers/devin test",
+		"lint:hooks": "oxlint -c .oxlintrc.json src/web",
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",
+		"ui:fixture": "vite --config scripts/ui/vite.config.ts",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
 		"browser:bench": "node --experimental-strip-types scripts/browser-bench.ts",
 		"tool:mix": "node --experimental-strip-types scripts/tool-mix.ts",
+		"cache:misses": "node --experimental-strip-types scripts/cache-misses.ts",
+		"gates:report": "node --experimental-strip-types scripts/gates-report.ts",
 		"postinstall": "node --experimental-strip-types scripts/patch-flue.ts"
 	},
 	"dependencies": {
@@ -91,6 +95,7 @@
 		"@vitejs/plugin-react": "^5.0.2",
 		"concurrently": "^9.2.1",
 		"happy-dom": "^20.14.5",
+		"oxlint": "^1.93.0",
 		"tailwindcss": "^4.1.13",
 		"typescript": "^7.0.2",
 		"vite": "^8.0.14",

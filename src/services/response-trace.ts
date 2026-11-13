@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { isIncognitoId } from '../core/incognito.ts';
 import { unrouted } from '../core/model-route.ts';
 import type { AgentSpan, CompactionSpan, ModelSpan, ToolSpan, Trace, TraceMessage, TracePart, TraceSpan } from '../core/trace.ts';
 import { measureRequest, scaleParts } from './context-usage.ts';
@@ -68,10 +69,10 @@ type Open = {
 
 const open = new Map<string, Open>();
 
-/** A reply starts: trace it from now. */
-export function startTrace(id: string): void {
+/** A reply starts: trace it from now. `resumed` marks one begun mid-reply, after a restart. */
+export function startTrace(id: string, resumed = false): void {
 	open.set(id, {
-		trace: { id: randomUUID(), sessionId: id, startedAt: new Date().toISOString(), durationMs: 0, model: null, spans: [], prompts: {}, toolsets: {}, dropped: 0 },
+		trace: { id: randomUUID(), sessionId: id, startedAt: new Date().toISOString(), durationMs: 0, model: null, spans: [], prompts: {}, toolsets: {}, dropped: 0, ...(resumed ? { resumed } : {}) },
 		started: Date.now(),
 		requests: new Map(),
 		tools: new Map(),
@@ -154,6 +155,10 @@ function push(state: Open, span: TraceSpan): boolean {
 export function recordTraceEvent(event: TraceEvent): void {
 	if (!event.instanceId) return;
 	if (event.agentName && /^reviewer$/i.test(event.agentName)) return;
+	// A reply the runtime resumed after a restart runs no start hooks, so nothing began its trace: the main conversation's
+	// next model call begins one, marked resumed, so the reply is still traced (and read by cache:misses) from there on.
+	if (!open.has(event.instanceId) && event.type === 'turn_request' && !event.taskId && !isIncognitoId(event.instanceId) && (event.purpose === undefined || event.purpose === 'agent') && /^coder$/i.test(event.agentName ?? ''))
+		startTrace(event.instanceId, true);
 	const state = open.get(event.instanceId);
 	if (!state) return;
 	const now = event.timestamp ? Date.parse(event.timestamp) || Date.now() : Date.now();

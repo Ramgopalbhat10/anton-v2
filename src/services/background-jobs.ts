@@ -156,7 +156,8 @@ function startScript(dir: string, first: number, id: string, cwd: string, comman
 		'set -C; until { : > "$d/$n.log"; } 2>/dev/null; do n=$((n+1)); [ "$n" -gt 99999 ] && exit 1; done; set +C',
 		'b="$d/$n"',
 		`printf '%s %s %s\\n' ${quote(id)} "$(date +%s)" ${seconds} > "$b.info"`,
-		`printf 'cd %s || exit 1\\n%s\\n' ${quote(quote(cwd))} ${quote(command)} > "$b.sh"`,
+		// A pipeline's failure is the job's: `npm test | tail -400` ends with tail's 0 otherwise, and a failing suite reads as passing.
+		`printf 'cd %s || exit 1\\nset -o pipefail\\n%s\\n' ${quote(quote(cwd))} ${quote(command)} > "$b.sh"`,
 		'z=; command -v setsid >/dev/null && z=setsid',
 		`$z nohup bash -c ${quote(RUNNER)} anton-job "$b" ${seconds} < /dev/null > /dev/null 2>&1 &`,
 		// Its pid is written before this returns, so a stop that comes at once finds it.
@@ -184,20 +185,27 @@ function inspectScript(dir: string, number: number, wait: number, digest: boolea
 		'echo "now=$(date +%s)"',
 		'echo "ended=$(stat -c %Y "$b.exit" 2>/dev/null)"',
 	];
-	if (digest) {
-		lines.push(
-			'total=$(wc -l < "$b.log")',
-			'echo "lines=$total"',
-			'echo @@fail',
-			`head -n "$((total > ${TAIL_LINES} ? total - ${TAIL_LINES} : 0))" "$b.log" | grep -n -E -e ${quote(FAILURE)} | head -n ${FAILURE_LINES} | cut -c1-${LINE_CHARS}`,
-			'echo @@tail',
-			`tail -n ${TAIL_LINES} "$b.log" | cut -c1-${LINE_CHARS}`,
-		);
-	}
+	if (digest) lines.push(...digestScript('"$b.log"'));
 	return lines.join('\n');
 }
 
-type Seen = {
+/**
+ * The lines of a script that print what `digestOf` is made from, for the log at `log` (a shell word): its line count,
+ * then its lines that look like failures before its end, then its end. Last in a script, as `parseInspect` reads
+ * everything after them as the log's. The repository's check (`repo-check.ts`) digests its log the same way.
+ */
+export function digestScript(log: string): string[] {
+	return [
+		`total=$(wc -l < ${log})`,
+		'echo "lines=$total"',
+		'echo @@fail',
+		`head -n "$((total > ${TAIL_LINES} ? total - ${TAIL_LINES} : 0))" ${log} | grep -n -E -e ${quote(FAILURE)} | head -n ${FAILURE_LINES} | cut -c1-${LINE_CHARS}`,
+		'echo @@tail',
+		`tail -n ${TAIL_LINES} ${log} | cut -c1-${LINE_CHARS}`,
+	];
+}
+
+export type Seen = {
 	none: boolean;
 	exitCode: number | null;
 	timedOut: boolean;
@@ -253,10 +261,13 @@ function within(textIn: string, chars: number, fromEnd = false): string {
 	return (fromEnd ? kept.reverse() : kept).join('\n');
 }
 
-/** A log as the agent reads it without any model: its failure-looking lines, then its end, a few KB at most, secrets hidden. */
-export function digestOf(seen: Pick<Seen, 'failures' | 'tail' | 'lines'>, log: string, hide: (text: string) => string): string {
-	const failures = within(hide(seen.failures), PART_CHARS);
-	const tail = within(hide(seen.tail), PART_CHARS, true);
+/**
+ * A log as the agent reads it without any model: its failure-looking lines, then its end, a few KB at most, secrets
+ * hidden. `partChars` bounds each of the two parts, for a shorter digest.
+ */
+export function digestOf(seen: Pick<Seen, 'failures' | 'tail' | 'lines'>, log: string, hide: (text: string) => string, partChars = PART_CHARS): string {
+	const failures = within(hide(seen.failures), partChars);
+	const tail = within(hide(seen.tail), partChars, true);
 	return [
 		`Log: ${log}${seen.lines === null ? '' : ` (${seen.lines.toLocaleString('en-US')} lines)`}; grep it for more.`,
 		failures ? `Lines that look like failures (line: text):\n${failures}${failures.length < seen.failures.length ? '\n…' : ''}` : '',

@@ -9,7 +9,7 @@ import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
-import { useGeneralSettings } from '@/components/settings/general';
+import { useGeneralSettings } from '@/components/settings/general-settings';
 import { MenuButton } from '@/components/nav';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
 import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';

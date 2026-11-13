@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { type QueryKey, useQuery } from '@tanstack/react-query';
 import { Blocks, FileText, SquareSlash } from 'lucide-react';
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/signal';
@@ -53,6 +53,10 @@ function itemsFor(trigger: Trigger | null, paths: string[], commands: Command[],
 }
 
 /** Skills every new task gets from the installed plugins; a task also has its repo's own. */
+/** The paths `@` offers: the task's files, or a repository's before a task has one. Made out here so the query cache never keeps the composer's scope. */
+const pathsQuery = (sessionId?: string, projectId?: string, branch?: string): { queryKey: QueryKey; queryFn: () => Promise<{ paths: string[] }> } =>
+	sessionId ? { queryKey: ['files', sessionId], queryFn: () => api.files(sessionId) } : { queryKey: ['project-files', projectId, branch], queryFn: () => api.projectFiles(projectId ?? '', branch) };
+
 function activeSkills(plugins: Plugin[]): SkillSummary[] {
 	return plugins.flatMap((plugin) => plugin.skills.filter((skill) => skill.active).map(({ name, description }) => ({ name, description })));
 }
@@ -93,11 +97,7 @@ export function useSuggestions({
 	const found = triggerAt(text, Math.min(caret, text.length));
 	const trigger = found && `${found.kind}${found.start}` !== dismissed ? found : null;
 	const commands = useQuery({ queryKey: ['commands'], queryFn: api.commands, enabled: trigger?.kind === '/' });
-	const files = useQuery<{ paths: string[] }>({
-		queryKey: sessionId ? ['files', sessionId] : ['project-files', projectId, branch],
-		queryFn: () => (sessionId ? api.files(sessionId) : api.projectFiles(projectId ?? '', branch)),
-		enabled: Boolean(sessionId || projectId) && trigger?.kind === '@',
-	});
+	const files = useQuery({ ...pathsQuery(sessionId, projectId, branch), enabled: Boolean(sessionId || projectId) && trigger?.kind === '@' });
 	const skills = useQuery({
 		queryKey: ['skills', sessionId ?? null],
 		queryFn: async () => (sessionId ? api.sessionSkills(sessionId) : { skills: activeSkills((await api.plugins()).plugins) }),
