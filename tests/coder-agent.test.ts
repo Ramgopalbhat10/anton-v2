@@ -132,7 +132,10 @@ test('Coder lists the request’s requirements as todos, and has a change read a
 	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
 	// In every repository and chat prompt: a coding task writes its list before it starts its workspace.
 	assert.equal(source.match(/\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/g)?.length, 2);
-	assert.match(source, /noteRequest\(id, delivery\.body\);/);
+	// Only the message that starts a reply is its request: a joining one fires useAgentStart again, never useResponseStart.
+	const latest = source.slice(source.indexOf('function useLatestInput'), source.indexOf('/** Each task\'s bookkeeping writes'));
+	assert.match(latest, /useResponseStart\(\(\) => \{\n\t\tif \(delivery\.kind === 'user'\) noteRequest\(id, delivery\.body\);/);
+	assert.equal(latest.match(/noteRequest\(/g)?.length, 1);
 	assert.match(source, /\(workspace \|\| hasWorkspace\(id\)\) && !planning && !review && !signal\.aborted \? await finishReview\(id, response\.toolCalls, signal\) : null/);
 	assert.match(source, /startFinishReview\(id\);/);
 });

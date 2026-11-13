@@ -91,6 +91,9 @@ export function noteRequest(id: string, text: string): void {
 /** The request the reply in hand answers, whole, or undefined when the task has none. */
 export const requestFor = (id: string): string | undefined => gate(id).request;
 
+/** Whether a message is the task's request as kept: the one that started the reply in hand, not one that joined it. */
+export const isRequest = (id: string, text: string): boolean => gate(id).request === text.trim().slice(0, MAX_REQUEST);
+
 /** A new reply may be reviewed again, from the change as the last reply left it. */
 export function startFinishReview(id: string): void {
 	changeGate(id, ({ review }) => {

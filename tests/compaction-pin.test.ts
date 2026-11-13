@@ -137,7 +137,7 @@ test('the Coder pins the message with every send-back and at the next message’
 	assert.equal((gates.match(/append\(/g) ?? []).length, 2);
 	assert.match(gates, /const pinned = await takePinned\(id\);\n\t\t\t\tif \(pinned\) append\(\{ kind: 'signal', type: 'reminder', body: pinned \}\);\n\t\t\t\tappend\(\{ kind: 'signal', type: 'reminder', body \}\);/);
 	// A reply that ends with nothing to send back appends nothing: the message waits for the next start.
-	assert.match(source, /useAgentStart\(async \(\{ append \}\) => \{\n\t\t\tconst pinned = await takePinned\(id, \{ request: delivery\.kind !== 'user' \}\);/);
+	assert.match(source, /useAgentStart\(async \(\{ append \}\) => \{\n\t\t\tconst pinned = await takePinned\(id, \{ request: !\(delivery\.kind === 'user' && isRequest\(id, delivery\.body\)\) \}\);/);
 	// In the Coder's non-incognito hooks only: subagents run no hooks of the Coder's.
 	const hooks = source.slice(source.indexOf('\tif (!incognito) {\n\t\t// What the checks at a reply'), source.indexOf('\tif (incognito) {\n\t\t// An incognito reply keeps only'));
 	assert.equal((source.match(/takePinned\(/g) ?? []).length, (hooks.match(/takePinned\(/g) ?? []).length);

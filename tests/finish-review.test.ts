@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, MAX_REVIEWS, noteRequest, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
+const { findingsOf, finishReview, isRequest, MAX_REVIEWS, noteRequest, requestFor, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -66,6 +66,14 @@ test('a reply that changes code after a review sent it back, then a reply that c
 	startFinishReview('s');
 	assert.equal(await finishReview('s', [{ tool: 'bash' }], undefined, deps(fixed)), null);
 	assert.equal(asked.length, 2);
+});
+
+test('the request is the message that started the reply, not one that joined it', () => {
+	noteRequest('j', '  Fix incognito chat scrolling.  ');
+	assert.equal(isRequest('j', 'Fix incognito chat scrolling.'), true);
+	// A message sent while the reply runs is answered within it; the checks at its end still read the request.
+	assert.equal(isRequest('j', 'What are you even testing? Are you stuck?'), false);
+	assert.equal(requestFor('j'), 'Fix incognito chat scrolling.');
 });
 
 test('a reply that reached its bound still leaves its change as seen, so the next reply that changes nothing is not reviewed', async () => {
