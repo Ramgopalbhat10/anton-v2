@@ -11,6 +11,7 @@ import { api, type CheckRun, type PullRequestDetail, type PullRequestItem, type 
 import { parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 const STATE_LABEL: Record<PullRequestState, string> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
 const STATE_ICON = PR_ICON;
@@ -265,8 +266,8 @@ function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: st
  * its diff), with a Merge button that squashes by default.
  */
 export function PrTab({ sessionId }: { sessionId: string }) {
-	const pulls = useQuery({ queryKey: ['pulls', sessionId], queryFn: () => api.pulls(sessionId) });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data;
+	const pulls = useQuery(taskQueries.pulls(sessionId));
+	const session = useQuery(taskQueries.session(sessionId)).data;
 	const [chosen, setChosen] = useState<number | null>(null);
 	const list = pulls.data?.pulls ?? [];
 	// A newer pull request opening while you look at the panel takes its place, unless you picked one.

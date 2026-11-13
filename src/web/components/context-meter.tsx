@@ -11,6 +11,7 @@ import { api, type ContextPart, type ContextView, type PlanUsage } from '@/lib/a
 import { tokens as windowSize } from '@/lib/model-catalog';
 import { age, dollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 /** What each part of the context is, in the order the bar and the list show them. */
 const PARTS: Record<ContextPart, { label: string; color: string; help: string }> = {
@@ -116,7 +117,7 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
 
 /** For a model billed per token: this task's spend, and today's against the daily cap. */
 function SpendSection({ sessionId }: { sessionId: string }) {
-	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId) });
+	const budget = useQuery(taskQueries.budget(sessionId));
 	if (!budget.data) return null;
 	const { today, task, limits } = budget.data;
 	const cap = limits.dailyUsd;
@@ -148,7 +149,7 @@ function SpendSection({ sessionId }: { sessionId: string }) {
  */
 export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { sessionId: string; model: string }) {
 	const [open, setOpen] = useState(false);
-	const context = useQuery({ queryKey: ['context', sessionId], queryFn: () => api.context(sessionId) });
+	const context = useQuery(taskQueries.context(sessionId));
 	const models = useModels();
 	const info = models.data?.models.find((entry) => entry.id === unrouted(model));
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage, enabled: open && Boolean(info?.subscription) });

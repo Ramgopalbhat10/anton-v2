@@ -44,6 +44,7 @@ import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { IMAGE_TOOL, nowText, type ReplyPhase } from '@/lib/now-text';
 import { outputLinkPath, outputLinksIn } from '../../core/outputs';
 import { asConnectorTool } from '@/lib/connector-calls';
+import { taskQueries } from '@/lib/task-queries';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>;
@@ -245,7 +246,7 @@ function scriptText(input: unknown): string {
 
 /** The calls a run_script program made, read from Anton (the runtime only has the program and its result); live while it runs. */
 function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean): ScriptCall[] {
-	const { data } = useQuery({ queryKey: ['scripts', sessionId], queryFn: () => api.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
+	const { data } = useQuery({ ...taskQueries.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
 	return data?.scripts[toolCallId] ?? [];
 }
 
@@ -804,7 +805,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
 	const sessionId = useContext(SessionId);
 	// The files it made show as cards once it is whole, so a half-written link never loads.
-	const library = useQuery({ queryKey: ['outputs', sessionId], queryFn: () => api.outputs(sessionId), staleTime: 30_000, enabled: !live });
+	const library = useQuery({ ...taskQueries.outputs(sessionId), staleTime: 30_000, enabled: !live });
 	const kept = useMemo(() => (library.data ? new Set(library.data.outputs.map((output) => output.path)) : null), [library.data]);
 	const deleted = useMemo(() => new Set(library.data?.deleted ?? []), [library.data]);
 	const made = useMemo<ViewerItem[]>(
@@ -1008,7 +1009,7 @@ function Notice({ children }: { children: ReactNode }) {
 function RetryOnDefault({ refused, onRetry }: { refused: boolean; onRetry: (text: string) => void }) {
 	const sessionId = useContext(SessionId);
 	const queryClient = useQueryClient();
-	const fallback = useQuery({ queryKey: ['fallback', sessionId], queryFn: () => api.fallbackModel(sessionId) }).data?.fallback ?? null;
+	const fallback = useQuery(taskQueries.fallback(sessionId)).data?.fallback ?? null;
 	const [switching, setSwitching] = useState(false);
 	if (!fallback) return null;
 	const retry = async () => {
@@ -1068,7 +1069,7 @@ function useSince(since: string | null): number {
 
 /** What the agent is doing this moment and for how long, from the task's latest `now`. */
 function useNow(sessionId: string) {
-	const now = useQuery({ queryKey: ['now', sessionId], queryFn: () => api.now(sessionId) }).data?.now ?? null;
+	const now = useQuery(taskQueries.now(sessionId)).data?.now ?? null;
 	return { now, took: useSince(now?.since ?? null) };
 }
 
@@ -1169,7 +1170,7 @@ const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
 /** File references in replies link to the task's files, and open in the Files panel at their line. */
 function useThreadFileLinks(sessionId: string): FileLinks {
 	const showPanel = useContext(ShowPanel);
-	const files = useQuery({ queryKey: ['files', sessionId], queryFn: () => api.files(sessionId), staleTime: 30_000 });
+	const files = useQuery({ ...taskQueries.files(sessionId), staleTime: 30_000 });
 	const paths = useMemo(() => new Set(files.data?.paths ?? []), [files.data?.paths]);
 	return useMemo(
 		() => ({
@@ -1185,14 +1186,14 @@ function useThreadFileLinks(sessionId: string): FileLinks {
 
 export function Thread({ sessionId, agent, composer, fresh }: { sessionId: string; agent: UseFlueAgentResult; composer?: ReactNode; fresh?: boolean }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const scroller = useRef<HTMLDivElement>(null);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
 	const conversation = useDeferredValue(agent.messages);
 	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
 	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
-	const unreadByServer = useQuery({ queryKey: ['waiting', sessionId], queryFn: () => api.waiting(sessionId) }).data?.messages ?? NO_WAITING;
+	const unreadByServer = useQuery(taskQueries.waiting(sessionId)).data?.messages ?? NO_WAITING;
 	const messages = useMemo(() => {
 		const shown = conversation
 			.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system'))
@@ -1213,7 +1214,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	// What the reply being written ends on: a steps card's header says what the agent is doing, and streaming text shows itself.
 	const tail = useMemo(() => (liveReply ? (toBlocks(liveReply.parts).at(-1)?.kind ?? null) : null), [liveReply?.parts]);
 	const settlements = agent.settlements;
-	const joins = useQuery({ queryKey: ['joins', sessionId], queryFn: () => api.joins(sessionId) }).data?.joins ?? NO_JOINS;
+	const joins = useQuery(taskQueries.joins(sessionId)).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
 	// Messages sent while Anton worked, moved into the reply where it read them.
 	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, liveReply), [messages, joins, answeredBy, liveReply]);

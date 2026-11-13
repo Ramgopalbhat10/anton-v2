@@ -15,10 +15,10 @@ import { useResume } from '@/components/source-bar';
 import { Count, PanelTab, PanelTabs } from '@/components/instrument';
 import { Icon, IconBtn, Menu, MenuContent, MenuLabel, MenuTrigger, SectionLabel } from '@/components/signal';
 import { TerminalTab } from '@/components/terminal-tab';
-import { api } from '@/lib/api';
 import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
+import { taskQueries } from '@/lib/task-queries';
 
 export const panels = [
 	{ name: 'Changes', icon: FileDiff, desc: 'What the agent changed that GitHub does not have yet, as a diff' },
@@ -59,7 +59,7 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
  * saved, or as the branch was when the task began.
  */
 function ResumeButton({ sessionId }: { sessionId: string }) {
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const resume = useResume(sessionId);
 	const status = session.data?.status;
 	if (!session.data || status === 'running') return null;

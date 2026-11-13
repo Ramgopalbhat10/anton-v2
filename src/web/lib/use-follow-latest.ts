@@ -120,6 +120,8 @@ export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = 
 		observer?.observe(el);
 		for (const child of el.children) observer?.observe(child);
 		return () => {
+			// Let go of the view, so a cached closure over this hook never keeps a left page's DOM alive.
+			scroller.current = null;
 			observer?.disconnect();
 			cancelNavigation();
 			el.removeEventListener('scroll', onScroll);

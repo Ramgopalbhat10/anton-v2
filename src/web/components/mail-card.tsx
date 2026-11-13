@@ -6,6 +6,7 @@ import { ReplyActions, type ReplyPlace } from '@/components/reply-cards';
 import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type MailApproval } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 /** The tools that ask the user to send an email: the thread draws each as the email with Send and Don't send. */
 export const MAIL_SEND_TOOLS = new Set(['gmail_send']);
@@ -35,7 +36,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
 	const { send: reply, busy } = useContext(ReplyActions);
 	const queryClient = useQueryClient();
-	const approvals = useQuery({ queryKey: ['mail', sessionId], queryFn: () => api.mailApprovals(sessionId) });
+	const approvals = useQuery(taskQueries.mail(sessionId));
 	const approval = approvals.data?.approvals.find((item) => item.id === approvalId);
 	const decide = useMutation({
 		mutationFn: (send: boolean) => api.decideMail(sessionId, approvalId, send),

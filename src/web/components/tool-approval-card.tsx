@@ -6,6 +6,7 @@ import { Btn, Icon, Spinner } from '@/components/signal';
 import { api, type ToolApproval } from '@/lib/api';
 import { composioEntryFor } from '@/lib/connector-catalog';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 /** The approval a connector tool call made, named at the end of its result. */
 export function toolApprovalOf(output: unknown): string | null {
@@ -37,7 +38,7 @@ function argsText(args: Record<string, unknown>): string {
 export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
 	const { send: reply, busy } = useContext(ReplyActions);
 	const queryClient = useQueryClient();
-	const approvals = useQuery({ queryKey: ['tool-approvals', sessionId], queryFn: () => api.toolApprovals(sessionId) });
+	const approvals = useQuery(taskQueries.toolApprovals(sessionId));
 	const approval = approvals.data?.approvals.find((item) => item.id === approvalId);
 	const decide = useMutation({
 		mutationFn: (run: boolean) => api.decideToolApproval(sessionId, approvalId, run),

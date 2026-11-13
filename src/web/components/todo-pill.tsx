@@ -3,8 +3,9 @@ import { Check } from 'lucide-react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Spinner } from '@/components/signal';
-import { api, type Todo } from '@/lib/api';
+import type { Todo } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 /** Long enough to cross from the pill to the list without it closing. */
 const CLOSE_MS = 150;
@@ -61,7 +62,7 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
  * only the latest list, while the task has one.
  */
 export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId: string; busy: boolean }) {
-	const todos = useQuery({ queryKey: ['todos', sessionId], queryFn: () => api.todos(sessionId), staleTime: Infinity });
+	const todos = useQuery({ ...taskQueries.todos(sessionId), staleTime: Infinity });
 	const [open, setOpen] = useState(false);
 	// Opened by a click, it stays until clicked again or dismissed; opened by hover or focus, it closes as the pointer leaves.
 	const [pinned, setPinned] = useState(false);

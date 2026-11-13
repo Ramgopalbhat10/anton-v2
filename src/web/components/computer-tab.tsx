@@ -11,6 +11,7 @@ import { addToComposer } from '@/lib/composer-inbox';
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
+import { taskQueries } from '@/lib/task-queries';
 
 /*
  * The Computer panel: the desktop inside the task's sandbox, shown over VNC
@@ -270,7 +271,7 @@ function Overlay({ children }: { children: React.ReactNode }) {
 
 export function ComputerTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
-	const view = useQuery({ queryKey: ['computer', sessionId], queryFn: () => api.computer(sessionId) });
+	const view = useQuery(taskQueries.computer(sessionId));
 	const computer = view.data;
 	const running = Boolean(computer?.live && computer.running);
 	const browsing = Boolean(computer?.live && computer.browser);
