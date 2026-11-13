@@ -836,7 +836,7 @@ const AssistantMessage = memo(function AssistantMessage({
 	if (blocks.length === 0 && !(live && foot)) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
-		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter')}>
+		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter', !live && !last && 'thread-row-settled')}>
 			{head ? (
 				<div className="flex items-center gap-2">
 					<Logo size={18} />
@@ -1277,6 +1277,14 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		release();
 		const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 		el.scrollTo({ top, behavior: reduced ? 'auto' : 'smooth' });
+		// Rows that were never on screen count at an estimate until drawn (`.thread-row-settled`); once the
+		// scroll ends among them, land on the message itself.
+		const land = () => {
+			const off = target.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+			if (Math.abs(off) > 2) el.scrollTo({ top: el.scrollTop + off });
+		};
+		el.addEventListener('scrollend', land, { once: true });
+		setTimeout(() => el.removeEventListener('scrollend', land), 3000);
 	}, [follow, release]);
 	const send = agent.sendMessage;
 	const actions = useMemo<ReplyActions>(
@@ -1366,7 +1374,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 				<div className="relative min-h-0 flex-1">
 				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
 				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-1 pl-4">
-					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
+					<div className="thread-rows mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-tile border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-small leading-[18px] text-(--warning-text)">
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
@@ -1414,7 +1422,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
-								<div key={row.message.id} data-chat-input={row.message.id} className={rises(row.message.id, row === rows[0] && !fresh) ? 'in-sent' : undefined}>
+								<div key={row.message.id} data-chat-input={row.message.id} className={cn(rises(row.message.id, row === rows[0] && !fresh) && 'in-sent', row !== rows[rows.length - 1] && 'thread-row-settled')}>
 									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
 								</div>
 							) : (
