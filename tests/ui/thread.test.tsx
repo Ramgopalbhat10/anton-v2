@@ -814,4 +814,11 @@ describe('chat navigation scrolling', () => {
 		);
 		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(3));
 	});
+	it('lets finished rows skip drawing off screen, but never the latest reply or the one being written', () => {
+		show(agent([user('u1', 'First'), assistant('a1', [{ type: 'text', text: 'Old reply' }]), user('u2', 'Second'), assistant('a2', [{ type: 'text', text: 'Writing' }])], { status: 'streaming' }));
+		const settled = (text: string) => Boolean(screen.getByText(text).closest('.thread-row-settled'));
+		expect(settled('First')).toBe(true);
+		expect(settled('Old reply')).toBe(true);
+		expect(settled('Writing')).toBe(false);
+	});
 });

@@ -302,6 +302,27 @@ textarea::placeholder {
 	box-shadow: var(--glass-shadow);
 }
 
+/*
+ * In a conversation the sky is dimmed behind the page, so blurring it again under every card
+ * changes little you can see but costs a blur of the page behind each card on every frame it
+ * scrolls or streams. The cards there keep the glass fill without the blur.
+ */
+.app-main:is([data-sky='full'], [data-sky='dim']) .thread-rows :is(.in-card, .in-tile) {
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+/*
+ * A finished row of a conversation skips layout and paint while it is off screen, and keeps the
+ * height it last drew at, so a long conversation costs about what its visible rows cost.
+ * The clip margin leaves room for the cards' shadows, which paint containment would cut.
+ */
+.thread-row-settled {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 240px;
+	overflow-clip-margin: 16px;
+}
+
 /* Quiet text steps up one notch over the sky, where the picture under the glass lifts its background. */
 .app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile, .home-panel, .home-composer, .sky-credit) {
 	--text-tertiary: var(--neutral-350);
