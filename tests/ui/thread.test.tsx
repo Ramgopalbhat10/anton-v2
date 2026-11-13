@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
 	waiting: vi.fn(async (): Promise<{ messages: unknown[] }> => ({ messages: [] })),
 	fallbackModel: vi.fn(async (): Promise<{ fallback: { model: string; name: string } | null }> => ({ fallback: null })),
 	switchToFallbackModel: vi.fn(async () => ({})),
+	files: vi.fn(async () => ({ source: 'live', at: null, paths: ['src/app.ts'], changes: [] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -791,5 +792,26 @@ describe('chat navigation scrolling', () => {
 		fireEvent.click(screen.getByRole('button', { name: /Go to input 1/ }));
 		expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
 		expect(scroll).toHaveBeenCalledWith({ top: 488, behavior: 'smooth' });
+	});
+	it('fetches the file list for its links when it opens and when a reply starts or ends, not after every tool call', async () => {
+		const messages = [assistant('a1', [{ type: 'text', text: 'See `src/app.ts`.' }])];
+		const view = show(agent(messages));
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(1));
+		// A tool call marks the list stale; the thread waits for the reply to end.
+		await act(() => view.client.invalidateQueries({ queryKey: ['files', 's1'] }));
+		expect(api.files).toHaveBeenCalledTimes(1);
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent(messages, { status: 'streaming' })} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(2));
+		await act(() => view.client.invalidateQueries({ queryKey: ['files', 's1'] }));
+		view.rerender(
+			<QueryClientProvider client={view.client}>
+				<Thread sessionId="s1" agent={agent(messages)} />
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(api.files).toHaveBeenCalledTimes(3));
 	});
 });

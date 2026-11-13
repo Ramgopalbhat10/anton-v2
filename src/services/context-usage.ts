@@ -118,7 +118,8 @@ export async function recordContext(event: ContextEvent): Promise<void> {
 		at: new Date().toISOString(),
 	};
 	await setSetting(key(id), snapshot).catch((error: unknown) => logProblem('warn', 'Context usage not kept', error, id));
-	announce({ kind: 'task', id, what: 'state' });
+	// Each model turn: its context and its spend moved, nothing else about the task did.
+	announce({ kind: 'task', id, what: 'usage' });
 }
 
 /**
