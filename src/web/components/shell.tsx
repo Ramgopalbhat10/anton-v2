@@ -14,7 +14,7 @@ import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions'
 import { Thread } from '@/components/thread';
 import { type PanelName, panels, VmPanel } from '@/components/vm-panel';
 import { PaneSlideContext, usePaneSlide } from '@/components/workspace-pane';
-import { api, isChat, type Session } from '@/lib/api';
+import { isChat, type Session } from '@/lib/api';
 import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useOnePane } from '@/lib/one-pane';
@@ -30,6 +30,7 @@ import { SettingsModal } from '@/components/settings/modal';
 import { Sky } from '@/components/sky';
 import { useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 function readCollapsed() {
 	try {
@@ -282,7 +283,7 @@ export function usePanelChange(
 function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const queryClient = useQueryClient();
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const working = session.data?.working ?? false;
 	useFollowOnceStarted(agent, session.dataUpdatedAt);
 	const status = taskStatus(agent.status, working);
@@ -326,10 +327,7 @@ export function TaskWorkspace({
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const [renaming, setRenaming] = useState(false);
-	const session = useQuery({
-		queryKey: ['session', sessionId],
-		queryFn: () => api.session(sessionId),
-	});
+	const session = useQuery(taskQueries.session(sessionId));
 	const agent = useTaskAgent(sessionId);
 	const status = statusFor(agent);
 	const { tabs, active } = panels;
@@ -429,7 +427,7 @@ export function SessionPage() {
 	const open = search.app !== 'closed';
 	// A task you just started opens at once, as a skeleton until the server has made it.
 	const starting = useStarting(sessionId);
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId), enabled: !starting });
+	const session = useQuery({ ...taskQueries.session(sessionId), enabled: !starting });
 	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {

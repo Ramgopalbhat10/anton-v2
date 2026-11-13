@@ -21,6 +21,7 @@ import { nowText } from '@/lib/now-text';
 import { cn } from '@/lib/utils';
 import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
+import { taskQueries } from '@/lib/task-queries';
 
 /** The state as a drawn glyph, for list rows: a turning ring while it works, a calling dot while it waits on you. */
 export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
@@ -348,8 +349,8 @@ export type ThreadNow = { text: string; done: number; total: number };
  */
 export function useThreadNow(thread: Session): ThreadNow | null {
 	const working = stateOf(thread) === 'working';
-	const todos = useQuery({ queryKey: ['todos', thread.id], queryFn: () => api.todos(thread.id), staleTime: Infinity, enabled: working });
-	const now = useQuery({ queryKey: ['now', thread.id], queryFn: () => api.now(thread.id), enabled: working }).data?.now ?? null;
+	const todos = useQuery({ ...taskQueries.todos(thread.id), staleTime: Infinity, enabled: working });
+	const now = useQuery({ ...taskQueries.now(thread.id), enabled: working }).data?.now ?? null;
 	if (!working) return null;
 	const list = todos.data?.list?.todos ?? [];
 	const step = list.find((todo) => todo.status === 'in_progress') ?? list.find((todo) => todo.status === 'pending');

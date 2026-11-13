@@ -16,6 +16,7 @@ import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMar
 import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 /*
  * Everything the agent made, in every task: apps (the pages it drew, which
@@ -547,7 +548,7 @@ export function ArtifactView() {
 	const { path = '' } = useSearch({ from: '/artifacts/$taskId' });
 	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, refetchInterval: SAFETY_NET_MS });
 	const added = sessionId === ADDED_FILES;
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId), enabled: !added });
+	const session = useQuery({ ...taskQueries.session(sessionId), enabled: !added });
 	const listed = artifacts.data?.artifacts.find((artifact) => artifact.sessionId === sessionId && artifact.path === path);
 	const artifact: Artifact = listed ?? {
 		sessionId,

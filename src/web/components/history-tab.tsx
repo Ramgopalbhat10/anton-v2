@@ -10,6 +10,7 @@ import { api, type CheckpointSummary, SAFETY_NET_MS } from '@/lib/api';
 import { parsePatch } from '@/lib/diff';
 import { age, clock } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
 
 function Loading({ label }: { label: string }) {
 	return (
@@ -91,7 +92,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 /** Every distinct state of the task's files, one per agent response that changed something. */
 export function HistoryTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
-	const timeline = useQuery({ queryKey: ['checkpoints', sessionId], queryFn: () => api.checkpoints(sessionId), refetchInterval: SAFETY_NET_MS });
+	const timeline = useQuery({ ...taskQueries.checkpoints(sessionId), refetchInterval: SAFETY_NET_MS });
 	const entries = timeline.data?.checkpoints ?? [];
 	const current = entries.find((entry) => entry.at === selected);
 

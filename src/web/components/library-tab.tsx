@@ -9,10 +9,11 @@ import { LibraryArt } from '@/components/illustrations';
 import { Segmented, SegmentedItem } from '@/components/instrument';
 import { Btn, EmptyLine, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
 import { useStoredState } from '@/components/split-pane';
-import { api, type Output, outputUrl, refreshFor, spaceFileUrl } from '@/lib/api';
+import { api, type Output, outputUrl, spaceFileUrl } from '@/lib/api';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
 import { age, fileSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { refreshBySource, taskQueries } from '@/lib/task-queries';
 
 type Kind = 'page' | 'image' | 'pdf' | 'table' | 'text' | 'other';
 
@@ -645,12 +646,8 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
  */
 export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
-	const outputs = useQuery({
-		queryKey: ['outputs', sessionId],
-		queryFn: () => api.outputs(sessionId),
-		refetchInterval: (query) => refreshFor(query.state.data?.source),
-	});
-	const spaceId = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) }).data?.spaceId ?? null;
+	const outputs = useQuery({ ...taskQueries.outputs(sessionId), refetchInterval: refreshBySource });
+	const spaceId = useQuery(taskQueries.session(sessionId)).data?.spaceId ?? null;
 	const shared = useQuery({ queryKey: ['space-files', spaceId], queryFn: () => api.spaceFiles(spaceId!), enabled: Boolean(spaceId) });
 	const refresh = useCallback(() => {
 		void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] });

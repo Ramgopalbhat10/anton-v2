@@ -18,6 +18,7 @@ import { askToNotify } from '@/lib/notifications';
 import { stateOf } from '@/lib/spaces';
 import { useSessionWake } from '@/lib/wake';
 import { withAttachments } from '../../core/attachments';
+import { taskQueries } from '@/lib/task-queries';
 
 /** Sent when a message is only images, since the agent always gets text. */
 const IMAGE_ONLY = 'Look at the attached image.';
@@ -121,10 +122,7 @@ export const Composer = memo(function Composer({
 	};
 	const queryClient = useQueryClient();
 	const models = useModels();
-	const session = useQuery({
-		queryKey: ['session', sessionId],
-		queryFn: () => api.session(sessionId),
-	});
+	const session = useQuery(taskQueries.session(sessionId));
 	const chosen = session.data?.model ?? models.data?.default ?? '';
 	const reasoning = session.data?.reasoning ?? null;
 	// One object while the choice holds, so the model picker skips the renders typing causes.
@@ -170,7 +168,7 @@ export const Composer = memo(function Composer({
 	const setRoute = useCallback((next: ModelRoute | null, model?: string) => edit(model ? { model, reasoning: null, route: next } : { route: next }), [edit]);
 	const model = models.data?.models.find((item) => item.id === choice.model);
 	const blind = images.length > 0 && model !== undefined && !model.vision;
-	const budget = useQuery({ queryKey: ['budget', sessionId], queryFn: () => api.budget(sessionId), refetchInterval: SAFETY_NET_MS });
+	const budget = useQuery({ ...taskQueries.budget(sessionId), refetchInterval: SAFETY_NET_MS });
 	const blocked = budget.data?.blocked ?? null;
 	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending && !attachments.limitError;
 	const mood = useMascotMood({ busy: Boolean(busy), waiting: session.data ? stateOf(session.data) === 'waiting' : false, stir: text });

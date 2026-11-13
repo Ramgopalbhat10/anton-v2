@@ -8,6 +8,7 @@ import { Facts, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';
 import { useRefreshTask } from '@/components/source-bar';
 import { api, isChat, repoShort } from '@/lib/api';
+import { taskQueries } from '@/lib/task-queries';
 
 /** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
 const theme = {
@@ -109,7 +110,7 @@ export function TerminalTab({ sessionId }: { sessionId: string }) {
 	const [generation, setGeneration] = useState(0);
 	const [link, setLink] = useState<Link>('connecting');
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
-	const session = useQuery({ queryKey: ['session', sessionId], queryFn: () => api.session(sessionId) });
+	const session = useQuery(taskQueries.session(sessionId));
 	const onConnected = useRefreshTask(sessionId);
 
 	return (
