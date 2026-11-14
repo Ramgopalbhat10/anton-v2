@@ -5,7 +5,6 @@ import type {
 	AgentRuntime,
 	AppsConnector,
 	BrowserHost,
-	DailyPicture,
 	DecisionModel,
 	GatewayAccount,
 	GitHost,
@@ -30,7 +29,6 @@ import { githubHost } from './github/host.ts';
 import { gmailMailbox } from './google/gmail.ts';
 import { googleSignIn } from './google/sign-in.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
-import { nasaApod } from './nasa/apod.ts';
 import { dockerSandboxProvider } from './docker/sandbox.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
@@ -87,7 +85,6 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
  * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
  * `apps` is the apps platform (Composio) the Connectors page's Composio apps sign in and run through.
- * `daily` is NASA's picture of the day, which the sky can show in place of the hourly pictures; absent in tests.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -111,7 +108,6 @@ export type Providers = {
 	mailboxes?: Mailbox[];
 	/** The apps platform behind Settings › Connectors' Composio apps; absent in tests that do not set one. */
 	apps?: AppsConnector | null;
-	daily?: DailyPicture | null;
 };
 
 let providers: Providers | undefined;
@@ -157,7 +153,6 @@ function production(): Providers {
 		accounts: [googleSignIn()],
 		mailboxes: [gmailMailbox()],
 		apps: composioApps({ key: composioKeySlot }),
-		daily: nasaApod({ apiKey: config.nasaApiKey }),
 	};
 }
 

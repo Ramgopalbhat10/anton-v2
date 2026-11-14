@@ -3,8 +3,7 @@
    TIER 1 — PRIMITIVES. Raw scales. Components never touch these.
    ============================================================ */
 :root{
-  /* Neutral ramp — charcoal greys with no hue, so the sky behind the app and
-     the cyan accent are the only colour. The dark end is the surface ramp
+  /* Neutral ramp — charcoal greys with no hue, so the cyan accent is the only colour. The dark end is the surface ramp
      (five fills, each one step of lift); the light end is text and icons. */
   --neutral-1000:#000000;
   --neutral-950:#0A0A0A;
@@ -109,22 +108,13 @@
   --bg-skeleton:var(--alpha-white-6);
   --bg-scrim:var(--alpha-black-60);
 
-  /* Glass: what floats over the sky. A charcoal tint and a wide blur that
-     turns the mesh into soft colour; no edge of its own, a little lift. */
-  --glass-bg:rgba(22,22,22,0.8);
-  --glass-bg-strong:rgba(17,17,17,0.9);
-  --glass-border:transparent;
-  --glass-highlight:0 0 #0000;
-  --glass-shadow:var(--elev-2);
-  --glass-blur:blur(26px) saturate(165%);
-
   /* Borders */
   --border-subtle:var(--alpha-white-6);
   --border-default:var(--alpha-white-9);
   --border-strong:var(--alpha-white-15);
   --border-selected:var(--cyan-alpha-40);
 
-  /* Text — spaced for 13px on charcoal and on glass. */
+  /* Text — spaced for 13px on charcoal. */
   --text-primary:var(--neutral-100);
   --text-secondary:var(--neutral-300);
   --text-tertiary:var(--neutral-400);
@@ -398,7 +388,7 @@
   --transition-sheet:var(--duration-sheet) var(--ease-out);
 
   /* Focus ring — one treatment everywhere. A 1px accent edge plus a 3px
-     accent wash: the wash makes it visible on glass and over the sky, the
+     accent wash: the wash makes it visible on any surface, the
      edge makes it visible against an accent-filled button. :focus-visible only. */
   --focus-ring-width:1px;
   --focus-ring-offset:0px;

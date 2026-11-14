@@ -1,19 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, CalendarRange, Clock, Eye, EyeOff, GitPullRequest, Image as ImageIcon, type LucideIcon, Shuffle, Telescope } from 'lucide-react';
+import { CalendarRange, Clock, GitPullRequest, type LucideIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { PR_ICON, prColor, prTone } from '@/components/pr-status';
-import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/signal';
+import { Icon } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
-import { SkyBrightnessSlider } from '@/components/sky';
-import { setSkyMode, setSkyOn, shuffleSky, type SkyImage, skyLink, untilNextHour, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
 
 /*
  * Home's dashboard, under the composer: what Anton has been doing, in four
- * glass cards over the sky. Activity (a heatmap of tasks per day), the latest
+ * cards. Activity (a heatmap of tasks per day), the latest
  * tasks, the pull requests they opened, and this month against the last.
  */
 
@@ -25,7 +23,7 @@ function localDay(at: Date): number {
 	return Math.floor((at.getTime() - at.getTimezoneOffset() * 60_000) / DAY);
 }
 
-/** A glass card with a small header: an icon, a title, and something on the right. */
+/** A card with a small header: an icon, a title, and something on the right. */
 function Panel({ icon, title, aside, children, className, footer }: { icon: LucideIcon; title: string; aside?: ReactNode; children: ReactNode; className?: string; footer?: ReactNode }) {
 	return (
 		<section aria-label={title} className={cn('home-panel flex min-w-0 flex-col', className)}>
@@ -366,78 +364,5 @@ export function HomeDashboard() {
 			<PullRequests sessions={byCreated} />
 			<ThisMonth sessions={byCreated} />
 		</div>
-	);
-}
-
-/** "in 23 min", until the sky moves on to its next picture. */
-function useNextIn(): string {
-	const [left, setLeft] = useState(() => untilNextHour(new Date()));
-	useEffect(() => {
-		const timer = setInterval(() => setLeft(untilNextHour(new Date())), 30_000);
-		return () => clearInterval(timer);
-	}, []);
-	const minutes = Math.max(1, Math.ceil(left / 60_000));
-	return `${minutes} min`;
-}
-
-/** The picture, credited, in Home's corner: where it comes from and when it changes, which pictures to show (a new one every hour, or NASA's picture of the day), a random other one, and a way to turn the sky off; with the sky off, a button that turns it back on. */
-export function SkyCredit() {
-	const on = useSkyOn();
-	const image: SkyImage = useSky();
-	const mode = useSkyMode();
-	const next = useNextIn();
-	if (!on) {
-		// Off is a look of its own, not a dead end: the way back stays where the credit was.
-		return (
-			<button
-				type="button"
-				onClick={() => setSkyOn(true)}
-				className="sky-credit inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-micro text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
-			>
-				<Icon icon={Eye} size={11} />
-				Show the sky
-			</button>
-		);
-	}
-	const day = image.day ? new Date(`${image.day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
-	return (
-		<Menu>
-			<MenuTrigger asChild>
-				<button
-					type="button"
-					aria-label={`Sky: ${image.title}, ${image.credit}`}
-					className="sky-credit inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-micro text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={image.day ? Telescope : ImageIcon} size={11} />
-					<span className="truncate">{image.title}</span>
-					<span className="hidden shrink-0 text-(--text-disabled) sm:inline">· {image.day ? 'Picture of the day' : image.credit}</span>
-				</button>
-			</MenuTrigger>
-			<MenuContent align="end" side="top" className="w-[280px]">
-				<MenuLabel>
-					<span className="block text-small text-(--text-primary)">{image.title}</span>
-					<span className="block font-normal">{image.day ? `${image.credit} · picture of the day for ${day}, until midnight` : `${image.credit} · next picture in ${next}`}</span>
-				</MenuLabel>
-				<MenuSeparator />
-				<MenuItem icon={Clock} checked={mode === 'hourly'} onSelect={(event) => { event.preventDefault(); setSkyMode('hourly'); }}>
-					A new picture every hour
-				</MenuItem>
-				<MenuItem icon={Telescope} checked={mode === 'daily'} onSelect={(event) => { event.preventDefault(); setSkyMode('daily'); }}>
-					NASA’s picture of the day
-				</MenuItem>
-				<MenuItem icon={Shuffle} onSelect={(event) => { event.preventDefault(); shuffleSky(); }}>
-					Show a random picture
-				</MenuItem>
-				<MenuSeparator />
-				<SkyBrightnessSlider className="px-2 pt-1 pb-2" />
-				<MenuSeparator />
-				<MenuItem icon={ArrowUpRight} onSelect={() => window.open(skyLink(image), '_blank', 'noopener')}>
-					Open at NASA
-				</MenuItem>
-				<MenuItem icon={EyeOff} onSelect={() => setSkyOn(false)}>
-					Turn the sky off
-				</MenuItem>
-			</MenuContent>
-		</Menu>
 	);
 }

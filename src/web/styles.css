@@ -211,59 +211,13 @@ textarea::placeholder {
 	border-width: 0;
 }
 
-/*
- * The sky: this hour's picture as a pixel mesh behind the app (components/sky.tsx).
- * The canvas fades in once drawn; the shade over it is a vignette that keeps the
- * corners dark and the bottom quiet, so text over it stays readable.
- */
-.sky-canvas {
-	opacity: 0;
-	transition: opacity 900ms var(--ease-out);
-}
-.sky-canvas[data-shown='true'] {
-	opacity: 1;
-}
-.sky-shade {
-	background:
-		radial-gradient(130% 100% at 60% 30%, transparent 0%, rgba(14, 14, 14, 0.2) 55%, rgba(14, 14, 14, 0.7) 100%),
-		linear-gradient(180deg, rgba(14, 14, 14, 0.15) 0%, transparent 30%, rgba(14, 14, 14, 0.45) 100%);
-}
-
-/*
- * How much of the sky a page lets through, set on <main> by the route:
- * all of it on Home, a little behind lists, settings and every conversation
- * (a task, a thread, a coordinator, alike), a hint behind an artifact you read.
- * With the sky off it is 'off', and every surface is the plain one.
- */
 .app-main {
 	position: relative;
 	z-index: 1;
 	background: var(--bg-canvas);
 }
-.app-main[data-sky='full'] {
-	background: transparent;
-}
-.app-main[data-sky='dim'] {
-	background: color-mix(in srgb, var(--bg-canvas) 84%, transparent);
-}
-.app-main[data-sky='faint'] {
-	background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
-}
 
-/* Glass: a panel over the sky. */
-.glass {
-	background: var(--glass-bg);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-shadow);
-}
-.glass-strong {
-	background: var(--glass-bg-strong);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-}
-
-/* Home's composer and dashboard cards: ordinary cards, until the sky is behind them. */
+/* Home's composer and dashboard cards. */
 .home-composer,
 .home-panel {
 	background: var(--card-bg);
@@ -282,41 +236,6 @@ textarea::placeholder {
 	border-radius: var(--radius-card);
 	min-height: 176px;
 }
-/* The picture's credit and the route under the composer: a pill over the sky, plain words on the canvas. */
-.sky-credit {
-	background: transparent;
-}
-
-/* Over the sky, cards turn to glass, so the picture tints them instead of being cut out. */
-.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile),
-.app-main[data-sky='full'] .home-panel {
-	background: var(--glass-bg);
-	box-shadow: var(--card-shadow);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-}
-.app-main[data-sky='full'] .home-composer {
-	background: color-mix(in srgb, var(--glass-bg-strong) 88%, transparent);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-}
-.app-main[data-sky='full'] .sky-credit {
-	background: color-mix(in srgb, var(--bg-canvas) 72%, transparent);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
-	box-shadow: var(--glass-shadow);
-}
-
-/*
- * In a conversation the sky is dimmed behind the page, so blurring it again under every card
- * changes little you can see but costs a blur of the page behind each card on every frame it
- * scrolls or streams. The cards there keep the glass fill without the blur.
- */
-.app-main:is([data-sky='full'], [data-sky='dim']) .thread-rows :is(.in-card, .in-tile) {
-	-webkit-backdrop-filter: none;
-	backdrop-filter: none;
-}
-
 /*
  * A finished row of a conversation skips layout and paint while it is off screen, and keeps the
  * height it last drew at, so a long conversation costs about what its visible rows cost.
@@ -328,14 +247,6 @@ textarea::placeholder {
 	overflow-clip-margin: 16px;
 }
 
-/* Quiet text steps up one notch over the sky, where the picture under the glass lifts its background. */
-.app-main:is([data-sky='full'], [data-sky='dim']) :is(.in-card, .in-tile, .home-panel, .home-composer, .sky-credit) {
-	--text-tertiary: var(--neutral-350);
-	--text-disabled: var(--neutral-400);
-	--text-placeholder: var(--neutral-400);
-	--icon-tertiary: var(--neutral-350);
-}
-
 :root {
 	--heat-0: var(--alpha-white-5);
 	--heat-1: var(--cyan-alpha-30);
@@ -344,8 +255,7 @@ textarea::placeholder {
 	--heat-4: var(--cyan-200);
 }
 
-/* The Settings card (settings/modal.tsx): a glass card over a dimmed, blurred
-   app, full screen on a phone. */
+/* The Settings card (settings/modal.tsx): a card over a dimmed app, full screen on a phone. */
 .settings-overlay {
 	background: var(--bg-scrim);
 	-webkit-backdrop-filter: blur(6px);
@@ -355,8 +265,6 @@ textarea::placeholder {
 .settings-card {
 	--surface-fill: var(--bg-surface);
 	background: var(--bg-surface);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
 	animation: settings-rise 200ms var(--ease-out, ease-out);
 }
 @media (min-width: 768px) {
@@ -395,60 +303,3 @@ textarea::placeholder {
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), var(--elev-2);
 }
 
-/* The sky's brightness slider: a thin track filled in the accent up to the
-   thumb, a tick at the default, and a round thumb. */
-.sky-range {
-	-webkit-appearance: none;
-	appearance: none;
-	width: 100%;
-	height: 18px;
-	margin: 0;
-	background: transparent;
-	cursor: pointer;
-}
-.sky-range:focus-visible {
-	outline: none;
-}
-.sky-range::-webkit-slider-runnable-track {
-	height: 4px;
-	border-radius: 999px;
-	background:
-		linear-gradient(90deg, transparent calc(var(--range-mark) - 1px), rgba(255, 255, 255, 0.35) calc(var(--range-mark) - 1px), rgba(255, 255, 255, 0.35) calc(var(--range-mark) + 1px), transparent calc(var(--range-mark) + 1px)),
-		linear-gradient(90deg, var(--accent-base) var(--range-fill), rgba(255, 255, 255, 0.1) var(--range-fill));
-}
-.sky-range::-moz-range-track {
-	height: 4px;
-	border-radius: 999px;
-	background: rgba(255, 255, 255, 0.1);
-}
-.sky-range::-moz-range-progress {
-	height: 4px;
-	border-radius: 999px;
-	background: var(--accent-base);
-}
-.sky-range::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	appearance: none;
-	width: 14px;
-	height: 14px;
-	margin-top: -5px;
-	border-radius: 999px;
-	background: #f2f2f2;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-	transition: transform var(--transition-micro);
-}
-.sky-range::-moz-range-thumb {
-	width: 14px;
-	height: 14px;
-	border: 0;
-	border-radius: 999px;
-	background: #f2f2f2;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-.sky-range:hover::-webkit-slider-thumb,
-.sky-range:active::-webkit-slider-thumb {
-	transform: scale(1.12);
-}
-.sky-range:focus-visible::-webkit-slider-thumb {
-	box-shadow: 0 0 0 3px var(--accent-bg-subtle), 0 0 0 1px var(--accent-base);
-}

@@ -101,7 +101,7 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	return (
 		<nav
 			data-shown={shown}
-			className="sg-nav-rail glass-strong absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) py-2 md:flex"
+			className="sg-nav-rail absolute bg-(--bg-surface) inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) py-2 md:flex"
 		>
 			<div className="mb-2">
 				<Logo />
@@ -607,7 +607,7 @@ export function ChatSidebar({
 		<aside
 			data-open={open}
 			data-collapsed={collapsed}
-			className="sg-nav glass-strong flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
+			className="sg-nav flex bg-(--bg-surface) w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
 				<Logo size={22} />

@@ -185,7 +185,3 @@
 .sg-markdown .sg-output-deleted--block{display:flex;width:fit-content;max-width:100%;align-items:center;gap:4px;margin:8px 0;padding:8px 12px;border:1px dashed var(--border-default);border-radius:var(--radius-control);background:var(--bg-inset);font-size:var(--text-small-size);text-decoration:none}
 .sg-markdown .sg-output-deleted--block .sg-output-deleted__tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
 
-/* Over the sky, the sidebar's column stacks above it. */
-@media (min-width: 768px) {
- .sg-nav-column { z-index: 1; }
-}
