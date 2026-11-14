@@ -136,6 +136,18 @@ const spaces = [
 	space('space-docs', 'Docs refresh', 'Refresh the docs for the new CLI and tighten the voice.', 'active', [], [], spaceThreads.filter((item) => item.spaceId === 'space-docs'), 30),
 	space('space-mobile', 'Mobile app', 'First pass at the mobile app shell and theme.', 'archived', ['p-mobile'], [{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-mobile'), 60),
 ];
+const notifications = [
+	{ id: 'n-ask', kind: 'question', category: 'needs-you', sessionId: 'th-invoices', spaceId: 'space-billing', title: 'Name the invoices table', body: 'The schema is in. Before I write the migration: should the table be `invoices` or `billing_documents`?', url: '/projects/space-billing/threads/th-invoices', createdAt: ago(12), read: false },
+	{ id: 'n-checks', kind: 'checks-failed', category: 'failures', sessionId: 'th-api', spaceId: 'space-billing', title: 'Expose invoices over the API', body: 'Checks failed on pull request #12: `ui-tests`.', url: '/projects/space-billing/threads/th-api', createdAt: ago(140), read: false },
+	{ id: 'n-reply', kind: 'replied', category: 'replies', sessionId: 'th-schema', spaceId: 'space-billing', title: 'Migrate the ledger schema', body: 'Reran the migration tests against the new ledger columns — all green now. The `ledger_entries` backfill takes about 40s on the fixture dataset.', url: '/projects/space-billing/threads/th-schema', createdAt: ago(300), read: false },
+	{ id: 'n-done', kind: 'done', category: 'done', sessionId: 'th-cleanup', spaceId: 'space-billing', title: 'Prune stale webhook retries', body: 'Done: retries are pruned after 7 days.', url: '/projects/space-billing/threads/th-cleanup', createdAt: ago(60 * 30), read: true },
+	{ id: 'n-merged', kind: 'merged', category: 'done', sessionId: 'perf-task', spaceId: null, title: 'Make the app fast while agents stream', body: 'Merged: the perf branch landed on main.', url: '/agents/perf-task', createdAt: ago(60 * 26), read: true },
+	{ id: 'n-sandbox', kind: 'sandbox-stopped', category: 'sandboxes', sessionId: 'th-mobile-shell', spaceId: 'space-mobile', title: 'App shell and navigation', body: 'Sandbox stopped after 5 idle minutes.', url: '/projects/space-mobile/threads/th-mobile-shell', createdAt: ago(60 * 50), read: true },
+];
+const notificationUnread = notifications.reduce<Record<string, number>>((acc, item) => {
+	if (!item.read) acc[item.category] = (acc[item.category] ?? 0) + 1;
+	return acc;
+}, {});
 const projects = [
 	{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
 	{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24 * 5), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
@@ -242,7 +254,7 @@ export function mockApi(): Plugin {
 		if (path === '/api/projects') return json(res, { projects });
 		if (path === '/api/reviews') return json(res, { reviews: [] });
 		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
-		if (path === '/api/notifications') return json(res, { notifications: [], unread: {} });
+		if (path === '/api/notifications') return json(res, { notifications, unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0, ...notificationUnread } });
 		if (path === `${task}/waiting`) return json(res, { messages: [] });
 		if (path === `${task}/joins`) return json(res, { joins: [] });
 		if (path === `${task}/todos`) return json(res, { list: null });

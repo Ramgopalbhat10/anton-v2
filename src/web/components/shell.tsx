@@ -6,7 +6,7 @@ import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
+import { ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
 import { Badge, DiffStat, Icon, IconBtn } from '@/components/signal';
@@ -62,15 +62,10 @@ export function AppShell() {
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
 	const [paletteOpen, setPaletteOpen] = useState(false);
-	const [notificationsOpen, setNotificationsOpen] = useState(false);
+	const navigate = useNavigate();
 	// An incognito chat shows no sidebar: its frame covers the whole page.
 	const incognito = pathname === '/incognito';
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
-	const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
-	const openNotifications = useCallback(() => {
-		setNavOpen(false);
-		setNotificationsOpen(true);
-	}, []);
 	const closeNav = useCallback(() => setNavOpen(false), []);
 	// The same function on every render, so nothing that opens the sidebar draws again when the shell does.
 	const openNav = useCallback(() => setNavOpen(true), []);
@@ -79,6 +74,11 @@ export function AppShell() {
 		setNavOpen(false);
 		setPaletteOpen(true);
 	}, []);
+	// The bell opens the Inbox page.
+	const openNotifications = useCallback(() => {
+		setNavOpen(false);
+		void navigate({ to: '/inbox' });
+	}, [navigate]);
 	useLiveUpdates();
 
 	useEffect(() => {
@@ -133,9 +133,6 @@ export function AppShell() {
 				</main>
 				<ErrorBoundary label="The command palette" className={FLOATING}>
 					<CommandPalette open={paletteOpen} onClose={closePalette} />
-				</ErrorBoundary>
-				<ErrorBoundary label="Notifications" className={FLOATING}>
-					<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
 				</ErrorBoundary>
 				<ErrorBoundary label="Settings" className={FLOATING}>
 					<SettingsModal />
