@@ -13,7 +13,7 @@ type Checks = NonNullable<PullRequest['checks']>;
 
 const CHECKS: Record<Checks, string> = { failed: 'failing', pending: 'running', passed: 'passing' };
 
-const CUE = 'relative inline-flex shrink-0 items-center gap-1 rounded-control outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+const CUE = 'relative inline-flex shrink-0 items-center gap-1 rounded-control outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
 function Dot({ checks }: { checks: Checks }) {
 	return <span className={cn('size-1.5 shrink-0 rounded-full', checks === 'pending' && 'animate-pulse')} style={{ background: prTone(checksTone(checks)) }} />;
@@ -30,8 +30,8 @@ function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest:
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex items-baseline justify-between gap-3">
-				<span className="text-small font-medium text-(--text-primary)">Checks on {number}</span>
-				<span className="text-micro text-(--text-tertiary)">{counts.join(', ') || CHECKS[pullRequest.checks]}</span>
+				<span className="text-small font-medium text-(--text)">Checks on {number}</span>
+				<span className="text-micro text-(--text-3)">{counts.join(', ') || CHECKS[pullRequest.checks]}</span>
 			</div>
 			{runs.length ? (
 				<div className="-mx-1 flex max-h-[220px] flex-col overflow-y-auto">
@@ -41,7 +41,7 @@ function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest:
 							href={run.url || url}
 							target="_blank"
 							rel="noreferrer"
-							className="flex h-6 items-center gap-2 rounded-control px-1 text-small text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							className="flex h-6 items-center gap-2 rounded-control px-1 text-small text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 						>
 							<Dot checks={run.status} />
 							<span className="min-w-0 flex-1 truncate">{run.name}</span>
@@ -53,7 +53,7 @@ function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest:
 				href={url}
 				target="_blank"
 				rel="noreferrer"
-				className="inline-flex items-center gap-1 self-start text-small text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="inline-flex items-center gap-1 self-start text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)"
 			>
 				Open checks on GitHub
 				<Icon icon={ArrowUpRight} size={11} />
@@ -98,7 +98,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 	const cues: ReactNode[] = [];
 	if (planReady(session)) {
 		cues.push(
-			<Link key="plan" to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={cn(CUE, 'text-(--attention-text)')}>
+			<Link key="plan" to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={cn(CUE, 'text-(--warn)')}>
 				Review plan
 			</Link>,
 		);
@@ -111,7 +111,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 				params={{ sessionId: session.id }}
 				search={{ app: 'code' }}
 				title={session.asking}
-				className={cn(CUE, 'text-(--attention-text)')}
+				className={cn(CUE, 'text-(--warn)')}
 			>
 				Your turn
 			</Link>,

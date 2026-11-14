@@ -3,7 +3,7 @@ import { cn, RADIUS_STEPS, TEXT_STEPS } from '@/lib/utils';
 
 /**
  * The design system's scales are the only way to set a size, a radius or a
- * colour (styles/signal-tokens.css, docs/architecture/web-ui.md). These fail
+ * colour (styles/aura-tokens.css, docs/architecture/web-ui.md). These fail
  * on a value typed by hand, so a screen cannot drift from the others.
  */
 const raw = import.meta.glob<string>('../../src/web/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true });
@@ -48,10 +48,10 @@ describe('design tokens', () => {
 	});
 
 	it('merges a size with a colour, and one radius with another', () => {
-		expect(cn('text-small', 'text-(--text-tertiary)')).toBe('text-small text-(--text-tertiary)');
+		expect(cn('text-small', 'text-(--text-3)')).toBe('text-small text-(--text-3)');
 		expect(cn('text-body', 'text-small')).toBe('text-small');
 		expect(cn('rounded-control', 'rounded-card')).toBe('rounded-card');
 		expect(TEXT_STEPS).toHaveLength(9);
-		expect(RADIUS_STEPS).toHaveLength(6);
+		expect(RADIUS_STEPS).toHaveLength(5);
 	});
 });

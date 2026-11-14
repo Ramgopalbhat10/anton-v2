@@ -69,10 +69,10 @@ export function CodeBlock({ code, language, className }: { code: string; languag
 	// Colours for an earlier version of a block still being written would land on the wrong lines.
 	const tokens = settled === text ? (colored.data ?? null) : null;
 	return (
-		<div className={cn('sg-code group/code relative mb-2.5 overflow-hidden rounded-tile border border-(--border-subtle) bg-(--bg-inset)', className)}>
-			<div className="flex h-7 items-center gap-2 border-b border-(--border-subtle) pr-1 pl-3">
+		<div className={cn('sg-code group/code relative mb-2.5 overflow-hidden rounded-card border border-(--line) bg-(--bg-app)', className)}>
+			<div className="flex h-7 items-center gap-2 border-b border-(--line) pr-1 pl-3">
 				<span className="in-caption min-w-0 flex-1 truncate">{language || 'text'}</span>
-				<CopyButton text={text} label="Copy code" className="opacity-0 transition-opacity duration-(--duration-micro) group-hover/code:opacity-100 focus-visible:opacity-100" />
+				<CopyButton text={text} label="Copy code" className="opacity-0 transition-opacity duration-(--t-fast) group-hover/code:opacity-100 focus-visible:opacity-100" />
 			</div>
 			<pre className="m-0! rounded-none! bg-transparent!">
 				<code>

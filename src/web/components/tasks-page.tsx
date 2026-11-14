@@ -43,7 +43,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 	const first = page * PAGE_SIZE + 1;
 	const last = Math.min(total, (page + 1) * PAGE_SIZE);
 	return (
-		<nav aria-label="Pages" className="flex flex-wrap items-center gap-2 border-t border-(--border-subtle) px-3 py-2">
+		<nav aria-label="Pages" className="flex flex-wrap items-center gap-2 border-t border-(--line) px-3 py-2">
 			<Caption className="flex-1">
 				{first}–{last} of {total}
 			</Caption>
@@ -52,7 +52,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 					<IconBtn icon={ChevronLeft} size="xs" label="Previous page" disabled={page === 0} onClick={() => onPage(page - 1)} />
 					{pageNumbers(page, pages).map((index, at) =>
 						index === null ? (
-							<span key={`gap-${at}`} className="w-5 text-center text-micro text-(--text-disabled)">
+							<span key={`gap-${at}`} className="w-5 text-center text-micro text-(--text-4)">
 								…
 							</span>
 						) : (
@@ -63,8 +63,8 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
 								aria-label={`Page ${index + 1}`}
 								onClick={() => onPage(index)}
 								className={cn(
-									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-control px-1.5 text-micro outline-none focus-visible:shadow-(--focus-ring)',
-									index === page ? 'bg-(--accent-bg-subtle) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-(--text-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
+									'in-num inline-flex h-6 min-w-6 items-center justify-center rounded-control px-1.5 text-micro outline-none focus-visible:shadow-(--focus)',
+									index === page ? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]' : 'text-(--text-3) hover:bg-(--bg-hover) hover:text-(--text)',
 								)}
 							>
 								{index + 1}
@@ -98,10 +98,10 @@ function Summary({ sessions }: { sessions: Session[] }) {
 	const cost = sessions.reduce((sum, session) => sum + session.usage.cost, 0);
 	const tokensUsed = sessions.reduce((sum, session) => sum + used(session), 0);
 	const parts: Part[] = [
-		{ key: 'live', label: 'Running', value: sessions.filter(isLive).length, color: 'var(--accent-base)' },
+		{ key: 'live', label: 'Running', value: sessions.filter(isLive).length, color: 'var(--accent)' },
 		{ key: 'pr', label: 'With a pull request', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && session.prUrl).length, color: 'var(--data-2)' },
-		{ key: 'stopped', label: 'Stopped', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && !session.prUrl).length, color: 'var(--neutral-500)' },
-		{ key: 'error', label: 'Failed', value: sessions.filter((session) => session.status === 'error').length, color: 'var(--danger-base)' },
+		{ key: 'stopped', label: 'Stopped', value: sessions.filter((session) => !isLive(session) && session.status !== 'error' && !session.prUrl).length, color: 'var(--text-4)' },
+		{ key: 'error', label: 'Failed', value: sessions.filter((session) => session.status === 'error').length, color: 'var(--bad)' },
 	];
 	return (
 		<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
@@ -139,7 +139,7 @@ function Summary({ sessions }: { sessions: Session[] }) {
 
 /** The chart's series, bottom first, in the same colours as the split bar beside it. */
 const SERIES = ['Running', 'Pull request', 'Stopped', 'Failed'];
-const SERIES_COLORS = ['var(--accent-base)', 'var(--data-2)', 'var(--neutral-500)', 'var(--danger-base)'];
+const SERIES_COLORS = ['var(--accent)', 'var(--data-2)', 'var(--text-4)', 'var(--bad)'];
 
 /** Every task, searchable and filtered by state, newest first, a page at a time. */
 export function TasksPage() {
@@ -158,7 +158,7 @@ export function TasksPage() {
 			{all.length ? <RackCard sessions={all} /> : null}
 			{all.length ? <Summary sessions={all} /> : null}
 			<Card as="div">
-				<div className="flex flex-wrap items-center gap-2 border-b border-(--border-subtle) p-2.5">
+				<div className="flex flex-wrap items-center gap-2 border-b border-(--line) p-2.5">
 					<Segmented label="Tasks by state" className="max-w-full overflow-x-auto">
 						{(Object.keys(TABS) as TabKey[]).map((key) => (
 							<SegmentedItem
@@ -171,7 +171,7 @@ export function TasksPage() {
 								}}
 							>
 								{TABS[key].label}
-								<span className="in-num text-micro text-(--text-disabled)">{searched.filter(TABS[key].test).length}</span>
+								<span className="in-num text-micro text-(--text-4)">{searched.filter(TABS[key].test).length}</span>
 							</SegmentedItem>
 						))}
 					</Segmented>

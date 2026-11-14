@@ -168,7 +168,7 @@ describe('threads', () => {
 		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
 		expect(within(ready).getByTitle('#12 open · checks pass').textContent).toBe('#12');
 		const failing = screen.getByRole('article', { name: 'Flaky' });
-		expect(within(failing).getByTitle('#3 open · checks failing').getAttribute('style')).toContain('--pr-open');
+		expect(within(failing).getByTitle('#3 open · checks failing').getAttribute('style')).toContain('--ok');
 		expect(within(failing).queryByText('Needs you')).toBeNull();
 		await userEvent.click(within(failing).getByRole('button', { name: 'Fix CI' }));
 		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'fail', expect.stringContaining('Checks are failing'));

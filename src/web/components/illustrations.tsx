@@ -16,7 +16,7 @@ const EDGE = 'rgba(255, 255, 255, 0.09)';
 const RULE = 'rgba(255, 255, 255, 0.16)';
 const RULE_FAINT = 'rgba(255, 255, 255, 0.08)';
 const WIRE = 'rgba(255, 255, 255, 0.16)';
-const ACCENT = 'var(--accent-base)';
+const ACCENT = 'var(--accent)';
 
 /** The drawing's own gradient ids, so two drawings on a page never share them. */
 const Ids = createContext('art');
@@ -31,12 +31,12 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 					<stop offset="1" style={{ stopColor: '#fff', stopOpacity: 0.035 }} />
 				</linearGradient>
 				<linearGradient id={`${id}-lit`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.34 }} />
-					<stop offset="1" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.1 }} />
+					<stop offset="0" style={{ stopColor: 'var(--a-300)', stopOpacity: 0.34 }} />
+					<stop offset="1" style={{ stopColor: 'var(--a-300)', stopOpacity: 0.1 }} />
 				</linearGradient>
 				<radialGradient id={`${id}-glow`} cx="0.5" cy="0.5" r="0.5">
-					<stop offset="0" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0.28 }} />
-					<stop offset="1" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0 }} />
+					<stop offset="0" style={{ stopColor: 'var(--accent)', stopOpacity: 0.28 }} />
+					<stop offset="1" style={{ stopColor: 'var(--accent)', stopOpacity: 0 }} />
 				</radialGradient>
 				<linearGradient id={`${id}-screen`} x1="0" y1="0" x2="0" y2="1">
 					<stop offset="0" style={{ stopColor: '#000', stopOpacity: 0.5 }} />
@@ -63,7 +63,7 @@ function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: numb
 	const id = useContext(Ids);
 	return (
 		<g className={className} style={style}>
-			<rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-${lit ? 'lit' : 'tile'})`} stroke={lit ? 'var(--accent-border)' : EDGE} />
+			<rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-${lit ? 'lit' : 'tile'})`} stroke={lit ? 'var(--accent-line)' : EDGE} />
 		</g>
 	);
 }
@@ -92,7 +92,7 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 					width={3.5}
 					height={6}
 					rx={0.8}
-					fill={index < level ? (on ? ACCENT : 'var(--neutral-500)') : 'rgba(255, 255, 255, 0.07)'}
+					fill={index < level ? (on ? ACCENT : 'var(--text-4)') : 'rgba(255, 255, 255, 0.07)'}
 					fillOpacity={index < level && on ? 0.55 + (index / cells) * 0.45 : 1}
 				/>
 			))}
@@ -104,7 +104,7 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number; w: number | number[]; n?: number; gap?: number; faint?: boolean; lit?: boolean }) {
 	const widths = Array.isArray(w) ? w : Array.from({ length: n }, () => w);
 	return (
-		<g stroke={lit ? 'var(--cyan-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
+		<g stroke={lit ? 'var(--a-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
 			{widths.map((width, index) => (
 				<line key={index} x1={x} x2={x + width} y1={y + index * gap + 0.5} y2={y + index * gap + 0.5} />
 			))}
@@ -114,14 +114,14 @@ function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number
 
 /** A tile's light: grey, lit, or lit and pulsing while it works. */
 function Light({ x, y, size = 5, on, live }: { x: number; y: number; size?: number; on?: boolean; live?: boolean }) {
-	return <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={1} fill={on || live ? ACCENT : 'var(--neutral-600)'} className={live ? 'in-pulse' : undefined} />;
+	return <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={1} fill={on || live ? ACCENT : 'var(--track)'} className={live ? 'in-pulse' : undefined} />;
 }
 
 /** A wire between parts; lit ones carry a slow dashed flow. */
 function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }) {
 	return lit ? (
 		<g>
-			<path d={d} stroke="var(--accent-border)" strokeLinecap="round" />
+			<path d={d} stroke="var(--accent-line)" strokeLinecap="round" />
 			<path d={d} stroke={ACCENT} strokeDasharray="3 3" className="fa-flow" />
 		</g>
 	) : (
@@ -131,7 +131,7 @@ function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }
 
 function Caption({ x, y, children, accent, anchor = 'start' }: { x: number; y: number; children: ReactNode; accent?: boolean; anchor?: 'start' | 'middle' | 'end' }) {
 	return (
-		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font-sans)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-tertiary)'}>
+		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-3)'}>
 			{children}
 		</text>
 	);
@@ -194,7 +194,7 @@ export function ProjectArt({ className }: { className?: string }) {
  */
 export function SandboxArt({ className, label = 'idle' }: { className?: string; label?: string }) {
 	const on = label === 'ready' || label === 'running';
-	const prompt = on ? ACCENT : 'var(--neutral-500)';
+	const prompt = on ? ACCENT : 'var(--text-4)';
 	return (
 		<Art w={260} h={116} label={`A terminal on a compute unit, ${label}`} className={className}>
 			{on ? <Glow cx={208} cy={58} r={56} /> : null}
@@ -209,7 +209,7 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 			<Rules x={33} y={43.5} w={[46]} n={1} />
 			<Rules x={24} y={55} w={[104, 82, 94, 60]} faint gap={6} />
 			<path d="M24 82 l3.5 3 l-3.5 3" stroke={prompt} strokeLinecap="round" strokeLinejoin="round" />
-			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--neutral-600)'} className={on ? 'fa-blink' : undefined} />
+			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--track)'} className={on ? 'fa-blink' : undefined} />
 			{/* Two leads to the unit. */}
 			<Wire d="M160 46 H180" lit={on} broken={!on} />
 			<Wire d="M160 70 H180" lit={on} broken={!on} />
@@ -225,13 +225,13 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 				] as const
 			).map(([name, level], index) => (
 				<g key={name}>
-					<text x={190} y={46 + index * 14} fontFamily="var(--font-sans)" fontSize={6.5} letterSpacing="0.04em" fill="var(--text-disabled)">
+					<text x={190} y={46 + index * 14} fontFamily="var(--font)" fontSize={6.5} letterSpacing="0.04em" fill="var(--text-4)">
 						{name}
 					</text>
 					<Meter x={208} y={40.5 + index * 14} cells={7} level={level} on={on} />
 				</g>
 			))}
-			<line x1={190} x2={238} y1={84.5} y2={84.5} stroke={on ? 'var(--accent-border)' : EDGE} />
+			<line x1={190} x2={238} y1={84.5} y2={84.5} stroke={on ? 'var(--accent-line)' : EDGE} />
 			<Caption x={214} y={96} anchor="middle" accent={on}>
 				{label}
 			</Caption>
@@ -241,7 +241,7 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 
 /** A branch leaving main and heading for a pull request, its newest commit lit. */
 export function BranchArt({ className }: { className?: string }) {
-	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--neutral-700)'} stroke={lit ? 'var(--accent-border)' : 'rgba(255,255,255,0.22)'} />;
+	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--bg-active)'} stroke={lit ? 'var(--accent-line)' : 'rgba(255,255,255,0.22)'} />;
 	return (
 		<Art w={250} h={96} label="A branch leaving main, its newest commit lit, headed for a pull request" className={className}>
 			<Wire d="M10 70 H240" />
@@ -333,7 +333,7 @@ export function ChangesArt({ className, branch, base }: { className?: string; br
 				const y = 44 + index * 12;
 				return (
 					<g key={y}>
-						<rect x={20} y={y - 4} width={2} height={9} rx={1} fill={kind === 'add' ? ACCENT : kind === 'drop' ? 'var(--neutral-500)' : 'transparent'} />
+						<rect x={20} y={y - 4} width={2} height={9} rx={1} fill={kind === 'add' ? ACCENT : kind === 'drop' ? 'var(--text-4)' : 'transparent'} />
 						<Rules x={30} y={y} w={[width]} n={1} faint={kind === 'keep'} lit={kind === 'add'} />
 					</g>
 				);
@@ -378,14 +378,14 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 			{/* The key between them: a check when signed in, an open plug when not. */}
 			{linked ? (
 				<g>
-					<rect x={124.5} y={34.5} width={31} height={23} rx={11.5} fill="var(--cyan-alpha-16)" stroke="var(--accent-border)" />
+					<rect x={124.5} y={34.5} width={31} height={23} rx={11.5} fill="var(--accent-soft)" stroke="var(--accent-line)" />
 					<path d="M133.5 46 l4 4 l9 -8.5" stroke="var(--accent-text)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
 				</g>
 			) : (
 				<g>
-					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--neutral-700)" stroke={EDGE} />
-					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--neutral-500)" strokeLinecap="round" />
-					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--neutral-500)" strokeLinecap="round" />
+					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--bg-active)" stroke={EDGE} />
+					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--text-4)" strokeLinecap="round" />
+					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--text-4)" strokeLinecap="round" />
 					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeDasharray="2 2" />
 				</g>
 			)}
@@ -401,7 +401,7 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 				<foreignObject x={194} y={18} width={56} height={56}>
 					<div
 						aria-hidden
-						className={cn('flex size-full items-center justify-center text-[28px] [&_svg]:block', linked ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}
+						className={cn('flex size-full items-center justify-center text-[28px] [&_svg]:block', linked ? 'text-(--text)' : 'text-(--text-3)')}
 						dangerouslySetInnerHTML={{ __html: logo }}
 					/>
 				</foreignObject>
@@ -507,14 +507,14 @@ export function ProjectRouteArt({ className, active }: { className?: string; act
 				return (
 					<g key={index}>
 						<Tile x={x} y={8} w={44} h={44} r={9} />
-						<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--neutral-400)" />
+						<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--text-3)" />
 						<g
 							className={active ? undefined : 'fa-stage'}
 							data-first={index === 0 ? true : undefined}
 							style={{ '--stage': index, opacity: active ? (lit ? 1 : 0) : undefined } as CSSProperties}
 						>
 							<Tile x={x} y={8} w={44} h={44} r={9} lit />
-							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--cyan-200)" />
+							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--a-200)" />
 						</g>
 					</g>
 				);

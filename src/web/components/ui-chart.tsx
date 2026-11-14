@@ -79,7 +79,7 @@ function Legend({
   items: Array<{ label: string; color: string; value?: string }>;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-small text-(--text-secondary)">
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-small text-(--text-2)">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
           <span
@@ -88,7 +88,7 @@ function Legend({
           />
           {item.label}
           {item.value ? (
-            <span className="in-num text-(--text-tertiary)">{item.value}</span>
+            <span className="in-num text-(--text-3)">{item.value}</span>
           ) : null}
         </span>
       ))}
@@ -193,7 +193,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
         onKeyDown={onKeyDown}
         onBlur={() => setActive(null)}
         onPointerLeave={() => setActive(null)}
-        className="in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)"
+        className="in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus)"
         style={{ height: HEIGHT }}
       >
         {width > 0 ? (
@@ -340,7 +340,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
                           cy={points[lastIndex][1]}
                           r={4}
                           fill={SERIES[at]}
-                          stroke="var(--card-bg)"
+                          stroke="var(--bg-surface)"
                           strokeWidth={2}
                         />
                       ) : null}
@@ -350,7 +350,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
                           cy={points[active][1]}
                           r={4}
                           fill={SERIES[at]}
-                          stroke="var(--card-bg)"
+                          stroke="var(--bg-surface)"
                           strokeWidth={2}
                         />
                       ) : null}
@@ -399,7 +399,7 @@ function CartesianChart({ node }: { node: ChartNode }) {
                         : "middle"
                   }
                   fill={
-                    active === index ? "var(--text-secondary)" : "currentColor"
+                    active === index ? "var(--text-2)" : "currentColor"
                   }
                 >
                   {label.length > 12 ? `${label.slice(0, 11)}…` : label}
@@ -422,17 +422,17 @@ function CartesianChart({ node }: { node: ChartNode }) {
               transform: "translate(-50%, -100%)",
             }}
           >
-            <span className="text-(--text-tertiary)">{current.label}</span>
+            <span className="text-(--text-3)">{current.label}</span>
             {series.map((item, at) => (
               <span key={item.key} className="flex items-center gap-1.5">
                 <span
                   className="size-1.5 shrink-0 rounded-mark"
                   style={{ background: SERIES[at] }}
                 />
-                <span className="min-w-0 flex-1 truncate text-(--text-secondary)">
+                <span className="min-w-0 flex-1 truncate text-(--text-2)">
                   {item.label ?? item.key}
                 </span>
-                <span className="in-num text-(--text-primary)">
+                <span className="in-num text-(--text)">
                   {current.values[at] === null
                     ? "–"
                     : formatValue(current.values[at], node.format || "number")}
@@ -526,10 +526,10 @@ function DonutChart({ node }: { node: ChartNode }) {
           ))}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="in-num text-h3 text-(--text-primary)">
+          <span className="in-num text-h3 text-(--text)">
             {formatValue(shown ? shown.value : total, node.format || "number")}
           </span>
-          <span className="max-w-[90px] truncate text-micro text-(--text-tertiary)">
+          <span className="max-w-[90px] truncate text-micro text-(--text-3)">
             {shown ? shown.label : "Total"}
           </span>
         </div>
@@ -549,13 +549,13 @@ function DonutChart({ node }: { node: ChartNode }) {
               className="size-2 shrink-0 rounded-mark"
               style={{ background: slice.color }}
             />
-            <span className="min-w-0 flex-1 truncate text-(--text-secondary)">
+            <span className="min-w-0 flex-1 truncate text-(--text-2)">
               {slice.label}
             </span>
-            <span className="in-num text-(--text-primary)">
+            <span className="in-num text-(--text)">
               {formatValue(slice.value, node.format || "number")}
             </span>
-            <span className="in-num w-10 text-right text-(--text-tertiary)">
+            <span className="in-num w-10 text-right text-(--text-3)">
               {Math.round((slice.value / total) * 100)}%
             </span>
           </div>

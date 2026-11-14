@@ -12,7 +12,7 @@ const CLOSE_MS = 150;
 
 function Done() {
 	return (
-		<span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-(--success-base) text-(--bg-canvas)">
+		<span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-(--ok) text-(--bg-panel)">
 			<Check aria-hidden size={9} strokeWidth={3} />
 		</span>
 	);
@@ -26,13 +26,13 @@ function Progress({ done, total }: { done: number; total: number }) {
 	const length = 2 * Math.PI * r;
 	return (
 		<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="-rotate-90">
-			<circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--segment-off)" strokeWidth={2} />
+			<circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-active)" strokeWidth={2} />
 			<circle
 				cx={size / 2}
 				cy={size / 2}
 				r={r}
 				fill="none"
-				stroke="var(--accent-base)"
+				stroke="var(--accent)"
 				strokeWidth={2}
 				strokeLinecap="round"
 				strokeDasharray={`${total ? Math.max(0.001, done / total) * length : 0} ${length}`}
@@ -49,7 +49,7 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
 		<span
 			className={cn(
 				'size-3.5 rounded-full border-[1.5px]',
-				status === 'in_progress' ? 'border-(--accent-base)' : 'border-dashed border-(--text-disabled)',
+				status === 'in_progress' ? 'border-(--accent)' : 'border-dashed border-(--text-4)',
 			)}
 		/>
 	);
@@ -124,7 +124,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 					onBlur={() => {
 						if (!pinned) setOpen(false);
 					}}
-					className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-(--border-subtle) bg-(--well-bg) pr-2.5 pl-1.5 text-small text-(--text-secondary) outline-none hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[state=open]:border-(--border-strong) data-[state=open]:text-(--text-primary)"
+					className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg-raised) pr-2.5 pl-1.5 text-small text-(--text-2) outline-none hover:border-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:border-(--line-strong) data-[state=open]:text-(--text)"
 				>
 					<Progress done={done} total={list.length} />
 					<span className="in-num">
@@ -143,11 +143,11 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 					// Hover should not pull focus away from the composer.
 					onOpenAutoFocus={(event) => event.preventDefault()}
 					onCloseAutoFocus={(event) => event.preventDefault()}
-					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] origin-(--radix-popover-content-transform-origin) in-pop flex-col overflow-hidden text-(--text-primary) outline-none duration-(--duration-overlay) ease-(--ease-out) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1"
+					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] origin-(--radix-popover-content-transform-origin) in-pop flex-col overflow-hidden text-(--text) outline-none duration-(--t) ease-(--ease) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1"
 				>
 					<header className="flex items-baseline gap-2 px-3.5 pt-3 pb-1.5">
 						<span className="text-body font-medium">Todos</span>
-						<span className="in-num ml-auto text-micro text-(--text-tertiary)">
+						<span className="in-num ml-auto text-micro text-(--text-3)">
 							{done} of {list.length} done
 						</span>
 					</header>
@@ -164,11 +164,11 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 								<span
 									className={cn(
 										'min-w-0 flex-1 text-pretty',
-										todo.status === 'completed' ? 'text-(--text-tertiary)' : todo.status === 'in_progress' ? 'text-(--text-primary)' : 'text-(--text-secondary)',
+										todo.status === 'completed' ? 'text-(--text-3)' : todo.status === 'in_progress' ? 'text-(--text)' : 'text-(--text-2)',
 									)}
 								>
 									{todo.content}
-									{todo.evidence && <span className="block text-small text-(--text-tertiary)">{todo.evidence}</span>}
+									{todo.evidence && <span className="block text-small text-(--text-3)">{todo.evidence}</span>}
 								</span>
 							</li>
 						))}

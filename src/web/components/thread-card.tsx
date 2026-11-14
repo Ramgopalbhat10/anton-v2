@@ -88,7 +88,7 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 					</Btn>
 				),
 			)}
-			{send.isError ? <span role="alert" className="basis-full text-small text-(--danger-text)">Action failed. Try again.</span> : null}
+			{send.isError ? <span role="alert" className="basis-full text-small text-(--bad)">Action failed. Try again.</span> : null}
 			{size === 'sm' ? (
 				<Btn size="sm" variant="ghost" icon={Play} onClick={() => open(thread)} aria-label={`Open ${thread.title}`}>
 					Open
@@ -122,7 +122,7 @@ export function ThreadChips({ thread }: { thread: Session }) {
 
 /** A chip that does something: the look of a Chip, with a hover and a click of its own. */
 const CHIP_BUTTON =
-	'inline-flex h-5 max-w-[168px] shrink-0 items-center gap-1 rounded-control border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-micro leading-none whitespace-nowrap text-(--text-secondary) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) hover:bg-(--alpha-white-7) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)';
+	'inline-flex h-5 max-w-[168px] shrink-0 items-center gap-1 rounded-control border border-(--line) bg-(--bg-hover) px-1.5 text-micro leading-none whitespace-nowrap text-(--text-2) outline-none transition-colors duration-(--t-fast) hover:border-(--line-strong) hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)';
 
 /** A file's look on a chip: a speck of the picture, or its kind's icon. */
 function FileMark({ item }: { item: ViewerItem }) {
@@ -134,7 +134,7 @@ function FileMark({ item }: { item: ViewerItem }) {
 				alt=""
 				loading="lazy"
 				onError={() => setBroken(true)}
-				className="size-3.5 shrink-0 rounded-mark object-cover object-top shadow-[0_0_0_1px_var(--border-subtle)]"
+				className="size-3.5 shrink-0 rounded-mark object-cover object-top shadow-[0_0_0_1px_var(--line)]"
 			/>
 		);
 	}
@@ -146,12 +146,12 @@ function FileMark({ item }: { item: ViewerItem }) {
 function FilePeek({ item }: { item: ViewerItem }) {
 	return (
 		<>
-			<div className="relative h-[148px] overflow-hidden rounded-control border border-(--border-subtle) bg-(--bg-inset)">
+			<div className="relative h-[148px] overflow-hidden rounded-control border border-(--line) bg-(--bg-app)">
 				{isImagePath(item.path) ? <OutputThumb item={item} fit="contain" /> : <FileFace path={item.path} size={24} />}
 			</div>
 			<div className="flex min-w-0 items-center gap-2">
 				<FileMark item={item} />
-				<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)" title={item.path}>
+				<span className="min-w-0 flex-1 truncate text-body text-(--text)" title={item.path}>
 					{nameOf(item.path)}
 				</span>
 				<Chip mono className="shrink-0">
@@ -164,15 +164,15 @@ function FilePeek({ item }: { item: ViewerItem }) {
 
 /** All remaining files are available by click, keyboard or touch, not only on hover. */
 function FileList({ items, open }: { items: ViewerItem[]; open: (item: ViewerItem) => void }) {
-	const row = 'flex min-h-8 min-w-0 items-center gap-2 rounded-control px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex min-h-8 min-w-0 items-center gap-2 rounded-control px-1.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)';
 	return (
 		<div className="flex max-h-[min(320px,50vh)] flex-col overflow-y-auto overscroll-contain">
 			{items.map((item) => (
 				<button key={item.path} type="button" onClick={() => open(item)} className={row}>
-					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-control border border-(--border-subtle) bg-(--bg-inset)">
+					<span className="inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-control border border-(--line) bg-(--bg-app)">
 						{isImagePath(item.path) ? <OutputThumb item={item} /> : <FileMark item={item} />}
 					</span>
-					<span className="min-w-0 flex-1 truncate text-body text-(--text-secondary)" title={item.path}>{nameOf(item.path)}</span>
+					<span className="min-w-0 flex-1 truncate text-body text-(--text-2)" title={item.path}>{nameOf(item.path)}</span>
 				</button>
 			))}
 		</div>
@@ -222,7 +222,7 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 					<span className="min-w-0 truncate">{nameOf(first.path)}</span>
 				</button>
 			</HoverPeek>
-			{rest.length ? <MoreFiles items={rest} open={open} className={cn(CHIP_BUTTON, 'in-num px-1.5 text-micro text-(--text-tertiary)')} /> : null}
+			{rest.length ? <MoreFiles items={rest} open={open} className={cn(CHIP_BUTTON, 'in-num px-1.5 text-micro text-(--text-3)')} /> : null}
 		</span>
 	);
 }
@@ -247,7 +247,7 @@ function PeekFiles({ thread, room }: { thread: Session; room: number }) {
 	const shown = items.length > room ? items.slice(0, room - 1) : items;
 	const more = items.length - shown.length;
 	const tile =
-		'inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-control border border-(--border-subtle) bg-(--bg-inset) outline-none transition-colors duration-(--duration-micro) hover:border-(--border-strong) focus-visible:shadow-(--focus-ring)';
+		'inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-control border border-(--line) bg-(--bg-app) outline-none transition-colors duration-(--t-fast) hover:border-(--line-strong) focus-visible:shadow-(--focus)';
 	return (
 		<span role="list" aria-label="Files" className="flex min-w-0 flex-1 items-center gap-1">
 			{shown.map((item) => (
@@ -258,7 +258,7 @@ function PeekFiles({ thread, room }: { thread: Session; room: number }) {
 				</span>
 			))}
 			{more > 0 ? (
-				<span role="listitem" className="inline-flex"><MoreFiles items={items.slice(shown.length)} open={open} className={cn(tile, 'in-num border-dashed text-micro text-(--text-tertiary) hover:text-(--text-primary)')} /></span>
+				<span role="listitem" className="inline-flex"><MoreFiles items={items.slice(shown.length)} open={open} className={cn(tile, 'in-num border-dashed text-micro text-(--text-3) hover:text-(--text)')} /></span>
 			) : null}
 		</span>
 	);
@@ -284,14 +284,14 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					<Glyph kind={glyphKind(thread)} size={14} title={broken ? (thread.status === 'error' ? 'Failed' : 'Checks failing') : STATE_LOOK[state].label} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text-primary)">{thread.title}</span>
+					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{thread.title}</span>
 					<span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-						<span className="inline-flex min-w-0 items-center gap-1 text-small text-(--text-tertiary)">
-							<Icon icon={isChat(thread) ? MessageSquare : Github} size={11} className="text-(--icon-tertiary)" />
+						<span className="inline-flex min-w-0 items-center gap-1 text-small text-(--text-3)">
+							<Icon icon={isChat(thread) ? MessageSquare : Github} size={11} className="text-(--text-3)" />
 							<span className="truncate">{repoShort(thread)}</span>
 						</span>
-						<span className="inline-flex shrink-0 items-center gap-1 text-small text-(--text-tertiary)">
-							<Icon icon={Clock} size={11} className="text-(--icon-tertiary)" />
+						<span className="inline-flex shrink-0 items-center gap-1 text-small text-(--text-3)">
+							<Icon icon={Clock} size={11} className="text-(--text-3)" />
 							{phaseOf(thread, now)}
 						</span>
 					</span>
@@ -302,19 +302,19 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 					<div
 						className={cn(
 							'line-clamp-4 rounded-r-inner border-l-2 py-1 pr-2 pl-2.5 text-body leading-[18px] text-pretty [&_.sg-markdown]:text-body [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-inherit',
-							broken ? 'border-(--danger-base) bg-(--danger-bg) text-(--danger-text)' : 'border-(--attention-base) bg-(--attention-bg) text-(--attention-text)',
+							broken ? 'border-(--bad) bg-(--bad-soft) text-(--bad)' : 'border-(--warn) bg-(--warn-soft) text-(--warn)',
 						)}
 					>
 						<InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider>
 					</div>
 				) : (
-					<div className={cn('m-0 flex min-w-0 items-baseline gap-1.5 text-body leading-[18px] text-pretty text-(--text-tertiary)', live && 'agent-live-line')}>
+					<div className={cn('m-0 flex min-w-0 items-baseline gap-1.5 text-body leading-[18px] text-pretty text-(--text-3)', live && 'agent-live-line')}>
 						{live?.total ? (
-							<span className="in-num shrink-0 text-micro text-(--text-disabled)">
+							<span className="in-num shrink-0 text-micro text-(--text-4)">
 								{live.done}/{live.total}
 							</span>
 						) : null}
-						<div className="line-clamp-3 min-w-0 [&_.sg-markdown]:text-body [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-(--text-tertiary)"><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
+						<div className="line-clamp-3 min-w-0 [&_.sg-markdown]:text-body [&_.sg-markdown]:leading-[18px] [&_.sg-markdown]:text-(--text-3)"><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
 					</div>
 				)
 			) : null}
@@ -325,7 +325,7 @@ export function ThreadPeek({ thread }: { thread: Session }) {
 				</div>
 				<PrChecks pull={thread.pullRequest} />
 			</> : null}
-			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+			<div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-(--line) pt-2.5">
 				<PeekFiles thread={thread} room={nextSteps(thread).length ? 2 : 5} />
 				<NextSteps thread={thread} size="xs" />
 				<Btn size="xs" variant="primary" onClick={() => open(thread)}>
@@ -365,9 +365,9 @@ export function useThreadNow(thread: Session): ThreadNow | null {
  */
 function LiveLine({ text, live, className }: { text: string; live: ThreadNow | null; className?: string }) {
 	return (
-		<div className={cn('flex min-w-0 items-center gap-1.5 text-small leading-[17px] text-(--text-tertiary)', className)}>
+		<div className={cn('flex min-w-0 items-center gap-1.5 text-small leading-[17px] text-(--text-3)', className)}>
 			{live?.total ? (
-				<span className="in-num shrink-0 text-micro text-(--text-disabled)" title={`${live.done} of ${live.total} steps done`}>
+				<span className="in-num shrink-0 text-micro text-(--text-4)" title={`${live.done} of ${live.total} steps done`}>
 					{live.done}/{live.total}
 				</span>
 			) : null}
@@ -408,13 +408,13 @@ export function ThreadRow({ thread }: { thread: Session }) {
 				onClick={() => open(thread)}
 				className={cn(
 					THREAD_CARD,
-					'group/thread cursor-pointer gap-1 transition-colors duration-(--duration-micro) hover:border-(--border-strong) hover:bg-(--bg-hover)',
-					calling && 'gap-1.5 border-(--border-default) py-2.5 sm:min-w-[360px]',
+					'group/thread cursor-pointer gap-1 transition-colors duration-(--t-fast) hover:border-(--line-strong) hover:bg-(--bg-hover)',
+					calling && 'gap-1.5 border-(--line-strong) py-2.5 sm:min-w-[360px]',
 				)}
 			>
 				<div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 sm:flex-nowrap">
 					<ThreadGlyph thread={thread} size={14} />
-					<button type="button" onClick={(event) => { event.stopPropagation(); open(thread); }} className="min-w-0 flex-1 truncate rounded-inner text-left text-body text-(--text-primary) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent-text) sm:flex-initial">{thread.title}</button>
+					<button type="button" onClick={(event) => { event.stopPropagation(); open(thread); }} className="min-w-0 flex-1 truncate rounded-inner text-left text-body text-(--text) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent-text) sm:flex-initial">{thread.title}</button>
 					{/* On a phone the line and the chips take a row each under the title, so none squeezes the others. */}
 					{!calling && line ? <LiveLine text={line} live={live} className="order-last basis-full pl-[24px] sm:order-none sm:shrink-[4] sm:basis-auto sm:pl-0" /> : null}
 					<span className="order-last flex min-w-0 basis-full items-center gap-1 pl-[24px] empty:hidden sm:order-none sm:basis-auto sm:pl-0">
@@ -423,7 +423,7 @@ export function ThreadRow({ thread }: { thread: Session }) {
 					</span>
 				</div>
 				{calling && line ? (
-					<div className={cn('line-clamp-2 pl-[24px] text-small leading-[17px] text-pretty [&_.sg-markdown]:text-small [&_.sg-markdown]:leading-[17px] [&_.sg-markdown]:text-inherit', broken ? 'text-(--danger-text)' : state === 'waiting' ? 'text-(--attention-text)' : 'text-(--text-secondary)')} onClick={(event) => { if ((event.target as HTMLElement).closest('a')) event.stopPropagation(); }}><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
+					<div className={cn('line-clamp-2 pl-[24px] text-small leading-[17px] text-pretty [&_.sg-markdown]:text-small [&_.sg-markdown]:leading-[17px] [&_.sg-markdown]:text-inherit', broken ? 'text-(--bad)' : state === 'waiting' ? 'text-(--warn)' : 'text-(--text-2)')} onClick={(event) => { if ((event.target as HTMLElement).closest('a')) event.stopPropagation(); }}><InlineLinks.Provider value={null}><Markdown text={line} /></InlineLinks.Provider></div>
 				) : null}
 				{calling ? (
 					<div className="flex flex-wrap items-center gap-1.5 pl-[24px]">
@@ -467,7 +467,7 @@ export function ThreadChip({ thread, children }: { thread: Session; children?: R
 			<button
 				type="button"
 				onClick={() => open(thread)}
-				className="mx-px inline-flex max-w-full items-center gap-1 rounded-control bg-(--alpha-white-6) px-1.5 align-baseline text-[0.95em] leading-[1.5] text-(--accent-text) outline-none hover:bg-(--alpha-white-9) focus-visible:shadow-(--focus-ring)"
+				className="mx-px inline-flex max-w-full items-center gap-1 rounded-control bg-(--bg-active) px-1.5 align-baseline text-[0.95em] leading-[1.5] text-(--accent-text) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus)"
 			>
 				<span className="inline-flex shrink-0 self-center">
 					<ThreadGlyph thread={thread} size={11} />

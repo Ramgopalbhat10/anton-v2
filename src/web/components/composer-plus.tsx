@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils';
 /** A switch drawn inside a menu row, which toggles as the row is picked. */
 function RowSwitch({ on }: { on: boolean }) {
 	return (
-		<span aria-hidden className={cn('relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors duration-(--duration-micro)', on ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
-			<span className={cn('absolute top-0.5 size-3 rounded-full bg-white transition-transform duration-(--duration-micro)', on ? 'translate-x-3.5' : 'translate-x-0.5')} />
+		<span aria-hidden className={cn('relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors duration-(--t-fast)', on ? 'bg-(--accent)' : 'bg-(--track)')}>
+			<span className={cn('absolute top-0.5 size-3 rounded-full bg-white transition-transform duration-(--t-fast)', on ? 'translate-x-3.5' : 'translate-x-0.5')} />
 		</span>
 	);
 }
@@ -41,7 +41,7 @@ function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: Co
 				if (!waiting) event.preventDefault();
 				onPick(item);
 			}}
-			hint={waiting ? <Icon icon={TriangleAlert} size={13} className="text-(--warning-text)" /> : <RowSwitch on={item.state === 'on'} />}
+			hint={waiting ? <Icon icon={TriangleAlert} size={13} className="text-(--warn)" /> : <RowSwitch on={item.state === 'on'} />}
 		>
 			<span className="flex min-w-0 items-center gap-2">
 				<MarkTile mark={mark} size={18} className="rounded-control" />
@@ -71,13 +71,13 @@ function RunOnMenu({ run }: { run: RunChoice }) {
 			</MenuSubTrigger>
 			<MenuSubContent className="w-[260px]">
 				<MenuItem role="menuitemradio" aria-checked={run.value === 'sandbox'} checked={run.value === 'sandbox'} icon={Cloud} disabled={Boolean(run.locked)} onSelect={() => pick('sandbox')}>
-					Sandbox <span className="text-(--text-tertiary)">· {sandbox}</span>
+					Sandbox <span className="text-(--text-3)">· {sandbox}</span>
 				</MenuItem>
 				<MenuItem role="menuitemradio" aria-checked={run.value === 'host'} checked={run.value === 'host'} icon={Server} disabled={Boolean(run.locked)} onSelect={() => pick('host')}>
 					This server
 				</MenuItem>
 				<MenuSeparator />
-				<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-tertiary)">
+				<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">
 					{run.locked ??
 						run.note ??
 						"This server runs the task's commands in a folder on the machine Anton runs on, from its address. It is not isolated from that machine, so keep it for tasks you trust."}
@@ -119,7 +119,7 @@ function ArtifactRow({ artifact, added, onAdd }: { artifact: Artifact; added: bo
 				<Icon icon={info.icon} size={14} className={cn('mt-0.5 shrink-0', info.tone)} />
 				<span className="flex min-w-0 flex-col gap-0.5">
 					<span className="truncate text-body leading-[17px]">{artifact.title}</span>
-					<span className="truncate text-micro leading-[14px] text-(--text-tertiary)">
+					<span className="truncate text-micro leading-[14px] text-(--text-3)">
 						{detail} · {age(new Date(artifact.mtimeMs).toISOString())}
 					</span>
 				</span>
@@ -151,7 +151,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 			setProblem(error instanceof Error ? error.message : String(error));
 		}
 	};
-	const note = (text: string) => <p className="m-0 px-2 py-1.5 text-small leading-[16px] text-pretty text-(--text-tertiary)">{text}</p>;
+	const note = (text: string) => <p className="m-0 px-2 py-1.5 text-small leading-[16px] text-pretty text-(--text-3)">{text}</p>;
 	return (
 		<MenuSub
 			open={open}
@@ -165,8 +165,8 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 			</MenuSubTrigger>
 			<MenuSubContent className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] w-[320px] gap-0 overflow-hidden p-0">
 				{all.length > 8 ? (
-					<div className="flex items-center gap-2 border-b border-(--border-subtle) px-3 py-2">
-						<Icon icon={Search} size={13} className="shrink-0 text-(--icon-tertiary)" />
+					<div className="flex items-center gap-2 border-b border-(--line) px-3 py-2">
+						<Icon icon={Search} size={13} className="shrink-0 text-(--text-3)" />
 						<input
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
@@ -176,7 +176,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 							}}
 							placeholder="Search files"
 							aria-label="Search artifacts"
-							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+							className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text) outline-none placeholder:text-(--text-4)"
 						/>
 					</div>
 				) : null}
@@ -202,7 +202,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 						</MenuGroup>
 					) : null}
 				</div>
-				{problem ? <p className="m-0 border-t border-(--border-subtle) px-3 py-1.5 text-micro leading-[15px] text-(--danger-text)">{problem}</p> : null}
+				{problem ? <p className="m-0 border-t border-(--line) px-3 py-1.5 text-micro leading-[15px] text-(--bad)">{problem}</p> : null}
 			</MenuSubContent>
 		</MenuSub>
 	);
@@ -255,7 +255,7 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 							icon={Plug}
 							hint={
 								waiting ? (
-									<span className="inline-flex items-center gap-1 text-(--warning-text)">
+									<span className="inline-flex items-center gap-1 text-(--warn)">
 										<Icon icon={TriangleAlert} size={12} />
 										{waiting}
 									</span>
@@ -278,7 +278,7 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 								<ConnectorRow key={item.key} item={item} onPick={pick} />
 							))}
 							<MenuSeparator />
-							<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-tertiary)">
+							<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">
 								{problem ?? 'On for every task. Tools load only when a task uses them, so nothing is spent until then.'}
 							</p>
 						</MenuSubContent>

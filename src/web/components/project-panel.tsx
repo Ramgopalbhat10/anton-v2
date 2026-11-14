@@ -59,7 +59,7 @@ function Overview({ space, threads }: { space: Space; threads: Session[] }) {
 						{ready.map((thread) => {
 							const runs = thread.pullRequest?.runs ?? [];
 							return (
-								<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2">
+								<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--line) px-4 py-2">
 									<ThreadStateIcon thread={thread} size={13} />
 									<button type="button" onClick={() => openThread(thread, thread.prUrl ? 'PR' : 'Changes')} className="flex min-w-0 flex-1 flex-col text-left outline-none">
 										<span className="truncate text-body hover:underline">{thread.title}</span>
@@ -146,10 +146,10 @@ function PullRequests({ threads }: { threads: Session[] }) {
 				{withPr.map((thread) => {
 					const runs = thread.pullRequest?.runs ?? [];
 					return (
-						<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--border-subtle) px-4 py-2.5">
+						<div key={thread.id} className="flex items-center gap-2.5 border-t border-(--line) px-4 py-2.5">
 							<ThreadStateIcon thread={thread} size={12} />
 							<button type="button" onClick={() => openThread(thread, 'PR')} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left outline-none">
-								<span className="truncate text-body text-(--text-primary)">{thread.title}</span>
+								<span className="truncate text-body text-(--text)">{thread.title}</span>
 								<span className="flex items-center gap-2">
 									<Caption>{repoShort(thread)}</Caption><PrStatus thread={thread} full />
 									{runs.length ? (
@@ -178,8 +178,8 @@ const RUNS_SHOWN = 14;
 /** A run's bar: green once it delivered, red when it failed, amber while it asks, blue while it works. */
 const RUN_COLOR: Record<GlyphKind, string> = {
 	...STATE_COLOR,
-	resolved: 'color-mix(in oklab, var(--success-base) 62%, var(--neutral-800))',
-	idle: 'color-mix(in oklab, var(--success-base) 40%, var(--neutral-700))',
+	resolved: 'color-mix(in oklab, var(--ok) 62%, var(--bg-overlay))',
+	idle: 'color-mix(in oklab, var(--ok) 40%, var(--bg-active))',
 };
 
 /** A routine's recent runs as bars in their thread's state colour, oldest first, each opening its thread. */
@@ -189,7 +189,7 @@ function RunStrip({ runs }: { runs: Session[] }) {
 	return (
 		<span role="group" aria-label="Recent runs" className="flex h-3.5 items-stretch gap-[2px]">
 			{Array.from({ length: RUNS_SHOWN - shown.length }, (_, index) => (
-				<span key={`empty-${index}`} aria-hidden className="w-1 rounded-mark bg-(--segment-off)" />
+				<span key={`empty-${index}`} aria-hidden className="w-1 rounded-mark bg-(--bg-active)" />
 			))}
 			{shown.map((thread) => {
 				const kind = glyphKind(thread);
@@ -200,7 +200,7 @@ function RunStrip({ runs }: { runs: Session[] }) {
 						onClick={() => open(thread)}
 						title={`${thread.title}: ${KIND_LABEL[kind]}`}
 						aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
-						className={cn('w-1 rounded-mark outline-none hover:brightness-150 focus-visible:shadow-(--focus-ring)', kind === 'working' && 'in-sweep')}
+						className={cn('w-1 rounded-mark outline-none hover:brightness-150 focus-visible:shadow-(--focus)', kind === 'working' && 'in-sweep')}
 						style={{ background: RUN_COLOR[kind] }}
 					/>
 				);
@@ -219,7 +219,7 @@ function routineName(automation: Automation): string {
 }
 
 /** A small arrow between what starts a routine and where its threads work. */
-const Flow = () => <Icon icon={ArrowRight} size={11} className="text-(--icon-tertiary)" />;
+const Flow = () => <Icon icon={ArrowRight} size={11} className="text-(--text-3)" />;
 
 function RoutineRow({ automation, space, runs }: { automation: Automation; space: Space; runs: Session[] }) {
 	const queryClient = useQueryClient();
@@ -238,12 +238,12 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 	const on = automation.enabled;
 	if (editing) return <RoutineForm space={space} automation={automation} onDone={() => setEditing(false)} />;
 	return (
-		<div className="group/routine flex flex-col gap-2 border-t border-(--border-subtle) px-4 py-3">
+		<div className="group/routine flex flex-col gap-2 border-t border-(--line) px-4 py-3">
 			<div className="flex min-w-0 items-start gap-3">
 				<span
 					className={cn(
 						'mt-px inline-flex size-7 shrink-0 items-center justify-center',
-						on ? 'text-(--accent-text)' : 'text-(--icon-tertiary)',
+						on ? 'text-(--accent-text)' : 'text-(--text-3)',
 					)}
 				>
 					<Icon icon={automation.kind === 'issues' ? CircleDot : CalendarClock} size={16} />
@@ -254,10 +254,10 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 							type="button"
 							aria-expanded={open}
 							onClick={() => setOpen(!open)}
-							className="flex min-w-0 items-center gap-1 rounded-control text-left outline-none focus-visible:shadow-(--focus-ring)"
+							className="flex min-w-0 items-center gap-1 rounded-control text-left outline-none focus-visible:shadow-(--focus)"
 						>
-							<span className={cn('min-w-0 truncate text-body leading-[18px] font-medium', on ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}>{routineName(automation)}</span>
-							<Icon icon={ChevronDown} size={12} className={cn('text-(--icon-tertiary) transition-transform duration-(--duration-micro)', open && 'rotate-180')} />
+							<span className={cn('min-w-0 truncate text-body leading-[18px] font-medium', on ? 'text-(--text)' : 'text-(--text-3)')}>{routineName(automation)}</span>
+							<Icon icon={ChevronDown} size={12} className={cn('text-(--text-3) transition-transform duration-(--t-fast)', open && 'rotate-180')} />
 						</button>
 						<span className="flex-1" />
 						<span className="hidden shrink-0 items-center gap-0.5 group-focus-within/routine:flex group-hover/routine:flex pointer-coarse:flex">
@@ -269,14 +269,14 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 						</span>
 						<Switch checked={on} disabled={toggle.isPending} onChange={(enabled) => toggle.mutate(enabled)} label={<span className="sr-only">Enabled</span>} className="ml-1" />
 					</div>
-					<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-small leading-[17px] text-(--text-tertiary)">
+					<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-small leading-[17px] text-(--text-3)">
 						<span className="truncate">{automation.kind === 'issues' ? 'Checks every 5 minutes' : whenItRuns(automation)}</span>
-						<span className="text-(--text-disabled)">·</span>
+						<span className="text-(--text-4)">·</span>
 						{!on ? (
 							<span>Paused</span>
 						) : automation.schedule && next ? (
 							<span title={nextRunText(automation)}>
-								Next <span className="in-num text-(--text-primary)">{until(next)}</span>
+								Next <span className="in-num text-(--text)">{until(next)}</span>
 							</span>
 						) : (
 							<span>
@@ -301,13 +301,13 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 							{repo.repoFullName.split('/').pop()}
 						</Chip>
 					) : (
-						<Chip icon={MessageSquare} className="border-dashed bg-transparent text-(--text-tertiary)">
+						<Chip icon={MessageSquare} className="border-dashed bg-transparent text-(--text-3)">
 							no repository
 						</Chip>
 					)}
 					{model ? (
-						<span className="inline-flex h-5 min-w-0 items-center gap-1 text-micro text-(--text-secondary)" title={model}>
-							<span aria-hidden className="mr-1 h-3 w-px bg-(--border-subtle)" />
+						<span className="inline-flex h-5 min-w-0 items-center gap-1 text-micro text-(--text-2)" title={model}>
+							<span aria-hidden className="mr-1 h-3 w-px bg-(--line)" />
 							<ModelLogo model={model} size={14} />
 							<span className="truncate">{modelName(model)}</span>
 						</span>
@@ -320,22 +320,22 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 					) : null}
 				</span>
 				<span className="ml-auto flex shrink-0 items-center gap-2.5">
-					<span className="flex items-center gap-1.5 text-micro text-(--text-tertiary)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
+					<span className="flex items-center gap-1.5 text-micro text-(--text-3)" title={`${runs.length} run${runs.length === 1 ? '' : 's'}`}>
 						{last ? <Glyph kind={glyphKind(last)} size={12} /> : null}
 						{automation.lastRunAt ? `${age(automation.lastRunAt) === 'now' ? 'just now' : `${age(automation.lastRunAt)} ago`}` : 'Not run yet'}
 					</span>
 					<RunStrip runs={runs} />
 				</span>
 			</div>
-			{open && automation.prompt ? <p className="m-0 ml-10 rounded-control bg-(--well-bg) px-2.5 py-2 text-small leading-[18px] whitespace-pre-wrap text-(--text-secondary)">{automation.prompt}</p> : null}
+			{open && automation.prompt ? <p className="m-0 ml-10 rounded-control bg-(--bg-raised) px-2.5 py-2 text-small leading-[18px] whitespace-pre-wrap text-(--text-2)">{automation.prompt}</p> : null}
 			{automation.gate && automation.lastGate && !automation.lastGate.run ? (
-				<div className="ml-10 text-small text-(--text-tertiary)">
+				<div className="ml-10 text-small text-(--text-3)">
 					Skipped {age(automation.lastGate.at) === 'now' ? 'just now' : `${age(automation.lastGate.at)} ago`}
 					{automation.lastGate.reason ? `: ${automation.lastGate.reason}` : ''}
 				</div>
 			) : null}
-			{automation.lastError ? <div className="ml-10 text-small text-(--danger-text)">{automation.lastError}</div> : null}
-			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-small text-(--danger-text)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
+			{automation.lastError ? <div className="ml-10 text-small text-(--bad)">{automation.lastError}</div> : null}
+			{(run.error ?? toggle.error ?? remove.error) ? <div className="ml-10 text-small text-(--bad)">{(run.error ?? toggle.error ?? remove.error)?.message}</div> : null}
 		</div>
 	);
 }
@@ -377,7 +377,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 	});
 	return (
 		<form
-			className="flex flex-col gap-2 border-t border-(--border-subtle) px-4 py-3"
+			className="flex flex-col gap-2 border-t border-(--line) px-4 py-3"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate();
@@ -424,7 +424,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 			/>
 			{kind === 'schedule' ? (
 				<label className="flex flex-col gap-1">
-					<span className="text-small text-(--text-secondary)">Run only when a skill's script says so (optional)</span>
+					<span className="text-small text-(--text-2)">Run only when a skill's script says so (optional)</span>
 					<Input
 						aria-label="Gate"
 						value={gate}
@@ -435,7 +435,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 				</label>
 			) : null}
 			<div className="flex items-center gap-2">
-				{save.isError ? <span className="min-w-0 flex-1 text-small text-(--danger-text)">{save.error.message}</span> : <span className="flex-1" />}
+				{save.isError ? <span className="min-w-0 flex-1 text-small text-(--bad)">{save.error.message}</span> : <span className="flex-1" />}
 				<Btn size="sm" variant="ghost" onClick={onDone}>
 					Cancel
 				</Btn>
@@ -475,7 +475,7 @@ function Routines({ space, threads }: { space: Space; threads: Session[] }) {
 				/>
 			))}
 			{list.length === 0 && !adding && routines.isSuccess ? (
-				<div className="flex items-center gap-2 border-t border-(--border-subtle) px-4 py-3">
+				<div className="flex items-center gap-2 border-t border-(--line) px-4 py-3">
 					<Caption>No routines yet</Caption>
 				</div>
 			) : null}

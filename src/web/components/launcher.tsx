@@ -112,7 +112,7 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 					onKeyDown={(event) => event.key === 'Escape' && onCancel()}
 					placeholder="Search your repositories, or type owner/repository"
 					aria-label="Repository"
-					className="h-7 min-w-0 flex-1 rounded-tile bg-(--bg-surface) px-2.5 text-body text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)"
+					className="h-7 min-w-0 flex-1 rounded-card bg-(--bg-panel) px-2.5 text-body text-(--text) outline-none focus-visible:shadow-(--focus)"
 				/>
 				<Btn type="submit" size="sm" disabled={add.isPending || !name.trim()}>
 					{add.isPending ? 'Adding…' : 'Add'}
@@ -129,15 +129,15 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 							key={repo}
 							disabled={add.isPending}
 							onClick={() => add.mutate(repo)}
-							className="flex h-7 items-center gap-2 rounded-control px-2 text-left text-small text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							className="flex h-7 items-center gap-2 rounded-control px-2 text-left text-small text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 						>
-							<Icon icon={Folder} size={12} className="text-(--icon-tertiary)" />
+							<Icon icon={Folder} size={12} className="text-(--text-3)" />
 							<span className="min-w-0 flex-1 truncate">{repo}</span>
 						</button>
 					))}
 				</div>
 			) : null}
-			{add.isError ? <p className="m-0 text-small text-(--danger-text)">{add.error.message}</p> : null}
+			{add.isError ? <p className="m-0 text-small text-(--bad)">{add.error.message}</p> : null}
 		</form>
 	);
 }
@@ -175,12 +175,12 @@ function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 		<ol aria-label={label} className="m-0 mx-auto flex w-fit max-w-full list-none flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-card px-3 py-1.5 text-small sm:rounded-full">
 			{stages.map((stage, index) => (
 				<li key={stage.title} className="flex items-center gap-1">
-					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--border-strong)" /> : null}
-					<span className="route-caption inline-flex items-center gap-1.5 text-(--text-tertiary)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
+					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--line-strong)" /> : null}
+					<span className="route-caption inline-flex items-center gap-1.5 text-(--text-3)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
 						<Icon icon={stage.icon} size={12} />
 						<span>{stage.title}</span>
 					</span>
-					<span className="hidden text-(--text-disabled) sm:inline">{stage.note}</span>
+					<span className="hidden text-(--text-4) sm:inline">{stage.note}</span>
 				</li>
 			))}
 		</ol>
@@ -260,7 +260,7 @@ export function Launcher() {
 				<div className="mx-auto flex max-w-[880px] flex-col gap-10 pt-6 md:pt-[min(16vh,148px)]">
 					<div className="mx-auto flex w-full max-w-[680px] flex-col gap-4">
 						{/* The sidebar already names the product; Home asks the one question it is for. */}
-						<h1 className="m-0 text-h2 leading-7 font-medium tracking-[-0.02em] text-(--text-primary)">{chat ? 'What should Anton look into?' : 'What should Anton work on?'}</h1>
+						<h1 className="m-0 text-h2 leading-7 font-medium tracking-[-0.02em] text-(--text)">{chat ? 'What should Anton look into?' : 'What should Anton work on?'}</h1>
 
 						<form
 							className="home-composer in-enter relative flex flex-col"
@@ -285,7 +285,7 @@ export function Launcher() {
 								className="min-h-[84px] px-4 pt-3.5 text-body-lg leading-[21px]"
 							/>
 							{attachments.notice || blind ? (
-								<div className="px-4 pt-2 text-small text-(--warning-text)">
+								<div className="px-4 pt-2 text-small text-(--warn)">
 									{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 								</div>
 							) : null}

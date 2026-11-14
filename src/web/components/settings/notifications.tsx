@@ -64,8 +64,8 @@ function ThisDevice({ view, thisDevice }: { view: PushView; thisDevice: string |
 					</Btn>
 				</SettingRow>
 			) : null}
-			{toggle.error ? <span className="text-small text-(--danger-text)">{toggle.error.message}</span> : null}
-			{test.error ? <span className="text-small text-(--danger-text)">{test.error.message}</span> : null}
+			{toggle.error ? <span className="text-small text-(--bad)">{toggle.error.message}</span> : null}
+			{test.error ? <span className="text-small text-(--bad)">{test.error.message}</span> : null}
 			{test.isSuccess ? (
 				<SaveState pending={false} success error={null} saved={test.data.sent ? 'Sent. It shows when no Anton window is in front of you.' : 'Not sent: this device is not listed.'} />
 			) : null}
@@ -112,14 +112,14 @@ function Devices({ view, thisDevice }: { view: PushView; thisDevice: string | nu
 			) : (
 				<List>
 					{view.devices.map((device) => (
-						<div key={device.id} className="flex min-h-11 items-center gap-3 rounded-tile px-2.5 py-1.5">
+						<div key={device.id} className="flex min-h-11 items-center gap-3 rounded-card px-2.5 py-1.5">
 							<RowIcon icon={/iPhone|Android phone/.test(device.name) ? Smartphone : MonitorSmartphone} />
 							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 								<div className="flex items-center gap-2 text-body font-medium">
 									<span className="truncate">{device.name}</span>
 									{device.id === thisDevice ? <Status tone="accent">This device</Status> : null}
 								</div>
-								<div className={device.lastError ? 'text-small text-(--danger-text)' : 'text-small text-(--text-tertiary)'}>
+								<div className={device.lastError ? 'text-small text-(--bad)' : 'text-small text-(--text-3)'}>
 									{device.lastError ? `Last send failed: ${device.lastError}` : device.lastSentAt ? `Last notified ${age(device.lastSentAt)} ago` : `Added ${age(device.addedAt)} ago`}
 								</div>
 							</div>
@@ -177,7 +177,7 @@ export function NotificationsPage() {
 					<Devices view={view.data} thisDevice={thisDevice} />
 				</>
 			) : view.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">{view.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">{view.error.message}</p>
 			) : (
 				<Spinner size={12} />
 			)}

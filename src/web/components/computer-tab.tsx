@@ -260,13 +260,13 @@ function StartComputer({ sessionId, live }: { sessionId: string; live: boolean }
 			<Btn size="sm" variant="primary" disabled={start.isPending} onClick={() => start.mutate()}>
 				{start.isPending ? 'Starting…' : 'Start computer'}
 			</Btn>
-			{start.isError ? <p className="m-0 text-small text-(--danger-text)">{start.error.message}</p> : null}
+			{start.isError ? <p className="m-0 text-small text-(--bad)">{start.error.message}</p> : null}
 		</EmptyState>
 	);
 }
 
 function Overlay({ children }: { children: React.ReactNode }) {
-	return <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-(--bg-inset) px-6 text-center">{children}</div>;
+	return <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-(--bg-app) px-6 text-center">{children}</div>;
 }
 
 export function ComputerTab({ sessionId }: { sessionId: string }) {
@@ -311,7 +311,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 
 	if (view.isPending) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Checking the computer
 			</div>
@@ -326,7 +326,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2">
 			<div className="flex h-8 shrink-0 items-center gap-1.5">
-				<span className="flex min-w-0 flex-1 items-center gap-1.5 pl-1 text-small text-(--text-secondary)">
+				<span className="flex min-w-0 flex-1 items-center gap-1.5 pl-1 text-small text-(--text-2)">
 					{yours ? (
 						<>
 							<Icon icon={Hand} size={12} className="shrink-0 text-(--accent-text)" />
@@ -338,13 +338,13 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 							<span className="truncate">The agent is using the computer</span>
 						</>
 					) : (
-						<span className="truncate text-(--text-tertiary)">Watching. Take over to use it yourself.</span>
+						<span className="truncate text-(--text-3)">Watching. Take over to use it yourself.</span>
 					)}
 				</span>
 				{running && browsing ? (
 					<>
-						<IconBtn icon={Globe} size="sm" label="Show the sandbox browser" aria-pressed={mode === 'browser'} onClick={() => setPicked('browser')} className={cn(mode === 'browser' && 'bg-(--accent-bg-subtle) text-(--accent-text)')} />
-						<IconBtn icon={Monitor} size="sm" label="Show the desktop" aria-pressed={mode === 'desktop'} onClick={() => setPicked('desktop')} className={cn(mode === 'desktop' && 'bg-(--accent-bg-subtle) text-(--accent-text)')} />
+						<IconBtn icon={Globe} size="sm" label="Show the sandbox browser" aria-pressed={mode === 'browser'} onClick={() => setPicked('browser')} className={cn(mode === 'browser' && 'bg-(--accent-soft) text-(--accent-text)')} />
+						<IconBtn icon={Monitor} size="sm" label="Show the desktop" aria-pressed={mode === 'desktop'} onClick={() => setPicked('desktop')} className={cn(mode === 'desktop' && 'bg-(--accent-soft) text-(--accent-text)')} />
 					</>
 				) : null}
 				<IconBtn
@@ -360,7 +360,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 						if (mode === 'browser' && frame) setSketch({ data: frame.toDataURL('image/png').split(',')[1] ?? '', width: frame.width, height: frame.height });
 						else capture.mutate();
 					}}
-					className={cn(sketch && 'bg-(--accent-bg-subtle) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
+					className={cn(sketch && 'bg-(--accent-soft) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
 				/>
 				<IconBtn
 					icon={Power}
@@ -375,7 +375,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 				</Btn>
 			</div>
 			<div ref={area} className="relative flex min-h-[240px] flex-1 items-center justify-center">
-				<div className="in-well relative overflow-hidden bg-(--bg-inset)" style={{ width: size.width, height: size.height }}>
+				<div className="in-well relative overflow-hidden bg-(--bg-app)" style={{ width: size.width, height: size.height }}>
 					{showing ? (
 						mode === 'browser' ? (
 							<BrowserScreen key={`browser-${connection}`} sessionId={sessionId} viewOnly={!yours} onLink={setLink} canvas={browserCanvas} />
@@ -385,22 +385,22 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 					) : null}
 					{!showing ? (
 						<Overlay>
-							<Icon icon={Pause} size={16} className="text-(--icon-tertiary)" />
-							<div className="text-body text-(--text-primary)">Paused while nobody watched</div>
-							<p className="m-0 max-w-[300px] text-small text-(--text-tertiary)">The computer keeps running in the sandbox.</p>
+							<Icon icon={Pause} size={16} className="text-(--text-3)" />
+							<div className="text-body text-(--text)">Paused while nobody watched</div>
+							<p className="m-0 max-w-[300px] text-small text-(--text-3)">The computer keeps running in the sandbox.</p>
 							<Btn size="sm" variant="primary" onClick={wake}>
 								Resume
 							</Btn>
 						</Overlay>
 					) : link.state === 'connecting' ? (
-						<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-(--bg-inset) text-small text-(--text-tertiary)">
+						<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-(--bg-app) text-small text-(--text-3)">
 							<Spinner size={12} />
 							Connecting to the computer
 						</div>
 					) : link.state === 'closed' ? (
 						<Overlay>
-							<div className="text-body text-(--text-primary)">The connection closed</div>
-							{link.error ? <p className="m-0 max-w-[300px] text-small text-(--text-tertiary)">{link.error}</p> : null}
+							<div className="text-body text-(--text)">The connection closed</div>
+							{link.error ? <p className="m-0 max-w-[300px] text-small text-(--text-3)">{link.error}</p> : null}
 							<Btn
 								size="sm"
 								variant="primary"
@@ -431,7 +431,7 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 					) : null}
 					{status ? (
 						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
-							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-small text-(--text-secondary)">
+							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-small text-(--text-2)">
 								{status}
 							</span>
 						</div>

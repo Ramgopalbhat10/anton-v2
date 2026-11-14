@@ -60,7 +60,7 @@ export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, 
 		},
 	});
 	if (pull.state === 'merged') {
-		if (compact) return <span className="text-small text-(--text-secondary)">Merged{pull.mergedBy ? ` by ${pull.mergedBy}` : ''}</span>;
+		if (compact) return <span className="text-small text-(--text-2)">Merged{pull.mergedBy ? ` by ${pull.mergedBy}` : ''}</span>;
 		return (
 			<Box tone="merged" icon={GitMerge} title={`Merged${pull.mergedBy ? ` by ${pull.mergedBy}` : ''}${pull.mergedAt ? ` ${age(pull.mergedAt)} ago` : ''}`}>
 				{pull.headBranch} went into {pull.baseBranch}.
@@ -68,7 +68,7 @@ export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, 
 		);
 	}
 	if (pull.state === 'closed') {
-		if (compact) return <span className="text-small text-(--text-secondary)">Closed without merging</span>;
+		if (compact) return <span className="text-small text-(--text-2)">Closed without merging</span>;
 		return (
 			<Box tone="closed" icon={GitPullRequestClosed} title="Closed without merging">
 				{pull.closedAt ? `Closed ${age(pull.closedAt)} ago.` : 'It was closed on GitHub.'}
@@ -91,11 +91,11 @@ export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, 
 		</div>
 	);
 	const problem = merge.isError ? merge.error.message : blocked;
-	if (compact) return <div className="flex min-w-0 flex-col items-start gap-1">{action}{problem ? <span role="alert" className="max-w-[280px] text-small text-(--danger-text)">{problem}</span> : null}</div>;
+	if (compact) return <div className="flex min-w-0 flex-col items-start gap-1">{action}{problem ? <span role="alert" className="max-w-[280px] text-small text-(--bad)">{problem}</span> : null}</div>;
 	return (
 		<Box tone={pull.draft ? 'draft' : pull.mergeable === false ? 'conflicts' : blocked ? 'neutral' : failing ? 'failing' : running ? 'running' : 'ready'} icon={blocked || failing ? CircleAlert : running ? CircleDot : CircleCheck}
 			title={blocked ? 'Not ready to merge' : failing ? 'Checks are failing' : running ? 'Checks are running' : 'Ready to merge'} action={action}>
-			{merge.isError ? <span className="text-(--danger-text)">{merge.error.message}</span> : <>{blocked ?? checksPhrase(pull.checks)}{pull.approved ? ' · Approved' : ''}</>}
+			{merge.isError ? <span className="text-(--bad)">{merge.error.message}</span> : <>{blocked ?? checksPhrase(pull.checks)}{pull.approved ? ' · Approved' : ''}</>}
 		</Box>
 	);
 }
@@ -119,8 +119,8 @@ function Box({ tone, icon, title, action, children }: { tone: keyof typeof BOX_T
 				<Icon icon={icon} size={16} />
 			</span>
 			<div className="flex min-w-0 flex-1 flex-col">
-				<span className="text-body leading-[18px] font-medium text-(--text-primary)">{title}</span>
-				<span className="text-small leading-[17px] text-(--text-tertiary)">{children}</span>
+				<span className="text-body leading-[18px] font-medium text-(--text)">{title}</span>
+				<span className="text-small leading-[17px] text-(--text-3)">{children}</span>
 			</div>
 			{action}
 		</div>

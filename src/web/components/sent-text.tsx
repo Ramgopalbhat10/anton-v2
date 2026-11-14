@@ -25,7 +25,7 @@ export function RichText({ text }: { text: string }) {
 		const ref = piece.kind === 'file' ? fileRef(piece.text.slice(1)) : null;
 		if (ref && files?.has(ref.path))
 			return (
-				<button key={piece.start} type="button" title={`Open ${ref.path}`} onClick={() => files.open(ref.path, ref.line)} className={cn(RICH_CLASS.chip, 'hover:bg-(--accent-bg-subtle-hover)')}>
+				<button key={piece.start} type="button" title={`Open ${ref.path}`} onClick={() => files.open(ref.path, ref.line)} className={cn(RICH_CLASS.chip, 'hover:bg-(--accent-soft)')}>
 					{piece.text}
 				</button>
 			);
@@ -48,7 +48,7 @@ export function SentText({ text, className }: { text: string; className?: string
 	return (
 		<div
 			className={cn(
-				'relative rounded-control rounded-br-mark border border-(--card-border) bg-(--bg-overlay) px-3.5 py-2.5 text-body leading-[19px] shadow-(--card-highlight)',
+				'relative rounded-control rounded-br-mark border border-(--line) bg-(--bg-overlay) px-3.5 py-2.5 text-body leading-[19px]',
 				className,
 			)}
 		>
@@ -112,7 +112,7 @@ export function PendingMessage({ pending }: { pending: PendingSend }) {
 	return (
 		<div className="in-sent flex flex-col items-end gap-1.5">
 			{pending.text ? <SentText text={pending.text} className="max-w-[min(520px,100%)]" /> : null}
-			<div className="flex items-center gap-1.5 text-small text-(--text-tertiary)">
+			<div className="flex items-center gap-1.5 text-small text-(--text-3)">
 				<Spinner size={11} tone="neutral" />
 				Attaching {pending.attaching}
 			</div>

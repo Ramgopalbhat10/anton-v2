@@ -93,7 +93,7 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 		gcTime: 0,
 	});
 	return (
-		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-nano leading-[14px] whitespace-pre-wrap wrap-anywhere text-(--text-tertiary) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
+		<pre className="m-0 h-full overflow-hidden px-3.5 pt-3 font-mono text-nano leading-[14px] whitespace-pre-wrap wrap-anywhere text-(--text-3) [mask-image:linear-gradient(180deg,#000_55%,transparent)]">
 			{(text.data ?? '').slice(0, 1200)}
 		</pre>
 	);
@@ -107,8 +107,8 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	let body: ReactNode = (
 		<span className="flex h-full flex-col items-center justify-center gap-2">
 			<Icon icon={info.icon} size={22} className={info.tone} />
-			<span className="text-nano tracking-[0.08em] text-(--text-tertiary)">{extensionOf(artifact.path)}</span>
-			{category === 'app' ? <span className="text-micro text-(--text-tertiary)">Open to run app</span> : null}
+			<span className="text-nano tracking-[0.08em] text-(--text-3)">{extensionOf(artifact.path)}</span>
+			{category === 'app' ? <span className="text-micro text-(--text-3)">Open to run app</span> : null}
 		</span>
 	);
 	// Large originals stay in the detail view; CSS resizing would still decode the full image here.
@@ -116,7 +116,7 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 		body = <span className="absolute inset-0"><OutputThumb item={artifact} /></span>;
 	else if (near && category !== 'app' && isText(artifact.path) && artifact.size < 256 * 1024) body = <Snippet artifact={artifact} />;
 	return (
-		<div ref={ref} className="relative aspect-[16/10] overflow-hidden border-b border-(--border-subtle) bg-(--bg-inset)">
+		<div ref={ref} className="relative aspect-[16/10] overflow-hidden border-b border-(--line) bg-(--bg-app)">
 			{body}
 		</div>
 	);
@@ -153,7 +153,7 @@ function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolea
 				{install.isPending ? 'Installing…' : installedAs ? 'Update the skill' : 'Install as skill'}
 			</MenuItem>
 			{install.isSuccess || install.isError || installedAs ? (
-				<div className={cn('max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-pretty', install.isError ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<div className={cn('max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-pretty', install.isError ? 'text-(--bad)' : 'text-(--text-3)')}>
 					{install.isError ? (
 						install.error.message
 					) : (
@@ -224,11 +224,11 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete'}
 				</MenuItem>
 				{confirming && !remove.isError ? (
-					<div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-tertiary)">
+					<div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-3)">
 						{artifact.added ? 'Tasks it was attached to keep their own copy.' : "It leaves the task's Library too. Replies that showed it say it was deleted."}
 					</div>
 				) : null}
-				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
+				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--bad)">{remove.error.message}</div> : null}
 			</MenuContent>
 		</Menu>
 	);
@@ -240,13 +240,13 @@ type Selection = { keys: Set<string>; toggle: (artifact: Artifact) => void; disa
 function ArtifactCard({ artifact, selection }: { artifact: Artifact; selection?: Selection }) {
 	const info = categoryInfo(categoryOf(artifact.path));
 	return (
-		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--duration-micro) hover:border-(--border-default) has-[:focus-visible]:shadow-(--focus-ring)">
+		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--t-fast) hover:border-(--line-strong) has-[:focus-visible]:shadow-(--focus)">
 			<Thumb artifact={artifact} />
 			<div className="flex min-w-0 items-start gap-2 py-2.5 pr-1.5 pl-3">
 				<Icon icon={info.icon} size={13} className={cn('mt-[3px] shrink-0', info.tone)} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span title={artifact.title} className="truncate text-body text-(--text-primary)">{artifact.title}</span>
-					<span className="truncate text-small text-(--text-tertiary)">
+					<span title={artifact.title} className="truncate text-body text-(--text)">{artifact.title}</span>
+					<span className="truncate text-small text-(--text-3)">
 						{artifact.task.title} · {when(artifact)}
 					</span>
 				</div>
@@ -291,9 +291,9 @@ function Grid({ items, selection }: { items: Artifact[]; selection?: Selection }
 function Section({ label, count, children }: { label: string; count: number; children: ReactNode }) {
 	return (
 		<section aria-label={label} className="flex flex-col gap-2.5">
-			<h2 className="m-0 flex items-baseline gap-2 text-body font-medium text-(--text-secondary)">
+			<h2 className="m-0 flex items-baseline gap-2 text-body font-medium text-(--text-2)">
 				{label}
-				<span className="in-num text-micro font-normal text-(--text-disabled)">{count}</span>
+				<span className="in-num text-micro font-normal text-(--text-4)">{count}</span>
 			</h2>
 			{children}
 		</section>
@@ -364,8 +364,8 @@ function AddFiles() {
 					if (files.length) addFolder.mutate(files);
 				}}
 			/>
-			{problem ? <span className="text-small text-(--danger-text)">{problem.message}</span> : null}
-			{addFolder.isSuccess && addFolder.data ? <span className="text-small text-(--text-tertiary)">{addFolder.data}</span> : null}
+			{problem ? <span className="text-small text-(--bad)">{problem.message}</span> : null}
+			{addFolder.isSuccess && addFolder.data ? <span className="text-small text-(--text-3)">{addFolder.data}</span> : null}
 			<Btn size="sm" variant="ghost" icon={FolderUp} disabled={busy} onClick={() => folderPicker.current?.click()} className="shrink-0">
 				{addFolder.isPending ? 'Adding…' : 'Add folder'}
 			</Btn>
@@ -429,9 +429,9 @@ function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: 
 		if (failures.length) setError(`${failures.length} could not be deleted. They remain selected; retry Delete. ${failures.slice(0, 3).join(' · ')}`);
 	};
 	return (
-		<div className="flex flex-col gap-2 rounded-control border border-(--border-default) bg-(--bg-inset) p-3" role="group" aria-label="Artifact selection">
+		<div className="flex flex-col gap-2 rounded-control border border-(--line-strong) bg-(--bg-app) p-3" role="group" aria-label="Artifact selection">
 			<div className="flex flex-wrap items-center gap-2">
-				<span role="status" className="mr-1 text-body text-(--text-secondary)">{selected.length} selected{hidden ? ` (${hidden} hidden by filters)` : ''}</span>
+				<span role="status" className="mr-1 text-body text-(--text-2)">{selected.length} selected{hidden ? ` (${hidden} hidden by filters)` : ''}</span>
 				<Btn size="sm" disabled={busy || !shown.length} onClick={() => setKeys(new Set([...keys, ...shown.map(artifactKey)]))}>Select all shown</Btn>
 				<Btn size="sm" variant="ghost" disabled={busy || !selected.length} onClick={() => setKeys(new Set())}>Clear selection</Btn>
 				<span className="flex-1" />
@@ -439,14 +439,14 @@ function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: 
 				<Btn size="sm" variant="dangerGhost" icon={Trash2} disabled={busy || !selected.length} onClick={() => { setConfirming(keys); setError(''); }}>{operation === 'delete' ? 'Deleting…' : 'Delete selected'}</Btn>
 				<Btn size="sm" variant="ghost" disabled={busy} onClick={finish}>Done</Btn>
 			</div>
-			{confirming === keys ? <div className="flex flex-wrap items-center gap-2 text-small text-(--text-secondary)">
+			{confirming === keys ? <div className="flex flex-wrap items-center gap-2 text-small text-(--text-2)">
 				<p className="m-0 basis-full">Delete {selected.length} selected artifact{selected.length === 1 ? '' : 's'}{hidden ? ', including those hidden by filters' : ''}? This cannot be undone. They leave their tasks’ Libraries too, and replies show them as deleted. Tasks keep their own copies of files you added and attached.</p>
 				<Btn size="sm" variant="danger" disabled={busy} onClick={() => void deleteSelected()}>Confirm delete</Btn>
 				<Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>Cancel</Btn>
 			</div> : null}
-			<p className="m-0 text-micro text-(--text-tertiary)">ZIP: up to 500 files and 50 MB per download. Selections stay selected across filters.</p>
-			{notice ? <p role="status" className="m-0 text-small text-(--text-secondary)">{notice}</p> : null}
-			{error ? <p role="alert" className="m-0 text-small break-words text-(--danger-text)">{error}</p> : null}
+			<p className="m-0 text-micro text-(--text-3)">ZIP: up to 500 files and 50 MB per download. Selections stay selected across filters.</p>
+			{notice ? <p role="status" className="m-0 text-small text-(--text-2)">{notice}</p> : null}
+			{error ? <p role="alert" className="m-0 text-small break-words text-(--bad)">{error}</p> : null}
 		</div>
 	);
 }
@@ -491,12 +491,12 @@ export function ArtifactsPage() {
 				<Segmented label="Kind" className="max-w-full flex-wrap [&>button]:shrink-0">
 					<SegmentedItem size="sm" on={!type} onClick={() => setSearch({ q: query || undefined })}>
 						All
-						<span className="in-num text-(--text-disabled)">{found.length}</span>
+						<span className="in-num text-(--text-4)">{found.length}</span>
 					</SegmentedItem>
 					{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
 						<SegmentedItem key={category.key} size="sm" on={type === category.key} onClick={() => setSearch({ type: category.key, q: query || undefined })}>
 							{category.label}
-							<span className="in-num text-(--text-disabled)">{counts.get(category.key) ?? 0}</span>
+							<span className="in-num text-(--text-4)">{counts.get(category.key) ?? 0}</span>
 						</SegmentedItem>
 					))}
 				</Segmented>
@@ -508,7 +508,7 @@ export function ArtifactsPage() {
 
 			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}
 			{artifacts.isPending ? (
-				<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+				<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 					<Spinner size={12} />
 					Loading artifacts
 				</div>
@@ -583,15 +583,15 @@ export function ArtifactView() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-(--border-subtle) pr-2 pl-2 md:pl-3">
+			<header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-(--line) pr-2 pl-2 md:pl-3">
 				<MenuButton />
 				<Link to="/artifacts" aria-label="All artifacts" title="All artifacts" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
 					<Icon icon={ChevronLeft} size={14} />
 				</Link>
 				<Icon icon={info.icon} size={14} className={cn('shrink-0', info.tone)} />
 				<div className="flex min-w-0 flex-1 items-baseline gap-2">
-					<h1 className="m-0 min-w-0 truncate text-body font-medium text-(--text-primary)">{artifact.title}</h1>
-					<TaskLink artifact={artifact} className="hidden min-w-0 truncate text-small text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring) sm:inline">
+					<h1 className="m-0 min-w-0 truncate text-body font-medium text-(--text)">{artifact.title}</h1>
+					<TaskLink artifact={artifact} className="hidden min-w-0 truncate text-small text-(--text-3) outline-none hover:text-(--text-2) focus-visible:shadow-(--focus) sm:inline">
 						{artifact.task.title}
 						{listed ? ` · ${when(artifact)}` : ''}
 					</TaskLink>
@@ -625,7 +625,7 @@ export function ArtifactView() {
 					</>
 				)}
 			</header>
-			{remove.isError ? <div className="border-b border-(--border-subtle) px-3 py-1.5 text-small text-(--danger-text)">{remove.error.message}</div> : null}
+			{remove.isError ? <div className="border-b border-(--line) px-3 py-1.5 text-small text-(--bad)">{remove.error.message}</div> : null}
 			<div className={cn('min-h-0 flex-1', app && !code ? 'overflow-hidden' : 'overflow-y-auto')}>{body}</div>
 		</div>
 	);

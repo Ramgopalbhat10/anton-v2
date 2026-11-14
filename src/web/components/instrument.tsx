@@ -4,25 +4,25 @@ import { Fragment, type ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/** `attention` is what waits on you (the accent); `warning` is something off (amber). */
+/** `attention` is what waits on you and `warning` is something off: both amber. The accent is live agent work. */
 export type Tone = 'neutral' | 'accent' | 'attention' | 'success' | 'warning' | 'danger';
 
 const TEXT: Record<Tone, string> = {
-	neutral: 'text-(--text-tertiary)',
+	neutral: 'text-(--text-3)',
 	accent: 'text-(--accent-text)',
-	attention: 'text-(--attention-text)',
-	success: 'text-(--success-text)',
-	warning: 'text-(--warning-text)',
-	danger: 'text-(--danger-text)',
+	attention: 'text-(--warn)',
+	success: 'text-(--ok)',
+	warning: 'text-(--warn)',
+	danger: 'text-(--bad)',
 };
 
 const FILL: Record<Tone, string> = {
-	neutral: 'var(--text-tertiary)',
-	accent: 'var(--accent-base)',
-	attention: 'var(--attention-base)',
-	success: 'var(--success-base)',
-	warning: 'var(--warning-base)',
-	danger: 'var(--danger-base)',
+	neutral: 'var(--text-3)',
+	accent: 'var(--accent)',
+	attention: 'var(--warn)',
+	success: 'var(--ok)',
+	warning: 'var(--warn)',
+	danger: 'var(--bad)',
 };
 
 export const toneFill = (tone: Tone) => FILL[tone];
@@ -46,7 +46,7 @@ export function StatusDot({ tone = 'neutral', color, pulse, title, className }: 
 			title={title}
 			aria-hidden={title ? undefined : true}
 			className={cn('size-1.5 shrink-0 rounded-full', pulse && 'in-pulse', className)}
-			style={{ background: color ?? (tone === 'off' ? 'var(--text-disabled)' : FILL[tone]) }}
+			style={{ background: color ?? (tone === 'off' ? 'var(--text-4)' : FILL[tone]) }}
 		/>
 	);
 }
@@ -65,7 +65,7 @@ export function Status({ tone = 'neutral', color, pulse, children }: { tone?: To
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center justify-center', tone === 'neutral' ? 'text-(--icon-secondary)' : TEXT[tone])}
+			className={cn('inline-flex shrink-0 items-center justify-center', tone === 'neutral' ? 'text-(--text-2)' : TEXT[tone])}
 			style={{ width: size, height: size }}
 		>
 			<Icon icon={icon} size={16} />
@@ -102,14 +102,14 @@ export function Card({
 	return (
 		<As className={cn('in-card', className)} aria-label={label}>
 			{title ? (
-				<header className="flex min-h-12 items-center gap-2.5 px-4 pt-3 pb-2">
+				<header className="flex min-h-11 items-center gap-2.5 px-4 pt-3 pb-2">
 					{icon ? <IconTile icon={icon} /> : null}
 					<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-						<h2 className="m-0 max-w-full shrink-0 truncate text-body leading-[18px] font-medium tracking-[-0.005em] text-(--text-primary)">{title}</h2>
+						<h2 className="m-0 max-w-full shrink-0 truncate text-body leading-[18px] font-semibold text-(--text)">{title}</h2>
 						{sub ? (
 							<>
-								<span className="text-small text-(--text-disabled)">/</span>
-								<span className="min-w-0 truncate text-small text-(--text-tertiary)">{sub}</span>
+								<span className="text-small text-(--text-4)">/</span>
+								<span className="min-w-0 truncate text-small text-(--text-3)">{sub}</span>
 							</>
 						) : null}
 					</div>
@@ -125,7 +125,7 @@ export function Card({
 /** A padded stretch of a card, ruled off from the one above it. */
 export function CardSection({ label, hint, children, className, ruled = true }: { label?: ReactNode; hint?: ReactNode; children?: ReactNode; className?: string; ruled?: boolean }) {
 	return (
-		<div className={cn('flex flex-col gap-3 px-4 py-3.5', ruled && 'border-t border-(--border-subtle)', className)}>
+		<div className={cn('flex flex-col gap-3 px-4 py-3.5', ruled && 'border-t border-(--line)', className)}>
 			{label || hint ? (
 				<div className="flex items-center gap-3">
 					{label ? <Caption className="min-w-0 flex-1 truncate">{label}</Caption> : <span className="flex-1" />}
@@ -140,7 +140,7 @@ export function CardSection({ label, hint, children, className, ruled = true }: 
 /** The bar along a card's bottom: a caption on the left, its actions on the right. */
 export function CardFooter({ caption, children }: { caption?: ReactNode; children?: ReactNode }) {
 	return (
-		<footer className="mt-auto flex min-h-[52px] flex-wrap items-center gap-2 border-t border-(--border-subtle) px-4 py-2.5">
+		<footer className="mt-auto flex min-h-11 flex-wrap items-center gap-2 border-t border-(--line) px-4 py-2">
 			<div className="min-w-0 flex-1">{typeof caption === 'string' ? <Caption>{caption}</Caption> : caption}</div>
 			{children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
 		</footer>
@@ -181,13 +181,13 @@ export function Figure({
 			>
 				<span aria-hidden>{whole}</span>
 				{fraction ? (
-					<span aria-hidden className="text-(--text-disabled)">
+					<span aria-hidden className="text-(--text-4)">
 						{fraction}
 					</span>
 				) : null}
 				{rest ? <span aria-hidden>{rest}</span> : null}
 			</span>
-			{unit ? <span className="in-num text-small whitespace-nowrap text-(--text-tertiary)">{unit}</span> : null}
+			{unit ? <span className="in-num text-small whitespace-nowrap text-(--text-3)">{unit}</span> : null}
 			{note}
 		</div>
 	);
@@ -196,24 +196,24 @@ export function Figure({
 /** A change beside a figure: "+12%", "−$0.40", "3 failing". */
 export function Delta({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
 	const bg: Record<Tone, string> = {
-		neutral: 'bg-(--alpha-white-6)',
-		accent: 'bg-(--accent-bg-subtle)',
-		attention: 'bg-(--attention-bg)',
-		success: 'bg-(--success-bg)',
-		warning: 'bg-(--warning-bg)',
-		danger: 'bg-(--danger-bg)',
+		neutral: 'bg-(--bg-active)',
+		accent: 'bg-(--accent-soft)',
+		attention: 'bg-(--warn-soft)',
+		success: 'bg-(--ok-soft)',
+		warning: 'bg-(--warn-soft)',
+		danger: 'bg-(--bad-soft)',
 	};
-	return <span className={cn('in-num inline-flex h-5 items-center rounded-control px-1.5 text-micro whitespace-nowrap', bg[tone], TEXT[tone])}>{children}</span>;
+	return <span className={cn('in-num inline-flex h-[18px] items-center rounded-inner px-1.5 text-micro font-medium whitespace-nowrap', bg[tone], TEXT[tone])}>{children}</span>;
 }
 
 /** Stats side by side, ruled apart: a value over a caption. */
 export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; color?: string; title?: string }>; className?: string }) {
 	return (
-		<div className={cn('grid border-t border-(--border-subtle)', className)} style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
+		<div className={cn('grid border-t border-(--line)', className)} style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
 			{stats.map((stat, index) => (
-				<div key={index} title={stat.title} className={cn('flex min-w-0 flex-col gap-0.5 px-4 py-3', index > 0 && 'border-l border-(--border-subtle)')}>
+				<div key={index} title={stat.title} className={cn('flex min-w-0 flex-col gap-0.5 px-4 py-3', index > 0 && 'border-l border-(--line)')}>
 					<span className={cn('in-figure truncate text-h3 leading-[20px]', !stat.color && stat.tone && TEXT[stat.tone])} style={stat.color ? { color: stat.color } : undefined}>{stat.value}</span>
-					<span className="truncate text-micro leading-4 text-(--text-tertiary)">{stat.label}</span>
+					<span className="truncate text-micro leading-4 text-(--text-3)">{stat.label}</span>
 				</div>
 			))}
 		</div>
@@ -223,13 +223,13 @@ export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode;
 /** Labelled values on a grid, like a spec sheet: a mono caption over each value, two across on a phone and three wider. */
 export function SpecGrid({ items, className }: { items: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; title?: string }>; className?: string }) {
 	return (
-		<dl className={cn('m-0 grid grid-cols-2 gap-x-4 gap-y-3.5 border-t border-(--border-subtle) px-4 py-3.5 sm:grid-cols-3', className)}>
+		<dl className={cn('m-0 grid grid-cols-2 gap-x-4 gap-y-3.5 border-t border-(--line) px-4 py-3.5 sm:grid-cols-3', className)}>
 			{items.map((item, index) => (
 				<div key={index} title={item.title} className="flex min-w-0 flex-col gap-1">
 					<dt>
 						<Caption>{item.label}</Caption>
 					</dt>
-					<dd className={cn('in-num m-0 truncate text-body leading-[18px] text-(--text-primary)', item.tone && TEXT[item.tone])}>{item.value}</dd>
+					<dd className={cn('in-num m-0 truncate text-body leading-[18px] text-(--text)', item.tone && TEXT[item.tone])}>{item.value}</dd>
 				</div>
 			))}
 		</dl>
@@ -291,7 +291,7 @@ export function TickGauge({
 							className="w-px rounded-full"
 							style={{
 								height: marker ? 18 : major ? 12 : 8,
-								background: marker ? FILL[marker.tone ?? 'neutral'] : index <= lit && lit > 0 ? FILL[tone] : 'var(--tick-off)',
+								background: marker ? FILL[marker.tone ?? 'neutral'] : index <= lit && lit > 0 ? FILL[tone] : 'var(--line-strong)',
 								opacity: marker || index <= lit ? 1 : major ? 0.9 : 0.7,
 							}}
 						/>
@@ -340,7 +340,7 @@ export function SegmentMeter({
 			style={{ height }}
 		>
 			{Array.from({ length: segments }, (_, index) => (
-				<span key={index} className="min-w-0 flex-1 rounded-mark" style={{ background: index < lit ? FILL[tone] : 'var(--segment-off)' }} />
+				<span key={index} className="min-w-0 flex-1 rounded-mark" style={{ background: index < lit ? FILL[tone] : 'var(--bg-active)' }} />
 			))}
 		</div>
 	);
@@ -358,17 +358,17 @@ export function SplitBar({ parts, label, legend = true, format }: { parts: Part[
 				{total > 0 ? (
 					shown.map((part) => <span key={part.key} className="min-w-[3px] rounded-mark" style={{ flexGrow: part.value, flexBasis: 0, background: part.color }} title={part.label} />)
 				) : (
-					<span className="flex-1 rounded-mark bg-(--segment-off)" />
+					<span className="flex-1 rounded-mark bg-(--bg-active)" />
 				)}
 			</div>
 			{legend ? (
 				<div className="flex flex-wrap gap-x-4 gap-y-1">
 					{parts.map((part) => (
-						<span key={part.key} className="inline-flex min-w-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
+						<span key={part.key} className="inline-flex min-w-0 items-center gap-1.5 text-micro text-(--text-3)">
 							{/* A part with nothing in it keeps its place but not its colour, so an empty "Failed" does not read as a failure. */}
-							<span className="size-2 shrink-0 rounded-mark" style={{ background: part.value ? part.color : 'var(--segment-off)' }} />
+							<span className="size-2 shrink-0 rounded-mark" style={{ background: part.value ? part.color : 'var(--bg-active)' }} />
 							<span className="truncate">{part.label}</span>
-							<span className="in-num text-(--text-secondary)">{format ? format(part, total ? part.value / total : 0) : part.value}</span>
+							<span className="in-num text-(--text-2)">{format ? format(part, total ? part.value / total : 0) : part.value}</span>
 						</span>
 					))}
 				</div>
@@ -378,17 +378,17 @@ export function SplitBar({ parts, label, legend = true, format }: { parts: Part[
 }
 
 /** A ranked row: what it is, a bar for its share of the largest, and its value. */
-export function ShareRow({ label, sub, share, value, color = 'var(--accent-base)' }: { label: ReactNode; sub?: ReactNode; share: number; value: ReactNode; color?: string }) {
+export function ShareRow({ label, sub, share, value, color = 'var(--accent)' }: { label: ReactNode; sub?: ReactNode; share: number; value: ReactNode; color?: string }) {
 	return (
 		<div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-1.5 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto]">
 			<div className="flex min-w-0 flex-col">
-				<span className="truncate text-small text-(--text-primary)">{label}</span>
-				{sub ? <span className="in-num truncate text-micro text-(--text-disabled)">{sub}</span> : null}
+				<span className="truncate text-small text-(--text)">{label}</span>
+				{sub ? <span className="in-num truncate text-micro text-(--text-4)">{sub}</span> : null}
 			</div>
-			<div className="order-last col-span-2 h-1.5 overflow-hidden rounded-full bg-(--segment-off) sm:order-none sm:col-span-1">
+			<div className="order-last col-span-2 h-1.5 overflow-hidden rounded-full bg-(--bg-active) sm:order-none sm:col-span-1">
 				<div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, share * 100))}%`, background: color }} />
 			</div>
-			<span className="in-num text-right text-small whitespace-nowrap text-(--text-secondary)">{value}</span>
+			<span className="in-num text-right text-small whitespace-nowrap text-(--text-2)">{value}</span>
 		</div>
 	);
 }
@@ -419,12 +419,12 @@ export function Facts({ items, className }: { items: ReactNode[]; className?: st
 }
 
 const CHIP: Record<Tone, string> = {
-	neutral: 'text-(--text-secondary)',
-	accent: 'text-(--accent-text) border-(--accent-border)',
-	attention: 'text-(--attention-text) border-(--attention-border)',
-	success: 'text-(--success-text) border-(--success-border)',
-	warning: 'text-(--warning-text) border-(--warning-border)',
-	danger: 'text-(--danger-text) border-(--danger-border)',
+	neutral: 'bg-(--bg-active) text-(--text-2)',
+	accent: 'bg-(--accent-soft) text-(--accent-text)',
+	attention: 'bg-(--warn-soft) text-(--warn)',
+	success: 'bg-(--ok-soft) text-(--ok)',
+	warning: 'bg-(--warn-soft) text-(--warn)',
+	danger: 'bg-(--bad-soft) text-(--bad)',
 };
 
 /**
@@ -455,12 +455,12 @@ export function Chip({
 		<span
 			title={title}
 			className={cn(
-				'inline-flex h-5 shrink-0 items-center gap-1 rounded-control border border-(--border-subtle) bg-(--alpha-white-4) px-1.5 text-micro leading-none whitespace-nowrap',
-				mono && 'in-num text-micro',
+				'inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro leading-none font-medium whitespace-nowrap',
+								mono && 'in-num',
 				CHIP[tone],
 				className,
 			)}
-			style={color ? { color, borderColor: `color-mix(in oklab, ${color} 32%, transparent)`, background: `color-mix(in oklab, ${color} 10%, transparent)` } : undefined}
+			style={color ? { color, background: `color-mix(in oklab, ${color} 13%, transparent)` } : undefined}
 		>
 			{icon ? <Icon icon={icon} size={11} className="shrink-0" style={iconColor ? { color: iconColor } : undefined} /> : null}
 			{children}
@@ -468,13 +468,13 @@ export function Chip({
 	);
 }
 
-/** A small mono count in a pill: beside a tab, a section heading or a nav item. */
+/** A small count beside a tab, a section heading or a nav item: quiet figures, or a filled pill in the accent for what is new. */
 export function Count({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'accent'; className?: string }) {
 	return (
 		<span
 			className={cn(
-				'in-num inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-micro',
-				tone === 'accent' ? 'bg-(--accent-bg-subtle) text-(--accent-text)' : 'bg-(--alpha-white-6) text-(--text-tertiary)',
+				'in-num inline-flex h-4 min-w-4 shrink-0 items-center justify-center text-micro',
+								tone === 'accent' ? 'rounded-full bg-(--accent) px-1 font-semibold text-(--accent-fg)' : 'text-(--text-4)',
 				className,
 			)}
 		>
@@ -486,7 +486,7 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 /** The well a segmented control sits in; its items are `SegmentedItem`s. */
 export function Segmented({ children, label, className, role = 'tablist' }: { children: ReactNode; label: string; className?: string; role?: 'tablist' | 'radiogroup' | 'group' }) {
 	return (
-		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-control border border-(--border-subtle) bg-(--well-bg) p-[3px]', className)}>
+		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-control bg-(--bg-hover) p-0.5 shadow-[inset_0_0_0_1px_var(--line)]', className)}>
 			{children}
 		</div>
 	);
@@ -519,11 +519,9 @@ export function SegmentedItem({
 			title={title}
 			onClick={onClick}
 			className={cn(
-				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-control border whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
-				size === 'sm' ? 'h-[22px] px-2 text-micro' : 'h-7 px-3 text-body',
-				on
-					? 'in-chosen border-transparent'
-					: 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-inner font-medium whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
+								size === 'sm' ? 'h-5 px-1.5 text-micro' : 'h-6 px-2.5 text-small',
+								on ? 'in-segment-on' : 'text-(--text-3) hover:text-(--text)',
 				className,
 			)}
 		>
@@ -535,7 +533,7 @@ export function SegmentedItem({
 /** The row the sections of a page sit in, on a rule: a plan, a plugin's parts. Its items are `Tab`s. */
 export function Tabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
 	return (
-		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex gap-5 overflow-x-auto overflow-y-hidden border-b border-(--border-subtle)', className)}>
+		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]', className)}>
 			{children}
 		</div>
 	);
@@ -552,8 +550,8 @@ export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onS
 			aria-selected={on}
 			onClick={onSelect}
 			className={cn(
-				'-mb-px inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-0.5 text-body whitespace-nowrap outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
-				on ? 'border-(--text-primary) text-(--text-primary)' : 'border-transparent text-(--text-tertiary) hover:text-(--text-secondary)',
+				'inline-flex h-9 shrink-0 items-center gap-1.5 text-body font-medium whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus-inset)',
+								on ? 'text-(--text) shadow-[inset_0_-1.5px_0_var(--text)]' : 'text-(--text-3) hover:text-(--text)',
 			)}
 		>
 			{children}
@@ -602,7 +600,7 @@ export function PanelTab({
 	title?: string;
 }) {
 	return (
-		<div className={cn('group/tab relative flex h-7 shrink-0 items-center rounded-control transition-colors duration-(--duration-micro)', on ? 'in-chosen' : 'hover:bg-(--bg-hover)')}>
+		<div className={cn('group/tab relative flex h-[26px] shrink-0 items-center rounded-control transition-colors duration-(--t-fast)', on ? 'in-chosen' : 'hover:bg-(--bg-hover)')}>
 			<button
 				type="button"
 				role="tab"
@@ -612,17 +610,17 @@ export function PanelTab({
 				title={title}
 				onClick={onSelect}
 				className={cn(
-					'flex h-full items-center gap-1.5 rounded-control pr-2 text-small whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)',
-					mark ? 'pl-1.5' : 'pl-2',
-					on ? 'text-(--text-primary)' : 'text-(--text-secondary)',
+					'flex h-full items-center gap-1.5 rounded-control pr-2 text-small font-medium whitespace-nowrap outline-none focus-visible:shadow-(--focus)',
+										mark ? 'pl-1.5' : 'pl-2',
+										on ? 'text-(--text)' : 'text-(--text-3) group-hover/tab:text-(--text)',
 				)}
 			>
 				{mark ? (
 					<span
 						className={cn(
 							'inline-flex size-4 shrink-0 items-center justify-center',
-							on ? 'text-(--icon-primary)' : 'text-(--icon-tertiary)',
-							onClose && 'transition-opacity duration-(--duration-micro) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
+							on ? 'text-(--text)' : 'text-(--text-3)',
+							onClose && 'transition-opacity duration-(--t-fast) group-focus-within/tab:opacity-0 group-hover/tab:opacity-0',
 						)}
 					>
 						{mark}
@@ -635,7 +633,7 @@ export function PanelTab({
 					type="button"
 					aria-label={closeLabel ?? 'Close'}
 					onClick={onClose}
-					className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-inner text-(--text-secondary) opacity-0 transition-opacity duration-(--duration-micro) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--alpha-white-15) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+					className="absolute top-1/2 left-1.5 inline-flex size-4 -translate-y-1/2 items-center justify-center rounded-inner text-(--text-2) opacity-0 transition-opacity duration-(--t-fast) outline-none group-focus-within/tab:opacity-100 group-hover/tab:opacity-100 hover:bg-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus)"
 				>
 					<Icon icon={X} size={12} />
 				</button>
@@ -660,7 +658,7 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 				<span
 					key={index}
 					className="size-[7px] rounded-mark"
-					style={{ background: index < green ? 'var(--diff-add-base)' : index < green + red ? 'var(--diff-remove-base)' : 'var(--segment-off)' }}
+					style={{ background: index < green ? 'var(--ok)' : index < green + red ? 'var(--bad)' : 'var(--bg-active)' }}
 				/>
 			))}
 		</span>
@@ -672,8 +670,8 @@ export function PathName({ path, className, active }: { path: string; className?
 	const slash = path.lastIndexOf('/');
 	return (
 		<span className={cn('flex min-w-0 items-baseline gap-1.5 text-small', className)} title={path}>
-			<span className={cn('shrink-0 truncate', active ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
-			{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-disabled)">{path.slice(0, slash)}</span> : null}
+			<span className={cn('shrink-0 truncate', active ? 'text-(--text)' : 'text-(--text-2)')}>{path.slice(slash + 1)}</span>
+			{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-4)">{path.slice(0, slash)}</span> : null}
 		</span>
 	);
 }

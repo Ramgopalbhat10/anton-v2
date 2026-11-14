@@ -61,7 +61,7 @@ function Commands({ saved }: { saved: Command[] }) {
 							rows={2}
 							placeholder="Review the changes on this branch for bugs and missing tests."
 							aria-label="Prompt"
-							className="min-w-0 flex-1 resize-y rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 py-1.5 text-body leading-[19px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+							className="min-w-0 flex-1 resize-y rounded-card border border-(--line) bg-(--bg-raised) px-2.5 py-1.5 text-body leading-[19px] text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)"
 						/>
 						<IconBtn icon={Trash2} size="sm" label="Remove command" onClick={() => setRows((current) => current.filter((_, at) => at !== index))} />
 					</div>

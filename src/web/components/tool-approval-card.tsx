@@ -53,7 +53,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 	});
 	if (!approval) {
 		return approvals.isPending ? (
-			<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--card-border) px-3 text-small text-(--text-tertiary)">
+			<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--line) px-3 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Preparing the call
 			</div>
@@ -62,36 +62,36 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 	const pending = approval.state === 'pending' || approval.state === 'running';
 	const status =
 		approval.state === 'done' ? (
-			<span className="inline-flex items-center gap-1.5 text-(--success-text)">
+			<span className="inline-flex items-center gap-1.5 text-(--ok)">
 				<Icon icon={Check} size={12} />
 				Ran {time(approval.decidedAt)}
 			</span>
 		) : approval.state === 'declined' ? (
-			<span className="inline-flex items-center gap-1.5 text-(--text-tertiary)">
+			<span className="inline-flex items-center gap-1.5 text-(--text-3)">
 				<Icon icon={X} size={12} />
 				Not run
 			</span>
 		) : approval.state === 'failed' ? (
-			<span className="text-(--danger-text)">It failed{approval.error ? `: ${approval.error}` : ''}</span>
+			<span className="text-(--bad)">It failed{approval.error ? `: ${approval.error}` : ''}</span>
 		) : null;
 	return (
 		<section className="in-card overflow-hidden" aria-label="Tool call to run">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text-primary)">{approval.tool}</h3>
-					<span className="text-small text-(--text-tertiary)">{pending ? `The agent asks to run this on ${connectorName(approval.connector)}` : `Tool call on ${connectorName(approval.connector)}`}</span>
+					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text)">{approval.tool}</h3>
+					<span className="text-small text-(--text-3)">{pending ? `The agent asks to run this on ${connectorName(approval.connector)}` : `Tool call on ${connectorName(approval.connector)}`}</span>
 				</div>
 			</header>
 			<div
 				className={cn(
-					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--border-subtle) bg-(--well-bg) px-3 py-2 font-mono text-small leading-[18px] whitespace-pre-wrap text-(--text-secondary)',
+					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--line) bg-(--bg-raised) px-3 py-2 font-mono text-small leading-[18px] whitespace-pre-wrap text-(--text-2)',
 					pending ? 'max-h-[200px]' : 'max-h-[240px]',
 				)}
 			>
 				{approval.state === 'done' && approval.result !== null ? approval.result : argsText(approval.args) || '(no arguments)'}
 			</div>
-			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-3.5 py-2 text-small">
-				{decide.error ? <span className="mr-auto text-(--danger-text)">{decide.error.message}</span> : null}
+			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--line) px-3.5 py-2 text-small">
+				{decide.error ? <span className="mr-auto text-(--bad)">{decide.error.message}</span> : null}
 				{status ? <span className="mr-auto">{status}</span> : null}
 				{pending ? (
 					<>

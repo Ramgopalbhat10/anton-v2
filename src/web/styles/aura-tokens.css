@@ -1,0 +1,285 @@
+/* ==========================================================================
+   AURA — the design system for Anton.
+   Tier 1 primitives → tier 2 semantic tokens → components.
+   Components only ever read tier 2.
+   ========================================================================== */
+
+/* ---- Tier 1: primitives. Fixed across themes. ---- */
+:root {
+	/* Neutrals: zinc, a hair cool. */
+	--n-0: #000000;
+	--n-25: #070708;
+	--n-50: #0a0a0b;
+	--n-75: #0d0d0f;
+	--n-100: #111113;
+	--n-150: #151518;
+	--n-200: #19191c;
+	--n-250: #1e1e22;
+	--n-300: #26262b;
+	--n-400: #34343a;
+	--n-500: #52525b;
+	--n-600: #71717a;
+	--n-700: #a1a1aa;
+	--n-800: #d4d4d8;
+	--n-900: #ededef;
+	--n-950: #fafafa;
+
+	/* Accent: Aura indigo. */
+	--a-200: #c7c9ff;
+	--a-300: #a5a8ff;
+	--a-400: #8a8eff;
+	--a-500: #6e72f7;
+	--a-600: #5a5de0;
+	--a-700: #4547b8;
+
+	/* State hues. */
+	--green-400: #3dd68c;
+	--amber-400: #f5b544;
+	--red-400: #f2555a;
+	--violet-400: #b58cff;
+	--orange-400: #ff8a4c;
+	--sky-400: #5ab8ff;
+}
+
+/* ---- Tier 2: semantic, dark. ---- */
+:root,
+[data-theme='dark'] {
+	color-scheme: dark;
+
+	/* Surfaces: each layer steps forward gently. Hover and active are
+	   translucent overlays, so they hold on any layer.
+	   app     the window canvas; the sidebar sits here
+	   panel   the inset content panel
+	   surface cards and wells
+	   raised  inputs, cards on cards
+	   overlay menus, popovers, dialogs */
+	--bg-app: var(--n-50);
+	--bg-panel: var(--n-75);
+	--bg-surface: var(--n-100);
+	--bg-raised: var(--n-150);
+	--bg-overlay: var(--n-200);
+	--bg-hover: rgba(255, 255, 255, 0.045);
+	--bg-active: rgba(255, 255, 255, 0.075);
+	--bg-inverse: var(--n-900);
+	--bg-scrim: rgba(0, 0, 0, 0.5);
+	/* The off part of a control: a switch's track, a slider's rail. */
+	--track: var(--n-400);
+
+	/* Lines: default for structure, strong for controls, focus for the keyboard. */
+	--line: rgba(255, 255, 255, 0.07);
+	--line-strong: rgba(255, 255, 255, 0.11);
+	--line-focus: var(--a-400);
+
+	/* Text: four levels and the inverse. Icons use the same levels. */
+	--text: var(--n-900);
+	--text-2: var(--n-700);
+	--text-3: var(--n-600);
+	--text-4: var(--n-500);
+	--text-inverse: var(--n-50);
+
+	/* Accent: an action, or live agent work. Nothing else. */
+	--accent: var(--a-500);
+	--accent-hover: var(--a-400);
+	--accent-text: var(--a-300);
+	--accent-soft: rgba(110, 114, 247, 0.14);
+	--accent-line: rgba(110, 114, 247, 0.38);
+	--accent-fg: #ffffff;
+
+	/* States: a solid hue for symbols and labels, a soft one behind them, a line for a callout's edge. */
+	--ok: var(--green-400);
+	--ok-soft: rgba(61, 214, 140, 0.12);
+	--ok-line: rgba(61, 214, 140, 0.3);
+	--warn: var(--amber-400);
+	--warn-soft: rgba(245, 181, 68, 0.12);
+	--warn-line: rgba(245, 181, 68, 0.3);
+	--bad: var(--red-400);
+	--bad-soft: rgba(242, 85, 90, 0.12);
+	--bad-line: rgba(242, 85, 90, 0.3);
+	--merged: var(--violet-400);
+	--merged-soft: rgba(181, 140, 255, 0.13);
+	--conflict: var(--orange-400);
+	--conflict-soft: rgba(255, 138, 76, 0.13);
+	--info: var(--sky-400);
+	--info-soft: rgba(90, 184, 255, 0.12);
+	--info-line: rgba(90, 184, 255, 0.3);
+
+	--diff-add: rgba(61, 214, 140, 0.1);
+	--diff-add-mark: rgba(61, 214, 140, 0.55);
+	--diff-del: rgba(242, 85, 90, 0.1);
+	--diff-del-mark: rgba(242, 85, 90, 0.55);
+
+	/* Elevation: hairlines make structure; shadows say which layers float.
+	   sh-1 a control's or the panel's finish, sh-2 menus, popovers and tips,
+	   sh-3 dialogs. */
+	--sh-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.3);
+	--sh-2: 0 0 0 1px var(--line-strong), 0 8px 24px -4px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+	--sh-3: 0 0 0 1px var(--line-strong), 0 24px 64px -12px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.4);
+	--sh-composer: 0 8px 32px -12px rgba(0, 0, 0, 0.6);
+	--focus: 0 0 0 1px var(--bg-panel), 0 0 0 3px rgba(138, 142, 255, 0.55);
+	--focus-inset: inset 0 0 0 1.5px var(--line-focus);
+
+	/* Syntax: technical surfaces share one mono voice; syntax never uses the accent. */
+	--syntax-text: var(--text-2);
+	--syntax-comment: var(--text-4);
+	--syntax-punctuation: var(--text-3);
+	--syntax-operator: var(--text-2);
+	--syntax-keyword: #c792ea;
+	--syntax-string: #a5d6a7;
+	--syntax-number: #f78c6c;
+	--syntax-function: #82aaff;
+	--syntax-type: #ffcb6b;
+	--syntax-property: var(--text-2);
+	--syntax-variable: var(--text);
+	--syntax-tag: #c792ea;
+	--syntax-attribute: #ffcb6b;
+
+	/* Data: the order chart series take their colours in. Indigo leads, so one series reads as Anton's. */
+	--data-1: var(--a-500);
+	--data-2: var(--n-800);
+	--data-3: var(--a-700);
+	--data-4: var(--n-600);
+	--data-5: var(--a-200);
+	--data-6: var(--n-500);
+
+	/* Drawings: the grid, ticks and line art of illustrations and gauges. */
+	--grid-line: rgba(255, 255, 255, 0.035);
+	--grid-mark: rgba(255, 255, 255, 0.14);
+	--line-art: rgba(255, 255, 255, 0.34);
+	--line-art-faint: rgba(255, 255, 255, 0.14);
+}
+
+/* ---- Tier 2: semantic, light. A peer theme: the same names resolve to paper neutrals. ---- */
+[data-theme='light'] {
+	color-scheme: light;
+
+	--bg-app: #f4f4f5;
+	--bg-panel: #ffffff;
+	--bg-surface: #fafafa;
+	--bg-raised: #ffffff;
+	--bg-overlay: #ffffff;
+	--bg-hover: rgba(0, 0, 0, 0.04);
+	--bg-active: rgba(0, 0, 0, 0.065);
+	--bg-inverse: #18181b;
+	--bg-scrim: rgba(24, 24, 27, 0.25);
+	--track: #d4d4d8;
+
+	--line: rgba(0, 0, 0, 0.075);
+	--line-strong: rgba(0, 0, 0, 0.12);
+	--line-focus: var(--a-600);
+
+	--text: #18181b;
+	--text-2: #52525b;
+	--text-3: #71717a;
+	--text-4: #a1a1aa;
+	--text-inverse: #fafafa;
+
+	--accent: var(--a-600);
+	--accent-hover: var(--a-500);
+	--accent-text: var(--a-700);
+	--accent-soft: rgba(90, 93, 224, 0.1);
+	--accent-line: rgba(90, 93, 224, 0.35);
+
+	--ok: #16a36a;
+	--warn: #c98300;
+	--bad: #dc3a40;
+	--merged: #8b5cf6;
+	--conflict: #e8692a;
+	--info: #1d8be0;
+
+	--sh-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+	--sh-2: 0 0 0 1px var(--line-strong), 0 8px 24px -6px rgba(0, 0, 0, 0.14);
+	--sh-3: 0 0 0 1px var(--line-strong), 0 24px 64px -12px rgba(0, 0, 0, 0.25);
+	--sh-composer: 0 8px 32px -12px rgba(0, 0, 0, 0.12);
+	--focus: 0 0 0 1px #fff, 0 0 0 3px rgba(90, 93, 224, 0.45);
+
+	--syntax-keyword: #7c3aed;
+	--syntax-string: #15803d;
+	--syntax-number: #c2410c;
+	--syntax-function: #1d4ed8;
+	--syntax-type: #a16207;
+	--syntax-tag: #7c3aed;
+	--syntax-attribute: #a16207;
+
+	--data-2: #3f3f46;
+	--data-4: #71717a;
+	--data-5: #8a8eff;
+	--data-6: #a1a1aa;
+
+	--grid-line: rgba(0, 0, 0, 0.04);
+	--grid-mark: rgba(0, 0, 0, 0.16);
+	--line-art: rgba(0, 0, 0, 0.4);
+	--line-art-faint: rgba(0, 0, 0, 0.16);
+}
+
+/* ---- Scales. The same in both themes. ---- */
+:root {
+	/* Type: Inter for the interface, JetBrains Mono for what the agent reads
+	   and writes (code, paths, branch names, commands). Three weights: 400 for
+	   reading, 500 for actions and labels, 600 for hierarchy. */
+	--font: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--fs-11: 11px;
+	--fs-12: 12px;
+	--fs-13: 13px;
+	--fs-14: 14px;
+	--fs-16: 16px;
+	--fs-20: 20px;
+	--fs-24: 24px;
+	--fs-32: 32px;
+
+	/* Radius: the name is not always the value (--r-2 is 3px).
+	   r-2  checkboxes and tiny marks
+	   r-4  badges, keys, small buttons, menu items
+	   r-6  controls and inputs
+	   r-8  cards, the inset panel, popovers
+	   r-12 dialogs and the composer */
+	--r-2: 3px;
+	--r-4: 4px;
+	--r-6: 6px;
+	--r-8: 8px;
+	--r-12: 12px;
+
+	/* Control heights: 28 by default, 24 in dense rows and toolbars, 32 for a
+	   page's main action; 20 is for an icon button inside a row or a heading. */
+	--h-xs: 20px;
+	--h-sm: 24px;
+	--h-md: 28px;
+	--h-lg: 32px;
+
+	/* Motion confirms a change; it does not ask for attention. */
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--t-fast: 90ms;
+	--t: 160ms;
+	--t-slow: 240ms;
+}
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--t-fast: 0ms;
+		--t: 0ms;
+		--t-slow: 0ms;
+	}
+}
+
+/* The type steps and the radius steps are Tailwind theme values, so each is a
+   utility (text-small, rounded-control) and Tailwind's own sizes are switched
+   off: there is no other way to set either. A size sets no line height; pair
+   it with leading-* where the body default is not wanted. */
+@theme static {
+	--text-*: initial;
+	--text-nano: 10px;
+	--text-micro: 11px;
+	--text-small: 12px;
+	--text-body: 13px;
+	--text-body-lg: 14px;
+	--text-h3: 16px;
+	--text-h2: 20px;
+	--text-h1: 24px;
+	--text-display: 32px;
+
+	--radius-*: initial;
+	--radius-mark: 3px;
+	--radius-inner: 4px;
+	--radius-control: 6px;
+	--radius-card: 8px;
+	--radius-dialog: 12px;
+}

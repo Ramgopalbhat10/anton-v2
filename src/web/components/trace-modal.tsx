@@ -55,21 +55,21 @@ const PART_COLORS: Record<TracePart, string> = {
 };
 
 const TONE_FILL: Record<Tone, string> = {
-	neutral: 'var(--neutral-400)',
-	accent: 'var(--accent-base)',
-	attention: 'var(--attention-base)',
-	success: 'var(--success-base)',
-	warning: 'var(--warning-base)',
-	danger: 'var(--danger-base)',
+	neutral: 'var(--text-3)',
+	accent: 'var(--accent)',
+	attention: 'var(--warn)',
+	success: 'var(--ok)',
+	warning: 'var(--warn)',
+	danger: 'var(--bad)',
 };
 
 const TONE_TEXT: Record<Tone, string> = {
 	neutral: '',
 	accent: 'text-(--accent-text)',
-	attention: 'text-(--attention-text)',
-	success: 'text-(--success-text)',
-	warning: 'text-(--warning-text)',
-	danger: 'text-(--danger-text)',
+	attention: 'text-(--warn)',
+	success: 'text-(--ok)',
+	warning: 'text-(--warn)',
+	danger: 'text-(--bad)',
 };
 
 /** Waiting on others, as the hatching under a group's own calls. */
@@ -77,7 +77,7 @@ const hatch = (hue: string): CSSProperties => ({
 	backgroundImage: `repeating-linear-gradient(135deg, color-mix(in oklab, ${hue} 34%, transparent) 0 1.5px, transparent 1.5px 6px)`,
 	boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${hue} 30%, transparent)`,
 });
-const toolFill = (hue: string) => `color-mix(in oklab, ${hue} 46%, var(--neutral-750))`;
+const toolFill = (hue: string) => `color-mix(in oklab, ${hue} 46%, var(--bg-active))`;
 
 /** The trace modal, over the whole app; Escape or the scrim closes it. */
 export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string; traceId: string; onClose: () => void }) {
@@ -93,7 +93,7 @@ export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string;
 				) : (
 					<>
 						<TraceHeader sub={null} onClose={onClose} />
-						<div className="flex flex-1 items-center justify-center gap-2 text-body text-(--text-tertiary)">
+						<div className="flex flex-1 items-center justify-center gap-2 text-body text-(--text-3)">
 							{trace.isError ? (
 								<>
 									<Icon icon={CircleAlert} size={13} />
@@ -115,14 +115,14 @@ export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string;
 
 function TraceHeader({ sub, children, onClose }: { sub: ReactNode; children?: ReactNode; onClose: () => void }) {
 	return (
-		<header className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-(--border-subtle) px-4">
+		<header className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-(--line) px-4">
 			<IconTile icon={TraceIcon} tone="accent" />
 			<div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-				<h2 className="m-0 shrink-0 text-body-lg font-medium text-(--text-primary)">Trace</h2>
+				<h2 className="m-0 shrink-0 text-body-lg font-medium text-(--text)">Trace</h2>
 				{sub ? (
 					<>
-						<span className="text-small text-(--text-disabled)">/</span>
-						<span className="min-w-0 truncate text-small text-(--text-tertiary)">{sub}</span>
+						<span className="text-small text-(--text-4)">/</span>
+						<span className="min-w-0 truncate text-small text-(--text-3)">{sub}</span>
 					</>
 				) : null}
 			</div>
@@ -328,12 +328,12 @@ function TraceView({ trace, onClose }: { trace: Trace; onClose: () => void }) {
 							))}
 						</div>
 						{rows.length === 0 ? (
-							<div className="sticky left-0 px-4 py-6 text-body text-(--text-tertiary)" style={{ width: line.tree + line.fit }}>
+							<div className="sticky left-0 px-4 py-6 text-body text-(--text-3)" style={{ width: line.tree + line.fit }}>
 								No step matches “{query}”.
 							</div>
 						) : null}
 						{trace.dropped ? (
-							<div className="sticky left-0 px-4 py-3 text-small text-(--text-disabled)" style={{ width: line.tree + line.fit }}>
+							<div className="sticky left-0 px-4 py-3 text-small text-(--text-4)" style={{ width: line.tree + line.fit }}>
 								{trace.dropped} later steps weren't kept: a trace keeps its first 600.
 							</div>
 						) : null}
@@ -373,12 +373,12 @@ function TraceStatsRow({ stats, trace }: { stats: ReturnType<typeof traceStats>;
 		{ label: 'Errors', value: String(stats.errors), tone: stats.errors ? 'danger' : undefined },
 	];
 	return (
-		<div className="grid shrink-0 grid-cols-4 border-b border-(--border-subtle) sm:grid-cols-7" aria-label={`Trace of a reply on ${trace.model ?? 'a model'}`}>
+		<div className="grid shrink-0 grid-cols-4 border-b border-(--line) sm:grid-cols-7" aria-label={`Trace of a reply on ${trace.model ?? 'a model'}`}>
 			{items.map((item, index) => (
-				<div key={item.label} title={item.title} className={cn('flex min-w-0 flex-col gap-1 px-3 py-2.5 sm:px-4', index > 0 && 'sm:border-l sm:border-(--border-subtle)', index >= 4 && 'max-sm:hidden')}>
-					<span className="truncate text-micro text-(--text-tertiary)">{item.label}</span>
+				<div key={item.label} title={item.title} className={cn('flex min-w-0 flex-col gap-1 px-3 py-2.5 sm:px-4', index > 0 && 'sm:border-l sm:border-(--line)', index >= 4 && 'max-sm:hidden')}>
+					<span className="truncate text-micro text-(--text-3)">{item.label}</span>
 					<span className={cn('in-figure truncate text-h3 leading-[22px] sm:text-h2 sm:leading-[24px]', item.tone && TONE_TEXT[item.tone])}>{item.value}</span>
-					{item.note ? <span className="in-num truncate text-micro text-(--text-disabled)">{item.note}</span> : <span className="h-[15px]" />}
+					{item.note ? <span className="in-num truncate text-micro text-(--text-4)">{item.note}</span> : <span className="h-[15px]" />}
 				</div>
 			))}
 		</div>
@@ -389,7 +389,7 @@ function TraceStatsRow({ stats, trace }: { stats: ReturnType<typeof traceStats>;
 const pos = (ms: number, total: number) => `${Math.max(0, Math.min(100, (ms / total) * 100))}%`;
 
 /** The steps column's own background, so the timeline scrolls under it; a row's state is laid over it. */
-const STICKY = 'sticky left-0 border-r border-(--border-subtle) bg-(--pop-bg)';
+const STICKY = 'sticky left-0 border-r border-(--line) bg-(--bg-overlay)';
 
 /** The handle on the steps column's edge: drag to widen it or narrow it, double-click to set it back. */
 function ColumnGrip({ line }: { line: Timeline }) {
@@ -419,7 +419,7 @@ function ColumnGrip({ line }: { line: Timeline }) {
 				window.addEventListener('pointerup', up);
 			}}
 		>
-			<span className="absolute inset-y-0 left-[2.5px] w-px bg-transparent transition-colors duration-(--duration-micro) group-hover/grip:bg-(--accent-base)" />
+			<span className="absolute inset-y-0 left-[2.5px] w-px bg-transparent transition-colors duration-(--t-fast) group-hover/grip:bg-(--accent)" />
 		</span>
 	);
 }
@@ -439,8 +439,8 @@ function TimeAxis({
 }) {
 	const total = line.total;
 	return (
-		<div className="sticky top-0 z-[4] flex h-8 border-b border-(--border-subtle) bg-(--pop-bg)">
-			<div className={cn(STICKY, 'z-[2] flex shrink-0 items-center gap-1.5 px-4 text-(--text-tertiary)')} style={{ width: line.tree }}>
+		<div className="sticky top-0 z-[4] flex h-8 border-b border-(--line) bg-(--bg-overlay)">
+			<div className={cn(STICKY, 'z-[2] flex shrink-0 items-center gap-1.5 px-4 text-(--text-3)')} style={{ width: line.tree }}>
 				<Icon icon={ListTree} size={12} />
 				<Caption>Steps</Caption>
 				<Count>{count}</Count>
@@ -449,14 +449,14 @@ function TimeAxis({
 			<div className="relative shrink-0" style={{ width: line.outer }}>
 				<div className="absolute inset-y-0" style={{ left: LEAD, width: line.width }}>
 					{ticks.map((tick) => (
-						<span key={tick} className="in-num absolute top-1/2 -translate-y-1/2 pl-1.5 text-micro whitespace-nowrap text-(--text-disabled)" style={{ left: pos(tick, total) }}>
+						<span key={tick} className="in-num absolute top-1/2 -translate-y-1/2 pl-1.5 text-micro whitespace-nowrap text-(--text-4)" style={{ left: pos(tick, total) }}>
 							{seconds(tick)}
 						</span>
 					))}
 					{changes.map((change) => (
 						<span
 							key={change.span}
-							className="absolute top-1/2 z-[1] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-(--warning-border) bg-(--pop-bg) py-px pr-1.5 pl-[3px] text-nano whitespace-nowrap text-(--warning-text)"
+							className="absolute top-1/2 z-[1] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-(--warn-line) bg-(--bg-overlay) py-px pr-1.5 pl-[3px] text-nano whitespace-nowrap text-(--warn)"
 							style={{ left: pos(change.at, total) }}
 							title={`Model changed: ${names.of(change.from)} → ${names.of(change.to)}`}
 						>
@@ -499,7 +499,7 @@ function StretchGrip({ line }: { line: Timeline }) {
 				window.addEventListener('pointerup', up);
 			}}
 		>
-			<span className="h-4 w-[5px] rounded-full bg-(--bg-raised) transition-colors duration-(--duration-micro) group-hover/stretch:border group-hover/stretch:border-(--accent-border) group-hover/stretch:bg-(--accent-bg-subtle)" />
+			<span className="h-4 w-[5px] rounded-full bg-(--bg-surface) transition-colors duration-(--t-fast) group-hover/stretch:border group-hover/stretch:border-(--accent-line) group-hover/stretch:bg-(--accent-soft)" />
 		</span>
 	);
 }
@@ -512,7 +512,7 @@ function GridLines({ line, ticks, changes }: { line: Timeline; ticks: number[]; 
 				<span key={tick} className="absolute inset-y-0 w-px bg-(--grid-line)" style={{ left: pos(tick, total) }} />
 			))}
 			{changes.map((change) => (
-				<span key={change.span} className="absolute inset-y-0 w-0 border-l border-dashed border-(--warning-border)" style={{ left: pos(change.at, total) }} />
+				<span key={change.span} className="absolute inset-y-0 w-0 border-l border-dashed border-(--warn-line)" style={{ left: pos(change.at, total) }} />
 			))}
 		</div>
 	);
@@ -556,8 +556,8 @@ function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; 
 	return (
 		<span className="inline-flex min-w-0 items-center gap-1.5">
 			<ModelLogo model={main.model} size={15} />
-			<span className="truncate text-(--text-secondary)">{names.name(main.model)}</span>
-			<span className="text-(--text-disabled)">via</span>
+			<span className="truncate text-(--text-2)">{names.name(main.model)}</span>
+			<span className="text-(--text-4)">via</span>
 			<Provider gateway={main.gateway} />
 			{others.length ? (
 				<HoverPeek
@@ -569,8 +569,8 @@ function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; 
 							{used.map((use) => (
 								<div key={use.model} className="flex items-center gap-2 text-small">
 									<ModelLogo model={use.model} size={16} />
-									<span className="min-w-0 flex-1 truncate text-(--text-primary)">{names.name(use.model)}</span>
-									<span className="in-num text-micro text-(--text-tertiary)">
+									<span className="min-w-0 flex-1 truncate text-(--text)">{names.name(use.model)}</span>
+									<span className="in-num text-micro text-(--text-3)">
 										{use.calls} call{use.calls === 1 ? '' : 's'}
 									</span>
 								</div>
@@ -586,7 +586,7 @@ function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; 
 					</span>
 				</HoverPeek>
 			) : null}
-			<span className="text-(--text-disabled)">·</span>
+			<span className="text-(--text-4)">·</span>
 			<span className="shrink-0">{when}</span>
 		</span>
 	);
@@ -601,7 +601,7 @@ function RowIcon({ node }: { node: TraceNode }) {
 		return (
 			<span className="relative inline-flex shrink-0">
 				<ModelLogo model={span.model} size={18} />
-				<span className="absolute -right-[2px] -bottom-[2px] size-[7px] rounded-full shadow-[0_0_0_1.5px_var(--pop-bg)]" style={{ background: node.hue }} />
+				<span className="absolute -right-[2px] -bottom-[2px] size-[7px] rounded-full shadow-[0_0_0_1.5px_var(--bg-overlay)]" style={{ background: node.hue }} />
 			</span>
 		);
 	}
@@ -609,7 +609,7 @@ function RowIcon({ node }: { node: TraceNode }) {
 	return (
 		<span
 			className="inline-flex size-[18px] shrink-0 items-center justify-center"
-			style={{ color: span.error ? 'var(--danger-text)' : 'var(--icon-tertiary)' }}
+			style={{ color: span.error ? 'var(--bad)' : 'var(--text-3)' }}
 		>
 			<Icon icon={icon} size={13} />
 		</span>
@@ -670,20 +670,20 @@ function StepRow({
 			aria-level={row.depth + 1}
 			aria-expanded={row.children.length ? !row.folded : undefined}
 			onClick={onSelect}
-			className={cn('group/row relative flex h-[30px] cursor-default transition-colors duration-(--duration-micro)', selected ? 'bg-(--bg-selected)' : 'hover:bg-(--bg-hover)')}
+			className={cn('group/row relative flex h-[30px] cursor-default transition-colors duration-(--t-fast)', selected ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover)')}
 			style={{ width: line.tree + line.outer }}
 		>
 			<div
 				className={cn(
 					STICKY,
 					'z-[2] flex h-full shrink-0 items-center gap-1.5 pr-2',
-					selected ? '[background-image:linear-gradient(var(--bg-selected),var(--bg-selected))]' : 'group-hover/row:[background-image:linear-gradient(var(--bg-hover),var(--bg-hover))]',
-					row.match && 'shadow-[inset_2px_0_0_var(--warning-base)]',
+					selected ? '[background-image:linear-gradient(var(--bg-active),var(--bg-active))]' : 'group-hover/row:[background-image:linear-gradient(var(--bg-hover),var(--bg-hover))]',
+					row.match && 'shadow-[inset_2px_0_0_var(--warn)]',
 				)}
 				style={{ width: line.tree, paddingLeft: 10 + row.depth * 16 }}
 			>
 				{Array.from({ length: row.depth }, (_, level) => (
-					<span key={level} aria-hidden className="absolute inset-y-0 w-px bg-(--border-subtle)" style={{ left: 18 + level * 16 }} />
+					<span key={level} aria-hidden className="absolute inset-y-0 w-px bg-(--line)" style={{ left: 18 + level * 16 }} />
 				))}
 				{row.children.length ? (
 					<button
@@ -693,7 +693,7 @@ function StepRow({
 							event.stopPropagation();
 							onToggle();
 						}}
-						className="inline-flex size-4 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-active) hover:text-(--icon-primary) focus-visible:shadow-(--focus-ring)"
+						className="inline-flex size-4 shrink-0 items-center justify-center rounded-control text-(--text-3) outline-none hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
 					>
 						<Icon icon={row.folded ? ChevronRight : ChevronDown} size={12} />
 					</button>
@@ -701,14 +701,14 @@ function StepRow({
 					<span className="w-4 shrink-0" />
 				)}
 				<RowIcon node={row} />
-				<span className={cn('min-w-0 shrink truncate text-body', row.span?.error ? 'text-(--danger-text)' : 'text-(--text-primary)', group && 'font-medium')}>{label}</span>
+				<span className={cn('min-w-0 shrink truncate text-body', row.span?.error ? 'text-(--bad)' : 'text-(--text)', group && 'font-medium')}>{label}</span>
 				{switched ? (
-					<span className="inline-flex shrink-0 items-center gap-1 text-micro text-(--warning-text)" title={`Model changed: ${names.of(switched.from)} → ${names.of(switched.to)}`}>
+					<span className="inline-flex shrink-0 items-center gap-1 text-micro text-(--warn)" title={`Model changed: ${names.of(switched.from)} → ${names.of(switched.to)}`}>
 						<Icon icon={ArrowLeftRight} size={11} />
 						{names.short(switched.to)}
 					</span>
 				) : null}
-				{sub ? <span className="min-w-0 flex-1 truncate text-small text-(--text-tertiary)">{sub}</span> : null}
+				{sub ? <span className="min-w-0 flex-1 truncate text-small text-(--text-3)">{sub}</span> : null}
 				<ColumnGrip line={line} />
 			</div>
 			<div className="relative h-full shrink-0" style={{ width: line.outer }}>
@@ -728,7 +728,7 @@ function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; tota
 	const nearEnd = end / total > 0.9 && row.start / total > 0.35;
 	const width = (ms: number) => `max(3px, ${(ms / total) * 100}%)`;
 	const failed = Boolean(span?.error);
-	const fill = failed ? 'var(--danger-base)' : span?.kind === 'model' ? row.hue : span?.kind === 'compaction' ? 'var(--warning-base)' : toolFill(row.hue);
+	const fill = failed ? 'var(--bad)' : span?.kind === 'model' ? row.hue : span?.kind === 'compaction' ? 'var(--warn)' : toolFill(row.hue);
 	// A group's bar is hatched while it waits on its own calls and subagents, solid where it called its model.
 	const own = row.group ? trace.spans.filter((other): other is ModelSpan => other.kind === 'model' && other.lane === row.group) : [];
 	const verdict = span?.kind === 'model' ? cacheVerdict(span, previousCall(trace, span)) : null;
@@ -744,7 +744,7 @@ function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; tota
 							style={{
 								left: `${((call.start - row.start) / Math.max(duration, 1)) * 100}%`,
 								width: `max(3px, ${(call.durationMs / Math.max(duration, 1)) * 100}%)`,
-								background: call.error ? 'var(--danger-base)' : row.hue,
+								background: call.error ? 'var(--bad)' : row.hue,
 							}}
 						/>
 					))}
@@ -754,11 +754,11 @@ function Bar({ row, trace, total, slowest }: { row: TraceRow; trace: Trace; tota
 					className={cn('absolute top-1/2 flex h-3.5 -translate-y-1/2 items-center justify-center rounded-control', span?.kind === 'compaction' && 'opacity-80')}
 					style={{ left: pos(row.start, total), width: width(duration), background: fill }}
 				>
-					{failed && duration / total > 0.02 ? <Icon icon={X} size={10} className="text-(--danger-fg)" /> : null}
+					{failed && duration / total > 0.02 ? <Icon icon={X} size={10} className="text-(--accent-fg)" /> : null}
 				</div>
 			)}
 			<span
-				className="in-num absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-micro whitespace-nowrap text-(--text-tertiary)"
+				className="in-num absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-micro whitespace-nowrap text-(--text-3)"
 				style={nearEnd ? { right: `calc(${100 - (row.start / total) * 100}% + 6px)` } : { left: `calc(${pos(end, total)} + 6px)` }}
 			>
 				<span>
@@ -781,7 +781,7 @@ function TraceFooter({ line }: { line: Timeline }) {
 	// The slider moves on a log scale, so each step stretches by the same factor.
 	const step = (zoom: number) => Math.round((Math.log(zoom) / Math.log(line.most)) * 1000);
 	return (
-		<footer className="flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-(--border-subtle) px-3">
+		<footer className="flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-(--line) px-3">
 			<Segmented label="Timeline width" role="radiogroup" className="shrink-0">
 				<SegmentedItem size="sm" role="radio" on={line.zoomPref === 'fit'} onClick={() => line.stretch('fit')} title="Fit the whole reply in view (0)">
 					Fit
@@ -799,23 +799,23 @@ function TraceFooter({ line }: { line: Timeline }) {
 				aria-label="Timeline width"
 				aria-valuetext={`${line.zoom.toFixed(1)} times the width that fits`}
 				onChange={(event) => line.stretch(line.most ** (Number(event.target.value) / 1000))}
-				className="h-1 w-24 shrink-0 cursor-pointer accent-(--accent-base) sm:w-28"
+				className="h-1 w-24 shrink-0 cursor-pointer accent-(--accent) sm:w-28"
 			/>
 			<IconBtn icon={Plus} size="xs" label="Wider timeline (+)" disabled={line.zoom >= line.most} onClick={() => line.stretch(line.zoom * 1.5)} />
-			<span className="in-num w-10 shrink-0 text-micro text-(--text-tertiary)" title="Times the width that fits the whole reply">
+			<span className="in-num w-10 shrink-0 text-micro text-(--text-3)" title="Times the width that fits the whole reply">
 				{line.zoom < 9.95 ? line.zoom.toFixed(1) : Math.round(line.zoom)}×
 			</span>
 			<span className="flex-1" />
-			<div className="hidden shrink-0 items-center gap-3.5 text-micro text-(--text-tertiary) lg:flex">
+			<div className="hidden shrink-0 items-center gap-3.5 text-micro text-(--text-3) lg:flex">
 				<Legend swatch={{ background: 'var(--data-1)' }}>Model call</Legend>
 				<Legend swatch={{ background: toolFill('var(--data-1)') }}>Tool call</Legend>
-				<Legend swatch={hatch('var(--neutral-300)')}>Waiting</Legend>
-				<Legend swatch={{ background: 'var(--danger-base)' }}>Failed</Legend>
-				<span className="inline-flex items-center gap-1.5 text-(--warning-text)">
+				<Legend swatch={hatch('var(--text-2)')}>Waiting</Legend>
+				<Legend swatch={{ background: 'var(--bad)' }}>Failed</Legend>
+				<span className="inline-flex items-center gap-1.5 text-(--warn)">
 					<Icon icon={ArrowLeftRight} size={11} />
 					Model changed
 				</span>
-				<span className="h-3 w-px bg-(--border-default)" />
+				<span className="h-3 w-px bg-(--line-strong)" />
 				<span className="inline-flex items-center gap-1.5">
 					<Icon icon={Zap} size={11} />
 					Cache
@@ -853,15 +853,15 @@ function StepCard({ node, trace, names, onClose, onSelect }: { node: TraceNode; 
 			aria-label="Step details"
 			className="in-pop absolute inset-x-2 bottom-2 z-10 flex max-h-[72%] flex-col overflow-hidden sm:inset-x-auto sm:top-3 sm:right-3 sm:bottom-3 sm:max-h-none sm:w-[420px]"
 		>
-			<header className="flex min-h-12 shrink-0 items-center gap-2.5 border-b border-(--border-subtle) px-3.5 py-2">
+			<header className="flex min-h-12 shrink-0 items-center gap-2.5 border-b border-(--line) px-3.5 py-2">
 				<RowIcon node={node} />
-				<div className="min-w-0 flex-1 truncate text-body font-medium text-(--text-primary)">{label}</div>
+				<div className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">{label}</div>
 				{span ? <Chip tone={failed ? 'danger' : 'success'}>{failed ? 'Failed' : 'Done'}</Chip> : null}
 				<IconBtn icon={X} size="sm" label="Close details" onClick={onClose} />
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-3.5 py-3.5 *:shrink-0">
 				{failed ? (
-					<div className="flex items-start gap-2 rounded-control border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-small leading-[18px] text-(--danger-text)">
+					<div className="flex items-start gap-2 rounded-control border border-(--bad-line) bg-(--bad-soft) px-3 py-2 text-small leading-[18px] text-(--bad)">
 						<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 						<span className="min-w-0 break-words">{failed}</span>
 					</div>
@@ -878,11 +878,11 @@ function StepCard({ node, trace, names, onClose, onSelect }: { node: TraceNode; 
 
 function Facts({ items }: { items: Array<{ label: string; value: ReactNode; tone?: Tone }> }) {
 	return (
-		<dl className="m-0 grid grid-cols-3 gap-px overflow-hidden rounded-control border border-(--border-subtle) bg-(--border-subtle)">
+		<dl className="m-0 grid grid-cols-3 gap-px overflow-hidden rounded-control border border-(--line) bg-(--line)">
 			{items.map((item) => (
-				<div key={item.label} className="flex min-w-0 flex-col gap-0.5 bg-(--bg-raised) px-3 py-2">
-					<dt className="truncate text-micro text-(--text-tertiary)">{item.label}</dt>
-					<dd className={cn('in-num m-0 truncate text-body text-(--text-primary)', item.tone && TONE_TEXT[item.tone])}>{item.value}</dd>
+				<div key={item.label} className="flex min-w-0 flex-col gap-0.5 bg-(--bg-surface) px-3 py-2">
+					<dt className="truncate text-micro text-(--text-3)">{item.label}</dt>
+					<dd className={cn('in-num m-0 truncate text-body text-(--text)', item.tone && TONE_TEXT[item.tone])}>{item.value}</dd>
 				</div>
 			))}
 		</dl>
@@ -894,7 +894,7 @@ function Section({ title, hint, children }: { title: string; hint?: ReactNode; c
 		<section className="flex flex-col gap-2">
 			<div className="flex items-center gap-2">
 				<Caption className="flex-1">{title}</Caption>
-				{hint ? <span className="in-num text-micro text-(--text-disabled)">{hint}</span> : null}
+				{hint ? <span className="in-num text-micro text-(--text-4)">{hint}</span> : null}
 			</div>
 			{children}
 		</section>
@@ -903,9 +903,9 @@ function Section({ title, hint, children }: { title: string; hint?: ReactNode; c
 
 /** Text as it was sent or returned, in a well, scrolling past a height. */
 function Pre({ text, tall }: { text: string; tall?: boolean }) {
-	if (!text.trim()) return <span className="text-small text-(--text-disabled)">Empty</span>;
+	if (!text.trim()) return <span className="text-small text-(--text-4)">Empty</span>;
 	return (
-		<pre className={cn('in-well m-0 overflow-auto px-3 py-2 font-mono text-small leading-[17px] break-words whitespace-pre-wrap text-(--text-secondary)', tall ? 'max-h-[360px]' : 'max-h-[200px]')}>
+		<pre className={cn('in-well m-0 overflow-auto px-3 py-2 font-mono text-small leading-[17px] break-words whitespace-pre-wrap text-(--text-2)', tall ? 'max-h-[360px]' : 'max-h-[200px]')}>
 			{text}
 		</pre>
 	);
@@ -920,11 +920,11 @@ function Fold({ label, hint, children }: { label: string; hint?: ReactNode; chil
 				type="button"
 				aria-expanded={open}
 				onClick={() => setOpen(!open)}
-				className="flex h-7 items-center gap-1.5 rounded-control px-1 text-left text-small text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="flex h-7 items-center gap-1.5 rounded-control px-1 text-left text-small text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 			>
-				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+				<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--text-3)" />
 				<span className="flex-1">{label}</span>
-				{hint ? <span className="in-num text-micro text-(--text-disabled)">{hint}</span> : null}
+				{hint ? <span className="in-num text-micro text-(--text-4)">{hint}</span> : null}
 			</button>
 			<Disclosure open={open}>
 				<div className="pt-1.5">{children}</div>
@@ -960,15 +960,15 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 					{ label: 'Messages', value: span.messages },
 				]}
 			/>
-			<div className="flex flex-col gap-2 rounded-control border border-(--border-subtle) bg-(--bg-raised) px-3 py-2.5">
+			<div className="flex flex-col gap-2 rounded-control border border-(--line) bg-(--bg-surface) px-3 py-2.5">
 				<div className="flex min-w-0 items-center gap-2">
 					<ModelLogo model={span.model} size={20} />
 					<div className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate text-body font-medium text-(--text-primary)">{names.name(span.model)}</span>
-						<span className="in-num truncate text-micro text-(--text-disabled)">{span.served && span.served !== span.model ? `answered by ${span.served}` : span.model}</span>
+						<span className="truncate text-body font-medium text-(--text)">{names.name(span.model)}</span>
+						<span className="in-num truncate text-micro text-(--text-4)">{span.served && span.served !== span.model ? `answered by ${span.served}` : span.model}</span>
 					</div>
 				</div>
-				<div className="flex flex-wrap items-center gap-1.5 text-small text-(--text-tertiary)">
+				<div className="flex flex-wrap items-center gap-1.5 text-small text-(--text-3)">
 					<Chip>
 						<Provider gateway={gatewayOf(span.model)} size={11} />
 					</Chip>
@@ -976,7 +976,7 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 					{span.finish ? <Chip mono>{span.finish}</Chip> : null}
 				</div>
 				{changed ? (
-					<div className="flex items-center gap-1.5 text-small text-(--warning-text)">
+					<div className="flex items-center gap-1.5 text-small text-(--warn)">
 						<Icon icon={ArrowLeftRight} size={11} />
 						<span className="min-w-0 truncate">Changed from {names.of(changed)} on the call before</span>
 					</div>
@@ -1008,29 +1008,29 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 					<Chip tone={verdict.tone === 'neutral' ? 'neutral' : verdict.tone} icon={Zap}>
 						{verdict.label}
 					</Chip>
-					<p className="m-0 min-w-0 flex-1 text-small leading-[17px] text-(--text-secondary)">{verdict.why}</p>
+					<p className="m-0 min-w-0 flex-1 text-small leading-[17px] text-(--text-2)">{verdict.why}</p>
 				</div>
 				{share && share.total ? (
 					<SplitBar
 						label="Where the input came from"
 						format={(part) => tokens(part.value)}
 						parts={[
-							{ key: 'read', label: 'Read from cache', value: share.read, color: 'var(--success-base)' },
-							{ key: 'write', label: 'Written to cache', value: share.write, color: 'var(--warning-base)' },
-							{ key: 'fresh', label: 'Uncached', value: share.fresh, color: 'var(--neutral-500)' },
+							{ key: 'read', label: 'Read from cache', value: share.read, color: 'var(--ok)' },
+							{ key: 'write', label: 'Written to cache', value: share.write, color: 'var(--warn)' },
+							{ key: 'fresh', label: 'Uncached', value: share.fresh, color: 'var(--text-4)' },
 						]}
 					/>
 				) : null}
 			</Section>
 			<Section title="Added to the context" hint={span.added.length ? `${span.added.length + span.addedMore} message${span.added.length + span.addedMore === 1 ? '' : 's'}` : undefined}>
-				{span.addedMore ? <span className="text-small text-(--text-disabled)">{span.addedMore} earlier not shown</span> : null}
+				{span.addedMore ? <span className="text-small text-(--text-4)">{span.addedMore} earlier not shown</span> : null}
 				{span.added.length ? (
 					span.added.map((message, index) => (
 						<div key={index} className="flex flex-col gap-1">
 							<div className="flex items-center gap-1.5">
 								<Chip tone={ROLE[message.role].tone}>{ROLE[message.role].label}</Chip>
-								{message.tool ? <span className="in-num text-micro text-(--text-tertiary)">{message.tool}</span> : null}
-								<span className="in-num ml-auto text-micro text-(--text-disabled)">{message.chars.toLocaleString()} chars</span>
+								{message.tool ? <span className="in-num text-micro text-(--text-3)">{message.tool}</span> : null}
+								<span className="in-num ml-auto text-micro text-(--text-4)">{message.chars.toLocaleString()} chars</span>
 							</div>
 							<Pre text={message.text} />
 						</div>
@@ -1049,8 +1049,8 @@ function ModelDetail({ span, trace, names, onSelect }: { span: ModelSpan; trace:
 				{span.output.toolCalls.length ? (
 					<div className="flex flex-wrap gap-1">
 						{span.output.toolCalls.map((call) => (
-							<button key={call.id} type="button" onClick={() => onSelect(`tool:${call.id}`)} className="rounded-control outline-none focus-visible:shadow-(--focus-ring)">
-								<Chip mono icon={ChevronRight} className="hover:border-(--border-strong) hover:text-(--text-primary)">
+							<button key={call.id} type="button" onClick={() => onSelect(`tool:${call.id}`)} className="rounded-control outline-none focus-visible:shadow-(--focus)">
+								<Chip mono icon={ChevronRight} className="hover:border-(--line-strong) hover:text-(--text)">
 									{call.name}
 								</Chip>
 							</button>
@@ -1077,8 +1077,8 @@ function ToolDetail({ span, trace, onSelect }: { span: ToolSpan; trace: Trace; o
 			<div className="flex flex-wrap items-center gap-1.5">
 				<Chip mono>{span.tool}</Chip>
 				{caller ? (
-					<button type="button" onClick={() => onSelect(`model:${caller.id}`)} className="rounded-control outline-none focus-visible:shadow-(--focus-ring)">
-						<Chip icon={Sparkles} className="hover:border-(--border-strong) hover:text-(--text-primary)">
+					<button type="button" onClick={() => onSelect(`model:${caller.id}`)} className="rounded-control outline-none focus-visible:shadow-(--focus)">
+						<Chip icon={Sparkles} className="hover:border-(--line-strong) hover:text-(--text)">
 							Called by model call {callNumber(trace, caller)}
 						</Chip>
 					</button>
@@ -1112,7 +1112,7 @@ function AgentDetail({ span, trace, names }: { span: AgentSpan; trace: Trace; na
 			{model ? (
 				<div className="flex flex-wrap items-center gap-1.5">
 					<ModelLogo model={model} size={18} />
-					<span className="text-small text-(--text-secondary)">{names.name(model)}</span>
+					<span className="text-small text-(--text-2)">{names.name(model)}</span>
 					<Chip>
 						<Provider gateway={gatewayOf(model)} size={11} />
 					</Chip>
@@ -1139,7 +1139,7 @@ function CompactionDetail({ span }: { span: CompactionSpan }) {
 					{ label: 'Before', value: span.tokensBefore ? `${tokens(span.tokensBefore)} tok` : '—' },
 				]}
 			/>
-			<p className="m-0 text-small leading-[18px] text-(--text-secondary)">
+			<p className="m-0 text-small leading-[18px] text-(--text-2)">
 				The conversation{span.reason ? ` reached its ${span.reason === 'threshold' ? 'compaction point' : span.reason}` : ' was compacted'}: older turns were summarized
 				{span.messagesBefore !== null && span.messagesAfter !== null ? `, from ${span.messagesBefore} messages to ${span.messagesAfter}` : ''}. The calls after it start a fresh cache.
 			</p>
@@ -1167,13 +1167,13 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 					<div key={use.model} className="flex items-center gap-2.5 text-small">
 						<ModelLogo model={use.model} size={20} />
 						<div className="flex min-w-0 flex-1 flex-col">
-							<span className="truncate text-(--text-primary)">{names.name(use.model)}</span>
-							<span className="flex min-w-0 items-center gap-1 text-micro text-(--text-tertiary)">
+							<span className="truncate text-(--text)">{names.name(use.model)}</span>
+							<span className="flex min-w-0 items-center gap-1 text-micro text-(--text-3)">
 								<Provider gateway={use.gateway} size={11} />
-								{use.served.length ? <span className="in-num truncate text-(--text-disabled)">· {use.served.map(shortModel).join(', ')}</span> : null}
+								{use.served.length ? <span className="in-num truncate text-(--text-4)">· {use.served.map(shortModel).join(', ')}</span> : null}
 							</span>
 						</div>
-						<span className="in-num text-right text-micro text-(--text-tertiary)">
+						<span className="in-num text-right text-micro text-(--text-3)">
 							{use.calls} call{use.calls === 1 ? '' : 's'}
 							<br />
 							{tokens(use.tokens)} · {dollars(use.cost)}
@@ -1185,7 +1185,7 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 						key={change.span}
 						type="button"
 						onClick={() => onSelect(`model:${change.span}`)}
-						className="flex items-center gap-1.5 rounded-control px-1 py-0.5 text-left text-small text-(--warning-text) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="flex items-center gap-1.5 rounded-control px-1 py-0.5 text-left text-small text-(--warn) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 					>
 						<Icon icon={ArrowLeftRight} size={11} />
 						<span className="min-w-0 truncate">
@@ -1205,11 +1205,11 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 								type="button"
 								title={`Call ${callNumber(trace, call)}: ${share ? `${tokens(share.total)} in, ${Math.round(share.hit * 100)}% cached` : 'no usage'}`}
 								onClick={() => onSelect(`model:${call.id}`)}
-								className="flex min-w-[4px] flex-1 flex-col justify-end overflow-hidden rounded-mark outline-none hover:opacity-80 focus-visible:shadow-(--focus-ring)"
+								className="flex min-w-[4px] flex-1 flex-col justify-end overflow-hidden rounded-mark outline-none hover:opacity-80 focus-visible:shadow-(--focus)"
 								style={{ height: `${share ? Math.max(6, (share.total / top) * 100) : 6}%` }}
 							>
-								<span className="w-full bg-(--neutral-500)" style={{ flexGrow: share ? share.fresh + share.write : 1 }} />
-								<span className="w-full bg-(--success-base)" style={{ flexGrow: share?.read ?? 0 }} />
+								<span className="w-full bg-(--text-4)" style={{ flexGrow: share ? share.fresh + share.write : 1 }} />
+								<span className="w-full bg-(--ok)" style={{ flexGrow: share?.read ?? 0 }} />
 							</button>
 						);
 					})}
@@ -1230,18 +1230,18 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 							const part = traceStats(trace, lane);
 							const agent = trace.spans.find((span): span is AgentSpan => span.kind === 'agent' && span.id === lane);
 							return (
-								<tr key={lane} className="border-t border-(--border-subtle)">
-									<td className="max-w-[150px] truncate py-1.5 text-(--text-secondary)">{agent ? `${lookOf(agent.agent).label} · ${titleOf(agent.prompt, agent.description ?? undefined)}` : 'Anton'}</td>
-									<td className="in-num py-1.5 pl-3 text-right text-(--text-tertiary)">{part.modelCalls}</td>
-									<td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{tokens(part.input + part.output)}</td>
-									<td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{part.input ? `${Math.round(part.hit * 100)}%` : '—'}</td>
+								<tr key={lane} className="border-t border-(--line)">
+									<td className="max-w-[150px] truncate py-1.5 text-(--text-2)">{agent ? `${lookOf(agent.agent).label} · ${titleOf(agent.prompt, agent.description ?? undefined)}` : 'Anton'}</td>
+									<td className="in-num py-1.5 pl-3 text-right text-(--text-3)">{part.modelCalls}</td>
+									<td className="in-num py-1.5 pl-3 text-right text-(--text)">{tokens(part.input + part.output)}</td>
+									<td className="in-num py-1.5 pl-3 text-right text-(--text)">{part.input ? `${Math.round(part.hit * 100)}%` : '—'}</td>
 								</tr>
 							);
 						})}
 					</tbody>
 				</table>
 			</Section>
-			<p className="m-0 text-small leading-4 text-(--text-tertiary)">
+			<p className="m-0 text-small leading-4 text-(--text-3)">
 				Every call sends the whole conversation again, so input adds up fast; a provider's cache reads the unchanged start of it at a lower price. Pick a model call to see what it held and why its cache hit or missed.
 			</p>
 		</>

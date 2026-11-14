@@ -137,7 +137,7 @@ function lineCount(text: string) {
 }
 
 export function Em({ children }: { children: ReactNode }) {
-	return <span className="text-(--text-secondary)">{children}</span>;
+	return <span className="text-(--text-2)">{children}</span>;
 }
 
 /** Lines added and removed, as an edit shows them. */
@@ -145,11 +145,11 @@ function counts(added: number, removed?: number): ReactNode {
 	return (
 		<>
 			{' '}
-			<span className="text-(--diff-add-text)">+{added}</span>
+			<span className="text-(--ok)">+{added}</span>
 			{removed === undefined ? null : (
 				<>
 					{' '}
-					<span className="text-(--danger-text)">-{removed}</span>
+					<span className="text-(--bad)">-{removed}</span>
 				</>
 			)}
 		</>
@@ -245,8 +245,8 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				icon: Pencil,
 				body: (
 					<>
-						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--diff-add-text)">+{added}</span>{' '}
-						<span className="text-(--danger-text)">-{removed}</span>
+						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--ok)">+{added}</span>{' '}
+						<span className="text-(--bad)">-{removed}</span>
 					</>
 				),
 			};
@@ -258,7 +258,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 				icon: FilePlus,
 				body: (
 					<>
-						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--diff-add-text)">+{lineCount(field(input, 'content'))}</span>
+						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--ok)">+{lineCount(field(input, 'content'))}</span>
 					</>
 				),
 			};
@@ -427,7 +427,7 @@ export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNod
 
 /** What kind of work a tool call was, as a colour: commands blue, edits violet, the browser amber, failures red. */
 export function toolTone(toolName: string, failed: boolean): string {
-	if (failed) return 'var(--danger-base)';
+	if (failed) return 'var(--bad)';
 	switch (toolName) {
 		case 'bash':
 		case 'run_in_background':
@@ -447,6 +447,6 @@ export function toolTone(toolName: string, failed: boolean): string {
 		case 'task':
 			return 'var(--data-5)';
 		default:
-			return 'var(--neutral-500)';
+			return 'var(--text-4)';
 	}
 }

@@ -267,7 +267,7 @@ export function Sketch({
 							if (event.key === 'Escape') setTyping(null);
 						}}
 						onBlur={commitText}
-						className="absolute z-10 min-w-[120px] rounded-control border border-(--accent-border) bg-(--bg-raised) px-1.5 py-0.5 text-body text-(--text-primary) outline-none"
+						className="absolute z-10 min-w-[120px] rounded-control border border-(--accent-line) bg-(--bg-surface) px-1.5 py-0.5 text-body text-(--text) outline-none"
 						style={{ left: (typing.at.x / width) * box.width, top: (typing.at.y / height) * box.height }}
 					/>
 				) : null}
@@ -282,10 +282,10 @@ export function Sketch({
 							label={entry.label}
 							aria-pressed={tool === entry.tool}
 							onClick={() => setTool(entry.tool)}
-							className={cn(tool === entry.tool && 'bg-(--accent-bg-subtle) text-(--accent-text)')}
+							className={cn(tool === entry.tool && 'bg-(--accent-soft) text-(--accent-text)')}
 						/>
 					))}
-					<span aria-hidden className="mx-1 h-4 w-px bg-(--border-subtle)" />
+					<span aria-hidden className="mx-1 h-4 w-px bg-(--line)" />
 					<div role="radiogroup" aria-label="Colour" className="flex items-center gap-1 px-0.5">
 						{COLORS.map((entry) => (
 							<button
@@ -297,14 +297,14 @@ export function Sketch({
 								title={entry.label}
 								onClick={() => setColor(entry.value)}
 								className={cn(
-									'size-[18px] rounded-full border border-(--border-strong) outline-none focus-visible:shadow-(--focus-ring)',
-									color === entry.value && 'ring-2 ring-(--accent-base) ring-offset-1 ring-offset-(--pop-bg)',
+									'size-[18px] rounded-full border border-(--line-strong) outline-none focus-visible:shadow-(--focus)',
+									color === entry.value && 'ring-2 ring-(--accent) ring-offset-1 ring-offset-(--bg-overlay)',
 								)}
 								style={{ background: entry.value }}
 							/>
 						))}
 					</div>
-					<span aria-hidden className="mx-1 h-4 w-px bg-(--border-subtle)" />
+					<span aria-hidden className="mx-1 h-4 w-px bg-(--line)" />
 					{(
 						[
 							[Undo2, 'Undo', undo, marks.length === 0],
@@ -314,7 +314,7 @@ export function Sketch({
 					).map(([icon, label, run, disabled]) => (
 						<IconBtn key={label} icon={icon} size="sm" label={label} disabled={disabled} onClick={() => run()} />
 					))}
-					<span aria-hidden className="mx-1 h-4 w-px bg-(--border-subtle)" />
+					<span aria-hidden className="mx-1 h-4 w-px bg-(--line)" />
 					<Btn size="sm" variant="ghost" onClick={onClose}>
 						Close
 					</Btn>

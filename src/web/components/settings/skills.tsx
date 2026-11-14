@@ -78,25 +78,25 @@ function Card({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="in-card group gap-2.5 p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default)">
+		<div className="in-card group gap-2.5 p-3.5 transition-colors duration-(--t-fast) hover:border-(--line-strong)">
 			<div className="flex items-start gap-3">
 				<Glyph bundle={bundle} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<Link
 						to="/settings/skills/view"
 						search={open}
-						className="truncate text-body font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-control focus-visible:after:shadow-(--focus-ring)"
+						className="truncate text-body font-medium text-(--text) outline-none after:absolute after:inset-0 after:rounded-control focus-visible:after:shadow-(--focus)"
 					>
 						{title}
 					</Link>
-					<div className="flex min-w-0 items-center gap-1.5 truncate text-micro text-(--text-disabled)">{caption}</div>
+					<div className="flex min-w-0 items-center gap-1.5 truncate text-micro text-(--text-4)">{caption}</div>
 				</div>
 				{action ? <div className="relative z-10 flex shrink-0 items-center">{action}</div> : null}
 			</div>
-			<p className={cn('m-0 line-clamp-2 min-h-9 text-small leading-[18px] text-pretty', description ? 'text-(--text-tertiary)' : 'text-(--text-disabled)')}>
+			<p className={cn('m-0 line-clamp-2 min-h-9 text-small leading-[18px] text-pretty', description ? 'text-(--text-3)' : 'text-(--text-4)')}>
 				{description || 'No description.'}
 			</p>
-			{children ? <div className="-mx-3.5 mt-auto border-t border-(--border-subtle) px-3.5 pt-2.5">{children}</div> : null}
+			{children ? <div className="-mx-3.5 mt-auto border-t border-(--line) px-3.5 pt-2.5">{children}</div> : null}
 		</div>
 	);
 }
@@ -114,15 +114,15 @@ function SkillChips({ plugin }: { plugin: Plugin }) {
 					key={skill.name}
 					title={skill.active ? skill.description : plugin.enabled ? 'Not used: an earlier plugin has a skill with this name' : 'Not used: this plugin is off'}
 					className={cn(
-						'inline-flex h-5 max-w-[160px] items-center truncate rounded-control border border-(--border-subtle) bg-(--well-bg) px-1.5 text-micro',
-						skill.active ? 'text-(--text-secondary)' : 'text-(--text-disabled) line-through',
+						'inline-flex h-5 max-w-[160px] items-center truncate rounded-control border border-(--line) bg-(--bg-raised) px-1.5 text-micro',
+						skill.active ? 'text-(--text-2)' : 'text-(--text-4) line-through',
 					)}
 				>
 					/{skill.name}
 				</span>
 			))}
 			{plugin.skills.length > shown.length ? (
-				<span className="inline-flex h-5 items-center px-1 text-micro text-(--text-disabled)">+{plugin.skills.length - shown.length}</span>
+				<span className="inline-flex h-5 items-center px-1 text-micro text-(--text-4)">+{plugin.skills.length - shown.length}</span>
 			) : null}
 		</div>
 	);
@@ -194,14 +194,14 @@ function Installed({ plugins, query, onDiscover }: { plugins: Plugin[]; query: s
 					))}
 				</Grid>
 			) : (
-				<p className="m-0 text-small text-(--text-tertiary)">
+				<p className="m-0 text-small text-(--text-3)">
 					Nothing installed matches.{' '}
 					<button type="button" onClick={onDiscover} className="text-(--accent-text) outline-none hover:underline">
 						Search Discover instead
 					</button>
 				</p>
 			)}
-			<Note className="rounded-tile bg-(--bg-inset) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
+			<Note className="rounded-card bg-(--bg-app) px-3 py-2.5" info="Type / and a skill’s name in a task to ask for it.">
 				A repository’s own <code>.agents/skills</code> and <code>.claude/skills</code> come first.
 			</Note>
 		</div>
@@ -217,7 +217,7 @@ function InstallButton({ pick, name }: { pick: PluginPick; name: string }) {
 			size="sm"
 			variant="secondary"
 			label={install.isError ? `Could not install: ${install.error.message}` : `Install ${name}`}
-			className={install.isError ? 'text-(--danger-text)' : undefined}
+			className={install.isError ? 'text-(--bad)' : undefined}
 			onClick={() => install.mutate(undefined)}
 		/>
 	);
@@ -263,14 +263,14 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 					align="end"
 					sideOffset={6}
 					collisionPadding={12}
-					className="in-pop z-50 flex w-[320px] flex-col gap-2 p-3 text-(--text-primary) outline-none"
+					className="in-pop z-50 flex w-[320px] flex-col gap-2 p-3 text-(--text) outline-none"
 				>
 					<Caption>Marketplaces</Caption>
-					<p className="m-0 text-small leading-[17px] text-(--text-tertiary)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
+					<p className="m-0 text-small leading-[17px] text-(--text-3)">Repositories that list plugins, in Claude Code’s marketplace.json or Devin’s format.</p>
 					<div className="flex flex-col gap-0.5">
 						{saved.map((marketplace) => (
 							<div key={marketplace} className="flex h-7 items-center gap-2 rounded-control pr-0.5 pl-2 hover:bg-(--bg-hover)">
-								<Icon icon={Store} size={12} className="text-(--icon-tertiary)" />
+								<Icon icon={Store} size={12} className="text-(--text-3)" />
 								<span className="min-w-0 flex-1 truncate text-small">{marketplace}</span>
 								<IconBtn icon={X} size="xs" label={`Remove ${marketplace}`} onClick={() => save.mutate(saved.filter((item) => item !== marketplace))} />
 							</div>
@@ -294,7 +294,7 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 							Add
 						</Btn>
 					</form>
-					{save.isError ? <p className="m-0 text-small text-(--danger-text)">{save.error.message}</p> : null}
+					{save.isError ? <p className="m-0 text-small text-(--bad)">{save.error.message}</p> : null}
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
@@ -345,13 +345,13 @@ function GitHubResults({ query }: { query: string }) {
 	return (
 		<section className="flex flex-col gap-2.5" aria-label="On GitHub">
 			<div className="flex items-center gap-2">
-				<Icon icon={Github} size={13} className="text-(--icon-tertiary)" />
+				<Icon icon={Github} size={13} className="text-(--text-3)" />
 				<Caption>On GitHub</Caption>
 				{typing ? <Spinner size={12} /> : null}
 			</div>
-			{search.isError ? <p className="m-0 text-small text-(--danger-text)">{search.error.message}</p> : null}
+			{search.isError ? <p className="m-0 text-small text-(--bad)">{search.error.message}</p> : null}
 			{result?.problems.map((problem) => (
-				<p key={problem} className="m-0 text-small text-(--warning-text)">
+				<p key={problem} className="m-0 text-small text-(--warn)">
 					{problem}
 				</p>
 			))}
@@ -377,14 +377,14 @@ function GitHubResults({ query }: { query: string }) {
 							key={repo.address}
 							to="/settings/skills/view"
 							search={{ address: repo.address }}
-							className="flex min-h-10 items-center gap-3 rounded-tile px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex min-h-10 items-center gap-3 rounded-card px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 						>
-							<Icon icon={Github} size={14} className="text-(--icon-tertiary)" />
+							<Icon icon={Github} size={14} className="text-(--text-3)" />
 							<div className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate text-small text-(--text-primary)">{repo.address}</span>
-								{repo.description ? <span className="truncate text-small text-(--text-tertiary)">{repo.description}</span> : null}
+								<span className="truncate text-small text-(--text)">{repo.address}</span>
+								{repo.description ? <span className="truncate text-small text-(--text-3)">{repo.description}</span> : null}
 							</div>
-							<span className="in-num flex shrink-0 items-center gap-1 text-micro text-(--text-disabled)">
+							<span className="in-num flex shrink-0 items-center gap-1 text-micro text-(--text-4)">
 								<Icon icon={Star} size={11} />
 								{repo.stars.toLocaleString()}
 							</span>
@@ -413,12 +413,12 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 				<Link
 					to="/settings/skills/view"
 					search={{ address: query.trim() }}
-					className="flex items-center gap-3 rounded-control border border-(--accent-border) bg-(--accent-bg-subtle) px-3.5 py-3 outline-none hover:bg-(--accent-bg-subtle-hover) focus-visible:shadow-(--focus-ring)"
+					className="flex items-center gap-3 rounded-control border border-(--accent-line) bg-(--accent-soft) px-3.5 py-3 outline-none hover:bg-(--accent-soft) focus-visible:shadow-(--focus)"
 				>
 					<Icon icon={Github} size={16} className="text-(--accent-text)" />
 					<div className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate text-body font-medium text-(--text-primary)">Open {query.trim()}</span>
-						<span className="text-small text-(--text-tertiary)">Look through its skills and files before installing.</span>
+						<span className="truncate text-body font-medium text-(--text)">Open {query.trim()}</span>
+						<span className="text-small text-(--text-3)">Look through its skills and files before installing.</span>
 					</div>
 				</Link>
 			) : null}
@@ -432,7 +432,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 					<ManageMarketplaces saved={marketplaces} />
 				</div>
 				{catalogs.failures.map(({ marketplace, error, retry }) => (
-					<div key={marketplace} className="flex items-center gap-2 rounded-tile bg-(--danger-bg) px-3 py-2 text-small text-(--danger-text)">
+					<div key={marketplace} className="flex items-center gap-2 rounded-card bg-(--bad-soft) px-3 py-2 text-small text-(--bad)">
 						<span className="min-w-0 flex-1">
 							Could not read {marketplace}: {error.message}
 						</span>
@@ -454,7 +454,7 @@ function Discover({ marketplaces, query }: { marketplaces: string[]; query: stri
 						))}
 					</Grid>
 				) : (
-					<p className="m-0 text-small text-(--text-tertiary)">{needle ? 'Nothing in your marketplaces matches.' : 'Add a marketplace to browse it.'}</p>
+					<p className="m-0 text-small text-(--text-3)">{needle ? 'Nothing in your marketplaces matches.' : 'Add a marketplace to browse it.'}</p>
 				)}
 				{shown.length > limit ? (
 					<Btn size="sm" variant="ghost" className="self-center" onClick={() => setLimit((current) => current + PAGE)}>
@@ -494,7 +494,7 @@ export function SkillsPage() {
 					</SegmentedItem>
 				</Segmented>
 				<label className="relative flex min-w-[220px] flex-1 items-center">
-					<Icon icon={Search} size={13} className="pointer-events-none absolute left-2.5 text-(--icon-tertiary)" />
+					<Icon icon={Search} size={13} className="pointer-events-none absolute left-2.5 text-(--text-3)" />
 					<input
 						type="search"
 						value={query}
@@ -515,7 +515,7 @@ export function SkillsPage() {
 					<Discover marketplaces={plugins.data.marketplaces} query={query} />
 				)
 			) : plugins.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">{plugins.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">{plugins.error.message}</p>
 			) : (
 				<Spinner size={12} />
 			)}

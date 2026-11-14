@@ -18,7 +18,7 @@ function Open({ section, children }: { section: string; children: ReactNode }) {
 		<Link
 			to="/settings/$section"
 			params={{ section }}
-			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-small font-medium text-(--text-secondary) outline-none hover:bg-(--neutral-700) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-small font-medium text-(--text-2) outline-none hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
 		>
 			{children}
 			<Icon icon={ArrowUpRight} size={12} />
@@ -57,7 +57,7 @@ function SpendCard() {
 					</div>
 					{cap !== null ? (
 						<ArcDial label="Today's spend against the daily cap" value={today} max={cap}>
-							<span className="in-num text-h3 leading-none text-(--text-primary)">{dollars(Math.max(0, cap - today))}</span>
+							<span className="in-num text-h3 leading-none text-(--text)">{dollars(Math.max(0, cap - today))}</span>
 							<span className="in-caption">left</span>
 						</ArcDial>
 					) : null}
@@ -76,9 +76,9 @@ function TasksCard() {
 	const all = sessions.data?.sessions ?? [];
 	const running = all.filter((session) => session.status === 'running').length;
 	const parts: Part[] = [
-		{ key: 'live', label: 'Running', value: all.filter(isLive).length, color: 'var(--accent-base)' },
-		{ key: 'stopped', label: 'Stopped', value: all.filter((session) => !isLive(session) && session.status !== 'error').length, color: 'var(--neutral-500)' },
-		{ key: 'failed', label: 'Failed', value: all.filter((session) => session.status === 'error').length, color: 'var(--danger-base)' },
+		{ key: 'live', label: 'Running', value: all.filter(isLive).length, color: 'var(--accent)' },
+		{ key: 'stopped', label: 'Stopped', value: all.filter((session) => !isLive(session) && session.status !== 'error').length, color: 'var(--text-4)' },
+		{ key: 'failed', label: 'Failed', value: all.filter((session) => session.status === 'error').length, color: 'var(--bad)' },
 	];
 	return (
 		<Card
@@ -108,7 +108,7 @@ function TasksCard() {
 									to="/agents/$sessionId"
 									params={{ sessionId: session.id }}
 									search={{ app: 'code' }}
-									className="flex min-h-8 items-center gap-2 rounded-tile px-1 text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+									className="flex min-h-8 items-center gap-2 rounded-card px-1 text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 								>
 									<StatusDot tone="accent" pulse />
 									<span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -190,7 +190,7 @@ export function SettingsOverview() {
 		<div className="flex flex-col gap-6">
 			<div className="flex flex-col gap-2">
 				<h1 className="m-0 text-h1 leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
-				<p className="m-0 max-w-[72ch] text-body leading-[20px] text-pretty text-(--text-tertiary)">What Anton may spend, work on and keep.</p>
+				<p className="m-0 max-w-[72ch] text-body leading-[20px] text-pretty text-(--text-3)">What Anton may spend, work on and keep.</p>
 			</div>
 			<div className="grid gap-3 sm:grid-cols-2">
 				<SpendCard />
@@ -207,16 +207,16 @@ export function SettingsOverview() {
 								key={section.id}
 								to="/settings/$section"
 								params={{ section: section.id }}
-								className="group/row flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+								className="group/row flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 							>
-								<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--icon-secondary) group-hover/row:text-(--accent-text)">
+								<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--text-2) group-hover/row:text-(--accent-text)">
 									<Icon icon={section.icon} size={17} />
 								</span>
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 									<div className="truncate text-body font-medium">{section.label}</div>
-									<div className="line-clamp-2 text-small leading-4 text-(--text-tertiary)">{section.desc}</div>
+									<div className="line-clamp-2 text-small leading-4 text-(--text-3)">{section.desc}</div>
 								</div>
-								<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled) group-hover/row:text-(--icon-secondary)" />
+								<Icon icon={ChevronRight} size={12} className="text-(--text-4) group-hover/row:text-(--text-2)" />
 							</Link>
 						))}
 					</nav>

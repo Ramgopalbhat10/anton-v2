@@ -15,7 +15,7 @@ const FIELD = WELL_FIELD;
 
 /** A textarea on the same inset well as the fields. */
 export const AREA =
-	'w-full resize-y rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)';
+	'w-full resize-y rounded-card border border-(--line) bg-(--bg-raised) px-2.5 py-2 text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)';
 
 function Section({ title, help, info, children }: { title: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
@@ -57,7 +57,7 @@ export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange
 						onChange={(event) => update(index, { name: event.target.value })}
 						placeholder="NAME"
 						aria-label="Variable name"
-						className={`${FIELD} w-[40%] font-mono read-only:text-(--text-secondary)`}
+						className={`${FIELD} w-[40%] font-mono read-only:text-(--text-2)`}
 					/>
 					<input
 						type="password"
@@ -237,7 +237,7 @@ function MemoryEditor({ project }: { project: Project }) {
 			info="The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
 			footer={
 				<>
-					{save.isError ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
+					{save.isError ? <span className="text-small text-(--bad)">{save.error.message}</span> : null}
 					<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
 						{save.isPending ? 'Saving…' : 'Save notes'}
 					</Btn>
@@ -279,7 +279,7 @@ function RemoveRepo({ project }: { project: Project }) {
 			>
 				{remove.isPending ? 'Removing…' : confirming ? 'Click again to remove' : 'Remove repository'}
 			</Btn>
-			{remove.isError ? <span className="text-small text-(--danger-text)">{remove.error.message}</span> : null}
+			{remove.isError ? <span className="text-small text-(--bad)">{remove.error.message}</span> : null}
 		</div>
 	);
 }
@@ -291,7 +291,7 @@ export function RepoSettingsPage() {
 	const project = projects.data?.projects.find((item) => item.id === projectId);
 	if (projects.isPending) {
 		return (
-			<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
+			<div className="flex items-center gap-2 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Loading
 			</div>
@@ -316,7 +316,7 @@ export function RepoSettingsPage() {
 			<Block
 				title="Remove"
 				icon={Trash2}
-				className="border-(--danger-border)"
+				className="border-(--bad-line)"
 				help="Deletes its tasks, automations and memory from Anton."
 				info="Its tasks' sandboxes and history go too. Branches and pull requests stay on GitHub."
 				footer={<RemoveRepo project={project} />}

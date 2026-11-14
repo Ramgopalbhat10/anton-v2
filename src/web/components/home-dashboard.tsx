@@ -27,13 +27,13 @@ function localDay(at: Date): number {
 function Panel({ icon, title, aside, children, className, footer }: { icon: LucideIcon; title: string; aside?: ReactNode; children: ReactNode; className?: string; footer?: ReactNode }) {
 	return (
 		<section aria-label={title} className={cn('home-panel flex min-w-0 flex-col', className)}>
-			<header className="flex h-9 shrink-0 items-center gap-2 px-3.5 text-small text-(--text-secondary)">
-				<Icon icon={icon} size={13} className="text-(--icon-tertiary)" />
+			<header className="flex h-9 shrink-0 items-center gap-2 px-3.5 text-small text-(--text-2)">
+				<Icon icon={icon} size={13} className="text-(--text-3)" />
 				<h2 className="m-0 min-w-0 flex-1 truncate text-small font-medium">{title}</h2>
 				{aside}
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col px-3.5 pb-3">{children}</div>
-			{footer ? <footer className="flex h-8 shrink-0 items-center gap-2 px-3.5 pb-1 text-small text-(--text-tertiary)">{footer}</footer> : null}
+			{footer ? <footer className="flex h-8 shrink-0 items-center gap-2 px-3.5 pb-1 text-small text-(--text-3)">{footer}</footer> : null}
 		</section>
 	);
 }
@@ -125,7 +125,7 @@ function TaskLink({ session, children, className }: { session: Session; children
 	);
 }
 
-const ROW = 'group/row -mx-1.5 flex h-[30px] min-w-0 items-center gap-2.5 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+const ROW = 'group/row -mx-1.5 flex h-[30px] min-w-0 items-center gap-2.5 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)';
 
 /** The latest tasks, each a line: its state, its title and how long ago. */
 function Recent({ sessions }: { sessions: Session[] }) {
@@ -137,7 +137,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 			title="Recent"
 			footer={
 				more > 0 ? (
-					<Link to="/tasks" className="rounded-control outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+					<Link to="/tasks" className="rounded-control outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
 						{more} more
 					</Link>
 				) : null
@@ -148,13 +148,13 @@ function Recent({ sessions }: { sessions: Session[] }) {
 					{shown.map((session) => (
 						<TaskLink key={session.id} session={session} className={ROW}>
 							<TaskStatusIcon session={session} size={12} />
-							<span className="min-w-0 flex-1 truncate text-body text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
-							<span className="in-num shrink-0 text-micro text-(--text-disabled)">{age(session.lastInputAt ?? session.createdAt)}</span>
+							<span className="min-w-0 flex-1 truncate text-body text-(--text-2) group-hover/row:text-(--text)">{session.title}</span>
+							<span className="in-num shrink-0 text-micro text-(--text-4)">{age(session.lastInputAt ?? session.createdAt)}</span>
 						</TaskLink>
 					))}
 				</div>
 			) : (
-				<p className="m-0 py-2 text-small text-(--text-tertiary)">Tasks you start show up here.</p>
+				<p className="m-0 py-2 text-small text-(--text-3)">Tasks you start show up here.</p>
 			)}
 		</Panel>
 	);
@@ -198,10 +198,10 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 			icon={GitPullRequest}
 			title="Pull requests"
 			className="md:col-span-2"
-			aside={open ? <span className="in-num text-small text-(--text-tertiary)">{open} open</span> : null}
+			aside={open ? <span className="in-num text-small text-(--text-3)">{open} open</span> : null}
 			footer={
 				more > 0 ? (
-					<Link to="/reviews" className="rounded-control outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+					<Link to="/reviews" className="rounded-control outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
 						{more} more
 					</Link>
 				) : null
@@ -218,8 +218,8 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 										<Icon icon={PR_ICON[state]} size={13} />
 									</span>
 									<span className="flex min-w-0 flex-1 flex-col">
-										<span className="truncate text-body leading-4 text-(--text-secondary) group-hover/row:text-(--text-primary)">{session.title}</span>
-										<span className="truncate text-micro leading-4 text-(--text-disabled)">
+										<span className="truncate text-body leading-4 text-(--text-2) group-hover/row:text-(--text)">{session.title}</span>
+										<span className="truncate text-micro leading-4 text-(--text-4)">
 											<span className="in-num">{prNumber(session)}</span> · {session.repo.split('/').pop()} · {age(session.createdAt)}
 										</span>
 									</span>
@@ -228,10 +228,10 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 							);
 						})}
 					</div>
-					<div className="flex min-w-0 flex-col justify-between gap-3 rounded-card bg-(--alpha-white-3) p-3">
+					<div className="flex min-w-0 flex-col justify-between gap-3 rounded-card bg-(--bg-hover) p-3">
 						<div className="flex items-baseline gap-1.5">
 							<span className="in-figure text-h1 leading-7">{merged}</span>
-							<span className="text-small text-(--text-tertiary)">of the last {recent.length} merged</span>
+							<span className="text-small text-(--text-3)">of the last {recent.length} merged</span>
 						</div>
 						<div role="img" aria-label={`The last ${recent.length} pull requests by state, oldest first`} className="grid grid-cols-12 gap-[3px]">
 							{Array.from({ length: RIBBON }, (_, index) => {
@@ -247,13 +247,13 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 								);
 							})}
 						</div>
-						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-(--text-tertiary)">
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-(--text-3)">
 							{(['merged', 'open', 'draft', 'closed'] as const).map((state) =>
 								count(state) ? (
 									<span key={state} className="inline-flex items-center gap-1.5">
 										<span className="size-1.5 rounded-full" style={{ background: prColor(state) }} />
 										{PR_LABEL[state]}
-										<span className="in-num text-(--text-disabled)">{count(state)}</span>
+										<span className="in-num text-(--text-4)">{count(state)}</span>
 									</span>
 								) : null,
 							)}
@@ -261,7 +261,7 @@ function PullRequests({ sessions }: { sessions: Session[] }) {
 					</div>
 				</div>
 			) : (
-				<p className="m-0 py-2 text-small text-(--text-tertiary)">Pull requests the agent opens show up here, with their checks.</p>
+				<p className="m-0 py-2 text-small text-(--text-3)">Pull requests the agent opens show up here, with their checks.</p>
 			)}
 		</Panel>
 	);
@@ -307,7 +307,7 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 			icon={CalendarRange}
 			title={now.toLocaleDateString(undefined, { month: 'long' })}
 			aside={
-				<span className="in-num text-small text-(--text-tertiary)">
+				<span className="in-num text-small text-(--text-3)">
 					Day {today} of {length}
 				</span>
 			}
@@ -316,9 +316,9 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 				<div className="flex flex-col gap-0.5">
 					<span className="flex items-baseline gap-1.5">
 						<span className="in-figure text-h1 leading-8">{started}</span>
-						<span className="text-small text-(--text-tertiary)">{started === 1 ? 'task' : 'tasks'} so far</span>
+						<span className="text-small text-(--text-3)">{started === 1 ? 'task' : 'tasks'} so far</span>
 					</span>
-					<span className={cn('text-small', started > before ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{pace(started, before, lastName)}</span>
+					<span className={cn('text-small', started > before ? 'text-(--accent-text)' : 'text-(--text-3)')}>{pace(started, before, lastName)}</span>
 				</div>
 				<div role="img" aria-label={`Tasks started each day of ${now.toLocaleDateString(undefined, { month: 'long' })}`} className="flex h-12 items-end gap-[2px]">
 					{perDay.map((count, index) => {
@@ -328,22 +328,22 @@ function ThisMonth({ sessions }: { sessions: Session[] }) {
 							<span
 								key={day}
 								title={future ? undefined : `${count} ${count === 1 ? 'task' : 'tasks'} on ${new Date(year, month, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
-								className={cn('min-w-0 flex-1 rounded-mark', future && 'border border-dashed border-(--border-default)', day === today && 'shadow-[0_0_0_1px_var(--accent-border)]')}
+								className={cn('min-w-0 flex-1 rounded-mark', future && 'border border-dashed border-(--line-strong)', day === today && 'shadow-[0_0_0_1px_var(--accent-line)]')}
 								style={{
 									height: future ? 6 : count ? `${Math.max(18, (count / most) * 100)}%` : 3,
-									background: future ? 'transparent' : count ? (day === today ? 'var(--accent-base)' : 'var(--heat-3)') : 'var(--heat-0)',
+									background: future ? 'transparent' : count ? (day === today ? 'var(--accent)' : 'var(--heat-3)') : 'var(--heat-0)',
 								}}
 							/>
 						);
 					})}
 				</div>
 				<div className="grid grid-cols-2 gap-2">
-					<div className="flex flex-col rounded-tile bg-(--alpha-white-3) px-2.5 py-1.5">
-						<span className="text-micro text-(--text-tertiary)">Merged</span>
+					<div className="flex flex-col rounded-card bg-(--bg-hover) px-2.5 py-1.5">
+						<span className="text-micro text-(--text-3)">Merged</span>
 						<span className="in-figure text-h3 leading-5">{merged}</span>
 					</div>
-					<div className="flex flex-col rounded-tile bg-(--alpha-white-3) px-2.5 py-1.5">
-						<span className="text-micro text-(--text-tertiary)">Spent</span>
+					<div className="flex flex-col rounded-card bg-(--bg-hover) px-2.5 py-1.5">
+						<span className="text-micro text-(--text-3)">Spent</span>
 						<span className="in-figure text-h3 leading-5">{usage.data ? dollars(usage.data.month) : '—'}</span>
 					</div>
 				</div>

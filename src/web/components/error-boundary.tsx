@@ -38,7 +38,7 @@ export class ErrorBoundary extends Component<Props, { error: unknown }> {
 			<div
 				role="alert"
 				className={cn(
-					'flex items-start gap-2 rounded-control border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-small leading-[18px] text-(--danger-text)',
+					'flex items-start gap-2 rounded-control border border-(--bad-line) bg-(--bad-soft) px-3 py-2 text-small leading-[18px] text-(--bad)',
 					this.props.className,
 				)}
 			>

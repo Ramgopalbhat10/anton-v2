@@ -18,26 +18,26 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 		<Link
 			to="/settings/repos/$projectId"
 			params={{ projectId: project.id }}
-			className="flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-h-14 items-center gap-3 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 		>
 			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div className="truncate text-body font-medium">
-					<span className="font-normal text-(--text-tertiary)">{owner}</span>
+					<span className="font-normal text-(--text-3)">{owner}</span>
 					{name}
 				</div>
-				<div className="in-num flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
+				<div className="in-num flex min-w-0 items-center gap-1.5 text-small text-(--text-3)">
 					<span className="inline-flex min-w-0 items-center gap-1" title={`Default branch ${project.defaultBranch}`}>
 						<Icon icon={GitBranch} size={11} className="shrink-0" />
 						<span className="truncate">{project.defaultBranch}</span>
 					</span>
-					<span className="text-(--text-disabled)">·</span>
+					<span className="text-(--text-4)">·</span>
 					<span className="truncate" title="The base image its sandboxes start from">
 						{project.baseImage ?? 'default image'}
 					</span>
-					<span className="hidden text-(--text-disabled) md:inline">·</span>
+					<span className="hidden text-(--text-4) md:inline">·</span>
 					{project.warmedAt ? (
-						<span className="hidden shrink-0 items-center gap-1 text-(--text-secondary) md:inline-flex" title="A prepared image starts its sandboxes with the repository and setup already in place">
+						<span className="hidden shrink-0 items-center gap-1 text-(--text-2) md:inline-flex" title="A prepared image starts its sandboxes with the repository and setup already in place">
 							<StatusDot tone="accent" />
 							prepared {age(project.warmedAt)} ago
 						</span>
@@ -49,10 +49,10 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 				</div>
 			</div>
 			<div className="hidden shrink-0 items-baseline gap-1 sm:flex">
-				<span className="in-num text-body text-(--text-primary)">{tasks}</span>
+				<span className="in-num text-body text-(--text)">{tasks}</span>
 				<Caption>{tasks === 1 ? 'task' : 'tasks'}</Caption>
 			</div>
-			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
+			<Icon icon={ChevronRight} size={12} className="text-(--text-4)" />
 		</Link>
 	);
 }

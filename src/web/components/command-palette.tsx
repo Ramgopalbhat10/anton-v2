@@ -129,8 +129,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				aria-label="Command palette"
 				className="in-pop in-pop--modal flex w-[min(580px,100%)] flex-col overflow-hidden"
 			>
-				<div className="flex h-12 items-center gap-2.5 px-3.5 shadow-[inset_0_-1px_0_var(--border-subtle)]">
-					<Icon icon={Search} className="text-(--icon-tertiary)" />
+				<div className="flex h-12 items-center gap-2.5 px-3.5 shadow-[inset_0_-1px_0_var(--line)]">
+					<Icon icon={Search} className="text-(--text-3)" />
 					<input
 						ref={input}
 						autoFocus
@@ -153,7 +153,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 							}
 						}}
 						placeholder="Type a command, or describe a task"
-						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body-lg text-(--text-primary) outline-none"
+						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body-lg text-(--text) outline-none"
 					/>
 				</div>
 				<div className="flex max-h-[52vh] flex-col gap-px overflow-y-auto p-1.5">
@@ -162,14 +162,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 						onMouseEnter={() => setIndex(0)}
 						onClick={start}
 						className={cn(
-							'relative flex h-9 items-center gap-2.5 rounded-tile px-2.5 text-left',
+							'relative flex h-9 items-center gap-2.5 rounded-card px-2.5 text-left',
 							index === 0 ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover)',
 						)}
 					>
 						<Icon icon={Plus} className="text-(--accent-text)" />
 						<div className="min-w-0 flex-1 truncate text-body">
 							{project || !projects.isSuccess ? 'Start a task' : 'Start a chat'}{' '}
-							<span className="text-(--text-tertiary)">{query.trim() ? `“${query.trim()}”` : 'with a prompt…'}</span>
+							<span className="text-(--text-3)">{query.trim() ? `“${query.trim()}”` : 'with a prompt…'}</span>
 						</div>
 						<Kbd keys="enter" />
 					</button>
@@ -183,27 +183,27 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 							onMouseEnter={() => setIndex(position + 1)}
 							onClick={entry.onSelect}
 							className={cn(
-								'flex h-8 items-center gap-2.5 rounded-tile px-2.5 text-left text-(--text-secondary)',
-								index === position + 1 && 'bg-(--bg-active) text-(--text-primary)',
+								'flex h-8 items-center gap-2.5 rounded-card px-2.5 text-left text-(--text-2)',
+								index === position + 1 && 'bg-(--bg-active) text-(--text)',
 							)}
 						>
-							{entry.mark ?? <Icon icon={entry.icon} size={12} className="text-(--icon-tertiary)" />}
+							{entry.mark ?? <Icon icon={entry.icon} size={12} className="text-(--text-3)" />}
 							<div className="min-w-0 flex-1 truncate text-body">{entry.label}</div>
-							<div className="text-micro whitespace-nowrap text-(--text-disabled)">{entry.meta}</div>
+							<div className="text-micro whitespace-nowrap text-(--text-4)">{entry.meta}</div>
 						</button>
 					))}
 				</div>
-				<div className="flex h-9 items-center gap-3 px-3 shadow-[inset_0_1px_0_var(--border-subtle)]">
+				<div className="flex h-9 items-center gap-3 px-3 shadow-[inset_0_1px_0_var(--line)]">
 					<div className="flex items-center gap-1.5">
 						<Kbd keys="↑+↓" />
-						<span className="text-micro text-(--text-disabled)">Navigate</span>
+						<span className="text-micro text-(--text-4)">Navigate</span>
 					</div>
 					<div className="flex items-center gap-1.5">
 						<Kbd keys="esc" />
-						<span className="text-micro text-(--text-disabled)">Close</span>
+						<span className="text-micro text-(--text-4)">Close</span>
 					</div>
 					<div className="flex-1" />
-					<span className="hidden text-micro text-(--text-disabled) sm:inline">Describing a task starts it in a fresh sandbox</span>
+					<span className="hidden text-micro text-(--text-4) sm:inline">Describing a task starts it in a fresh sandbox</span>
 				</div>
 			</div>
 		</div>

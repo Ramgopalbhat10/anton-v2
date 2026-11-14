@@ -36,11 +36,11 @@ function Matches({
 						key={path}
 						onClick={() => onOpen(path)}
 						aria-current={selected === path ? 'true' : undefined}
-						className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 					>
 						<FileIcon path={path} />
-						<span className={cn('shrink-0 text-small', selected === path ? 'text-(--text-primary)' : 'text-(--text-secondary)')}>{path.slice(slash + 1)}</span>
-						<span className="min-w-0 flex-1 truncate text-micro text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+						<span className={cn('shrink-0 text-small', selected === path ? 'text-(--text)' : 'text-(--text-2)')}>{path.slice(slash + 1)}</span>
+						<span className="min-w-0 flex-1 truncate text-micro text-(--text-4)">{path.slice(0, Math.max(slash, 0))}</span>
 						{status ? <StatusChip status={status} /> : null}
 					</button>
 				);
@@ -56,7 +56,7 @@ const CHANGED_SHOWN = 6;
 /** What Files shows with nothing open: the changed files to open, and where else to go. */
 function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
 	const showPanel = useContext(ShowPanel);
-	const row = 'flex h-7 items-center gap-2 rounded-control px-2 text-left text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)';
+	const row = 'flex h-7 items-center gap-2 rounded-control px-2 text-left text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)';
 	return (
 		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
 			<div className="flex w-full max-w-[340px] flex-col gap-4">
@@ -68,8 +68,8 @@ function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string
 							return (
 								<button type="button" key={path} onClick={() => onOpen(path)} title={path} className={row}>
 									<FileIcon path={path} />
-									<span className="shrink-0 text-(--text-secondary)">{path.slice(slash + 1)}</span>
-									<span className="min-w-0 flex-1 truncate text-micro text-(--text-disabled)">{path.slice(0, Math.max(slash, 0))}</span>
+									<span className="shrink-0 text-(--text-2)">{path.slice(slash + 1)}</span>
+									<span className="min-w-0 flex-1 truncate text-micro text-(--text-4)">{path.slice(0, Math.max(slash, 0))}</span>
 									<StatusChip status={status} />
 								</button>
 							);
@@ -77,11 +77,11 @@ function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string
 					</div>
 				) : null}
 				<div className="flex flex-col gap-px">
-					<button type="button" onClick={onFind} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+					<button type="button" onClick={onFind} className={cn(row, 'text-(--text-3) hover:text-(--text-2)')}>
 						<Icon icon={Search} size={13} />
 						Find a file by name
 					</button>
-					<button type="button" onClick={() => showPanel('Changes')} className={cn(row, 'text-(--text-tertiary) hover:text-(--text-secondary)')}>
+					<button type="button" onClick={() => showPanel('Changes')} className={cn(row, 'text-(--text-3) hover:text-(--text-2)')}>
 						<Icon icon={FileDiff} size={13} />
 						Review what changed
 					</button>
@@ -143,7 +143,7 @@ export function FilesTab({ sessionId }: { sessionId: string }) {
 					{listing.isError ? (
 						<EmptyState title="Files unavailable" body={listing.error.message} />
 					) : listing.isPending ? (
-						<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+						<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 							<Spinner size={12} />
 							Listing files
 						</div>

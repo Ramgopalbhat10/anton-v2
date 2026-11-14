@@ -14,7 +14,7 @@ import { taskQueries } from '@/lib/task-queries';
 
 function Loading({ label }: { label: string }) {
 	return (
-		<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+		<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 			<Spinner size={12} />
 			{label}
 		</div>
@@ -35,7 +35,7 @@ function RestoreButton({ sessionId, at, onDone }: { sessionId: string; at: strin
 	});
 	return (
 		<div className="flex min-w-0 items-center gap-2">
-			{restore.isError ? <span className="min-w-0 truncate text-small text-(--danger-text)">{restore.error.message}</span> : null}
+			{restore.isError ? <span className="min-w-0 truncate text-small text-(--bad)">{restore.error.message}</span> : null}
 			<Btn
 				size="xs"
 				variant={confirming ? 'danger' : 'secondary'}
@@ -68,8 +68,8 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 				)}
 			</div>
 			{restored ? (
-				<div className="flex items-start gap-2.5 rounded-control border border-(--border-subtle) bg-(--success-bg) px-3 py-2.5 text-small leading-[18px] text-(--text-secondary)">
-					<Icon icon={Check} size={13} className="mt-0.5 text-(--success-text)" />
+				<div className="flex items-start gap-2.5 rounded-control border border-(--line) bg-(--ok-soft) px-3 py-2.5 text-small leading-[18px] text-(--text-2)">
+					<Icon icon={Check} size={13} className="mt-0.5 text-(--ok)" />
 					<span>
 					Files restored. Commits and the conversation are unchanged, so tell the agent if it should know.
 					{restored.length > 0 ? ` Too large to have been saved, so left as they were: ${restored.join(', ')}.` : ''}
@@ -117,26 +117,26 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 				{entries.map((entry, index) => (
 					<li key={entry.at} className="relative">
 						{/* The timeline runs through every checkpoint's node, newest at the top. */}
-						<span aria-hidden className={cn('absolute left-[17px] w-px bg-(--border-default)', index === 0 ? 'top-1/2' : 'top-0', index === entries.length - 1 ? 'bottom-1/2' : 'bottom-0')} />
+						<span aria-hidden className={cn('absolute left-[17px] w-px bg-(--line-strong)', index === 0 ? 'top-1/2' : 'top-0', index === entries.length - 1 ? 'bottom-1/2' : 'bottom-0')} />
 						<button
 							type="button"
 							onClick={() => setSelected(entry.at)}
-							className="relative flex min-h-14 w-full items-center gap-3 rounded-tile py-2 pr-2.5 pl-3 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="relative flex min-h-14 w-full items-center gap-3 rounded-card py-2 pr-2.5 pl-3 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 						>
 							<span
 								className={cn(
 									'relative size-[11px] shrink-0 rounded-full border-2',
-									index === 0 ? 'border-(--accent-base) bg-(--accent-bg-subtle) shadow-[0_0_0_3px_var(--accent-bg-subtle)]' : 'border-(--text-disabled) bg-(--card-bg)',
+									index === 0 ? 'border-(--accent) bg-(--accent-soft) shadow-[0_0_0_3px_var(--accent-soft)]' : 'border-(--text-4) bg-(--bg-surface)',
 								)}
 							/>
 							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-								<div className="flex min-w-0 items-center gap-2 text-body text-(--text-primary)">
+								<div className="flex min-w-0 items-center gap-2 text-body text-(--text)">
 									<span className="truncate">
 										{entry.files} {entry.files === 1 ? 'file' : 'files'} changed
 									</span>
 									{index === 0 ? <Status tone="accent">Current</Status> : null}
 								</div>
-								<div className="truncate text-small text-(--text-tertiary)">{entry.commit ?? 'No commits yet'}</div>
+								<div className="truncate text-small text-(--text-3)">{entry.commit ?? 'No commits yet'}</div>
 							</div>
 							{entry.added !== null && entry.removed !== null ? (
 								<span className="hidden shrink-0 items-center gap-2 sm:flex">
@@ -147,8 +147,8 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 								</span>
 							) : null}
 							<span className="flex w-12 shrink-0 flex-col items-end">
-								<span className="in-num text-small text-(--text-secondary)">{clock(entry.at)}</span>
-								<span className="in-num text-micro text-(--text-disabled)">{age(entry.at)}</span>
+								<span className="in-num text-small text-(--text-2)">{clock(entry.at)}</span>
+								<span className="in-num text-micro text-(--text-4)">{age(entry.at)}</span>
 							</span>
 						</button>
 					</li>

@@ -12,7 +12,7 @@ function Usage() {
 	const storage = useQuery({ queryKey: ['storage'], queryFn: api.storage });
 	const clean = useMutation({ mutationFn: api.cleanUpStorage, onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['storage'] }) });
 	if (storage.isPending) return <Spinner size={12} />;
-	if (storage.isError) return <p className="m-0 text-small text-(--danger-text)">{storage.error.message}</p>;
+	if (storage.isError) return <p className="m-0 text-small text-(--bad)">{storage.error.message}</p>;
 	const { objects, bytes, lastCleanup } = storage.data;
 	const last = clean.data ?? lastCleanup;
 	return (
@@ -25,7 +25,7 @@ function Usage() {
 				<CardFooter
 					caption={
 						clean.isError ? (
-							<span className="text-small text-(--danger-text)">{clean.error.message}</span>
+							<span className="text-small text-(--bad)">{clean.error.message}</span>
 						) : (
 							'Cleanup runs once a day'
 						)
@@ -45,7 +45,7 @@ function Usage() {
 					<StorageArt className="w-full max-w-[320px]" />
 					<div className="flex flex-col gap-1">
 						<div className="text-body-lg font-medium">What cleanup removes</div>
-						<div className="max-w-[52ch] text-small leading-[18px] text-pretty text-(--text-tertiary)">
+						<div className="max-w-[52ch] text-small leading-[18px] text-pretty text-(--text-3)">
 							Deleted tasks, history beyond the newest 50 entries per task, and file contents nothing uses any more.
 						</div>
 					</div>

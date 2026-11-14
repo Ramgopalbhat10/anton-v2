@@ -29,18 +29,18 @@ export function fileSize(bytes: number): string {
 /** One file as a chip: its glyph, name and a note under it, with a remove button while it is a draft. */
 function FileChip({ name, note, title, onRemove }: { name: string; note: string; title?: string; onRemove?: () => void }) {
 	return (
-		<div title={title ?? name} className="flex h-9 max-w-[240px] items-center gap-2 rounded-control border border-(--border-subtle) bg-(--well-bg) pr-1 pl-2">
-			<Icon icon={fileGlyph(name)} size={14} className="shrink-0 text-(--icon-secondary)" />
+		<div title={title ?? name} className="flex h-9 max-w-[240px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-2">
+			<Icon icon={fileGlyph(name)} size={14} className="shrink-0 text-(--text-2)" />
 			<span className="flex min-w-0 flex-col">
-				<span className="truncate text-small text-(--text-primary)">{name}</span>
-				<span className="truncate text-micro text-(--text-tertiary)">{note}</span>
+				<span className="truncate text-small text-(--text)">{name}</span>
+				<span className="truncate text-micro text-(--text-3)">{note}</span>
 			</span>
 			{onRemove ? (
 				<button
 					type="button"
 					aria-label={`Remove ${name}`}
 					onClick={onRemove}
-					className="inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+					className="inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--text-3) hover:bg-(--bg-hover) hover:text-(--text)"
 				>
 					<Icon icon={X} size={10} />
 				</button>
@@ -155,13 +155,13 @@ export function AttachmentTray({ attachments, className }: { attachments: Attach
 	return (
 		<div className={cn('flex flex-wrap items-center gap-1.5', className)}>
 			{images.map((image) => (
-				<div key={image.id} className="relative size-14 overflow-hidden rounded-control border border-(--border-subtle)">
+				<div key={image.id} className="relative size-14 overflow-hidden rounded-control border border-(--line)">
 					<img src={image.preview} alt={image.filename} className="size-full object-cover" />
 					<button
 						type="button"
 						aria-label={`Remove ${image.filename}`}
 						onClick={() => removeImage(image.id)}
-						className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-control bg-(--bg-scrim) text-(--text-primary)"
+						className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-control bg-(--bg-scrim) text-(--text)"
 					>
 						<Icon icon={X} size={10} />
 					</button>

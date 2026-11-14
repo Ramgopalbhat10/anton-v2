@@ -25,7 +25,7 @@ function useConnectorMutation<T>(run: (input: T) => Promise<Partial<ConnectorsVi
 }
 
 function ErrorLine({ error }: { error: Error | null }) {
-	return error ? <span className="text-small text-(--danger-text)">{error.message}</span> : null;
+	return error ? <span className="text-small text-(--bad)">{error.message}</span> : null;
 }
 
 /** A value to paste somewhere else, with a button that copies it. */
@@ -33,7 +33,7 @@ function CopyField({ value, label }: { value: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
 		<div className="flex min-w-0 items-center gap-1.5">
-			<input readOnly value={value} aria-label={label} className={cn(FIELD, 'flex-1 font-mono text-small text-(--text-secondary)')} onFocus={(event) => event.target.select()} />
+			<input readOnly value={value} aria-label={label} className={cn(FIELD, 'flex-1 font-mono text-small text-(--text-2)')} onFocus={(event) => event.target.select()} />
 			<IconBtn
 				icon={copied ? Check : Copy}
 				size="sm"
@@ -52,10 +52,10 @@ function CopyField({ value, label }: { value: string; label: string }) {
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
 	return (
 		<li className="flex gap-3">
-			<span className="in-num mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-control border border-(--border-default) text-micro text-(--text-tertiary)">{n}</span>
+			<span className="in-num mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-control border border-(--line-strong) text-micro text-(--text-3)">{n}</span>
 			<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-				<div className="text-body font-medium text-(--text-primary)">{title}</div>
-				<div className="flex flex-col gap-1.5 text-small leading-[18px] text-pretty text-(--text-tertiary)">{children}</div>
+				<div className="text-body font-medium text-(--text)">{title}</div>
+				<div className="flex flex-col gap-1.5 text-small leading-[18px] text-pretty text-(--text-3)">{children}</div>
 			</div>
 		</li>
 	);
@@ -120,7 +120,7 @@ function GoogleClient({ account, open }: { account: ConnectorAccount; open: bool
 			</div>
 			<div className="flex flex-wrap items-center justify-end gap-3">
 				<ErrorLine error={save.error} />
-				{save.isSuccess && !save.isPending ? <span className="text-small text-(--success-text)">Saved.</span> : null}
+				{save.isSuccess && !save.isPending ? <span className="text-small text-(--ok)">Saved.</span> : null}
 				<Btn type="submit" size="sm" variant={open ? 'primary' : 'secondary'} disabled={save.isPending || (!clientId.trim() && !account.client)}>
 					{save.isPending ? 'Saving…' : 'Save client'}
 				</Btn>
@@ -186,14 +186,14 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 	const save = useConnectorMutation(async () => (editing ? api.updateMcpServer(toInput(draft, editing)) : api.addMcpServer(toInput(draft, null))));
 	return (
 		<form
-			className="flex flex-col gap-2 rounded-control border border-(--border-subtle) p-3"
+			className="flex flex-col gap-2 rounded-control border border-(--line) p-3"
 			onSubmit={(event) => {
 				event.preventDefault();
 				save.mutate(undefined, { onSuccess: () => (onSaved ? onSaved(draft.name.trim()) : onDone()) });
 			}}
 		>
 			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-				<input value={draft.name} readOnly={Boolean(editing)} onChange={(event) => update({ name: event.target.value })} placeholder="name" aria-label="Server name" className={cn(FIELD, 'font-mono read-only:text-(--text-secondary)')} />
+				<input value={draft.name} readOnly={Boolean(editing)} onChange={(event) => update({ name: event.target.value })} placeholder="name" aria-label="Server name" className={cn(FIELD, 'font-mono read-only:text-(--text-2)')} />
 				<input value={draft.url} onChange={(event) => update({ url: event.target.value })} placeholder="https://mcp.example.com/mcp" aria-label="Server URL" className={cn(FIELD, 'font-mono')} />
 				<input
 					type="password"
@@ -207,7 +207,7 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 				<input value={draft.tools} onChange={(event) => update({ tools: event.target.value })} placeholder="All tools, or a list: search, fetch" aria-label="Tools" className={cn(FIELD, 'font-mono')} />
 			</div>
 			<div className="flex flex-wrap items-center gap-3">
-				<Switch checked={draft.codeMode} onChange={(codeMode) => update({ codeMode })} label={<span className="text-small text-(--text-secondary)">Scripts can call it</span>} />
+				<Switch checked={draft.codeMode} onChange={(codeMode) => update({ codeMode })} label={<span className="text-small text-(--text-2)">Scripts can call it</span>} />
 				{editing && editing.signIn.state !== 'none' ? <SignOut name={editing.name} /> : null}
 				<span className="flex-1" />
 				<ErrorLine error={save.error} />
@@ -226,8 +226,8 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 function ServerTools({ name }: { name: string }) {
 	const tools = useQuery({ queryKey: ['mcp-tools', name], queryFn: () => api.mcpServerTools(name), retry: false, staleTime: 30_000 });
 	if (tools.isPending) return <Spinner size={12} />;
-	if (tools.isError) return <span className="text-small text-(--danger-text)">{tools.error.message}</span>;
-	if (!tools.data.tools.length) return <span className="text-small text-(--text-tertiary)">It answered with no tools.</span>;
+	if (tools.isError) return <span className="text-small text-(--bad)">{tools.error.message}</span>;
+	if (!tools.data.tools.length) return <span className="text-small text-(--text-3)">It answered with no tools.</span>;
 	return <ToolChips tools={tools.data.tools.map((tool) => ({ name: tool.name, about: tool.description ?? '' }))} />;
 }
 
@@ -260,7 +260,7 @@ function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<t
 	const github = /(^|\.)githubcopilot\.com$/.test(hostOf(server.url));
 	return (
 		<form
-			className="flex flex-col gap-2 rounded-control border border-(--border-subtle) px-3 py-2.5"
+			className="flex flex-col gap-2 rounded-control border border-(--line) px-3 py-2.5"
 			onSubmit={(event) => {
 				event.preventDefault();
 				signIn.mutate({ clientId: clientId.trim(), clientSecret: secret || null });
@@ -303,7 +303,7 @@ function ToolChips({ tools }: { tools: Array<{ name: string; about: string }> })
 		<ul className="m-0 grid list-none grid-cols-1 gap-1.5 p-0 sm:grid-cols-2">
 			{tools.map((tool) => (
 				<li key={tool.name} className="min-w-0" title={tool.about || undefined}>
-					<span className="inline-flex max-w-full items-center rounded-control border border-(--border-subtle) bg-(--well-bg) px-2 py-1 text-small text-(--text-secondary)">
+					<span className="inline-flex max-w-full items-center rounded-control border border-(--line) bg-(--bg-raised) px-2 py-1 text-small text-(--text-2)">
 						<span className="truncate">{tool.name}</span>
 					</span>
 				</li>
@@ -323,7 +323,7 @@ function OnSwitch({ item, label }: { item: ConnectorItem; label?: ReactNode }) {
 	const [problem, setProblem] = useState<string | null>(null);
 	return (
 		<>
-			{problem ? <span className="text-small text-(--danger-text)">{problem}</span> : null}
+			{problem ? <span className="text-small text-(--bad)">{problem}</span> : null}
 			<Switch
 				checked={item.state !== 'off'}
 				onChange={(on) => {
@@ -349,21 +349,21 @@ type Opened = { c?: string; add?: string; connected?: string; problem?: string }
 /** A connector on the catalog: its mark, name and what it does, opening its page; its switch, or a +, in the corner. */
 function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; mark: Mark; title: string; mono?: boolean; by: string; tagline: string; corner: ReactNode }) {
 	return (
-		<div className="in-card group relative flex-row items-start gap-3 p-3.5 transition-colors duration-(--duration-micro) hover:border-(--border-default)">
+		<div className="in-card group relative flex-row items-start gap-3 p-3.5 transition-colors duration-(--t-fast) hover:border-(--line-strong)">
 			<MarkTile mark={mark} size={40} className="rounded-control" />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Link
 					to="/settings/connectors/view"
 					search={open}
 					className={cn(
-						'truncate text-body-lg font-medium text-(--text-primary) outline-none after:absolute after:inset-0 after:rounded-control focus-visible:after:shadow-(--focus-ring)',
+						'truncate text-body-lg font-medium text-(--text) outline-none after:absolute after:inset-0 after:rounded-control focus-visible:after:shadow-(--focus)',
 						mono && 'text-body',
 					)}
 				>
 					{title}
 				</Link>
-				<p className="m-0 line-clamp-2 text-small leading-[17px] text-pretty text-(--text-tertiary)">{tagline}</p>
-				<span className="text-micro text-(--text-disabled)">by {by}</span>
+				<p className="m-0 line-clamp-2 text-small leading-[17px] text-pretty text-(--text-3)">{tagline}</p>
+				<span className="text-micro text-(--text-4)">by {by}</span>
 			</div>
 			<div className="relative z-10 flex shrink-0 items-center">{corner}</div>
 		</div>
@@ -372,7 +372,7 @@ function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; 
 
 /** A tile's + corner: the connector is not added yet. */
 const AddCorner = () => (
-	<span aria-hidden className="inline-flex size-7 items-center justify-center text-(--icon-tertiary) group-hover:text-(--text-primary)">
+	<span aria-hidden className="inline-flex size-7 items-center justify-center text-(--text-3) group-hover:text-(--text)">
 		<Icon icon={Plus} size={16} />
 	</span>
 );
@@ -475,7 +475,7 @@ export function ConnectorsPage() {
 				Connect your tools once here, then turn each on or off from the + menu in any composer. Tools load only when a task uses them.
 			</PageHeading>
 			<Returned search={returned} />
-			{connectors.isError ? <p className="m-0 text-small text-(--danger-text)">{connectors.error.message}</p> : null}
+			{connectors.isError ? <p className="m-0 text-small text-(--bad)">{connectors.error.message}</p> : null}
 			{!connectors.data && !connectors.isError ? <Spinner size={12} /> : null}
 			{connectors.data && yours.length ? (
 				<section className="flex flex-col gap-2.5" aria-label="Your connectors">
@@ -510,7 +510,7 @@ function SectionTitle({ count, children }: { count: number; children: ReactNode 
 	return (
 		<h2 className="m-0 flex items-center gap-2 text-body-lg font-semibold">
 			{children}
-			<span className="in-num rounded-control bg-(--alpha-white-6) px-1.5 text-micro font-normal text-(--text-tertiary)">{count}</span>
+			<span className="in-num rounded-control bg-(--bg-active) px-1.5 text-micro font-normal text-(--text-3)">{count}</span>
 		</h2>
 	);
 }
@@ -528,7 +528,7 @@ function Returned({ search }: { search: Opened }) {
 			role="status"
 			className={cn(
 				'flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-body',
-				search.problem ? 'border-(--danger-border) text-(--danger-text)' : 'border-(--success-border) text-(--success-text)',
+				search.problem ? 'border-(--bad-line) text-(--bad)' : 'border-(--ok-line) text-(--ok)',
 			)}
 		>
 			<span className="min-w-0 flex-1">{search.problem ? `Not connected: ${search.problem}` : 'Connected. Turn it on or off for tasks here or from the + menu in any composer.'}</span>
@@ -543,21 +543,21 @@ type Fact = { label: string; value: ReactNode };
 function DetailFrame({ mark, title, mono, tagline, actions, facts, children }: { mark: Mark; title: string; mono?: boolean; tagline: string; actions?: ReactNode; facts: Fact[]; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-5">
-			<div className="flex flex-wrap items-center gap-4 border-b border-(--border-subtle) pb-5">
+			<div className="flex flex-wrap items-center gap-4 border-b border-(--line) pb-5">
 				<MarkTile mark={mark} size={64} label={mark.title} className="rounded-control" />
 				<div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-1">
 					<h1 className={cn('m-0 truncate text-h1 leading-[32px] font-semibold tracking-[-0.022em]', mono && 'text-h1')}>{title}</h1>
-					<p className="m-0 text-body leading-[19px] text-pretty text-(--text-tertiary)">{tagline}</p>
+					<p className="m-0 text-body leading-[19px] text-pretty text-(--text-3)">{tagline}</p>
 				</div>
 				{actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
 			</div>
 			<div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_220px]">
 				<div className="flex min-w-0 flex-col gap-6">{children}</div>
-				<dl className="m-0 flex flex-col gap-4 lg:border-l lg:border-(--border-subtle) lg:pl-6">
+				<dl className="m-0 flex flex-col gap-4 lg:border-l lg:border-(--line) lg:pl-6">
 					{facts.map((fact) => (
 						<div key={fact.label} className="flex min-w-0 flex-col gap-1">
-							<dt className="in-caption text-(--text-disabled)">{fact.label}</dt>
-							<dd className="m-0 min-w-0 text-body leading-[18px] break-words text-(--text-secondary)">{fact.value}</dd>
+							<dt className="in-caption text-(--text-4)">{fact.label}</dt>
+							<dd className="m-0 min-w-0 text-body leading-[18px] break-words text-(--text-2)">{fact.value}</dd>
 						</div>
 					))}
 				</dl>
@@ -578,7 +578,7 @@ function Section({ title, children, aside }: { title: string; children: ReactNod
 	);
 }
 
-const Prose = ({ children }: { children: ReactNode }) => <p className="m-0 max-w-[68ch] text-body leading-[21px] text-pretty text-(--text-secondary)">{children}</p>;
+const Prose = ({ children }: { children: ReactNode }) => <p className="m-0 max-w-[68ch] text-body leading-[21px] text-pretty text-(--text-2)">{children}</p>;
 
 const DocsLink = ({ href }: { href: string }) => <ConsoleLink href={href}>Documentation</ConsoleLink>;
 
@@ -612,7 +612,7 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 				connected && item ? (
 					<>
 						{item.state === 'needs-sign-in' ? <StateBadge state={item.state} /> : null}
-						<OnSwitch item={item} label={<span className="text-body text-(--text-secondary)">On for tasks</span>} />
+						<OnSwitch item={item} label={<span className="text-body text-(--text-2)">On for tasks</span>} />
 					</>
 				) : undefined
 			}
@@ -640,20 +640,20 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 								aria-checked={access === value}
 								onClick={() => setAccess(value)}
 								className={cn(
-									'flex items-center gap-2.5 rounded-control border px-2.5 py-2 text-left outline-none focus-visible:shadow-(--focus-ring)',
-									access === value ? 'border-(--accent-border) bg-(--accent-bg-subtle)' : 'border-(--border-subtle) hover:border-(--border-strong)',
+									'flex items-center gap-2.5 rounded-control border px-2.5 py-2 text-left outline-none focus-visible:shadow-(--focus)',
+									access === value ? 'border-(--accent-line) bg-(--accent-soft)' : 'border-(--line) hover:border-(--line-strong)',
 								)}
 							>
-								<span className={cn('inline-flex size-3.5 shrink-0 rounded-full border', access === value ? 'border-(--accent-base) bg-(--accent-base)' : 'border-(--border-strong)')} />
+								<span className={cn('inline-flex size-3.5 shrink-0 rounded-full border', access === value ? 'border-(--accent) bg-(--accent)' : 'border-(--line-strong)')} />
 								<span className="flex min-w-0 flex-col">
-									<span className="text-body text-(--text-primary)">{title}</span>
-									<span className="text-small text-(--text-tertiary)">{detail}</span>
+									<span className="text-body text-(--text)">{title}</span>
+									<span className="text-small text-(--text-3)">{detail}</span>
 								</span>
 							</button>
 						))}
 					</div>
 					<div className="flex flex-wrap items-center justify-end gap-3">
-						<button type="button" className="mr-auto text-small text-(--text-tertiary) hover:text-(--text-secondary)" onClick={() => setShowClient((open) => !open)}>
+						<button type="button" className="mr-auto text-small text-(--text-3) hover:text-(--text-2)" onClick={() => setShowClient((open) => !open)}>
 							{showClient ? 'Hide the OAuth client' : 'Change the OAuth client'}
 						</button>
 						<ConnectButton mailbox={mailbox} access={access} label={`Connect ${mailbox.name}`} />
@@ -663,8 +663,8 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 			) : (
 				<>
 					{account.problem ? (
-						<div className="flex flex-wrap items-center gap-3 rounded-control border border-(--danger-border) px-3 py-2">
-							<span className="min-w-0 flex-1 text-small text-(--danger-text)">{account.problem}</span>
+						<div className="flex flex-wrap items-center gap-3 rounded-control border border-(--bad-line) px-3 py-2">
+							<span className="min-w-0 flex-1 text-small text-(--bad)">{account.problem}</span>
 							<ConnectButton mailbox={mailbox} access={mailbox.canDraft ? 'draft' : 'read'} label="Connect again" />
 						</div>
 					) : null}
@@ -706,7 +706,7 @@ function MailboxDetail({ mailbox, account, search }: { mailbox: ConnectorMailbox
 			{connected ? (
 				<Section title="Disconnect">
 					<div className="flex flex-wrap items-center gap-3">
-						<span className="min-w-0 flex-1 text-small text-(--text-tertiary)">Signs out of {account.email ?? 'the account'} and removes Anton from its connected apps.</span>
+						<span className="min-w-0 flex-1 text-small text-(--text-3)">Signs out of {account.email ?? 'the account'} and removes Anton from its connected apps.</span>
 						<Disconnect account={account} />
 					</div>
 				</Section>
@@ -752,13 +752,13 @@ function ServerDetail({ server, search }: { server: McpServer; search: Opened })
 							{signIn.isPending ? 'Opening…' : needsSignIn ? 'Sign in again' : 'Sign in'}
 						</Btn>
 					) : null}
-					{item ? <OnSwitch item={item} label={<span className="text-body text-(--text-secondary)">On for tasks</span>} /> : null}
+					{item ? <OnSwitch item={item} label={<span className="text-body text-(--text-2)">On for tasks</span>} /> : null}
 				</>
 			}
 		>
 			<Returned search={search} />
 			<Prose>{entry?.description ?? `A remote MCP server at ${hostOf(server.url)}. Its tools are listed below as the agent finds them.`}</Prose>
-			{needsSignIn ? <span className="text-small text-(--danger-text)">{server.signIn.problem}</span> : null}
+			{needsSignIn ? <span className="text-small text-(--bad)">{server.signIn.problem}</span> : null}
 			<ErrorLine error={signIn.error} />
 			{offerSignIn && (server.signIn.pastedClient || noRegistration) ? <OwnClient server={server} signIn={signIn} /> : null}
 			<Section title="Tools">
@@ -793,7 +793,7 @@ function ServerDetail({ server, search }: { server: McpServer; search: Opened })
 			</Section>
 			<Section title="Remove">
 				<div className="flex flex-wrap items-center gap-3">
-					<span className="min-w-0 flex-1 text-small text-(--text-tertiary)">Removes the server, its sign-in and its token from Anton.</span>
+					<span className="min-w-0 flex-1 text-small text-(--text-3)">Removes the server, its sign-in and its token from Anton.</span>
 					<ErrorLine error={remove.error} />
 					<Btn
 						size="sm"
@@ -913,7 +913,7 @@ function ComposioKeyForm({ configured, keyFromEnv }: { configured: boolean; keyF
 				) : null}
 			</div>
 			<ErrorLine error={save.error ?? remove.error} />
-			{keyFromEnv ? <span className="text-small text-(--text-tertiary)">Set by COMPOSIO_API_KEY on this server.</span> : null}
+			{keyFromEnv ? <span className="text-small text-(--text-3)">Set by COMPOSIO_API_KEY on this server.</span> : null}
 		</form>
 	);
 }
@@ -922,8 +922,8 @@ function ComposioKeyForm({ configured, keyFromEnv }: { configured: boolean; keyF
 function ComposioTools({ toolkit }: { toolkit: string }) {
 	const tools = useQuery({ queryKey: ['composio-tools', toolkit], queryFn: () => api.composioTools(toolkit), retry: false, staleTime: 60_000 });
 	if (tools.isPending) return <Spinner size={12} />;
-	if (tools.isError) return <span className="text-small text-(--danger-text)">{tools.error.message}</span>;
-	if (!tools.data.tools.length) return <span className="text-small text-(--text-tertiary)">Composio lists no tools for it.</span>;
+	if (tools.isError) return <span className="text-small text-(--bad)">{tools.error.message}</span>;
+	if (!tools.data.tools.length) return <span className="text-small text-(--text-3)">Composio lists no tools for it.</span>;
 	return <ToolChips tools={tools.data.tools.map((tool) => ({ name: tool.name, about: tool.description }))} />;
 }
 
@@ -974,15 +974,15 @@ function ComposioDetail({ account, search }: { account: ComposioAccount; search:
 							{check.isPending ? 'Checking…' : 'Check again'}
 						</Btn>
 					) : null}
-					{item ? <OnSwitch item={item} label={<span className="text-body text-(--text-secondary)">On for tasks</span>} /> : null}
+					{item ? <OnSwitch item={item} label={<span className="text-body text-(--text-2)">On for tasks</span>} /> : null}
 				</>
 			}
 		>
 			<Returned search={search} />
 			<Prose>{entry?.description ?? account.description}</Prose>
 			{account.status === 'failed' ? (
-				<div className="flex flex-wrap items-center gap-3 rounded-control border border-(--danger-border) px-3 py-2">
-					<span className="min-w-0 flex-1 text-small text-(--danger-text)">{account.statusReason ?? 'The connection failed.'}</span>
+				<div className="flex flex-wrap items-center gap-3 rounded-control border border-(--bad-line) px-3 py-2">
+					<span className="min-w-0 flex-1 text-small text-(--bad)">{account.statusReason ?? 'The connection failed.'}</span>
 				</div>
 			) : null}
 			{pending ? (
@@ -1006,7 +1006,7 @@ function ComposioDetail({ account, search }: { account: ComposioAccount; search:
 					</Section>
 					<Section title="Disconnect">
 						<div className="flex flex-wrap items-center gap-3">
-							<span className="min-w-0 flex-1 text-small text-(--text-tertiary)">Revokes the sign-in at {account.name} and at Composio; the app stays here to connect again.</span>
+							<span className="min-w-0 flex-1 text-small text-(--text-3)">Revokes the sign-in at {account.name} and at Composio; the app stays here to connect again.</span>
 							<ErrorLine error={disconnect.error} />
 							<Btn
 								size="sm"
@@ -1023,7 +1023,7 @@ function ComposioDetail({ account, search }: { account: ComposioAccount; search:
 			) : null}
 			<Section title="Remove">
 				<div className="flex flex-wrap items-center gap-3">
-					<span className="min-w-0 flex-1 text-small text-(--text-tertiary)">Removes the app, its sign-in and its connection from Anton.</span>
+					<span className="min-w-0 flex-1 text-small text-(--text-3)">Removes the app, its sign-in and its connection from Anton.</span>
 					<ErrorLine error={remove.error} />
 					<Btn
 						size="sm"
@@ -1106,7 +1106,7 @@ function OfferedComposio({ entry }: { entry: CatalogEntry }) {
 function OfferedComposioLookup({ slug }: { slug: string }) {
 	const toolkit = useQuery({ queryKey: ['composio-toolkit', slug], queryFn: () => api.composioToolkit(slug), staleTime: 60_000 });
 	if (toolkit.isPending) return <Spinner size={12} />;
-	if (toolkit.isError) return <p className="m-0 text-small text-(--danger-text)">{toolkit.error.message}</p>;
+	if (toolkit.isError) return <p className="m-0 text-small text-(--bad)">{toolkit.error.message}</p>;
 	return <OfferedComposio entry={entryForToolkit(toolkit.data)} />;
 }
 
@@ -1149,7 +1149,7 @@ export function ConnectorDetailPage() {
 			<button
 				type="button"
 				onClick={back}
-				className="inline-flex items-center gap-1.5 self-start text-small text-(--text-tertiary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+				className="inline-flex items-center gap-1.5 self-start text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)"
 			>
 				<Icon icon={ArrowLeft} size={12} />
 				Connectors
@@ -1158,7 +1158,7 @@ export function ConnectorDetailPage() {
 				(connectors.isPending ? (
 					<Spinner size={12} />
 				) : connectors.isError ? (
-					<p className="m-0 text-small text-(--danger-text)">{connectors.error.message}</p>
+					<p className="m-0 text-small text-(--bad)">{connectors.error.message}</p>
 				) : (
 					<EmptyState title="No such connector" body="It may have been removed. Every connector is on the Connectors page.">
 						<Link to="/settings/$section" params={{ section: 'connectors' }}>

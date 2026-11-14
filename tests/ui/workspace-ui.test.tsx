@@ -197,7 +197,7 @@ describe('Spend matrix and dial', () => {
 		);
 		const matrix = screen.getByRole('figure', { name: 'Spend per day' });
 		// The busiest day fills its column; a quarter of it lights one cell; a quiet day none.
-		const lit = [...container.querySelectorAll('svg > g')].map((day) => day.querySelectorAll('rect[fill="var(--accent-base)"]').length);
+		const lit = [...container.querySelectorAll('svg > g')].map((day) => day.querySelectorAll('rect[fill="var(--accent)"]').length);
 		expect(lit).toEqual([4, 0, 1]);
 		expect(within(matrix).getByText('$0.04')).toBeTruthy();
 		expect(within(matrix).getByText('Today')).toBeTruthy();

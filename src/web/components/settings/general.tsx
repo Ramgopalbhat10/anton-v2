@@ -75,7 +75,7 @@ function BackgroundModel({
 					only={only}
 				/>
 			) : (
-				<span className="text-small text-(--text-tertiary)">{fallbackLabel}</span>
+				<span className="text-small text-(--text-3)">{fallbackLabel}</span>
 			)}
 			<Switch
 				checked={value !== null}
@@ -103,8 +103,8 @@ const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string
 /** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
 function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {
 	const listed = useQuery({ queryKey: ['image-models'], queryFn: api.imageModels, staleTime: 5 * 60_000 });
-	if (!listed.data) return listed.error ? <span className="text-small text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
-	if (!listed.data.available) return <span className="text-small text-(--text-tertiary)">Needs an OpenRouter key</span>;
+	if (!listed.data) return listed.error ? <span className="text-small text-(--bad)">Could not list image models</span> : <Spinner size={12} />;
+	if (!listed.data.available) return <span className="text-small text-(--text-3)">Needs an OpenRouter key</span>;
 	const { models, default: fallback } = listed.data;
 	const label = (id: string) => models.find((model) => model.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	const vendors = new Map<string, ImageModelInfo[]>();
@@ -358,11 +358,11 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<div
 				role="group"
 				aria-label="Save changes"
-				className="flex items-center gap-3 self-stretch border-t border-(--border-subtle) pt-4"
+				className="flex items-center gap-3 self-stretch border-t border-(--line) pt-4"
 			>
 				<span className="min-w-0 flex-1 text-small">
 					{dirty ? (
-						<span className="inline-flex items-center gap-1.5 text-(--text-secondary)">
+						<span className="inline-flex items-center gap-1.5 text-(--text-2)">
 							<StatusDot tone="accent" />
 							Unsaved changes
 						</span>
@@ -370,7 +370,7 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
 					)}
 				</span>
-				{dirty && save.error ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
+				{dirty && save.error ? <span className="text-small text-(--bad)">{save.error.message}</span> : null}
 				<Btn
 					size="sm"
 					variant="ghost"

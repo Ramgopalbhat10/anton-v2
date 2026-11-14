@@ -67,7 +67,7 @@ function Bubble({ message }: { message: FlueConversationMessage }) {
 				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
 					{images.map((image, index) => (
 						<a key={image.url ?? index} href={image.url} target="_blank" rel="noreferrer">
-							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-tile border border-(--border-subtle)" />
+							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-card border border-(--line)" />
 						</a>
 					))}
 				</div>
@@ -106,14 +106,14 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 				type="button"
 				aria-expanded={open}
 				onClick={() => setOpen((current) => !current)}
-				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-full border border-(--border-subtle) bg-(--well-bg) pr-3 pl-1.5 text-left text-small text-(--text-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-full border border-(--line) bg-(--bg-raised) pr-3 pl-1.5 text-left text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
 			>
-				<Icon icon={ChevronRight} size={12} className="text-(--icon-tertiary) transition-transform duration-(--duration-micro)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
+				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform duration-(--t-fast)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
 				<span className="flex shrink-0 items-center -space-x-1">
 					{reports.slice(0, 5).map((report, index) => {
 						const thread = byPrefix(threads, report.id);
 						return (
-							<span key={index} className="inline-flex rounded-full bg-(--bg-canvas) p-px">
+							<span key={index} className="inline-flex rounded-full bg-(--bg-panel) p-px">
 								{thread ? <ThreadGlyph thread={thread} size={12} /> : <Glyph kind={report.state} size={12} />}
 							</span>
 						);
@@ -128,12 +128,12 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 				) : (
 					<span className="min-w-0 truncate">
 						{reports.length} threads reported
-						{needs ? <span className="text-(--attention-text)"> · {needs} need you</span> : null}
+						{needs ? <span className="text-(--warn)"> · {needs} need you</span> : null}
 					</span>
 				)}
 			</button>
 			{open ? (
-				<div className="ml-3 flex flex-col gap-1 border-l border-(--border-subtle) py-1 pl-3">
+				<div className="ml-3 flex flex-col gap-1 border-l border-(--line) py-1 pl-3">
 					{reports.map((report, index) => {
 						const thread = byPrefix(threads, report.id);
 						return (
@@ -142,12 +142,12 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 								type="button"
 								disabled={!thread}
 								onClick={() => thread && openThread(thread)}
-								className="flex min-w-0 items-start gap-2 rounded-control px-1.5 py-1 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+								className="flex min-w-0 items-start gap-2 rounded-control px-1.5 py-1 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 							>
 								<span className="mt-[3px] inline-flex">{thread ? <ThreadGlyph thread={thread} size={12} /> : <Glyph kind={report.state} size={12} />}</span>
 								<span className="flex min-w-0 flex-col">
-									<span className="truncate text-body text-(--text-primary)">{report.title}</span>
-									{report.text ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{report.text}</span> : null}
+									<span className="truncate text-body text-(--text)">{report.title}</span>
+									{report.text ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{report.text}</span> : null}
 								</span>
 							</button>
 						);
@@ -185,8 +185,8 @@ function StartedRows({ reports, threads }: { reports: Report[]; threads: Session
 /** A line for what the coordinator did quietly: sent a thread a note, saved to memory, added a repository. */
 function ActionRow({ icon, children, failed }: { icon: typeof Send; children: ReactNode; failed?: boolean }) {
 	return (
-		<div className={cn('flex min-w-0 items-center gap-2 px-1 text-small', failed ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-			<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? undefined : 'text-(--icon-tertiary)'} />
+		<div className={cn('flex min-w-0 items-center gap-2 px-1 text-small', failed ? 'text-(--bad)' : 'text-(--text-3)')}>
+			<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? undefined : 'text-(--text-3)'} />
 			<span className="min-w-0 break-words">{children}</span>
 		</div>
 	);
@@ -223,11 +223,11 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 					const threadId = started[index];
 					const thread = threadId ? data?.sessions.find((session) => session.id === threadId) : undefined;
 					return (
-						<li key={index} className="flex items-start gap-3 border-t border-(--border-subtle) px-3.5 py-2.5">
-							<span className="in-num mt-px w-4 shrink-0 text-micro text-(--text-disabled)">{String(index + 1).padStart(2, '0')}</span>
+						<li key={index} className="flex items-start gap-3 border-t border-(--line) px-3.5 py-2.5">
+							<span className="in-num mt-px w-4 shrink-0 text-micro text-(--text-4)">{String(index + 1).padStart(2, '0')}</span>
 							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-								<span className="truncate text-body text-(--text-primary)">{suggestion.title}</span>
-								<span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{suggestion.brief}</span>
+								<span className="truncate text-body text-(--text)">{suggestion.title}</span>
+								<span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{suggestion.brief}</span>
 								{suggestion.repo ? <Caption>{suggestion.repo.split('/').pop()}</Caption> : null}
 							</div>
 							{thread ? (
@@ -244,8 +244,8 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 				})}
 			</ol>
 			{left.length > 1 ? (
-				<footer className="flex items-center justify-between gap-2 border-t border-(--border-subtle) px-3.5 py-2">
-					<Caption>{start.isError ? <span className="text-(--danger-text)">{start.error.message}</span> : `Up to ${space.maxParallel} work at once; the rest queue`}</Caption>
+				<footer className="flex items-center justify-between gap-2 border-t border-(--line) px-3.5 py-2">
+					<Caption>{start.isError ? <span className="text-(--bad)">{start.error.message}</span> : `Up to ${space.maxParallel} work at once; the rest queue`}</Caption>
 					<Btn size="sm" variant="primary" disabled={start.isPending} onClick={() => start.mutate(left)}>
 						Start all {left.length}
 					</Btn>
@@ -263,13 +263,13 @@ function Starting({ part }: { part: ToolPart }) {
 	return (
 		<div aria-busy={!failed} className={cn(THREAD_CARD, 'min-h-9 justify-center')}>
 			<div className="flex min-h-6 min-w-0 items-center gap-2.5">
-				{failed ? <Icon icon={CircleAlert} size={14} className="text-(--danger-text)" /> : <Spinner size={13} />}
+				{failed ? <Icon icon={CircleAlert} size={14} className="text-(--bad)" /> : <Spinner size={13} />}
 				{failed ? (
-					<span className="min-w-0 truncate text-body text-(--danger-text)">Could not start “{title || 'a thread'}”</span>
+					<span className="min-w-0 truncate text-body text-(--bad)">Could not start “{title || 'a thread'}”</span>
 				) : title ? (
-					<span className="min-w-0 truncate text-body text-(--text-primary)">{title}</span>
+					<span className="min-w-0 truncate text-body text-(--text)">{title}</span>
 				) : (
-					<span aria-hidden className="in-pulse h-2.5 w-[140px] rounded-full bg-(--bg-skeleton)" />
+					<span aria-hidden className="in-pulse h-2.5 w-[140px] rounded-full bg-(--bg-active)" />
 				)}
 				{failed ? null : <span className="in-shimmer shrink-0 text-small">Starting</span>}
 			</div>
@@ -310,7 +310,7 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 			return (
 				<ActionRow icon={Send} failed={failed}>
 					{/* A thread deleted since is gone from the list; the coordinator then starts a new one. */}
-					{failed ? 'Not sent' : 'Sent'} to <span className="text-(--text-secondary)">{target?.title ?? (failed ? 'a deleted thread' : 'a thread')}</span>: {field(part.input, 'message')}
+					{failed ? 'Not sent' : 'Sent'} to <span className="text-(--text-2)">{target?.title ?? (failed ? 'a deleted thread' : 'a thread')}</span>: {field(part.input, 'message')}
 				</ActionRow>
 			);
 		case 'remember':
@@ -408,7 +408,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 			)}
 			<OutputCards items={files} composer={space.id} />
 			{live && parts.length === 0 ? (
-				<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
+				<div className="flex items-center gap-2 text-small text-(--text-3)">
 					<Spinner size={12} />
 					<span>Thinking</span>
 				</div>
@@ -447,7 +447,7 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 			</div>
 			<div className="flex max-w-[52ch] flex-col items-center gap-1.5">
 				<h1 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.02em]">{space.name}</h1>
-				<p className="m-0 text-body leading-[19px] text-pretty text-(--text-tertiary)">
+				<p className="m-0 text-body leading-[19px] text-pretty text-(--text-3)">
 					{space.goal || 'Describe the work. The coordinator splits it into threads that run in parallel, each on its own branch and sandbox, and reports back here.'}
 				</p>
 			</div>
@@ -457,7 +457,7 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 						key={starter}
 						type="button"
 						onClick={() => onPick(starter)}
-						className="h-7 rounded-full border border-(--border-subtle) bg-(--well-bg) px-3 text-small text-(--text-secondary) outline-none hover:border-(--border-default) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+						className="h-7 rounded-full border border-(--line) bg-(--bg-raised) px-3 text-small text-(--text-2) outline-none hover:border-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus)"
 					>
 						{starter.trim()}
 					</button>
@@ -501,7 +501,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	}
 	return (
 		<form
-			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--border-strong)"
+			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--line-strong)"
 			onSubmit={(event) => {
 				event.preventDefault();
 				if (brief.trim() || attachments.count) start();
@@ -510,7 +510,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 		>
 			<div className="flex items-center gap-2 px-3.5 pt-3">
 				<Caption className="flex-1">New thread in {space.name}</Caption>
-				<button type="button" onClick={onDone} className="text-small text-(--text-tertiary) hover:text-(--text-primary)">
+				<button type="button" onClick={onDone} className="text-small text-(--text-3) hover:text-(--text)">
 					Cancel
 				</button>
 			</div>
@@ -529,8 +529,8 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				className="min-h-[72px] px-3.5 pt-2 text-body-lg leading-[20px]"
 			/>
 			<AttachmentTray attachments={attachments} className="px-3.5 pt-2" />
-			{attachments.notice ? <div className="px-3.5 pt-2 text-small text-(--warning-text)">{attachments.notice}</div> : null}
-			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--border-subtle) px-3 py-2">
+			{attachments.notice ? <div className="px-3.5 pt-2 text-small text-(--warn)">{attachments.notice}</div> : null}
+			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--line) px-3 py-2">
 				<ComposerPlus attachments={attachments} label="Attach files to the brief" side="bottom" />
 				<Menu>
 					<MenuTrigger asChild>
@@ -650,7 +650,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				}
 			}}
 		>
-			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)" {...attachments.dropZone}>
+			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)" {...attachments.dropZone}>
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput
@@ -660,18 +660,18 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>
 				{blocked || notice || attachments.limitError ? (
-					<div className="text-small text-(--danger-text)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
+					<div className="text-small text-(--bad)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
 				) : blind ? (
-					<div className="text-small text-(--warning-text)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
+					<div className="text-small text-(--warn)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
 				) : attachments.limitError || attachments.notice || paused ? (
-					<div className="text-small text-(--warning-text)">{attachments.limitError ?? attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
+					<div className="text-small text-(--warn)">{attachments.limitError ?? attachments.notice ?? `The project is ${space.state}: new threads wait as queued until it is active again.`}</div>
 				) : null}
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
 					<AttachButton attachments={attachments} />
 					<ModelPicker value={choice} onChange={(change) => edit.mutate(change)} />
 					{/* Enter sends, as everywhere; the hint speaks up only while the coordinator is busy. */}
-					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-disabled) max-sm:invisible">
+					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-4) max-sm:invisible">
 						{busy ? (
 							<>
 								<span className="truncate">Send to the coordinator</span>
@@ -762,7 +762,7 @@ export function ProjectFeed({
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
 					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-						<div className="flex items-center gap-2 text-small text-(--text-secondary)">
+						<div className="flex items-center gap-2 text-small text-(--text-2)">
 							<Spinner size={12} />
 							<span>The coordinator is reading</span>
 						</div>

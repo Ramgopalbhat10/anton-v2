@@ -15,7 +15,7 @@ export const CATEGORIES: Array<{ key: Category; label: string; one: string; icon
 	{ key: 'image', label: 'Images', one: 'Image', icon: Image, tone: 'text-(--data-5)', test: /\.(png|jpe?g|gif|webp|svg|avif)$/i },
 	{ key: 'data', label: 'Data', one: 'Data', icon: Sheet, tone: 'text-(--data-4)', test: /\.(csv|tsv|json|jsonl|ya?ml|xml|xlsx?|parquet|sqlite|db)$/i },
 	{ key: 'code', label: 'Code', one: 'Code', icon: Braces, tone: 'text-(--data-3)', test: /\.([cm]?[jt]sx?|py|go|rs|rb|java|kt|swift|c|cc|cpp|h|cs|php|sh|sql|css|scss|diff|patch|toml|ini)$/i },
-	{ key: 'other', label: 'Other', one: 'File', icon: Package, tone: 'text-(--icon-tertiary)', test: /$^/ },
+	{ key: 'other', label: 'Other', one: 'File', icon: Package, tone: 'text-(--text-3)', test: /$^/ },
 ];
 
 export function categoryOf(path: string): Category {
