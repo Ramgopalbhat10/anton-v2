@@ -81,6 +81,20 @@ function page() {
 }
 
 describe('Subscriptions', () => {
+	it('labels the Devin worker prototype and accepts a PAT without promising free billing', async () => {
+		const devin = plan({ id: 'devin', name: 'Devin', kind: 'key', gateway: 'devin', keyPage: 'https://app.devin.ai/settings/devin-api?tab=pats' });
+		api.subscriptions.mockResolvedValue({ subscriptions: [devin] });
+		api.connectSubscriptionKey.mockResolvedValue({ ...devin, state: 'connected', keyHint: '1234', models: [planModel('devin/swe-2-flash', 'SWE-2 Flash'), planModel('devin/swe-2', 'SWE-2')] });
+		page();
+		expect(await screen.findByText('SWE-2 Flash and SWE-2, with Anton’s tools.')).toBeTruthy();
+		expect(screen.getByText(/not an officially supported inference endpoint/)).toBeTruthy();
+		fireEvent.change(screen.getByLabelText('Devin key'), { target: { value: 'test-pat' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		await waitFor(() => expect(api.connectSubscriptionKey).toHaveBeenCalledWith('devin', 'test-pat'));
+		expect(await screen.findByText(/on-demand billing apply/)).toBeTruthy();
+		expect(screen.getByText('Not priced locally')).toBeTruthy();
+	});
+
 	it('offers both ways to connect a plan', async () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [plan()] });
 		page();

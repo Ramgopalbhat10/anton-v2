@@ -335,6 +335,8 @@ export type ModelInfo = {
 	id: string;
 	name: string;
 	vendor: string;
+	/** Provider-selected wire model when a display/family id is not directly callable. */
+	requestModelId?: string;
 	description: string;
 	/** Unix milliseconds the model was published. */
 	createdAt: number;

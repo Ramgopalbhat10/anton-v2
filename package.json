@@ -13,6 +13,8 @@
 		"start": "node src/server.ts",
 		"start:backup": "scripts/start-with-backup.sh",
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
+		"setup:devin": "npm --prefix workers/devin ci --no-audit --no-fund",
+		"test:devin-worker": "npm --prefix workers/devin test",
 		"lint:hooks": "oxlint -c .oxlintrc.json src/web",
 		"test": "node --experimental-strip-types --test tests/*.test.ts",
 		"test:ui": "vitest run",

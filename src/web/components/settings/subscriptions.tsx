@@ -535,7 +535,17 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 }
 
 /** What a key plan's card says, by plan; a plan not listed here gets plain wording. */
-const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; howTo: string; placeholder: string; pricedAs: string | null; terms?: string }> = {
+const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; howTo: string; placeholder: string; pricedAs: string | null; terms?: string; billing?: string }> = {
+	devin: {
+		tagline: 'experimental · oh-my-pi worker',
+		lead: 'SWE-2 Flash and SWE-2, with Anton’s tools.',
+		about: 'This prototype runs oh-my-pi in a Bun worker on this server. Devin supplies the model; Anton keeps control of tools and the task sandbox. SWE-2 Flash is preferred; choose SWE-2 if Flash is unavailable.',
+		howTo: 'Create a Devin personal access token (PAT) and paste it here. The server needs npm run setup:devin first.',
+		placeholder: 'cog_…',
+		pricedAs: null,
+		billing: 'Your Devin plan limits and on-demand billing apply. Local token counts are not an invoice.',
+		terms: 'Experimental: uses an internal Devin/Windsurf API, not an officially supported inference endpoint. Your Devin limits and billing apply; check your subscription terms.',
+	},
 	'opencode-go': {
 		tagline: 'open coding models',
 		lead: 'A monthly plan of open coding models, with a key from OpenCode.',
@@ -678,7 +688,7 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 					title={`${subscription.models.length} ${subscription.models.length === 1 ? 'model' : 'models'} on your plan`}
 					info={<Named gateway={subscription.gateway} />}
 				>
-					Billed to your {subscription.name} plan, not per token.
+						{copy.billing ?? <>Billed to your {subscription.name} plan, not per token.</>}
 				</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title={`${subscription.name} stopped taking the key`}>
@@ -698,7 +708,7 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 							{ label: 'Connected', value: subscription.connectedAt ? day(subscription.connectedAt) : '—' },
 							{ label: 'Models', value: enabled ? `${subscription.models.length} in the picker` : 'Switched off', tone: enabled ? undefined : 'warning' },
 							{ label: 'This month', value: `${tokens(subscription.monthTokens)} tokens`, tone: 'accent' },
-							{ label: 'Counted as', value: copy.pricedAs && countAtApiPrices ? 'API prices' : '$0 per call' },
+							{ label: 'Counted as', value: subscription.id === 'devin' ? 'Not priced locally' : copy.pricedAs && countAtApiPrices ? 'API prices' : '$0 per call' },
 						]}
 					/>
 					{subscription.windows?.length ? <Windows windows={subscription.windows} /> : null}

@@ -10,6 +10,8 @@ export const config = {
 	/** Model for new tasks, as `<gateway>/<model id>`. */
 	model: read('ANTON_MODEL', 'openrouter/~deepseek/deepseek-flash-latest'),
 	dataDir,
+	/** Optional Bun executable for the separately installed, server-side Devin prototype. */
+	devinBun: read('ANTON_DEVIN_BUN'),
 	databaseUrl: read('TURSO_DATABASE_URL', `file:${path.join(dataDir, 'anton.db')}`),
 	databaseToken: read('TURSO_AUTH_TOKEN'),
 	/** Which provider backs each port; see src/providers/index.ts. */
