@@ -1,21 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { ArrowRight, Check, FolderGit2, FolderKanban, MessageSquare, Moon, Plus, X } from 'lucide-react';
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { Check, FolderGit2, FolderKanban, MessageSquare, Moon, Plus, Search, Settings, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';
-import { Caption, Status, StatusDot } from '@/components/instrument';
-import { PageFrame } from '@/components/page-frame';
-import { IconPicker, iconTint, suggestIcon } from '@/components/project-icon';
+import { Caption } from '@/components/instrument';
+import { IconPicker, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
-import { ProjectRack } from '@/components/project-rack';
 import { activity, ActivityBars } from '@/components/project-viz';
 import { AREA } from '@/components/repo-settings';
 import { FIELD } from '@/components/settings/parts';
-import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner } from '@/components/signal';
+import { MenuButton } from '@/components/nav';
 import { useNow } from '@/components/subagents';
 import { ThreadStateIcon } from '@/components/thread-card';
-import { api, SAFETY_NET_MS, type Space } from '@/lib/api';
+import { api, type Space } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { stateOf, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
@@ -25,79 +24,93 @@ import { cn } from '@/lib/utils';
 const CARD_ROWS = 3;
 
 /**
- * A project as a card: its mark and goal over a wash of its own colour, three
- * figures (open threads, what needs you, what runs), its repositories by short
- * name, its latest open threads, and a footer with its recent activity.
+ * A project as a quiet card: its mark and goal, three figures (open threads,
+ * what needs you, what works) over a strip of its recent activity, its
+ * repositories as outline badges, and its latest open threads underneath.
+ * The whole card opens the project; the gear opens its settings.
  */
 function ProjectCard({ space }: { space: Space }) {
 	const { threads } = useThreads(space.id);
 	const open = threads.filter((thread) => stateOf(thread) !== 'resolved');
 	const counts = space.counts;
+	const openCount = Object.entries(counts).reduce((total, [state, count]) => (state === 'resolved' ? total : total + count), 0);
 	const now = useNow(false);
-	const tint = iconTint(space.icon);
 	const repos = space.repos.slice(0, 3);
 	const extra = space.repos.length - repos.length;
 	return (
-		<Link
-			to="/projects/$spaceId"
-			params={{ spaceId: space.id }}
-			style={{ '--tint': tint } as CSSProperties}
-			className={cn(
-				'project-card group/card in-card relative flex min-w-0 flex-col overflow-hidden outline-none focus-visible:shadow-(--focus)',
-				space.state === 'archived' && 'opacity-70',
-			)}
-		>
-			<span aria-hidden className="project-card__wash pointer-events-none absolute inset-x-0 top-0 h-24" />
-			<div className="relative flex items-start gap-3 px-4 pt-4">
-				<SpaceMark space={space} size={36} />
-				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="flex items-center gap-2">
-						<span className="min-w-0 flex-1 truncate text-body-lg font-semibold tracking-[-0.01em] text-(--text)">{space.name}</span>
-						{space.state !== 'active' ? <Caption tone="warning">{space.state === 'paused' ? 'Paused' : 'Archived'}</Caption> : null}
-						{counts.waiting > 0 ? <Status tone="attention">{counts.waiting === 1 ? 'Needs you' : `${counts.waiting} need you`}</Status> : counts.working > 0 ? <Status tone="accent" pulse>Working</Status> : null}
+		<div className={cn('in-card relative overflow-hidden transition-shadow duration-(--t) hover:shadow-(--sh-1)', space.state === 'archived' && 'opacity-70')}>
+			<Link to="/projects/$spaceId" params={{ spaceId: space.id }} aria-label={`Open ${space.name}`} className="absolute inset-0 rounded-card outline-none focus-visible:shadow-(--focus)" />
+			<div className="pointer-events-none flex min-w-0 flex-1 flex-col">
+				<div className="flex items-start gap-2.5 px-3.5 pt-3.5">
+					<SpaceMark space={space} size={28} />
+					<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+						<div className="flex items-center gap-1.5">
+							<span className="min-w-0 flex-1 truncate text-body font-semibold text-(--text)">{space.name}</span>
+							{space.state !== 'active' ? <span className="shrink-0 text-micro font-medium text-(--warn)">{space.state === 'paused' ? 'Paused' : 'Archived'}</span> : null}
+						</div>
+						<span className="truncate text-small text-(--text-3)" title={space.goal || undefined}>
+							{space.goal || 'No goal yet. Tell the coordinator what this project is for.'}
+						</span>
 					</div>
-					<span className="line-clamp-2 min-h-[34px] text-small leading-[17px] text-(--text-3)">{space.goal || 'No goal yet. Tell the coordinator what this project is for.'}</span>
+					<Link
+						to="/projects/$spaceId/settings"
+						params={{ spaceId: space.id }}
+						aria-label={`${space.name} settings`}
+						className="pointer-events-auto relative -mr-1.5 -mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-(--text-3) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+					>
+						<Icon icon={Settings} size={13} />
+					</Link>
+				</div>
+				<div className="flex items-start gap-4 px-3.5 pt-3">
+					<div className="flex flex-col">
+						<span className="in-num text-body font-semibold text-(--text)">{openCount}</span>
+						<span className="text-micro text-(--text-3)">Open</span>
+					</div>
+					<div className="flex flex-col">
+						<span className={cn('in-num text-body font-semibold', counts.waiting ? 'text-(--warn)' : 'text-(--text)')}>{counts.waiting}</span>
+						<span className="whitespace-nowrap text-micro text-(--text-3)">Needs you</span>
+					</div>
+					<div className="flex flex-col">
+						<span className="in-num text-body font-semibold text-(--text)">{counts.working}</span>
+						<span className="text-micro text-(--text-3)">Working</span>
+					</div>
+					<span className="min-w-2 flex-1" />
+					<ActivityBars bars={activity(threads, now, 14).bars} height={14} className="mt-0.5 w-[96px] shrink-0" />
+				</div>
+				<div className="flex min-h-[22px] flex-wrap items-center gap-1 px-3.5 pt-2.5">
+					{repos.map((repo) => (
+						<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[20px] max-w-[48%] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)]">
+							<Icon icon={FolderGit2} size={10} className="shrink-0 text-(--text-3)" />
+							<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
+						</span>
+					))}
+					{extra > 0 ? <span className="inline-flex h-[20px] items-center rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]">+{extra}</span> : null}
+					{space.repos.length === 0 ? (
+						<span className="inline-flex h-[20px] items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]">
+							<Icon icon={MessageSquare} size={10} className="shrink-0" />
+							Chats only
+						</span>
+					) : null}
+				</div>
+				<div className="mx-3.5 mt-3 border-t border-(--line)" />
+				<div className="flex flex-col px-1.5 pt-1 pb-1.5" style={{ minHeight: CARD_ROWS * 26 }}>
+					{open.length ? (
+						open.slice(0, CARD_ROWS).map((thread) => (
+							<div key={thread.id} className="flex h-[26px] items-center gap-2 px-1.5">
+								<ThreadStateIcon thread={thread} size={12} />
+								<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">{thread.title}</span>
+								<span className="in-num shrink-0 text-micro text-(--text-4)">{age(threadActiveAt(thread))}</span>
+							</div>
+						))
+					) : (
+						<div className="flex flex-1 items-center justify-center gap-1.5 text-small text-(--text-4)" style={{ minHeight: CARD_ROWS * 26 }}>
+							<Icon icon={Moon} size={12} />
+							All quiet{space.activeAt ? ` · active ${age(space.activeAt)} ago` : ''}
+						</div>
+					)}
 				</div>
 			</div>
-			<div className="flex min-h-[22px] flex-wrap items-center gap-1 px-4 pt-3">
-				{repos.map((repo) => (
-					<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[22px] max-w-[48%] min-w-0 items-center gap-1 rounded-full bg-(--bg-hover) pr-2 pl-1.5 text-small text-(--text-2)">
-						<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
-						<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
-					</span>
-				))}
-				{extra > 0 ? <span className="in-num inline-flex h-[22px] items-center rounded-full bg-(--bg-hover) px-2 text-small text-(--text-3)">+{extra}</span> : null}
-				{space.repos.length === 0 ? (
-					<span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-(--bg-hover) pr-2 pl-1.5 text-small text-(--text-3)">
-						<Icon icon={MessageSquare} size={11} className="shrink-0" />
-						Chats, no repository
-					</span>
-				) : null}
-			</div>
-			<div className="mt-3 flex flex-col px-2" style={{ minHeight: CARD_ROWS * 28 }}>
-				{open.length ? (
-					open.slice(0, CARD_ROWS).map((thread) => (
-						<div key={thread.id} className="flex h-7 items-center gap-2 px-2">
-							<ThreadStateIcon thread={thread} size={12} />
-							<span className="min-w-0 flex-1 truncate text-body text-(--text-2)">{thread.title}</span>
-							<span className="in-num shrink-0 text-micro text-(--text-4)">{age(threadActiveAt(thread))}</span>
-						</div>
-					))
-				) : (
-					<div className="flex flex-1 items-center justify-center gap-2 text-small text-(--text-4)" style={{ minHeight: CARD_ROWS * 28 }}>
-						<Icon icon={Moon} size={13} />
-						All quiet, no open threads
-					</div>
-				)}
-			</div>
-			<footer className="mt-auto flex items-center gap-3 border-t border-(--line) px-4 py-2.5">
-				<ActivityBars bars={activity(threads, now, 14).bars} height={14} className="w-[64px] shrink-0" />
-				<span className="min-w-0 flex-1 truncate text-small text-(--text-3)">
-					{space.threads} thread{space.threads === 1 ? '' : 's'} · {age(space.activeAt) === 'now' ? 'active now' : `active ${age(space.activeAt)} ago`}
-				</span>
-				<Icon icon={ArrowRight} size={13} className="shrink-0 text-(--text-3) transition-transform duration-(--t) group-hover/card:translate-x-0.5 group-hover/card:text-(--text)" />
-			</footer>
-		</Link>
+		</div>
 	);
 }
 
@@ -105,20 +118,18 @@ function ProjectCard({ space }: { space: Space }) {
 function Summary({ spaces }: { spaces: Space[] }) {
 	const sum = (pick: (space: Space) => number) => spaces.reduce((total, space) => total + pick(space), 0);
 	const waiting = sum((space) => space.counts.waiting);
-	const working = sum((space) => space.counts.working);
-	const open = sum((space) => space.counts.waiting + space.counts.working + space.counts.queued + space.counts.review + space.counts.landing + space.counts.idle);
+	const open = sum((space) => Object.entries(space.counts).reduce((total, [state, count]) => (state === 'resolved' ? total : total + count), 0));
 	const items: Array<[string, number, string?]> = [
 		[spaces.length === 1 ? 'project' : 'projects', spaces.length],
 		[open === 1 ? 'open thread' : 'open threads', open],
-		['working', working, 'text-(--accent-text)'],
 		[waiting === 1 ? 'needs you' : 'need you', waiting, 'text-(--warn)'],
 	];
 	return (
-		<div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+		<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-small text-(--text-3)">
 			{items.map(([label, value, tone]) => (
-				<span key={label} className="inline-flex items-baseline gap-1.5">
-					<span className={cn('in-figure text-h2 leading-6', value > 0 && tone)}>{value}</span>
-					<span className="text-small text-(--text-3)">{label}</span>
+				<span key={label} className="inline-flex items-baseline gap-1">
+					<span className={cn('in-num font-semibold text-(--text)', tone)}>{value}</span>
+					{label}
 				</span>
 			))}
 		</div>
@@ -229,7 +240,7 @@ export function ProjectsPage() {
 	const search = useSearch({ from: '/projects' });
 	const navigate = useNavigate();
 	const spaces = useSpaces();
-	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
+	const [query, setQuery] = useState('');
 	const [creating, setCreating] = useState(Boolean(search.create));
 	useEffect(() => {
 		if (search.create) {
@@ -239,53 +250,75 @@ export function ProjectsPage() {
 	}, [search.create]);
 	const list = [...(spaces.data?.spaces ?? [])].sort((a, b) => Number(a.state === 'archived') - Number(b.state === 'archived') || b.counts.waiting - a.counts.waiting || b.activeAt.localeCompare(a.activeAt));
 	const active = list.filter((space) => space.state !== 'archived');
+	const needle = query.trim().toLowerCase();
+	const shown = needle
+		? list.filter((space) => `${space.name} ${space.goal} ${space.repos.map((repo) => repo.repoFullName).join(' ')}`.toLowerCase().includes(needle))
+		: list;
 	return (
-		<PageFrame
-			title="Projects"
-			description="Work under one goal, split into threads that run at once by a coordinator."
-			actions={
-				<Btn size="sm" icon={Plus} onClick={() => setCreating(true)}>
+		<div className="flex min-h-0 flex-1 flex-col">
+			<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
+				<MenuButton />
+				<nav aria-label="Where you are" className="flex min-w-0 shrink-0 items-center text-body">
+					<span className="font-medium text-(--text)">Projects</span>
+				</nav>
+				<span className="min-w-2 flex-1" />
+				<SearchField value={query} onChange={setQuery} placeholder="Search projects" label="Search projects" className="hidden w-[200px] shrink-0 md:flex" />
+				<Btn size="sm" variant="primary" icon={Plus} onClick={() => setCreating(true)} className="shrink-0">
 					New project
 				</Btn>
-			}
-		>
-			{spaces.isPending ? <Spinner size={12} /> : null}
-			{spaces.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-2)">Unable to load projects. Check your connection and try again. <Btn size="sm" onClick={() => void spaces.refetch()}>Try again</Btn></div> : null}
-			{spaces.data && list.length === 0 ? (
-				<div className="in-card p-1.5">
-					<EmptyState
-						art={<ProjectArt className="w-full max-w-[360px]" />}
-						title="Run several threads at once"
-						body="A project groups work under one goal, with or without repositories. Its coordinator splits the work into threads that run in parallel, each in its own sandbox, and tells you which need you."
-					>
-						<Btn size="sm" variant="primary" icon={Plus} onClick={() => setCreating(true)}>
-							New project
-						</Btn>
-					</EmptyState>
+			</header>
+			<div className="min-h-0 flex-1 overflow-y-auto">
+				<div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-6 py-7 md:px-8">
+					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+						<div className="flex min-w-0 flex-col gap-1">
+							<h1 className="m-0 text-h1 font-semibold tracking-[-0.01em] text-(--text)">Projects</h1>
+							<p className="m-0 max-w-[560px] text-body text-(--text-3)">A goal, its repositories, and a coordinator that runs threads in parallel.</p>
+						</div>
+						{active.length > 0 ? <Summary spaces={active} /> : null}
+					</div>
+					{spaces.isPending ? <Spinner size={13} /> : null}
+					{spaces.isError ? (
+						<div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-2)">
+							Unable to load projects. Check your connection and try again.
+							<Btn size="sm" onClick={() => void spaces.refetch()}>
+								Try again
+							</Btn>
+						</div>
+					) : null}
+					{spaces.data && list.length === 0 ? (
+						<EmptyState
+							art={<ProjectArt className="w-full max-w-[360px]" />}
+							title="Run several threads at once"
+							body="A project groups work under one goal, with or without repositories. Its coordinator splits the work into threads that run in parallel, each in its own sandbox, and tells you which need you."
+						>
+							<Btn size="sm" variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+								New project
+							</Btn>
+						</EmptyState>
+					) : null}
+					{shown.length ? (
+						<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+							{shown.map((space) => (
+								<ProjectCard key={space.id} space={space} />
+							))}
+							<button
+								type="button"
+								onClick={() => setCreating(true)}
+								className="group/new flex min-h-[190px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-(--line-strong) px-6 text-center outline-none transition-colors hover:border-(--accent-line) hover:bg-(--accent-soft) focus-visible:shadow-(--focus)"
+							>
+								<span className="inline-flex size-9 items-center justify-center rounded-full bg-(--bg-active) text-(--text-2) group-hover/new:bg-(--accent-soft) group-hover/new:text-(--accent-text)">
+									<Icon icon={Plus} size={16} />
+								</span>
+								<span className="text-body font-medium text-(--text-2) group-hover/new:text-(--text)">New project</span>
+								<span className="max-w-[220px] text-small leading-4 text-(--text-4)">A goal, its repositories, and a coordinator that runs threads in parallel.</span>
+							</button>
+						</div>
+					) : list.length ? (
+						<EmptyState icon={Search} title="No projects match" body="Try another search." />
+					) : null}
 				</div>
-			) : null}
-			{active.length > 0 ? <Summary spaces={active} /> : null}
-			{list.length ? (
-				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					{list.map((space) => (
-						<ProjectCard key={space.id} space={space} />
-					))}
-					<button
-						type="button"
-						onClick={() => setCreating(true)}
-						className="group/new flex min-h-[220px] flex-col items-center justify-center gap-2.5 rounded-card border border-dashed border-(--line-strong) px-6 text-center outline-none hover:border-(--accent-line) hover:bg-(--accent-soft) focus-visible:shadow-(--focus)"
-					>
-						<span className="inline-flex size-9 items-center justify-center rounded-full bg-(--bg-active) text-(--text-2) group-hover/new:bg-(--accent-soft) group-hover/new:text-(--accent-text)">
-							<Icon icon={Plus} size={16} />
-						</span>
-						<span className="text-body font-medium text-(--text-2) group-hover/new:text-(--text)">New project</span>
-						<span className="max-w-[220px] text-small leading-4 text-(--text-4)">A goal, its repositories, and a coordinator that runs threads in parallel.</span>
-					</button>
-				</div>
-			) : null}
-			{active.length > 0 && sessions.data ? <ProjectRack spaces={active} threads={sessions.data.sessions} /> : null}
-			{active.length > 0 && sessions.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-2)">Unable to load thread activity. Check your connection and try again. <Btn size="sm" onClick={() => void sessions.refetch()}>Try again</Btn></div> : null}
+			</div>
 			{creating ? <NewProjectDialog onClose={() => setCreating(false)} /> : null}
-		</PageFrame>
+		</div>
 	);
 }

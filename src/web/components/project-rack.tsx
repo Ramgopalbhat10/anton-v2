@@ -1,11 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, LayoutGrid } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { Caption, Card, CardFooter, CardSection } from '@/components/instrument';
-import { SpaceMark } from '@/components/project-sidebar';
 import { Btn, Icon } from '@/components/signal';
-import { FollowUp, PER_BAY, RackArrows, type RackBay, type RackLook, RackStats, RackWell, type RackWellHandle } from '@/components/task-rack';
+import { FollowUp, PER_BAY, type RackLook, RackStats, RackWell } from '@/components/task-rack';
 import { NextSteps, useOpenThread } from '@/components/thread-card';
 import { Glyph, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
 import { api, branchLabel, repoShort, type Session, type Space } from '@/lib/api';
@@ -113,95 +110,6 @@ function ThreadDetails({ thread }: { thread: Session }) {
 				</div>
 			</form>
 		</>
-	);
-}
-
-/** A project's name plate under its bay: its mark and name, then what is open and what needs you. */
-function Plate({ space, threads, shown }: { space: Space; threads: Session[]; shown: number }) {
-	const open = threads.filter((thread) => stateOf(thread) !== 'resolved').length;
-	const needs = threads.filter((thread) => stateOf(thread) === 'waiting').length;
-	return (
-		<Link
-			to="/projects/$spaceId"
-			params={{ spaceId: space.id }}
-			className="flex max-w-full min-w-0 flex-col items-center gap-0.5 rounded-control border border-transparent px-2.5 py-1 outline-none hover:border-(--line-strong) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
-		>
-			<span className="flex max-w-full min-w-0 items-center gap-1.5">
-				<SpaceMark space={space} size={16} />
-				<span className="truncate text-body text-(--text)">{space.name}</span>
-			</span>
-			<span className="in-caption whitespace-nowrap">
-				{open} open
-				{needs ? <span className="text-(--warn)"> · {needs} need{needs === 1 ? 's' : ''} you</span> : null}
-				{threads.length > shown ? ` · +${threads.length - shown}` : ''}
-			</span>
-		</Link>
-	);
-}
-
-const LEGEND: Array<{ kind: 'working' | 'waiting' | 'review' | 'queued' | 'resolved'; label: string }> = [
-	{ kind: 'working', label: 'Working' },
-	{ kind: 'waiting', label: 'Needs you' },
-	{ kind: 'review', label: 'Ready' },
-	{ kind: 'queued', label: 'Queued' },
-	{ kind: 'resolved', label: 'Done' },
-];
-
-function Legend() {
-	return (
-		<span className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-			{LEGEND.map((item) => (
-				<span key={item.kind} className="flex items-center gap-1.5">
-					<Glyph kind={item.kind} size={11} />
-					<Caption>{item.label}</Caption>
-				</span>
-			))}
-		</span>
-	);
-}
-
-/**
- * Every project as a bay in one rack, its threads as the blades: the whole
- * of Projects at a glance, and any thread a point away.
- */
-export function ProjectRack({ spaces, threads }: { spaces: Space[]; threads: Session[] }) {
-	const openThread = useOpenThread();
-	const [scroll, setScroll] = useState<RackWellHandle | null>(null);
-	const bays: Array<RackBay<Session>> = spaces.map((space) => {
-		const own = threads.filter((thread) => thread.spaceId === space.id);
-		const items = bayThreads(own);
-		return {
-			key: space.id,
-			items,
-			sweep: own.some((thread) => stateOf(thread) === 'working'),
-			led: bayLed(own),
-			plate: <Plate space={space} threads={own} shown={items.length} />,
-		};
-	});
-	return (
-		<Card
-			icon={LayoutGrid}
-			title="Rack"
-			sub="each project a bay, its threads the blades"
-			status={
-				<div className="flex items-center gap-1">
-					<RackArrows state={scroll} newer="Scroll back" older="Scroll on" />
-				</div>
-			}
-			footer={<CardFooter caption={<Legend />} />}
-		>
-			<CardSection ruled={false} className="pt-1">
-				<RackWell
-					bays={bays}
-					look={threadLook}
-					details={(thread) => <ThreadDetails thread={thread} />}
-					detailsLabel={(thread) => thread.title}
-					onChoose={(thread) => openThread(thread)}
-					label={`${spaces.length} projects as bays, their threads as blades`}
-					onScrollState={setScroll}
-				/>
-			</CardSection>
-		</Card>
 	);
 }
 

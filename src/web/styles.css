@@ -284,16 +284,3 @@ textarea::placeholder {
 		animation: none;
 	}
 }
-
-/* A project's card on the Projects page: a wash of the project's own colour
-   behind its mark, and a ring in that colour on hover. */
-.project-card {
-	transition: box-shadow var(--t) var(--ease), transform var(--t) var(--ease);
-}
-.project-card__wash {
-	background: radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--tint) 16%, transparent), transparent 70%);
-}
-.project-card:hover {
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), var(--sh-1);
-}
-

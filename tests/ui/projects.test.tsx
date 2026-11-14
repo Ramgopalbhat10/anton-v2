@@ -35,7 +35,7 @@ const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
 const { ProjectPanel } = await import('@/components/project-panel');
-const { ProjectRack, bayThreads } = await import('@/components/project-rack');
+const { ProjectBay, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
 const { OutputViewerHost } = await import('@/components/output-viewer');
@@ -529,11 +529,10 @@ describe('threads', () => {
 		expect(screen.getByText('1 thread needs you')).toBeTruthy();
 	});
 
-	it('racks each project as a bay of its threads, and draws a thread out with what it asks', async () => {
+	it('racks a project as a bay of its threads, and draws a thread out with what it asks', async () => {
 		expect(bayThreads(threads).map((item) => item.id)).toEqual(['asks', 'runs', 'pr', 'done']);
-		withRouter(() => <ProjectRack spaces={[space]} threads={threads} />);
-		expect(await screen.findByRole('group', { name: '1 projects as bays, their threads as blades' })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /Billing/ })).toBeTruthy();
+		withRouter(() => <ProjectBay space={space} threads={threads} />);
+		expect(await screen.findByRole('group', { name: "Billing's threads as blades in its bay" })).toBeTruthy();
 		fireEvent.focus(screen.getByRole('link', { name: 'Pick a name, Needs you' }));
 		const card = await screen.findByRole('dialog', { name: 'Pick a name' });
 		expect(within(card).getByText('Asks you')).toBeTruthy();
