@@ -38,6 +38,18 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * timeout, so a write that meets Litestream's lock failed at once with
  * "database is locked", failing the subagent or reply that made it. It now
  * waits up to five seconds, as Litestream asks of the apps it backs up.
+ *
+ * Writes that take the lock as they begin. Flue's transactions open with a
+ * plain BEGIN, and the one that saves each batch of a reply reads the stream's
+ * row before it writes. SQLite never waits when a transaction that has read
+ * asks to write: with the lock held elsewhere it answers "database is locked"
+ * at once, whatever the busy timeout, since waiting there could deadlock. So
+ * the timeout above did not cover the write Flue makes most. The error ends
+ * the reply's attempt, and the runtime starts it again only once its 30 second
+ * lease runs out: 17 replies traced in two weeks stopped so, each for 30 to 50
+ * seconds. Its transactions now open with BEGIN IMMEDIATE, which takes the
+ * lock first, where the timeout applies. Flue has one connection a process,
+ * so a transaction that only reads loses nothing by it.
  */
 
 type Patch = { name: string; dir: string; marker: string; fixes: Array<[string, string]> };
@@ -93,6 +105,12 @@ const PATCHES: Patch[] = [
 		dir: 'node/',
 		marker: 'function openDatabase(',
 		fixes: [['db.exec("PRAGMA journal_mode=WAL");', 'db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");']],
+	},
+	{
+		name: 'writes that take the lock as they begin',
+		dir: 'node/',
+		marker: 'function createNodeTransactionSync(',
+		fixes: [['db.exec("BEGIN");', 'db.exec("BEGIN IMMEDIATE");']],
 	},
 ];
 
