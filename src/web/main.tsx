@@ -37,6 +37,7 @@ const TasksPage = lazyRouteComponent(() => import('@/components/tasks-page'), 'T
 const ArtifactsPage = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactsPage');
 const ArtifactView = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactView');
 const ReviewsPage = lazyRouteComponent(() => import('@/components/reviews-page'), 'ReviewsPage');
+const InboxPage = lazyRouteComponent(() => import('@/components/inbox-page'), 'InboxPage');
 const SettingsLayout = lazyRouteComponent(() => import('@/components/settings/layout'), 'SettingsLayout');
 const SectionPage = lazyRouteComponent(() => import('@/components/settings/layout'), 'SectionPage');
 const SettingsOverview = lazyRouteComponent(() => import('@/components/settings/overview'), 'SettingsOverview');
@@ -153,6 +154,12 @@ const reviewsRoute = createRoute({
 	component: ReviewsPage,
 });
 
+const inboxRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/inbox',
+	component: InboxPage,
+});
+
 /**
  * Settings opens as a card over the page you are on (SettingsModal in the
  * shell), not as a page: going to any settings address opens the card there
@@ -222,6 +229,7 @@ const routeTree = rootRoute.addChildren([
 	threadRoute,
 	projectSettingsRoute,
 	reviewsRoute,
+	inboxRoute,
 	artifactsRoute,
 	artifactRoute,
 	oldRepoSettingsRoute,
