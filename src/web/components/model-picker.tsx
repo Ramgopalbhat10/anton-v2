@@ -791,24 +791,24 @@ export const ModelPicker = memo(function ModelPicker({
 					aria-label="Model and reasoning"
 					title={selected?.subscription ? `${selected.name}, on your ${selected.subscription} plan` : undefined}
 					className={cn(
-						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-card bg-(--bg-overlay) pr-1.5 pl-1 whitespace-nowrap text-(--text-2) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)',
-						height === 28 ? 'h-7' : 'h-[26px]',
+						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-control pr-1.5 pl-1.5 font-medium whitespace-nowrap text-(--text-2) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
+						height === 28 ? 'h-7' : 'h-6',
 					)}
 				>
-					{selected ? <ModelMark model={selected} size={height - 10} /> : <Spinner size={12} tone="neutral" />}
+					{selected ? <ModelMark model={selected} size={16} /> : <Spinner size={12} tone="neutral" />}
 					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : 'Model'}</span>
 					{options?.chosen.context ? (
-						<span className="in-num rounded-control bg-(--bg-active) px-1 py-px text-nano text-(--text-2)" title={`${tokens(selected!.contextLength)} context`}>
+						<span className="in-num rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2)" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
 						</span>
 					) : null}
 					{options?.chosen.fast ? <Icon icon={Zap} size={11} className="text-(--accent-text) [&_path]:fill-current" /> : null}
 					{routed && route ? <RouteBadge model={routed} route={route} size={height - 12} /> : null}
 					{effort && selected?.reasoning.length ? (
-						<span className="flex items-center gap-1 rounded-control bg-(--bg-active) px-1 py-px" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
+						<span className="flex items-center gap-1" title={`Reasoning effort: ${REASONING_LABEL[reasoning]}`}>
 							<ReasoningMeter strength={reasoningStrength(selected, reasoning)} />
 							{/* On a phone the meter says it alone, so the model keeps its name. */}
-							<span className="hidden text-nano text-(--text-3) sm:inline">{REASONING_LABEL[reasoning]}</span>
+							<span className="hidden text-small font-normal text-(--text-4) sm:inline">{REASONING_LABEL[reasoning]}</span>
 						</span>
 					) : null}
 					<Icon icon={ChevronDown} size={12} className="text-(--text-3)" />

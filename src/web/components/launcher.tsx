@@ -3,16 +3,16 @@ import { useNavigate } from '@tanstack/react-router';
 import { ArrowUp, BookOpen, EyeOff, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
-import { HomeDashboard } from '@/components/home-dashboard';
+import { HomeDashboard, homeSummary } from '@/components/home-dashboard';
+import { TopBar } from '@/components/page-frame';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
 import { Mascot, useMascotMood } from '@/components/mascot';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { useGeneralSettings } from '@/components/settings/general-settings';
-import { MenuButton } from '@/components/nav';
-import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
-import { api, type ModelChoice, type Project, type RunOn } from '@/lib/api';
+import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/signal';
+import { api, type ModelChoice, type Project, type RunOn, SAFETY_NET_MS } from '@/lib/api';
 import { expandCommand } from '@/lib/completion';
 import { useCreateChat } from '@/lib/create-chat';
 import { useDraftWake } from '@/lib/wake';
@@ -28,7 +28,7 @@ function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[];
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<PickerChip icon={value ? Folder : MessageSquare} label={value ? value.repoFullName.split('/').pop()! : 'No repository'} height={28} />
+				<PickerChip icon={value ? Folder : MessageSquare} label={value ? value.repoFullName.split('/').pop()! : 'No repository'} />
 			</MenuTrigger>
 			<MenuContent align="start" className="min-w-[240px]">
 				<MenuItem icon={MessageSquare} checked={!value} onSelect={() => onChange(NO_REPO)}>
@@ -63,7 +63,7 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<PickerChip icon={GitBranch} label={value || 'main'} height={28} disabled={!project} />
+				<PickerChip icon={GitBranch} label={value || 'main'} disabled={!project} />
 			</MenuTrigger>
 			<MenuContent align="start" className="max-h-[320px] min-w-[200px] overflow-y-auto">
 				{branches.isPending ? <MenuLabel>Loading branches</MenuLabel> : null}
@@ -112,7 +112,7 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 					onKeyDown={(event) => event.key === 'Escape' && onCancel()}
 					placeholder="Search your repositories, or type owner/repository"
 					aria-label="Repository"
-					className="h-7 min-w-0 flex-1 rounded-card bg-(--bg-panel) px-2.5 text-body text-(--text) outline-none focus-visible:shadow-(--focus)"
+					className="sg-field h-7 min-w-0 flex-1 px-2.5 text-body"
 				/>
 				<Btn type="submit" size="sm" disabled={add.isPending || !name.trim()}>
 					{add.isPending ? 'Adding…' : 'Add'}
@@ -172,7 +172,7 @@ function ChatRoute() {
 
 function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 	return (
-		<ol aria-label={label} className="m-0 mx-auto flex w-fit max-w-full list-none flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-card px-3 py-1.5 text-small sm:rounded-full">
+		<ol aria-label={label} className="m-0 flex max-w-full list-none flex-wrap items-center gap-x-1 gap-y-1 px-1 text-small">
 			{stages.map((stage, index) => (
 				<li key={stage.title} className="flex items-center gap-1">
 					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--line-strong)" /> : null}
@@ -187,8 +187,18 @@ function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 	);
 }
 
+/** Home's greeting: the time of day, and your first name once it is known. */
+function greeting(name?: string | null): string {
+	const hour = new Date().getHours();
+	const part = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+	const first = name?.trim().split(/\s+/)[0];
+	return first ? `${part}, ${first}` : part;
+}
+
 export function Launcher() {
 	const navigate = useNavigate();
+	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
+	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
@@ -252,15 +262,18 @@ export function Launcher() {
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-1 pr-4 pl-2 md:hidden">
-				<MenuButton />
-			</header>
-			<IconBtn icon={EyeOff} size="sm" label="Incognito chat" className="absolute top-4 right-4 z-10" onClick={() => void navigate({ to: '/incognito' })} />
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-16 md:px-6">
-				<div className="mx-auto flex max-w-[880px] flex-col gap-10 pt-6 md:pt-[min(16vh,148px)]">
-					<div className="mx-auto flex w-full max-w-[680px] flex-col gap-4">
-						{/* The sidebar already names the product; Home asks the one question it is for. */}
-						<h1 className="m-0 text-h2 leading-7 font-medium tracking-[-0.02em] text-(--text)">{chat ? 'What should Anton look into?' : 'What should Anton work on?'}</h1>
+			<TopBar crumbs={['Home']}>
+				<Btn size="sm" variant="ghost" icon={EyeOff} title="A chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })}>
+					Incognito
+				</Btn>
+			</TopBar>
+			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-6">
+				<div className="mx-auto flex max-w-[760px] flex-col gap-11 pt-8 md:pt-[min(11vh,88px)]">
+					<div className="flex w-full flex-col gap-3">
+						<div className="mb-2 flex flex-col gap-1">
+							<h1 className="m-0 text-h1 leading-[30px] font-semibold tracking-[-0.02em] text-(--text)">{greeting(profile.data?.name)}</h1>
+							<p className="m-0 text-body-lg leading-5 text-(--text-2)">{sessions.data ? homeSummary(sessions.data.sessions) : chat ? 'Ask anything, or hand off a job on the web.' : 'What should Anton work on?'}</p>
+						</div>
 
 						<form
 							className="home-composer in-enter relative flex flex-col"
@@ -271,7 +284,7 @@ export function Launcher() {
 							{...attachments.dropZone}
 						>
 							<Mascot mood={mood} className="absolute right-6 bottom-[calc(100%-1px)]" />
-							<AttachmentTray attachments={attachments} className="px-4 pt-3.5" />
+														<AttachmentTray attachments={attachments} className="px-3.5 pt-3" />
 							<ComposerInput
 								autoFocus
 								value={prompt}
@@ -282,18 +295,18 @@ export function Launcher() {
 								suggestionsPosition="below"
 								onPaste={attachments.onPaste}
 								placeholder={chat ? 'Ask anything, or hand off a job on the web' : 'Ask Anton to build a feature, fix a bug, or explain the code'}
-								className="min-h-[84px] px-4 pt-3.5 text-body-lg leading-[21px]"
+								className="min-h-[64px] px-3.5 pt-3 text-body-lg leading-[21px]"
 							/>
 							{attachments.notice || blind ? (
-								<div className="px-4 pt-2 text-small text-(--warn)">
+								<div className="px-3.5 pt-2 text-small text-(--warn)">
 									{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 								</div>
 							) : null}
-							<div className="mt-2 flex flex-wrap items-center gap-1 px-2.5 pt-1 pb-2.5">
+							<div className="flex flex-wrap items-center gap-1 px-2 pt-1.5 pb-2">
 								<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
 								<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 								{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
-								<ModelPicker value={{ model: specifier, reasoning }} onChange={chooseModel} height={28} side="bottom" />
+								<ModelPicker value={{ model: specifier, reasoning }} onChange={chooseModel} side="bottom" />
 								{chat ? null : <PlanToggle on={planMode} onChange={setPlanMode} />}
 								<div className="min-w-0 flex-[1_1_8px]" />
 								<button
@@ -301,9 +314,9 @@ export function Launcher() {
 									aria-label={chat ? 'Start chat' : 'Start task'}
 									title={chat ? 'Start chat (⌘↵)' : 'Start task (⌘↵)'}
 									disabled={starting || !projects.isSuccess || blind}
-									className="sg-btn sg-btn--primary sg-icon-btn sg-btn--round size-8"
+									className="sg-btn sg-btn--inverse sg-icon-btn"
 								>
-									<Icon icon={ArrowUp} size={16} />
+									<Icon icon={ArrowUp} size={15} />
 								</button>
 							</div>
 						</form>
