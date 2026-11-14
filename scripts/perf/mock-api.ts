@@ -261,6 +261,25 @@ export function mockApi(): Plugin {
 		if (path === '/api/models') return json(res, { models, default: session.model, pinned: [] });
 		if (path === '/api/subscriptions') return json(res, { subscriptions: [] });
 		if (path === '/api/settings/commands') return json(res, { commands: [] });
+		if (path === '/api/settings/background-models') return json(res, { defaults: { webDigest: null, vision: null, compaction: null } });
+		if (path === '/api/settings/general')
+			return json(res, {
+				model: session.model,
+				reasoning: null,
+				planMode: false,
+				reviewPullRequests: true,
+				codeMode: true,
+				visualReplies: 'some',
+				pageNetwork: true,
+				imageModel: null,
+				titleModel: null,
+				titleModelDefault: session.model,
+				agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
+				compactAt: null,
+				claudeCodeCompactAt: null,
+				backgroundModels: { webDigest: null, vision: null, compaction: null },
+				backgroundReasoning: { webDigest: null, vision: null, compaction: null },
+			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];

@@ -1,7 +1,7 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { ChevronRight, List, type LucideIcon, X } from 'lucide-react';
-import { Fragment, type ReactNode } from 'react';
-import { EmptyState, Icon, IconBtn, SectionLabel } from '@/components/signal';
+import { Fragment, type ReactNode, useState } from 'react';
+import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/signal';
 import { closeSettings } from '@/lib/settings-modal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
@@ -22,27 +22,54 @@ function NavIcon({ icon }: { icon: LucideIcon }) {
 	);
 }
 
+/** A search hit: the page's name over what it decides, since the words that matched may be in the second line. */
+function SearchHit({ section }: { section: (typeof SECTIONS)[number] }) {
+	return (
+		<Link to="/settings/$section" params={{ section: section.id }} className={cn(NAV_ITEM, 'h-auto flex-col items-start gap-0.5 py-2')}>
+			<span className="flex w-full min-w-0 items-center gap-2.5">
+				<NavIcon icon={section.icon} />
+				<span className="min-w-0 flex-1 truncate">{section.label}</span>
+			</span>
+			<span className="w-full truncate pl-8 text-micro text-(--text-4)">{section.desc}</span>
+		</Link>
+	);
+}
+
 function Nav() {
+	const [query, setQuery] = useState('');
+	const words = query.trim().toLowerCase();
+	const hits = words ? SECTIONS.filter((section) => `${section.label} ${section.desc}`.toLowerCase().includes(words)) : [];
 	return (
 		<nav aria-label="Settings" className="hidden w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-(--line) pt-2.5 pr-2.5 pb-4 pl-2.5 md:flex">
+			<div className="px-1 pb-1.5" onKeyDown={(event) => event.key === 'Escape' && words && (setQuery(''), event.stopPropagation())}>
+				<SearchField value={query} onChange={setQuery} placeholder="Search settings" label="Search settings" size="sm" />
+			</div>
 			<Link to="/settings" activeOptions={{ exact: true }} className={NAV_ITEM}>
 				<NavIcon icon={List} />
 				All settings
 			</Link>
-			{GROUPS.map((group) => (
-				<Fragment key={group.id}>
-					<div className="flex items-center gap-2 px-2 pt-4 pb-1.5">
-						<SectionLabel className="shrink-0">{group.label}</SectionLabel>
-						<span aria-hidden className="h-px flex-1 bg-(--line)" />
-					</div>
-					{SECTIONS.filter((section) => section.group === group.id).map((section) => (
-						<Link key={section.id} to="/settings/$section" params={{ section: section.id }} className={NAV_ITEM}>
-							<NavIcon icon={section.icon} />
-							<span className="min-w-0 flex-1 truncate">{section.label}</span>
-						</Link>
-					))}
-				</Fragment>
-			))}
+			{words ? (
+				hits.length ? (
+					<div className="flex flex-col gap-0.5 pt-1">{hits.map((section) => <SearchHit key={section.id} section={section} />)}</div>
+				) : (
+					<div className="px-2 pt-3 text-small text-(--text-4)">No settings match “{query.trim()}”.</div>
+				)
+			) : (
+				GROUPS.map((group) => (
+					<Fragment key={group.id}>
+						<div className="flex items-center gap-2 px-2 pt-4 pb-1.5">
+							<SectionLabel className="shrink-0">{group.label}</SectionLabel>
+							<span aria-hidden className="h-px flex-1 bg-(--line)" />
+						</div>
+						{SECTIONS.filter((section) => section.group === group.id).map((section) => (
+							<Link key={section.id} to="/settings/$section" params={{ section: section.id }} className={NAV_ITEM}>
+								<NavIcon icon={section.icon} />
+								<span className="min-w-0 flex-1 truncate">{section.label}</span>
+							</Link>
+						))}
+					</Fragment>
+				))
+			)}
 		</nav>
 	);
 }
@@ -100,6 +127,7 @@ export function SettingsLayout() {
 			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-4 text-body font-medium">
 				<Crumbs />
 				<span className="flex-1" />
+				<Kbd keys="esc" size="sm" />
 				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />
 			</header>
 			<div className="flex min-h-0 flex-1">
