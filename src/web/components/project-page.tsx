@@ -10,7 +10,7 @@ import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } f
 import { SpaceMark } from '@/components/project-sidebar';
 import { useModelName, useModels } from '@/components/model-picker';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell';
-import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
+import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
@@ -122,7 +122,7 @@ export function ProjectPage() {
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1">
 			<div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !centerVisible && 'hidden')}>
-				<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
+				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 					<MenuButton />
 					<nav aria-label="Where you are" className="flex min-w-0 shrink-0 items-center gap-1.5 text-body">
 						<Link to="/projects" className="shrink-0 rounded-control text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
@@ -177,12 +177,14 @@ export function ProjectPage() {
 					)}
 				</div>
 			</div>
-			<aside className={cn('min-h-0 min-w-0 flex-col border-(--line)', dockOpen ? cn('flex', onePane || expanded ? 'flex-1' : 'w-[380px] shrink-0 border-l') : 'hidden')}>
+			<aside className={cn('min-h-0 min-w-0 flex-col border-(--line)', dockOpen ? cn('flex', onePane || expanded ? 'flex-1' : 'w-[380px] shrink-0 border-l bg-(--bg-app)') : 'hidden')}>
 				<div className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3.5">
 					<Icon icon={Workflow} size={14} className="shrink-0 text-(--text-3)" />
 					<span className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">Coordinator</span>
 					{coordinatorName ? (
-						<span className="hidden shrink-0 rounded-inner px-1.5 py-0.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)] sm:inline">{coordinatorName}</span>
+						<span className="hidden shrink-0 sm:inline-flex">
+							<Badge>{coordinatorName}</Badge>
+						</span>
 					) : null}
 					<IconBtn
 						icon={expanded ? Minimize2 : Maximize2}
@@ -250,9 +252,7 @@ export function ThreadPage() {
 				{space.data ? <SpaceMark space={space.data} size={18} /> : null}
 				<span className="hidden max-w-[160px] truncate sm:inline">{space.data?.name ?? 'Project'}</span>
 			</Link>
-			<span aria-hidden className="text-(--text-4)">
-				/
-			</span>
+			<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 		</>
 	);
 	// A thread you just started opens at once, as a skeleton until the server has made it.

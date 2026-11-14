@@ -439,6 +439,55 @@ export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADG
 	return <span className={cn('inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
 }
 
+/** One attribute filter: a hairline chip that opens a menu of what it can be, tinted when it is set. */
+export function FilterMenu({
+	icon,
+	label,
+	anyLabel,
+	value,
+	valueLabel,
+	options,
+	onPick,
+}: {
+	icon: LucideIcon;
+	label: string;
+	anyLabel: string;
+	value: string | null;
+	valueLabel: string | null;
+	options: Array<{ id: string; label: string; hint?: number }>;
+	onPick: (id: string | null) => void;
+}) {
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						'inline-flex h-6 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
+						value
+							? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]'
+							: 'text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-(--bg-hover) hover:text-(--text)',
+					)}
+				>
+					<Icon icon={icon} size={12} className="shrink-0" />
+					<span className="truncate">{value ? `${label}: ${valueLabel}` : label}</span>
+					<Icon icon={ChevronDown} size={12} className="shrink-0 text-(--text-3)" />
+				</button>
+			</MenuTrigger>
+			<MenuContent align="start">
+				<MenuItem checked={value === null} onSelect={() => onPick(null)}>
+					{anyLabel}
+				</MenuItem>
+				{options.map((option) => (
+					<MenuItem key={option.id} checked={value === option.id} onSelect={() => onPick(option.id)} hint={option.hint}>
+						{option.label}
+					</MenuItem>
+				))}
+			</MenuContent>
+		</Menu>
+	);
+}
+
 /**
  * A filter that toggles on and off, in a row of them. Off is a hairline chip;
  * on takes the soft accent, since a filter is something you act on. A count

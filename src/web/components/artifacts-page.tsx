@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, CheckSquare, ChevronDown, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Sparkles, Trash2, Upload } from 'lucide-react';
+import { Link, useNavigate, useParams, useRouter, useSearch } from '@tanstack/react-router';
+import { ArrowUpRight, Check, CheckSquare, ChevronDown, ChevronLeft, Download, ExternalLink, FolderUp, Link2, Maximize2, MoreVertical, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl } from '@/components/html-frame';
@@ -9,19 +9,22 @@ import { Segmented, SegmentedItem } from '@/components/instrument';
 import { kindOf } from '@/components/library-tab';
 import { MenuButton } from '@/components/nav';
 import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output-viewer';
-import { PageFrame } from '@/components/page-frame';
+import { TopBar } from '@/components/page-frame';
 import { Btn, EmptyState, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
 import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf, zipFolder } from '@/lib/artifacts';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
-import { age } from '@/lib/format';
+import { age, fileSize } from '@/lib/format';
+import { useOnePane } from '@/lib/one-pane';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 
 /*
  * Everything the agent made, in every task: apps (the pages it drew, which
  * keep their state wherever they are open) and files, as cards with what each
- * looks like. A card opens the artifact here, full size, with its source.
+ * looks like. A card picks the artifact, which opens in a sheet beside the
+ * gallery with where it came from; from there, or on a second click, it
+ * opens here full size, with its source.
  */
 
 export type ArtifactsSearch = { type?: Category; q?: string };
@@ -257,18 +260,28 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 
 /** One artifact: what it looks like, its name, and the task it came from. The whole card opens it; its menu sits above the link. */
 type Selection = { keys: Set<string>; toggle: (artifact: Artifact) => void; disabled: boolean };
+/** The card the sheet shows, and how a card asks to be it; absent where a card opens the artifact straight away. */
+type Picking = { key: string | null; pick: (artifact: Artifact) => void };
 
-function ArtifactCard({ artifact, selection }: { artifact: Artifact; selection?: Selection }) {
+function ArtifactCard({ artifact, selection, picking }: { artifact: Artifact; selection?: Selection; picking?: Picking }) {
 	const info = categoryInfo(categoryOf(artifact.path));
+	const picked = picking?.key === artifactKey(artifact);
 	return (
-		<div className="in-card group relative flex flex-col overflow-hidden transition-colors duration-(--t-fast) hover:border-(--line-strong) has-[:focus-visible]:shadow-(--focus)">
+		<div
+			data-picked={picked || undefined}
+			className={cn(
+				'in-card group overflow-hidden transition-shadow duration-(--t-fast) has-[:focus-visible]:shadow-(--focus)',
+				picked ? 'shadow-[inset_0_0_0_1px_var(--accent-line),0_0_0_3px_var(--accent-soft)]' : 'hover:shadow-[inset_0_0_0_1px_var(--line-strong)]',
+			)}
+		>
 			<Thumb artifact={artifact} />
-			<div className="flex min-w-0 items-start gap-2 py-2.5 pr-1.5 pl-3">
-				<Icon icon={info.icon} size={13} className={cn('mt-[3px] shrink-0', info.tone)} />
+			<div className="flex min-w-0 items-start gap-1.5 py-2.5 pr-1.5 pl-3">
+				<Icon icon={info.icon} size={13} className="mt-[3px] shrink-0 text-(--text-3)" />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span title={artifact.title} className="truncate text-body text-(--text)">{artifact.title}</span>
-					<span className="truncate text-small text-(--text-3)">
-						{artifact.task.title} · {when(artifact)}
+					<span title={artifact.title} className="truncate text-body leading-[18px] font-medium text-(--text)">{artifact.title}</span>
+					<span className="truncate text-small leading-4 text-(--text-3)">{artifact.task.title}</span>
+					<span className="in-num truncate text-micro leading-4 text-(--text-4)">
+						{fileSize(artifact.size)} · {when(artifact)}
 					</span>
 				</div>
 				<span className="relative z-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100">
@@ -292,6 +305,13 @@ function ArtifactCard({ artifact, selection }: { artifact: Artifact; selection?:
 					params={{ taskId: artifact.sessionId }}
 					search={{ path: artifact.path }}
 					aria-label={`${artifact.title}, ${info.one.toLowerCase()} from ${artifact.task.title}`}
+					aria-current={picked || undefined}
+					// A plain click picks the card for the sheet; a click on the picked card, or one meant for a new tab, opens it.
+					onClick={(event) => {
+						if (!picking || picked || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+						event.preventDefault();
+						picking.pick(artifact);
+					}}
 					className="absolute inset-0 outline-none"
 				/>
 			)}
@@ -299,20 +319,112 @@ function ArtifactCard({ artifact, selection }: { artifact: Artifact; selection?:
 	);
 }
 
-function Grid({ items, selection }: { items: Artifact[]; selection?: Selection }) {
+function Grid({ items, selection, picking }: { items: Artifact[]; selection?: Selection; picking?: Picking }) {
 	return (
-		<div className="grid grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))] gap-3">
+		<div className="grid grid-cols-[repeat(auto-fill,minmax(min(200px,100%),1fr))] gap-3">
 			{items.map((artifact) => (
-				<ArtifactCard key={artifactKey(artifact)} artifact={artifact} selection={selection} />
+				<ArtifactCard key={artifactKey(artifact)} artifact={artifact} selection={selection} picking={picking} />
 			))}
 		</div>
 	);
 }
 
+/** A fact about the picked artifact: its name on the left, what it is on the right. */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<div className="flex items-start gap-2">
+			<dt className="w-[72px] shrink-0 text-small leading-[18px] text-(--text-3)">{label}</dt>
+			<dd className="m-0 min-w-0 flex-1 text-body leading-[18px] wrap-anywhere text-(--text)">{children}</dd>
+		</div>
+	);
+}
+
+/** The picked artifact beside the gallery: what it looks like, what it is, the task it came from, and the ways to take it. */
+function ArtifactSheet({ artifact, onClose }: { artifact: Artifact; onClose: () => void }) {
+	const router = useRouter();
+	const info = categoryInfo(categoryOf(artifact.path));
+	const [confirming, setConfirming] = useState(false);
+	const [copied, setCopied] = useState(false);
+	const remove = useDeleteArtifact(artifact, onClose);
+	const key = artifactKey(artifact);
+	useEffect(() => {
+		setConfirming(false);
+		setCopied(false);
+	}, [key]);
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 1600);
+		return () => clearTimeout(timer);
+	}, [copied]);
+	const view = { to: '/artifacts/$taskId', params: { taskId: artifact.sessionId }, search: { path: artifact.path } } as const;
+	return (
+		<aside aria-label={`${artifact.title}, picked`} className="hidden w-[360px] shrink-0 flex-col border-l border-(--line) md:flex">
+			<header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-(--line) pr-2 pl-3.5">
+				<Icon icon={info.icon} size={14} className="shrink-0 text-(--text-3)" />
+				<h2 title={artifact.title} className="m-0 min-w-0 flex-1 truncate text-body font-medium text-(--text)">{artifact.title}</h2>
+				<Link {...view} aria-label="Open full size" title="Open full size" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm">
+					<Icon icon={Maximize2} size={13} />
+				</Link>
+				<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
+			</header>
+			<div className="min-h-0 flex-1 overflow-y-auto">
+				<Link {...view} tabIndex={-1} aria-hidden className="block outline-none">
+					<Thumb key={key} artifact={artifact} />
+				</Link>
+				<div className="flex flex-col gap-3 p-3.5">
+					<dl className="m-0 flex flex-col gap-3">
+						<Fact label="Kind">{info.one}</Fact>
+						<Fact label="Size">
+							<span className="in-num">{fileSize(artifact.size)}</span>
+						</Fact>
+						<Fact label="From">
+							<TaskLink artifact={artifact} className={cn('rounded-inner outline-none', !artifact.added && 'hover:underline focus-visible:shadow-(--focus)')}>
+								{artifact.task.title}
+							</TaskLink>
+						</Fact>
+						<Fact label="Saved">
+							<span title={new Date(artifact.mtimeMs).toLocaleString()}>{when(artifact)} ago</span>
+						</Fact>
+					</dl>
+					<div className="flex items-center gap-1.5 pt-1">
+						<Link {...view} className="sg-btn sg-btn--secondary sg-btn--sm min-w-0 flex-1">
+							<Icon icon={ArrowUpRight} size={13} />
+							Open
+						</Link>
+						<Btn size="sm" icon={Download} onClick={() => download(artifact)} className="min-w-0 flex-1">
+							Download
+						</Btn>
+						<IconBtn
+							icon={copied ? Check : Link2}
+							size="sm"
+							label={copied ? 'Link copied' : 'Copy link'}
+							onClick={() => void navigator.clipboard.writeText(new URL(router.buildLocation(view).href, location.origin).href).then(() => setCopied(true), () => undefined)}
+						/>
+						<IconBtn
+							icon={Trash2}
+							size="sm"
+							variant={confirming ? 'danger' : 'ghost'}
+							label={remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : 'Delete'}
+							disabled={remove.isPending}
+							onClick={() => (confirming ? remove.mutate() : setConfirming(true))}
+						/>
+					</div>
+					{confirming && !remove.isError ? (
+						<p className="m-0 text-small leading-4 text-(--text-3)">
+							Click the bin again to delete it. {artifact.added ? 'Tasks it was attached to keep their own copy.' : "It leaves the task's Library too; replies that showed it say it was deleted."}
+						</p>
+					) : null}
+					{remove.isError ? <p role="alert" className="m-0 text-small leading-4 text-(--bad)">{remove.error.message}</p> : null}
+				</div>
+			</div>
+		</aside>
+	);
+}
+
 function Section({ label, count, children }: { label: string; count: number; children: ReactNode }) {
 	return (
-		<section aria-label={label} className="flex flex-col gap-2.5">
-			<h2 className="m-0 flex items-baseline gap-2 text-body font-medium text-(--text-2)">
+		<section aria-label={label} className="flex flex-col gap-2">
+			<h2 className="m-0 flex items-baseline gap-2 text-small font-medium text-(--text-3)">
 				{label}
 				<span className="in-num text-micro font-normal text-(--text-4)">{count}</span>
 			</h2>
@@ -548,14 +660,18 @@ export function ArtifactsPage() {
 		setKeys(next);
 	} } : undefined;
 	const setSearch = (next: ArtifactsSearch) => void navigate({ to: '/artifacts', search: next, replace: true });
+	// On a wide screen a card picks the artifact for the sheet; on a phone, and while selecting, there is no sheet.
+	const onePane = useOnePane();
+	const [pickedKey, setPickedKey] = useState<string | null>(null);
+	const picked = selecting || onePane ? undefined : shown.find((artifact) => artifactKey(artifact) === pickedKey);
+	const picking: Picking | undefined = selecting || onePane ? undefined : { key: picked ? pickedKey : null, pick: (artifact) => setPickedKey(artifactKey(artifact)) };
 
 	return (
-		<PageFrame
-			title="Artifacts"
-			description="What the agent made and saved across every task: reports, pages, images and files."
-			actions={<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" label="Search artifacts" className="w-[220px] max-w-full" />}
-		>
-			<div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+		<div className="flex min-h-0 flex-1 flex-col">
+			<TopBar crumbs={['Artifacts']}>
+				<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" label="Search artifacts" size="sm" className="w-[220px] max-w-[46vw] shrink" />
+			</TopBar>
+			<div className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4 [scrollbar-width:none]">
 				<FilterChip label="All" count={found.length} on={!type} onToggle={() => setSearch({ q: query || undefined })} />
 				{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
 					<FilterChip
@@ -576,6 +692,8 @@ export function ArtifactsPage() {
 				<SortMenu sort={sort} onPick={setSort} />
 			</div>
 
+			<div className="flex min-h-0 flex-1">
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
 			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}
 			{artifacts.isPending ? (
 				<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
@@ -593,22 +711,25 @@ export function ArtifactsPage() {
 			) : shown.length === 0 ? (
 				<EmptyState title="Nothing matches" body={query ? 'Try other words, or clear the search.' : 'Pick another kind, or All.'} />
 			) : type ? (
-				<Grid items={shown} selection={selection} />
+				<Grid items={shown} selection={selection} picking={picking} />
 			) : (
 				<>
 					{apps.length ? (
 						<Section label="Apps" count={apps.length}>
-							<Grid items={apps} selection={selection} />
+							<Grid items={apps} selection={selection} picking={picking} />
 						</Section>
 					) : null}
 					{files.length ? (
 						<Section label="Files" count={files.length}>
-							<Grid items={files} selection={selection} />
+							<Grid items={files} selection={selection} picking={picking} />
 						</Section>
 					) : null}
 				</>
 			)}
-		</PageFrame>
+			</div>
+			{picked ? <ArtifactSheet artifact={picked} onClose={() => setPickedKey(null)} /> : null}
+			</div>
+		</div>
 	);
 }
 

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, type LucideIcon, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TasksArt } from '@/components/illustrations';
 import { useModelName } from '@/components/model-picker';
 import { MenuButton } from '@/components/nav';
-import { EmptyState, Icon, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, SearchField, Spinner } from '@/components/signal';
+import { EmptyState, FilterMenu, Icon, Kbd, SearchField, Spinner } from '@/components/signal';
 import { TaskRow } from '@/components/task-row';
 import { glyphKind, type GlyphKind } from '@/components/thread-glyph';
 import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
@@ -49,55 +49,6 @@ const PR_STATES: Array<{ id: string; label: string; test: (session: Session) => 
 function matches(session: Session, query: string): boolean {
 	const text = `${session.title} ${isChat(session) ? 'chat' : `${session.repo} ${session.branch}`} ${session.model}`.toLowerCase();
 	return text.includes(query.trim().toLowerCase());
-}
-
-/** One attribute filter: a hairline chip that opens a menu of what it can be, tinted when it is set. */
-function FilterMenu({
-	icon,
-	label,
-	anyLabel,
-	value,
-	valueLabel,
-	options,
-	onPick,
-}: {
-	icon: LucideIcon;
-	label: string;
-	anyLabel: string;
-	value: string | null;
-	valueLabel: string | null;
-	options: Array<{ id: string; label: string; hint?: number }>;
-	onPick: (id: string | null) => void;
-}) {
-	return (
-		<Menu>
-			<MenuTrigger asChild>
-				<button
-					type="button"
-					className={cn(
-						'inline-flex h-6 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
-						value
-							? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]'
-							: 'text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-(--bg-hover) hover:text-(--text)',
-					)}
-				>
-					<Icon icon={icon} size={12} className="shrink-0" />
-					<span className="truncate">{value ? `${label}: ${valueLabel}` : label}</span>
-					<Icon icon={ChevronDown} size={12} className="shrink-0 text-(--text-3)" />
-				</button>
-			</MenuTrigger>
-			<MenuContent align="start">
-				<MenuItem checked={value === null} onSelect={() => onPick(null)}>
-					{anyLabel}
-				</MenuItem>
-				{options.map((option) => (
-					<MenuItem key={option.id} checked={value === option.id} onSelect={() => onPick(option.id)} hint={option.hint}>
-						{option.label}
-					</MenuItem>
-				))}
-			</MenuContent>
-		</Menu>
-	);
 }
 
 export function TasksPage() {
@@ -233,6 +184,7 @@ export function TasksPage() {
 					}}
 					placeholder="Search tasks"
 					label="Search tasks"
+					size="sm"
 					inputRef={searchRef}
 					trailing={<Kbd keys="/" size="sm" />}
 					className="hidden w-[220px] shrink-0 md:flex"
@@ -282,7 +234,7 @@ export function TasksPage() {
 									type="button"
 									aria-expanded={!shut}
 									onClick={() => toggle(group.id)}
-									className="flex h-8 w-full items-center gap-2 bg-(--bg-hover) px-3 text-left text-small font-medium text-(--text-2) outline-none hover:text-(--text) focus-visible:shadow-(--focus-inset)"
+									className="flex h-8 w-full items-center gap-2 bg-(--bg-hover) pr-4 pl-5 text-left text-small font-medium text-(--text-2) outline-none hover:text-(--text) focus-visible:shadow-(--focus-inset)"
 								>
 									<Icon icon={shut ? ChevronRight : ChevronDown} size={12} className="text-(--text-3)" />
 									{group.label}
@@ -304,7 +256,7 @@ export function TasksPage() {
 			</div>
 
 			{all.length ? (
-				<footer className="flex h-8 shrink-0 items-center gap-3 border-t border-(--line) px-4 text-small text-(--text-4)">
+				<footer className="flex h-8 shrink-0 items-center gap-3 border-t border-(--line) px-4 text-small text-(--text-3)">
 					<span className="in-num">
 						{flat.length} of {all.length}
 					</span>
