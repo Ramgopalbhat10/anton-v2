@@ -27,10 +27,10 @@ const sideOf = (line: CodeLine): ReviewComment['side'] => (line.kind === 'remove
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
-		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] items-start gap-2 border-l-2 border-l-(--accent-base) px-2.5 py-2 font-sans">
+		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] items-start gap-2 border-l-2 border-l-(--accent) px-2.5 py-2 font-sans">
 			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--accent-text)" />
-			<div className="min-w-0 flex-1 text-small leading-[18px] whitespace-pre-wrap text-(--text-primary)">
-				{outdated ? <div className="text-(--text-tertiary)">Line {comment.line} has changed since this comment</div> : null}
+			<div className="min-w-0 flex-1 text-small leading-[18px] whitespace-pre-wrap text-(--text)">
+				{outdated ? <div className="text-(--text-3)">Line {comment.line} has changed since this comment</div> : null}
 				{comment.text}
 			</div>
 			<IconBtn icon={X} size="xs" label="Delete comment" onClick={onRemove} />
@@ -42,7 +42,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 	const [text, setText] = useState('');
 	const save = () => (text.trim() ? onSave(text.trim()) : undefined);
 	return (
-		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] flex-col gap-2 border-l-2 border-l-(--accent-base) p-2 font-sans">
+		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] flex-col gap-2 border-l-2 border-l-(--accent) p-2 font-sans">
 			<textarea
 				autoFocus
 				rows={2}
@@ -54,7 +54,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 				}}
 				placeholder="What should the agent change here?"
 				aria-label="Comment"
-				className="w-full resize-none rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2 py-1.5 text-small leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+				className="w-full resize-none rounded-card border border-(--line) bg-(--bg-raised) px-2 py-1.5 text-small leading-[18px] text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)"
 			/>
 			<div className="flex justify-end gap-1.5">
 				<Btn size="xs" variant="ghost" onClick={onCancel}>
@@ -73,8 +73,8 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 		<div
 			className={cn(
 				'group relative flex',
-				line.kind === 'add' && 'bg-(--diff-add-bg) shadow-[inset_2px_0_0_var(--diff-add-base)]',
-				line.kind === 'remove' && 'bg-(--danger-bg) shadow-[inset_2px_0_0_var(--danger-base)]',
+				line.kind === 'add' && 'bg-(--diff-add) shadow-[inset_2px_0_0_var(--ok)]',
+				line.kind === 'remove' && 'bg-(--bad-soft) shadow-[inset_2px_0_0_var(--bad)]',
 			)}
 		>
 			{onComment ? (
@@ -82,19 +82,19 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					type="button"
 					aria-label={`Comment on line ${line.number}`}
 					onClick={onComment}
-					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-control bg-(--accent-base) text-(--text-on-accent) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-control bg-(--accent) text-(--accent-fg) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
 				>
 					<Icon icon={Plus} size={11} />
 				</button>
 			) : null}
-			<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{line.number}</span>
-			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--diff-add-text)' : line.kind === 'remove' ? 'text-(--diff-remove-text)' : 'text-transparent')}>
+			<span className="w-12 shrink-0 border-r border-(--line) pr-2.5 text-right text-(--text-4) select-none">{line.number}</span>
+			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-transparent')}>
 				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}
 			</span>
 			<span
 				className={cn(
 					'pr-3 whitespace-pre',
-					line.kind === 'add' ? 'text-(--diff-add-text)' : line.kind === 'remove' ? 'text-(--diff-remove-text)' : 'text-(--text-secondary)',
+					line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-(--text-2)',
 				)}
 			>
 				{line.text}
@@ -121,18 +121,18 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => matches(comment, line));
 	const outdated = (commenting?.comments ?? []).filter((comment) => !codeLines.some((line) => matches(comment, line)));
 	if (file.lines.length === 0) {
-		return <div className="border-t border-(--border-subtle) px-3 py-2 text-small text-(--text-tertiary)">{file.status === 'D' ? 'The file was deleted.' : 'No lines to show: the file is empty or binary.'}</div>;
+		return <div className="border-t border-(--line) px-3 py-2 text-small text-(--text-3)">{file.status === 'D' ? 'The file was deleted.' : 'No lines to show: the file is empty or binary.'}</div>;
 	}
 	return (
-		<div className="@container overflow-x-auto border-t border-(--border-subtle) bg-(--bg-inset) py-1 font-mono text-small leading-[19px]">
+		<div className="@container overflow-x-auto border-t border-(--line) bg-(--bg-app) py-1 font-mono text-small leading-[19px]">
 			<div className="min-w-max">
 				{outdated.map((comment, at) => (
 					<CommentCard key={`outdated-${at}`} comment={comment} outdated onRemove={() => commenting?.onRemove(comment)} />
 				))}
 				{file.lines.map((line, index) =>
 					line.kind === 'hunk' ? (
-						<div key={`hunk-${index}`} className="my-1 flex bg-(--alpha-white-4) py-0.5 text-(--text-tertiary) first:mt-0">
-							<span className="w-12 shrink-0 border-r border-(--accent-border) pr-2.5 text-right opacity-70 select-none">@@</span>
+						<div key={`hunk-${index}`} className="my-1 flex bg-(--bg-hover) py-0.5 text-(--text-3) first:mt-0">
+							<span className="w-12 shrink-0 border-r border-(--accent-line) pr-2.5 text-right opacity-70 select-none">@@</span>
 							<span className="pl-2 whitespace-pre opacity-80">{line.text}</span>
 						</div>
 					) : (
@@ -191,7 +191,7 @@ function FileMenu({ file, sessionId, revertTo }: { file: FileDiff; sessionId?: s
 	});
 	return (
 		<>
-			{revert.isError ? <span className="max-w-[40%] truncate text-micro text-(--danger-text)">{revert.error.message}</span> : null}
+			{revert.isError ? <span className="max-w-[40%] truncate text-micro text-(--bad)">{revert.error.message}</span> : null}
 			<Menu onOpenChange={(open) => (open ? undefined : setConfirming(false))}>
 				<MenuTrigger asChild>
 					<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${file.path}`} className="shrink-0" />
@@ -233,7 +233,7 @@ function FileMenu({ file, sessionId, revertTo }: { file: FileDiff; sessionId?: s
 								icon={Undo2}
 								disabled={revert.isPending}
 								title={revertTo === 'pushed' ? 'Drop the edits to this file since the last push' : 'Put this file back as it is on the base branch'}
-								className="text-(--danger-text)"
+								className="text-(--bad)"
 								onSelect={(event) => {
 									if (confirming) return revert.mutate();
 									event.preventDefault();
@@ -318,20 +318,20 @@ function ChangeList({
 						key={file.path}
 						ref={(element) => void (element ? rows.current.set(file.path, element) : rows.current.delete(file.path))}
 						aria-label={file.path}
-						className="border-b border-(--border-subtle) last:border-b-0"
+						className="border-b border-(--line) last:border-b-0"
 					>
-						<div className="sticky top-0 z-[1] flex h-8 items-center gap-1.5 bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] pr-1 pl-1.5">
+						<div className="sticky top-0 z-[1] flex h-8 items-center gap-1.5 bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1 pl-1.5">
 							<button
 								type="button"
 								aria-expanded={isOpen}
 								onClick={() => open.set(file.path, !isOpen)}
 								title={file.path}
-								className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-control pr-1 text-left outline-none focus-visible:shadow-(--focus-ring)"
+								className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-control pr-1 text-left outline-none focus-visible:shadow-(--focus)"
 							>
-								<Icon icon={ChevronRight} size={12} className={cn('text-(--icon-tertiary) transition-transform duration-(--duration-micro)', isOpen && 'rotate-90')} />
+								<Icon icon={ChevronRight} size={12} className={cn('text-(--text-3) transition-transform duration-(--t-fast)', isOpen && 'rotate-90')} />
 								<FileIcon path={file.path} />
-								<span className={cn('shrink-0 truncate text-small', selected?.path === file.path ? 'text-(--accent-text)' : 'text-(--text-primary)')}>{file.path.slice(slash + 1)}</span>
-								{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-disabled)">{file.path.slice(0, slash)}</span> : null}
+								<span className={cn('shrink-0 truncate text-small', selected?.path === file.path ? 'text-(--accent-text)' : 'text-(--text)')}>{file.path.slice(slash + 1)}</span>
+								{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-4)">{file.path.slice(0, slash)}</span> : null}
 							</button>
 							{comments.length ? (
 								<span className="inline-flex shrink-0 items-center gap-1 text-micro text-(--accent-text)" title={`${comments.length} draft ${comments.length === 1 ? 'comment' : 'comments'}`}>
@@ -384,7 +384,7 @@ function FilesSummary({ files }: { files: FileDiff[] }) {
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
 	return (
-		<span className="flex shrink-0 items-center gap-2 text-micro text-(--text-tertiary)">
+		<span className="flex shrink-0 items-center gap-2 text-micro text-(--text-3)">
 			<span className="in-num">
 				{files.length} {files.length === 1 ? 'file' : 'files'}
 			</span>
@@ -420,7 +420,7 @@ export function DiffList({
 	return (
 		<FileIcons>
 			<div className="in-well">
-				<div className="flex h-8 items-center gap-2 border-b border-(--border-subtle) pr-1 pl-2.5">
+				<div className="flex h-8 items-center gap-2 border-b border-(--line) pr-1 pl-2.5">
 					<FilesSummary files={files} />
 					<span className="flex-1" />
 					<ExpandAll open={open} />
@@ -441,9 +441,9 @@ function CommitList({ log, title }: { log: ChangesPayload['log']; title: string 
 				type="button"
 				aria-expanded={shown}
 				onClick={() => setShown(!shown)}
-				className="in-caption flex h-6 items-center gap-1 rounded-control px-1.5 text-left outline-none hover:text-(--text-tertiary) focus-visible:shadow-(--focus-ring)"
+				className="in-caption flex h-6 items-center gap-1 rounded-control px-1.5 text-left outline-none hover:text-(--text-3) focus-visible:shadow-(--focus)"
 			>
-				<Icon icon={ChevronRight} size={11} className={cn('transition-transform duration-(--duration-micro)', shown && 'rotate-90')} />
+				<Icon icon={ChevronRight} size={11} className={cn('transition-transform duration-(--t-fast)', shown && 'rotate-90')} />
 				{title}
 				<span className="ml-auto">{log.length}</span>
 			</button>
@@ -453,10 +453,10 @@ function CommitList({ log, title }: { log: ChangesPayload['log']; title: string 
 						<li key={entry.sha} title={`${entry.subject}\n${entry.sha.slice(0, 7)} · ${age(entry.at)} ago${entry.pushed === false ? ' · not pushed' : ''}`} className="flex h-[26px] items-center gap-2 rounded-control px-2 hover:bg-(--bg-hover)">
 							<span
 								aria-label={entry.pushed === false ? 'Not pushed' : undefined}
-								className={cn('size-1.5 shrink-0 rounded-full', entry.pushed === false ? 'bg-(--warning-base)' : 'bg-(--text-disabled)')}
+								className={cn('size-1.5 shrink-0 rounded-full', entry.pushed === false ? 'bg-(--warn)' : 'bg-(--text-4)')}
 							/>
-							<span className="min-w-0 flex-1 truncate text-small text-(--text-secondary)">{entry.subject}</span>
-							<span className="in-num shrink-0 text-micro text-(--text-disabled)">{entry.sha.slice(0, 7)}</span>
+							<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">{entry.subject}</span>
+							<span className="in-num shrink-0 text-micro text-(--text-4)">{entry.sha.slice(0, 7)}</span>
 						</li>
 					))}
 				</ol>
@@ -477,7 +477,7 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 			<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--accent-text)">
 				<Icon icon={MessageSquare} size={14} />
 			</span>
-			<span className="min-w-0 flex-1 truncate text-small text-(--text-secondary)">
+			<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">
 				{error ?? `${count} ${count === 1 ? 'comment' : 'comments'} for the agent`}
 			</span>
 			<Btn size="xs" variant="ghost" onClick={review.clear}>
@@ -523,9 +523,9 @@ function foldersOf(paths: string[]): Set<string> {
 function LinesFigure({ file }: { file: FileDiff | undefined }) {
 	if (!file || file.added + file.removed === 0) return null;
 	return file.added ? (
-		<span className="in-num shrink-0 text-micro text-(--diff-add-text)">+{file.added}</span>
+		<span className="in-num shrink-0 text-micro text-(--ok)">+{file.added}</span>
 	) : (
-		<span className="in-num shrink-0 text-micro text-(--danger-text)">-{file.removed}</span>
+		<span className="in-num shrink-0 text-micro text-(--bad)">-{file.removed}</span>
 	);
 }
 
@@ -571,7 +571,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 	if (changes.isError) return <EmptyState title="Changes unavailable" body={changes.error.message} />;
 	if (!changes.data) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Loading changes
 			</div>
@@ -590,7 +590,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 				body={
 					<>
 						Everything the agent changed is on GitHub. New edits show up here.{' '}
-						<button type="button" onClick={() => setChangesScope(sessionId, 'branch')} className="text-(--accent-text) underline-offset-2 outline-none hover:underline focus-visible:shadow-(--focus-ring)">
+						<button type="button" onClick={() => setChangesScope(sessionId, 'branch')} className="text-(--accent-text) underline-offset-2 outline-none hover:underline focus-visible:shadow-(--focus)">
 							Show the whole branch
 						</button>
 					</>
@@ -615,15 +615,15 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						<>
 							{scope === 'branch' && branch ? (
 								<div className="mb-1.5 flex min-w-0 flex-col gap-0.5 px-1.5 pt-0.5">
-									<span className="truncate text-small text-(--text-secondary)" title={branch}>
+									<span className="truncate text-small text-(--text-2)" title={branch}>
 										{branch}
 									</span>
-									{base ? <span className="text-micro text-(--text-disabled)">compared with {base}</span> : null}
+									{base ? <span className="text-micro text-(--text-4)">compared with {base}</span> : null}
 								</div>
 							) : null}
 							<SearchField size="sm" value={query} onChange={setQuery} placeholder="Find a changed file" className="mb-1.5 shrink-0" />
 							{files.length === 0 ? (
-								<div className="px-2 py-1.5 text-small text-(--text-tertiary)">{scope === 'branch' ? 'The branch changes no files yet.' : 'No changed files.'}</div>
+								<div className="px-2 py-1.5 text-small text-(--text-3)">{scope === 'branch' ? 'The branch changes no files yet.' : 'No changed files.'}</div>
 							) : shown.length === 0 ? (
 								<EmptyLine>No changed files match.</EmptyLine>
 							) : (
@@ -652,9 +652,9 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						<>
 							<EditorBar sideToggle={sideToggle}>
 								<nav aria-label="Showing" className="flex min-w-0 flex-1 items-center gap-1 pl-1 text-small">
-									<span className="shrink-0 text-(--text-tertiary)">{scope === 'branch' ? 'Branch' : 'Changes'}</span>
-									<Icon icon={ChevronRight} size={11} className="text-(--icon-tertiary)" />
-									<span className="min-w-0 truncate text-(--text-primary)">{scope === 'branch' ? 'All changes' : 'Not pushed'}</span>
+									<span className="shrink-0 text-(--text-3)">{scope === 'branch' ? 'Branch' : 'Changes'}</span>
+									<Icon icon={ChevronRight} size={11} className="text-(--text-3)" />
+									<span className="min-w-0 truncate text-(--text)">{scope === 'branch' ? 'All changes' : 'Not pushed'}</span>
 								</nav>
 								{files.length ? (
 									<>

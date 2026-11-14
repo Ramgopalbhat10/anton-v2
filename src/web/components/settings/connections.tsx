@@ -28,7 +28,7 @@ function Tile({ connection }: { connection: Connection }) {
 			status={<Status tone={TONE[connection.state]}>{state.label}</Status>}
 			label={connection.name}
 		>
-			<div className="px-4 pt-0.5 pb-4 pl-[50px] text-small leading-[18px] text-pretty break-words text-(--text-tertiary)">{connection.detail}</div>
+			<div className="px-4 pt-0.5 pb-4 pl-[50px] text-small leading-[18px] text-pretty break-words text-(--text-3)">{connection.detail}</div>
 		</Card>
 	);
 }
@@ -41,7 +41,7 @@ export function ConnectionsPage() {
 		key,
 		label: STATE[key].label,
 		value: list.filter((connection) => connection.state === key).length,
-		color: { ok: 'var(--success-base)', set: 'var(--accent-base)', failing: 'var(--danger-base)', off: 'var(--neutral-600)' }[key],
+		color: { ok: 'var(--ok)', set: 'var(--accent)', failing: 'var(--bad)', off: 'var(--track)' }[key],
 	}));
 	const failing = parts[2].value;
 	return (
@@ -60,7 +60,7 @@ export function ConnectionsPage() {
 			{connections.isPending ? (
 				<Spinner size={12} />
 			) : connections.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">{connections.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">{connections.error.message}</p>
 			) : (
 				<>
 					<Card icon={Link} title="Health" sub="checked just now" status={failing ? <Status tone="danger">{failing} failing</Status> : <Status tone="success">All working</Status>}>

@@ -55,15 +55,15 @@ function sorted(node: TreeNode) {
 }
 
 export const STATUS_TONE: Record<string, string> = {
-	A: 'text-(--diff-add-text)',
-	M: 'text-(--warning-text)',
-	D: 'text-(--danger-text)',
+	A: 'text-(--ok)',
+	M: 'text-(--warn)',
+	D: 'text-(--bad)',
 };
 
 const STATUS_BG: Record<string, string> = {
-	A: 'bg-(--diff-add-bg)',
-	M: 'bg-(--warning-bg)',
-	D: 'bg-(--danger-bg)',
+	A: 'bg-(--diff-add)',
+	M: 'bg-(--warn-soft)',
+	D: 'bg-(--bad-soft)',
 };
 
 /** A file's git status as a small lettered chip: A added, M modified, D deleted. */
@@ -96,7 +96,7 @@ export function Branch({
 	detailOf?: (path: string) => ReactNode;
 }) {
 	return (
-		<div className={cn('flex flex-col gap-px', depth > 0 && 'ml-[13px] border-l border-(--border-subtle) pl-1')}>
+		<div className={cn('flex flex-col gap-px', depth > 0 && 'ml-[13px] border-l border-(--line) pl-1')}>
 			{sorted(node).map((child) => {
 				const status = statusOf?.(child.path, !child.file);
 				if (child.file) {
@@ -106,13 +106,13 @@ export function Branch({
 							key={child.path}
 							onClick={() => onOpen(child.path)}
 							aria-current={selected === child.path ? 'true' : undefined}
-							className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 						>
 							<FileIcon path={child.path} />
 							<span
 								className={cn(
 									'min-w-0 flex-1 truncate text-small',
-									selected === child.path ? 'text-(--text-primary)' : status ? 'text-(--text-secondary)' : 'text-(--text-tertiary)',
+									selected === child.path ? 'text-(--text)' : status ? 'text-(--text-2)' : 'text-(--text-3)',
 								)}
 							>
 								{child.name}
@@ -129,9 +129,9 @@ export function Branch({
 							type="button"
 							aria-expanded={open}
 							onClick={() => onToggle(child.path)}
-							className="flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left text-(--text-secondary) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left text-(--text-2) outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 						>
-							<Icon icon={open ? FolderOpen : Folder} size={12} className={open ? 'text-(--icon-secondary)' : 'text-(--icon-tertiary)'} />
+							<Icon icon={open ? FolderOpen : Folder} size={12} className={open ? 'text-(--text-2)' : 'text-(--text-3)'} />
 							<span className="min-w-0 flex-1 truncate text-small">{child.name}</span>
 							{status ? <StatusChip status={status} /> : null}
 						</button>
@@ -258,13 +258,13 @@ export function FileView({
 		if (markedLine && lines.length) marked.current?.scrollIntoView({ block: 'center' });
 	}, [markedLine, lines.length]);
 	return (
-		<div className={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', className)}>
+		<div className={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-app)', className)}>
 			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="my-2 me-3 self-end shrink-0" /> : null}
 			<div className="min-h-0 flex-1 overflow-auto">
 				{file.isError ? (
-					<div className="px-3 py-2.5 text-small text-(--danger-text)">{file.error.message || 'Could not read this file.'}</div>
+					<div className="px-3 py-2.5 text-small text-(--bad)">{file.error.message || 'Could not read this file.'}</div>
 				) : file.isPending ? (
-					<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-tertiary)">
+					<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-3)">
 						<Spinner size={12} />
 						Reading
 					</div>
@@ -275,14 +275,14 @@ export function FileView({
 				) : markdown && preview && contents !== null ? (
 					<DocumentMarkdown text={contents} images={images} className="p-4" />
 				) : contents === null ? (
-					<div className="px-3 py-2.5 text-small text-(--text-tertiary)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
+					<div className="px-3 py-2.5 text-small text-(--text-3)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
 				) : (
 					<div className="overflow-x-auto py-1.5 font-mono text-small leading-[19px]">
 						<div className="min-w-max">
 							{lines.map((line, index) => (
-								<div key={index} ref={index + 1 === markedLine ? marked : undefined} className={cn('flex', index + 1 === markedLine && 'bg-(--accent-bg-subtle)')}>
-									<span className="w-12 shrink-0 border-r border-(--border-subtle) pr-2.5 text-right text-(--text-disabled) select-none">{index + 1}</span>
-									<span className="pr-3 pl-3 whitespace-pre text-(--text-secondary)">
+								<div key={index} ref={index + 1 === markedLine ? marked : undefined} className={cn('flex', index + 1 === markedLine && 'bg-(--accent-soft)')}>
+									<span className="w-12 shrink-0 border-r border-(--line) pr-2.5 text-right text-(--text-4) select-none">{index + 1}</span>
+									<span className="pr-3 pl-3 whitespace-pre text-(--text-2)">
 										{tokens?.[index]
 											? tokens[index].map((token, at) => (
 													<span key={at} style={{ color: token.color }}>

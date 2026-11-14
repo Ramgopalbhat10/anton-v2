@@ -96,7 +96,7 @@ export const AskCard = memo(function AskCard({
         <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center text-(--accent-text)">
           <Icon icon={MessageCircleQuestion} size={15} />
         </span>
-        <h3 className="m-0 min-w-0 flex-1 text-body leading-[20px] font-medium text-(--text-primary)">
+        <h3 className="m-0 min-w-0 flex-1 text-body leading-[20px] font-medium text-(--text)">
           {question}
         </h3>
       </header>
@@ -115,12 +115,12 @@ export const AskCard = memo(function AskCard({
               aria-pressed={chosen}
               onClick={() => send(option.label)}
               className={cn(
-                "group/option flex min-h-9 items-center gap-2.5 rounded-control border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus-ring)",
+                "group/option flex min-h-9 items-center gap-2.5 rounded-control border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus)",
                 chosen
-                  ? "border-(--accent-border) bg-(--accent-bg-subtle)"
-                  : "border-(--border-subtle)",
+                  ? "border-(--accent-line) bg-(--accent-soft)"
+                  : "border-(--line)",
                 open && !busy
-                  ? "hover:border-(--border-strong) hover:bg-(--bg-hover)"
+                  ? "hover:border-(--line-strong) hover:bg-(--bg-hover)"
                   : "cursor-default",
                 !open && !chosen && "opacity-55",
               )}
@@ -129,18 +129,18 @@ export const AskCard = memo(function AskCard({
                 className={cn(
                   "in-num inline-flex size-5 shrink-0 items-center justify-center rounded-control border text-micro",
                   chosen
-                    ? "border-(--accent-border) text-(--accent-text)"
-                    : "border-(--border-default) text-(--text-tertiary)",
+                    ? "border-(--accent-line) text-(--accent-text)"
+                    : "border-(--line-strong) text-(--text-3)",
                 )}
               >
                 {chosen ? <Icon icon={Check} size={11} /> : index + 1}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-body leading-[18px] text-(--text-primary)">
+                <span className="text-body leading-[18px] text-(--text)">
                   {option.label}
                 </span>
                 {option.detail ? (
-                  <span className="text-small leading-[16px] text-(--text-tertiary)">
+                  <span className="text-small leading-[16px] text-(--text-3)">
                     {option.detail}
                   </span>
                 ) : null}
@@ -153,7 +153,7 @@ export const AskCard = memo(function AskCard({
         })}
       </div>
       {open ? (
-        <div className="border-t border-(--border-subtle) px-3.5 py-2 text-small text-(--text-tertiary)">
+        <div className="border-t border-(--line) px-3.5 py-2 text-small text-(--text-3)">
           Pick one, or type your own answer below.
         </div>
       ) : null}
@@ -180,14 +180,14 @@ function AnsweredCard({
       className="in-card flex flex-col gap-1.5 px-3.5 py-2.5"
       aria-label="Answered question"
     >
-      <span className="text-small leading-[16px] text-(--text-tertiary)">
+      <span className="text-small leading-[16px] text-(--text-3)">
         Question
       </span>
-      <h3 className="m-0 text-body leading-[19px] font-normal text-(--text-primary)">
+      <h3 className="m-0 text-body leading-[19px] font-normal text-(--text)">
         {question}
       </h3>
       <p className="m-0 flex min-w-0 items-center gap-2 text-body leading-[18px]">
-        <span className="inline-flex shrink-0 items-center gap-1 text-(--success-text)">
+        <span className="inline-flex shrink-0 items-center gap-1 text-(--ok)">
           <Icon icon={Check} size={12} />
           {index >= 0 ? (
             <span className="in-num text-small">
@@ -195,10 +195,10 @@ function AnsweredCard({
             </span>
           ) : null}
         </span>
-        <span className="min-w-0 truncate font-medium text-(--text-primary)">
+        <span className="min-w-0 truncate font-medium text-(--text)">
           {answer}
         </span>
-        <span className="shrink-0 text-small text-(--text-tertiary)">
+        <span className="shrink-0 text-small text-(--text-3)">
           {index >= 0 ? "You chose" : "You answered"}
         </span>
       </p>
@@ -231,22 +231,22 @@ export const ChangesCard = memo(function ChangesCard({
     <FileIcons>
       <section className="in-card overflow-hidden" aria-label={paths ? "Files changed" : "Unpushed changes"}>
         <header className="flex h-9 items-center gap-2 px-3">
-          <Icon icon={FileDiff} size={13} className="text-(--icon-tertiary)" />
-          <span className="min-w-0 flex-1 truncate text-small text-(--text-secondary)">
+          <Icon icon={FileDiff} size={13} className="text-(--text-3)" />
+          <span className="min-w-0 flex-1 truncate text-small text-(--text-2)">
             {paths ? (files.length === 1 ? "1 file changed" : `${files.length} files changed`) : (files.length === 1 ? "1 unpushed file" : `${files.length} unpushed files`)}
           </span>
           <span className="in-num text-small">
             <DiffStat added={added} removed={removed} />
           </span>
         </header>
-        <div className="flex flex-col gap-px border-t border-(--border-subtle) p-1">
+        <div className="flex flex-col gap-px border-t border-(--line) p-1">
           {files.slice(0, 12).map((file) => (
             <button
               key={file.path}
               type="button"
               onClick={() => open(file.path)}
               title={`Open ${file.path} in Changes`}
-              className="flex h-7 items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+              className="flex h-7 items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
             >
               <FileIcon path={file.path} />
               <PathName path={file.path} className="flex-1" />
@@ -260,7 +260,7 @@ export const ChangesCard = memo(function ChangesCard({
             <button
               type="button"
               onClick={() => showPanel("Changes")}
-              className="h-7 rounded-control px-2 text-left text-small text-(--text-tertiary) hover:bg-(--bg-hover)"
+              className="h-7 rounded-control px-2 text-left text-small text-(--text-3) hover:bg-(--bg-hover)"
             >
               {files.length - 12} more in Changes
             </button>
@@ -319,7 +319,7 @@ function ChatMerge({ sessionId, url }: { sessionId: string; url: string }) {
   if (detail) return <div className="px-3.5 pb-2.5 @min-[540px]/pr:py-2.5"><MergeBox sessionId={sessionId} pull={detail} ownWork compact initialConfirming initialMethod={method} onMerged={setDetail} /></div>;
   return <div className="flex min-w-0 flex-wrap items-center gap-2 px-3.5 pb-2.5 @min-[540px]/pr:py-2.5">
     <div className="flex shrink-0 items-center"><Btn size="sm" variant="secondary" icon={GitMerge} disabled={load.isPending} className="rounded-r-none" onClick={() => load.mutate()}>{load.isPending ? 'Checking pull request…' : mergeLabel[method]}</Btn><MergeMethodMenu method={method} onChange={setMethod} disabled={load.isPending} /></div>
-    {load.isError ? <span role="alert" className="text-small text-(--danger-text)">{load.error.message}</span> : null}
+    {load.isError ? <span role="alert" className="text-small text-(--bad)">{load.error.message}</span> : null}
   </div>;
 }
 
@@ -346,11 +346,11 @@ export const PullRequestCard = memo(function PullRequestCard({
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="group/pr flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
+        className="group/pr flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 no-underline outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-body leading-[18px] text-(--text-primary)">{title || "Pull request"}</span>
-          <span className="flex flex-wrap items-center gap-2 text-small leading-[16px] text-(--text-tertiary)">
+          <span className="truncate text-body leading-[18px] text-(--text)">{title || "Pull request"}</span>
+          <span className="flex flex-wrap items-center gap-2 text-small leading-[16px] text-(--text-3)">
             <PrStatus thread={{ prUrl: url, pullRequest: pull }} showFailing={false} />
             <PrMetadata sessionId={sessionId} url={url} />
             <PrChecks pull={pull ?? null} />
@@ -359,7 +359,7 @@ export const PullRequestCard = memo(function PullRequestCard({
         <Icon
           icon={ExternalLink}
           size={12}
-          className="shrink-0 text-(--icon-tertiary) opacity-0 transition-opacity group-hover/pr:opacity-100"
+          className="shrink-0 text-(--text-3) opacity-0 transition-opacity group-hover/pr:opacity-100"
         />
       </a>
       {session.data && !session.data.review && pull?.state === 'open' ? <ChatMerge key={url} sessionId={sessionId} url={url} /> : null}

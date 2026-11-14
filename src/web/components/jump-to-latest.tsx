@@ -16,7 +16,7 @@ export const JumpToLatest = memo(function JumpToLatest({ show, live, onJump, cla
 				tabIndex={show ? 0 : -1}
 				onClick={onJump}
 				className={cn(
-					'flex h-7 -translate-y-full items-center gap-1.5 rounded-full border border-(--card-border) bg-(--card-bg-top) pr-3 pl-2.5 text-small text-(--text-secondary) shadow-(--shadow-overlay) outline-none transition-opacity duration-150 hover:border-(--border-strong) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
+					'flex h-7 -translate-y-full items-center gap-1.5 rounded-full border border-(--line) bg-(--bg-surface) pr-3 pl-2.5 text-small text-(--text-2) shadow-(--sh-2) outline-none transition-opacity duration-150 hover:border-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus)',
 					show ? 'pointer-events-auto opacity-100' : 'opacity-0',
 				)}
 			>

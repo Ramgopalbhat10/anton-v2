@@ -92,7 +92,7 @@ function IncognitoComposer({
 	return (
 		<form ref={formRef} className={cn('relative mx-auto flex w-full max-w-[680px] flex-col gap-2 px-4 pt-1 pb-4', className)} onSubmit={submit} {...attachments.dropZone}>
 			<AttachmentTray attachments={attachments} />
-			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)">
+			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)">
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<ComposerInput
 					autoFocus={!busy}
@@ -102,7 +102,7 @@ function IncognitoComposer({
 					placeholder={busy ? 'Add to what Anton is doing' : 'Ask anything — this chat is never saved'}
 				/>
 				{attachments.notice || blind ? (
-					<div className="px-1 text-micro text-(--warning-text)">
+					<div className="px-1 text-micro text-(--warn)">
 						{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 					</div>
 				) : null}

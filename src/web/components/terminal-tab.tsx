@@ -10,29 +10,29 @@ import { useRefreshTask } from '@/components/source-bar';
 import { api, isChat, repoShort } from '@/lib/api';
 import { taskQueries } from '@/lib/task-queries';
 
-/** xterm palette from the Signal tokens: inset black, secondary text, cyan cursor. */
+/** xterm's palette in Aura's hues: the app canvas, secondary text, an accent cursor, the state hues for its colours. */
 const theme = {
-	background: '#000000',
-	foreground: '#ababab',
-	cursor: '#3fb6d8',
-	cursorAccent: '#06181f',
-	selectionBackground: 'rgba(63,182,216,0.2)',
-	black: '#161616',
-	red: '#f58581',
-	green: '#63dda5',
-	yellow: '#f2c173',
-	blue: '#6fcde8',
-	magenta: '#b98be8',
-	cyan: '#6fcde8',
-	white: '#ededed',
-	brightBlack: '#737373',
-	brightRed: '#f58581',
-	brightGreen: '#63dda5',
-	brightYellow: '#f2c173',
-	brightBlue: '#9ee1f3',
-	brightMagenta: '#b98be8',
-	brightCyan: '#9ee1f3',
-	brightWhite: '#f7f7f7',
+	background: '#0a0a0b',
+	foreground: '#a1a1aa',
+	cursor: '#6e72f7',
+	cursorAccent: '#0a0a0b',
+	selectionBackground: 'rgba(110,114,247,0.3)',
+	black: '#19191c',
+	red: '#f2555a',
+	green: '#3dd68c',
+	yellow: '#f5b544',
+	blue: '#82aaff',
+	magenta: '#c792ea',
+	cyan: '#5ab8ff',
+	white: '#ededef',
+	brightBlack: '#71717a',
+	brightRed: '#f2555a',
+	brightGreen: '#3dd68c',
+	brightYellow: '#ffcb6b',
+	brightBlue: '#a5a8ff',
+	brightMagenta: '#b58cff',
+	brightCyan: '#5ab8ff',
+	brightWhite: '#fafafa',
 };
 
 type Link = 'connecting' | 'connected' | 'closed';
@@ -53,7 +53,7 @@ function Shell({ sessionId, onConnected, onLink }: { sessionId: string; onConnec
 			cursorBlink: true,
 			fontSize: 12,
 			lineHeight: 1.5,
-			fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace",
+			fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace",
 			theme,
 		});
 		const fit = new FitAddon();
@@ -124,10 +124,10 @@ export function TerminalTab({ sessionId }: { sessionId: string }) {
 					Restart
 				</Btn>
 			</div>
-			<div className="in-well flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)">
-				<div aria-hidden className="flex h-8 shrink-0 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-3">
-					<Icon icon={SquareTerminal} size={12} className={link === 'connected' ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
-					<span className="in-num min-w-0 flex-1 truncate text-micro text-(--text-tertiary)">{session.data ? `${isChat(session.data) ? 'scratch' : repoShort(session.data)} — shell` : 'shell'}</span>
+			<div className="in-well flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-app)">
+				<div aria-hidden className="flex h-8 shrink-0 items-center gap-2 border-b border-(--line) bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] px-3">
+					<Icon icon={SquareTerminal} size={12} className={link === 'connected' ? 'text-(--accent-text)' : 'text-(--text-3)'} />
+					<span className="in-num min-w-0 flex-1 truncate text-micro text-(--text-3)">{session.data ? `${isChat(session.data) ? 'scratch' : repoShort(session.data)} — shell` : 'shell'}</span>
 				</div>
 				<div className="min-h-0 flex-1 p-3">
 					<Shell key={generation} sessionId={sessionId} onConnected={onConnected} onLink={setLink} />

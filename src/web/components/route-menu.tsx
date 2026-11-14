@@ -31,11 +31,11 @@ export function HostMark({ slug, name, size = 14 }: { slug: string; name: string
 			className="inline-flex shrink-0 items-center justify-center rounded-control font-semibold uppercase"
 			style={
 				logo
-					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--alpha-white-6)', boxShadow: 'inset 0 0 0 1px var(--border-subtle)' }
+					? { width: size, height: size, fontSize: Math.round(size * 0.72), background: 'var(--bg-active)', boxShadow: 'inset 0 0 0 1px var(--line)' }
 					: { width: size, height: size, fontSize: size * 0.45, color: hue, background: `${hue}1f`, boxShadow: `inset 0 0 0 1px ${hue}33` }
 			}
 		>
-			{logo ? <span className="flex text-(--text-primary)" dangerouslySetInnerHTML={{ __html: logo }} /> : name.replace(/[^a-z0-9]/gi, '').slice(0, 2)}
+			{logo ? <span className="flex text-(--text)" dangerouslySetInnerHTML={{ __html: logo }} /> : name.replace(/[^a-z0-9]/gi, '').slice(0, 2)}
 		</span>
 	);
 }
@@ -47,7 +47,7 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 		<span className="flex min-w-0 flex-1 items-center gap-2">
 			<HostMark slug={endpoint.slug} name={endpoint.name} />
 			<span className="min-w-0 flex-1 truncate">{endpoint.name}</span>
-			<span className="in-num shrink-0 text-micro text-(--text-tertiary)">
+			<span className="in-num shrink-0 text-micro text-(--text-3)">
 				{dollars(endpoint.price.input)}/{dollars(endpoint.price.output)}
 				{speed ? ` · ${speed}` : ''}
 			</span>
@@ -57,7 +57,7 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 
 /** The routing buttons: as small as the pin beside them, lit once one is set. */
 const CONTROL =
-	'inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--alpha-white-6) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring) data-[state=open]:bg-(--alpha-white-6)';
+	'inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--text-3) outline-none hover:bg-(--bg-active) hover:text-(--text-2) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)';
 
 /** The providers the gateway lists for the model, shared by the menu and the mark on the picker's button; asked for only once `enabled`. */
 function useEndpoints(model: ModelInfo, enabled = true) {
@@ -106,24 +106,24 @@ function ProviderMenu({ model, route, onChange }: RouteProps & { model: ModelInf
 				<MenuItem checked={!route?.provider} onSelect={() => onChange(null)}>
 					Any provider
 				</MenuItem>
-				<p className="m-0 px-2 pt-0.5 pb-1.5 text-micro leading-[15px] text-(--text-tertiary)">
+				<p className="m-0 px-2 pt-0.5 pb-1.5 text-micro leading-[15px] text-(--text-3)">
 					For this model selection. If the provider you pick fails, {sourceOf(model)} falls back to its default routing.
 				</p>
 				<MenuSeparator />
 				<div className="flex items-center justify-between pr-2">
 					<MenuLabel>Try first</MenuLabel>
-					<span className="in-caption text-(--text-disabled)" title="US dollars per million input / output tokens">
+					<span className="in-caption text-(--text-4)" title="US dollars per million input / output tokens">
 						in/out
 					</span>
 				</div>
 				{endpoints.isPending ? (
-					<div className="flex h-8 items-center gap-2 px-2 text-small text-(--text-tertiary)">
+					<div className="flex h-8 items-center gap-2 px-2 text-small text-(--text-3)">
 						<Spinner size={11} /> Loading providers
 					</div>
 				) : endpoints.isError ? (
-					<div className="px-2 py-1.5 text-small text-(--danger-text)">Could not load providers: {endpoints.error.message}</div>
+					<div className="px-2 py-1.5 text-small text-(--bad)">Could not load providers: {endpoints.error.message}</div>
 				) : listed.length === 0 ? (
-					<div className="px-2 py-1.5 text-small text-(--text-tertiary)">{sourceOf(model)} lists no providers for this model.</div>
+					<div className="px-2 py-1.5 text-small text-(--text-3)">{sourceOf(model)} lists no providers for this model.</div>
 				) : (
 					listed.map((endpoint) => (
 						<MenuItem
@@ -145,7 +145,7 @@ function ProviderMenu({ model, route, onChange }: RouteProps & { model: ModelInf
 					))
 				)}
 				{route?.provider && listed.length > 0 && !chosen ? (
-					<div className="px-2 py-1.5 text-micro text-(--warning-text)">{route.provider} no longer serves this model; calls use the default routing.</div>
+					<div className="px-2 py-1.5 text-micro text-(--warn)">{route.provider} no longer serves this model; calls use the default routing.</div>
 				) : null}
 			</MenuContent>
 		</Menu>
@@ -175,7 +175,7 @@ function SortMenu({ route, onChange }: RouteProps) {
 						{ROUTE_SORT[sort].label}
 					</MenuItem>
 				))}
-				<p className="m-0 px-2 pt-1 pb-1.5 text-micro leading-[15px] text-(--text-tertiary)">For this model selection.</p>
+				<p className="m-0 px-2 pt-1 pb-1.5 text-micro leading-[15px] text-(--text-3)">For this model selection.</p>
 			</MenuContent>
 		</Menu>
 	);

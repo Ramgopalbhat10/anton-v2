@@ -20,29 +20,29 @@ const MAX_HEIGHT = 1600;
 
 /** Anton's tokens under the names a page uses (renders.ts lists them for the agent). */
 const THEME: Record<string, string> = {
-	'--text-primary': '--text-primary',
-	'--text-secondary': '--text-secondary',
-	'--text-tertiary': '--text-tertiary',
-	'--accent': '--accent-base',
+	'--text-primary': '--text',
+	'--text-secondary': '--text-2',
+	'--text-tertiary': '--text-3',
+	'--accent': '--accent',
 	'--accent-text': '--accent-text',
-	'--border': '--border-default',
-	'--surface': '--card-bg',
-	'--surface-inset': '--bg-inset',
-	'--success': '--success-base',
-	'--warning': '--warning-base',
-	'--danger': '--danger-base',
+	'--border': '--line-strong',
+	'--surface': '--bg-surface',
+	'--surface-inset': '--bg-app',
+	'--success': '--ok',
+	'--warning': '--warn',
+	'--danger': '--bad',
 	'--data-1': '--data-1',
 	'--data-2': '--data-2',
 	'--data-3': '--data-3',
 	'--data-4': '--data-4',
 	'--data-5': '--data-5',
-	'--font-sans': '--font-sans',
-	'--font-mono': '--font-mono',
+	'--font-sans': '--font',
+	'--font-mono': '--mono',
 };
 
 function themeVariables(): Record<string, string> {
 	const style = getComputedStyle(document.documentElement);
-	const variables: Record<string, string> = { '--radius': '10px' };
+	const variables: Record<string, string> = { '--radius': '8px' };
 	for (const [name, token] of Object.entries(THEME)) {
 		const value = style.getPropertyValue(token).trim();
 		if (value) variables[name] = value;
@@ -53,7 +53,7 @@ function themeVariables(): Record<string, string> {
 export const frameUrl = (sessionId: string, path: string) => `/api/sessions/${encodeURIComponent(sessionId)}/render-frame?path=${encodeURIComponent(path)}`;
 
 const chrome =
-	'inline-flex size-7 items-center justify-center rounded-tile border border-(--card-border) bg-(--bg-overlay) text-(--icon-secondary) shadow-(--card-highlight) outline-none hover:text-(--icon-primary) focus-visible:shadow-(--focus-ring)';
+	'inline-flex size-7 items-center justify-center rounded-card border border-(--line) bg-(--bg-overlay) text-(--text-2) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
 /**
  * The page, live. In the thread it is as tall as the page says and offers to
@@ -133,7 +133,7 @@ export const HtmlFrame = memo(function HtmlFrame({
 		<figure className="group/page relative m-0">
 			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-control border-0 bg-transparent" style={{ height, colorScheme: 'dark' }} />
 			{actions ? (
-			<div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--duration-micro) group-hover/page:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+			<div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--t-fast) group-hover/page:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
 				<Link to="/artifacts/$taskId" params={{ taskId: sessionId }} search={{ path }} aria-label={`Open ${title} in Artifacts`} title="Open in Artifacts" className={chrome}>
 					<Icon icon={Maximize2} size={13} />
 				</Link>

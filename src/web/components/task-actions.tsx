@@ -59,7 +59,7 @@ export function TitleInput({ session, onDone, className }: { session: Session; o
 				if (event.key === 'Enter') save(event.currentTarget.value);
 				if (event.key === 'Escape') onDone();
 			}}
-			className={cn('h-7 rounded-control bg-(--bg-raised) px-2 text-body text-(--text-primary) outline-none focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('h-7 rounded-control bg-(--bg-surface) px-2 text-body text-(--text) outline-none focus-visible:shadow-(--focus)', className)}
 		/>
 	);
 }
@@ -178,8 +178,8 @@ function TaskFacts({ session }: { session: Session }) {
 		<div className="flex max-w-[260px] flex-col gap-1 px-2 pt-1 pb-1.5 text-micro">
 			{facts.map(([label, value]) => (
 				<div key={label} className="flex items-center gap-3">
-					<span className="shrink-0 text-(--text-tertiary)">{label}</span>
-					<span className="min-w-0 flex-1 truncate text-right text-(--text-secondary)" title={value}>
+					<span className="shrink-0 text-(--text-3)">{label}</span>
+					<span className="min-w-0 flex-1 truncate text-right text-(--text-2)" title={value}>
 						{value}
 					</span>
 				</div>
@@ -328,8 +328,8 @@ export function TaskMenu({
 				>
 					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : thread ? 'Delete thread' : 'Delete task'}
 				</MenuItem>
-				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-tertiary)">Its files stay in the project Library, in a folder named for it.</div> : null}
-				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--danger-text)">{remove.error.message}</div> : null}
+				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-3)">Its files stay in the project Library, in a folder named for it.</div> : null}
+				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--bad)">{remove.error.message}</div> : null}
 				<MenuSeparator />
 				<TaskFacts session={session} />
 			</MenuContent>

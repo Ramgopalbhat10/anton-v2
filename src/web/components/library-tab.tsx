@@ -83,39 +83,39 @@ function TextAt({ place, render }: { place: Place; render: (text: string) => Rea
 	const content = useQuery({ queryKey: place.textKey, queryFn: place.text });
 	if (content.isPending) {
 		return (
-			<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-tertiary)">
+			<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Reading
 			</div>
 		);
 	}
-	if (content.isError) return <div className="px-3 py-2.5 text-small text-(--danger-text)">{content.error.message}</div>;
+	if (content.isError) return <div className="px-3 py-2.5 text-small text-(--bad)">{content.error.message}</div>;
 	return render(content.data);
 }
 
 const plain = (text: string) => (
-	<pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-secondary)">{text}</pre>
+	<pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-2)">{text}</pre>
 );
 
 /** The first row is the header; a file cut at MAX_ROWS says so. */
 function Table({ text, separator }: { text: string; separator: string }) {
 	const parsed = parseCsv(text, separator, MAX_ROWS + 1);
 	const [header = [], ...rows] = parsed.slice(0, MAX_ROWS);
-	const cell = 'max-w-[320px] truncate border-b border-(--border-subtle) px-3 py-1.5 text-left';
-	const head = 'max-w-[320px] truncate border-b border-(--border-default) px-3 py-2 text-left';
+	const cell = 'max-w-[320px] truncate border-b border-(--line) px-3 py-1.5 text-left';
+	const head = 'max-w-[320px] truncate border-b border-(--line-strong) px-3 py-2 text-left';
 	return (
 		<div className="overflow-x-auto">
 			<table className="w-full border-collapse text-small">
-				<thead className="bg-(--card-bg)">
+				<thead className="bg-(--bg-surface)">
 					<tr>
 						{header.map((name, index) => (
-							<th key={index} className={`${head} in-caption font-medium text-(--text-tertiary)`}>
+							<th key={index} className={`${head} in-caption font-medium text-(--text-3)`}>
 								{name}
 							</th>
 						))}
 					</tr>
 				</thead>
-				<tbody className="text-(--text-secondary)">
+				<tbody className="text-(--text-2)">
 					{rows.map((row, index) => (
 						<tr key={index} className="hover:bg-(--bg-hover)">
 							{row.map((value, column) => (
@@ -128,7 +128,7 @@ function Table({ text, separator }: { text: string; separator: string }) {
 				</tbody>
 			</table>
 			{parsed.length > MAX_ROWS ? (
-				<div className="px-3 py-2 text-small text-(--text-tertiary)">Showing the first {MAX_ROWS} rows. Download the file for the rest.</div>
+				<div className="px-3 py-2 text-small text-(--text-3)">Showing the first {MAX_ROWS} rows. Download the file for the rest.</div>
 			) : null}
 		</div>
 	);
@@ -184,11 +184,11 @@ function Preview({ library, output, onBack }: { library: LibrarySource; output: 
 					Library
 				</Btn>
 			</div>
-			<div className="in-well overflow-hidden bg-(--bg-inset)">
-				<div className="flex h-9 items-center gap-2 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] pr-1.5 pl-3">
+			<div className="in-well overflow-hidden bg-(--bg-app)">
+				<div className="flex h-9 items-center gap-2 border-b border-(--line) bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1.5 pl-3">
 					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
-					<div className="min-w-0 flex-1 truncate text-small text-(--text-primary)">{output.path}</div>
-					<span className="in-num text-micro text-(--text-disabled)">{size(output.size)}</span>
+					<div className="min-w-0 flex-1 truncate text-small text-(--text)">{output.path}</div>
+					<span className="in-num text-micro text-(--text-4)">{size(output.size)}</span>
 					{live ? (
 						<>
 							<Segmented label="Show" role="radiogroup" className="shrink-0">
@@ -229,7 +229,7 @@ const KIND_TONE: Record<Kind, string> = {
 	pdf: 'text-(--data-3)',
 	table: 'text-(--data-4)',
 	text: 'text-(--data-1)',
-	other: 'text-(--icon-tertiary)',
+	other: 'text-(--text-3)',
 };
 
 const extension = (path: string) => (path.includes('.') ? (path.split('.').pop()?.toUpperCase() ?? 'FILE') : 'FILE');
@@ -346,7 +346,7 @@ function ItemActions({
 						}}
 						className={cn(
 							'flex h-8 items-center gap-2 rounded-control px-2 text-left text-body outline-none hover:bg-(--bg-hover) focus-visible:bg-(--bg-hover)',
-							action.danger ? 'text-(--danger-text)' : 'text-(--text-primary)',
+							action.danger ? 'text-(--bad)' : 'text-(--text)',
 						)}
 					>
 						<Icon icon={action.icon} size={13} />
@@ -393,21 +393,21 @@ function ItemActions({
 function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folder: Folder; onOpen: () => void }) {
 	return (
 		<div className="group relative pt-2.5">
-			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-inner border border-b-0 border-(--card-border) bg-(--card-bg-top)" />
+			<span aria-hidden className="absolute top-0 left-0 h-3.5 w-12 rounded-t-inner border border-b-0 border-(--line) bg-(--bg-surface)" />
 			<div
 				role="button"
 				tabIndex={0}
 				onClick={onOpen}
 				onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && onOpen()}
-				className="in-card relative flex h-[104px] cursor-pointer flex-col justify-between rounded-tl-none p-3 text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
+				className="in-card relative flex h-[104px] cursor-pointer flex-col justify-between rounded-tl-none p-3 text-left outline-none transition-colors duration-(--t-fast) hover:border-(--line-strong) focus-visible:shadow-(--focus)"
 			>
 				<span className="flex min-w-0 items-start gap-2">
-					<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{folder.name}</span>
+					<span className="min-w-0 flex-1 truncate text-body text-(--text)">{folder.name}</span>
 					<span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 						<ItemActions library={library} path={folder.path} folder onOpen={onOpen} variant="menu" />
 					</span>
 				</span>
-				<span className="in-num flex items-center justify-between text-micro text-(--text-disabled)">
+				<span className="in-num flex items-center justify-between text-micro text-(--text-4)">
 					<span>
 						{folder.count} {folder.count === 1 ? 'item' : 'items'}
 					</span>
@@ -431,7 +431,7 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 			onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && onOpen()}
 			title={`${name} · ${size(output.size)} · ${modified(output)}`}
 			aria-label={name}
-			className="in-card group relative mt-2.5 flex h-[104px] cursor-pointer flex-col overflow-hidden text-left outline-none transition-colors duration-(--duration-micro) hover:border-(--border-default) focus-visible:shadow-(--focus-ring)"
+			className="in-card group relative mt-2.5 flex h-[104px] cursor-pointer flex-col overflow-hidden text-left outline-none transition-colors duration-(--t-fast) hover:border-(--line-strong) focus-visible:shadow-(--focus)"
 		>
 			{kind === 'image' ? (
 				<img src={place.url} alt="" loading="lazy" className="absolute inset-0 size-full object-cover object-top opacity-90 transition-opacity group-hover:opacity-100" />
@@ -440,7 +440,7 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 			) : (
 				<span className="flex min-w-0 items-start gap-1.5 p-3 pr-1.5">
 					<Icon icon={ICONS[kind]} size={13} className={cn('mt-0.5 shrink-0', KIND_TONE[kind])} />
-					<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[17px] break-all text-(--text-primary)">{name}</span>
+					<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[17px] break-all text-(--text)">{name}</span>
 				</span>
 			)}
 			<span className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
@@ -449,12 +449,12 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
-				<span className="rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-nano tracking-[0.06em] text-(--text-secondary) backdrop-blur-sm">{extension(output.path)}</span>
+				<span className="rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-nano tracking-[0.06em] text-(--text-2) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
 				{kind === 'page' && place.sessionId ? (
-					<span className="min-w-0 truncate rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-micro text-(--text-primary) backdrop-blur-sm">{name}</span>
+					<span className="min-w-0 truncate rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-micro text-(--text) backdrop-blur-sm">{name}</span>
 				) : kind === 'image' ? null : (
-					<span className="in-num ml-auto text-micro text-(--text-disabled)">{size(output.size)}</span>
+					<span className="in-num ml-auto text-micro text-(--text-4)">{size(output.size)}</span>
 				)}
 			</span>
 		</div>
@@ -478,16 +478,16 @@ function Grid({ library, outputs, folder, onFolder, onOpen }: { library: Library
 /** The tree's own look, in the app's tokens, so it sits in the panel like the rest. */
 const TREE_STYLE = {
 	// The panel's own ground, which also backs the ellipsis a long name truncates to.
-	'--trees-bg-override': 'var(--bg-canvas)',
-	'--trees-fg-override': 'var(--text-secondary)',
-	'--trees-fg-muted-override': 'var(--text-tertiary)',
+	'--trees-bg-override': 'var(--bg-panel)',
+	'--trees-fg-override': 'var(--text-2)',
+	'--trees-fg-muted-override': 'var(--text-3)',
 	'--trees-bg-muted-override': 'var(--bg-hover)',
-	'--trees-selected-bg-override': 'var(--neutral-750)',
-	'--trees-selected-fg-override': 'var(--text-primary)',
-	'--trees-accent-override': 'var(--accent-base)',
-	'--trees-border-color-override': 'var(--border-subtle)',
-	'--trees-indent-guide-bg-override': 'var(--border-subtle)',
-	'--trees-focus-ring-color-override': 'var(--accent-base)',
+	'--trees-selected-bg-override': 'var(--bg-active)',
+	'--trees-selected-fg-override': 'var(--text)',
+	'--trees-accent-override': 'var(--accent)',
+	'--trees-border-color-override': 'var(--line)',
+	'--trees-indent-guide-bg-override': 'var(--line)',
+	'--trees-focus-ring-color-override': 'var(--accent)',
 	'--trees-font-family-override': 'inherit',
 	'--trees-font-size-override': '12.5px',
 	'--trees-border-radius-override': '7px',
@@ -501,7 +501,7 @@ const TREE_STYLE = {
  * Modified and size as columns: fixed-width text in Anton's mono type, kept on
  * one line with its spaces, and kept whole while a long name gives way.
  */
-const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font-sans); font-size: 11px; font-variant-numeric: tabular-nums; }`;
+const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font); font-size: 11px; font-variant-numeric: tabular-nums; }`;
 const COLUMN_GAP = 3;
 
 /**
@@ -568,7 +568,7 @@ function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: O
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* The rows' padding, then the lane the tree keeps for its row menu button (18px and a 6px gap), and its scrollbar's, sit right of the columns. */}
-			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--border-subtle) pl-2" style={{ paddingRight: `calc(2rem + ${lane}px)` }}>
+			<div className="flex h-7 shrink-0 items-center justify-between border-b border-(--line) pl-2" style={{ paddingRight: `calc(2rem + ${lane}px)` }}>
 				<span className="in-caption">Name</span>
 				{/* Measured in the rows' own type, so each heading ends where its column does. */}
 				<span className="flex text-micro">
@@ -614,20 +614,20 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
 			<button
 				type="button"
 				onClick={() => onFolder('')}
-				className={cn('shrink-0 rounded-control px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)', parts.length ? 'text-(--text-tertiary)' : 'text-(--text-primary)')}
+				className={cn('shrink-0 rounded-control px-1 outline-none hover:text-(--text) focus-visible:shadow-(--focus)', parts.length ? 'text-(--text-3)' : 'text-(--text)')}
 			>
 				All files
 			</button>
 			{parts.map((part, index) => (
 				<span key={index} className="flex min-w-0 items-center gap-1">
-					<Icon icon={ChevronRight} size={11} className="shrink-0 text-(--icon-disabled)" />
+					<Icon icon={ChevronRight} size={11} className="shrink-0 text-(--text-4)" />
 					<button
 						type="button"
 						onClick={() => onFolder(parts.slice(0, index + 1).join('/'))}
 						aria-current={index === parts.length - 1 ? 'page' : undefined}
 						className={cn(
-							'min-w-0 truncate rounded-control px-1 outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)',
-							index === parts.length - 1 ? 'text-(--text-primary)' : 'text-(--text-tertiary)',
+							'min-w-0 truncate rounded-control px-1 outline-none hover:text-(--text) focus-visible:shadow-(--focus)',
+							index === parts.length - 1 ? 'text-(--text)' : 'text-(--text-3)',
 						)}
 					>
 						{part}
@@ -707,7 +707,7 @@ export function Library({ library }: { library: LibrarySource }) {
 					<MenuTrigger asChild>
 						<Btn variant="ghost" size="xs" className="shrink-0">
 							{TYPES.find((entry) => entry.key === type)?.label === 'All types' ? 'Type' : TYPES.find((entry) => entry.key === type)?.label}
-							<Icon icon={ChevronDown} size={11} className="text-(--icon-tertiary)" />
+							<Icon icon={ChevronDown} size={11} className="text-(--text-3)" />
 						</Btn>
 					</MenuTrigger>
 					<MenuContent align="start" sideOffset={4}>
@@ -746,7 +746,7 @@ export function Library({ library }: { library: LibrarySource }) {
 			</div>
 
 			{notice ? (
-				<div role="status" className="shrink-0 text-small text-(--text-tertiary)">
+				<div role="status" className="shrink-0 text-small text-(--text-3)">
 					{notice}
 				</div>
 			) : null}
@@ -755,7 +755,7 @@ export function Library({ library }: { library: LibrarySource }) {
 				{library.error ? (
 					<EmptyState title="Library unavailable" body={library.error.message} />
 				) : !library.files ? (
-					<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+					<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 						<Spinner size={12} />
 						Loading the library
 					</div>
@@ -775,7 +775,7 @@ export function Library({ library }: { library: LibrarySource }) {
 			</div>
 
 			{all.length ? (
-				<div className="in-caption flex shrink-0 items-center justify-between border-t border-(--border-subtle) pt-2">
+				<div className="in-caption flex shrink-0 items-center justify-between border-t border-(--line) pt-2">
 					<span>
 						{type === 'all' ? `${all.length} ${all.length === 1 ? 'file' : 'files'}` : `${items.length} of ${all.length} files`}
 					</span>

@@ -52,7 +52,7 @@ function Row({ item }: { item: ReviewItem }) {
 				to="/agents/$sessionId"
 				params={{ sessionId: item.sessionId }}
 				search={{ app: 'code' }}
-				className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+				className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-control outline-none focus-visible:shadow-(--focus)"
 			>
 				<div className="flex min-w-0 items-center gap-2">
 					<span className="truncate text-body font-medium">{item.title}</span>
@@ -60,14 +60,14 @@ function Row({ item }: { item: ReviewItem }) {
 					{item.draft ? <PrFlag tone="draft">Draft</PrFlag> : null}
 					{open && item.conflicts ? <PrFlag tone="conflicts">Conflicts</PrFlag> : null}
 				</div>
-				<div className="truncate text-micro text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-3)">
 					{item.repo} · <PrStatus thread={{ prUrl: item.url, pullRequest: state === 'unknown' ? null : { state, checks: null, runs: [] } }} full /> · {age(item.createdAt)}
 					{open ? ` · ${checksText(item.checks)}` : ''}
 				</div>
 			</Link>
 			{open ? <CheckPips checks={item.checks} /> : null}
 			{open && item.comments ? (
-				<span className="in-num flex shrink-0 items-center gap-1 text-small text-(--text-tertiary)" title="Comments and reviews">
+				<span className="in-num flex shrink-0 items-center gap-1 text-small text-(--text-3)" title="Comments and reviews">
 					<Icon icon={MessageSquare} size={12} />
 					{item.comments}
 				</span>
@@ -115,7 +115,7 @@ function ReviewAny() {
 				<Btn type="submit" variant="primary" disabled={!url.trim() || review.isPending}>
 					{review.isPending ? 'Starting…' : 'Review'}
 				</Btn>
-				{review.isError ? <p className="m-0 w-full text-small text-(--danger-text)">{review.error.message}</p> : null}
+				{review.isError ? <p className="m-0 w-full text-small text-(--bad)">{review.error.message}</p> : null}
 			</form>
 		</Card>
 	);
@@ -165,7 +165,7 @@ export function ReviewsPage() {
 			{reviews.isPending ? (
 				<Spinner size={12} />
 			) : reviews.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">Could not load pull requests: {reviews.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">Could not load pull requests: {reviews.error.message}</p>
 			) : groups.length === 0 ? (
 				<Card as="div">
 					<div className="p-1.5">

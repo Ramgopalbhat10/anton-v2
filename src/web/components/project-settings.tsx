@@ -209,8 +209,8 @@ function Repositories({ space }: { space: Space }) {
 		>
 			<div className="flex flex-col">
 				{space.repos.map((repo) => (
-					<div key={repo.id} className="flex h-10 items-center gap-2.5 border-t border-(--border-subtle) first:border-t-0">
-						<FolderGit2 aria-hidden size={14} strokeWidth={1.5} className="text-(--icon-tertiary)" />
+					<div key={repo.id} className="flex h-10 items-center gap-2.5 border-t border-(--line) first:border-t-0">
+						<FolderGit2 aria-hidden size={14} strokeWidth={1.5} className="text-(--text-3)" />
 						<span className="min-w-0 flex-1 truncate text-body">{repo.repoFullName}</span>
 						<Caption>{repo.defaultBranch}</Caption>
 						<IconBtn
@@ -223,7 +223,7 @@ function Repositories({ space }: { space: Space }) {
 					</div>
 				))}
 				{space.repos.length === 0 ? (
-					<div className="flex h-10 items-center text-body text-(--text-tertiary)">
+					<div className="flex h-10 items-center text-body text-(--text-3)">
 						{others.length || projects.isPending ? (
 							'None. Threads work as chats until you add one.'
 						) : (
@@ -238,7 +238,7 @@ function Repositories({ space }: { space: Space }) {
 					</div>
 				) : null}
 			</div>
-			{save.isError ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
+			{save.isError ? <span className="text-small text-(--bad)">{save.error.message}</span> : null}
 		</Block>
 	);
 }
@@ -263,7 +263,7 @@ function Usage({ space }: { space: Space }) {
 					{data.byThread.length ? (
 						<SubBlock label="By thread">
 							{data.byThread.slice(0, 10).map((row) => (
-								<ShareRow key={row.id} label={row.title} sub={`${tokens(row.tokens)} tokens`} share={row.cost / top} value={dollars(row.cost)} color={row.title === 'Coordinator' ? 'var(--accent-base)' : 'var(--neutral-500)'} />
+								<ShareRow key={row.id} label={row.title} sub={`${tokens(row.tokens)} tokens`} share={row.cost / top} value={dollars(row.cost)} color={row.title === 'Coordinator' ? 'var(--accent)' : 'var(--text-4)'} />
 							))}
 						</SubBlock>
 					) : null}
@@ -301,12 +301,12 @@ function Lifecycle({ space }: { space: Space }) {
 		<Block
 			title="Pause, archive or delete"
 			icon={Trash2}
-			className="border-(--danger-border)"
+			className="border-(--bad-line)"
 			help="Pause, archive or delete the project."
 			info="Paused projects queue new threads instead of starting them. Archived ones leave the sidebar. Deleting removes the project, its coordinator conversation and its files; its threads stay as ordinary tasks."
 			footer={
 				<>
-					{remove.isError ? <span className="text-small text-(--danger-text)">{remove.error.message}</span> : null}
+					{remove.isError ? <span className="text-small text-(--bad)">{remove.error.message}</span> : null}
 					<Btn size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate({ state: space.state === 'paused' ? 'active' : 'paused' })}>
 						{space.state === 'paused' ? 'Resume' : 'Pause'}
 					</Btn>
@@ -332,7 +332,7 @@ const SECTIONS: Array<{ id: ProjectSection; label: string; icon: LucideIcon }> =
 ];
 
 const NAV_ITEM =
-	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[active=true]:bg-(--alpha-white-6) data-[active=true]:text-(--text-primary)';
+	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[active=true]:bg-(--bg-active) data-[active=true]:text-(--text)';
 
 function Section({ space, section }: { space: Space; section: ProjectSection }) {
 	switch (section) {
@@ -384,13 +384,13 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 	const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--border-subtle) pr-2 pl-4 text-body font-medium">
+			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-4 text-body font-medium">
 				{space.data ? <SpaceMark space={space.data} size={20} /> : null}
-				<span className="min-w-0 truncate text-(--text-secondary)">{space.data?.name ?? 'Project'}</span>
-				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--icon-disabled)" />
-				<span className="shrink-0 text-(--text-secondary)">Settings</span>
-				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--icon-disabled)" />
-				<span className="min-w-0 truncate text-(--text-primary)">{current.label}</span>
+				<span className="min-w-0 truncate text-(--text-2)">{space.data?.name ?? 'Project'}</span>
+				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
+				<span className="shrink-0 text-(--text-2)">Settings</span>
+				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
+				<span className="min-w-0 truncate text-(--text)">{current.label}</span>
 				<span className="flex-1" />
 				<IconBtn icon={X} size="sm" label="Close project settings" onClick={closeProjectSettings} />
 			</header>
@@ -398,11 +398,11 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 				<nav
 					aria-label="Project settings"
 					data-noscrollbar
-					className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-(--border-subtle) px-2.5 py-2 md:w-[232px] md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:pt-2.5 md:pb-4"
+					className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-(--line) px-2.5 py-2 md:w-[232px] md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:pt-2.5 md:pb-4"
 				>
 					<div className="hidden items-center gap-2 px-2 pt-1 pb-1.5 md:flex">
 						<SectionLabel className="shrink-0">Project</SectionLabel>
-						<span aria-hidden className="h-px flex-1 bg-(--border-subtle)" />
+						<span aria-hidden className="h-px flex-1 bg-(--line)" />
 					</div>
 					{SECTIONS.map((item) => (
 						<button
@@ -415,9 +415,9 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 						>
 							<span
 								className={cn(
-									'inline-flex size-6 shrink-0 items-center justify-center text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary)',
+									'inline-flex size-6 shrink-0 items-center justify-center text-(--text-3) group-hover/nav:text-(--text-2)',
 									item.id === current.id && 'text-(--accent-text) group-hover/nav:text-(--accent-text)',
-									item.id === 'lifecycle' && item.id === current.id && 'text-(--danger-text) group-hover/nav:text-(--danger-text)',
+									item.id === 'lifecycle' && item.id === current.id && 'text-(--bad) group-hover/nav:text-(--bad)',
 								)}
 							>
 								<Icon icon={item.icon} size={15} />

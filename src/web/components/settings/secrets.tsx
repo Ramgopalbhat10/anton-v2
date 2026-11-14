@@ -79,10 +79,10 @@ function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone:
 			onDone();
 		},
 	});
-	const label = 'text-small font-medium text-(--text-secondary)';
+	const label = 'text-small font-medium text-(--text-2)';
 	return (
 		<form
-			className="flex flex-col gap-3 rounded-control border border-(--border-subtle) p-3"
+			className="flex flex-col gap-3 rounded-control border border-(--line) p-3"
 			aria-label={editing ? `Change ${editing.name}` : 'Add a sealed secret'}
 			onSubmit={(event) => {
 				event.preventDefault();
@@ -125,7 +125,7 @@ function SealedForm({ editing, onDone }: { editing: SealedSecret | null; onDone:
 				</div>
 			</div>
 			{hasProxy ? (
-				<label className="flex items-start gap-2 text-small text-(--text-secondary)">
+				<label className="flex items-start gap-2 text-small text-(--text-2)">
 					<input type="checkbox" checked={readsDirect} onChange={(event) => setReadsDirect(event.target.checked)} className="mt-0.5" />
 					<span>
 						Only send changes through the proxy. Reads (GET) go straight out, which is faster. Turn this on when the API asks for the fixed IP only on orders and other changes.
@@ -150,11 +150,11 @@ function SealedRow({ secret, onEdit }: { secret: SealedSecret; onEdit: () => voi
 	const remove = useMutation({ mutationFn: () => api.deleteSealedSecret(secret.name), onSuccess: (saved) => queryClient.setQueryData(['sealed-secrets'], saved) });
 	const from = secret.source.by === 'task' ? 'Kept by a task from an answer' : 'Set by you';
 	return (
-		<div className="flex min-h-12 items-center gap-3 rounded-tile px-2.5 py-1.5">
+		<div className="flex min-h-12 items-center gap-3 rounded-card px-2.5 py-1.5">
 			<RowIcon icon={LockKeyhole} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="truncate text-body font-medium">{secret.name}</div>
-				<div className="truncate text-micro text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-3)">
 					To {secret.hosts.join(', ')}
 					{secret.proxy ? ` · ${secret.readsDirect ? 'changes ' : ''}through ${secret.proxy}` : ''} · {from} {age(secret.updatedAt)}
 				</div>
@@ -205,14 +205,14 @@ function RepoRow({ repo }: { repo: SecretsView['repos'][number] }) {
 		<Link
 			to="/settings/repos/$projectId"
 			params={{ projectId: repo.projectId }}
-			className="flex min-h-12 items-center gap-3 rounded-tile px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+			className="flex min-h-12 items-center gap-3 rounded-card px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 		>
 			<RowIcon icon={Folder} />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="truncate text-body font-medium">{repo.repo}</div>
-				<div className="truncate text-micro text-(--text-tertiary)">{repo.names.join(' · ')}</div>
+				<div className="truncate text-micro text-(--text-3)">{repo.names.join(' · ')}</div>
 			</div>
-			<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
+			<Icon icon={ChevronRight} size={12} className="text-(--text-4)" />
 		</Link>
 	);
 }

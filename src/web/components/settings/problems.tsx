@@ -19,10 +19,10 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 	return (
 		<div className="relative flex items-start gap-3 py-1.5 pl-1">
 			{/* A rail through the dots, so the list reads as a timeline. */}
-			{last ? null : <span className="absolute top-[22px] bottom-[-8px] left-[7px] w-px bg-(--border-subtle)" />}
+			{last ? null : <span className="absolute top-[22px] bottom-[-8px] left-[7px] w-px bg-(--line)" />}
 			<span
-				className="relative mt-[9px] size-[7px] shrink-0 rounded-full ring-4 ring-(--card-bg)"
-				style={{ background: entry.level === 'error' ? 'var(--danger-base)' : 'var(--warning-base)' }}
+				className="relative mt-[9px] size-[7px] shrink-0 rounded-full ring-4 ring-(--bg-surface)"
+				style={{ background: entry.level === 'error' ? 'var(--bad)' : 'var(--warn)' }}
 			/>
 			<div className="flex min-w-0 flex-1 flex-col">
 				<div className="flex min-h-[26px] items-center gap-2">
@@ -31,18 +31,18 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 						disabled={!entry.detail}
 						aria-expanded={entry.detail ? open : undefined}
 						onClick={() => setOpen((value) => !value)}
-						className="group -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-control px-1.5 py-0.5 text-left outline-none enabled:cursor-pointer enabled:hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+						className="group -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-control px-1.5 py-0.5 text-left outline-none enabled:cursor-pointer enabled:hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 					>
-						<span className="shrink-0 text-body font-medium text-(--text-primary)">{entry.message}</span>
+						<span className="shrink-0 text-body font-medium text-(--text)">{entry.message}</span>
 						{count > 1 ? (
-							<span className="in-num shrink-0 rounded-control bg-(--bg-hover) px-1.5 py-px text-micro text-(--text-secondary)" title={`${count} times, first ${age(first)} ago`}>
+							<span className="in-num shrink-0 rounded-control bg-(--bg-hover) px-1.5 py-px text-micro text-(--text-2)" title={`${count} times, first ${age(first)} ago`}>
 								×{count}
 							</span>
 						) : null}
-						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate text-micro text-(--text-tertiary)">{entry.detail}</span> : <span className="flex-1" />}
-						{entry.detail ? <Icon icon={ChevronDown} size={12} className={cn('shrink-0 text-(--icon-tertiary) transition-transform', open && 'rotate-180')} /> : null}
+						{entry.detail && !open ? <span className="min-w-0 flex-1 truncate text-micro text-(--text-3)">{entry.detail}</span> : <span className="flex-1" />}
+						{entry.detail ? <Icon icon={ChevronDown} size={12} className={cn('shrink-0 text-(--text-3) transition-transform', open && 'rotate-180')} /> : null}
 					</button>
-					<span className="in-num w-[64px] shrink-0 text-right text-micro text-(--text-disabled)">{count > 1 ? `${age(entry.at)} – ${age(first)}` : age(entry.at)}</span>
+					<span className="in-num w-[64px] shrink-0 text-right text-micro text-(--text-4)">{count > 1 ? `${age(entry.at)} – ${age(first)}` : age(entry.at)}</span>
 					{entry.sessionId ? (
 						<Link
 							to="/agents/$sessionId"
@@ -50,7 +50,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 							search={{ app: 'code' }}
 							title="Open the task"
 							aria-label="Open the task"
-							className="grid size-6 shrink-0 place-items-center rounded-control text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+							className="grid size-6 shrink-0 place-items-center rounded-control text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 						>
 							<Icon icon={ArrowUpRight} size={13} />
 						</Link>
@@ -59,7 +59,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 					)}
 				</div>
 				{entry.detail && open ? (
-					<div className="mt-1 mb-1 rounded-control bg-(--bg-inset) px-2.5 py-2 font-mono text-micro leading-[16px] break-all whitespace-pre-wrap text-(--text-secondary) select-text">{entry.detail}</div>
+					<div className="mt-1 mb-1 rounded-control bg-(--bg-app) px-2.5 py-2 font-mono text-micro leading-[16px] break-all whitespace-pre-wrap text-(--text-2) select-text">{entry.detail}</div>
 				) : null}
 			</div>
 		</div>
@@ -69,7 +69,7 @@ function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: num
 function Problems() {
 	const logs = useQuery({ queryKey: ['logs'], queryFn: api.logs, refetchInterval: SAFETY_NET_MS });
 	if (logs.isPending) return <Spinner size={12} />;
-	if (logs.isError) return <p className="m-0 text-small text-(--danger-text)">{logs.error.message}</p>;
+	if (logs.isError) return <p className="m-0 text-small text-(--bad)">{logs.error.message}</p>;
 	const recent = logs.data.logs.slice(0, PROBLEMS_SHOWN);
 	const errors = recent.filter((entry) => entry.level === 'error').length;
 	// The same problem again and again (a pull request that cannot be read, checked each minute) is one row with a count.
@@ -102,8 +102,8 @@ function Problems() {
 					<SplitBar
 						label="Problems by level"
 						parts={[
-							{ key: 'error', label: 'Errors', value: errors, color: 'var(--danger-base)' },
-							{ key: 'warn', label: 'Warnings', value: recent.length - errors, color: 'var(--warning-base)' },
+							{ key: 'error', label: 'Errors', value: errors, color: 'var(--bad)' },
+							{ key: 'warn', label: 'Warnings', value: recent.length - errors, color: 'var(--warn)' },
 						]}
 					/>
 				</CardSection>

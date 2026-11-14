@@ -160,10 +160,10 @@ export const VmPanel = memo(function VmPanel({
 											onSelect={() => show(panel.name)}
 											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 outline-none data-highlighted:bg-(--bg-hover)"
 										>
-											<span className="inline-flex shrink-0 text-(--icon-secondary)">
+											<span className="inline-flex shrink-0 text-(--text-2)">
 												<Icon icon={panel.icon} size={13} />
 											</span>
-											<span className="min-w-0 flex-1 truncate text-body text-(--text-primary)">{panel.name}</span>
+											<span className="min-w-0 flex-1 truncate text-body text-(--text)">{panel.name}</span>
 											{tabs.includes(panel.name) ? (
 												<span className="inline-flex shrink-0 text-(--accent-text)">
 													<Icon icon={Check} size={12} />
@@ -180,7 +180,7 @@ export const VmPanel = memo(function VmPanel({
 											}}
 											className={cn(
 												'inline-flex size-8 shrink-0 items-center justify-center rounded-control outline-none data-highlighted:bg-(--bg-hover)',
-												isPinned ? 'text-(--accent-text)' : 'text-(--icon-tertiary) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
+												isPinned ? 'text-(--accent-text)' : 'text-(--text-3) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
 											)}
 										>
 											<Icon icon={Pin} size={12} className={cn(isPinned && '[&_path]:fill-current')} />
@@ -188,7 +188,7 @@ export const VmPanel = memo(function VmPanel({
 									</div>
 								);
 							})}
-							<div className="px-2 pt-1.5 pb-1 text-micro leading-[15px] text-(--text-tertiary)">
+							<div className="px-2 pt-1.5 pb-1 text-micro leading-[15px] text-(--text-3)">
 								{pinned.length ? 'Tasks open with the pinned panels.' : 'Pin panels to open them with every task.'}
 							</div>
 						</MenuContent>
@@ -219,9 +219,9 @@ export const VmPanel = memo(function VmPanel({
 								key={panel.name}
 								title={panel.desc}
 								onClick={() => show(panel.name)}
-								className="group/panel flex h-8 items-center gap-2.5 rounded-control px-2 text-left text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+								className="group/panel flex h-8 items-center gap-2.5 rounded-control px-2 text-left text-body text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 							>
-								<Icon icon={panel.icon} size={14} className="text-(--icon-tertiary) group-hover/panel:text-(--icon-secondary)" />
+								<Icon icon={panel.icon} size={14} className="text-(--text-3) group-hover/panel:text-(--text-2)" />
 								{panel.name}
 							</button>
 						))}

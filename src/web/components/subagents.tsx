@@ -88,8 +88,8 @@ export type WorkKind = 'read' | 'search' | 'run' | 'edit' | 'browse' | 'other';
 
 /** The kinds of work a subagent's steps add up to: reading and searching quiet greys, doing things lit in colour. */
 export const WORK: Record<WorkKind, { label: string; doing: string; tone: string }> = {
-	read: { label: 'Read', doing: 'reading', tone: 'var(--neutral-300)' },
-	search: { label: 'Searched', doing: 'searching', tone: 'var(--neutral-500)' },
+	read: { label: 'Read', doing: 'reading', tone: 'var(--text-2)' },
+	search: { label: 'Searched', doing: 'searching', tone: 'var(--text-4)' },
 	run: { label: 'Ran', doing: 'running commands', tone: 'var(--data-1)' },
 	edit: { label: 'Edited', doing: 'editing', tone: 'var(--data-2)' },
 	browse: { label: 'Browsed', doing: 'browsing', tone: 'var(--data-3)' },
@@ -111,9 +111,9 @@ export const stepTone = (step: SubagentStep) => (step.state === 'failed' ? toolT
 /** Running, finished, stopped or failed, as a small glyph. */
 export function StatusGlyph({ status }: { status: SubagentRun['status'] | 'starting' }) {
 	if (status === 'running' || status === 'starting') return <Spinner size={11} />;
-	if (status === 'failed') return <Icon icon={CircleAlert} size={12} className="text-(--danger-text)" />;
-	if (status === 'stopped') return <Icon icon={CircleStop} size={12} className="text-(--text-tertiary)" />;
-	return <Icon icon={Check} size={12} className="text-(--success-text)" />;
+	if (status === 'failed') return <Icon icon={CircleAlert} size={12} className="text-(--bad)" />;
+	if (status === 'stopped') return <Icon icon={CircleStop} size={12} className="text-(--text-3)" />;
+	return <Icon icon={Check} size={12} className="text-(--ok)" />;
 }
 
 /**
@@ -235,24 +235,24 @@ function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; cal
 				<span className="text-micro font-medium" style={{ color: look.tone }}>
 					{look.label}
 				</span>
-				<span className={cn('ml-auto flex items-center gap-1.5 text-micro', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span className={cn('ml-auto flex items-center gap-1.5 text-micro', status === 'failed' ? 'text-(--bad)' : 'text-(--text-3)')}>
 					<StatusGlyph status={status} />
 					{STATUS_WORD[status]}
 				</span>
 			</div>
-			<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+			<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{titleOf(call.prompt, call.description)}</span>
 			{live ? (
 				<span className="agent-live-line flex min-w-0 items-start gap-1.5 text-small leading-[17px]">
 					{latest && !run?.writing ? <Icon icon={stepBody(latest).icon} size={12} className="mt-[2px] shrink-0" /> : null}
 					<span className="line-clamp-2 min-w-0">{runLine(run, call)}</span>
 				</span>
 			) : answer ? (
-				<p className={cn('m-0 line-clamp-4 text-small leading-[17px] text-pretty', status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{answer}</p>
+				<p className={cn('m-0 line-clamp-4 text-small leading-[17px] text-pretty', status === 'failed' ? 'text-(--bad)' : 'text-(--text-2)')}>{answer}</p>
 			) : status === 'stopped' ? (
-				<p className="m-0 text-small text-(--text-tertiary)">Stopped by you</p>
+				<p className="m-0 text-small text-(--text-3)">Stopped by you</p>
 			) : null}
-			{facts.length ? <span className="in-num truncate text-micro text-(--text-tertiary)">{facts.join(' · ')}</span> : null}
-			<div className="flex items-center gap-1.5 border-t border-(--border-subtle) pt-2.5">
+			{facts.length ? <span className="in-num truncate text-micro text-(--text-3)">{facts.join(' · ')}</span> : null}
+			<div className="flex items-center gap-1.5 border-t border-(--line) pt-2.5">
 				<Btn size="xs" variant="secondary" icon={ChevronRight} onClick={onOpen}>
 					Open in Agents
 				</Btn>
@@ -287,24 +287,24 @@ function AgentRow({ sessionId, call, run, now }: { sessionId: string; call: Dele
 				<button
 					type="button"
 					onClick={open}
-					className={cn('flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2 pl-3 text-left outline-none focus-visible:shadow-(--focus-ring-inset)', stoppable ? 'pr-1' : 'pr-3')}
+					className={cn('flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2 pl-3 text-left outline-none focus-visible:shadow-(--focus-inset)', stoppable ? 'pr-1' : 'pr-3')}
 				>
 					<span className="flex min-h-5 min-w-0 items-center gap-2">
 						<span className="inline-flex w-3.5 shrink-0 justify-center">
 							<StatusGlyph status={status} />
 						</span>
-						<span className="min-w-0 truncate text-body text-(--text-primary)">{titleOf(call.prompt, call.description)}</span>
+						<span className="min-w-0 truncate text-body text-(--text)">{titleOf(call.prompt, call.description)}</span>
 						<Chip icon={look.icon} iconColor={look.tone}>
 							{look.label}
 						</Chip>
 						{status === 'failed' ? <Chip tone="danger">Failed</Chip> : status === 'stopped' ? <Chip>Stopped</Chip> : null}
 						<span className="flex-1" />
 						{run ? (
-							<span className="in-num hidden shrink-0 text-micro text-(--text-tertiary) sm:inline">
+							<span className="in-num hidden shrink-0 text-micro text-(--text-3) sm:inline">
 								{run.steps.length} {run.steps.length === 1 ? 'step' : 'steps'}
 							</span>
 						) : null}
-						{run ? <span className={cn('in-num w-12 shrink-0 text-right text-micro', live ? 'text-(--accent-text)' : 'text-(--text-tertiary)')}>{elapsed(runElapsed(run, now))}</span> : null}
+						{run ? <span className={cn('in-num w-12 shrink-0 text-right text-micro', live ? 'text-(--accent-text)' : 'text-(--text-3)')}>{elapsed(runElapsed(run, now))}</span> : null}
 					</span>
 					{live ? (
 						<span className="agent-live-line flex min-w-0 items-center gap-1.5 pl-[22px] text-small">
@@ -332,7 +332,7 @@ export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Del
 	return (
 		<section
 			aria-label={calls.length === 1 ? '1 agent on this reply' : `${calls.length} agents on this reply`}
-			className="in-tile flex flex-col divide-y divide-(--border-subtle) overflow-hidden"
+			className="in-tile flex flex-col divide-y divide-(--line) overflow-hidden"
 		>
 			{matched.map(({ call, run }) => (
 				<AgentRow key={call.toolCallId} sessionId={sessionId} call={call} run={run} now={now} />

@@ -131,7 +131,7 @@ export function StackedDaysChart({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus)', className)}
 			style={{ height }}
 		>
 			{width > 0 ? (
@@ -152,8 +152,8 @@ export function StackedDaysChart({
 					))}
 					{model.showLimit && limit ? (
 						<g>
-							<line x1={GUTTER.left} x2={GUTTER.left + plotW} y1={y(limit.value)} y2={y(limit.value)} stroke="var(--warning-base)" strokeOpacity={0.8} strokeDasharray="4 4" />
-							<text x={GUTTER.left + plotW} y={y(limit.value) - 5} textAnchor="end" fill="var(--warning-text)">
+							<line x1={GUTTER.left} x2={GUTTER.left + plotW} y1={y(limit.value)} y2={y(limit.value)} stroke="var(--warn)" strokeOpacity={0.8} strokeDasharray="4 4" />
+							<text x={GUTTER.left + plotW} y={y(limit.value) - 5} textAnchor="end" fill="var(--warn)">
 								{limit.label} {format(limit.value)}
 							</text>
 						</g>
@@ -168,7 +168,7 @@ export function StackedDaysChart({
 								<rect x={x(index) - band / 2} y={GUTTER.top} width={band} height={plotH} fill="transparent" onPointerEnter={() => setActive(index)} />
 								{shown === index ? <rect x={x(index) - band / 2 + 1} y={GUTTER.top} width={band - 2} height={plotH} rx={4} fill="currentColor" fillOpacity={0.05} pointerEvents="none" /> : null}
 								{entry.total === 0 ? (
-									<rect x={x(index) - barW / 2} y={y(0) - 2} width={barW} height={2} rx={1} fill="var(--segment-off)" pointerEvents="none" />
+									<rect x={x(index) - barW / 2} y={y(0) - 2} width={barW} height={2} rx={1} fill="var(--bg-active)" pointerEvents="none" />
 								) : (
 									visible.map((part, partIndex) => {
 										const from = y(base);
@@ -186,7 +186,7 @@ export function StackedDaysChart({
 									})
 								)}
 								{index === model.peakIndex && shown === null ? (
-									<text x={x(index)} y={y(entry.total) - 6} textAnchor="middle" fill="var(--text-secondary)" pointerEvents="none">
+									<text x={x(index)} y={y(entry.total) - 6} textAnchor="middle" fill="var(--text-2)" pointerEvents="none">
 										{format(entry.total)}
 									</text>
 								) : null}
@@ -194,13 +194,13 @@ export function StackedDaysChart({
 						);
 					})}
 					{model.peakIndex < 0 ? (
-						<text x={GUTTER.left + plotW / 2} y={GUTTER.top + plotH / 2} textAnchor="middle" fill="var(--text-tertiary)" className="in-chart-empty">
+						<text x={GUTTER.left + plotW / 2} y={GUTTER.top + plotH / 2} textAnchor="middle" fill="var(--text-3)" className="in-chart-empty">
 							Nothing in these {days.length} days
 						</text>
 					) : null}
 					{days.map((day, index) =>
 						(days.length - 1 - index) % 7 === 0 ? (
-							<text key={day} x={x(index)} y={height - 6} textAnchor="middle" fill={index === days.length - 1 ? 'var(--text-secondary)' : 'currentColor'}>
+							<text key={day} x={x(index)} y={height - 6} textAnchor="middle" fill={index === days.length - 1 ? 'var(--text-2)' : 'currentColor'}>
 								{index === days.length - 1 ? 'Today' : shortDay(day)}
 							</text>
 						) : null,
@@ -220,8 +220,8 @@ export function StackedDaysChart({
 					}}
 				>
 					<div className="flex items-baseline justify-between gap-3">
-						<span className="text-(--text-tertiary)">{shortDay(current.day)}</span>
-						<span className="in-num text-(--text-primary)">{format(current.total)}</span>
+						<span className="text-(--text-3)">{shortDay(current.day)}</span>
+						<span className="in-num text-(--text)">{format(current.total)}</span>
 					</div>
 					{current.parts
 						.filter((part) => part.value > 0)
@@ -229,8 +229,8 @@ export function StackedDaysChart({
 						.map((part) => (
 							<div key={part.series} className="flex items-center gap-1.5">
 								<span className="size-1.5 shrink-0 rounded-mark" style={{ background: colorOf(part.series) }} />
-								<span className="min-w-0 flex-1 truncate text-(--text-secondary)">{part.series}</span>
-								<span className="in-num text-(--text-tertiary)">{format(part.value)}</span>
+								<span className="min-w-0 flex-1 truncate text-(--text-2)">{part.series}</span>
+								<span className="in-num text-(--text-3)">{format(part.value)}</span>
 							</div>
 						))}
 				</div>
@@ -251,7 +251,7 @@ export function DotMatrix({
 	label,
 	format,
 	rows = 7,
-	color = 'var(--accent-base)',
+	color = 'var(--accent)',
 	className,
 }: {
 	values: Array<{ key: string; value: number }>;
@@ -296,7 +296,7 @@ export function DotMatrix({
 			onKeyDown={onKeyDown}
 			onBlur={() => setActive(null)}
 			onPointerLeave={() => setActive(null)}
-			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus-ring)', className)}
+			className={cn('in-chart relative outline-none focus-visible:rounded-control focus-visible:shadow-(--focus)', className)}
 			style={{ height }}
 		>
 			{width > 0 && cols ? (
@@ -332,7 +332,7 @@ export function DotMatrix({
 										x={index >= cols - 3 ? x(index) + cell : index < 3 ? x(index) : x(index) + cell / 2}
 										y={y(on - 1) - 5}
 										textAnchor={index >= cols - 3 ? 'end' : index < 3 ? 'start' : 'middle'}
-										fill="var(--text-secondary)"
+										fill="var(--text-2)"
 										pointerEvents="none"
 									>
 										{format(entry.value)}
@@ -344,7 +344,7 @@ export function DotMatrix({
 					<text x={left} y={height - 4} fill="currentColor">
 						{shortDay(values[0].key)}
 					</text>
-					<text x={left + matrixW} y={height - 4} textAnchor="end" fill="var(--text-secondary)">
+					<text x={left + matrixW} y={height - 4} textAnchor="end" fill="var(--text-2)">
 						Today
 					</text>
 				</svg>
@@ -357,7 +357,7 @@ export function DotMatrix({
 					className="in-pop pointer-events-none absolute z-10 px-2 py-1 text-micro whitespace-nowrap"
 					style={{ left: Math.min(Math.max(x(active) + cell / 2, 50), width - 50), top: y(0) - 6, transform: 'translate(-50%, -100%)' }}
 				>
-					<span className="text-(--text-tertiary)">{shortDay(current.key)}</span> <span className="in-num text-(--text-secondary)">{format(current.value)}</span>
+					<span className="text-(--text-3)">{shortDay(current.key)}</span> <span className="in-num text-(--text-2)">{format(current.value)}</span>
 				</div>
 			) : null}
 		</div>
@@ -409,13 +409,13 @@ export function ArcDial({
 					const [x2, y2] = point(t, outer);
 					const warn = t >= warnAt;
 					const on = fraction > 0 && t <= fraction;
-					const stroke = t >= 1 ? 'var(--danger-base)' : warn ? 'var(--warning-base)' : on ? 'var(--accent-base)' : 'var(--tick-off)';
+					const stroke = t >= 1 ? 'var(--bad)' : warn ? 'var(--warn)' : on ? 'var(--accent)' : 'var(--line-strong)';
 					// The lit run fades in towards the value, like a trail behind it.
 					const opacity = on ? 0.45 + 0.55 * (t / Math.max(fraction, 1e-6)) : warn ? 0.45 : major ? 1 : 0.75;
 					return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeOpacity={opacity} strokeWidth={major ? 1.5 : 1} strokeLinecap="round" />;
 				})}
-				<circle cx={mx} cy={my} r={6} fill="var(--accent-base)" fillOpacity={0.18} />
-				<circle cx={mx} cy={my} r={2.5} fill="var(--accent-base)" />
+				<circle cx={mx} cy={my} r={6} fill="var(--accent)" fillOpacity={0.18} />
+				<circle cx={mx} cy={my} r={2.5} fill="var(--accent)" />
 			</svg>
 			<div className="absolute inset-x-0 flex flex-col items-center gap-0.5" style={{ top: cy - 16 }}>
 				{children}

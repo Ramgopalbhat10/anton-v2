@@ -68,11 +68,11 @@ import { cn } from '@/lib/utils';
 
 /* The page you are on lifts out of the well as a small card, as the active task does. */
 const NAV_ROW =
-	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-control pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-control pr-1.5 pl-2 text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 /** A nav row's icon, lit in the accent on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
-	return <Icon icon={icon} size={15} className="shrink-0 text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--icon-primary)" />;
+	return <Icon icon={icon} size={15} className="shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)" />;
 }
 
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
@@ -82,11 +82,11 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-control px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
-			<span className={cn('flex items-baseline justify-between gap-2 text-small', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-control px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)" title="Spent today">
+			<span className={cn('flex items-baseline justify-between gap-2 text-small', budget.data.blocked ? 'text-(--bad)' : 'text-(--text-3)')}>
 				<span>Spent today</span>
 				<span className="in-num">
-					<span className={budget.data.blocked ? undefined : 'text-(--text-secondary)'}>{dollars(today)}</span>
+					<span className={budget.data.blocked ? undefined : 'text-(--text-2)'}>{dollars(today)}</span>
 					{limits.dailyUsd !== null ? ` of $${limits.dailyUsd}` : ''}
 				</span>
 			</span>
@@ -101,7 +101,7 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	return (
 		<nav
 			data-shown={shown}
-			className="sg-nav-rail absolute bg-(--bg-surface) inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) py-2 md:flex"
+			className="sg-nav-rail absolute bg-(--bg-panel) inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--line) py-2 md:flex"
 		>
 			<div className="mb-2">
 				<Logo />
@@ -225,7 +225,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 					aria-checked={view.compact}
 					onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}
 					hint={
-						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
+						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent)' : 'bg-(--track)')}>
 							<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', view.compact ? 'translate-x-3' : 'translate-x-0.5')} />
 						</span>
 					}
@@ -267,7 +267,7 @@ function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (nex
 					type="button"
 					aria-label={`Remove the ${label} filter`}
 					onClick={() => onChange(toggleFilter(view, key, value))}
-					className="in-chosen flex h-[22px] max-w-full items-center gap-1 rounded-full pr-1 pl-2 text-micro outline-none focus-visible:shadow-(--focus-ring)"
+					className="in-chosen flex h-[22px] max-w-full items-center gap-1 rounded-full pr-1 pl-2 text-micro outline-none focus-visible:shadow-(--focus)"
 				>
 					<Icon icon={FACET_ICON[key]} size={10} />
 					<span className="truncate">{label}</span>
@@ -337,12 +337,12 @@ function Toolbar({
 
 /** How each section of Tasks is marked beside its name: live work in the accent, the rest quiet. */
 function SectionMark({ place, count }: { place: Place; count: number }) {
-	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--icon-tertiary)" />;
+	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--text-3)" />;
 	const live = place === 'running' && count > 0;
 	return (
 		<span aria-hidden className="relative inline-flex size-[11px] shrink-0 items-center justify-center">
-			{live ? <span className="absolute inset-0 animate-ping rounded-full bg-(--accent-base) opacity-30" /> : null}
-			<span className={cn('size-[5px] rounded-full', live ? 'bg-(--accent-base)' : 'bg-(--text-disabled)')} />
+			{live ? <span className="absolute inset-0 animate-ping rounded-full bg-(--accent) opacity-30" /> : null}
+			<span className={cn('size-[5px] rounded-full', live ? 'bg-(--accent)' : 'bg-(--text-4)')} />
 		</span>
 	);
 }
@@ -369,19 +369,19 @@ function SectionHeader({
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-3) outline-none hover:text-(--text-2) focus-visible:shadow-(--focus)"
 			>
 				<SectionMark place={place} count={count} />
 				<span className="truncate text-small font-medium">{label}</span>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
-						<span className="in-num text-micro text-(--text-disabled) transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
+						<span className="in-num text-micro text-(--text-4) transition-opacity duration-(--t-fast) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
 					) : null}
 					<Icon
 						icon={ChevronRight}
 						size={12}
-						className="absolute text-(--icon-secondary) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) ease-(--ease-out) group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100"
+						className="absolute text-(--text-2) opacity-0 transition-[opacity,transform] duration-(--t) ease-(--ease) group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100"
 						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
 					/>
 				</span>
@@ -428,7 +428,7 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 		(part): part is string => Boolean(part),
 	);
 	return (
-		<div className="flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
+		<div className="flex min-w-0 items-center gap-1.5 text-small text-(--text-3)">
 			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
@@ -474,7 +474,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								params={{ spaceId: session.spaceId, threadId: session.id }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus)"
 							/>
 						) : (
 							<Link
@@ -483,13 +483,13 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								search={{ app: 'code' }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus)"
 							/>
 						)}
 						<div
 							className={cn(
 								'pointer-events-none relative flex h-full min-w-0 flex-1 items-center gap-2 pr-1.5 pl-2',
-								active || live ? 'text-(--text-primary)' : 'text-(--text-secondary) group-hover:text-(--text-primary)',
+								active || live ? 'text-(--text)' : 'text-(--text-2) group-hover:text-(--text)',
 							)}
 						>
 							<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-[5px]', live && 'text-(--accent-text)')}>
@@ -506,7 +506,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 									aria-label={note.text}
 									className={cn(
 										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-										note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--attention-base)',
+										note.tone === 'danger' ? 'bg-(--bad)' : 'bg-(--warn)',
 									)}
 								/>
 							) : null}
@@ -542,7 +542,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 		<div className="flex flex-col gap-0.5 px-3">
 			{groups(tasks, view.group).map((group) => (
 				<div key={group.key} className="flex flex-col gap-0.5">
-					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-micro text-(--text-disabled)">{group.label}</div> : null}
+					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-micro text-(--text-4)">{group.label}</div> : null}
 					{group.tasks.map((session) => (
 						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
 					))}
@@ -556,7 +556,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 const RECENT_PAGE = 50;
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="px-5 py-1 text-small text-(--text-disabled)">{children}</div>;
+	return <div className="px-5 py-1 text-small text-(--text-4)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -607,7 +607,7 @@ export function ChatSidebar({
 		<aside
 			data-open={open}
 			data-collapsed={collapsed}
-			className="sg-nav flex bg-(--bg-surface) w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
+			className="sg-nav flex bg-(--bg-panel) w-[288px] min-w-0 shrink-0 flex-col border-r border-(--line)"
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
 				<Logo size={22} />
@@ -622,7 +622,7 @@ export function ChatSidebar({
 				<Link
 					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 					onClick={onNavigate}
-					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-tile border border-(--card-border) bg-(--bg-hover) px-2.5 text-body font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-card border border-(--line) bg-(--bg-hover) px-2.5 text-body font-medium text-(--text) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus)"
 				>
 					<Icon icon={inProject ? Waypoints : Plus} />
 					<span>{inProject ? 'New thread' : 'New task'}</span>
@@ -632,7 +632,7 @@ export function ChatSidebar({
 					onClick={onOpenPalette}
 					aria-label="Command palette"
 					title="Search or jump to"
-					className="flex h-8 shrink-0 items-center gap-1.5 rounded-tile pr-1.5 pl-2 text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
+					className="flex h-8 shrink-0 items-center gap-1.5 rounded-card pr-1.5 pl-2 text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
 				>
 					<Icon icon={Search} size={14} />
 					<Kbd keys="mod+k" size="sm" />
@@ -671,10 +671,10 @@ export function ChatSidebar({
 				<section aria-label="Running">
 					<SectionHeader {...header('running', 'Running', running.length)} />
 					{folded('running') ? null : sessionsQuery.isError ? (
-						<div className="px-5 py-1.5 text-small text-(--danger-text)">Could not load tasks.</div>
+						<div className="px-5 py-1.5 text-small text-(--bad)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
 						<div className="px-3">
-							<div className="h-11 rounded-tile bg-(--bg-skeleton)" />
+							<div className="h-11 rounded-card bg-(--bg-active)" />
 						</div>
 					) : running.length ? (
 						rows(running, 'running')
@@ -688,7 +688,7 @@ export function ChatSidebar({
 						<>
 							{rows(recent.length > recentShown ? recent.slice(0, recentShown) : recent, 'recent')}
 							{recent.length > recentShown ? (
-								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mx-3 mt-0.5 text-(--text-tertiary)')}>
+								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mx-3 mt-0.5 text-(--text-3)')}>
 									Show {Math.min(RECENT_PAGE, recent.length - recentShown)} more
 								</button>
 							) : null}
@@ -700,10 +700,10 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="flex shrink-0 flex-col gap-1 border-t border-(--border-subtle) px-3 pt-2 pb-3">
+			<div className="flex shrink-0 flex-col gap-1 border-t border-(--line) px-3 pt-2 pb-3">
 				<div className="flex items-center gap-2.5 px-1.5">
 					<Avatar name={name} />
-					<div className="min-w-0 flex-1 truncate text-body text-(--text-secondary)">{name}</div>
+					<div className="min-w-0 flex-1 truncate text-body text-(--text-2)">{name}</div>
 					<button
 						type="button"
 						onClick={() => {

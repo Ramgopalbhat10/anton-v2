@@ -137,7 +137,7 @@ export function useSuggestions({
 
 	const list =
 		trigger && items.length > 0 ? (
-			<div role="listbox" className="flex flex-col gap-px rounded-tile border border-(--border-subtle) bg-(--bg-overlay) p-1 shadow-(--elev-3)">
+			<div role="listbox" className="flex flex-col gap-px rounded-card border border-(--line) bg-(--bg-overlay) p-1 shadow-(--sh-2)">
 				{items.map((item, index) => (
 					<button
 						key={item.key}
@@ -148,12 +148,12 @@ export function useSuggestions({
 						onClick={() => choose(item)}
 						className={cn(
 							'flex h-7 min-w-0 items-center gap-2 rounded-control px-2 text-left text-small',
-							index === current ? 'bg-(--bg-hover) text-(--text-primary)' : 'text-(--text-secondary)',
+							index === current ? 'bg-(--bg-hover) text-(--text)' : 'text-(--text-2)',
 						)}
 					>
-						<Icon icon={item.skill ? Blocks : trigger.kind === '/' ? SquareSlash : FileText} size={12} className="shrink-0 text-(--icon-tertiary)" />
+						<Icon icon={item.skill ? Blocks : trigger.kind === '/' ? SquareSlash : FileText} size={12} className="shrink-0 text-(--text-3)" />
 						<span className="shrink-0">{item.label}</span>
-						<span className="min-w-0 truncate text-(--text-tertiary)">{item.detail}</span>
+						<span className="min-w-0 truncate text-(--text-3)">{item.detail}</span>
 					</button>
 				))}
 			</div>
@@ -168,7 +168,7 @@ export function useSuggestions({
 					: 'No files match.'
 			: null;
 	const statusList = fileStatus ? (
-		<div role="status" className="rounded-tile border border-(--border-subtle) bg-(--bg-overlay) px-3 py-2 text-small text-(--text-tertiary) shadow-(--elev-3)">
+		<div role="status" className="rounded-card border border-(--line) bg-(--bg-overlay) px-3 py-2 text-small text-(--text-3) shadow-(--sh-2)">
 			{fileStatus}
 		</div>
 	) : null;

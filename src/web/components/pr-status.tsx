@@ -13,23 +13,35 @@ export const prNumber = (url: string | null) => url ? (/\/pull\/(\d+)/.exec(url)
  * One colour per thing a pull request can be, the same everywhere it shows
  * (chips, rows, the PR tab, Reviews, Home): open green, draft grey, merged
  * violet, closed red, conflicts orange, and checks passed green, running
- * amber, failing red. The hues are `--pr-*` in `styles/signal-tokens.css`.
+ * amber, failing red. Each is a state hue of `styles/aura-tokens.css` with
+ * its soft fill behind it.
  */
 export type PrTone = 'open' | 'draft' | 'merged' | 'closed' | 'conflicts' | 'passed' | 'running' | 'failing' | 'unknown';
-export const prTone = (tone: PrTone) => `var(--pr-${tone})`;
+const PR_HUE: Record<PrTone, [color: string, soft: string]> = {
+	open: ['var(--ok)', 'var(--ok-soft)'],
+	draft: ['var(--text-2)', 'var(--bg-active)'],
+	merged: ['var(--merged)', 'var(--merged-soft)'],
+	closed: ['var(--bad)', 'var(--bad-soft)'],
+	conflicts: ['var(--conflict)', 'var(--conflict-soft)'],
+	passed: ['var(--ok)', 'var(--ok-soft)'],
+	running: ['var(--warn)', 'var(--warn-soft)'],
+	failing: ['var(--bad)', 'var(--bad-soft)'],
+	unknown: ['var(--text-3)', 'var(--bg-active)'],
+};
+export const prTone = (tone: PrTone) => PR_HUE[tone][0];
 export const prColor = (state?: State | null) => prTone(state ?? 'unknown');
 export const checksTone = (checks: 'passed' | 'pending' | 'failed'): PrTone => ({ passed: 'passed', pending: 'running', failed: 'failing' } as const)[checks];
 export const PR_ICON: Record<State, LucideIcon> = { open: GitPullRequest, draft: GitPullRequestDraft, merged: GitMerge, closed: GitPullRequestClosed };
 
-/** A chip tinted in a PR tone: its text in the colour, on a faint wash of it with a hairline. */
-export const prChipStyle = (tone: PrTone): CSSProperties => {
-	const color = prTone(tone);
-	return { color, borderColor: `color-mix(in oklab, ${color} 34%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` };
-};
+/** A badge tinted in a PR tone: its text in the colour, on the soft fill of it. */
+export const prChipStyle = (tone: PrTone): CSSProperties => ({ color: PR_HUE[tone][0], background: PR_HUE[tone][1] });
+
+/** The shape every PR badge takes: 18px tall, a 4px corner, 11px medium. */
+const PR_BADGE = 'inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro leading-none font-medium whitespace-nowrap';
 
 /** A short PR word on a row (Conflicts, Draft, Checks failing), tinted in its tone. */
 export function PrFlag({ tone, children, className }: { tone: PrTone; children: ReactNode; className?: string }) {
-	return <span className={cn('inline-flex h-5 shrink-0 items-center rounded-control border px-1.5 text-micro leading-none font-medium whitespace-nowrap', className)} style={prChipStyle(tone)}>{children}</span>;
+	return <span className={cn(PR_BADGE, className)} style={prChipStyle(tone)}>{children}</span>;
 }
 
 /** State remains visible even when checks or conflicts need attention. */
@@ -49,15 +61,15 @@ export function PrStatus({ thread, link = false, full = false, showConflicts = t
 	const pr = thread.pullRequest;
 	const active = pr && (pr.state === 'open' || pr.state === 'draft');
 	const visible = full && pr?.state !== 'merged' ? summary : `#${prNumber(thread.prUrl) ?? '?'}`;
-	const content = <><Icon icon={PR_ICON[pr?.state ?? 'open']} size={12} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span style={{ color: prTone('conflicts') }}>Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span style={{ color: prTone('failing') }}>Checks failing</span> : null}</>;
-	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num inline-flex h-5 shrink-0 items-center gap-1 rounded-control border px-1.5 text-micro leading-none whitespace-nowrap outline-none focus-visible:shadow-(--focus-ring)', link && 'hover:brightness-125', className), style: prChipStyle(pr?.state ?? 'unknown') };
+	const content = <><Icon icon={PR_ICON[pr?.state ?? 'open']} size={11} /><span>{visible}</span>{!full && active && showConflicts && pr.conflicts ? <span style={{ color: prTone('conflicts') }}>Conflicts</span> : null}{!full && active && showFailing && pr.checks === 'failed' ? <span style={{ color: prTone('failing') }}>Checks failing</span> : null}</>;
+	const props = { title: summary, 'aria-label': `Pull request ${summary}`, className: cn('in-num outline-none focus-visible:shadow-(--focus)', PR_BADGE, link && 'hover:brightness-125', className), style: prChipStyle(pr?.state ?? 'unknown') };
 	return link ? <a {...props} href={thread.prUrl} target="_blank" rel="noreferrer">{content}</a> : <span {...props}>{content}</span>;
 }
 
 /** Focusable text, not a button: inspecting a branch does not perform an action. */
 function BranchName({ name, kind }: { name: string; kind: 'Source' | 'Target' }) {
 	return <Tooltip>
-		<TooltipTrigger asChild><span tabIndex={0} aria-label={`${kind} branch: ${name}`} className="min-w-0 truncate rounded-mark focus-visible:shadow-(--focus-ring)">{name}</span></TooltipTrigger>
+		<TooltipTrigger asChild><span tabIndex={0} aria-label={`${kind} branch: ${name}`} className="min-w-0 truncate rounded-mark focus-visible:shadow-(--focus)">{name}</span></TooltipTrigger>
 		<TooltipContent sideOffset={5} className="z-[60] max-w-[min(24rem,calc(100vw-24px))] break-all">{name}</TooltipContent>
 	</Tooltip>;
 }
@@ -70,7 +82,7 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 	const detail = useQuery({ queryKey: ['pr-metadata', sessionId, number], queryFn: () => api.pullMetadata(sessionId, number), enabled: enabled && number > 0, staleTime: 60_000, retry: false }).data;
 	if (!detail || detail.url !== url) return null;
 	return (
-		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-small leading-[16px] text-(--text-tertiary)', compact ? 'flex-1' : 'flex-wrap')}>
+		<span className={cn('inline-flex min-w-0 items-center gap-x-2 gap-y-1 text-small leading-[16px] text-(--text-3)', compact ? 'flex-1' : 'flex-wrap')}>
 			{compact ? (
 				// Intrinsic tracks let a short branch keep its natural width while the
 				// longer branch uses the remaining space; both can still truncate.
@@ -80,7 +92,7 @@ export function PrMetadata({ sessionId, url, enabled = true, compact = false }: 
 					<BranchName name={detail.baseBranch || 'Unknown target'} kind="Target" />
 				</span>
 			) : <span className="inline-flex min-w-0 items-center gap-1" title={`${detail.headBranch} → ${detail.baseBranch}`}><Icon icon={GitBranch} size={11} /><span className="truncate">{detail.headBranch} → {detail.baseBranch}</span></span>}
-			<span className="in-num shrink-0 whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--diff-add-text)">+{detail.additions}</span> <span className="text-(--danger-text)">−{detail.deletions}</span></span>
+			<span className="in-num shrink-0 whitespace-nowrap" aria-label={`${detail.additions} additions, ${detail.deletions} deletions`}><span className="text-(--ok)">+{detail.additions}</span> <span className="text-(--bad)">−{detail.deletions}</span></span>
 		</span>
 	);
 }

@@ -29,9 +29,9 @@ function Running({ view }: { view: ComputeView }) {
 				<CardFooter
 					caption={
 						stopAll.isError ? (
-							<span className="text-small text-(--danger-text)">{stopAll.error.message}</span>
+							<span className="text-small text-(--bad)">{stopAll.error.message}</span>
 						) : view.others > 0 ? (
-							<span className="block text-small leading-[18px] text-pretty text-(--text-disabled)">
+							<span className="block text-small leading-[18px] text-pretty text-(--text-4)">
 								{view.others} more running in this app are not tasks of this Anton, so they are not shown or stopped here.
 							</span>
 						) : (
@@ -63,7 +63,7 @@ function Running({ view }: { view: ComputeView }) {
 						<SandboxArt className="w-full max-w-[280px]" />
 						<div className="flex flex-col gap-1">
 							<div className="text-body-lg font-medium">Nothing is running</div>
-							<div className="max-w-[44ch] text-small leading-[18px] text-(--text-tertiary)">A sandbox starts when a task needs to edit or run code.</div>
+							<div className="max-w-[44ch] text-small leading-[18px] text-(--text-3)">A sandbox starts when a task needs to edit or run code.</div>
 						</div>
 					</Well>
 				</CardSection>
@@ -76,7 +76,7 @@ function Running({ view }: { view: ComputeView }) {
 								to="/agents/$sessionId"
 								params={{ sessionId: task.id }}
 								search={{ app: 'code' }}
-								className="flex min-w-0 flex-1 flex-col gap-0.5 outline-none focus-visible:shadow-(--focus-ring)"
+								className="flex min-w-0 flex-1 flex-col gap-0.5 outline-none focus-visible:shadow-(--focus)"
 							>
 								<span className="truncate text-body font-medium">{task.title}</span>
 								<Facts items={[task.repo, `created ${age(task.createdAt)} ago`]} className="tracking-[0.04em] normal-case" />
@@ -105,7 +105,7 @@ export function ComputePage() {
 			{compute.isPending ? (
 				<Spinner size={12} />
 			) : compute.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">{compute.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">{compute.error.message}</p>
 			) : view ? (
 				<Running view={view} />
 			) : null}

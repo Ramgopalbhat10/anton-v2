@@ -11,12 +11,12 @@ import { pickOf, usePreview } from './skill-detail';
 import type { ViewSearch } from './skills';
 
 const NAV_ITEM =
-	'group/nav relative flex h-8 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--alpha-white-6) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-8 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 /** A nav item's bare icon, lit on the page you are on. */
 function NavIcon({ icon }: { icon: LucideIcon }) {
 	return (
-		<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--accent-text)">
+		<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--accent-text)">
 			<Icon icon={icon} size={15} />
 		</span>
 	);
@@ -24,7 +24,7 @@ function NavIcon({ icon }: { icon: LucideIcon }) {
 
 function Nav() {
 	return (
-		<nav aria-label="Settings" className="hidden w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-(--border-subtle) pt-2.5 pr-2.5 pb-4 pl-2.5 md:flex">
+		<nav aria-label="Settings" className="hidden w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-(--line) pt-2.5 pr-2.5 pb-4 pl-2.5 md:flex">
 			<Link to="/settings" activeOptions={{ exact: true }} className={NAV_ITEM}>
 				<NavIcon icon={List} />
 				All settings
@@ -33,7 +33,7 @@ function Nav() {
 				<Fragment key={group.id}>
 					<div className="flex items-center gap-2 px-2 pt-4 pb-1.5">
 						<SectionLabel className="shrink-0">{group.label}</SectionLabel>
-						<span aria-hidden className="h-px flex-1 bg-(--border-subtle)" />
+						<span aria-hidden className="h-px flex-1 bg-(--line)" />
 					</div>
 					{SECTIONS.filter((section) => section.group === group.id).map((section) => (
 						<Link key={section.id} to="/settings/$section" params={{ section: section.id }} className={NAV_ITEM}>
@@ -69,13 +69,13 @@ function Crumbs() {
 	else if (section) steps.push(sectionById(section)?.label ?? 'Not found');
 	return (
 		<div className="flex min-w-0 items-center gap-2">
-			<Link to="/settings" className="shrink-0 text-(--text-secondary) outline-none hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+			<Link to="/settings" className="shrink-0 text-(--text-2) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
 				Settings
 			</Link>
 			{steps.map((step, index) => (
 				<Fragment key={index}>
-					<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
-					<span className="min-w-0 truncate text-(--text-primary)">{step}</span>
+					<Icon icon={ChevronRight} size={12} className="text-(--text-4)" />
+					<span className="min-w-0 truncate text-(--text)">{step}</span>
 				</Fragment>
 			))}
 		</div>
@@ -84,7 +84,7 @@ function Crumbs() {
 
 function CrumbLink({ to, children }: { to: string; children: ReactNode }) {
 	return (
-		<Link to="/settings/$section" params={{ section: to }} className="text-(--text-secondary) outline-none hover:text-(--text-primary)">
+		<Link to="/settings/$section" params={{ section: to }} className="text-(--text-2) outline-none hover:text-(--text)">
 			{children}
 		</Link>
 	);
@@ -97,7 +97,7 @@ export function SettingsLayout() {
 	const wide = path.startsWith('/settings/skills') || path.startsWith('/settings/connectors');
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--border-subtle) pr-2 pl-4 text-body font-medium">
+			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-4 text-body font-medium">
 				<Crumbs />
 				<span className="flex-1" />
 				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />

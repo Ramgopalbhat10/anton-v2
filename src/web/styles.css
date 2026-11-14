@@ -1,59 +1,42 @@
 @import 'tailwindcss';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
-@import "./styles/signal-tokens.css";
-@import "./styles/signal-components.css" layer(components);
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "./styles/aura-tokens.css";
+@import "./styles/aura-components.css" layer(components);
 @import "./styles/instrument.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 
+/* Tailwind's and shadcn's names resolve to Aura's semantic tokens, so a
+   utility (font-mono, bg-popover) and any primitive left on the shadcn layer
+   draw in the same system. */
 @theme inline {
-	--font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
-	--font-heading: var(--font-sans);
-	--color-background: var(--background);
-	--color-foreground: var(--foreground);
-	--color-card: var(--card);
-	--color-card-foreground: var(--card-foreground);
-	--color-popover: var(--popover);
-	--color-popover-foreground: var(--popover-foreground);
-	--color-primary: var(--primary);
-	--color-primary-foreground: var(--primary-foreground);
-	--color-secondary: var(--secondary);
-	--color-secondary-foreground: var(--secondary-foreground);
-	--color-muted: var(--muted);
-	--color-muted-foreground: var(--muted-foreground);
-	--color-accent: var(--accent);
-	--color-accent-foreground: var(--accent-foreground);
-	--color-destructive: var(--destructive);
-	--color-border: var(--border);
-	--color-input: var(--input);
-	--color-ring: var(--ring);
+	--font-sans: var(--font);
+	--font-mono: var(--mono);
+	--font-heading: var(--font);
+	--color-background: var(--bg-panel);
+	--color-foreground: var(--text);
+	--color-card: var(--bg-surface);
+	--color-card-foreground: var(--text);
+	--color-popover: var(--bg-overlay);
+	--color-popover-foreground: var(--text);
+	--color-primary: var(--accent);
+	--color-primary-foreground: var(--accent-fg);
+	--color-secondary: var(--bg-raised);
+	--color-secondary-foreground: var(--text);
+	--color-muted: var(--bg-surface);
+	--color-muted-foreground: var(--text-3);
+	--color-accent: var(--bg-hover);
+	--color-accent-foreground: var(--text);
+	--color-destructive: var(--bad);
+	--color-border: var(--line);
+	--color-input: var(--line-strong);
+	--color-ring: var(--line-focus);
 }
 
-/* shadcn variables resolve to Signal semantics, so any primitive left on
-   the shadcn layer (dropdowns, tooltips) renders in the same system. */
 :root {
-	--background: var(--bg-canvas);
-	--foreground: var(--text-primary);
-	--card: var(--bg-surface);
-	--card-foreground: var(--text-primary);
-	--popover: var(--bg-overlay);
-	--popover-foreground: var(--text-primary);
-	--primary: var(--accent-base);
-	--primary-foreground: var(--accent-fg);
-	--secondary: var(--bg-overlay);
-	--secondary-foreground: var(--text-primary);
-	--muted: var(--bg-raised);
-	--muted-foreground: var(--text-tertiary);
-	--accent: var(--bg-hover);
-	--accent-foreground: var(--text-primary);
-	--destructive: var(--danger-base);
-	--border: var(--border-subtle);
-	--input: var(--border-default);
-	--ring: var(--accent-base);
 	--radius: 8px;
 }
 
@@ -65,22 +48,24 @@ body,
 
 body {
 	margin: 0;
-	background: var(--bg-canvas);
-	color: var(--text-primary);
-	font-family: var(--font-sans);
-	font-size: var(--text-body-size);
-	line-height: var(--text-body-line);
+	background: var(--bg-app);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: var(--fs-13);
+	line-height: 18px;
+	/* Inter's single-storey a, open digits and round quotes. */
+	font-feature-settings: 'cv11', 'ss01', 'ss03';
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-	background: var(--cyan-alpha-30);
+	background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 ::placeholder,
 textarea::placeholder {
-	color: var(--text-placeholder);
+	color: var(--text-4);
 }
 
 :where(button, [role='button']) {
@@ -124,32 +109,31 @@ textarea::placeholder {
    so it is the same colour as the rest of that surface and hides what scrolls
    under it. */
 .sticky-veil {
-	background: var(--surface-fill, var(--bg-surface));
+	background: var(--surface-fill, var(--bg-panel));
 }
 
 /* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
-   as one dark tip with no arrow. */
+   as one tip with no arrow. A tip names an action. */
 .tip {
 	/* Its own width, not what is left of the window: a fixed tip near the right
 	   edge would otherwise shrink to a sliver and wrap letter by letter before
 	   it is nudged back in. */
 	width: max-content;
 	max-width: min(320px, calc(100vw - 16px));
-	padding: 5px 8px;
-	border-radius: var(--radius-control);
-	border: 1px solid var(--border-default);
-	background: var(--bg-inset);
-	box-shadow: var(--elev-3);
-	color: var(--text-primary);
-	font-family: var(--font-sans);
-	font-size: var(--text-small-size);
+	padding: 4px 8px;
+	border-radius: var(--r-6);
+	background: var(--bg-overlay);
+	box-shadow: var(--sh-2);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: var(--fs-12);
 	font-weight: 400;
-	line-height: var(--text-small-line);
+	line-height: 16px;
 	letter-spacing: 0;
 	text-transform: none;
 	white-space: pre-line;
 	overflow-wrap: anywhere;
-	animation: tip-in 120ms var(--ease-out);
+	animation: tip-in var(--t) var(--ease);
 }
 @keyframes tip-in {
 	from {
@@ -158,7 +142,7 @@ textarea::placeholder {
 }
 
 * {
-	scrollbar-color: var(--neutral-700) transparent;
+	scrollbar-color: var(--line-strong) transparent;
 	scrollbar-width: thin;
 }
 
@@ -176,13 +160,15 @@ textarea::placeholder {
 }
 
 ::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
+	width: 10px;
+	height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-	background: var(--neutral-700);
-	border-radius: var(--radius-control);
+	background: var(--bg-active);
+	border-radius: 999px;
+	border: 3px solid transparent;
+	background-clip: content-box;
 }
 
 ::-webkit-scrollbar-track {
@@ -203,37 +189,30 @@ textarea::placeholder {
 	}
 }
 
-/* Flat surfaces: a neutral all-side border is off — cards, panels, wells and
-   popovers separate by background and shadow. Semantic, dashed, form-control,
-   selected and side borders (dividers, table rules) are untouched. Unlayered
-   so it wins over the utilities layer. */
-:is([class~='border']):not([class*='border-dashed']):not([class*='border-input']):not([class*='border-ring']):not([class*='border-destructive']):not([class*='border-(--danger']):not([class*='border-(--warning']):not([class*='border-(--attention']):not([class*='border-(--success']):not([class*='border-(--accent']):not([class*='border-(--info']):not([class*='border-(--border-selected']):not([class*='border-(--text-']):not([class*='border-white']):not([class*='border-black']):not([class*='border-current']):not([class*='border-inherit']):not([class*='border-red']):not([class*='border-amber']):not([class*='border-emerald']):not([class*='border-cyan']):not([class*='border-neutral']):not([class*='border-gray']):not([class*='border-slate']):not([class*='border-zinc']):not([class*='border-stone']):not([class*='border-blue']):not([class*='border-green']):not([class*='border-yellow']):not([class*='border-orange']):not([class*='border-rose']):not([class*='border-pink']):not([class*='border-purple']):not([class*='border-violet']):not([class*='border-fuchsia']):not([class*='border-indigo']):not([class*='border-teal']):not([class*='border-sky']):not([class*='alert']) {
-	border-width: 0;
-}
-
 .app-main {
 	position: relative;
 	z-index: 1;
-	background: var(--bg-canvas);
+	background: var(--bg-panel);
 }
 
-/* Home's composer and dashboard cards. */
-.home-composer,
-.home-panel {
-	background: var(--card-bg);
-	box-shadow: var(--card-shadow);
-}
+/* The composer: the one surface with a 12px corner and a shadow of its own
+   under it. With focus inside, its edge and a soft ring take the accent. */
+.composer,
 .home-composer {
-	border-radius: var(--radius-card);
-	box-shadow: var(--elev-2);
-	transition: box-shadow var(--transition-standard);
+	border-radius: var(--r-12);
+	background: var(--bg-surface);
+	box-shadow: inset 0 0 0 1px var(--line-strong), var(--sh-composer);
+	transition: box-shadow var(--t) var(--ease);
 }
+.composer:focus-within,
 .home-composer:focus-within {
-	/* A quiet edge: the composer has focus as soon as Home opens, so the accent would read as an alert at rest. */
-	box-shadow: 0 0 0 1px var(--border-strong), var(--elev-2);
+	box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 0 4px var(--accent-soft), var(--sh-composer);
 }
+/* Home's dashboard cards. */
 .home-panel {
-	border-radius: var(--radius-card);
+	border-radius: var(--r-8);
+	background: var(--bg-surface);
+	box-shadow: inset 0 0 0 1px var(--line);
 	min-height: 176px;
 }
 /*
@@ -247,30 +226,29 @@ textarea::placeholder {
 	overflow-clip-margin: 16px;
 }
 
+/* The activity heatmap: nothing, then four steps of the accent. */
 :root {
-	--heat-0: var(--alpha-white-5);
-	--heat-1: var(--cyan-alpha-30);
-	--heat-2: rgba(63, 182, 216, 0.5);
-	--heat-3: rgba(63, 182, 216, 0.75);
-	--heat-4: var(--cyan-200);
+	--heat-0: var(--bg-active);
+	--heat-1: color-mix(in srgb, var(--accent) 28%, transparent);
+	--heat-2: color-mix(in srgb, var(--accent) 52%, transparent);
+	--heat-3: color-mix(in srgb, var(--accent) 76%, transparent);
+	--heat-4: var(--accent);
 }
 
 /* The Settings card (settings/modal.tsx): a card over a dimmed app, full screen on a phone. */
 .settings-overlay {
 	background: var(--bg-scrim);
-	-webkit-backdrop-filter: blur(6px);
-	backdrop-filter: blur(6px);
-	animation: settings-fade 160ms var(--ease-out, ease-out);
+	animation: settings-fade var(--t) var(--ease);
 }
 .settings-card {
-	--surface-fill: var(--bg-surface);
-	background: var(--bg-surface);
-	animation: settings-rise 200ms var(--ease-out, ease-out);
+	--surface-fill: var(--bg-overlay);
+	background: var(--bg-overlay);
+	animation: settings-rise var(--t-slow) var(--ease);
 }
 @media (min-width: 768px) {
 	.settings-card {
-		border-radius: var(--radius-dialog);
-		box-shadow: var(--elev-4);
+		border-radius: var(--r-12);
+		box-shadow: var(--sh-3);
 	}
 }
 @keyframes settings-fade {
@@ -294,12 +272,12 @@ textarea::placeholder {
 /* A project's card on the Projects page: a wash of the project's own colour
    behind its mark, and a ring in that colour on hover. */
 .project-card {
-	transition: box-shadow var(--transition-standard), transform var(--transition-standard);
+	transition: box-shadow var(--t) var(--ease), transform var(--t) var(--ease);
 }
 .project-card__wash {
 	background: radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--tint) 16%, transparent), transparent 70%);
 }
 .project-card:hover {
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), var(--elev-2);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint) 40%, transparent), var(--sh-1);
 }
 

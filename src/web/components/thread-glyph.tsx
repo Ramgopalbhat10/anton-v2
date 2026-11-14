@@ -12,14 +12,14 @@ export const glyphKind = (thread: Session): GlyphKind => {
 
 /** The colour each state draws with, in rings, bars and splits. */
 export const STATE_COLOR: Record<GlyphKind, string> = {
-	failed: 'var(--danger-base)',
-	waiting: 'var(--attention-base)',
-	working: 'var(--accent-base)',
-	queued: 'var(--neutral-600)',
-	review: 'var(--success-base)',
-	landing: 'color-mix(in srgb, var(--success-base) 55%, var(--neutral-100))',
-	idle: 'var(--neutral-500)',
-	resolved: 'var(--neutral-700)',
+	failed: 'var(--bad)',
+	waiting: 'var(--warn)',
+	working: 'var(--accent)',
+	queued: 'var(--track)',
+	review: 'var(--ok)',
+	landing: 'color-mix(in srgb, var(--ok) 55%, var(--text))',
+	idle: 'var(--text-4)',
+	resolved: 'var(--bg-active)',
 };
 
 /** The order states take in rings, splits and legends: what needs you first, what is done last. */
@@ -72,12 +72,12 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 				</>
 			) : kind === 'failed' ? (
 				<>
-					<circle cx="8" cy="8" r="6" fill="var(--danger-bg)" stroke={color} strokeWidth="1.5" />
+					<circle cx="8" cy="8" r="6" fill="var(--bad-soft)" stroke={color} strokeWidth="1.5" />
 					<path d="M8 4.9v3.6" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
 					<circle cx="8" cy="10.9" r="0.95" fill={color} />
 				</>
 			) : kind === 'queued' ? (
-				<circle cx="8" cy="8" r="6" stroke="var(--neutral-500)" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0.1 2.95" />
+				<circle cx="8" cy="8" r="6" stroke="var(--text-4)" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0.1 2.95" />
 			) : kind === 'review' ? (
 				<>
 					<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
@@ -85,8 +85,8 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 				</>
 			) : kind === 'landing' ? (
 				<>
-					<circle cx="8" cy="8" r="6.75" fill="var(--success-base)" />
-					<path d={CHECK} stroke="var(--neutral-950)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="6.75" fill="var(--ok)" />
+					<path d={CHECK} stroke="var(--bg-app)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
 				</>
 			) : kind === 'idle' ? (
 				<>
@@ -95,8 +95,8 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 				</>
 			) : (
 				<>
-					<circle cx="8" cy="8" r="6.75" fill="color-mix(in oklab, var(--success-base) 20%, transparent)" />
-					<path d={CHECK} stroke="var(--success-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="6.75" fill="color-mix(in oklab, var(--ok) 20%, transparent)" />
+					<path d={CHECK} stroke="var(--ok)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
 				</>
 			)}
 		</svg>

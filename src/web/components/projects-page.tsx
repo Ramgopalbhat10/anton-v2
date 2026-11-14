@@ -43,7 +43,7 @@ function ProjectCard({ space }: { space: Space }) {
 			params={{ spaceId: space.id }}
 			style={{ '--tint': tint } as CSSProperties}
 			className={cn(
-				'project-card group/card in-card relative flex min-w-0 flex-col overflow-hidden outline-none focus-visible:shadow-(--focus-ring)',
+				'project-card group/card in-card relative flex min-w-0 flex-col overflow-hidden outline-none focus-visible:shadow-(--focus)',
 				space.state === 'archived' && 'opacity-70',
 			)}
 		>
@@ -52,23 +52,23 @@ function ProjectCard({ space }: { space: Space }) {
 				<SpaceMark space={space} size={36} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<div className="flex items-center gap-2">
-						<span className="min-w-0 flex-1 truncate text-body-lg font-semibold tracking-[-0.01em] text-(--text-primary)">{space.name}</span>
+						<span className="min-w-0 flex-1 truncate text-body-lg font-semibold tracking-[-0.01em] text-(--text)">{space.name}</span>
 						{space.state !== 'active' ? <Caption tone="warning">{space.state === 'paused' ? 'Paused' : 'Archived'}</Caption> : null}
 						{counts.waiting > 0 ? <Status tone="attention">{counts.waiting === 1 ? 'Needs you' : `${counts.waiting} need you`}</Status> : counts.working > 0 ? <Status tone="accent" pulse>Working</Status> : null}
 					</div>
-					<span className="line-clamp-2 min-h-[34px] text-small leading-[17px] text-(--text-tertiary)">{space.goal || 'No goal yet. Tell the coordinator what this project is for.'}</span>
+					<span className="line-clamp-2 min-h-[34px] text-small leading-[17px] text-(--text-3)">{space.goal || 'No goal yet. Tell the coordinator what this project is for.'}</span>
 				</div>
 			</div>
 			<div className="flex min-h-[22px] flex-wrap items-center gap-1 px-4 pt-3">
 				{repos.map((repo) => (
-					<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[22px] max-w-[48%] min-w-0 items-center gap-1 rounded-full bg-(--alpha-white-4) pr-2 pl-1.5 text-small text-(--text-secondary)">
-						<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--icon-tertiary)" />
+					<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[22px] max-w-[48%] min-w-0 items-center gap-1 rounded-full bg-(--bg-hover) pr-2 pl-1.5 text-small text-(--text-2)">
+						<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
 						<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
 					</span>
 				))}
-				{extra > 0 ? <span className="in-num inline-flex h-[22px] items-center rounded-full bg-(--alpha-white-4) px-2 text-small text-(--text-tertiary)">+{extra}</span> : null}
+				{extra > 0 ? <span className="in-num inline-flex h-[22px] items-center rounded-full bg-(--bg-hover) px-2 text-small text-(--text-3)">+{extra}</span> : null}
 				{space.repos.length === 0 ? (
-					<span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-(--alpha-white-4) pr-2 pl-1.5 text-small text-(--text-tertiary)">
+					<span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-(--bg-hover) pr-2 pl-1.5 text-small text-(--text-3)">
 						<Icon icon={MessageSquare} size={11} className="shrink-0" />
 						Chats, no repository
 					</span>
@@ -79,23 +79,23 @@ function ProjectCard({ space }: { space: Space }) {
 					open.slice(0, CARD_ROWS).map((thread) => (
 						<div key={thread.id} className="flex h-7 items-center gap-2 px-2">
 							<ThreadStateIcon thread={thread} size={12} />
-							<span className="min-w-0 flex-1 truncate text-body text-(--text-secondary)">{thread.title}</span>
-							<span className="in-num shrink-0 text-micro text-(--text-disabled)">{age(threadActiveAt(thread))}</span>
+							<span className="min-w-0 flex-1 truncate text-body text-(--text-2)">{thread.title}</span>
+							<span className="in-num shrink-0 text-micro text-(--text-4)">{age(threadActiveAt(thread))}</span>
 						</div>
 					))
 				) : (
-					<div className="flex flex-1 items-center justify-center gap-2 text-small text-(--text-disabled)" style={{ minHeight: CARD_ROWS * 28 }}>
+					<div className="flex flex-1 items-center justify-center gap-2 text-small text-(--text-4)" style={{ minHeight: CARD_ROWS * 28 }}>
 						<Icon icon={Moon} size={13} />
 						All quiet, no open threads
 					</div>
 				)}
 			</div>
-			<footer className="mt-auto flex items-center gap-3 border-t border-(--border-subtle) px-4 py-2.5">
+			<footer className="mt-auto flex items-center gap-3 border-t border-(--line) px-4 py-2.5">
 				<ActivityBars bars={activity(threads, now, 14).bars} height={14} className="w-[64px] shrink-0" />
-				<span className="min-w-0 flex-1 truncate text-small text-(--text-tertiary)">
+				<span className="min-w-0 flex-1 truncate text-small text-(--text-3)">
 					{space.threads} thread{space.threads === 1 ? '' : 's'} · {age(space.activeAt) === 'now' ? 'active now' : `active ${age(space.activeAt)} ago`}
 				</span>
-				<Icon icon={ArrowRight} size={13} className="shrink-0 text-(--icon-tertiary) transition-transform duration-(--duration-standard) group-hover/card:translate-x-0.5 group-hover/card:text-(--icon-primary)" />
+				<Icon icon={ArrowRight} size={13} className="shrink-0 text-(--text-3) transition-transform duration-(--t) group-hover/card:translate-x-0.5 group-hover/card:text-(--text)" />
 			</footer>
 		</Link>
 	);
@@ -111,14 +111,14 @@ function Summary({ spaces }: { spaces: Space[] }) {
 		[spaces.length === 1 ? 'project' : 'projects', spaces.length],
 		[open === 1 ? 'open thread' : 'open threads', open],
 		['working', working, 'text-(--accent-text)'],
-		[waiting === 1 ? 'needs you' : 'need you', waiting, 'text-(--attention-text)'],
+		[waiting === 1 ? 'needs you' : 'need you', waiting, 'text-(--warn)'],
 	];
 	return (
 		<div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
 			{items.map(([label, value, tone]) => (
 				<span key={label} className="inline-flex items-baseline gap-1.5">
 					<span className={cn('in-figure text-h2 leading-6', value > 0 && tone)}>{value}</span>
-					<span className="text-small text-(--text-tertiary)">{label}</span>
+					<span className="text-small text-(--text-3)">{label}</span>
 				</span>
 			))}
 		</div>
@@ -150,7 +150,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 		<Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
 			<Dialog.Portal>
 				<Dialog.Overlay className="fixed inset-0 z-40 bg-(--bg-scrim)" />
-				<Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className="in-card fixed top-[10vh] left-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 flex-col overflow-hidden shadow-(--shadow-modal)">
+				<Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className="in-card fixed top-[10vh] left-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 flex-col overflow-hidden shadow-(--sh-3)">
 			<form
 				className="flex min-h-0 flex-col"
 				onSubmit={(event) => {
@@ -158,7 +158,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 					create.mutate();
 				}}
 			>
-				<header className="flex items-center gap-2 border-b border-(--border-subtle) px-4 py-3">
+				<header className="flex items-center gap-2 border-b border-(--line) px-4 py-3">
 					<Icon icon={FolderKanban} size={14} className="text-(--accent-text)" />
 					<Dialog.Title className="flex-1 text-body-lg font-medium">New project</Dialog.Title>
 					<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
@@ -182,18 +182,18 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 										aria-pressed={on}
 										onClick={() => toggle(project.id)}
 										className={cn(
-											'flex h-9 items-center gap-2.5 rounded-tile border px-2.5 text-left text-body outline-none focus-visible:shadow-(--focus-ring)',
-											on ? 'border-(--accent-border) bg-(--accent-bg-subtle) text-(--text-primary)' : 'border-(--border-subtle) bg-(--well-bg) text-(--text-secondary) hover:border-(--border-default)',
+											'flex h-9 items-center gap-2.5 rounded-card border px-2.5 text-left text-body outline-none focus-visible:shadow-(--focus)',
+											on ? 'border-(--accent-line) bg-(--accent-soft) text-(--text)' : 'border-(--line) bg-(--bg-raised) text-(--text-2) hover:border-(--line-strong)',
 										)}
 									>
-										<Icon icon={FolderGit2} size={13} className={on ? 'text-(--accent-text)' : 'text-(--icon-tertiary)'} />
+										<Icon icon={FolderGit2} size={13} className={on ? 'text-(--accent-text)' : 'text-(--text-3)'} />
 										<span className="min-w-0 flex-1 truncate">{project.repoFullName}</span>
 										{on ? <Icon icon={Check} size={13} className="text-(--accent-text)" /> : null}
 									</button>
 								);
 							})}
 							{projects.data && projects.data.projects.length === 0 ? (
-								<span className="text-small text-(--text-tertiary)">
+								<span className="text-small text-(--text-3)">
 									No repositories yet. You can{' '}
 									<Link to="/settings/$section" params={{ section: 'repos' }} className="text-(--accent-text) hover:underline">
 										add one in Settings
@@ -208,8 +208,8 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 						<textarea id="project-first-message" value={ask} onChange={(event) => setAsk(event.target.value)} rows={3} placeholder="Split the billing rewrite into threads: the schema change, the API, and the settings page." className={`${AREA} text-body leading-[19px]`} />
 					</div>
 				</div>
-				<footer className="flex items-center gap-2 border-t border-(--border-subtle) px-4 py-2.5">
-					{create.isError ? <span className="min-w-0 flex-1 text-small text-(--danger-text)">{create.error.message}</span> : <span className="flex-1" />}
+				<footer className="flex items-center gap-2 border-t border-(--line) px-4 py-2.5">
+					{create.isError ? <span className="min-w-0 flex-1 text-small text-(--bad)">{create.error.message}</span> : <span className="flex-1" />}
 					<Btn size="sm" variant="ghost" onClick={onClose}>
 						Cancel
 					</Btn>
@@ -250,7 +250,7 @@ export function ProjectsPage() {
 			}
 		>
 			{spaces.isPending ? <Spinner size={12} /> : null}
-			{spaces.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-secondary)">Unable to load projects. Check your connection and try again. <Btn size="sm" onClick={() => void spaces.refetch()}>Try again</Btn></div> : null}
+			{spaces.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-2)">Unable to load projects. Check your connection and try again. <Btn size="sm" onClick={() => void spaces.refetch()}>Try again</Btn></div> : null}
 			{spaces.data && list.length === 0 ? (
 				<div className="in-card p-1.5">
 					<EmptyState
@@ -273,18 +273,18 @@ export function ProjectsPage() {
 					<button
 						type="button"
 						onClick={() => setCreating(true)}
-						className="group/new flex min-h-[220px] flex-col items-center justify-center gap-2.5 rounded-card border border-dashed border-(--border-default) px-6 text-center outline-none hover:border-(--accent-border) hover:bg-(--accent-bg-subtle) focus-visible:shadow-(--focus-ring)"
+						className="group/new flex min-h-[220px] flex-col items-center justify-center gap-2.5 rounded-card border border-dashed border-(--line-strong) px-6 text-center outline-none hover:border-(--accent-line) hover:bg-(--accent-soft) focus-visible:shadow-(--focus)"
 					>
-						<span className="inline-flex size-9 items-center justify-center rounded-full bg-(--alpha-white-6) text-(--icon-secondary) group-hover/new:bg-(--accent-bg-subtle) group-hover/new:text-(--accent-text)">
+						<span className="inline-flex size-9 items-center justify-center rounded-full bg-(--bg-active) text-(--text-2) group-hover/new:bg-(--accent-soft) group-hover/new:text-(--accent-text)">
 							<Icon icon={Plus} size={16} />
 						</span>
-						<span className="text-body font-medium text-(--text-secondary) group-hover/new:text-(--text-primary)">New project</span>
-						<span className="max-w-[220px] text-small leading-4 text-(--text-disabled)">A goal, its repositories, and a coordinator that runs threads in parallel.</span>
+						<span className="text-body font-medium text-(--text-2) group-hover/new:text-(--text)">New project</span>
+						<span className="max-w-[220px] text-small leading-4 text-(--text-4)">A goal, its repositories, and a coordinator that runs threads in parallel.</span>
 					</button>
 				</div>
 			) : null}
 			{active.length > 0 && sessions.data ? <ProjectRack spaces={active} threads={sessions.data.sessions} /> : null}
-			{active.length > 0 && sessions.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-secondary)">Unable to load thread activity. Check your connection and try again. <Btn size="sm" onClick={() => void sessions.refetch()}>Try again</Btn></div> : null}
+			{active.length > 0 && sessions.isError ? <div role="alert" className="in-card flex flex-wrap items-center gap-3 p-4 text-body text-(--text-2)">Unable to load thread activity. Check your connection and try again. <Btn size="sm" onClick={() => void sessions.refetch()}>Try again</Btn></div> : null}
 			{creating ? <NewProjectDialog onClose={() => setCreating(false)} /> : null}
 		</PageFrame>
 	);

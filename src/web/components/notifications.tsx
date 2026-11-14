@@ -56,12 +56,12 @@ const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; tone: To
 
 /** A kind's colour, on its label and its bare icon: no tile behind either, like every other icon in the app. */
 const TONE: Record<Tone, { text: string; icon: string }> = {
-	attention: { text: 'text-(--attention-text)', icon: 'text-(--attention-text)' },
-	warning: { text: 'text-(--warning-text)', icon: 'text-(--warning-text)' },
-	danger: { text: 'text-(--danger-text)', icon: 'text-(--danger-text)' },
-	success: { text: 'text-(--success-text)', icon: 'text-(--success-text)' },
+	attention: { text: 'text-(--warn)', icon: 'text-(--warn)' },
+	warning: { text: 'text-(--warn)', icon: 'text-(--warn)' },
+	danger: { text: 'text-(--bad)', icon: 'text-(--bad)' },
+	success: { text: 'text-(--ok)', icon: 'text-(--ok)' },
 	accent: { text: 'text-(--accent-text)', icon: 'text-(--accent-text)' },
-	neutral: { text: 'text-(--text-tertiary)', icon: 'text-(--icon-tertiary)' },
+	neutral: { text: 'text-(--text-3)', icon: 'text-(--text-3)' },
 };
 
 /** The filters, in the order they matter: what waits on you first, what went wrong, what finished, what was said, and the machines. */
@@ -118,7 +118,7 @@ export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: 
 	const { data } = useNotifications();
 	const count = loudUnread(data?.unread);
 	// An answer from an older server may carry no counts; the bell then shows none rather than taking the page down.
-	const tone = data?.unread?.failures ? 'bg-(--danger-base)' : data?.unread?.['needs-you'] ? 'bg-(--attention-base)' : 'bg-(--accent-base)';
+	const tone = data?.unread?.failures ? 'bg-(--bad)' : data?.unread?.['needs-you'] ? 'bg-(--warn)' : 'bg-(--accent)';
 	return (
 		<span className={cn('relative inline-flex shrink-0', className)}>
 			<IconBtn icon={Bell} size={size} label={count ? `Notifications, ${count} unread` : 'Notifications'} onClick={onOpen} aria-haspopup="dialog" />
@@ -126,7 +126,7 @@ export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: 
 				<span
 					aria-hidden
 					className={cn(
-						'pointer-events-none absolute -top-1 -right-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-[3px] text-nano leading-none font-semibold text-(--neutral-950) tabular-nums shadow-[0_0_0_2px_var(--bg-surface)]',
+						'pointer-events-none absolute -top-1 -right-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-[3px] text-nano leading-none font-semibold text-(--bg-app) tabular-nums shadow-[0_0_0_2px_var(--bg-panel)]',
 						tone,
 					)}
 				>
@@ -217,10 +217,10 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 					aria-describedby={undefined}
 					className="in-pop in-pop--modal fixed top-[8vh] left-1/2 z-50 flex max-h-[min(84vh,760px)] w-[calc(100%-2rem)] max-w-[600px] -translate-x-1/2 flex-col overflow-hidden outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
 				>
-					<header className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-4 shadow-[inset_0_-1px_0_var(--border-subtle)]">
-						<Icon icon={Bell} size={14} className="text-(--icon-secondary)" />
+					<header className="flex h-12 shrink-0 items-center gap-2 pr-2.5 pl-4 shadow-[inset_0_-1px_0_var(--line)]">
+						<Icon icon={Bell} size={14} className="text-(--text-2)" />
 						<Dialog.Title className="text-body-lg font-medium">Notifications</Dialog.Title>
-						{unreadCount ? <span className="text-small text-(--text-tertiary) tabular-nums">{unreadCount} unread</span> : null}
+						{unreadCount ? <span className="text-small text-(--text-3) tabular-nums">{unreadCount} unread</span> : null}
 						<div className="flex-1" />
 						<Btn size="sm" variant="ghost" icon={CheckCheck} disabled={!unreadCount || read.isPending} onClick={() => read.mutate({ all: true })}>
 							<span className="hidden sm:inline">Mark all read</span>
@@ -230,13 +230,13 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						</Dialog.Close>
 					</header>
 
-					<div className="flex shrink-0 flex-col gap-2 px-4 pt-3 pb-2.5 shadow-[inset_0_-1px_0_var(--border-subtle)]">
+					<div className="flex shrink-0 flex-col gap-2 px-4 pt-3 pb-2.5 shadow-[inset_0_-1px_0_var(--line)]">
 						<div className="flex items-center gap-2">
 							<Segmented label="Show" role="radiogroup">
 								{([false, true] as const).map((unreadOnly) => (
 									<SegmentedItem key={String(unreadOnly)} role="radio" size="sm" on={filters.unreadOnly === unreadOnly} onClick={() => change({ unreadOnly })} className="px-2.5 text-small">
 										{unreadOnly ? 'Unread' : 'All'}
-										{unreadOnly ? <span className="text-(--text-disabled) tabular-nums">{unreadCount}</span> : null}
+										{unreadOnly ? <span className="text-(--text-4) tabular-nums">{unreadCount}</span> : null}
 									</SegmentedItem>
 								))}
 							</Segmented>
@@ -286,7 +286,7 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 								<button
 									type="button"
 									onClick={() => change(DEFAULT_FILTERS)}
-									className="ml-auto h-6 shrink-0 rounded-full px-2.5 text-small text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)"
+									className="ml-auto h-6 shrink-0 rounded-full px-2.5 text-small text-(--text-3) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 								>
 									Clear
 								</button>
@@ -296,21 +296,21 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						{isError ? (
-							<div className="px-4 py-6 text-small text-(--danger-text)">Could not load notifications.</div>
+							<div className="px-4 py-6 text-small text-(--bad)">Could not load notifications.</div>
 						) : isPending ? (
 							<div className="flex flex-col gap-1.5 p-3">
 								{[0, 1, 2].map((key) => (
-									<div key={key} className="h-14 rounded-tile bg-(--bg-skeleton)" />
+									<div key={key} className="h-14 rounded-card bg-(--bg-active)" />
 								))}
 							</div>
 						) : shown.length === 0 ? (
 							<div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-								<span className="inline-flex size-9 items-center justify-center text-(--icon-secondary)">
+								<span className="inline-flex size-9 items-center justify-center text-(--text-2)">
 									<Icon icon={BellOff} size={22} />
 								</span>
 								<div className="flex flex-col gap-1">
 									<div className="text-body-lg font-medium">{filtered ? 'Nothing matches these filters' : 'You are all caught up'}</div>
-									<div className="max-w-[44ch] text-small leading-[18px] text-(--text-tertiary)">
+									<div className="max-w-[44ch] text-small leading-[18px] text-(--text-3)">
 										{filtered
 											? 'Try another kind or place, or clear the filters.'
 											: 'Questions, approvals, finished work, failures and sandboxes starting or stopping show up here.'}
@@ -337,9 +337,9 @@ export function NotificationsDialog({ open, onClose }: { open: boolean; onClose:
 						)}
 					</div>
 
-					<footer className="flex h-9 shrink-0 items-center gap-2 px-4 text-small text-(--text-disabled) shadow-[inset_0_1px_0_var(--border-subtle)]">
+					<footer className="flex h-9 shrink-0 items-center gap-2 px-4 text-small text-(--text-4) shadow-[inset_0_1px_0_var(--line)]">
 						<span className="min-w-0 flex-1 truncate">Only what needs a look. Opening a task marks its notifications read.</span>
-						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="-mr-1.5 shrink-0 rounded-control px-1.5 py-0.5 text-(--text-tertiary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring)">
+						<Link to="/settings/$section" params={{ section: 'notifications' }} onClick={onClose} className="-mr-1.5 shrink-0 rounded-control px-1.5 py-0.5 text-(--text-3) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)">
 							Phone alerts
 						</Link>
 					</footer>
@@ -358,7 +358,7 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 				type="button"
 				onClick={onOpen}
 				className={cn(
-					'flex w-full items-start gap-3 rounded-tile px-2.5 py-2.5 pr-10 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)',
+					'flex w-full items-start gap-3 rounded-card px-2.5 py-2.5 pr-10 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)',
 					notification.read && 'opacity-[0.72] hover:opacity-100',
 				)}
 			>
@@ -367,20 +367,20 @@ function Row({ notification, where, onOpen, onToggleRead }: { notification: AppN
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="flex min-w-0 items-center gap-2">
-						<span className={cn('min-w-0 flex-1 truncate text-body', notification.read ? 'text-(--text-secondary)' : 'font-medium text-(--text-primary)')}>{notification.title}</span>
-						<span className="shrink-0 text-micro text-(--text-disabled) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
+						<span className={cn('min-w-0 flex-1 truncate text-body', notification.read ? 'text-(--text-2)' : 'font-medium text-(--text)')}>{notification.title}</span>
+						<span className="shrink-0 text-micro text-(--text-4) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
 							{age(notification.createdAt)}
 						</span>
 					</span>
-					<span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{plainPreview(notification.body)}</span>
+					<span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{plainPreview(notification.body)}</span>
 					<span className="flex min-w-0 items-center gap-1.5 pt-0.5 text-micro">
 						<span className={cn('shrink-0 font-medium', tone.text)}>{look.label}</span>
-						<span className="text-(--text-disabled)">·</span>
-						<span className="min-w-0 truncate text-(--text-disabled)">{where}</span>
+						<span className="text-(--text-4)">·</span>
+						<span className="min-w-0 truncate text-(--text-4)">{where}</span>
 					</span>
 				</span>
 			</button>
-			{notification.read ? null : <span aria-label="Unread" className="pointer-events-none absolute top-3.5 right-3.5 size-1.5 rounded-full bg-(--accent-base) group-hover/row:opacity-0" />}
+			{notification.read ? null : <span aria-label="Unread" className="pointer-events-none absolute top-3.5 right-3.5 size-1.5 rounded-full bg-(--accent) group-hover/row:opacity-0" />}
 			<IconBtn
 				icon={notification.read ? CircleDot : Check}
 				size="xs"

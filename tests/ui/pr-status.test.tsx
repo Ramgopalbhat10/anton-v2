@@ -27,7 +27,8 @@ describe('pull request presentation', () => {
 		const chip = screen.getByRole('link', { name: 'Pull request #42 merged' });
 		expect(chip.textContent).toBe('#42');
 		expect(chip.querySelector('.lucide-git-merge')).toBeTruthy();
-		expect(chip.className).toContain('border');
+		expect(chip.className).toContain('rounded-inner');
+		expect(chip.style.background).toContain('--merged-soft');
 		expect(within(chip).queryByText(/merged/i)).toBeNull();
 	});
 	it('keeps state and attention details together, without treating unknown as open', () => {
@@ -55,8 +56,8 @@ describe('pull request presentation', () => {
 	it('gives every state and attention cue its own colour', () => {
 		const tones = ['open', 'draft', 'merged', 'closed', 'conflicts'] as const;
 		expect(new Set(tones.map(prTone)).size).toBe(tones.length);
-		expect(prColor('merged')).toBe('var(--pr-merged)');
-		expect(prColor(null)).toBe('var(--pr-unknown)');
+		expect(prColor('merged')).toBe('var(--merged)');
+		expect(prColor(null)).toBe('var(--text-3)');
 		const thread = session({ prUrl: url, pullRequest: { state: 'open', checks: 'failed', conflicts: true, runs: [] } });
 		render(<PrStatus thread={thread} />);
 		expect(screen.getByText('Conflicts').style.color).toBe(prTone('conflicts'));

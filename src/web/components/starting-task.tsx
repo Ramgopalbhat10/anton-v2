@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 /** A line of text not there yet. */
 function Bar({ width, className }: { width: string; className?: string }) {
-	return <div className={cn('in-pulse h-2.5 rounded-full bg-(--bg-skeleton)', className)} style={{ width }} />;
+	return <div className={cn('in-pulse h-2.5 rounded-full bg-(--bg-active)', className)} style={{ width }} />;
 }
 
 /** The reply to come: a few lines, as the agent's answer will sit under your message. */
@@ -33,7 +33,7 @@ export function HistorySkeleton() {
 	return (
 		<div aria-hidden className="flex flex-col gap-5">
 			<div className="flex justify-end">
-				<div className="in-pulse h-9 w-[46%] rounded-control rounded-br-mark bg-(--bg-skeleton)" />
+				<div className="in-pulse h-9 w-[46%] rounded-control rounded-br-mark bg-(--bg-active)" />
 			</div>
 			<ReplySkeleton />
 		</div>
@@ -45,10 +45,10 @@ function WorkspaceSkeleton() {
 	return (
 		<WorkspacePane expanded={false}>
 			<div aria-hidden className="flex h-11 shrink-0 items-center gap-1.5 px-3">
-				<div className="in-pulse h-6 w-[72px] rounded-control bg-(--bg-skeleton)" />
-				<div className="in-pulse h-6 w-[64px] rounded-control bg-(--bg-skeleton)" />
+				<div className="in-pulse h-6 w-[72px] rounded-control bg-(--bg-active)" />
+				<div className="in-pulse h-6 w-[64px] rounded-control bg-(--bg-active)" />
 			</div>
-			<div aria-hidden className="flex flex-col gap-3 border-t border-(--border-subtle) px-4 pt-4">
+			<div aria-hidden className="flex flex-col gap-3 border-t border-(--line) px-4 pt-4">
 				<Bar width="38%" />
 				<Bar width="62%" />
 				<Bar width="48%" />
@@ -68,10 +68,10 @@ function ComposerSkeleton({ model }: { model: string }) {
 		<div className="shrink-0 px-4 pt-1 pb-4">
 			<div aria-hidden className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2">
 				<Mascot mood="working" className="absolute right-5 bottom-[calc(100%-1px)]" />
-				<div className="min-h-[38px] text-body leading-[21px] text-(--text-placeholder)">Add to what the agent is doing</div>
+				<div className="min-h-[38px] text-body leading-[21px] text-(--text-4)">Add to what the agent is doing</div>
 				<div className="flex items-center gap-1.5">
 					<IconBtn icon={Plus} size="sm" label="Attach files" tabIndex={-1} disabled />
-					<div className="flex h-[26px] max-w-[260px] min-w-0 items-center gap-1.5 rounded-tile bg-(--bg-overlay) pr-1.5 pl-1 text-(--text-secondary)">
+					<div className="flex h-[26px] max-w-[260px] min-w-0 items-center gap-1.5 rounded-card bg-(--bg-overlay) pr-1.5 pl-1 text-(--text-2)">
 						{info ? <ModelMark model={info} size={16} /> : <Spinner size={12} tone="neutral" />}
 						<span className="min-w-0 truncate text-small">{info ? shortName(info) : 'Model'}</span>
 					</div>
@@ -115,8 +115,8 @@ export function StartingTask({
 				<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 					<MenuButton />
 					{leading}
-					<span className={cn('flex shrink-0 items-center gap-1.5 text-small whitespace-nowrap', error ? 'text-(--danger-text)' : 'text-(--accent-text)')}>
-						<span className={cn('size-1.5 shrink-0 rounded-full', error ? 'bg-(--danger-base)' : 'in-pulse bg-(--accent-base)')} />
+					<span className={cn('flex shrink-0 items-center gap-1.5 text-small whitespace-nowrap', error ? 'text-(--bad)' : 'text-(--accent-text)')}>
+						<span className={cn('size-1.5 shrink-0 rounded-full', error ? 'bg-(--bad)' : 'in-pulse bg-(--accent)')} />
 						<span className="hidden sm:inline">{error ? 'Not started' : 'Starting'}</span>
 					</span>
 					<span className="min-w-[60px] flex-auto truncate text-body font-medium">{session.title}</span>
@@ -131,7 +131,7 @@ export function StartingTask({
 							</div>
 						</div>
 						{error ? (
-							<div role="alert" className="flex flex-col gap-2.5 rounded-control border border-(--danger-border) bg-(--danger-bg) px-3 py-2.5 text-small leading-[18px] text-(--danger-text)">
+							<div role="alert" className="flex flex-col gap-2.5 rounded-control border border-(--bad-line) bg-(--bad-soft) px-3 py-2.5 text-small leading-[18px] text-(--bad)">
 								<div className="flex items-start gap-2">
 									<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 									<div className="min-w-0 flex-1 break-words">
@@ -156,7 +156,7 @@ export function StartingTask({
 							</div>
 						) : (
 							<div role="status" className="flex flex-col gap-3">
-								<div className="flex min-w-0 items-center gap-2 text-small text-(--text-secondary)">
+								<div className="flex min-w-0 items-center gap-2 text-small text-(--text-2)">
 									<Spinner size={12} />
 									<span className="in-shimmer min-w-0 truncate">Starting the {kind}</span>
 								</div>

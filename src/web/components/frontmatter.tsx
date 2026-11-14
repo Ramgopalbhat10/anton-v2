@@ -30,7 +30,7 @@ function Value({ value }: { value: unknown }): ReactNode {
 		return (
 			<dl className="@container/frontmatter m-0 min-w-0">
 				{fields.map(([key, item]) => (
-					<div key={key} className="grid min-w-0 gap-1 border-b border-(--border-subtle) px-2.5 py-2 last:border-b-0 @min-[480px]/frontmatter:grid-cols-[120px_minmax(0,1fr)]">
+					<div key={key} className="grid min-w-0 gap-1 border-b border-(--line) px-2.5 py-2 last:border-b-0 @min-[480px]/frontmatter:grid-cols-[120px_minmax(0,1fr)]">
 						<dt className="in-caption break-words">{key}</dt>
 						<dd className="m-0 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"><Value value={item} /></dd>
 					</div>
@@ -49,10 +49,10 @@ export function useFrontmatter(text: string) {
 export function Frontmatter({ front }: { front: ReturnType<typeof useFrontmatter> }) {
 	if (front.raw === null) return null;
 	return (
-		<section aria-label="Frontmatter" className="@container/frontmatter in-well min-w-0 text-small text-(--text-secondary)">
+		<section aria-label="Frontmatter" className="@container/frontmatter in-well min-w-0 text-small text-(--text-2)">
 			{front.error ? (
 				<div className="p-2.5">
-					<p className="m-0 mb-2 text-(--text-tertiary)">Could not parse frontmatter. Showing its source.</p>
+					<p className="m-0 mb-2 text-(--text-3)">Could not parse frontmatter. Showing its source.</p>
 					<pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{front.raw}</pre>
 				</div>
 			) : <Value value={front.value} />}

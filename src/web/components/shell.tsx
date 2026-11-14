@@ -55,7 +55,7 @@ function TaskNotifications() {
 }
 
 /** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
-const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--elev-2)';
+const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--sh-1)';
 
 export function AppShell() {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -103,7 +103,7 @@ export function AppShell() {
 	return (
 		<NavContext.Provider value={openNav}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
-			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text-primary)">
+			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text)">
 				<button
 					type="button"
 					aria-label="Close sidebar"
@@ -174,10 +174,10 @@ function handingTo(message: UseFlueAgentResult['messages'][number] | undefined):
 }
 
 // One object per state, so the header sees the same status from chunk to chunk.
-const WORKING: StatusTone = { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent-base)' };
-const STOPPED: StatusTone = { label: 'Stopped', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
-const FAILED: StatusTone = { label: 'Failed', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
-const FINISHED: StatusTone = { label: 'Finished', text: 'text-(--success-text)', dot: 'bg-(--success-base)' };
+const WORKING: StatusTone = { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent)' };
+const STOPPED: StatusTone = { label: 'Stopped', text: 'text-(--bad)', dot: 'bg-(--bad)' };
+const FAILED: StatusTone = { label: 'Failed', text: 'text-(--bad)', dot: 'bg-(--bad)' };
+const FINISHED: StatusTone = { label: 'Finished', text: 'text-(--ok)', dot: 'bg-(--ok)' };
 
 function statusFor(agent: UseFlueAgentResult): StatusTone | null {
 	if (agent.status === 'submitted' || agent.status === 'streaming') return WORKING;
@@ -197,7 +197,7 @@ export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; o
 	if (!files.length) return null;
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
-	return <button type="button" onClick={() => onShowPanel('Changes')} aria-label={`Open Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}, ${added} additions, ${removed} deletions`} className="inline-flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-micro text-(--text-secondary) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus-ring)">
+	return <button type="button" onClick={() => onShowPanel('Changes')} aria-label={`Open Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}, ${added} additions, ${removed} deletions`} className="inline-flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-micro text-(--text-2) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus)">
 		<Icon icon={FileDiff} size={13} /><span className="in-num whitespace-nowrap">{files.length} {files.length === 1 ? 'file' : 'files'}</span><span className="in-num hidden sm:inline"><DiffStat added={added} removed={removed} /></span>
 	</button>;
 }

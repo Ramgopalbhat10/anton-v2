@@ -41,12 +41,12 @@ export function StateSplit({ threads, className, height = 4 }: { threads: Sessio
 				shown.map((kind) => (
 					<span
 						key={kind}
-						className={cn('min-w-[3px] rounded-mark', kind === 'resolved' && 'in-hatch text-(--neutral-600)', kind === 'working' && 'in-sweep')}
-						style={{ flexGrow: counts[kind], flexBasis: 0, ...(kind === 'resolved' ? { backgroundColor: 'var(--segment-off)' } : { background: STATE_COLOR[kind] }) }}
+						className={cn('min-w-[3px] rounded-mark', kind === 'resolved' && 'in-hatch text-(--track)', kind === 'working' && 'in-sweep')}
+						style={{ flexGrow: counts[kind], flexBasis: 0, ...(kind === 'resolved' ? { backgroundColor: 'var(--bg-active)' } : { background: STATE_COLOR[kind] }) }}
 					/>
 				))
 			) : (
-				<span className="flex-1 rounded-mark bg-(--segment-off)" />
+				<span className="flex-1 rounded-mark bg-(--bg-active)" />
 			)}
 		</div>
 	);
@@ -77,7 +77,7 @@ export function ActivityBars({ bars, height = 32, className }: { bars: number[];
 						className="min-w-0 flex-1 rounded-mark transition-[height] duration-300"
 						style={{
 							height: bar ? `${Math.max(14, (bar / max) * 100)}%` : 2,
-							background: last ? (bar ? 'var(--accent-base)' : 'var(--accent-border)') : bar === 0 ? 'var(--segment-off)' : index === peak ? 'var(--neutral-400)' : 'var(--neutral-600)',
+							background: last ? (bar ? 'var(--accent)' : 'var(--accent-line)') : bar === 0 ? 'var(--bg-active)' : index === peak ? 'var(--text-3)' : 'var(--track)',
 						}}
 					/>
 				);
@@ -127,19 +127,19 @@ function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) 
 					type="button"
 					onClick={onOpen}
 					aria-label={`${thread.title}: ${KIND_LABEL[kind]}`}
-					className={cn('h-full min-w-[4px] flex-1 rounded-mark outline-none hover:brightness-125 focus-visible:shadow-(--focus-ring)', kind === 'resolved' && 'in-hatch text-(--neutral-600)', kind === 'working' && 'in-sweep')}
-					style={kind === 'resolved' ? { backgroundColor: 'var(--segment-off)' } : { background: STATE_COLOR[kind] }}
+					className={cn('h-full min-w-[4px] flex-1 rounded-mark outline-none hover:brightness-125 focus-visible:shadow-(--focus)', kind === 'resolved' && 'in-hatch text-(--track)', kind === 'working' && 'in-sweep')}
+					style={kind === 'resolved' ? { backgroundColor: 'var(--bg-active)' } : { background: STATE_COLOR[kind] }}
 				/>
 			</HoverCard.Trigger>
 			<HoverCard.Portal>
 				<HoverCard.Content side="top" sideOffset={8} collisionPadding={12} className="in-pop z-50 flex w-[260px] flex-col gap-1 px-3 py-2.5 outline-none">
 					<span className="flex items-center gap-1.5">
 						<Glyph kind={kind} size={12} />
-						<span className={cn('in-caption', kind === 'waiting' ? 'text-(--attention-text)' : kind === 'failed' ? 'text-(--danger-text)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-secondary)')}>{KIND_LABEL[kind]}</span>
+						<span className={cn('in-caption', kind === 'waiting' ? 'text-(--warn)' : kind === 'failed' ? 'text-(--bad)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-2)')}>{KIND_LABEL[kind]}</span>
 						<span className="in-caption ml-auto">{age(threadActiveAt(thread))}</span>
 					</span>
-					<span className="truncate text-body text-(--text-primary)">{thread.title}</span>
-					{threadLine(thread) ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-tertiary)">{threadLine(thread)}</span> : null}
+					<span className="truncate text-body text-(--text)">{thread.title}</span>
+					{threadLine(thread) ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{threadLine(thread)}</span> : null}
 				</HoverCard.Content>
 			</HoverCard.Portal>
 		</HoverCard.Root>
@@ -169,7 +169,7 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 		>
 			<div className="flex flex-col gap-3 px-4 pt-1 pb-4">
 				<div className="flex min-w-0 items-center gap-4">
-					<div className="flex shrink-0 flex-col items-start border-r border-(--border-subtle) pr-4">
+					<div className="flex shrink-0 flex-col items-start border-r border-(--line) pr-4">
 						<span className="in-figure text-display leading-[30px]">{threads.length - counts.resolved}</span>
 						<Caption>open</Caption>
 					</div>
@@ -177,12 +177,12 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 						<span
 							className={cn(
 								'text-body-lg leading-[20px] font-medium text-pretty',
-								line.tone === 'attention' ? 'text-(--attention-text)' : line.tone === 'accent' ? 'text-(--accent-text)' : line.tone === 'success' ? 'text-(--success-text)' : 'text-(--text-primary)',
+								line.tone === 'attention' ? 'text-(--warn)' : line.tone === 'accent' ? 'text-(--accent-text)' : line.tone === 'success' ? 'text-(--ok)' : 'text-(--text)',
 							)}
 						>
 							{line.headline}
 						</span>
-						<span className="text-small leading-[17px] text-(--text-tertiary)">{line.why}</span>
+						<span className="text-small leading-[17px] text-(--text-3)">{line.why}</span>
 					</div>
 				</div>
 				<div role="group" aria-label="Threads by state" className="flex h-2.5 gap-[3px]">
@@ -194,8 +194,8 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 					{KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
 						<span key={kind} className="flex items-center gap-1.5 text-small">
 							<Glyph kind={kind} size={11} />
-							<span className={kind === 'waiting' ? 'text-(--attention-text)' : kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)'}>{KIND_LABEL[kind]}</span>
-							<span className="in-num text-(--text-primary)">{counts[kind]}</span>
+							<span className={kind === 'waiting' ? 'text-(--warn)' : kind === 'failed' ? 'text-(--bad)' : 'text-(--text-3)'}>{KIND_LABEL[kind]}</span>
+							<span className="in-num text-(--text)">{counts[kind]}</span>
 						</span>
 					))}
 				</div>
@@ -234,19 +234,19 @@ export function WaitTracks({ threads }: { threads: Session[] }) {
 			icon={MessageCircleQuestion}
 			title={`${waiting.length} waiting on you`}
 			status={<Caption tone="attention">Longest {age(threadActiveAt(waiting[0]), now)}</Caption>}
-			className="border-(--attention-border)"
+			className="border-(--warn-line)"
 			footer={
-				<footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-(--border-subtle) px-4 py-2.5">
+				<footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-(--line) px-4 py-2.5">
 					<span className="flex items-center gap-1.5">
-						<span className="size-[7px] rounded-full bg-(--neutral-400)" />
+						<span className="size-[7px] rounded-full bg-(--text-3)" />
 						<Caption>Thread</Caption>
 					</span>
 					<span className="flex items-center gap-1.5">
-						<span className="size-[7px] rounded-full bg-(--accent-base)" />
+						<span className="size-[7px] rounded-full bg-(--accent)" />
 						<Caption>You</Caption>
 					</span>
 					<span className="flex items-center gap-1.5">
-						<span className="h-[3px] w-3 rounded-full bg-(--attention-base)" />
+						<span className="h-[3px] w-3 rounded-full bg-(--warn)" />
 						<Caption>On you</Caption>
 					</span>
 					<span className="flex-1" />
@@ -259,29 +259,29 @@ export function WaitTracks({ threads }: { threads: Session[] }) {
 					const reply = ms(threadActiveAt(thread));
 					const mine = [ms(thread.createdAt), ms(thread.lastInputAt)].filter((at, i, all) => !Number.isNaN(at) && at < reply && all.indexOf(at) === i);
 					const kind = glyphKind(thread);
-					const hue = kind === 'failed' ? 'var(--danger-base)' : 'var(--attention-base)';
+					const hue = kind === 'failed' ? 'var(--bad)' : 'var(--warn)';
 					return (
-						<div key={thread.id} className="viz-in flex flex-col gap-1.5 border-t border-(--border-subtle) px-4 py-2.5" style={{ '--i': index } as CSSProperties}>
+						<div key={thread.id} className="viz-in flex flex-col gap-1.5 border-t border-(--line) px-4 py-2.5" style={{ '--i': index } as CSSProperties}>
 							<div className="flex min-w-0 items-center gap-2">
 								<Glyph kind={kind} size={13} />
-								<button type="button" onClick={() => open(thread)} className="min-w-0 truncate text-left text-body text-(--text-primary) outline-none hover:underline">
+								<button type="button" onClick={() => open(thread)} className="min-w-0 truncate text-left text-body text-(--text) outline-none hover:underline">
 									{thread.title}
 								</button>
 								<Caption className="hidden shrink-0 @min-[420px]/workspace:inline">{repoShort(thread)}</Caption>
 								<span className="flex-1" />
-								<span className={cn('in-num shrink-0 text-small', index === 0 ? 'text-(--attention-text)' : 'text-(--text-tertiary)')}>{age(threadActiveAt(thread), now)}</span>
+								<span className={cn('in-num shrink-0 text-small', index === 0 ? 'text-(--warn)' : 'text-(--text-3)')}>{age(threadActiveAt(thread), now)}</span>
 								<NextSteps thread={thread} size="xs" />
 							</div>
 							<div className="relative ml-[21px] h-3">
-								<span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-(--border-default)" />
+								<span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-(--line-strong)" />
 								<span className="absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full" style={{ left: x(reply), right: 0, background: hue }} />
-								<span className="absolute top-0 right-0 bottom-0 border-r border-dashed border-(--border-strong)" />
+								<span className="absolute top-0 right-0 bottom-0 border-r border-dashed border-(--line-strong)" />
 								{mine.map((at) => (
-									<span key={at} className="absolute top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent-base) ring-2 ring-(--card-bg)" style={{ left: x(at) }} />
+									<span key={at} className="absolute top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) ring-2 ring-(--bg-surface)" style={{ left: x(at) }} />
 								))}
-								<span className="absolute top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--neutral-400) ring-2 ring-(--card-bg)" style={{ left: x(reply) }} />
+								<span className="absolute top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--text-3) ring-2 ring-(--bg-surface)" style={{ left: x(reply) }} />
 							</div>
-							<div className={cn('ml-[21px] line-clamp-1 text-small leading-[17px]', kind === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>{threadLine(thread)}</div>
+							<div className={cn('ml-[21px] line-clamp-1 text-small leading-[17px]', kind === 'failed' ? 'text-(--bad)' : 'text-(--text-3)')}>{threadLine(thread)}</div>
 						</div>
 					);
 				})}
@@ -318,7 +318,7 @@ function TitleWithTail({ title }: { title: string }) {
 	return (
 		<>
 			<span className="min-w-0 truncate">{title.slice(0, cut)}</span>
-			<span className="shrink-0 text-(--text-tertiary)">· {tail}</span>
+			<span className="shrink-0 text-(--text-3)">· {tail}</span>
 		</>
 	);
 }
@@ -330,7 +330,7 @@ function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: '
 		<span
 			className={cn(
 				'in-caption absolute top-1/2 -translate-y-1/2 rounded-control px-1 text-nano leading-[15px] whitespace-nowrap',
-				tone === 'danger' ? 'bg-(--danger-bg) text-(--danger-text)' : 'bg-(--success-bg) text-(--success-text)',
+				tone === 'danger' ? 'bg-(--bad-soft) text-(--bad)' : 'bg-(--ok-soft) text-(--ok)',
 			)}
 			style={right ? { right: `calc(${100 - at}% + 6px)` } : { left: `calc(${at}% + 6px)` }}
 		>
@@ -375,21 +375,21 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 			sub={`${shown.length} of ${threads.length} threads`}
 			status={live ? <Status tone="accent" pulse>Live</Status> : <Status>Quiet</Status>}
 		>
-			<div className="flex items-end justify-between gap-3 border-t border-(--border-subtle) px-4 pt-3 pb-3">
+			<div className="flex items-end justify-between gap-3 border-t border-(--line) px-4 pt-3 pb-3">
 				<div className="flex items-baseline gap-2">
 					<span className="in-figure text-h1 leading-[28px]">{elapsed(ran).replace(/ \d+s$/, '')}</span>
-					<span className="text-small text-(--text-tertiary)">thread time</span>
+					<span className="text-small text-(--text-3)">thread time</span>
 				</div>
 				<div className="flex flex-col items-end text-small leading-[16px]">
-					<span className={counts.failed ? 'text-(--danger-text)' : 'text-(--text-primary)'}>{left || 'nothing running'}</span>
-					<span className="text-(--text-tertiary)">{right}</span>
+					<span className={counts.failed ? 'text-(--bad)' : 'text-(--text)'}>{left || 'nothing running'}</span>
+					<span className="text-(--text-3)">{right}</span>
 				</div>
 			</div>
-			<div className="grid grid-cols-[minmax(88px,140px)_minmax(0,1fr)] gap-x-3 border-t border-(--border-subtle) px-4 pt-2.5 pb-3">
+			<div className="grid grid-cols-[minmax(88px,140px)_minmax(0,1fr)] gap-x-3 border-t border-(--line) px-4 pt-2.5 pb-3">
 				<span />
 				<div className="relative h-5">
 					{axis.steps.map((at) => (
-						<span key={at} className="in-num absolute top-0 -translate-x-1/2 text-nano whitespace-nowrap text-(--text-disabled)" style={{ left: `${pct(at)}%` }}>
+						<span key={at} className="in-num absolute top-0 -translate-x-1/2 text-nano whitespace-nowrap text-(--text-4)" style={{ left: `${pct(at)}%` }}>
 							{tickLabel(at, axis.step)}
 						</span>
 					))}
@@ -403,7 +403,7 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 								type="button"
 								onClick={() => open(thread)}
 								title={thread.title}
-								className={cn('flex h-6 min-w-0 items-center gap-1 text-left text-micro whitespace-nowrap outline-none hover:text-(--text-primary)', state === 'resolved' || state === 'queued' ? 'text-(--text-disabled)' : 'text-(--text-secondary)')}
+								className={cn('flex h-6 min-w-0 items-center gap-1 text-left text-micro whitespace-nowrap outline-none hover:text-(--text)', state === 'resolved' || state === 'queued' ? 'text-(--text-4)' : 'text-(--text-2)')}
 							>
 								<TitleWithTail title={thread.title} />
 							</button>
@@ -412,41 +412,41 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 				</div>
 				<div className="relative flex flex-col gap-1.5">
 					{axis.steps.map((at) => (
-						<span key={at} aria-hidden className="absolute -top-1 -bottom-1 border-l border-dashed border-(--border-subtle)" style={{ left: `${pct(at)}%` }} />
+						<span key={at} aria-hidden className="absolute -top-1 -bottom-1 border-l border-dashed border-(--line)" style={{ left: `${pct(at)}%` }} />
 					))}
-					<span aria-hidden className="absolute -top-1 -bottom-3 border-l border-dashed border-(--accent-base) opacity-70" style={{ left: `${nowAt}%` }} />
+					<span aria-hidden className="absolute -top-1 -bottom-3 border-l border-dashed border-(--accent) opacity-70" style={{ left: `${nowAt}%` }} />
 					{shown.map((thread) => {
 						const kind = glyphKind(thread);
 						const from = pct(ms(thread.createdAt));
 						const reply = pct(ms(threadActiveAt(thread)));
 						const bar = (a: number, b: number) => ({ left: `${a}%`, width: `max(6px, ${Math.max(0, b - a)}%)` });
 						return (
-							<button key={thread.id} type="button" onClick={() => open(thread)} aria-label={`${thread.title}: ${KIND_LABEL[kind]}`} className="relative h-6 rounded-control bg-white/[0.025] outline-none focus-visible:shadow-(--focus-ring)">
+							<button key={thread.id} type="button" onClick={() => open(thread)} aria-label={`${thread.title}: ${KIND_LABEL[kind]}`} className="relative h-6 rounded-control bg-white/[0.025] outline-none focus-visible:shadow-(--focus)">
 								{kind === 'working' ? (
-									<span className="in-sweep absolute inset-y-[3px] rounded-control" style={{ ...bar(from, nowAt), background: 'linear-gradient(90deg, color-mix(in srgb, var(--accent-base) 22%, transparent), var(--accent-base))' }} />
+									<span className="in-sweep absolute inset-y-[3px] rounded-control" style={{ ...bar(from, nowAt), background: 'linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--accent))' }} />
 								) : kind === 'failed' ? (
 									<>
-										<span className="absolute inset-y-[3px] rounded-control border border-(--danger-base) bg-(--danger-bg)" style={bar(from, Math.max(reply, from + 2))} />
+										<span className="absolute inset-y-[3px] rounded-control border border-(--bad) bg-(--bad-soft)" style={bar(from, Math.max(reply, from + 2))} />
 										<Chip at={Math.max(reply, from + 2)} tone="danger">
 											{thread.status === 'error' ? 'Failed' : 'CI failing'}
 										</Chip>
 									</>
 								) : kind === 'waiting' ? (
 									<>
-										<span className="absolute inset-y-[3px] rounded-l-inner bg-(--neutral-600)" style={bar(from, reply)} />
-										<span className="in-hatch absolute inset-y-[3px] rounded-r-inner border border-(--attention-border) bg-(--attention-bg) text-(--attention-base)" style={bar(reply, nowAt)} />
+										<span className="absolute inset-y-[3px] rounded-l-inner bg-(--track)" style={bar(from, reply)} />
+										<span className="in-hatch absolute inset-y-[3px] rounded-r-inner border border-(--warn-line) bg-(--warn-soft) text-(--warn)" style={bar(reply, nowAt)} />
 									</>
 								) : kind === 'queued' ? (
-									<span className="absolute inset-y-[3px] rounded-control border border-dashed border-(--border-strong)" style={bar(nowAt + 0.8, Math.min(99.5, nowAt + 9))} />
+									<span className="absolute inset-y-[3px] rounded-control border border-dashed border-(--line-strong)" style={bar(nowAt + 0.8, Math.min(99.5, nowAt + 9))} />
 								) : kind === 'review' || kind === 'landing' ? (
 									<>
-										<span className="absolute inset-y-[3px] rounded-control" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--success-base) 50%, transparent)' }} />
+										<span className="absolute inset-y-[3px] rounded-control" style={{ ...bar(from, reply), background: 'color-mix(in srgb, var(--ok) 50%, transparent)' }} />
 										{thread.prUrl ? (
 											<span className="absolute top-1/2 -translate-y-1/2" style={Math.max(reply, from + 1) > 72 ? { right: `calc(${100 - Math.max(reply, from + 1)}% + 6px)` } : { left: `calc(${Math.max(reply, from + 1)}% + 6px)` }}><PrStatus thread={thread} /></span>
 										) : null}
 									</>
 								) : (
-									<span className="absolute inset-y-[3px] rounded-control" style={{ ...bar(from, reply), background: kind === 'resolved' ? 'var(--neutral-700)' : 'var(--neutral-600)' }} />
+									<span className="absolute inset-y-[3px] rounded-control" style={{ ...bar(from, reply), background: kind === 'resolved' ? 'var(--bg-active)' : 'var(--track)' }} />
 								)}
 							</button>
 						);
@@ -455,20 +455,20 @@ export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 				<span />
 				<div className="relative mt-2 h-5">
 					<span
-						className="in-caption absolute top-0 -translate-x-1/2 rounded-control border whitespace-nowrap border-(--accent-border) bg-(--accent-bg-subtle) px-1.5 text-(--accent-text)"
+						className="in-caption absolute top-0 -translate-x-1/2 rounded-control border whitespace-nowrap border-(--accent-line) bg-(--accent-soft) px-1.5 text-(--accent-text)"
 						style={{ left: `clamp(36px, ${nowAt}%, calc(100% - 36px))` }}
 					>
 						Now {hhmm(now)}
 					</span>
 				</div>
 			</div>
-			<footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-(--border-subtle) px-4 py-2.5">
+			<footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-(--line) px-4 py-2.5">
 				{[
-					{ label: 'Done', swatch: <span className="h-2 w-3 rounded-mark bg-(--neutral-600)" /> },
-					{ label: 'Running', swatch: <span className="h-2 w-3 rounded-mark bg-(--accent-base)" /> },
-					{ label: 'On you', swatch: <span className="in-hatch h-2 w-3 rounded-mark border border-(--attention-border) text-(--attention-base)" /> },
-					{ label: 'Failed', swatch: <span className="h-2 w-3 rounded-mark border border-(--danger-base) bg-(--danger-bg)" /> },
-					{ label: 'Queued', swatch: <span className="h-2 w-3 rounded-mark border border-dashed border-(--border-strong)" /> },
+					{ label: 'Done', swatch: <span className="h-2 w-3 rounded-mark bg-(--track)" /> },
+					{ label: 'Running', swatch: <span className="h-2 w-3 rounded-mark bg-(--accent)" /> },
+					{ label: 'On you', swatch: <span className="in-hatch h-2 w-3 rounded-mark border border-(--warn-line) text-(--warn)" /> },
+					{ label: 'Failed', swatch: <span className="h-2 w-3 rounded-mark border border-(--bad) bg-(--bad-soft)" /> },
+					{ label: 'Queued', swatch: <span className="h-2 w-3 rounded-mark border border-dashed border-(--line-strong)" /> },
 				].map((item) => (
 					<span key={item.label} className="flex items-center gap-1.5">
 						{item.swatch}
@@ -515,12 +515,12 @@ export function BurnCard({ space }: { space: Space }) {
 					{byTokens ? (
 						<>
 							<span className="in-figure text-h1 leading-[30px]">{tokens(spent)}</span>
-							<span className="in-num text-small text-(--text-tertiary)">tokens · {dollars(data?.month ?? 0)} spent</span>
+							<span className="in-num text-small text-(--text-3)">tokens · {dollars(data?.month ?? 0)} spent</span>
 						</>
 					) : (
 						<>
 							<span className="in-figure text-h1 leading-[30px]">{dollars(data?.month ?? 0)}</span>
-							<span className="in-num text-small text-(--text-tertiary)">{tokens(spent)} tok</span>
+							<span className="in-num text-small text-(--text-3)">{tokens(spent)} tok</span>
 						</>
 					)}
 				</div>
@@ -530,14 +530,14 @@ export function BurnCard({ space }: { space: Space }) {
 						return (
 							<span key={day.key} title={`${day.key}: ${format(day.value)}`} className="relative flex h-full min-w-0 flex-1 items-end">
 								{index === peak && day.value > 0 ? (
-									<span className="in-num absolute -top-4 left-1/2 -translate-x-1/2 text-nano whitespace-nowrap text-(--text-secondary)">{format(day.value)}</span>
+									<span className="in-num absolute -top-4 left-1/2 -translate-x-1/2 text-nano whitespace-nowrap text-(--text-2)">{format(day.value)}</span>
 								) : null}
 								<span
 									className="w-full rounded-mark"
 									style={{
 										height: day.value ? `${Math.max(8, (day.value / max) * 100)}%` : 2,
-										background: today ? 'var(--accent-base)' : index === peak && day.value ? 'var(--neutral-400)' : day.value ? 'var(--neutral-600)' : 'var(--segment-off)',
-										boxShadow: today && day.value ? '0 0 12px -2px var(--accent-base)' : undefined,
+										background: today ? 'var(--accent)' : index === peak && day.value ? 'var(--text-3)' : day.value ? 'var(--track)' : 'var(--bg-active)',
+										boxShadow: today && day.value ? '0 0 12px -2px var(--accent)' : undefined,
 									}}
 								/>
 							</span>
@@ -590,10 +590,10 @@ export function ProjectRoute({ space }: { space: Space }) {
 			<ol aria-label="How the project runs" className="m-0 grid list-none grid-cols-4 p-0">
 				{stages.map((stage, index) => (
 					<li key={stage.title} className="flex min-w-0 flex-col items-center gap-0.5 px-1 text-center">
-						<span className="in-caption route-caption text-(--text-tertiary)" data-first={index === 0 ? true : undefined} style={{ '--stage': index } as CSSProperties}>
+						<span className="in-caption route-caption text-(--text-3)" data-first={index === 0 ? true : undefined} style={{ '--stage': index } as CSSProperties}>
 							{String(index + 1).padStart(2, '0')} {stage.title}
 						</span>
-						<div className="line-clamp-2 w-full text-small leading-[16px] text-(--text-secondary)">{stage.note}</div>
+						<div className="line-clamp-2 w-full text-small leading-[16px] text-(--text-2)">{stage.note}</div>
 					</li>
 				))}
 			</ol>

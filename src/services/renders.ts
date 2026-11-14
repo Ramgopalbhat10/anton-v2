@@ -88,27 +88,27 @@ export const pageGuide = (network: boolean) => [
 
 /** Variables the page gets before the thread sends its own, so its first paint is already right. */
 const FALLBACK_THEME: Record<string, string> = {
-  "--text-primary": "#ededed",
-  "--text-secondary": "#a1a1a1",
-  "--text-tertiary": "#7a7a7a",
-  "--accent": "#22c3e6",
-  "--accent-text": "#5fd4ee",
-  "--border": "#2a2a2a",
-  "--surface": "#121212",
-  "--surface-inset": "#0b0b0b",
-  "--success": "#35c88a",
-  "--warning": "#e3a63f",
-  "--danger": "#ef5f5f",
-  "--data-1": "#3fb6d8",
-  "--data-2": "#a78bfa",
-  "--data-3": "#e3a63f",
-  "--data-4": "#35c88a",
-  "--data-5": "#f472b6",
-  "--radius": "10px",
+  "--text-primary": "#ededef",
+  "--text-secondary": "#a1a1aa",
+  "--text-tertiary": "#71717a",
+  "--accent": "#6e72f7",
+  "--accent-text": "#a5a8ff",
+  "--border": "rgba(255,255,255,0.11)",
+  "--surface": "#111113",
+  "--surface-inset": "#0a0a0b",
+  "--success": "#3dd68c",
+  "--warning": "#f5b544",
+  "--danger": "#f2555a",
+  "--data-1": "#6e72f7",
+  "--data-2": "#d4d4d8",
+  "--data-3": "#4547b8",
+  "--data-4": "#71717a",
+  "--data-5": "#c7c9ff",
+  "--radius": "8px",
   "--font-sans":
-    "'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+    "'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
   "--font-mono":
-    "'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace",
+    "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
 // Both documents are dark like the frames that hold them: a browser paints a frame whose document's
@@ -121,8 +121,8 @@ const BASE_CSS =
     )}}html,body{margin:0;background:transparent;color:var(--text-primary);font:13px/1.55 var(--font-sans)}` +
   // Plain controls look like Anton's until the page styles them; :where keeps these weaker than any rule of its own.
   ":where(button,input,select,textarea){font:inherit;color:inherit}" +
-  ":where(button){background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer}:where(button:hover){border-color:var(--text-tertiary)}" +
-  ":where(input:not([type=range],[type=checkbox],[type=radio]),select,textarea){background:var(--surface-inset);border:1px solid var(--border);border-radius:8px;padding:5px 8px}" +
+  ":where(button){background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 11px;cursor:pointer}:where(button:hover){border-color:var(--text-tertiary)}" +
+  ":where(input:not([type=range],[type=checkbox],[type=radio]),select,textarea){background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;padding:5px 8px}" +
   ":where(input,progress){accent-color:var(--accent)}:where(a){color:var(--accent-text)}" +
   ":where(table){border-collapse:collapse}:where(th,td){padding:6px 10px;border-bottom:1px solid var(--border);text-align:left}:where(th){color:var(--text-secondary);font-weight:500}";
 

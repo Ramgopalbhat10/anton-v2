@@ -33,10 +33,10 @@ type Kind = 'live' | 'pr' | 'failed' | 'stopped';
 
 /** The same four states, in the same colours, as the split bar under the rack, which is the legend. */
 const KINDS: Record<Kind, { label: string; color: string }> = {
-	live: { label: 'Running', color: 'var(--accent-base)' },
+	live: { label: 'Running', color: 'var(--accent)' },
 	pr: { label: 'Pull request', color: 'var(--data-2)' },
-	stopped: { label: 'Stopped', color: 'var(--neutral-500)' },
-	failed: { label: 'Failed', color: 'var(--danger-base)' },
+	stopped: { label: 'Stopped', color: 'var(--text-4)' },
+	failed: { label: 'Failed', color: 'var(--bad)' },
 };
 
 const kindOf = (session: Session): Kind => (isLive(session) ? 'live' : session.status === 'error' ? 'failed' : session.prUrl ? 'pr' : 'stopped');
@@ -122,8 +122,8 @@ export function RackPopover({ label, placement, linger, children }: { label: str
 	const leader = side === 'right' ? { left: from[0], width: edge - from[0] } : { left: edge, width: from[0] - edge };
 	return (
 		<>
-			<span aria-hidden className="rack-leader pointer-events-none absolute z-10 border-t border-dashed border-(--accent-base)" style={{ left: leader.left, top: from[1], width: leader.width }}>
-				<span className="absolute -top-[3.5px] size-1.5 rounded-full bg-(--accent-base)" style={side === 'right' ? { left: -3 } : { right: -3 }} />
+			<span aria-hidden className="rack-leader pointer-events-none absolute z-10 border-t border-dashed border-(--accent)" style={{ left: leader.left, top: from[1], width: leader.width }}>
+				<span className="absolute -top-[3.5px] size-1.5 rounded-full bg-(--accent)" style={side === 'right' ? { left: -3 } : { right: -3 }} />
 			</span>
 			<div
 				role="dialog"
@@ -175,30 +175,30 @@ function TaskDetails({ session }: { session: Session }) {
 			<div className="flex flex-col gap-1.5 px-3.5 pt-3 pb-3">
 				<div className="flex items-center gap-1.5">
 					<span className={`size-1.5 shrink-0 rounded-full ${kind === 'live' ? 'in-pulse' : ''}`} style={{ background: KINDS[kind].color }} />
-					<span className="in-caption text-(--text-secondary)">{stateWord(session)}</span>
+					<span className="in-caption text-(--text-2)">{stateWord(session)}</span>
 					<span className="in-caption ml-auto" title={`Started ${new Date(session.createdAt).toLocaleString()}`}>
 						started {age(session.createdAt)} ago
 					</span>
 				</div>
-				<div className="truncate text-small text-(--text-tertiary)" title={session.title}>
+				<div className="truncate text-small text-(--text-3)" title={session.title}>
 					{session.title}
 				</div>
-				<div className="flex flex-col gap-1 rounded-control border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2">
+				<div className="flex flex-col gap-1 rounded-control border border-(--line) bg-(--bg-raised) px-2.5 py-2">
 					<div className="flex items-center gap-1.5">
 						<span className="in-caption">{followedUp ? 'Latest input' : 'Input'}</span>
 						<span className="in-caption ml-auto tracking-normal normal-case" title={new Date(latestAt).toLocaleString()}>
 							{age(latestAt)} ago
 						</span>
 					</div>
-					<p className="m-0 line-clamp-3 text-body leading-[18px] text-pretty whitespace-pre-line text-(--text-primary)">{latest}</p>
+					<p className="m-0 line-clamp-3 text-body leading-[18px] text-pretty whitespace-pre-line text-(--text)">{latest}</p>
 				</div>
-				<div className="truncate text-micro text-(--text-tertiary)">
+				<div className="truncate text-micro text-(--text-3)">
 					{repoShort(session)} · {branchLabel(session)}
 				</div>
 			</div>
 			<RackStats stats={stats} />
 			<form
-				className="flex flex-col gap-2 border-t border-(--border-subtle) p-2.5"
+				className="flex flex-col gap-2 border-t border-(--line) p-2.5"
 				onSubmit={(event) => {
 					event.preventDefault();
 					send();
@@ -232,10 +232,10 @@ function TaskDetails({ session }: { session: Session }) {
 /** A card's figures in a row of cells: value over its mono label. */
 export function RackStats({ stats }: { stats: Array<[string, ReactNode]> }) {
 	return (
-		<div className="grid grid-cols-[auto_auto_minmax(0,1fr)] border-t border-(--border-subtle)">
+		<div className="grid grid-cols-[auto_auto_minmax(0,1fr)] border-t border-(--line)">
 			{stats.map(([label, value], i) => (
-				<div key={label} className={`flex min-w-0 flex-col gap-0.5 px-3.5 py-2 ${i ? 'border-l border-(--border-subtle)' : ''}`}>
-					<span className="truncate text-body text-(--text-primary)">{value}</span>
+				<div key={label} className={`flex min-w-0 flex-col gap-0.5 px-3.5 py-2 ${i ? 'border-l border-(--line)' : ''}`}>
+					<span className="truncate text-body text-(--text)">{value}</span>
 					<span className="in-caption">{label}</span>
 				</div>
 			))}
@@ -246,13 +246,13 @@ export function RackStats({ stats }: { stats: Array<[string, ReactNode]> }) {
 /** The follow-up field in a card: a line to type in and a send button. */
 export function FollowUp({ value, onChange, label, submitLabel, disabled }: { value: string; onChange: (value: string) => void; label: string; submitLabel: string; disabled?: boolean }) {
 	return (
-		<div className="flex h-9 items-center gap-2 rounded-control border border-(--border-subtle) bg-(--well-bg) pr-1 pl-3 focus-within:border-(--accent-border)">
+		<div className="flex h-9 items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-3 focus-within:border-(--accent-line)">
 			<input
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				placeholder="Send a follow-up…"
 				aria-label={label}
-				className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text-primary) outline-none placeholder:text-(--text-disabled)"
+				className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-(--text) outline-none placeholder:text-(--text-4)"
 			/>
 			<IconBtn icon={ArrowUp} label={submitLabel} size="xs" variant={value.trim() ? 'primary' : 'ghost'} type="submit" disabled={disabled || !value.trim()} />
 		</div>

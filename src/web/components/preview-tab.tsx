@@ -39,7 +39,7 @@ export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWa
 
 	if (previews.isPending || (starting && !previews.data?.live)) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 				<Spinner size={12} />
 				{starting ? 'Starting the sandbox' : 'Looking for running servers'}
 			</div>
@@ -60,8 +60,8 @@ export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWa
 						<PortChip key={item.port} preview={item} active={item.port === current.port} onSelect={() => setChosen(item.port)} />
 					))}
 				</Segmented>
-				<div className="in-num flex h-7 min-w-0 flex-auto items-center gap-1.5 rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 text-small text-(--text-tertiary)">
-					<Icon icon={Globe} size={12} className={current.listening ? 'text-(--success-text)' : 'text-(--icon-tertiary)'} />
+				<div className="in-num flex h-7 min-w-0 flex-auto items-center gap-1.5 rounded-card border border-(--line) bg-(--bg-raised) px-2.5 text-small text-(--text-3)">
+					<Icon icon={Globe} size={12} className={current.listening ? 'text-(--ok)' : 'text-(--text-3)'} />
 					<span className="min-w-0 truncate">{current.url ?? `Port ${current.port} has no public URL`}</span>
 				</div>
 				{onWatchTest ? <IconBtn icon={Monitor} size="sm" label="Watch the agent's test in Computer" onClick={onWatchTest} /> : null}

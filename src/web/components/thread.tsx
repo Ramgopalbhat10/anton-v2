@@ -224,14 +224,14 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 		<>
 			<button type="button" onClick={() => setOpen((current) => !current)} className="flex h-6 min-w-0 items-center gap-2 px-1 text-left">
 				<span className={NODE}>
-					<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--icon-tertiary)" />
+					<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--text-3)" />
 				</span>
-				<span className="text-small whitespace-nowrap text-(--text-tertiary)">
+				<span className="text-small whitespace-nowrap text-(--text-3)">
 					{part.state === 'streaming' ? 'Thinking…' : `Thought${words ? ` · ${words} words` : ''}`}
 				</span>
 			</button>
 			{open && part.text.trim() ? (
-				<div className="mx-1 mt-0.5 mb-1.5 ml-6 text-small leading-[18px] whitespace-pre-wrap text-pretty text-(--text-tertiary)">{part.text.trim()}</div>
+				<div className="mx-1 mt-0.5 mb-1.5 ml-6 text-small leading-[18px] whitespace-pre-wrap text-pretty text-(--text-3)">{part.text.trim()}</div>
 			) : null}
 		</>
 	);
@@ -259,22 +259,22 @@ function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
 	return (
 		<ul className="flex min-w-0 flex-col gap-0.5 pt-1 pr-1 pl-6">
 			{calls.map((call, index) => (
-				<li key={index} className="flex min-w-0 items-center gap-1.5 text-small leading-[18px] text-(--text-tertiary)">
+				<li key={index} className="flex min-w-0 items-center gap-1.5 text-small leading-[18px] text-(--text-3)">
 					{call.state === 'running' ? (
 						<Spinner size={10} />
 					) : (
 						<Icon
 							icon={call.state === 'failed' ? CircleAlert : (toolServerMark(call.tool, servers, brands)?.icon ?? CornerDownRight)}
 							size={10}
-							className={call.state === 'failed' ? 'shrink-0 text-(--danger-text)' : 'shrink-0 text-(--icon-disabled)'}
+							className={call.state === 'failed' ? 'shrink-0 text-(--bad)' : 'shrink-0 text-(--text-4)'}
 						/>
 					)}
-					<span className={cn('shrink-0', call.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{call.tool.replace(/^mcp__/, '').replace('__', ' · ')}</span>
+					<span className={cn('shrink-0', call.state === 'failed' ? 'text-(--bad)' : 'text-(--text-2)')}>{call.tool.replace(/^mcp__/, '').replace('__', ' · ')}</span>
 					<span className="min-w-0 flex-1 truncate" title={call.input}>
 						{call.input}
 					</span>
 					{call.durationMs !== null ? (
-						<span className="in-num shrink-0 text-micro text-(--text-disabled)">{call.durationMs < 1000 ? `${call.durationMs}ms` : elapsed(call.durationMs)}</span>
+						<span className="in-num shrink-0 text-micro text-(--text-4)">{call.durationMs < 1000 ? `${call.durationMs}ms` : elapsed(call.durationMs)}</span>
 					) : null}
 				</li>
 			))}
@@ -314,28 +314,28 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 				<span
 					className={
 						expandable
-							? 'inline-flex transition-opacity duration-(--duration-micro) group-hover/trace:opacity-0 group-focus-visible/trace:opacity-0'
+							? 'inline-flex transition-opacity duration-(--t-fast) group-hover/trace:opacity-0 group-focus-visible/trace:opacity-0'
 							: 'inline-flex'
 					}
 				>
 					{running ? (
 						<Spinner size={12} />
 					) : (
-						<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? 'text-(--danger-text)' : 'text-(--icon-tertiary)'} />
+						<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? 'text-(--bad)' : 'text-(--text-3)'} />
 					)}
 				</span>
 				{expandable ? (
 					<Icon
 						icon={ChevronRight}
 						size={12}
-						className="absolute inset-0 text-(--icon-tertiary) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) ease-(--ease-out) group-hover/trace:opacity-100 group-focus-visible/trace:opacity-100"
+						className="absolute inset-0 text-(--text-3) opacity-0 transition-[opacity,transform] duration-(--t) ease-(--ease) group-hover/trace:opacity-100 group-focus-visible/trace:opacity-100"
 						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
 					/>
 				) : null}
 			</span>
 			<span className="min-w-0 flex-1 truncate">{body}</span>
 			{script && calls.length ? (
-				<span className="in-num shrink-0 text-micro text-(--text-disabled)">
+				<span className="in-num shrink-0 text-micro text-(--text-4)">
 					{calls.length} {calls.length === 1 ? 'call' : 'calls'}
 				</span>
 			) : null}
@@ -344,7 +344,7 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const details = (
 		<>
 			{script && calls.length ? <ScriptCalls calls={calls} /> : null}
-			{failed ? <div className="mx-1 mb-1 ml-6 text-small leading-[18px] text-(--danger-text)">{part.errorText}</div> : null}
+			{failed ? <div className="mx-1 mb-1 ml-6 text-small leading-[18px] text-(--bad)">{part.errorText}</div> : null}
 			{image && imageDeleted ? (
 				<DeletedArtifact path={image} className="mx-1 mb-1 ml-6" />
 			) : image ? (
@@ -352,14 +352,14 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 					type="button"
 					title={`Open ${image}`}
 					onClick={() => openViewer({ sessionId, path: image }, [], sessionId)}
-					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus)"
 				>
-					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-control border border-(--card-border)" />
+					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-control border border-(--line)" />
 				</button>
 			) : null}
 			{output || (expandable && command) ? (
 				<div className="pt-1 pr-1 pb-0.5 pl-6">
-					<div className="in-well max-h-56 overflow-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-secondary)">
+					<div className="in-well max-h-56 overflow-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-2)">
 						{`${command}${output ? `${script ? '\n\n// Result' : ''}\n${output.split('\n').slice(-40).join('\n')}` : ''}`}
 					</div>
 				</div>
@@ -374,12 +374,12 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 					aria-expanded={open}
 					aria-controls={detailsId}
 					onClick={() => setOpen((current) => !current)}
-					className="group/trace flex h-6 min-w-0 items-center gap-2 rounded-control px-1 text-left text-small text-(--text-tertiary) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus-ring)"
+					className="group/trace flex h-6 min-w-0 items-center gap-2 rounded-control px-1 text-left text-small text-(--text-3) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus)"
 				>
 					{heading}
 				</button>
 			) : (
-				<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-small text-(--text-tertiary)">{heading}</div>
+				<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-small text-(--text-3)">{heading}</div>
 			)}
 			{expandable ? (
 				<Disclosure open={open} id={detailsId}>
@@ -394,7 +394,7 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 
 /** What kind of work a step was, for the strip on a steps card. */
 function stepTone(step: Step): string {
-	return step.type === 'reasoning' ? 'var(--neutral-600)' : toolTone(step.toolName, step.state === 'output-error');
+	return step.type === 'reasoning' ? 'var(--track)' : toolTone(step.toolName, step.state === 'output-error');
 }
 
 /** Steps shown in a card's strip; a long turn shows its latest. */
@@ -414,7 +414,7 @@ function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 					<span
 						key={index}
 						className={cn('w-[3px] rounded-mark', running && 'in-pulse')}
-						style={{ height: step.type === 'reasoning' ? 7 : 14, background: running ? 'var(--accent-base)' : stepTone(step), opacity: running ? 1 : 0.85 }}
+						style={{ height: step.type === 'reasoning' ? 7 : 14, background: running ? 'var(--accent)' : stepTone(step), opacity: running ? 1 : 0.85 }}
 					/>
 				);
 			})}
@@ -423,7 +423,7 @@ function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 }
 
 /** A step's mark on the card's rail: it sits over the line so the line runs between steps. */
-const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-(--card-bg) ring-[3px] ring-(--card-bg)';
+const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-(--bg-surface) ring-[3px] ring-(--bg-surface)';
 
 function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
@@ -443,7 +443,7 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 				aria-expanded={open}
 				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
-				className="group/steps flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
+				className="group/steps flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
 			>
 				{/* One mark: the spinner while it works, which gives way to the chevron under the pointer; the chevron alone once done. */}
 				<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
@@ -455,22 +455,22 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 					<Icon
 						icon={ChevronDown}
 						className={cn(
-							'text-(--icon-tertiary) transition-transform duration-(--duration-overlay) ease-(--ease-out)',
+							'text-(--text-3) transition-transform duration-(--t) ease-(--ease)',
 							live && 'hidden group-hover/steps:block group-focus-visible/steps:block',
 						)}
 						style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }}
 					/>
 				</span>
-				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-small text-(--text-secondary)">{label}</div>}
-				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-micro text-(--text-tertiary) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
+				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-small text-(--text-2)">{label}</div>}
+				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-micro text-(--text-3) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
 				<StepStrip steps={steps} live={live} />
 				<div className="in-caption shrink-0 whitespace-nowrap">
 					{steps.length} {steps.length === 1 ? 'step' : 'steps'}
 				</div>
 			</button>
 			<Disclosure open={open} id={detailsId}>
-				<div className="relative flex flex-col gap-px border-t border-(--card-border) px-2 pt-1.5 pb-2">
-					<span aria-hidden className="absolute top-4 bottom-4 left-[17.5px] w-px bg-(--border-default)" />
+				<div className="relative flex flex-col gap-px border-t border-(--line) px-2 pt-1.5 pb-2">
+					<span aria-hidden className="absolute top-4 bottom-4 left-[17.5px] w-px bg-(--line-strong)" />
 					{steps.map((step, index) => (step.type === 'reasoning' ? <ThoughtRow key={index} part={step} /> : <ToolRow key={step.toolCallId} part={step} />))}
 				</div>
 			</Disclosure>
@@ -486,7 +486,7 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	const plan = field(part.input, 'plan');
 	return (
 		<div className="in-card overflow-hidden">
-			<div className="flex h-10 items-center gap-2.5 border-b border-(--card-border) px-3.5">
+			<div className="flex h-10 items-center gap-2.5 border-b border-(--line) px-3.5">
 				<span className="inline-flex size-[22px] items-center justify-center text-(--accent-text)">
 					<Icon icon={ListChecks} size={15} />
 				</span>
@@ -518,9 +518,9 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 		}
 	};
 	return (
-		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--card-border) bg-(--card-bg) py-1 pr-1 pl-3.5 shadow-(--card-highlight)">
+		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--line) bg-(--bg-surface) py-1 pr-1 pl-3.5">
 			<StatusDot tone="accent" pulse />
-			<span className="min-w-0 flex-1 text-small text-(--text-secondary)">
+			<span className="min-w-0 flex-1 text-small text-(--text-2)">
 				The plan is ready. Approve it to let Anton build it, or reply to change it.
 			</span>
 			<Btn size="sm" variant="primary" disabled={approving} onClick={() => void approve()}>
@@ -555,7 +555,7 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
 					{images.map((image, index) => (
 						<a key={image.id ?? index} href={image.url} target="_blank" rel="noreferrer">
-							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-tile border border-(--border-subtle)" />
+							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-card border border-(--line)" />
 						</a>
 					))}
 				</div>
@@ -564,13 +564,13 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
 			{text ? <SentText text={text} className="max-w-[min(520px,100%)]" /> : null}
 			{note ? (
-				<div className="flex items-center gap-1.5 text-small text-(--text-tertiary)">
+				<div className="flex items-center gap-1.5 text-small text-(--text-3)">
 					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
 					{note}
 				</div>
 			) : null}
 			{/* The same for every message, so it waits for the pointer. */}
-			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em] opacity-0 transition-opacity duration-(--duration-micro) group-hover/user:opacity-100">
+			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em] opacity-0 transition-opacity duration-(--t-fast) group-hover/user:opacity-100">
 				{meta.map((item, index) => (
 					<Fragment key={item + index}>
 						{index > 0 ? <span>·</span> : null}
@@ -628,19 +628,19 @@ function compactionsOf(message: FlueConversationMessage): CompactionView[] {
 /** A compaction, in the conversation where it happened: older turns from here up are summarized for the agent. */
 function CompactionMark({ compaction }: { compaction: CompactionView }) {
 	return (
-		<div role="separator" aria-label="Conversation compacted" className="flex items-center gap-3 py-1 text-micro text-(--text-tertiary)">
-			<span className="h-px flex-1 bg-(--border-subtle)" />
+		<div role="separator" aria-label="Conversation compacted" className="flex items-center gap-3 py-1 text-micro text-(--text-3)">
+			<span className="h-px flex-1 bg-(--line)" />
 			<span className="inline-flex items-center gap-1.5">
 				<Icon icon={FoldVertical} size={12} />
 				<span>Conversation compacted</span>
 				{compaction.before ? (
-					<span className="in-num text-(--text-disabled)">
+					<span className="in-num text-(--text-4)">
 						{tokens(compaction.before)}
 						{compaction.after ? ` → ${tokens(compaction.after)}` : ''} tokens
 					</span>
 				) : null}
 			</span>
-			<span className="h-px flex-1 bg-(--border-subtle)" />
+			<span className="h-px flex-1 bg-(--line)" />
 		</div>
 	);
 }
@@ -657,7 +657,7 @@ function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 }
 
 /** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
-const USAGE_COLORS = { cached: 'var(--cyan-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
+const USAGE_COLORS = { cached: 'var(--a-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
 /** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
 function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {
@@ -695,12 +695,12 @@ function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: (
 				]}
 			/>
 			{usage.context ? (
-				<div className="flex items-baseline justify-between gap-3 border-t border-(--border-subtle) pt-2 text-small">
-					<span className="text-(--text-secondary)">Largest context</span>
-					<span className="in-num text-(--text-primary)">
+				<div className="flex items-baseline justify-between gap-3 border-t border-(--line) pt-2 text-small">
+					<span className="text-(--text-2)">Largest context</span>
+					<span className="in-num text-(--text)">
 						{tokens(usage.context.peak)}
 						{usage.context.window ? (
-							<span className="text-(--text-tertiary)">
+							<span className="text-(--text-3)">
 								{' '}
 								of {tokens(usage.context.window)} · {Math.round((usage.context.peak / usage.context.window) * 100)}%
 							</span>
@@ -720,20 +720,20 @@ function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: (
 					</thead>
 					<tbody>
 						{who.map(({ label, part }) => (
-							<tr key={label} className="border-t border-(--border-subtle)">
-								<td className="py-1.5 text-(--text-secondary)">{label}</td>
-								<td className="in-num py-1.5 pl-3 text-right text-(--text-tertiary)">{part.calls}</td>
-								<td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{tokens(part.inputTokens + part.outputTokens)}</td>
-								{plan ? null : <td className="in-num py-1.5 pl-3 text-right text-(--text-primary)">{dollars(part.cost)}</td>}
+							<tr key={label} className="border-t border-(--line)">
+								<td className="py-1.5 text-(--text-2)">{label}</td>
+								<td className="in-num py-1.5 pl-3 text-right text-(--text-3)">{part.calls}</td>
+								<td className="in-num py-1.5 pl-3 text-right text-(--text)">{tokens(part.inputTokens + part.outputTokens)}</td>
+								{plan ? null : <td className="in-num py-1.5 pl-3 text-right text-(--text)">{dollars(part.cost)}</td>}
 							</tr>
 						))}
 					</tbody>
 				</table>
 			) : null}
 			{notes.length ? (
-				<div className="flex flex-col gap-1 border-t border-(--border-subtle) pt-2">
+				<div className="flex flex-col gap-1 border-t border-(--line) pt-2">
 					{notes.map((note) => (
-						<p key={note} className="m-0 text-small leading-4 text-(--text-tertiary)">
+						<p key={note} className="m-0 text-small leading-4 text-(--text-3)">
 							{note}
 						</p>
 					))}
@@ -755,7 +755,7 @@ function ReplyUsageLine({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: (
 		<HoverPeek content={<ReplyUsagePeek usage={usage} onTrace={onTrace} />} width={300} openDelay={200}>
 			<div
 				tabIndex={0}
-				className="in-num rounded-control text-micro text-(--text-disabled) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-tertiary) hover:underline focus-visible:shadow-(--focus-ring)"
+				className="in-num rounded-control text-micro text-(--text-4) decoration-dotted underline-offset-[3px] outline-none hover:text-(--text-3) hover:underline focus-visible:shadow-(--focus)"
 			>
 				{usage.estimated ? '~' : ''}
 				{tokens(usage.inputTokens + usage.outputTokens)} tokens{calls > 1 ? ` · ${calls} calls` : ''} ·{' '}
@@ -854,7 +854,7 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 			{head ? (
 				<div className="flex items-center gap-2">
 					<Logo size={18} />
-					<div className="text-small font-medium text-(--text-secondary)">Anton</div>
+					<div className="text-small font-medium text-(--text-2)">Anton</div>
 					{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
 				</div>
 			) : null}
@@ -898,7 +898,7 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 			{foot && showWorkspaceChanges ? <ChangesCard sessionId={sessionId} /> : foot && changed.length ? <ChangesCard sessionId={sessionId} paths={changed} /> : null}
 			{foot && !live ? (
 				// Copy and usage stay on the latest reply; earlier ones show them on hover.
-				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--duration-micro) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
+				<div className={cn('flex items-center gap-1.5', !last && 'opacity-0 transition-opacity duration-(--t-fast) group-focus-within/reply:opacity-100 group-hover/reply:opacity-100')}>
 					<CopyResponse text={copyText} />
 					{traceId ? <TraceButton onOpen={openTrace} /> : null}
 					{usage ? <ReplyUsageLine usage={usage} onTrace={traceId ? openTrace : undefined} /> : null}
@@ -931,7 +931,7 @@ function copiedText(block: Block): string[] {
 /** A card or page still being drawn. */
 function Drawing({ what }: { what: string }) {
 	return (
-		<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--card-border) px-3 text-small text-(--text-tertiary)">
+		<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--line) px-3 text-small text-(--text-3)">
 			<Spinner size={12} />
 			{what}
 		</div>
@@ -953,7 +953,7 @@ function aspectOf(input: unknown): string {
 }
 
 /** A light checkerboard under an image asked for with a transparent background, so a dark mark on it still shows. */
-const CHECKERBOARD = { background: 'repeating-conic-gradient(var(--neutral-200) 0% 25%, var(--neutral-50) 0% 50%) 50% / 16px 16px' };
+const CHECKERBOARD = { background: 'repeating-conic-gradient(var(--text) 0% 25%, var(--text) 0% 50%) 50% / 16px 16px' };
 
 /** An image the agent made: a frame of its shape while the model draws, then the image, which opens full size. */
 const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
@@ -965,7 +965,7 @@ const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: st
 		return (
 			<div
 				role="status"
-				className="in-sweep flex h-60 max-w-full items-center justify-center gap-2 self-start rounded-control border border-dashed border-(--card-border) bg-(--bg-inset) px-3 text-small text-(--text-tertiary)"
+				className="in-sweep flex h-60 max-w-full items-center justify-center gap-2 self-start rounded-control border border-dashed border-(--line) bg-(--bg-app) px-3 text-small text-(--text-3)"
 				style={{ aspectRatio: aspectOf(part.input) }}
 			>
 				<Spinner size={12} />
@@ -979,17 +979,17 @@ const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: st
 				type="button"
 				title={`Open ${made.path}`}
 				onClick={() => openViewer({ sessionId, path: made.path }, [], sessionId)}
-				className="block w-fit max-w-full cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+				className="block w-fit max-w-full cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus)"
 			>
 				<img
 					src={outputUrl(sessionId, made.path)}
 					alt={prompt}
-					className="block max-h-[420px] max-w-full rounded-control border border-(--card-border) bg-(--bg-inset)"
+					className="block max-h-[420px] max-w-full rounded-control border border-(--line) bg-(--bg-app)"
 					style={part.input && (part.input as { transparent?: unknown }).transparent === true ? CHECKERBOARD : undefined}
 				/>
 			</button>
-			<figcaption className="max-w-[560px] truncate text-small text-(--text-tertiary)" title={prompt}>
-				{made.model ? <span className="text-(--text-secondary)">{made.model}</span> : null}
+			<figcaption className="max-w-[560px] truncate text-small text-(--text-3)" title={prompt}>
+				{made.model ? <span className="text-(--text-2)">{made.model}</span> : null}
 				{made.model && prompt ? ' · ' : ''}
 				{prompt}
 			</figcaption>
@@ -1008,7 +1008,7 @@ const AgentsBlock = memo(
 
 function Notice({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex items-start gap-2 rounded-control border border-(--danger-border) bg-(--danger-bg) px-3 py-2 text-small leading-[18px] text-(--danger-text)">
+		<div className="flex items-start gap-2 rounded-control border border-(--bad-line) bg-(--bad-soft) px-3 py-2 text-small leading-[18px] text-(--bad)">
 			<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
 			<div className="min-w-0 flex-1 break-words">{children}</div>
 		</div>
@@ -1051,7 +1051,7 @@ const SettlementNotice = memo(function SettlementNotice({ message, retry }: { me
 	// Stopping is something you did, not a failure: one quiet line, however many messages it stopped.
 	if (message.settlement?.outcome === 'aborted') {
 		return (
-			<div className="flex items-center gap-1.5 text-small text-(--text-tertiary)">
+			<div className="flex items-center gap-1.5 text-small text-(--text-3)">
 				<Icon icon={CircleStop} size={12} />
 				Stopped
 			</div>
@@ -1098,7 +1098,7 @@ function NowLabel() {
 		<div className="flex min-w-0 flex-auto items-center gap-2 text-small">
 			<span className="in-shimmer min-w-0 truncate">{nowText(now, 'replying')}</span>
 			{now && took >= 1000 ? (
-				<span className="in-num shrink-0 text-(--text-disabled)" aria-hidden>
+				<span className="in-num shrink-0 text-(--text-4)" aria-hidden>
 					{elapsed(took)}
 				</span>
 			) : null}
@@ -1117,11 +1117,11 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
 	const { now, took } = heard.now?.what === 'replying' && phase !== 'replying' ? { now: null, took: 0 } : heard;
 	if (quiet && now?.what === 'replying') return null;
 	return (
-		<div className="flex min-w-0 items-center gap-2 text-small text-(--text-secondary)">
+		<div className="flex min-w-0 items-center gap-2 text-small text-(--text-2)">
 			<Spinner size={12} />
 			<span className="min-w-0 truncate">{nowText(now, phase)}</span>
 			{now && took >= 1000 ? (
-				<span className="in-num shrink-0 text-(--text-disabled)" aria-hidden>
+				<span className="in-num shrink-0 text-(--text-4)" aria-hidden>
 					{elapsed(took)}
 				</span>
 			) : null}
@@ -1143,7 +1143,7 @@ const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sess
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
-		<div role="status" className="in-tile flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-small leading-[18px] text-(--text-secondary)">
+		<div role="status" className="in-tile flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-small leading-[18px] text-(--text-2)">
 			<Spinner size={12} />
 			<span className="min-w-0 flex-1">
 				Anton reads your message when {who} {running.length === 1 ? 'finishes' : 'finish'}. Stop {running.length === 1 ? 'it' : 'them'} to have it read now.
@@ -1390,7 +1390,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-1 pl-4">
 					<div className="thread-rows mx-auto flex max-w-[700px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
-							<div className="rounded-tile border border-(--warning-border) bg-(--warning-bg) px-3 py-2 text-small leading-[18px] text-(--warning-text)">
+							<div className="rounded-card border border-(--warn-line) bg-(--warn-soft) px-3 py-2 text-small leading-[18px] text-(--warn)">
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.
 							</div>
 						) : null}
@@ -1399,8 +1399,8 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 							<div className="flex flex-col gap-5">
 								<UserMessage message={openingMessage(firstPrompt)} meta={meta} />
 								{busy ? null : session.data?.threadState === 'queued' ? (
-									<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
-										<Icon icon={Clock} size={12} className="text-(--icon-tertiary)" />
+									<div className="flex items-center gap-2 text-small text-(--text-3)">
+										<Icon icon={Clock} size={12} className="text-(--text-3)" />
 										Queued: it starts when a slot frees.
 									</div>
 								) : (
@@ -1415,8 +1415,8 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 								<div className="flex flex-col items-end">
 									<SentText text={splitAttachments(session.data.brief).text || session.data.brief} className="max-w-[min(520px,100%)]" />
 								</div>
-								<div className="flex items-center gap-2 text-small text-(--text-tertiary)">
-									<Icon icon={Clock} size={12} className="text-(--icon-tertiary)" />
+								<div className="flex items-center gap-2 text-small text-(--text-3)">
+									<Icon icon={Clock} size={12} className="text-(--text-3)" />
 									{session.data.threadState === 'queued' ? 'Queued: it starts when a slot frees.' : 'Starting'}
 								</div>
 							</div>
