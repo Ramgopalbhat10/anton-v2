@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, CheckSquare, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Sparkles, Trash2, Upload } from 'lucide-react';
+import { ArrowUpRight, CheckSquare, ChevronDown, ChevronLeft, Download, ExternalLink, FolderUp, MoreVertical, Sparkles, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl } from '@/components/html-frame';
@@ -10,7 +10,7 @@ import { kindOf } from '@/components/library-tab';
 import { MenuButton } from '@/components/nav';
 import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/output-viewer';
 import { PageFrame } from '@/components/page-frame';
-import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
+import { Btn, EmptyState, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
 import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf, zipFolder } from '@/lib/artifacts';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
@@ -99,16 +99,37 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 	);
 }
 
+/** An app's card well: a drawn browser window with a chart in it, since the page only runs when it is open. */
+function AppThumb() {
+	return (
+		<span data-preview="app" aria-hidden className="absolute inset-0 flex items-center justify-center bg-(--bg-app)">
+			<span className="flex h-[58%] w-[74%] flex-col overflow-hidden rounded-control shadow-[0_0_0_1px_var(--line-strong)]">
+				<span className="flex h-3 shrink-0 items-center gap-1 bg-(--bg-active) px-1.5">
+					{[0, 1, 2].map((dot) => (
+						<i key={dot} className="size-1 rounded-full bg-(--text-4)" />
+					))}
+				</span>
+				<span className="flex min-h-0 flex-1 items-end gap-1.5 p-2">
+					{[40, 70, 55, 90, 65, 80].map((height, bar) => (
+						<i key={bar} className="flex-1 rounded-mark bg-(--accent) opacity-70" style={{ height: `${height}%` }} />
+					))}
+				</span>
+			</span>
+		</span>
+	);
+}
+
 /** Apps never execute in the gallery. Only opening one mounts its live frame. */
 function Thumb({ artifact }: { artifact: Artifact }) {
 	const [ref, near] = useNearViewport<HTMLDivElement>();
 	const category = categoryOf(artifact.path);
 	const info = categoryInfo(category);
-	let body: ReactNode = (
+	let body: ReactNode = category === 'app' ? (
+		<AppThumb />
+	) : (
 		<span className="flex h-full flex-col items-center justify-center gap-2">
 			<Icon icon={info.icon} size={22} className={info.tone} />
 			<span className="text-nano tracking-[0.08em] text-(--text-3)">{extensionOf(artifact.path)}</span>
-			{category === 'app' ? <span className="text-micro text-(--text-3)">Open to run app</span> : null}
 		</span>
 	);
 	// Large originals stay in the detail view; CSS resizing would still decode the full image here.
@@ -451,6 +472,48 @@ function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: 
 	);
 }
 
+const SORTS = [
+	{ id: 'newest', label: 'Newest first' },
+	{ id: 'oldest', label: 'Oldest first' },
+	{ id: 'name', label: 'Name A–Z' },
+	{ id: 'largest', label: 'Largest first' },
+] as const;
+type SortId = (typeof SORTS)[number]['id'];
+
+function sortArtifacts(items: Artifact[], sort: SortId): Artifact[] {
+	const sorted = [...items];
+	if (sort === 'oldest') sorted.sort((a, b) => a.mtimeMs - b.mtimeMs);
+	else if (sort === 'name') sorted.sort((a, b) => a.title.localeCompare(b.title));
+	else if (sort === 'largest') sorted.sort((a, b) => b.size - a.size);
+	else sorted.sort((a, b) => b.mtimeMs - a.mtimeMs);
+	return sorted;
+}
+
+/** The order the gallery lies in, picked from a quiet menu on the row's right. */
+function SortMenu({ sort, onPick }: { sort: SortId; onPick: (sort: SortId) => void }) {
+	const label = SORTS.find((entry) => entry.id === sort)?.label ?? 'Newest first';
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<button
+					type="button"
+					className="ml-auto inline-flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 text-small text-(--text-3) outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+				>
+					{label}
+					<Icon icon={ChevronDown} size={12} className="text-(--text-4)" />
+				</button>
+			</MenuTrigger>
+			<MenuContent align="end">
+				{SORTS.map((entry) => (
+					<MenuItem key={entry.id} checked={sort === entry.id} onSelect={() => onPick(entry.id)}>
+						{entry.label}
+					</MenuItem>
+				))}
+			</MenuContent>
+		</Menu>
+	);
+}
+
 /** Every artifact, newest first: apps on top, then the files; or one kind, picked above. */
 export function ArtifactsPage() {
 	const search = useSearch({ from: '/artifacts' });
@@ -459,13 +522,14 @@ export function ArtifactsPage() {
 	const all = artifacts.data?.artifacts ?? [];
 	const query = search.q ?? '';
 	const type = search.type;
+	const [sort, setSort] = useState<SortId>('newest');
 	const found = useMemo(() => (query ? all.filter((artifact) => matches(artifact, query)) : all), [all, query]);
 	const counts = useMemo(() => {
 		const byCategory = new Map<Category, number>();
 		for (const artifact of found) byCategory.set(categoryOf(artifact.path), (byCategory.get(categoryOf(artifact.path)) ?? 0) + 1);
 		return byCategory;
 	}, [found]);
-	const shown = type ? found.filter((artifact) => categoryOf(artifact.path) === type) : found;
+	const shown = useMemo(() => sortArtifacts(type ? found.filter((artifact) => categoryOf(artifact.path) === type) : found, sort), [found, type, sort]);
 	const apps = shown.filter((artifact) => categoryOf(artifact.path) === 'app');
 	const files = shown.filter((artifact) => categoryOf(artifact.path) !== 'app');
 	const [selecting, setSelecting] = useState(false);
@@ -486,24 +550,30 @@ export function ArtifactsPage() {
 	const setSearch = (next: ArtifactsSearch) => void navigate({ to: '/artifacts', search: next, replace: true });
 
 	return (
-		<PageFrame title="Artifacts" description="What the agent made and saved across every task: reports, pages, images and files.">
-			<div className="flex flex-wrap items-center gap-2">
-				<Segmented label="Kind" className="max-w-full flex-wrap [&>button]:shrink-0">
-					<SegmentedItem size="sm" on={!type} onClick={() => setSearch({ q: query || undefined })}>
-						All
-						<span className="in-num text-(--text-4)">{found.length}</span>
-					</SegmentedItem>
-					{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
-						<SegmentedItem key={category.key} size="sm" on={type === category.key} onClick={() => setSearch({ type: category.key, q: query || undefined })}>
-							{category.label}
-							<span className="in-num text-(--text-4)">{counts.get(category.key) ?? 0}</span>
-						</SegmentedItem>
-					))}
-				</Segmented>
-				<span className="min-w-0 flex-1" />
-				{!selecting && all.length ? <Btn size="sm" variant="ghost" icon={CheckSquare} onClick={() => setSelecting(true)}>Select</Btn> : null}
+		<PageFrame
+			title="Artifacts"
+			description="What the agent made and saved across every task: reports, pages, images and files."
+			actions={<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" label="Search artifacts" className="w-[220px] max-w-full" />}
+		>
+			<div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+				<FilterChip label="All" count={found.length} on={!type} onToggle={() => setSearch({ q: query || undefined })} />
+				{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
+					<FilterChip
+						key={category.key}
+						label={category.label}
+						count={counts.get(category.key) ?? 0}
+						on={type === category.key}
+						onToggle={() => setSearch(type === category.key ? { q: query || undefined } : { type: category.key, q: query || undefined })}
+					/>
+				))}
+				<span className="min-w-2 flex-1" />
+				{!selecting && all.length ? (
+					<Btn size="sm" variant="ghost" icon={CheckSquare} onClick={() => setSelecting(true)} className="shrink-0">
+						Select
+					</Btn>
+				) : null}
 				<AddFiles />
-				<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" className="w-full sm:w-[240px]" />
+				<SortMenu sort={sort} onPick={setSort} />
 			</div>
 
 			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}
