@@ -1373,6 +1373,57 @@ test('a pull request with merge conflicts: the agent hears of it, merges the new
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 
+test('a base the agent merges in with git of its own is no part of the task\'s change, once the host says it is the base', async () => {
+	const { taskPatch } = await import('../src/services/finish-review.ts');
+	const changed = (patch: string | null) => [...(patch ?? '').matchAll(/^diff --git a\/(\S+)/gm)].map((match) => match[1]);
+	git(seed, 'branch', '-q', '-f', 'origin-fetched', 'main');
+	pushFromSeed('fetched', { 'fetched.txt': 'start\n' }, 'Start fetched');
+	const project = await addProject('acme/fetching');
+	const record = async (id: string) => (await getSessionRecord(id))!;
+
+	// A thread asked to take the latest base and analyse: it fast-forwards and changes nothing.
+	const reader = await sessions.createSession({ projectId: project.id, branch: 'fetched', title: 'Reads the latest' });
+	const reading = await machineFor(reader.id);
+	const began = (await record(reader.id)).baseSha;
+	const newer = pushFromSeed('fetched', { 'theirs.txt': 'theirs\n', 'docs/theirs.md': 'theirs\n' }, 'Theirs');
+	await run(reading, 'git fetch -q origin fetched && git merge -q --ff-only FETCH_HEAD');
+	assert.deepEqual(changed((await files.changesView(reader.id, 'branch')).patch), ['docs/theirs.md', 'theirs.txt'], 'measured from where it began, the base reads as its change');
+	assert.equal(await taskPatch(reader.id), '', 'the reply ends with no change of its own');
+	assert.equal((await record(reader.id)).baseSha, newer, 'and the task is measured from the base it took in');
+	assert.equal((await files.changesView(reader.id, 'branch')).patch, '');
+	await assert.rejects(() => openPullRequest(reader.id, { title: 'Nothing', body: '' }), /no changes to open a pull request with/);
+
+	// A task with work of its own merges the newer base: its change is its work alone, and so is what it pushes.
+	const worker = await sessions.createSession({ projectId: project.id, branch: 'fetched', title: 'Works and merges' });
+	const working = await machineFor(worker.id);
+	await run(working, "printf 'mine\\n' > mine.txt && git add -A && git commit -q -m Mine");
+	const newest = pushFromSeed('fetched', { 'later.txt': 'later\n' }, 'Later');
+	await run(working, "git fetch -q origin fetched && git -c commit.gpgsign=false merge -q --no-edit origin/fetched && printf 'more\\n' > more.txt");
+	assert.deepEqual(changed(await taskPatch(worker.id)), ['mine.txt', 'more.txt']);
+	assert.equal((await record(worker.id)).baseSha, newest);
+	await openPullRequest(worker.id, { title: 'Mine', body: '' });
+	assert.equal(git(remote, 'rev-parse', worker.branch), (await run(working, 'git rev-parse HEAD')).trim());
+	assert.deepEqual(git(remote, 'diff', '--name-only', 'fetched', worker.branch).split('\n'), ['mine.txt', 'more.txt'], 'the pull request holds the task\'s work alone');
+
+	// A branch that is not the base, fetched and merged, stays the task's change: the host does not have it on the base.
+	pushFromSeed('side', { 'side.txt': 'side\n' }, 'Side', 'origin-fetched');
+	const other = await sessions.createSession({ projectId: project.id, branch: 'fetched', title: 'Merges a side branch' });
+	const siding = await machineFor(other.id);
+	const from = (await record(other.id)).baseSha;
+	await run(siding, 'git fetch -q origin side && git merge -q --ff-only FETCH_HEAD');
+	assert.deepEqual(changed(await taskPatch(other.id)), ['side.txt']);
+	assert.equal((await record(other.id)).baseSha, from, 'the base stays where the task began');
+
+	// A task that fetched nothing is measured as it was.
+	assert.notEqual(began, newer);
+	const still = await sessions.createSession({ projectId: project.id, branch: 'fetched', title: 'Fetches nothing' });
+	const idle = await machineFor(still.id);
+	const stayed = (await record(still.id)).baseSha;
+	await run(idle, "printf 'own\\n' > own.txt");
+	assert.deepEqual(changed(await taskPatch(still.id)), ['own.txt']);
+	assert.equal((await record(still.id)).baseSha, stayed);
+});
+
 test('any pull request can be reviewed in a task of its own, with a security pass, and again after its author pushes', async () => {
 	const { postReview } = await import('../src/services/code-review.ts');
 	const { reviewPullRequest, runAutomaticReviews, pullRequestUrl } = await import('../src/services/review-tasks.ts');

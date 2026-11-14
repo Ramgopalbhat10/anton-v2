@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
+import { settleFetchedBase } from './base-merge.ts';
 import { changesView } from './files.ts';
 import { changeGate, type GateState, gate, loadGate } from './gate-state.ts';
 import { otherRepoChanges } from './git.ts';
@@ -362,13 +363,15 @@ const isChat = async (id: string): Promise<boolean> => {
 /**
  * A task's change since it began, pushed or not (null without a running machine, which is never started for this);
  * a chat's is what it changed in repositories it worked in, not the files it made in its scratch folder, which are
- * its deliverables rather than a change to code.
+ * its deliverables rather than a change to code. A base the agent merged in with git of its own is no part of it
+ * (`settleFetchedBase`).
  */
 export async function taskPatch(id: string): Promise<string | null> {
 	const machine = await liveMachine(id);
 	if (!machine) return null;
 	const session = await getSessionRecord(id);
 	if (session && !session.projectId) return otherRepoChanges(machine, new Date(session.createdAt));
+	await settleFetchedBase(id, machine);
 	return (await changesView(id, 'branch')).patch;
 }
 
