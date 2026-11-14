@@ -80,8 +80,6 @@ export const config = {
 		apiKey: read('COMPOSIO_API_KEY'),
 	},
 	/** Kernel's hosted browsers, for the Browser panel; without a key the panel says how to set one. */
-	/** api.nasa.gov key for the picture of the day's fallback; NASA's shared DEMO_KEY allows a few calls an hour, which a day's cache needs. */
-	nasaApiKey: read('NASA_API_KEY', 'DEMO_KEY'),
 	kernel: {
 		apiUrl: read('ANTON_KERNEL_API_URL', 'https://api.onkernel.com'),
 		apiKey: read('KERNEL_API_KEY'),

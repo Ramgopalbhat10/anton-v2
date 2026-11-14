@@ -60,7 +60,7 @@
 }
 
 /* A small card: a file a reply made, a thread's card, a status box. The same
-   edge and fill as .in-card at a tighter radius, and glass over the sky too. */
+   edge and fill as .in-card at a tighter radius. */
 .in-tile {
 	border-radius: var(--radius-tile);
 	border: 1px solid var(--card-border);
@@ -76,8 +76,8 @@
 }
 
 /* What an illustration sits on: a see-through well with a faint wash of the
-   accent from above and the sky's dot mesh, at rest, fading out toward its
-   edges, so the drawing blends into the glass card around it. */
+   accent from above and a dot mesh, at rest, fading out toward its
+   edges, so the drawing blends into the card around it. */
 .in-grid {
 	position: relative;
 	isolation: isolate;
@@ -478,7 +478,7 @@
 	--pop-shadow: var(--elev-3);
 }
 /* Solid, so a sticky header inside (.sticky-veil) is the very same fill and
-   never reads as a band of its own over the sky. */
+   never reads as a band of its own. */
 .in-pop {
 	--surface-fill: var(--pop-bg);
 	border-radius: var(--radius-card);

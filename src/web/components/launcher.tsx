@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { ArrowUp, BookOpen, EyeOff, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
-import { HomeDashboard, SkyCredit } from '@/components/home-dashboard';
+import { HomeDashboard } from '@/components/home-dashboard';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
 import { ComposerInput } from '@/components/composer-input';
@@ -172,7 +172,7 @@ function ChatRoute() {
 
 function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 	return (
-		<ol aria-label={label} className="sky-credit m-0 mx-auto flex w-fit max-w-full list-none flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-card px-3 py-1.5 text-small sm:rounded-full">
+		<ol aria-label={label} className="m-0 mx-auto flex w-fit max-w-full list-none flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-card px-3 py-1.5 text-small sm:rounded-full">
 			{stages.map((stage, index) => (
 				<li key={stage.title} className="flex items-center gap-1">
 					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--border-strong)" /> : null}
@@ -320,9 +320,6 @@ export function Launcher() {
 					</div>
 
 					<HomeDashboard />
-					<div className="-mt-2 flex min-w-0 justify-end">
-						<SkyCredit />
-					</div>
 				</div>
 			</div>
 		</div>
