@@ -7,6 +7,7 @@ import { withPruning } from '../flue/pruned-models.ts';
 import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
+import { STATE_SIGNAL } from '../services/context-prune.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/coordinator.ts';
@@ -231,6 +232,8 @@ const STATE_EVERY = 10;
 /**
  * Puts the project's state in the conversation, after each message it has changed for, rather than in the
  * instructions: instructions that changed with every thread's state missed the prompt cache on every message.
+ * The conversation keeps every one; a model call is sent the latest in full and a line for each before it
+ * (`latestStateOnly`).
  */
 function useProjectState(id: string) {
 	const [, setShown] = usePersistentState<{ body: string; since: number } | null>('project-state', null);
@@ -239,7 +242,7 @@ function useProjectState(id: string) {
 		const body = `The project now (${new Date().toISOString().slice(0, 10)}):\n${brief.state || `Project: ${brief.name}`}`;
 		setShown((shown) => {
 			if (shown?.body === body && shown.since < STATE_EVERY) return { body, since: shown.since + 1 };
-			append({ kind: 'signal', type: 'project-state', body });
+			append({ kind: 'signal', type: STATE_SIGNAL, body });
 			return { body, since: 1 };
 		});
 	});

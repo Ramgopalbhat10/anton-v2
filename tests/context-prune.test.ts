@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import type { Context, Message } from '@earendil-works/pi-ai';
-import { compactionPoint, noteSent, pruneContext, resetPruning, warmShare } from '../src/services/context-prune.ts';
+import { compactionPoint, latestStateOnly, noteSent, pruneContext, resetPruning, warmShare } from '../src/services/context-prune.ts';
 import { readFullResult } from '../src/services/tool-results.ts';
 
 const MINUTE = 60_000;
@@ -80,6 +80,45 @@ test('a provider sends the pruned context for a call that names its conversation
 	assert.notEqual(sent[0], context);
 	assert.match(resultText(sent[0], 'c0'), /^\[Cleared/);
 	assert.equal(sent[1], context);
+});
+
+test('a coordinator is sent its latest project state in full and a line for each before it, the calls between sending the same start', async () => {
+	const state = (threads: string, at: number): Message => ({ role: 'user', content: [{ type: 'text', text: `<signal type="project-state">\nThe project now (2026-11-13):\n${threads}\n</signal>` }], timestamp: at });
+	const said = (role: 'user' | 'assistant', text: string, at: number) => ({ role, content: [{ type: 'text', text }], timestamp: at }) as unknown as Message;
+	const textOf = (message: Message) => (message.content as Array<{ text: string }>)[0].text;
+	const first = [said('user', 'Start on the login page', 1), state('- Login page: working', 2), said('assistant', 'Started a thread.', 3)];
+	const second = [...first, said('user', 'And the docs?', 4), state('- Login page: review\n- Docs: working', 5), said('assistant', 'Started another.', 6)];
+	const third = [...second, said('user', 'How is it going?', 7), state('- Login page: resolved\n- Docs: review', 8)];
+	const context = (messages: Message[]) => ({ systemPrompt: 'You are the coordinator.', messages, tools: [] }) as unknown as Context;
+
+	const one = context(first);
+	assert.equal(latestStateOnly(one), one, 'one state is sent as it is');
+	const none = conversation(3, 1_000);
+	assert.equal(latestStateOnly(none), none, 'and so is a conversation with none');
+
+	const two = latestStateOnly(context(second));
+	assert.equal(textOf(two.messages[1]), '<signal type="project-state">\nAn earlier state of the project, left out: the latest one is the project now.\n</signal>');
+	assert.equal(two.messages[4], second[4], 'the latest is whole');
+	assert.equal(second[1], first[1], 'and the conversation itself keeps every one');
+
+	// A call with nothing new since sends the same start; a newer state changes it only from the state before.
+	const again = latestStateOnly(context([...second, said('user', 'Thanks', 7)]));
+	assert.deepEqual(again.messages.slice(0, second.length), two.messages);
+	const three = latestStateOnly(context(third));
+	assert.deepEqual(three.messages.slice(0, 4), two.messages.slice(0, 4), 'what came before the state it replaced is sent as it was');
+	assert.match(textOf(three.messages[4]), /An earlier state of the project/);
+	assert.equal(three.messages[7], third[7]);
+	for (const index of [0, 2, 3, 5, 6]) assert.equal(three.messages[index], third[index], 'what was said is never touched');
+
+	// A message that only quotes a state is the user's own.
+	const quoted = context([said('user', 'What does <signal type="project-state"> mean?', 1), state('- Login page: working', 2)]);
+	assert.equal(latestStateOnly(quoted), quoted);
+
+	const { withPruning } = await import('../src/flue/pruned-models.ts');
+	const sent: Context[] = [];
+	const provider = withPruning({ id: 'p', getModels: () => [], stream: (_m: unknown, sending: Context) => sent.push(sending), streamSimple: (_m: unknown, sending: Context) => sent.push(sending) } as never);
+	provider.stream({ contextWindow: 1_000_000, maxTokens: 64_000 } as never, context(third), { sessionId: 'space-1' });
+	assert.deepEqual(sent[0].messages, three.messages, 'a provider sends it so');
 });
 
 const SONNET = { input: 3, cacheRead: 0.3, cacheWrite: 3.75 };
