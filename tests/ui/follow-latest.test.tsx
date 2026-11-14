@@ -85,6 +85,33 @@ describe('useFollowLatest', () => {
 		}
 	});
 
+	it('follows streaming and composer/viewport resizing only while pinned', () => {
+		let resize = () => {};
+		vi.stubGlobal('ResizeObserver', class {
+			constructor(callback: () => void) { resize = callback; }
+			observe() {}
+			disconnect() {}
+		});
+		try {
+			render(<Feed />);
+			const scroller = sized(screen.getByTestId('scroller'));
+			scrollTo(scroller, 1500);
+			Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 2400 });
+			act(() => resize());
+			expect(scroller.scrollTop).toBe(2400);
+			Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 300 });
+			act(() => resize());
+			expect(scroller.scrollTop).toBe(2400);
+			scrollTo(scroller, 900);
+			Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 2800 });
+			act(() => resize());
+			expect(scroller.scrollTop).toBe(900);
+			expect(screen.getByRole('button', { name: /Jump to latest/ })).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: /Jump to latest/ }));
+			expect(scroller.scrollTop).toBe(2800);
+		} finally { vi.unstubAllGlobals(); }
+	});
+
 	it('recovers following if a navigation never moves', () => {
 		vi.useFakeTimers();
 		try {
