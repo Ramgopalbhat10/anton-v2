@@ -148,6 +148,26 @@ const notificationUnread = notifications.reduce<Record<string, number>>((acc, it
 	if (!item.read) acc[item.category] = (acc[item.category] ?? 0) + 1;
 	return acc;
 }, {});
+const artifact = (sessionId: string, task: { title: string; spaceId: string | null; chat: boolean }, path: string, title: string, size: number, daysAgo: number, added = false) => ({
+	sessionId,
+	path,
+	title,
+	size,
+	mtimeMs: Date.now() - daysAgo * 86_400_000,
+	task,
+	...(added ? { added: true } : {}),
+});
+const billing = { title: 'Expose invoices over the API', spaceId: 'space-billing', chat: false };
+const artifacts = [
+	artifact('th-api', billing, 'renders/invoice-dashboard.html', 'Invoice dashboard', 84_000, 0.2),
+	artifact('th-schema', { title: 'Migrate the ledger schema', spaceId: 'space-billing', chat: false }, 'reports/migration-plan.md', 'Migration plan', 12_400, 0.8),
+	artifact('th-invoices', billing, 'charts/revenue-by-plan.png', 'Revenue by plan', 220_000, 1.4),
+	artifact('th-cleanup', billing, 'exports/invoices-2026.csv', 'Invoices export', 96_000, 2.1),
+	artifact('th-settings', billing, 'scripts/proration.py', 'Proration calculator', 8_300, 3.5),
+	artifact('th-docs-audit', { title: 'Audit the getting-started guide', spaceId: 'space-docs', chat: false }, 'notes/guide-gaps.md', 'Guide gaps', 5_100, 4.2),
+	artifact('perf-task', { title: 'Make the app fast while agents stream', spaceId: null, chat: false }, 'benchmarks/stream-latency.json', 'Stream latency bench', 41_000, 5.0),
+	artifact('added-files', { title: 'Added by you', spaceId: null, chat: false }, 'skills/day-trading/SKILL.md', 'SKILL.md', 3_200, 6.0, true),
+];
 const projects = [
 	{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
 	{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24 * 5), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
@@ -254,6 +274,7 @@ export function mockApi(): Plugin {
 		if (path === '/api/projects') return json(res, { projects });
 		if (path === '/api/reviews') return json(res, { reviews: [] });
 		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
+		if (path === '/api/artifacts') return json(res, { artifacts });
 		if (path === '/api/notifications') return json(res, { notifications, unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0, ...notificationUnread } });
 		if (path === `${task}/waiting`) return json(res, { messages: [] });
 		if (path === `${task}/joins`) return json(res, { joins: [] });
