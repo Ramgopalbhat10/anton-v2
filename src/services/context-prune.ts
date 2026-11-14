@@ -23,6 +23,20 @@ import { keepCleared, MORE_TOOL } from './tool-results.ts';
  * stays cleared on every later call, so the cache holds between batches. The
  * runtime keeps the conversation itself whole: this only changes what is sent.
  *
+ * A conversation picked up after hours is cleared whatever its size: every
+ * result past the newest 20K tokens of them, on the first call of the reply.
+ * Its cache is gone by then, so the batch costs no miss, and those results
+ * are from work that ended hours or days ago. Before, a thread at 88K tokens,
+ * asked something new two days later, sent 56K of old results on each of its
+ * calls, far under the mark with Compact at 400K. How long it lay is read off
+ * its messages (`STALE_MS`), since what this file remembers is lost in a
+ * restart. Three hours, not the cache's lifetime: in eighteen days of real
+ * tasks OpenAI's cache still held on three calls in four made ten to twenty
+ * minutes after the one before, two in three up to an hour, one in three up
+ * to three hours, and on none of the seven conversations this would have
+ * cleared. Clearing at any size once idle past the lifetime would have missed
+ * a cache that held in 15 batches of 37.
+ *
  * How long to wait with a warm cache depends on the model's prices: a miss
  * costs the uncached price on what is sent again, and each later call saves the
  * cached price on what was cleared. Where the cache takes 90% off (Claude, GPT)
@@ -59,6 +73,8 @@ const PROTECT_TOKENS = 20_000;
 const PAYBACK_CALLS = 25;
 /** A result this small costs little more than its stub. */
 const MIN_CHARS = 2_000;
+/** A conversation left this long is picked up with no cache and for something new: its results past the newest are cleared at any size. */
+const STALE_MS = 3 * 60 * 60_000;
 /** Conversations whose cleared results are remembered, the least recently called dropped first. */
 const KEEP_CONVERSATIONS = 200;
 /** What a picture counts for, about what providers charge for a screenshot. */
@@ -137,6 +153,16 @@ export function compactionPoint(model: Pick<Model<Api>, 'contextWindow' | 'maxTo
 /** A call is the same message when it has the same role, time and tool call, as it does from one call to the next. */
 const markOf = (message: Message | undefined) => (message ? `${message.role}:${message.timestamp}:${message.role === 'toolResult' ? message.toolCallId : ''}` : '');
 
+/** Whether the conversation lay untouched for `STALE_MS` before this call: how old its newest reply or result is, where its messages say. */
+function pickedUpStale(messages: Message[], now: number): boolean {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (message.role === 'user') continue;
+		return message.timestamp > 0 && now - message.timestamp >= STALE_MS;
+	}
+	return false;
+}
+
 /** The context to send, how many results it has cleared, its size in tokens, and the call's number in its conversation, for `noteSent`. */
 export type Pruned = { context: Context; cleared: number; tokens: number; call: number };
 
@@ -182,7 +208,8 @@ export function pruneContext(key: string, context: Context, point: number, now =
 	if (counted !== null && model.dropThinking) context.messages.forEach((message, index) => message.role === 'toolResult' && state.cleared.has(message.toolCallId) && (dropped = index));
 
 	const { price } = model;
-	const due = cold ? tokens > point * START : tokens > point * URGENT || (priced(price) && tokens > point * warmShare(price) && paysBack(state.calls, tokens, point, price));
+	const stale = pickedUpStale(context.messages, now);
+	const due = stale || (cold ? tokens > point * START : tokens > point * URGENT || (priced(price) && tokens > point * warmShare(price) && paysBack(state.calls, tokens, point, price)));
 	if (point > 0 && due) {
 		// The newest results are kept, the one that crosses the line too.
 		let recent = 0;
@@ -194,7 +221,7 @@ export function pruneContext(key: string, context: Context, point: number, now =
 			else if (textOf(message).length >= MIN_CHARS || sizes[index] >= tokensOf(MIN_CHARS)) candidates.unshift(index);
 		}
 		for (const index of candidates) {
-			if (tokens <= point * TARGET) break;
+			if (!stale && tokens <= point * TARGET) break;
 			const message = context.messages[index] as Message & { role: 'toolResult' };
 			state.cleared.add(message.toolCallId);
 			const size = messageTokens(stubFor(message));

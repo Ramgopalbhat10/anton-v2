@@ -55,6 +55,47 @@ test('while the cache is warm it waits until compaction is near (85%); once it h
 	assert.ok(pruneContext('urgent', conversation(45, 16_000), POINT, MINUTE).cleared > 0, 'about 180K tokens, past 85%');
 });
 
+test('a conversation picked up after three hours is cleared at any size, past its newest 20K tokens of results, once', () => {
+	const HOUR = 60 * MINUTE;
+	const DAY = 24 * HOUR;
+	/** Ten results of 16,000 characters (about 40K tokens, a fifth of the mark), the last of them made at `at`, then what the user asks next. */
+	const pickedUp = (at: number, asked: number): Context => {
+		const context = conversation(10, 16_000);
+		context.messages.forEach((message) => (message.timestamp = at));
+		context.messages.push({ role: 'user', content: 'Now look at this other thing', timestamp: asked });
+		return context;
+	};
+	const cleared = (context: Context) => context.messages.filter((message) => message.role === 'toolResult' && resultText(context, message.toolCallId).startsWith('[Cleared')).map((message) => (message as { toolCallId: string }).toolCallId);
+
+	const soon = pickedUp(DAY, DAY + 3 * HOUR - MINUTE);
+	assert.equal(pruneContext('soon', soon, POINT, DAY + 3 * HOUR - MINUTE).context, soon, 'a minute short of three hours, it is sent whole');
+
+	const first = pruneContext('later', pickedUp(DAY, DAY + 2 * DAY), POINT, DAY + 2 * DAY);
+	assert.deepEqual(cleared(first.context), ['c0', 'c1', 'c2', 'c3', 'c4'], 'the results past the newest 20K tokens of them, though under the mark');
+	assert.ok(first.tokens < 26_000, `${first.tokens} tokens left`);
+	assert.equal(readFullResult('task', 'c0', 0), '0'.repeat(16_000), 'and the agent can read one again');
+
+	// The reply goes on: its own results are new, so nothing more is cleared and the start is sent as it was.
+	const going = pickedUp(DAY, DAY + 2 * DAY);
+	for (let index = 0; index < 4; index++) {
+		going.messages.push({ role: 'assistant', content: [{ type: 'toolCall', id: `n${index}`, name: 'read', arguments: {} }], timestamp: 3 * DAY } as unknown as Message);
+		going.messages.push({ role: 'toolResult', toolCallId: `n${index}`, toolName: 'read', content: [{ type: 'text', text: 'n'.repeat(16_000) }], isError: false, timestamp: 3 * DAY });
+	}
+	const next = pruneContext('later', going, POINT, 3 * DAY + MINUTE);
+	assert.deepEqual(cleared(next.context), ['c0', 'c1', 'c2', 'c3', 'c4']);
+	assert.deepEqual(next.context.messages.slice(0, first.context.messages.length), first.context.messages);
+
+	// Old results under a result made just now are a reply at work, however old they are.
+	const working = pickedUp(DAY, DAY + MINUTE);
+	working.messages.push({ role: 'assistant', content: [{ type: 'toolCall', id: 'slow', name: 'bash', arguments: {} }], timestamp: DAY + MINUTE } as unknown as Message);
+	working.messages.push({ role: 'toolResult', toolCallId: 'slow', toolName: 'bash', content: [{ type: 'text', text: 'done' }], isError: false, timestamp: DAY + 5 * HOUR });
+	assert.equal(pruneContext('working', working, POINT, DAY + 5 * HOUR).context, working, 'a command that ran five hours');
+
+	// Messages that carry no time say nothing of how long it lay.
+	const untimed = conversation(10, 16_000);
+	assert.equal(pruneContext('untimed', untimed, POINT, 5 * DAY).context, untimed);
+});
+
 test('small results stay, and an agent without read_full_result is told to call the tool again', () => {
 	const small = pruneContext('s', conversation(300, 1_500), POINT, 0);
 	assert.equal(small.cleared, 0);
