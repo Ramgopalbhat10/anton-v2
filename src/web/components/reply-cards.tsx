@@ -91,12 +91,12 @@ export const AskCard = memo(function AskCard({
       />
     );
   return (
-    <section className="in-card overflow-hidden" aria-label="Question">
-      <header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5">
-        <span className="mt-px inline-flex size-[22px] shrink-0 items-center justify-center text-(--accent-text)">
-          <Icon icon={MessageCircleQuestion} size={15} />
+    <section className={cn("in-callout overflow-hidden", open && "in-callout--warn")} aria-label="Question">
+      <header className="flex items-start gap-2.5 px-3 pt-3 pb-2.5">
+        <span className={cn("mt-0.5 inline-flex shrink-0 items-center justify-center", open ? "text-(--warn)" : "text-(--text-3)")}>
+          <Icon icon={MessageCircleQuestion} size={16} />
         </span>
-        <h3 className="m-0 min-w-0 flex-1 text-body leading-[20px] font-medium text-(--text)">
+        <h3 className="m-0 min-w-0 flex-1 text-body-lg leading-[20px] font-medium text-(--text)">
           {question}
         </h3>
       </header>
@@ -118,7 +118,7 @@ export const AskCard = memo(function AskCard({
                 "group/option flex min-h-9 items-center gap-2.5 rounded-control border px-2.5 py-1.5 text-left outline-none focus-visible:shadow-(--focus)",
                 chosen
                   ? "border-(--accent-line) bg-(--accent-soft)"
-                  : "border-(--line)",
+                  : "border-(--line-strong) bg-(--bg-panel)",
                 open && !busy
                   ? "hover:border-(--line-strong) hover:bg-(--bg-hover)"
                   : "cursor-default",

@@ -66,7 +66,7 @@ function ComposerSkeleton({ model }: { model: string }) {
 	const info = useModels().data?.models.find((item) => item.id === unrouted(model));
 	return (
 		<div className="shrink-0 px-4 pt-1 pb-4">
-			<div aria-hidden className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2">
+			<div aria-hidden className="composer relative mx-auto flex max-w-[720px] flex-col gap-2 px-3 pt-3 pb-2">
 				<Mascot mood="working" className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<div className="min-h-[38px] text-body leading-[21px] text-(--text-4)">Add to what the agent is doing</div>
 				<div className="flex items-center gap-1.5">
@@ -122,7 +122,7 @@ export function StartingTask({
 					<span className="min-w-[60px] flex-auto truncate text-body font-medium">{session.title}</span>
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-1">
-					<div className="mx-auto flex max-w-[700px] flex-col gap-5">
+					<div className="mx-auto flex max-w-[720px] flex-col gap-5">
 						{/* Laid out as the message it becomes, its caption line included, so nothing moves when the page fills in. */}
 						<div className="in-sent flex flex-col items-end gap-1.5">
 							<SentText text={prompt || session.title} className="max-w-[min(520px,100%)]" />

@@ -75,7 +75,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 			<span className="text-(--bad)">It failed{approval.error ? `: ${approval.error}` : ''}</span>
 		) : null;
 	return (
-		<section className="in-card overflow-hidden" aria-label="Tool call to run">
+		<section className={cn('in-callout overflow-hidden', pending && 'in-callout--warn')} aria-label="Tool call to run">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text)">{approval.tool}</h3>
@@ -84,7 +84,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, appr
 			</header>
 			<div
 				className={cn(
-					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--line) bg-(--bg-raised) px-3 py-2 font-mono text-small leading-[18px] whitespace-pre-wrap text-(--text-2)',
+					'mx-3.5 mb-3 overflow-auto rounded-control bg-(--bg-panel) px-3 py-2 font-mono text-small leading-[19px] whitespace-pre-wrap text-(--text-2) shadow-[inset_0_0_0_1px_var(--line)]',
 					pending ? 'max-h-[200px]' : 'max-h-[240px]',
 				)}
 			>

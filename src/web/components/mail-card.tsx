@@ -73,7 +73,7 @@ export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, 
 			<span className="text-(--warn)">The draft changed after you were shown it, so it was not sent.</span>
 		) : null;
 	return (
-		<section className="in-card overflow-hidden" aria-label="Email to send">
+		<section className={cn('in-callout overflow-hidden', pending && 'in-callout--warn')} aria-label="Email to send">
 			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
 				<MarkTile mark={GMAIL} size={22} className="mt-px rounded-control" />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
