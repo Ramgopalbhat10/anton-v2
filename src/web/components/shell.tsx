@@ -5,6 +5,7 @@ import { ChevronRight, FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
+import { MobileNav } from '@/components/mobile-nav';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
@@ -128,9 +129,10 @@ export function AppShell() {
 						</ErrorBoundary>
 					</div>
 				)}
-				<main className={cn('app-main flex min-h-0 min-w-0 flex-1 flex-col', incognito && 'app-main--alone')}>
+				<main className={cn('app-main flex min-h-0 min-w-0 flex-1 flex-col', incognito ? 'app-main--alone' : 'max-md:pb-14')}>
 					<Outlet />
 				</main>
+				{incognito ? null : <MobileNav onNew={openPalette} />}
 				<ErrorBoundary label="The command palette" className={FLOATING}>
 					<CommandPalette open={paletteOpen} onClose={closePalette} />
 				</ErrorBoundary>

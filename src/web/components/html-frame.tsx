@@ -4,6 +4,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/signal';
 import { addToComposer } from '@/lib/composer-inbox';
 import { onPageChange } from '@/lib/live-updates';
+import { theme, useTheme } from '@/lib/theme';
 
 /*
  * A page the agent wrote with render_html, in the thread. It loads inside
@@ -77,6 +78,7 @@ export const HtmlFrame = memo(function HtmlFrame({
 	actions?: boolean;
 }) {
 	const frame = useRef<HTMLIFrameElement>(null);
+	const current = useTheme();
 	const [height, setHeight] = useState(() => Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, initial)));
 	// Another copy saved the page's state: the frame page fetches it, unless the save was its own.
 	useEffect(
@@ -99,7 +101,7 @@ export const HtmlFrame = memo(function HtmlFrame({
 			switch (data.method) {
 				case 'ui/notifications/initialized':
 					frame.current?.contentWindow?.postMessage(
-						{ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'dark', styles: { variables: themeVariables() } } },
+						{ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: theme(), styles: { variables: themeVariables() } } },
 						window.location.origin,
 					);
 					break;
@@ -127,11 +129,11 @@ export const HtmlFrame = memo(function HtmlFrame({
 	}, [sessionId, title]);
 	const url = frameUrl(sessionId, path);
 	if (fill) {
-		return <iframe ref={frame} src={url} title={title} className="block size-full border-0 bg-transparent" style={{ colorScheme: 'dark' }} />;
+		return <iframe ref={frame} src={url} title={title} className="block size-full border-0 bg-transparent" style={{ colorScheme: current }} />;
 	}
 	return (
 		<figure className="group/page relative m-0">
-			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-control border-0 bg-transparent" style={{ height, colorScheme: 'dark' }} />
+			<iframe ref={frame} src={url} title={title} loading="lazy" className="block w-full rounded-control border-0 bg-transparent" style={{ height, colorScheme: current }} />
 			{actions ? (
 			<div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--t-fast) group-hover/page:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
 				<Link to="/artifacts/$taskId" params={{ taskId: sessionId }} search={{ path }} aria-label={`Open ${title} in Artifacts`} title="Open in Artifacts" className={chrome}>
@@ -155,6 +157,7 @@ const THUMBNAIL_WIDTH = 520;
  */
 export function PageThumbnail({ sessionId, path }: { sessionId: string; path: string }) {
 	const box = useRef<HTMLDivElement>(null);
+	const current = useTheme();
 	const [size, setSize] = useState<{ scale: number; height: number } | null>(null);
 	useLayoutEffect(() => {
 		const element = box.current;
@@ -176,7 +179,7 @@ export function PageThumbnail({ sessionId, path }: { sessionId: string; path: st
 					tabIndex={-1}
 					loading="lazy"
 					className="block origin-top-left border-0 bg-transparent"
-					style={{ width: THUMBNAIL_WIDTH, height: size.height, transform: `scale(${size.scale})`, colorScheme: 'dark' }}
+					style={{ width: THUMBNAIL_WIDTH, height: size.height, transform: `scale(${size.scale})`, colorScheme: current }}
 				/>
 			) : null}
 		</div>
