@@ -1,8 +1,8 @@
 import { PrStatus } from '@/components/pr-status';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, Library, ListChecks, Maximize2, MessageSquare, Minimize2, PanelRight, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
-import { memo, useState } from 'react';
-import { Caption, Card, Chip, PanelTab, PanelTabs, Pips } from '@/components/instrument';
+import { ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, ListChecks, MessageSquare, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Caption, Card, Chip, Pips } from '@/components/instrument';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';
 import { ModelLogo, ModelPicker, useModelName, useModels } from '@/components/model-picker';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';
@@ -14,7 +14,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/project-viz';
 import { NextSteps, ThreadStateIcon, useOpenThread } from '@/components/thread-card';
 import { Library as LibraryView, type LibrarySource, type Place, spacePlace, taskPlace } from '@/components/library-tab';
-import { WorkspacePane } from '@/components/workspace-pane';
 import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
 import { age, until } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
@@ -22,20 +21,12 @@ import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { defaultSchedule, type Frequency, type Schedule, scheduleProblem } from '../../core/schedule';
 
-export const PROJECT_TABS = [
-	{ name: 'Overview', icon: LayoutDashboard },
-	{ name: 'Library', icon: Library },
-	{ name: 'Pull requests', icon: GitPullRequest },
-	{ name: 'Routines', icon: CalendarClock },
-] as const;
-export type ProjectTab = (typeof PROJECT_TABS)[number]['name'];
-
 /**
- * Overview, read top to bottom: the project's pulse (what it comes to, its
+ * Activity, read top to bottom: the project's pulse (what it comes to, its
  * states, its bay in the rack, activity), what waits on you as tracks of time, the schedule of every
  * thread to now, what is ready for review, and what it all costs.
  */
-function Overview({ space, threads }: { space: Space; threads: Session[] }) {
+export function ProjectActivity({ space, threads }: { space: Space; threads: Session[] }) {
 	const ready = threads.filter((thread) => ['review', 'landing'].includes(stateOf(thread)));
 	const openThread = useOpenThread();
 	if (threads.length === 0) {
@@ -93,7 +84,7 @@ type Entry = { place: Place; agentPath: string; remove: () => Promise<unknown> }
  * The project's Library, shown as a task's is: the files you add for every
  * thread, and under From threads a folder for each thread with what it saved.
  */
-function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }) {
+export function ProjectFiles({ space, threads }: { space: Space; threads: Session[] }) {
 	const queryClient = useQueryClient();
 	const files = useQuery({ queryKey: ['space-files', space.id], queryFn: () => api.spaceFiles(space.id) });
 	const recent = threads.slice(0, LISTED_THREADS);
@@ -136,7 +127,7 @@ function ProjectLibrary({ space, threads }: { space: Space; threads: Session[] }
 	return <LibraryView library={library} />;
 }
 
-function PullRequests({ threads }: { threads: Session[] }) {
+export function ProjectPullRequests({ threads }: { threads: Session[] }) {
 	const openThread = useOpenThread();
 	const withPr = threads.filter((thread) => thread.prUrl);
 	if (withPr.length === 0) return <EmptyState icon={GitPullRequest} title="No pull requests yet" body="When a thread opens one, it shows here with its checks." className="mt-10" />;
@@ -448,7 +439,7 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 }
 
 /** Work that starts on its own as threads of this project: on a schedule, or from labeled issues. */
-function Routines({ space, threads }: { space: Space; threads: Session[] }) {
+export function ProjectRoutines({ space, threads }: { space: Space; threads: Session[] }) {
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);
 	const list = routines.data?.automations ?? [];
@@ -484,56 +475,3 @@ function Routines({ space, threads }: { space: Space; threads: Session[] }) {
 	);
 }
 
-/**
- * The right panel while the coordinator is selected: about the whole project.
- * Overview first (what needs you, what runs, what is ready), then the
- * Library, pull requests and routines. A thread's own panels replace it when
- * a thread is selected.
- */
-export const ProjectPanel = memo(function ProjectPanel({
-	space,
-	threads,
-	tab,
-	onTab,
-	expanded,
-	onToggleExpanded,
-	onClose,
-}: {
-	space: Space;
-	threads: Session[];
-	tab: ProjectTab;
-	onTab: (tab: ProjectTab) => void;
-	expanded: boolean;
-	onToggleExpanded: () => void;
-	onClose: () => void;
-}) {
-	return (
-		<WorkspacePane expanded={expanded}>
-			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
-				{/* On a phone the panel covers the coordinator; this goes back to it. */}
-				<IconBtn icon={ArrowLeft} size="sm" label="Back to the coordinator" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
-				<PanelTabs label="Project panels">
-					{PROJECT_TABS.map((item) => (
-						<PanelTab key={item.name} on={tab === item.name} mark={<Icon icon={item.icon} size={12} />} onSelect={() => onTab(item.name)}>
-							{item.name}
-						</PanelTab>
-					))}
-				</PanelTabs>
-				<IconBtn
-					icon={expanded ? Minimize2 : Maximize2}
-					size="sm"
-					label={expanded ? 'Restore the conversation' : 'Expand the panel'}
-					onClick={onToggleExpanded}
-					className="hidden @min-[700px]/workspace:inline-flex"
-				/>
-				<IconBtn icon={PanelRight} size="sm" label="Hide the panel" onClick={onClose} className="hidden @min-[700px]/workspace:inline-flex" />
-			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-				{tab === 'Overview' ? <Overview space={space} threads={threads} /> : null}
-				{tab === 'Library' ? <ProjectLibrary space={space} threads={threads} /> : null}
-				{tab === 'Pull requests' ? <PullRequests threads={threads} /> : null}
-				{tab === 'Routines' ? <Routines space={space} threads={threads} /> : null}
-			</div>
-		</WorkspacePane>
-	);
-});

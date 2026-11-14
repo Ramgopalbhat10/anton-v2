@@ -231,6 +231,13 @@ export function mockApi(): Plugin {
 		if (path === '/api/settings/commands') return json(res, { commands: [] });
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
+		if (spaceId) {
+			const found = spaces.find((item) => item.id === spaceId);
+			if (found) return json(res, found);
+			res.statusCode = 404;
+			return json(res, { error: 'No such project' });
+		}
 		if (path === '/api/compute') return json(res, { provider: 'local', app: null, running: [], others: 0 });
 		if (path === '/api/projects') return json(res, { projects });
 		if (path === '/api/reviews') return json(res, { reviews: [] });

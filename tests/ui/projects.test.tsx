@@ -34,7 +34,7 @@ const { InlineLinks, Markdown } = await import('@/components/markdown');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
-const { ProjectPanel } = await import('@/components/project-panel');
+const { ProjectRoutines } = await import('@/components/project-panel');
 const { ProjectBay, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
@@ -331,7 +331,7 @@ describe('threads', () => {
 		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts: [{ type: 'text', text }] }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
 		withRouter(() => (
 			<>
-				<ProjectFeed space={space} agent={agent as never} threads={threads} starting={false} onStartingChange={() => {}} />
+				<ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />
 				<OutputViewerHost />
 			</>
 		));
@@ -361,7 +361,7 @@ describe('threads', () => {
 		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
 		api.editSpace.mockResolvedValueOnce({ ...space, coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' });
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
-		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
@@ -384,7 +384,7 @@ describe('threads', () => {
 	it('saves a project routine route only when its form is submitted', async () => {
 		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
 		api.spaceAutomations.mockResolvedValueOnce({ automations: [] });
-		withRouter(() => <ProjectPanel space={space} threads={[]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		withRouter(() => <ProjectRoutines space={space} threads={[]} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'New routine' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
@@ -418,7 +418,7 @@ describe('threads', () => {
 	it('attaches files to the coordinator: saved to the project Library and sent with what they say', async () => {
 		const sendMessage = vi.fn(async () => undefined);
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['%PDF'], 'brief.pdf', { type: 'application/pdf' })], getData: () => '' } });
 		expect(await screen.findByText('brief.pdf')).toBeTruthy();
@@ -433,7 +433,7 @@ describe('threads', () => {
 		let reject!: (error: Error) => void;
 		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['old'], 'old.pdf', { type: 'application/pdf' })], getData: () => '' } });
 		await userEvent.type(box, 'Earlier message{Enter}');
@@ -452,7 +452,7 @@ describe('threads', () => {
 		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
 		const sendMessage = vi.fn(async (_text: string, _options?: unknown) => undefined);
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['old image'], 'photo.png', { type: 'image/png' })], getData: () => '' } });
 		await screen.findByRole('button', { name: 'Remove photo.png' });
@@ -654,7 +654,7 @@ describe('project overview numbers', () => {
 				},
 			],
 		});
-		withRouter(() => <ProjectPanel space={{ ...space, repos: [] }} threads={[...runs, ...threads]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		withRouter(() => <ProjectRoutines space={{ ...space, repos: [] }} threads={[...runs, ...threads]} />);
 		const strip = await screen.findByRole('group', { name: 'Recent runs' });
 		expect(within(strip).getAllByRole('button').map((cell) => cell.getAttribute('aria-label'))).toEqual(['Morning briefing · Oct 20: Done', 'Morning briefing · Oct 21: Failed', 'Morning briefing · Oct 22: Done']);
 		expect(screen.getByText('1h ago')).toBeTruthy();

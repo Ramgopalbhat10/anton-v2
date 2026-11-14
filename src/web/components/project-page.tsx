@@ -1,13 +1,14 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { PanelRight, Settings, Waypoints } from 'lucide-react';
+import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Status } from '@/components/instrument';
+import { PanelTab, PanelTabs, Status } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';
-import { ProjectFeed } from '@/components/project-feed';
-import { PROJECT_TABS, ProjectPanel, type ProjectTab } from '@/components/project-panel';
+import { ProjectBoard } from '@/components/project-board';
+import { NewThreadForm, ProjectFeed } from '@/components/project-feed';
+import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/project-panel';
 import { SpaceMark } from '@/components/project-sidebar';
-import { PaneSlideContext, usePaneSlide } from '@/components/workspace-pane';
+import { useModelName, useModels } from '@/components/model-picker';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell';
 import { Btn, EmptyState, Icon, IconBtn } from '@/components/signal';
 import { useOnePane } from '@/lib/one-pane';
@@ -17,32 +18,45 @@ import { StartingTask } from '@/components/starting-task';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
-type ProjectPanelState = { open: boolean; tab: ProjectTab };
+type ProjectView = 'board' | 'files' | 'activity' | 'prs' | 'routines';
 
-const panelKey = (spaceId: string) => `anton.project-panel.${spaceId}`;
+const VIEWS: Array<{ id: ProjectView; label: string }> = [
+	{ id: 'board', label: 'Board' },
+	{ id: 'files', label: 'Files' },
+	{ id: 'activity', label: 'Activity' },
+	{ id: 'prs', label: 'Pull requests' },
+	{ id: 'routines', label: 'Routines' },
+];
 
-function readProjectPanel(spaceId: string): ProjectPanelState {
+/** The tabs the right panel had before the board: their names map onto the views. */
+const LEGACY_VIEW: Record<string, ProjectView> = { Overview: 'activity', Library: 'files', 'Pull requests': 'prs', Routines: 'routines' };
+
+type DockState = { open: boolean; view: ProjectView };
+
+const dockKey = (spaceId: string) => `anton.project-panel.${spaceId}`;
+
+function readDock(spaceId: string): DockState {
 	try {
-		const saved = JSON.parse(localStorage.getItem(panelKey(spaceId)) ?? 'null') as Partial<ProjectPanelState> | null;
-		const tab = PROJECT_TABS.find((item) => item.name === saved?.tab)?.name ?? 'Overview';
-		return { open: saved?.open ?? true, tab };
+		const saved = JSON.parse(localStorage.getItem(dockKey(spaceId)) ?? 'null') as { open?: boolean; view?: string; tab?: string } | null;
+		const view = VIEWS.some((item) => item.id === saved?.view) ? (saved!.view as ProjectView) : (LEGACY_VIEW[saved?.tab ?? ''] ?? 'board');
+		return { open: saved?.open ?? true, view };
 	} catch {
-		return { open: true, tab: 'Overview' };
+		return { open: true, view: 'board' };
 	}
 }
 
-function saveProjectPanel(spaceId: string, state: ProjectPanelState) {
+function saveDock(spaceId: string, state: DockState) {
 	try {
-		localStorage.setItem(panelKey(spaceId), JSON.stringify(state));
+		localStorage.setItem(dockKey(spaceId), JSON.stringify(state));
 	} catch {
-		// Storage is a convenience; the panel still works without it.
+		// Storage is a convenience; the dock still works without it.
 	}
 }
 
 /**
- * A project with its coordinator selected: the coordinator's conversation in
- * the middle, and the project's own panels (Overview, Library, pull
- * requests, routines) on the right.
+ * A project: its threads as a board by state in the main view, with the
+ * coordinator docked on the right — it plans, starts threads and reports
+ * back. Files, activity, pull requests and routines are views of the board.
  */
 export function ProjectPage() {
 	const { spaceId } = useParams({ from: '/projects/$spaceId' });
@@ -51,38 +65,37 @@ export function ProjectPage() {
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
 	const agent = useFlueAgent({ url: `/api/agents/coordinator/${spaceId}` });
-	const [saved, setPanel] = useState(() => readProjectPanel(spaceId));
-	// On a phone the panel covers the coordinator, so it shows only once you open it here; the saved choice is the wide screen's.
+	const [saved, setDock] = useState(() => readDock(spaceId));
+	// On a phone the dock covers the board, so it shows only once you open it here; the saved choice is the wide screen's.
 	const onePane = useOnePane();
 	const [paneOpen, setPaneOpen] = useState(false);
-	const panel = { ...saved, open: onePane ? paneOpen : saved.open };
-	const slide = usePaneSlide(panel.open);
+	const dockOpen = onePane ? paneOpen : saved.open;
 	const [expanded, setExpanded] = useState(false);
 	const [starting, setStarting] = useState(Boolean(search.new));
 	const asked = useRef(false);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
+	const models = useModels();
+	const modelName = useModelName();
+	const coordinatorModel = space.data?.coordinatorModel ?? models.data?.default ?? '';
+	const coordinatorName = coordinatorModel ? modelName(coordinatorModel) : '';
 
-	// Kept to one identity each, so the memoized panel skips the renders the coordinator's stream causes.
-	const changePanel = useCallback(
-		(next: Partial<ProjectPanelState>) => {
+	const changeDock = useCallback(
+		(next: Partial<DockState>) => {
 			if (onePane && next.open !== undefined) {
 				setPaneOpen(next.open);
 				if (!next.open) setExpanded(false);
 				const { open: _open, ...rest } = next;
 				next = rest;
 			}
-			setPanel((current) => {
+			setDock((current) => {
 				const updated = { ...current, ...next };
-				saveProjectPanel(spaceId, updated);
+				saveDock(spaceId, updated);
 				if (!updated.open) setExpanded(false);
 				return updated;
 			});
 		},
 		[spaceId, onePane],
 	);
-	const changeTab = useCallback((tab: ProjectTab) => changePanel({ tab }), [changePanel]);
-	const closePanel = useCallback(() => changePanel({ open: false }), [changePanel]);
-	const toggleExpanded = useCallback(() => setExpanded((current) => !current), []);
 
 	// A first message from the New project dialog goes to the coordinator once, then leaves the address.
 	useEffect(() => {
@@ -104,44 +117,90 @@ export function ProjectPage() {
 	}
 	if (!space.data) return <div className="flex-1" />;
 	const data = space.data;
-	const centerVisible = !(panel.open && expanded);
+	const centerVisible = !(dockOpen && (onePane || expanded));
 
 	return (
-		<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
-			<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : panel.open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
+		<div className="flex min-h-0 min-w-0 flex-1">
+			<div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !centerVisible && 'hidden')}>
 				<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
 					<MenuButton />
-					<SpaceMark space={data} size={22} />
-					<h1 className="m-0 min-w-0 truncate text-body-lg font-medium text-(--text)">{data.name}</h1>
-					{busy ? (
-						<Status tone="accent" pulse>
-							Coordinating
-						</Status>
-					) : data.state !== 'active' ? (
-						<Status tone="warning">{data.state === 'paused' ? 'Paused' : 'Archived'}</Status>
-					) : null}
-					<div className="min-w-0 flex-1" />
-					<Btn size="sm" variant="ghost" icon={Waypoints} aria-label="New thread" onClick={() => setStarting(true)}>
+					<nav aria-label="Where you are" className="flex min-w-0 shrink-0 items-center gap-1.5 text-body">
+						<Link to="/projects" className="shrink-0 rounded-control text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
+							Projects
+						</Link>
+						<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
+						<SpaceMark space={data} size={18} />
+						<span className="min-w-0 truncate font-medium text-(--text)">{data.name}</span>
+						{busy ? (
+							<Status tone="accent" pulse>
+								Coordinating
+							</Status>
+						) : data.state !== 'active' ? (
+							<Status tone="warning">{data.state === 'paused' ? 'Paused' : 'Archived'}</Status>
+						) : null}
+					</nav>
+					<PanelTabs label="Project views" className="min-w-0 flex-1">
+						{VIEWS.map((view) => (
+							<PanelTab key={view.id} on={saved.view === view.id} onSelect={() => changeDock({ view: view.id })}>
+								{view.label}
+							</PanelTab>
+						))}
+					</PanelTabs>
+					<div className="hidden shrink-0 items-center gap-1 xl:flex">
+						{data.repos.slice(0, 4).map((repo) => (
+							<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[20px] max-w-[140px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]">
+								<Icon icon={FolderGit2} size={10} className="shrink-0" />
+								<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
+							</span>
+						))}
+					</div>
+					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
+					<Btn size="sm" variant="primary" icon={Waypoints} onClick={() => setStarting(true)}>
 						<span className="hidden sm:inline">New thread</span>
 					</Btn>
-					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
-					{!panel.open ? <IconBtn icon={PanelRight} size="sm" label="Show the project panel" onClick={() => changePanel({ open: true })} /> : null}
+					{!dockOpen ? <IconBtn icon={PanelRight} size="sm" label="Show the coordinator" onClick={() => changeDock({ open: true })} /> : null}
 				</header>
-				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} />
+				<div className="min-h-0 flex-1 overflow-y-auto">
+					{starting && centerVisible ? (
+						<div className="px-4 pt-[10vh]">
+							<NewThreadForm space={data} onDone={() => setStarting(false)} />
+						</div>
+					) : saved.view === 'board' ? (
+						<ProjectBoard threads={threads} onNewThread={() => setStarting(true)} />
+					) : (
+						<div className="mx-auto flex w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
+							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
+							{saved.view === 'activity' ? <ProjectActivity space={data} threads={threads} /> : null}
+							{saved.view === 'prs' ? <ProjectPullRequests threads={threads} /> : null}
+							{saved.view === 'routines' ? <ProjectRoutines space={data} threads={threads} /> : null}
+						</div>
+					)}
+				</div>
 			</div>
-			{slide ? (
-				<PaneSlideContext.Provider value={slide}>
-					<ProjectPanel
-						space={data}
-						threads={threads}
-						tab={panel.tab}
-						onTab={changeTab}
-						expanded={expanded}
-						onToggleExpanded={toggleExpanded}
-						onClose={closePanel}
+			<aside className={cn('min-h-0 min-w-0 flex-col border-(--line)', dockOpen ? cn('flex', onePane || expanded ? 'flex-1' : 'w-[380px] shrink-0 border-l') : 'hidden')}>
+				<div className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3.5">
+					<Icon icon={Workflow} size={14} className="shrink-0 text-(--text-3)" />
+					<span className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">Coordinator</span>
+					{coordinatorName ? (
+						<span className="hidden shrink-0 rounded-inner px-1.5 py-0.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)] sm:inline">{coordinatorName}</span>
+					) : null}
+					<IconBtn
+						icon={expanded ? Minimize2 : Maximize2}
+						size="sm"
+						label={expanded ? 'Restore the board' : 'Expand the coordinator'}
+						onClick={() => setExpanded((current) => !current)}
+						className="hidden md:inline-flex"
 					/>
-				</PaneSlideContext.Provider>
-			) : null}
+					<IconBtn icon={PanelRight} size="sm" label="Hide the coordinator" onClick={() => changeDock({ open: false })} />
+				</div>
+				{starting && !centerVisible ? (
+					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-[10vh]">
+						<NewThreadForm space={data} onDone={() => setStarting(false)} />
+					</div>
+				) : (
+					<ProjectFeed space={data} agent={agent} threads={threads} onStartingChange={setStarting} />
+				)}
+			</aside>
 		</div>
 	);
 }
