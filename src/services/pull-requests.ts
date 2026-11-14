@@ -130,7 +130,8 @@ export async function pullRequestDetail(id: string, number: number): Promise<Pul
 
 /** The pull request's whole diff, as the host shows it. */
 export async function pullRequestDiff(id: string, number: number): Promise<string> {
-	return getProviders().git.pullRequestDiff((await recordOf(id, number)).url);
+	const { url } = await detailRecord(id, number);
+	return getProviders().git.pullRequestDiff(url);
 }
 
 /**

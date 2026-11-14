@@ -180,7 +180,7 @@ function Loading({ children }: { children: ReactNode }) {
 	);
 }
 
-function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean }) {
+export function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean }) {
 	const [section, setSection] = useState<Section>('changes');
 	const detail = useQuery({ queryKey: ['pull', sessionId, item.number], queryFn: () => api.pull(sessionId, item.number) });
 	const pull = detail.data;

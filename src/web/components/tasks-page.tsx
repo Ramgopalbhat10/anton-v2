@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, type LucideIcon, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TasksArt } from '@/components/illustrations';
@@ -237,10 +237,10 @@ export function TasksPage() {
 					trailing={<Kbd keys="/" size="sm" />}
 					className="hidden w-[220px] shrink-0 md:flex"
 				/>
-				<a href="/" className="sg-btn sg-btn--primary sg-btn--sm shrink-0">
+				<Link to="/" className="sg-btn sg-btn--primary sg-btn--sm shrink-0">
 					<Icon icon={Plus} size={13} />
 					New task
-				</a>
+				</Link>
 			</header>
 
 			<div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-(--line) px-4">
