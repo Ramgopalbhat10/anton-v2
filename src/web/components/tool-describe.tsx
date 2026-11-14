@@ -137,7 +137,7 @@ function lineCount(text: string) {
 }
 
 export function Em({ children }: { children: ReactNode }) {
-	return <span className="text-(--text-2)">{children}</span>;
+	return <span className="font-mono text-small text-(--text)">{children}</span>;
 }
 
 /** Lines added and removed, as an edit shows them. */

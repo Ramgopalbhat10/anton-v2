@@ -73,8 +73,8 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 		<div
 			className={cn(
 				'group relative flex',
-				line.kind === 'add' && 'bg-(--diff-add) shadow-[inset_2px_0_0_var(--ok)]',
-				line.kind === 'remove' && 'bg-(--bad-soft) shadow-[inset_2px_0_0_var(--bad)]',
+				line.kind === 'add' && 'bg-(--diff-add) shadow-[inset_2px_0_0_var(--diff-add-mark)]',
+				line.kind === 'remove' && 'bg-(--diff-del) shadow-[inset_2px_0_0_var(--diff-del-mark)]',
 			)}
 		>
 			{onComment ? (
@@ -87,14 +87,14 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					<Icon icon={Plus} size={11} />
 				</button>
 			) : null}
-			<span className="w-12 shrink-0 border-r border-(--line) pr-2.5 text-right text-(--text-4) select-none">{line.number}</span>
-			<span className={cn('w-5 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-transparent')}>
-				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}
+			<span className="w-12 shrink-0 pr-2 text-right text-(--text-4) tabular-nums select-none">{line.number}</span>
+			<span className={cn('w-4 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-transparent')}>
+				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}
 			</span>
 			<span
 				className={cn(
 					'pr-3 whitespace-pre',
-					line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-(--text-2)',
+					line.kind === 'context' ? 'text-(--text-2)' : 'text-(--text)',
 				)}
 			>
 				{line.text}
@@ -124,16 +124,16 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 		return <div className="border-t border-(--line) px-3 py-2 text-small text-(--text-3)">{file.status === 'D' ? 'The file was deleted.' : 'No lines to show: the file is empty or binary.'}</div>;
 	}
 	return (
-		<div className="@container overflow-x-auto border-t border-(--line) bg-(--bg-app) py-1 font-mono text-small leading-[19px]">
+		<div className="@container overflow-x-auto border-t border-(--line) py-1 font-mono text-small leading-5">
 			<div className="min-w-max">
 				{outdated.map((comment, at) => (
 					<CommentCard key={`outdated-${at}`} comment={comment} outdated onRemove={() => commenting?.onRemove(comment)} />
 				))}
 				{file.lines.map((line, index) =>
 					line.kind === 'hunk' ? (
-						<div key={`hunk-${index}`} className="my-1 flex bg-(--bg-hover) py-0.5 text-(--text-3) first:mt-0">
-							<span className="w-12 shrink-0 border-r border-(--accent-line) pr-2.5 text-right opacity-70 select-none">@@</span>
-							<span className="pl-2 whitespace-pre opacity-80">{line.text}</span>
+						<div key={`hunk-${index}`} className="my-1 flex bg-(--accent-soft) text-(--accent-text) first:mt-0">
+							<span className="w-12 shrink-0 pr-2 text-right select-none">@@</span>
+							<span className="pl-4 whitespace-pre">{line.text}</span>
 						</div>
 					) : (
 						// Keyed by the line, not its position, so an open comment form keeps its text when the diff refreshes.

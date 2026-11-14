@@ -124,7 +124,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 					onBlur={() => {
 						if (!pinned) setOpen(false);
 					}}
-					className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg-raised) pr-2.5 pl-1.5 text-small text-(--text-2) outline-none hover:border-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:border-(--line-strong) data-[state=open]:text-(--text)"
+					className="flex h-6 shrink-0 items-center gap-1.5 rounded-control bg-(--bg-surface) pr-2 pl-1.5 text-small font-medium text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none hover:bg-(--bg-raised) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-raised) data-[state=open]:text-(--text)"
 				>
 					<Progress done={done} total={list.length} />
 					<span className="in-num">

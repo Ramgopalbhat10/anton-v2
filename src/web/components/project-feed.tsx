@@ -501,7 +501,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	}
 	return (
 		<form
-			className="in-card relative mx-auto flex w-full max-w-[700px] flex-col focus-within:border-(--line-strong)"
+			className="composer relative mx-auto flex w-full max-w-[720px] flex-col"
 			onSubmit={(event) => {
 				event.preventDefault();
 				if (brief.trim() || attachments.count) start();
@@ -650,7 +650,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				}
 			}}
 		>
-			<div className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)" {...attachments.dropZone}>
+			<div className="composer relative mx-auto flex max-w-[720px] flex-col gap-2 px-3 pt-3 pb-2" {...attachments.dropZone}>
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<AttachmentTray attachments={attachments} />
 				<ComposerInput
@@ -740,7 +740,7 @@ export function ProjectFeed({
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-2">
-				<div className="mx-auto flex max-w-[700px] flex-col gap-5">
+				<div className="mx-auto flex max-w-[720px] flex-col gap-5">
 					{messages.length === 0 && !busy && agent.historyReady ? <Welcome space={space} onPick={setDraft} /> : null}
 					{messages.map((message) => {
 						if (message.settlement) {

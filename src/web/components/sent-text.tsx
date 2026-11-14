@@ -48,7 +48,7 @@ export function SentText({ text, className }: { text: string; className?: string
 	return (
 		<div
 			className={cn(
-				'relative rounded-control rounded-br-mark border border-(--line) bg-(--bg-overlay) px-3.5 py-2.5 text-body leading-[19px]',
+				'relative rounded-dialog rounded-br-inner bg-(--bg-raised) px-3 py-2 text-body-lg leading-[21px] shadow-[inset_0_0_0_1px_var(--line)]',
 				className,
 			)}
 		>

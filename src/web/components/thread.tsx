@@ -18,7 +18,7 @@ import { approvalOf, MailSendCard, MAIL_SEND_TOOLS } from '@/components/mail-car
 import { toolApprovalOf, ToolApprovalCard } from '@/components/tool-approval-card';
 import { HtmlFrame } from '@/components/html-frame';
 import { Logo, SandboxArt } from '@/components/illustrations';
-import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
+import { Badge, Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
 import { HoverPeek } from '@/components/hover-peek';
 import { TraceButton, TraceModal } from '@/components/trace-modal';
 import { Caption, Chip, Figure, SplitBar, StatusDot } from '@/components/instrument';
@@ -222,16 +222,16 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	const words = part.text.trim().split(/\s+/).filter(Boolean).length;
 	return (
 		<>
-			<button type="button" onClick={() => setOpen((current) => !current)} className="flex h-6 min-w-0 items-center gap-2 px-1 text-left">
-				<span className={NODE}>
-					<Icon icon={open ? ChevronDown : ChevronRight} size={12} className="text-(--text-3)" />
-				</span>
-				<span className="text-small whitespace-nowrap text-(--text-3)">
+			<button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="flex h-[26px] min-w-0 items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
+							<span className={NODE}>
+								<Icon icon={open ? ChevronDown : ChevronRight} size={13} className="text-(--text-3)" />
+							</span>
+							<span className="text-body whitespace-nowrap text-(--text-3)">
 					{part.state === 'streaming' ? 'Thinking…' : `Thought${words ? ` · ${words} words` : ''}`}
 				</span>
 			</button>
 			{open && part.text.trim() ? (
-				<div className="mx-1 mt-0.5 mb-1.5 ml-6 text-small leading-[18px] whitespace-pre-wrap text-pretty text-(--text-3)">{part.text.trim()}</div>
+				<div className="mt-0.5 mr-2 mb-1.5 ml-[30px] text-small leading-[18px] whitespace-pre-wrap text-pretty text-(--text-3)">{part.text.trim()}</div>
 			) : null}
 		</>
 	);
@@ -319,15 +319,15 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 					}
 				>
 					{running ? (
-						<Spinner size={12} />
+						<Spinner size={13} />
 					) : (
-						<Icon icon={failed ? CircleAlert : icon} size={12} className={failed ? 'text-(--bad)' : 'text-(--text-3)'} />
+						<Icon icon={failed ? CircleAlert : icon} size={14} className={failed ? 'text-(--bad)' : 'text-(--text-3)'} />
 					)}
 				</span>
 				{expandable ? (
 					<Icon
 						icon={ChevronRight}
-						size={12}
+						size={14}
 						className="absolute inset-0 text-(--text-3) opacity-0 transition-[opacity,transform] duration-(--t) ease-(--ease) group-hover/trace:opacity-100 group-focus-visible/trace:opacity-100"
 						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
 					/>
@@ -344,22 +344,22 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	const details = (
 		<>
 			{script && calls.length ? <ScriptCalls calls={calls} /> : null}
-			{failed ? <div className="mx-1 mb-1 ml-6 text-small leading-[18px] text-(--bad)">{part.errorText}</div> : null}
+			{failed ? <div className="mr-2 mb-1 ml-[30px] text-small leading-[18px] text-(--bad)">{part.errorText}</div> : null}
 			{image && imageDeleted ? (
-				<DeletedArtifact path={image} className="mx-1 mb-1 ml-6" />
+				<DeletedArtifact path={image} className="mr-2 mb-1 ml-[30px]" />
 			) : image ? (
 				<button
 					type="button"
 					title={`Open ${image}`}
 					onClick={() => openViewer({ sessionId, path: image }, [], sessionId)}
-					className="mx-1 mb-1 ml-6 block w-fit cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus)"
+					className="mr-2 mb-1 ml-[30px] block w-fit cursor-zoom-in rounded-control outline-none focus-visible:shadow-(--focus)"
 				>
 					<img src={outputUrl(sessionId, image)} alt={image} className="block max-h-48 max-w-full rounded-control border border-(--line)" />
 				</button>
 			) : null}
 			{output || (expandable && command) ? (
-				<div className="pt-1 pr-1 pb-0.5 pl-6">
-					<div className="in-well max-h-56 overflow-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-2)">
+				<div className="pt-1 pr-2 pb-1 pl-[30px]">
+					<div className="max-h-56 overflow-auto rounded-control bg-(--bg-surface) px-3 py-2.5 font-mono text-small leading-[19px] whitespace-pre text-(--text-2) shadow-[inset_0_0_0_1px_var(--line)]">
 						{`${command}${output ? `${script ? '\n\n// Result' : ''}\n${output.split('\n').slice(-40).join('\n')}` : ''}`}
 					</div>
 				</div>
@@ -374,12 +374,12 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 					aria-expanded={open}
 					aria-controls={detailsId}
 					onClick={() => setOpen((current) => !current)}
-					className="group/trace flex h-6 min-w-0 items-center gap-2 rounded-control px-1 text-left text-small text-(--text-3) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus)"
+					className="group/trace flex h-[26px] min-w-0 items-center gap-2 rounded-control px-2 text-left text-body text-(--text-2) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus)"
 				>
 					{heading}
 				</button>
 			) : (
-				<div className="flex h-6 min-w-0 items-center gap-2 px-1 text-small text-(--text-3)">{heading}</div>
+				<div className="flex h-[26px] min-w-0 items-center gap-2 px-2 text-body text-(--text-2)">{heading}</div>
 			)}
 			{expandable ? (
 				<Disclosure open={open} id={detailsId}>
@@ -422,8 +422,8 @@ function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 	);
 }
 
-/** A step's mark on the card's rail: it sits over the line so the line runs between steps. */
-const NODE = 'z-[1] inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-(--bg-surface) ring-[3px] ring-(--bg-surface)';
+/** A step's mark, at the head of its line in the worklog. */
+const NODE = 'inline-flex size-3.5 shrink-0 items-center justify-center';
 
 function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
 	const [open, setOpen] = useState(live);
@@ -437,40 +437,40 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 	const edits = changedPaths(steps);
 	const label = duration !== undefined && Number.isFinite(duration) && duration >= 1000 ? `Worked for ${elapsed(duration)}` : 'Worked';
 	return (
-		<div className="in-tile overflow-hidden">
+		<div className="flex flex-col">
 			<button
 				type="button"
 				aria-expanded={open}
 				aria-controls={detailsId}
 				onClick={() => setOpen((current) => !current)}
-				className="group/steps flex h-9 w-full items-center gap-2 pr-3 pl-2.5 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+				className="group/steps -mx-2 flex h-7 w-[calc(100%+16px)] items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 			>
 				{/* One mark: the spinner while it works, which gives way to the chevron under the pointer; the chevron alone once done. */}
 				<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
 					{live ? (
 						<span className="inline-flex group-hover/steps:hidden group-focus-visible/steps:hidden">
-							<Spinner size={12} />
+							<Spinner size={13} />
 						</span>
 					) : null}
 					<Icon
 						icon={ChevronDown}
+						size={13}
 						className={cn(
 							'text-(--text-3) transition-transform duration-(--t) ease-(--ease)',
 							live && 'hidden group-hover/steps:block group-focus-visible/steps:block',
 						)}
-						style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }}
+						style={{ transform: open ? 'rotate(0)' : 'rotate(-90deg)' }}
 					/>
 				</span>
-				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-small text-(--text-2)">{label}</div>}
-				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-micro text-(--text-3) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
+				{live ? <NowLabel /> : <div className="min-w-0 flex-auto truncate text-body font-medium text-(--text-2)">{label}</div>}
+				{edits.length ? <span className="hidden min-w-0 max-w-[45%] truncate text-small text-(--text-3) sm:inline" title={edits.join(', ')}>{edits.map((path) => path.split('/').pop()).join(', ')}</span> : null}
 				<StepStrip steps={steps} live={live} />
-				<div className="in-caption shrink-0 whitespace-nowrap">
+				<div className="in-num shrink-0 text-small whitespace-nowrap text-(--text-4)">
 					{steps.length} {steps.length === 1 ? 'step' : 'steps'}
 				</div>
 			</button>
 			<Disclosure open={open} id={detailsId}>
-				<div className="relative flex flex-col gap-px border-t border-(--line) px-2 pt-1.5 pb-2">
-					<span aria-hidden className="absolute top-4 bottom-4 left-[17.5px] w-px bg-(--line-strong)" />
+				<div className="mt-0.5 ml-1.5 flex flex-col border-l border-(--line) pl-1.5">
 					{steps.map((step, index) => (step.type === 'reasoning' ? <ThoughtRow key={index} part={step} /> : <ToolRow key={step.toolCallId} part={step} />))}
 				</div>
 			</Disclosure>
@@ -486,14 +486,14 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	const plan = field(part.input, 'plan');
 	return (
 		<div className="in-card overflow-hidden">
-			<div className="flex h-10 items-center gap-2.5 border-b border-(--line) px-3.5">
-				<span className="inline-flex size-[22px] items-center justify-center text-(--accent-text)">
-					<Icon icon={ListChecks} size={15} />
+			<div className="flex h-10 items-center gap-2 border-b border-(--line) px-3">
+				<Icon icon={ListChecks} size={14} className="text-(--text-3)" />
+				<span className="text-body font-semibold">Plan</span>
+				<span className="ml-auto">
+					<Badge tone={!plan ? 'neutral' : answer === APPROVED ? 'success' : 'accent'}>{!plan ? 'Writing' : answer === APPROVED ? 'Approved' : 'Proposed'}</Badge>
 				</span>
-				<span className="text-body font-medium">Plan</span>
-				<span className="in-caption ml-auto">{!plan ? 'Writing' : answer === APPROVED ? 'Approved' : 'Proposed'}</span>
 			</div>
-			<div className="px-4 pt-3 pb-3.5">{plan ? <Markdown text={plan} /> : <Spinner size={12} />}</div>
+			<div className="px-3.5 pt-3 pb-3.5">{plan ? <Markdown text={plan} /> : <Spinner size={12} />}</div>
 		</div>
 	);
 });
@@ -518,9 +518,9 @@ function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: strin
 		}
 	};
 	return (
-		<div className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[700px] items-center gap-2.5 rounded-full border border-(--line) bg-(--bg-surface) py-1 pr-1 pl-3.5">
-			<StatusDot tone="accent" pulse />
-			<span className="min-w-0 flex-1 text-small text-(--text-2)">
+		<div className="in-callout in-callout--accent mx-auto mt-2 flex w-[calc(100%-32px)] max-w-[720px] items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+			<StatusDot tone="accent" />
+			<span className="min-w-0 flex-1 text-body text-(--text)">
 				The plan is ready. Approve it to let Anton build it, or reply to change it.
 			</span>
 			<Btn size="sm" variant="primary" disabled={approving} onClick={() => void approve()}>
@@ -555,14 +555,14 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
 					{images.map((image, index) => (
 						<a key={image.id ?? index} href={image.url} target="_blank" rel="noreferrer">
-							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-card border border-(--line)" />
+							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-card shadow-[0_0_0_1px_var(--line)]" />
 						</a>
 					))}
 				</div>
 			) : null}
 			<SentAttachments files={files} />
 			{/* A long hash, path or URL breaks where it must, rather than widening the thread. */}
-			{text ? <SentText text={text} className="max-w-[min(520px,100%)]" /> : null}
+			{text ? <SentText text={text} className="max-w-[min(560px,85%)]" /> : null}
 			{note ? (
 				<div className="flex items-center gap-1.5 text-small text-(--text-3)">
 					<Icon icon={CornerDownRight} size={11} className="-scale-y-100" />
@@ -853,9 +853,9 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter', !live && !last && 'thread-row-settled')}>
 			{head ? (
 				<div className="flex items-center gap-2">
-					<Logo size={18} />
-					<div className="text-small font-medium text-(--text-2)">Anton</div>
-					{live ? <span className="in-caption text-(--accent-text)">Live</span> : null}
+					<Logo size={16} />
+					<div className="text-small font-medium text-(--text-3)">Anton</div>
+					{live ? <Badge tone="accent">Live</Badge> : null}
 				</div>
 			) : null}
 			{blocks.map((block, index) =>
@@ -1008,8 +1008,8 @@ const AgentsBlock = memo(
 
 function Notice({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex items-start gap-2 rounded-control border border-(--bad-line) bg-(--bad-soft) px-3 py-2 text-small leading-[18px] text-(--bad)">
-			<Icon icon={CircleAlert} size={12} className="mt-[3px]" />
+		<div className="in-callout in-callout--bad flex items-start gap-2 px-3 py-2 text-body leading-[19px] text-(--text)">
+			<Icon icon={CircleAlert} size={14} className="mt-0.5 shrink-0 text-(--bad)" />
 			<div className="min-w-0 flex-1 break-words">{children}</div>
 		</div>
 	);
@@ -1095,7 +1095,7 @@ function useNow(sessionId: string) {
 function NowLabel() {
 	const { now, took } = useNow(useContext(SessionId));
 	return (
-		<div className="flex min-w-0 flex-auto items-center gap-2 text-small">
+		<div className="flex min-w-0 flex-auto items-center gap-2 text-body">
 			<span className="in-shimmer min-w-0 truncate">{nowText(now, 'replying')}</span>
 			{now && took >= 1000 ? (
 				<span className="in-num shrink-0 text-(--text-4)" aria-hidden>
@@ -1117,8 +1117,8 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
 	const { now, took } = heard.now?.what === 'replying' && phase !== 'replying' ? { now: null, took: 0 } : heard;
 	if (quiet && now?.what === 'replying') return null;
 	return (
-		<div className="flex min-w-0 items-center gap-2 text-small text-(--text-2)">
-			<Spinner size={12} />
+		<div className="flex min-w-0 items-center gap-2 text-body text-(--text-2)">
+			<Spinner size={13} />
 			<span className="min-w-0 truncate">{nowText(now, phase)}</span>
 			{now && took >= 1000 ? (
 				<span className="in-num shrink-0 text-(--text-4)" aria-hidden>
@@ -1143,8 +1143,8 @@ const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sess
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (
-		<div role="status" className="in-tile flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-small leading-[18px] text-(--text-2)">
-			<Spinner size={12} />
+		<div role="status" className="in-callout flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-body leading-[19px] text-(--text-2)">
+			<Spinner size={13} />
 			<span className="min-w-0 flex-1">
 				Anton reads your message when {who} {running.length === 1 ? 'finishes' : 'finish'}. Stop {running.length === 1 ? 'it' : 'them'} to have it read now.
 			</span>
@@ -1388,7 +1388,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 				<div className="relative min-h-0 flex-1">
 				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
 				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-1 pl-4">
-					<div className="thread-rows mx-auto flex max-w-[700px] flex-col gap-5">
+					<div className="thread-rows mx-auto flex max-w-[720px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-card border border-(--warn-line) bg-(--warn-soft) px-3 py-2 text-small leading-[18px] text-(--warn)">
 								Add an OpenRouter key under Settings › Subscriptions to run OpenRouter models. Models on a plan, Changes, Files, Library and Terminal still work.

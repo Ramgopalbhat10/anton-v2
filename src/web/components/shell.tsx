@@ -1,7 +1,7 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { FileDiff, PanelRight } from 'lucide-react';
+import { ChevronRight, FileDiff, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -9,7 +9,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
-import { DiffStat, Icon, IconBtn } from '@/components/signal';
+import { Badge, DiffStat, Icon, IconBtn } from '@/components/signal';
 import { useChanges } from '@/components/git-tab';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
@@ -160,7 +160,7 @@ function pullRequestAsk(session: Session): string {
 		: 'Open a pull request with the changes on this branch. Write a clear title and a short description.';
 }
 
-type StatusTone = { label: string; text: string; dot: string };
+type StatusTone = { label: string; tone: 'accent' | 'danger' | 'success' };
 
 /** The panel to show when the agent hands work to its browser or computer subagent, so its work can be watched. */
 function handingTo(message: UseFlueAgentResult['messages'][number] | undefined): 'Browser' | 'Computer' | null {
@@ -174,10 +174,10 @@ function handingTo(message: UseFlueAgentResult['messages'][number] | undefined):
 }
 
 // One object per state, so the header sees the same status from chunk to chunk.
-const WORKING: StatusTone = { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent)' };
-const STOPPED: StatusTone = { label: 'Stopped', text: 'text-(--bad)', dot: 'bg-(--bad)' };
-const FAILED: StatusTone = { label: 'Failed', text: 'text-(--bad)', dot: 'bg-(--bad)' };
-const FINISHED: StatusTone = { label: 'Finished', text: 'text-(--ok)', dot: 'bg-(--ok)' };
+const WORKING: StatusTone = { label: 'Working', tone: 'accent' };
+const STOPPED: StatusTone = { label: 'Stopped', tone: 'danger' };
+const FAILED: StatusTone = { label: 'Failed', tone: 'danger' };
+const FINISHED: StatusTone = { label: 'Finished', tone: 'success' };
 
 function statusFor(agent: UseFlueAgentResult): StatusTone | null {
 	if (agent.status === 'submitted' || agent.status === 'streaming') return WORKING;
@@ -224,17 +224,31 @@ const TaskHeader = memo(function TaskHeader({
 	onAskForPullRequest: () => void;
 }) {
 	return (
-		<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
+		<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 			<MenuButton />
 			{leading}
-			{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
-			{status ? (
-				<span className={`flex shrink-0 items-center gap-1.5 text-small whitespace-nowrap ${status.text}`} title={status.label}>
-					<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
-					<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
+			{/* Where the task works, as the crumb before its name; a project's thread says its project instead. */}
+			{!leading && session?.repo ? (
+				<span className="hidden min-w-0 shrink-[2] items-center gap-1.5 text-body text-(--text-3) md:flex">
+					<span className="truncate">{session.repo.split('/').pop()}</span>
+					<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 				</span>
 			) : null}
 			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
+			{/* The state says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
+			{status ? (
+				status.label === 'Finished' ? (
+					<span className="sr-only">{status.label}</span>
+				) : (
+					<span title={status.label} className="inline-flex shrink-0">
+						<Badge tone={status.tone}>
+							<span className={cn('size-[5px] shrink-0 rounded-full bg-current', status.label === 'Working' && 'in-pulse')} />
+							<span className="hidden sm:inline">{status.label}</span>
+						</Badge>
+					</span>
+				)
+			) : null}
+			<span className="min-w-0 flex-1" />
 			{session ? <PullRequestChip session={session} /> : null}
 			{session && !isChat(session) ? <HeaderChanges sessionId={session.id} onShowPanel={onShowPanel} /> : null}
 			{session ? <TaskMenu session={session} onRename={() => onRenamingChange(true)} onAskForPullRequest={onAskForPullRequest} /> : null}

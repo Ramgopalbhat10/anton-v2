@@ -126,7 +126,7 @@ export const VmPanel = memo(function VmPanel({
 
 	return (
 		<WorkspacePane expanded={expanded} narrow={current === null && !expanded}>
-			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 px-2">
+			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 border-b border-(--line) px-2">
 				{/* On a phone the workspace covers the conversation; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
 				<PanelTabs label="Workspace panels">
@@ -134,13 +134,13 @@ export const VmPanel = memo(function VmPanel({
 						<PanelTab
 							key={name}
 							on={current === name}
-							mark={<Icon icon={panels.find((panel) => panel.name === name)!.icon} size={12} />}
+							mark={<Icon icon={panels.find((panel) => panel.name === name)!.icon} size={13} />}
 							onSelect={() => onActiveChange(name)}
 							onClose={() => close(name)}
 							closeLabel={`Close ${name}`}
 						>
 							{name}
-							{name === 'Changes' && changed ? <Count tone="accent">{changed}</Count> : null}
+							{name === 'Changes' && changed ? <Count>{changed}</Count> : null}
 						</PanelTab>
 					))}
 				</PanelTabs>
@@ -158,7 +158,7 @@ export const VmPanel = memo(function VmPanel({
 									<div key={panel.name} className="group/row flex items-center gap-0.5">
 										<MenuPrimitive.Item
 											onSelect={() => show(panel.name)}
-											className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 outline-none data-highlighted:bg-(--bg-hover)"
+											className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-inner px-2 outline-none data-highlighted:bg-(--bg-active)"
 										>
 											<span className="inline-flex shrink-0 text-(--text-2)">
 												<Icon icon={panel.icon} size={13} />
@@ -179,7 +179,7 @@ export const VmPanel = memo(function VmPanel({
 												togglePinnedPanel(panel.name);
 											}}
 											className={cn(
-												'inline-flex size-8 shrink-0 items-center justify-center rounded-control outline-none data-highlighted:bg-(--bg-hover)',
+												'inline-flex size-7 shrink-0 items-center justify-center rounded-inner outline-none data-highlighted:bg-(--bg-active)',
 												isPinned ? 'text-(--accent-text)' : 'text-(--text-3) opacity-40 group-hover/row:opacity-100 data-highlighted:opacity-100',
 											)}
 										>
@@ -207,19 +207,19 @@ export const VmPanel = memo(function VmPanel({
 			<div
 				className={cn(
 					'min-h-0 flex-1',
-					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' || current === 'Changes' ? 'flex flex-col px-3 pb-3' : 'overflow-y-auto px-3 pb-3',
+					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' || current === 'Changes' ? 'flex flex-col p-3' : 'overflow-y-auto p-3',
 				)}
 			>
 				{current === null ? (
-					<nav aria-label="Open a panel" className="flex flex-col gap-0.5 px-2 pt-1 pb-4">
-						<SectionLabel className="px-2 pt-1 pb-1.5">Open a panel</SectionLabel>
+					<nav aria-label="Open a panel" className="flex flex-col gap-px pb-4">
+						<SectionLabel className="px-2 pb-1.5">Open a panel</SectionLabel>
 						{panels.map((panel) => (
 							<button
 								type="button"
 								key={panel.name}
 								title={panel.desc}
 								onClick={() => show(panel.name)}
-								className="group/panel flex h-8 items-center gap-2.5 rounded-control px-2 text-left text-body text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+								className="group/panel flex h-7 items-center gap-2 rounded-control px-2 text-left text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 							>
 								<Icon icon={panel.icon} size={14} className="text-(--text-3) group-hover/panel:text-(--text-2)" />
 								{panel.name}
