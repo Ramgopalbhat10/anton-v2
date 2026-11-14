@@ -15,6 +15,7 @@ import {
 	List,
 	ListFilter,
 	type LucideIcon,
+	Moon,
 	PanelLeft,
 	Pin,
 	PinOff,
@@ -28,6 +29,7 @@ import {
 	SlidersHorizontal,
 	Square,
 	SquarePen,
+	Sun,
 	Waypoints,
 	X,
 } from 'lucide-react';
@@ -64,6 +66,7 @@ import {
 } from '@/lib/task-view';
 import { useSpaceName } from '@/lib/spaces';
 import { openSettings } from '@/lib/settings-modal';
+import { toggleTheme, useTheme } from '@/lib/theme';
 import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
@@ -589,6 +592,7 @@ export function ChatSidebar({
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
 	const inProject = Boolean(params.spaceId);
+	const theme = useTheme();
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const name = profile.data?.name ?? 'You';
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
@@ -709,6 +713,15 @@ export function ChatSidebar({
 				<div className="flex items-center gap-2">
 					<Avatar name={name} />
 					<div className="min-w-0 flex-1 truncate text-small font-medium text-(--text)">{name}</div>
+					<button
+						type="button"
+						onClick={toggleTheme}
+						aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+						title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+						className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm"
+					>
+						<Icon icon={theme === 'dark' ? Sun : Moon} size={14} />
+					</button>
 					<button
 						type="button"
 						onClick={() => {

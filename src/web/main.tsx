@@ -13,6 +13,7 @@ import type { ArtifactsSearch } from '@/components/artifacts-page';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
+import { bootTheme } from '@/lib/theme';
 import { OutputViewerHost } from '@/components/output-viewer';
 import { AppShell, HomePage, SessionPage } from '@/components/shell';
 import { TitleTips } from '@/components/title-tips';
@@ -23,6 +24,7 @@ import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
 const queryClient = appQueryClient();
+bootTheme();
 
 /*
  * Home and a task are in the first download; every other page loads its code
