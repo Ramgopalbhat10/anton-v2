@@ -6,6 +6,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { repoDir, workingPatchCommand } from './git.ts';
 import { bringCommit, hasCommit, OFFLINE_GIT } from './host-commits.ts';
+import { logProblem } from './log.ts';
 import { machineFor } from './workspace.ts';
 
 /** The base a merge brought in, kept in the machine until the merge is committed. */
@@ -91,6 +92,45 @@ export async function settleMergedBase(id: string, machine: Machine): Promise<vo
 	if ((await machine.exec(`git merge-base --is-ancestor ${sha} HEAD`, { cwd, env: OFFLINE_GIT })).exitCode !== 0) return;
 	await updateSession(id, { baseSha: sha });
 	await run(machine, `rm -f ${PENDING}`, { cwd });
+}
+
+const SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * The base the agent brought in with git of its own: `git fetch origin main && git merge`, a fast-forward or a
+ * rebase, where the repository lets its machine fetch. That leaves no note for `settleMergedBase`, so the task's
+ * change was still measured from where it began and held everything the base had gained: a thread asked to take the
+ * latest main and analyse, changing nothing, ended its reply with a hundred files of other pull requests as its
+ * change, and was sent back to check them against its request.
+ *
+ * The machine says which commit the branch shares with the base it fetched (its `origin/<base>`, or what it last
+ * fetched); the host says whether that commit is on the base branch, since the machine is the agent's. Only a commit
+ * past the task's base that the branch already holds moves it, so a merge left in conflict, a branch that never
+ * took the base in, and a machine that fetched nothing change nothing. Never throws: the change is then measured as
+ * it was.
+ */
+export async function settleFetchedBase(id: string, machine: Machine): Promise<void> {
+	try {
+		const session = await getSessionRecord(id);
+		if (!session?.projectId || session.review || !SHA.test(session.baseSha)) return;
+		const refs = [`refs/remotes/origin/${session.baseBranch}`, 'FETCH_HEAD'];
+		const found = await machine.exec(
+			`best=${session.baseSha}; for ref in ${refs.map(quote).join(' ')}; do shared=$(git merge-base HEAD "$ref" 2>/dev/null) || continue; ` +
+				'[ "$shared" != "$best" ] && git merge-base --is-ancestor "$best" "$shared" 2>/dev/null && best=$shared; done; printf %s "$best"',
+			{ cwd: repoDir(machine), env: OFFLINE_GIT },
+		);
+		const shared = new TextDecoder().decode(found.stdout).trim();
+		if (found.exitCode !== 0 || !SHA.test(shared) || shared === session.baseSha) return;
+		const project = await getProject(session.projectId);
+		if (!project) return;
+		const { git } = getProviders();
+		const head = await git.branchHead(project.repoFullName, session.baseBranch);
+		if (!head) return;
+		if (head !== shared && (await git.mergeBase(project.repoFullName, head, shared)) !== shared) return;
+		await updateSession(id, { baseSha: shared });
+	} catch (error) {
+		logProblem('warn', 'Could not tell whether the task branch took in a newer base', error, id);
+	}
 }
 
 /** The task's next branch after a merged pull request: `-v2`, then `-v3`, and so on. */

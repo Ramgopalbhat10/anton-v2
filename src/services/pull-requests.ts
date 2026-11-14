@@ -2,7 +2,7 @@ import { getProject } from '../db/projects.ts';
 import { getPullRequestRecord, listPullRequestRecords, type PullRequestRecord, recordPullRequest, setPullRequestState } from '../db/pull-requests.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { branchAfterMerge, conflictedFiles, settleMergedBase } from './base-merge.ts';
+import { branchAfterMerge, conflictedFiles, settleFetchedBase, settleMergedBase } from './base-merge.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { reviewAfterPush } from './code-review.ts';
 import { commitAndPush } from './git.ts';
@@ -39,6 +39,9 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 	}
 	const conflicted = await conflictedFiles(machine);
 	if (conflicted.length) throw new InvalidInputError(`Resolve the merge conflicts first, then git add the files: ${conflicted.join(', ')}`);
+	// A base the agent merged in with git of its own is the host's already: only the task's commits past it are sent.
+	await settleFetchedBase(id, machine);
+	session = (await getSessionRecord(id))!;
 	const pushed = await commitAndPush(machine, git, {
 		repo: project.repoFullName,
 		branch: session.branch,
