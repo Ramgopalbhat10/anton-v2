@@ -50,6 +50,16 @@ describe('Settings', () => {
 		for (const label of ['All settings', 'Usage and limits', 'Storage', 'Repositories', 'Commands']) expect(within(nav).getByText(label)).toBeTruthy();
 	});
 
+	it('filters the nav to the sections a search matches', async () => {
+		open('/settings');
+		const nav = await screen.findByRole('navigation', { name: 'Settings' });
+		fireEvent.change(within(nav).getByLabelText('Search settings'), { target: { value: 'secret' } });
+		expect(within(nav).getByText('Secrets')).toBeTruthy();
+		expect(within(nav).queryByText('Guardrails')).toBeNull();
+		fireEvent.change(within(nav).getByLabelText('Search settings'), { target: { value: 'zzzz' } });
+		expect(await within(nav).findByText(/No settings match/)).toBeTruthy();
+	});
+
 	it('opens a section with its breadcrumb, and says when one does not exist', async () => {
 		open('/settings/usage');
 		expect(await screen.findByRole('heading', { name: 'Usage and limits' })).toBeTruthy();
