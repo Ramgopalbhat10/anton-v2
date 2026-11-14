@@ -1,92 +1,45 @@
 import { Link } from '@tanstack/react-router';
-import { GitBranch, Github, type LucideIcon, MessageSquare } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { Pips } from '@/components/instrument';
-import { ModelLogo } from '@/components/model-picker';
+import { Github, MessageSquare } from 'lucide-react';
 import { Icon } from '@/components/signal';
-import { isLive, liveLabel, TaskStatusIcon } from '@/components/task-status';
+import { TaskStatusIcon } from '@/components/task-status';
 import { PrStatus } from '@/components/pr-status';
-import { branchLabel, isChat, type Session } from '@/lib/api';
-import { age, dollars, tokens } from '@/lib/format';
+import { isChat, repoShort, type Session } from '@/lib/api';
+import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-/** Tokens a task's replies used, in and out. */
-export const used = (session: Session) => session.usage.inputTokens + session.usage.outputTokens;
-
-/** A fact on the row's second line: an icon and a few words. */
-function Fact({ icon, mono, title, children }: { icon?: LucideIcon; mono?: boolean; title?: string; children: ReactNode }) {
-	return (
-		<span title={title} className={cn('inline-flex min-w-0 shrink items-center gap-1 text-small text-(--text-3)', mono && 'in-num')}>
-			{icon ? <Icon icon={icon} size={12} className="text-(--text-3)" /> : null}
-			<span className="truncate">{children}</span>
-		</span>
-	);
-}
-
 /**
- * A task on two lines: its state's glyph, title and pull request (coloured
- * by its state), how long ago; then where it works, its model, a failure,
- * and what it cost. The glyph says the state, so no word repeats it.
+ * A task as one dense line, the way the Tasks list reads them: its state's
+ * glyph, title and pull request, then where it works, its model, what it
+ * cost and how long ago. The right-hand facts are fixed-width and tabular,
+ * so the columns line up from row to row; `active` is the list's keyboard
+ * cursor, not a state the task is in.
  */
-export function TaskRow({ session, modelName }: { session: Session; modelName: (model: string) => string }) {
-	const runs = session.pullRequest?.runs ?? [];
-	const tokensUsed = used(session);
+export function TaskRow({ session, modelName, active = false }: { session: Session; modelName: (model: string) => string; active?: boolean }) {
 	const chat = isChat(session);
-	const live = isLive(session) && !session.working;
 	return (
 		<Link
 			to="/agents/$sessionId"
 			params={{ sessionId: session.id }}
 			search={{ app: 'code' }}
-			className="flex min-w-0 flex-col gap-0.5 rounded-control px-2.5 py-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
+			data-active={active || undefined}
+			title={session.status === 'error' ? (session.errorMessage ?? undefined) : undefined}
+			className={cn(
+				'group/row flex h-9 min-w-0 items-center gap-2.5 px-3 outline-none transition-colors duration-(--t-fast)',
+				active ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)',
+			)}
 		>
-			<div className="flex min-w-0 items-center gap-2">
-				<TaskStatusIcon session={session} size={14} />
-				<span className="min-w-0 truncate text-body leading-[18px] font-medium text-(--text)">{session.title}</span>
-				<PrStatus thread={session} showFailing={!runs.some((run) => run.status === 'failed')} />
-				{runs.length ? (
-					<Pips label={`${runs.length} checks`} items={runs.map((run) => ({ tone: run.status === 'passed' ? 'success' : run.status === 'failed' ? 'danger' : 'neutral', title: run.name }))} />
-				) : null}
-				<span className="flex-1" />
-				{live ? <span title={`Sandbox ${liveLabel(session).toLowerCase()}`} aria-label="Sandbox on" className="in-pulse size-1.5 shrink-0 rounded-full bg-(--accent)" /> : null}
-				<span className="in-num shrink-0 text-micro text-(--text-4)" title={new Date(session.createdAt).toLocaleString()}>
-					{age(session.createdAt)}
-				</span>
-			</div>
-			<div className="flex min-w-0 items-center gap-3 pl-[22px]">
-				<Fact icon={chat ? MessageSquare : Github} title={chat ? undefined : session.repo}>
-					{chat ? 'Chat' : session.repo}
-				</Fact>
-				{!chat || session.workspace ? (
-					<Fact icon={GitBranch} mono>
-						{branchLabel(session)}
-					</Fact>
-				) : null}
-				{session.model ? (
-					<span className="inline-flex min-w-0 shrink items-center gap-1 text-small text-(--text-3)" title={session.model}>
-						<ModelLogo model={session.model} size={13} />
-						<span className="truncate">{modelName(session.model)}</span>
-					</span>
-				) : null}
-				{session.status === 'error' && session.errorMessage ? (
-					<span className="min-w-0 flex-1 truncate text-small text-(--bad)" title={session.errorMessage}>
-						{session.errorMessage}
-					</span>
-				) : (
-					<span className="flex-1" />
-				)}
-				<span className="in-num flex shrink-0 items-center gap-1.5 text-micro text-(--text-3)">
-					{tokensUsed ? (
-						<>
-							<span className="text-(--text-2)">{dollars(session.usage.cost)}</span>
-							<span className="text-(--text-4)">·</span>
-							<span>{tokens(tokensUsed)} tok</span>
-						</>
-					) : (
-						'—'
-					)}
-				</span>
-			</div>
+			<TaskStatusIcon session={session} size={14} />
+			<span className="min-w-0 flex-1 truncate text-body text-(--text)">{session.title}</span>
+			<PrStatus thread={session} />
+			<span className="hidden w-[104px] shrink-0 items-center gap-1.5 text-small text-(--text-3) md:inline-flex">
+				<Icon icon={chat ? MessageSquare : Github} size={12} className="shrink-0 text-(--text-4)" />
+				<span className="truncate">{repoShort(session)}</span>
+			</span>
+			<span className="hidden w-[120px] shrink-0 truncate text-small text-(--text-3) lg:inline">{session.model ? modelName(session.model) : null}</span>
+			<span className="in-num hidden w-[64px] shrink-0 text-right text-small text-(--text-3) sm:inline">{session.usage.cost ? dollars(session.usage.cost) : null}</span>
+			<span className="in-num w-11 shrink-0 text-right text-micro text-(--text-4)" title={new Date(session.createdAt).toLocaleString()}>
+				{age(session.createdAt)}
+			</span>
 		</Link>
 	);
 }
