@@ -249,6 +249,37 @@ export function pruneContext(key: string, context: Context, point: number, now =
 	return { context: { ...context, messages }, cleared: stubs.size, tokens, call: state.calls };
 }
 
+/** The signal a coordinator's project state arrives as (`useProjectState` in src/agents/coordinator.ts): each one replaces the one before. */
+export const STATE_SIGNAL = 'project-state';
+const STATE_OPEN = `<signal type="${STATE_SIGNAL}">`;
+const STATE_GONE = `${STATE_OPEN}\nAn earlier state of the project, left out: the latest one is the project now.\n</signal>`;
+
+const isState = (message: Message) => message.role === 'user' && (typeof message.content === 'string' ? message.content : ((message.content as Part[]).find((part) => part.type === 'text')?.text ?? '')).startsWith(STATE_OPEN);
+
+/**
+ * The context with every project state but the latest given one line. A coordinator is told the project's state
+ * after each message it changed for, and the latest is the project now, yet its conversation kept them all: one
+ * project's held 91, 89K of its 161K tokens, sent on every call and afresh on the one call in three that found no
+ * cache. A state gives way when the next arrives, so a call sends afresh only what came since the state before
+ * (the last exchange), and every earlier call's start is sent as it was. The same context when it holds one state
+ * or none, which is every conversation but a coordinator's.
+ */
+export function latestStateOnly(context: Context): Context {
+	let latest = -1;
+	let earlier = false;
+	for (let index = context.messages.length - 1; index >= 0; index--) {
+		if (!isState(context.messages[index])) continue;
+		if (latest < 0) latest = index;
+		else {
+			earlier = true;
+			break;
+		}
+	}
+	if (!earlier) return context;
+	const messages = context.messages.map((message, index) => (index < latest && isState(message) ? ({ ...message, content: [{ type: 'text', text: STATE_GONE }] } as Message) : message));
+	return { ...context, messages };
+}
+
 /**
  * What the provider counted of call `call` of conversation `key` (its input, read from the cache, written to it, or
  * neither), which sizes the conversation's next call. A count for any but its latest call, or of nothing (a call that
