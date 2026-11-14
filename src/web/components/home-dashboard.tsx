@@ -110,13 +110,11 @@ function NeedsYou({ sessions }: { sessions: Session[] }) {
 	return (
 		<section aria-label="Needs you">
 			<Heading title="Needs you" aside={<Badge tone="warning">{sessions.length}</Badge>}>
-				{sessions.length > shown.length ? (
-					<Link to="/tasks" className={MORE}>
-						{sessions.length - shown.length} more <Icon icon={ArrowRight} size={12} />
-					</Link>
-				) : null}
-			</Heading>
-			<div className="in-card flex flex-col overflow-hidden">
+				<Link to="/inbox" className={MORE}>
+					Open inbox <Icon icon={ArrowRight} size={12} />
+				</Link>
+				</Heading>
+				<div className="in-card flex flex-col overflow-hidden">
 				{shown.map((session) => (
 					<CardRow key={session.id} session={session} note={session.asking ?? session.errorMessage}>
 						{/* The row is the link; this only says where it leads. */}
@@ -124,14 +122,19 @@ function NeedsYou({ sessions }: { sessions: Session[] }) {
 							{nextStep(session)}
 						</span>
 						<span className={AGE}>{age(activeAt(session))}</span>
-					</CardRow>
-				))}
-			</div>
-		</section>
-	);
-}
+						</CardRow>
+					))}
+					{sessions.length > shown.length ? (
+						<Link to="/tasks" className="flex h-8 items-center gap-1 border-t border-(--line) px-3 text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus-inset)">
+						{sessions.length - shown.length} more in Tasks <Icon icon={ArrowRight} size={12} />
+						</Link>
+					) : null}
+				</div>
+			</section>
+		);
+	}
 
-/** Tasks the agent is working on now, with what each has spent. */
+	/** Tasks the agent is working on now, with what each has spent. */
 function Running({ sessions }: { sessions: Session[] }) {
 	const shown = sessions.slice(0, SHOWN);
 	return (

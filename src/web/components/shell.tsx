@@ -1,7 +1,7 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ChevronRight, FileDiff, PanelRight } from 'lucide-react';
+import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from 'lucide-react';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -75,7 +75,7 @@ export function AppShell() {
 		setNavOpen(false);
 		setPaletteOpen(true);
 	}, []);
-	// The bell opens the Inbox page.
+	// The rail's bell opens the Inbox page.
 	const openNotifications = useCallback(() => {
 		setNavOpen(false);
 		void navigate({ to: '/inbox' });
@@ -95,11 +95,20 @@ export function AppShell() {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
 				event.preventDefault();
 				setPaletteOpen((current) => !current);
+				return;
 			}
+			// C starts a new task from anywhere a key is not meant for a field, a menu, a dialog or the terminal.
+			if (event.key.toLowerCase() !== 'c' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+			const target = event.target as HTMLElement | null;
+			if (target?.closest('input, textarea, select, canvas, [contenteditable="true"], [role="dialog"], [role="menu"], [role="listbox"], .xterm, .cm-editor')) return;
+			if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+			event.preventDefault();
+			setNavOpen(false);
+			void navigate({ to: '/' });
 		}
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	}, []);
+	}, [navigate]);
 
 	return (
 		<NavContext.Provider value={openNav}>
@@ -124,7 +133,6 @@ export function AppShell() {
 								onNavigate={closeNav}
 								onCollapse={collapse}
 								onOpenPalette={openPalette}
-								onOpenNotifications={openNotifications}
 							/>
 						</ErrorBoundary>
 					</div>
@@ -201,6 +209,28 @@ export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; o
 	</button>;
 }
 
+/** The branch the task works on, once it has one; a click copies its name. */
+function BranchPill({ branch }: { branch: string }) {
+	const [copied, setCopied] = useState(false);
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 1600);
+		return () => clearTimeout(timer);
+	}, [copied]);
+	return (
+		<button
+			type="button"
+			title={copied ? 'Copied' : 'Copy the branch name'}
+			aria-label={`Branch ${branch}: copy its name`}
+			onClick={() => void navigator.clipboard.writeText(branch).then(() => setCopied(true), () => undefined)}
+			className="hidden h-6 max-w-[220px] min-w-0 shrink items-center gap-1.5 rounded-control px-1.5 text-small font-medium text-(--text-2) outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) xl:inline-flex"
+		>
+			<Icon icon={copied ? Check : GitBranch} size={13} className="shrink-0 text-(--text-3)" />
+			<span className="truncate font-mono text-micro">{branch}</span>
+		</button>
+	);
+}
+
 const TaskHeader = memo(function TaskHeader({
 	session,
 	status,
@@ -248,6 +278,7 @@ const TaskHeader = memo(function TaskHeader({
 				)
 			) : null}
 			<span className="min-w-0 flex-1" />
+			{session && !isChat(session) && session.workspace && session.branch ? <BranchPill branch={session.branch} /> : null}
 			{session ? <PullRequestChip session={session} /> : null}
 			{session && !isChat(session) ? <HeaderChanges sessionId={session.id} onShowPanel={onShowPanel} /> : null}
 			{session ? <TaskMenu session={session} onRename={() => onRenamingChange(true)} onAskForPullRequest={onAskForPullRequest} /> : null}

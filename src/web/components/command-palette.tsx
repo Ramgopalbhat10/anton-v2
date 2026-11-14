@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, FolderKanban, GitPullRequest, List, type LucideIcon, Plus, Search, Settings, Shapes } from 'lucide-react';
+import { CircleCheck, FolderKanban, GitPullRequest, type LucideIcon, Plus, Search, Settings, Shapes, Inbox, ListTodo } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { SECTION_LIST } from '@/components/settings/section-list';
-import { Icon, Kbd, SectionLabel } from '@/components/signal';
+import { Badge, Icon, Kbd, SectionLabel } from '@/components/signal';
 import { api, repoShort } from '@/lib/api';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
@@ -29,7 +29,8 @@ type Entry = {
 type Group = { label: string; entries: Entry[] };
 
 const PAGES = [
-	{ to: '/tasks', label: 'Tasks', icon: List },
+	{ to: '/inbox', label: 'Inbox', icon: Inbox },
+	{ to: '/tasks', label: 'Tasks', icon: ListTodo },
 	{ to: '/reviews', label: 'Reviews', icon: GitPullRequest },
 	{ to: '/projects', label: 'Projects', icon: FolderKanban },
 	{ to: '/artifacts', label: 'Artifacts', icon: Shapes },
@@ -209,8 +210,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 							}
 						}}
 						placeholder="Type a command, or describe a task"
-						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body-lg text-(--text) outline-none"
+						className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body-lg text-(--text) outline-none placeholder:text-(--text-4)"
 					/>
+					<Badge>Everything</Badge>
 				</div>
 				<div className="flex max-h-[52vh] flex-col gap-px overflow-y-auto p-1.5">
 					<button
@@ -218,11 +220,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 						onMouseEnter={() => setIndex(0)}
 						onClick={() => choose(0)}
 						className={cn(
-							'relative flex h-9 items-center gap-2.5 rounded-card px-2.5 text-left',
+							'relative flex h-[34px] shrink-0 items-center gap-2.5 rounded-inner px-2.5 text-left',
 							index === 0 ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover)',
 						)}
 					>
-						<Icon icon={Plus} className="text-(--accent-text)" />
+						<Icon icon={Plus} size={15} className="text-(--text-3)" />
 						<div className="min-w-0 flex-1 truncate text-body">
 							{project || !projects.isSuccess ? 'Start a task' : 'Start a chat'}{' '}
 							<span className="text-(--text-3)">{query.trim() ? `“${query.trim()}”` : 'with a prompt…'}</span>
@@ -241,35 +243,38 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 										onMouseEnter={() => setIndex(position)}
 										onClick={() => choose(position)}
 										className={cn(
-											'flex h-8 items-center gap-2.5 rounded-card px-2.5 text-left text-(--text-2)',
-											index === position && 'bg-(--bg-active) text-(--text)',
+											'flex h-[34px] shrink-0 items-center gap-2.5 rounded-inner px-2.5 text-left text-(--text)',
+											index === position && 'bg-(--bg-active)',
 										)}
 									>
-										{entry.mark ?? <Icon icon={entry.icon} size={12} className="text-(--text-3)" />}
+										{entry.mark ?? <Icon icon={entry.icon} size={15} className="text-(--text-3)" />}
 										<div className="min-w-0 flex-1 truncate text-body">{entry.label}</div>
-										<div className="text-micro whitespace-nowrap text-(--text-4)">{entry.meta}</div>
+										<div className="text-small whitespace-nowrap text-(--text-3)">{entry.meta}</div>
 									</button>
 								);
 							})}
 						</Fragment>
 					))}
 				</div>
-				<div className="flex h-9 items-center gap-3 px-3.5 shadow-[inset_0_1px_0_var(--line)]">
-					<div className="flex items-center gap-1.5">
+				<div className="flex h-9 shrink-0 items-center gap-3.5 bg-(--bg-panel) px-3.5 text-small text-(--text-3) shadow-[inset_0_1px_0_var(--line)]">
+					<span className="flex items-center gap-1">
 						<Kbd keys="↑+↓" />
-						<span className="text-micro text-(--text-4)">Move</span>
-					</div>
-					<div className="flex items-center gap-1.5">
+						Move
+					</span>
+					<span className="flex items-center gap-1">
 						<Kbd keys="enter" />
-						<span className="text-micro text-(--text-4)">Open</span>
-					</div>
-					<div className="flex items-center gap-1.5">
-						<Kbd keys="mod+enter" />
-						<span className="text-micro text-(--text-4)">New tab</span>
-					</div>
-					<div className="flex-1" />
-					<span className="hidden text-micro text-(--text-4) sm:inline">
-						{active?.href ? '⌘↵ opens it in a new tab' : 'Describing a task starts it in a fresh sandbox'}
+						{active ? 'Open' : 'Start'}
+					</span>
+					{active?.href ? (
+						<span className="hidden items-center gap-1 sm:flex">
+							<Kbd keys="mod+enter" />
+							Open in new tab
+						</span>
+					) : null}
+					<span className="min-w-0 flex-1" />
+					<span className="flex items-center gap-1">
+						<Kbd keys="esc" />
+						Close
 					</span>
 				</div>
 			</div>

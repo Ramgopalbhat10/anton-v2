@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronLeft, GitPullRequest, MessageSquare, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GitPullRequest, Github, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { BranchArt } from '@/components/illustrations';
 import { Count, Segmented, SegmentedItem } from '@/components/instrument';
@@ -171,17 +171,27 @@ function ReviewDetail({ item, onBack }: { item: ReviewItem; onBack: () => void }
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 				<IconBtn icon={ChevronLeft} size="sm" label="Back to the list" className="md:hidden" onClick={onBack} />
-				<nav aria-label="Where you are" className="flex min-w-0 items-center gap-1.5 text-body">
-					<span className="truncate text-(--text-2)">{item.repo}</span>
-					{number ? <span className="in-num shrink-0 text-(--text-3)">#{number}</span> : null}
+				<nav aria-label="The pull request picked" className="flex min-w-0 items-center gap-1.5 text-body text-(--text-3)">
+					<span className="truncate">{item.repo}</span>
+					{number ? (
+						<>
+							<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
+							<span className="in-num shrink-0 font-medium text-(--text)">#{number}</span>
+						</>
+					) : null}
 				</nav>
 				<span className="min-w-2 flex-1" />
 				<Link to="/agents/$sessionId" params={{ sessionId: item.sessionId }} search={{ app: 'code' }} className="sg-btn sg-btn--ghost sg-btn--sm shrink-0">
+					<Icon icon={MessageSquare} size={13} />
 					Open task
 				</Link>
+				<a href={item.url} target="_blank" rel="noreferrer" className="sg-btn sg-btn--ghost sg-btn--sm shrink-0">
+					<Icon icon={Github} size={13} />
+					<span className="max-sm:hidden">GitHub</span>
+				</a>
 			</header>
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto flex w-full max-w-[760px] flex-col gap-3 px-6 py-6">
+				<div className="flex w-full max-w-[760px] flex-col gap-3 px-5 py-6 md:px-8 md:py-7">
 					<PullView
 						key={shown.url}
 						sessionId={item.sessionId}

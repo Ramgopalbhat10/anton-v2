@@ -5,12 +5,12 @@ import {
 	BellOff,
 	Check,
 	CheckCheck,
-	ChevronDown,
+	ChevronRight,
 	CircleCheck,
 	CircleDot,
+	CircleX,
 	FolderGit2,
 	GitMerge,
-	GitPullRequest,
 	Hand,
 	type LucideIcon,
 	ListChecks,
@@ -29,7 +29,8 @@ import { CATEGORIES, useNotifications } from '@/components/notifications';
 import { Markdown } from '@/components/markdown';
 import { StatusDot } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';
-import { Badge, Btn, EmptyState, FilterChip, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/signal';
+import { Badge, Btn, EmptyState, FilterChip, FilterMenu, Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
+import { Glyph, type GlyphKind } from '@/components/thread-glyph';
 import { api, type AppNotification, type NotificationCategory, type NotificationKind, repoShort, SAFETY_NET_MS } from '@/lib/api';
 import { age, plainPreview } from '@/lib/format';
 import { useOnePane } from '@/lib/one-pane';
@@ -42,31 +43,20 @@ import { cn } from '@/lib/utils';
  * with the way to its task, on a phone the row goes straight there.
  */
 
-type Tone = 'attention' | 'warning' | 'danger' | 'success' | 'accent' | 'neutral';
-
-const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; tone: Tone }> = {
-	question: { label: 'Asked you', icon: MessageCircleQuestion, tone: 'attention' },
-	plan: { label: 'Plan ready', icon: ListChecks, tone: 'attention' },
-	approval: { label: 'Needs approval', icon: Hand, tone: 'attention' },
-	replied: { label: 'Replied', icon: MessageSquareText, tone: 'accent' },
-	done: { label: 'Done', icon: CircleCheck, tone: 'success' },
-	merged: { label: 'Merged', icon: GitMerge, tone: 'success' },
-	failed: { label: 'Failed', icon: OctagonAlert, tone: 'danger' },
-	'checks-failed': { label: 'Checks failed', icon: GitPullRequest, tone: 'danger' },
-	budget: { label: 'Spending cap', icon: Wallet, tone: 'danger' },
-	'sandbox-ready': { label: 'Sandbox created', icon: Server, tone: 'neutral' },
-	'sandbox-stopped': { label: 'Sandbox stopped', icon: ServerOff, tone: 'neutral' },
-	'sandbox-failed': { label: 'Sandbox failed', icon: ServerCrash, tone: 'danger' },
-};
-
-/** A kind's colour, on its label and its bare icon: no tile behind either, like every other icon in the app. */
-const TONE: Record<Tone, { text: string; icon: string }> = {
-	attention: { text: 'text-(--warn)', icon: 'text-(--warn)' },
-	warning: { text: 'text-(--warn)', icon: 'text-(--warn)' },
-	danger: { text: 'text-(--bad)', icon: 'text-(--bad)' },
-	success: { text: 'text-(--ok)', icon: 'text-(--ok)' },
-	accent: { text: 'text-(--accent-text)', icon: 'text-(--accent-text)' },
-	neutral: { text: 'text-(--text-3)', icon: 'text-(--text-3)' },
+/** How each kind reads: its words, and its mark — a task-state glyph where the moment is a state, else an icon in the colour of what happened. */
+const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; glyph?: GlyphKind; color?: string }> = {
+	question: { label: 'Asked you', icon: MessageCircleQuestion, glyph: 'waiting' },
+	plan: { label: 'Plan ready', icon: ListChecks, glyph: 'review' },
+	approval: { label: 'Needs approval', icon: Hand, glyph: 'waiting' },
+	replied: { label: 'Replied', icon: MessageSquareText, color: 'text-(--text-3)' },
+	done: { label: 'Done', icon: CircleCheck, glyph: 'resolved' },
+	merged: { label: 'Merged', icon: GitMerge, color: 'text-(--merged)' },
+	failed: { label: 'Failed', icon: OctagonAlert, glyph: 'failed' },
+	'checks-failed': { label: 'Checks failed', icon: CircleX, color: 'text-(--bad)' },
+	budget: { label: 'Spending cap', icon: Wallet, color: 'text-(--bad)' },
+	'sandbox-ready': { label: 'Sandbox created', icon: Server, color: 'text-(--text-3)' },
+	'sandbox-stopped': { label: 'Sandbox stopped', icon: ServerOff, color: 'text-(--text-3)' },
+	'sandbox-failed': { label: 'Sandbox failed', icon: ServerCrash, color: 'text-(--bad)' },
 };
 
 /** Where rows come from: everywhere, tasks outside any project, or one project. */
@@ -115,55 +105,6 @@ function openLabel(url: string): string {
 	if (url.includes('/threads/')) return 'Open thread';
 	if (url.startsWith('/projects/')) return 'Open project';
 	return 'Open task';
-}
-
-/** One attribute filter: a hairline chip that opens a menu of what it can be, tinted when it is set. */
-function FilterMenu({
-	icon,
-	label,
-	anyLabel,
-	value,
-	valueLabel,
-	options,
-	onPick,
-}: {
-	icon: LucideIcon;
-	label: string;
-	anyLabel: string;
-	value: string | null;
-	valueLabel: string | null;
-	options: Array<{ id: string; label: string; hint?: number }>;
-	onPick: (id: string | null) => void;
-}) {
-	return (
-		<Menu>
-			<MenuTrigger asChild>
-				<button
-					type="button"
-					className={cn(
-						'inline-flex h-6 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
-						value
-							? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]'
-							: 'text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-(--bg-hover) hover:text-(--text)',
-					)}
-				>
-					<Icon icon={icon} size={12} className="shrink-0" />
-					<span className="truncate">{value ? `${label}: ${valueLabel}` : label}</span>
-					<Icon icon={ChevronDown} size={12} className="shrink-0 text-(--text-3)" />
-				</button>
-			</MenuTrigger>
-			<MenuContent align="start">
-				<MenuItem checked={value === null} onSelect={() => onPick(null)}>
-					{anyLabel}
-				</MenuItem>
-				{options.map((option) => (
-					<MenuItem key={option.id} checked={value === option.id} onSelect={() => onPick(option.id)} hint={option.hint}>
-						{option.label}
-					</MenuItem>
-				))}
-			</MenuContent>
-		</Menu>
-	);
 }
 
 export function InboxPage() {
@@ -263,141 +204,156 @@ export function InboxPage() {
 		document.getElementById(`inbox-row-${shown[cursor].id}`)?.scrollIntoView({ block: 'nearest' });
 	}, [cursor, shown]);
 
-	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
-				<MenuButton />
-				<nav aria-label="Where you are" className="flex min-w-0 items-center gap-1.5 text-body">
-					<span className="font-medium text-(--text)">Inbox</span>
-				</nav>
-				{unreadCount ? <Badge tone="accent">{unreadCount} new</Badge> : null}
-				<span className="min-w-2 flex-1" />
-				<Btn size="sm" variant="ghost" icon={CheckCheck} disabled={!unreadCount || read.isPending} onClick={() => read.mutate({ all: true })}>
-					<span className="hidden sm:inline">Mark all read</span>
-				</Btn>
-			</header>
+	const header = (
+		<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-2 md:pl-4">
+			<MenuButton />
+			<nav aria-label="Where you are" className="flex min-w-0 items-center gap-1.5 text-body">
+				<span className="font-medium text-(--text)">Inbox</span>
+			</nav>
+			{unreadCount ? <Badge tone="accent">{unreadCount} new</Badge> : null}
+			<span className="min-w-2 flex-1" />
+			<IconBtn icon={CheckCheck} size="sm" label="Mark all read" disabled={!unreadCount || read.isPending} onClick={() => read.mutate({ all: true })} />
+		</header>
+	);
 
-			{isError ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center p-6 text-small text-(--bad)">Could not load notifications.</div>
-			) : isPending ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center">
-					<Spinner size={13} />
-				</div>
-			) : all.length === 0 ? (
-				<EmptyState icon={BellOff} title="You are all caught up" body="Questions, approvals, finished work, failures and sandboxes starting or stopping show up here." />
-			) : shown.length === 0 ? (
-				<EmptyState icon={Search} title="Nothing matches these filters" body="Try another kind or place, or clear the filters." />
-			) : (
-				<>
-					<div className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4 [scrollbar-width:none]">
-						<FilterChip
-							label="Unread"
-							count={unreadCount}
-							on={filters.unreadOnly}
-							onToggle={() => {
-								change({ unreadOnly: !filters.unreadOnly });
-								setCursor(-1);
-							}}
-						/>
-						{CATEGORIES.map((category) => {
-							const on = filters.categories.includes(category.id);
-							const count = countFor(category.id);
-							const unread = data?.unread[category.id] ?? 0;
-							return (
-								<FilterChip
-									key={category.id}
-									label={category.label}
-									count={count}
-									on={on}
-									onToggle={() => {
-										change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] });
-										setCursor(-1);
-									}}
-									mark={category.id === 'needs-you' && unread ? <StatusDot tone="attention" /> : category.id === 'failures' && unread ? <StatusDot tone="danger" /> : undefined}
-								/>
-							);
-						})}
-						<span className="mx-1 h-4 w-px shrink-0 bg-(--line)" />
-						<FilterMenu
-							icon={FolderGit2}
-							label="From"
-							anyLabel="Everywhere"
-							value={filters.place === 'all' ? null : filters.place}
-							valueLabel={placeLabel}
-							options={[
-								{ id: 'tasks', label: 'Tasks outside projects' },
-								...projectsWithRows.map((id) => ({ id: `space:${id}`, label: spaceName.get(id) ?? 'Project' })),
-							]}
-							onPick={(id) => {
-								change({ place: (id ?? 'all') as Place });
-								setCursor(-1);
-							}}
-						/>
-						{filtered ? (
-							<button
-								type="button"
-								onClick={() => {
-									change(DEFAULT_FILTERS);
+	// Nothing to list: one pane, saying why.
+	if (isError || isPending || all.length === 0) {
+		return (
+			<div className="flex min-h-0 flex-1 flex-col">
+				{header}
+				{isError ? (
+					<div className="flex min-h-0 flex-1 items-center justify-center p-6 text-small text-(--bad)">Could not load notifications.</div>
+				) : isPending ? (
+					<div className="flex min-h-0 flex-1 items-center justify-center">
+						<Spinner size={13} />
+					</div>
+				) : (
+					<EmptyState icon={BellOff} title="You are all caught up" body="Questions, approvals, finished work, failures and sandboxes starting or stopping show up here." />
+				)}
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex min-h-0 flex-1">
+			<div className="flex min-h-0 w-full min-w-0 shrink-0 flex-col md:w-[380px] md:shadow-[-1px_0_0_var(--line)_inset]">
+				{header}
+				<div className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-3.5 [scrollbar-width:none]">
+					<FilterChip
+						label="Unread"
+						count={unreadCount}
+						on={filters.unreadOnly}
+						onToggle={() => {
+							change({ unreadOnly: !filters.unreadOnly });
+							setCursor(-1);
+						}}
+					/>
+					{CATEGORIES.map((category) => {
+						const on = filters.categories.includes(category.id);
+						const count = countFor(category.id);
+						const unread = data?.unread[category.id] ?? 0;
+						return (
+							<FilterChip
+								key={category.id}
+								label={category.label}
+								count={count}
+								on={on}
+								onToggle={() => {
+									change({ categories: on ? filters.categories.filter((item) => item !== category.id) : [...filters.categories, category.id] });
 									setCursor(-1);
 								}}
-								className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-control px-2 text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
-							>
-								<Icon icon={X} size={12} />
-								Clear
-							</button>
-						) : null}
-					</div>
+								mark={category.id === 'needs-you' && unread ? <StatusDot tone="attention" /> : category.id === 'failures' && unread ? <StatusDot tone="danger" /> : undefined}
+							/>
+						);
+					})}
+					<span className="mx-1 h-4 w-px shrink-0 bg-(--line)" />
+					<FilterMenu
+						icon={FolderGit2}
+						label="From"
+						anyLabel="Everywhere"
+						value={filters.place === 'all' ? null : filters.place}
+						valueLabel={placeLabel}
+						options={[
+							{ id: 'tasks', label: 'Tasks outside projects' },
+							...projectsWithRows.map((id) => ({ id: `space:${id}`, label: spaceName.get(id) ?? 'Project' })),
+						]}
+						onPick={(id) => {
+							change({ place: (id ?? 'all') as Place });
+							setCursor(-1);
+						}}
+					/>
+					{filtered ? (
+						<button
+							type="button"
+							onClick={() => {
+								change(DEFAULT_FILTERS);
+								setCursor(-1);
+							}}
+							className="inline-flex h-6 shrink-0 items-center gap-1 rounded-control px-2 text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+						>
+							<Icon icon={X} size={12} />
+							Clear
+						</button>
+					) : null}
+				</div>
 
-					<div className="flex min-h-0 flex-1">
-						<div className="flex w-[min(400px,100%)] shrink-0 flex-col border-r border-(--line)">
-							<div className="min-h-0 flex-1 overflow-y-auto">
-								{groups.map((group) => (
-									<section key={group.label} aria-label={group.label}>
-										<div className="px-3.5 pt-3 pb-1 text-micro font-medium tracking-wide text-(--text-4) uppercase">{group.label}</div>
-										<ul className="flex flex-col gap-px px-1.5 pb-2">
-											{group.rows.map((notification) => (
-												<Row
-													key={notification.id}
-													notification={notification}
-													where={where(notification)}
-													on={picked?.id === notification.id}
-													onPick={() => pick(notification)}
-													onToggleRead={() => read.mutate({ ids: [notification.id], read: !notification.read })}
-												/>
-											))}
-										</ul>
-									</section>
-								))}
-							</div>
-						</div>
-						{onePane ? null : picked ? (
-							<Detail notification={picked} where={where(picked)} onOpen={() => openRow(picked)} onToggleRead={() => read.mutate({ ids: [picked.id], read: !picked.read })} />
-						) : (
-							<div className="flex min-w-0 flex-1 items-center justify-center p-6 text-small text-(--text-4)">Pick a moment to see it here.</div>
-						)}
-					</div>
+				<div className="min-h-0 flex-1 overflow-y-auto">
+					{shown.length === 0 ? (
+						<EmptyState icon={Search} title="Nothing matches these filters" body="Try another kind or place, or clear the filters." />
+					) : (
+						groups.map((group) => (
+							<section key={group.label} aria-label={group.label}>
+								<div className="px-3.5 pt-2.5 pb-1 text-micro font-medium tracking-[0.02em] text-(--text-3)">{group.label}</div>
+								<ul className="m-0 flex list-none flex-col p-0">
+									{group.rows.map((notification) => (
+										<Row
+											key={notification.id}
+											notification={notification}
+											where={where(notification)}
+											on={!onePane && picked?.id === notification.id}
+											onPick={() => pick(notification)}
+											onToggleRead={() => read.mutate({ ids: [notification.id], read: !notification.read })}
+										/>
+									))}
+								</ul>
+							</section>
+						))
+					)}
+				</div>
 
-					<footer className="flex h-8 shrink-0 items-center gap-3 border-t border-(--line) px-4 text-small text-(--text-4)">
-						<span className="in-num">
-							{shown.length} of {all.length}
-						</span>
-						<span className="min-w-0 flex-1" />
-						<span className="hidden items-center gap-1.5 sm:flex">
-							<Kbd keys="j" size="sm" />
-							<Kbd keys="k" size="sm" />
-							move
-						</span>
-						<span className="hidden items-center gap-1.5 sm:flex">
-							<Kbd keys="enter" size="sm" />
-							open
-						</span>
-					</footer>
-				</>
+				<footer className="flex h-8 shrink-0 items-center gap-3 border-t border-(--line) px-3.5 text-small text-(--text-3)">
+					<span className="in-num">
+						{shown.length} of {all.length}
+					</span>
+					<span className="min-w-0 flex-1" />
+					<span className="hidden items-center gap-1.5 sm:flex">
+						<Kbd keys="j" size="sm" />
+						<Kbd keys="k" size="sm" />
+						move
+					</span>
+					<span className="hidden items-center gap-1.5 sm:flex">
+						<Kbd keys="enter" size="sm" />
+						open
+					</span>
+				</footer>
+			</div>
+			{onePane ? null : picked ? (
+				<Detail notification={picked} where={where(picked)} onOpen={() => openRow(picked)} onToggleRead={() => read.mutate({ ids: [picked.id], read: !picked.read })} />
+			) : (
+				<div className="flex min-w-0 flex-1 items-center justify-center p-6 text-small text-(--text-4)">Pick a moment to see it here.</div>
 			)}
 		</div>
 	);
 }
 
+/** A kind's mark: the task-state glyph it stands for, or the pull request's icon in its colour. */
+function KindMark({ kind, size = 14 }: { kind: NotificationKind; size?: number }) {
+	const look = LOOK[kind];
+	if (look.glyph) return <Glyph kind={look.glyph} size={size} />;
+	return <Icon icon={look.icon} size={size} className={look.color} />;
+}
+
+/** One moment: its mark, the task it is about over what happened, its age and an unread dot. */
 function Row({
 	notification,
 	where,
@@ -412,36 +368,38 @@ function Row({
 	onToggleRead: () => void;
 }) {
 	const look = LOOK[notification.kind];
-	const tone = TONE[look.tone];
+	const preview = plainPreview(notification.body);
 	return (
-		<li id={`inbox-row-${notification.id}`} className="group/row relative">
+		<li id={`inbox-row-${notification.id}`} className="group/row relative not-first:border-t not-first:border-(--line)">
 			<button
 				type="button"
 				onClick={onPick}
 				aria-current={on || undefined}
 				className={cn(
-					'flex w-full items-start gap-3 rounded-control px-2.5 py-2.5 pr-9 text-left outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
+					'flex min-h-[52px] w-full items-start gap-2.5 px-3.5 pt-[9px] pb-2 text-left outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus-inset)',
 					on ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover)',
-					notification.read && 'opacity-[0.72] hover:opacity-100',
 				)}
 			>
-				<span className={cn('mt-[3px] inline-flex size-4 shrink-0 items-center justify-center', tone.icon)}>
-					<Icon icon={look.icon} size={15} />
+				<span className="mt-0.5 inline-flex shrink-0">
+					<KindMark kind={notification.kind} />
 				</span>
-				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="flex min-w-0 flex-1 flex-col gap-px">
 					{notification.read ? null : <span className="sr-only">Unread: </span>}
-					<span className="flex min-w-0 items-center gap-2">
-						<span className={cn('min-w-0 flex-1 truncate text-body', notification.read ? 'text-(--text-2)' : 'font-medium text-(--text)')}>{notification.title}</span>
-					</span>
-					<span className="truncate text-small leading-[17px] text-(--text-3)">{plainPreview(notification.body)}</span>
-					<span className="flex min-w-0 items-center gap-1.5 pt-0.5 text-micro">
-						<span className={cn('shrink-0 font-medium', tone.text)}>{look.label}</span>
+					<span className={cn('truncate text-body leading-[18px]', notification.read ? 'text-(--text-2)' : 'font-medium text-(--text)')}>{notification.title}</span>
+					<span className="flex min-w-0 items-center gap-1.5 text-small leading-4 text-(--text-3)">
+						<span className="shrink-0">{look.label}</span>
 						<span className="text-(--text-4)">·</span>
-						<span className="min-w-0 truncate text-(--text-4)">{where}</span>
+						<span className="max-w-[40%] shrink-0 truncate">{where}</span>
+						{preview ? (
+							<>
+								<span className="text-(--text-4)">·</span>
+								<span className="min-w-0 truncate">{preview}</span>
+							</>
+						) : null}
 					</span>
 				</span>
-				<span className="mt-1 flex shrink-0 flex-col items-end gap-1.5">
-					<span className="text-micro text-(--text-4) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
+				<span className="flex shrink-0 flex-col items-end gap-1.5 group-hover/row:invisible group-has-focus-visible/row:invisible">
+					<span className="in-num text-small leading-[18px] text-(--text-3)" title={new Date(notification.createdAt).toLocaleString()}>
 						{age(notification.createdAt)}
 					</span>
 					{notification.read ? null : <span aria-hidden className="size-1.5 rounded-full bg-(--accent)" />}
@@ -452,13 +410,13 @@ function Row({
 				size="xs"
 				label={notification.read ? 'Mark unread' : 'Mark read'}
 				onClick={onToggleRead}
-				className="absolute top-2 right-1.5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
+				className="absolute top-2 right-2.5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
 			/>
 		</li>
 	);
 }
 
-/** The picked moment beside the list: what it says, where it is from, and the way to its task. */
+/** The picked moment beside the list: where it is from, what it says, and the way to its task. */
 function Detail({
 	notification,
 	where,
@@ -471,34 +429,39 @@ function Detail({
 	onToggleRead: () => void;
 }) {
 	const look = LOOK[notification.kind];
-	const tone = TONE[look.tone];
 	return (
 		<div className="flex min-w-0 flex-1 flex-col">
+			<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-4">
+				<nav aria-label="The moment picked" className="flex min-w-0 items-center gap-1.5 text-body text-(--text-3)">
+					<span className="max-w-[160px] shrink-0 truncate">{where}</span>
+					<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
+					<span className="min-w-0 truncate font-medium text-(--text)">{notification.title}</span>
+				</nav>
+				<span className="min-w-2 flex-1" />
+				<Btn size="sm" variant="ghost" icon={notification.read ? CircleDot : Check} onClick={onToggleRead} className="shrink-0">
+					{notification.read ? 'Mark unread' : 'Mark read'}
+				</Btn>
+				<Btn size="sm" variant="secondary" onClick={onOpen} className="shrink-0">
+					{openLabel(notification.url)}
+					<Icon icon={ArrowUpRight} size={13} />
+				</Btn>
+			</header>
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto flex max-w-[620px] flex-col gap-4 px-6 py-8">
-					<div className="flex items-center gap-2 text-small">
-						<Icon icon={look.icon} size={14} className={tone.icon} />
-						<span className={cn('font-medium', tone.text)}>{look.label}</span>
-						<span className="text-(--text-4)">·</span>
-						<span className="min-w-0 truncate text-(--text-3)">{where}</span>
-						<span className="min-w-0 flex-1" />
-						<span className="shrink-0 text-(--text-4) tabular-nums" title={new Date(notification.createdAt).toLocaleString()}>
-							{age(notification.createdAt)}
+				<div className="mx-auto flex max-w-[640px] flex-col gap-4 px-7 py-10">
+					<div className="flex items-center gap-2 text-small text-(--text-3)">
+						<KindMark kind={notification.kind} />
+						<span className="min-w-0 truncate">
+							{look.label}
+							<span className="text-(--text-4)"> · </span>
+							<span className="in-num" title={new Date(notification.createdAt).toLocaleString()}>
+								{age(notification.createdAt)} ago
+							</span>
 						</span>
 					</div>
-					<h2 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.01em] text-(--text)">{notification.title}</h2>
+					<h2 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.015em] text-(--text)">{notification.title}</h2>
 					<Markdown text={notification.body} />
 				</div>
 			</div>
-			<footer className="flex h-12 shrink-0 items-center gap-2 border-t border-(--line) px-4">
-				<Btn size="sm" variant="ghost" onClick={onToggleRead}>
-					{notification.read ? 'Mark unread' : 'Mark read'}
-				</Btn>
-				<span className="min-w-0 flex-1" />
-				<Btn size="sm" variant="primary" icon={ArrowUpRight} onClick={onOpen}>
-					{openLabel(notification.url)}
-				</Btn>
-			</footer>
 		</div>
 	);
 }
