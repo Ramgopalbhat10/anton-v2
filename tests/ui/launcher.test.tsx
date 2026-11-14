@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({ mutate: vi.fn(), navigate: vi.fn() }));
 const api = vi.hoisted(() => ({
 	projects: vi.fn(),
 	sessions: vi.fn(),
+	profile: vi.fn(async () => ({ name: 'Ada Lovelace' })),
 	models: vi.fn(),
 	generalSettings: vi.fn(),
 	branches: vi.fn(),

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
+import { ArrowUp, ListChecks, SquareDashedMousePointer, Square, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
@@ -65,12 +65,13 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
 	return (
 		<Btn
-			size="xs"
-			variant={on ? 'secondary' : 'ghost'}
+			size="sm"
+			variant="ghost"
 			icon={ListChecks}
 			aria-pressed={on}
 			title={on ? 'Plan mode: the agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
 			onClick={() => onChange(!on)}
+			className={on ? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)] hover:bg-(--accent-soft) hover:text-(--accent-text)' : 'text-(--text-2)'}
 		>
 			Plan
 		</Btn>
@@ -217,11 +218,11 @@ export const Composer = memo(function Composer({
 			}}
 		>
 			{/* The agent's todo list, while the task has one; it renders nothing otherwise. */}
-			<div className="mx-auto mb-1.5 flex max-w-[700px] justify-center empty:hidden">
+			<div className="mx-auto mb-1.5 flex max-w-[720px] justify-center empty:hidden">
 				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
 			</div>
 			<div
-				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)"
+				className="composer relative mx-auto flex max-w-[720px] flex-col gap-2 px-3 pt-3 pb-2"
 				{...attachments.dropZone}
 			>
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
@@ -254,8 +255,8 @@ export const Composer = memo(function Composer({
 							</>
 						) : null}
 					</div>
-					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
+					{busy ? <IconBtn icon={Square} variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
+					<IconBtn type="submit" icon={ArrowUp} variant="inverse" label="Send message" disabled={!ready} />
 				</div>
 			</div>
 		</form>
