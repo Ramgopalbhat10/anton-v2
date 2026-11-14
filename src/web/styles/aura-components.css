@@ -450,7 +450,7 @@
 }
 
 /* The sidebar slides like a sheet: its column narrows to the rail while the
-   sidebar keeps its 288px and moves out, so nothing in it reflows. On a phone
+   sidebar keeps its 236px and moves out, so nothing in it reflows. On a phone
    it is a sheet over the page, slid in from the left. */
 .sg-nav { transition: transform var(--t-slow) var(--ease), visibility 0s; }
 .sg-nav-rail { transition: opacity var(--t-slow) var(--ease), visibility 0s; }
@@ -472,7 +472,7 @@
  .sg-nav[data-open='false'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
 }
 @media (min-width: 768px) {
- .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: 288px; overflow: hidden; transition: width var(--t-slow) var(--ease); }
+ .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: 236px; overflow: hidden; transition: width var(--t-slow) var(--ease); }
  .sg-nav-column[data-collapsed='true'] { width: 48px; }
  .sg-nav[data-collapsed='true'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
 }

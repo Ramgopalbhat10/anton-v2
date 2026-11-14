@@ -16,8 +16,8 @@ export const STATE_COLOR: Record<GlyphKind, string> = {
 	waiting: 'var(--warn)',
 	working: 'var(--accent)',
 	queued: 'var(--track)',
-	review: 'var(--ok)',
-	landing: 'color-mix(in srgb, var(--ok) 55%, var(--text))',
+	review: 'var(--merged)',
+	landing: 'var(--ok)',
 	idle: 'var(--text-4)',
 	resolved: 'var(--bg-active)',
 };
@@ -36,13 +36,15 @@ export const KIND_LABEL: Record<GlyphKind, string> = {
 	resolved: 'Done',
 };
 
-const CHECK = 'M5.4 8.3l1.8 1.8 3.5-3.8';
+const CHECK = 'M5 8.2l2.1 2.1 3.9-4.2';
 
 /**
- * A state as a small drawn mark, so a list reads at a glance without words:
- * a turning dashed ring while it works, an amber dot that calls out while it
- * waits on you, red with a bang when it failed, dotted while queued, a green
- * check when ready, filled when approved, and a green check on a soft disc once done.
+ * A state as a small drawn mark, so a list reads by shape as well as colour:
+ * a dashed ring while queued, an accent ring with a turning wedge while it
+ * works, an amber ring and dot while it waits on you, a violet ring three
+ * quarters full in review, a green ring with a check once approved, a solid
+ * green check when done, solid red with a bang when it failed, and a plain
+ * grey ring when idle.
  */
 export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; size?: number; className?: string; title?: string }) {
 	const color = STATE_COLOR[kind];
@@ -60,43 +62,39 @@ export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; 
 		>
 			{kind === 'working' ? (
 				<>
-					<circle cx="8" cy="8" r="6" stroke={color} strokeOpacity="0.28" strokeWidth="1.5" />
-					<circle className="glyph-spin" cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="9 28.7" />
-					<circle className="in-pulse" cx="8" cy="8" r="2" fill={color} />
+					<circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.6" />
+					{/* A wedge: a thick stroke on a small circle, dashed to three fifths of the way round. */}
+					<circle className="glyph-spin" cx="8" cy="8" r="2" stroke={color} strokeWidth="4" strokeDasharray="7.54 5.03" />
 				</>
 			) : kind === 'waiting' ? (
 				<>
-					<circle className="glyph-halo" cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-					<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-					<circle cx="8" cy="8" r="2.5" fill={color} />
+					<circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.6" />
+					<circle cx="8" cy="8" r="3.4" fill={color} />
 				</>
 			) : kind === 'failed' ? (
 				<>
-					<circle cx="8" cy="8" r="6" fill="var(--bad-soft)" stroke={color} strokeWidth="1.5" />
-					<path d="M8 4.9v3.6" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
-					<circle cx="8" cy="10.9" r="0.95" fill={color} />
+					<circle cx="8" cy="8" r="7.4" fill={color} />
+					<path d="M8 4.5v4" stroke="var(--bg-panel)" strokeWidth="1.7" strokeLinecap="round" />
+					<circle cx="8" cy="11.2" r="1" fill="var(--bg-panel)" />
 				</>
 			) : kind === 'queued' ? (
-				<circle cx="8" cy="8" r="6" stroke="var(--text-4)" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0.1 2.95" />
+				<circle cx="8" cy="8" r="6.6" stroke="var(--text-4)" strokeWidth="1.6" strokeDasharray="2.6 2.58" />
 			) : kind === 'review' ? (
 				<>
-					<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-					<path d={CHECK} stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.6" />
+					<circle cx="8" cy="8" r="2" stroke={color} strokeWidth="4" strokeDasharray="9.42 3.15" transform="rotate(-90 8 8)" />
 				</>
 			) : kind === 'landing' ? (
 				<>
-					<circle cx="8" cy="8" r="6.75" fill="var(--ok)" />
-					<path d={CHECK} stroke="var(--bg-app)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.6" />
+					<path d={CHECK} stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
 				</>
 			) : kind === 'idle' ? (
-				<>
-					<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" strokeDasharray="3.1 2.2" />
-					<circle cx="8" cy="8" r="1.6" fill={color} />
-				</>
+				<circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.6" />
 			) : (
 				<>
-					<circle cx="8" cy="8" r="6.75" fill="color-mix(in oklab, var(--ok) 20%, transparent)" />
-					<path d={CHECK} stroke="var(--ok)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+					<circle cx="8" cy="8" r="7.4" fill="var(--ok)" />
+					<path d={CHECK} stroke="var(--bg-panel)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
 				</>
 			)}
 		</svg>

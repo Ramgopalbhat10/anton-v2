@@ -31,7 +31,7 @@ function SpaceSignal({ space }: { space: Space }) {
 }
 
 const ROW =
-	'group/row relative flex min-w-0 items-center gap-2.5 rounded-control pr-2 pl-2 text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)';
+	'group/row relative flex min-w-0 shrink-0 items-center gap-2 rounded-control px-2 text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)';
 
 /** The page you are on, lifted out as a small card. */
 const LIFTED = 'data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
@@ -39,7 +39,7 @@ const LIFTED = 'data-[status=active]:bg-(--bg-active) data-[status=active]:text-
 /** A sidebar section's heading: its label and count in quiet type, and actions on hover. */
 export function SidebarHeading({ label, count, open, onToggle, tone, children }: { label: string; count?: number; open: boolean; onToggle: () => void; tone?: string; children?: ReactNode }) {
 	return (
-		<div className="group/header mt-2 flex h-7 items-center gap-1 pr-2.5 pl-3">
+		<div className="group/header mt-2 flex h-6 items-center gap-1">
 			<button
 				type="button"
 				aria-expanded={open}
@@ -79,7 +79,7 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 	);
 	const look = 'flex h-6 min-w-0 shrink-0 items-center gap-1.5 text-small font-medium text-(--text-3)';
 	return (
-		<div className={cn('group/group mt-4 flex h-7 items-center gap-2 pr-2.5 pl-5', className)}>
+		<div className={cn('group/group mt-3 flex h-6 items-center gap-1 pl-2', className)}>
 			{onToggle ? (
 				<button type="button" aria-expanded={open} onClick={onToggle} className={cn(look, 'rounded-control outline-none hover:text-(--text) focus-visible:shadow-(--focus)')}>
 					{name}
@@ -87,8 +87,13 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 			) : (
 				<h2 className={cn(look, 'm-0')}>{name}</h2>
 			)}
-			<span aria-hidden className="h-px min-w-3 flex-1 bg-(--line)" />
-			{children ? <span className="-my-1 flex shrink-0 items-center">{children}</span> : null}
+			<span className="flex-1" />
+			{/* Its actions wait for the pointer or the keyboard, and stay while a menu of theirs is open. */}
+			{children ? (
+				<span className="flex shrink-0 items-center opacity-0 transition-opacity duration-(--t-fast) group-focus-within/group:opacity-100 group-hover/group:opacity-100 has-data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100">
+					{children}
+				</span>
+			) : null}
 		</div>
 	);
 }
@@ -101,22 +106,22 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	if (!spaces.data) return null;
 	return (
 		<section aria-label="Projects" className="flex flex-col">
-			<GroupHeading label="Projects" count={list.length} open={open} onToggle={() => setOpen((current) => !current)} className="mt-3">
+			<GroupHeading label="Projects" count={list.length} open={open} onToggle={() => setOpen((current) => !current)}>
 				<Link to="/projects" search={{ create: true }} onClick={onNavigate} aria-label="New project" title="New project" className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--xs">
 					<Icon icon={Plus} size={12} />
 				</Link>
 			</GroupHeading>
 			{open ? (
-				<div className="flex flex-col gap-0.5 px-3 pt-1">
+				<div className="flex flex-col gap-px">
 					{list.map((space) => (
-						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-9 pl-1.5')}>
-							<SpaceMark space={space} size={24} />
-							<span className="min-w-0 flex-1 truncate text-body">{space.name}</span>
+						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-7')}>
+							<SpaceMark space={space} size={16} />
+							<span className="min-w-0 flex-1 truncate text-body font-medium">{space.name}</span>
 							<SpaceSignal space={space} />
 						</Link>
 					))}
 					{list.length === 0 ? (
-						<Link to="/projects" search={{ create: true }} onClick={onNavigate} className="mx-0 rounded-control px-2 py-1 text-small text-(--text-4) hover:bg-(--bg-hover) hover:text-(--text-3)">
+						<Link to="/projects" search={{ create: true }} onClick={onNavigate} className="rounded-control px-2 py-1 text-small text-(--text-4) hover:bg-(--bg-hover) hover:text-(--text-3)">
 							Group work and run threads in parallel.
 						</Link>
 					) : null}
@@ -135,11 +140,11 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 			params={{ spaceId: thread.spaceId ?? '', threadId: thread.id }}
 			onClick={onNavigate}
 			aria-current={active ? 'page' : undefined}
-			className={cn(ROW, 'h-11', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
+			className={cn(ROW, 'h-10', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
 		>
 			{active ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
-			<span className="relative inline-flex shrink-0 self-start pt-[7px]">
-				<ThreadStateIcon thread={thread} size={13} />
+			<span className="relative inline-flex shrink-0 self-start pt-1">
+							<ThreadStateIcon thread={thread} size={14} />
 			</span>
 			<span className="relative flex min-w-0 flex-1 flex-col gap-px">
 				<span className="truncate text-body">{thread.title}</span>
@@ -170,7 +175,7 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 				tone={state === 'waiting' ? 'text-(--warn)' : state === 'working' ? 'text-(--accent-text)' : state === 'review' || state === 'landing' ? 'text-(--ok)' : undefined}
 			/>
 			{open ? (
-				<div className="flex flex-col gap-0.5 px-3">
+				<div className="flex flex-col gap-px">
 					{threads.map((thread) => (
 						<ThreadRow key={thread.id} thread={thread} active={thread.id === activeId} repos={repos} onNavigate={onNavigate} />
 					))}
@@ -194,7 +199,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 	const coordinatorActive = !threadId;
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex flex-col gap-1.5 px-3 pb-1">
+			<div className="flex flex-col gap-1.5 pb-1">
 				<div className="flex h-6 items-center gap-1">
 					<Link to="/" onClick={onNavigate} className="flex h-6 items-center gap-1.5 rounded-control px-1.5 text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
 						<Icon icon={ArrowLeft} size={12} />
@@ -209,12 +214,12 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex flex-col rounded-card border border-(--line) bg-(--bg-hover) p-2 text-left outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
+							className="flex flex-col rounded-control bg-(--bg-hover) p-1.5 text-left shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
-								{space ? <SpaceMark space={space} size={30} /> : <span className="size-[30px]" />}
-								<span className="flex min-w-0 flex-1 flex-col gap-px">
-									<span className="truncate text-body-lg font-medium text-(--text)">{space?.name ?? 'Project'}</span>
+								{space ? <SpaceMark space={space} size={26} /> : <span className="size-[26px]" />}
+																<span className="flex min-w-0 flex-1 flex-col gap-px">
+																	<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
 									<span className="in-num truncate text-micro text-(--text-3)">
 										{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
 									</span>
@@ -223,7 +228,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 							</span>
 						</button>
 					</MenuTrigger>
-					<MenuContent align="start" className="w-[264px]">
+					<MenuContent align="start" className="w-[220px]">
 						{(spaces.data?.spaces ?? [])
 							.filter((item) => item.state !== 'archived')
 							.map((item) => (
@@ -247,27 +252,27 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					</MenuContent>
 				</Menu>
 			</div>
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
-				<div className="px-3 pt-1.5">
+			<div className="-mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 pb-2">
+				<div className="pt-1.5">
 					<Link
 						to="/projects/$spaceId"
 						params={{ spaceId }}
 						onClick={onNavigate}
 						aria-current={coordinatorActive ? 'page' : undefined}
-						className={cn(ROW, 'h-10 pl-1.5', coordinatorActive && 'text-(--text)')}
+						className={cn(ROW, 'h-7', coordinatorActive && 'text-(--text)')}
 					>
 						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
-						<span className="relative inline-flex size-7 shrink-0 items-center justify-center text-(--accent-text)">
+						<span className="relative inline-flex shrink-0 items-center justify-center text-(--accent-text)">
 							<Icon icon={Waypoints} size={15} />
 						</span>
-						<span className="relative min-w-0 flex-1 truncate text-body">Coordinator</span>
+						<span className="relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
 					</Link>
 				</div>
 				{groups.map((group) => (
 					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
 				))}
 				{threads.length === 0 ? (
-					<div className="px-5 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
+					<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
 				) : null}
 			</div>
 		</div>

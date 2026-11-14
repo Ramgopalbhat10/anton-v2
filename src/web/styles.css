@@ -189,10 +189,26 @@ textarea::placeholder {
 	}
 }
 
+/* The work panel: every page sits in one panel, inset on the window's canvas
+   beside the sidebar. On a phone the panel is the whole window. */
 .app-main {
 	position: relative;
 	z-index: 1;
 	background: var(--bg-panel);
+}
+@media (min-width: 768px) {
+	/* A border, not a line drawn inside: a page's own fills must not cover the panel's edge. */
+	.app-main {
+		margin: 8px 8px 8px 0;
+		overflow: hidden;
+		border: 1px solid var(--line);
+		border-radius: var(--r-8);
+		box-shadow: var(--sh-1);
+	}
+	/* With no sidebar beside it (an incognito chat), the panel keeps its margin all round. */
+	.app-main--alone {
+		margin-left: 8px;
+	}
 }
 
 /* The composer: the one surface with a 12px corner and a shadow of its own

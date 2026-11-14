@@ -103,7 +103,7 @@ export function AppShell() {
 	return (
 		<NavContext.Provider value={openNav}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
-			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text)">
+			<div className="flex h-dvh overflow-hidden bg-(--bg-app) pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text)">
 				<button
 					type="button"
 					aria-label="Close sidebar"
@@ -128,7 +128,7 @@ export function AppShell() {
 						</ErrorBoundary>
 					</div>
 				)}
-				<main className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
+				<main className={cn('app-main flex min-h-0 min-w-0 flex-1 flex-col', incognito && 'app-main--alone')}>
 					<Outlet />
 				</main>
 				<ErrorBoundary label="The command palette" className={FLOATING}>
