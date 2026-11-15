@@ -161,7 +161,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 		<Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
 			<Dialog.Portal>
 				<Dialog.Overlay className="fixed inset-0 z-40 bg-(--bg-scrim)" />
-				<Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className="in-card fixed top-[10vh] left-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 flex-col overflow-hidden shadow-(--sh-3)">
+				<Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className="in-pop in-pop--modal fixed top-[10vh] left-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 flex-col overflow-hidden">
 			<form
 				className="flex min-h-0 flex-col"
 				onSubmit={(event) => {
@@ -170,7 +170,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 				}}
 			>
 				<header className="flex items-center gap-2 border-b border-(--line) px-4 py-3">
-					<Icon icon={FolderKanban} size={14} className="text-(--accent-text)" />
+					<Icon icon={FolderKanban} size={14} className="text-(--text-3)" />
 					<Dialog.Title className="flex-1 text-body-lg font-medium">New project</Dialog.Title>
 					<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
 				</header>
@@ -193,8 +193,10 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 										aria-pressed={on}
 										onClick={() => toggle(project.id)}
 										className={cn(
-											'flex h-9 items-center gap-2.5 rounded-card border px-2.5 text-left text-body outline-none focus-visible:shadow-(--focus)',
-											on ? 'border-(--accent-line) bg-(--accent-soft) text-(--text)' : 'border-(--line) bg-(--bg-raised) text-(--text-2) hover:border-(--line-strong)',
+											'flex h-8 items-center gap-2 rounded-control px-2.5 text-left text-body outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
+											on
+												? 'bg-(--accent-soft) text-(--text) shadow-[inset_0_0_0_1px_var(--accent-line)]'
+												: 'bg-(--bg-raised) text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-(--bg-overlay) hover:text-(--text)',
 										)}
 									>
 										<Icon icon={FolderGit2} size={13} className={on ? 'text-(--accent-text)' : 'text-(--text-3)'} />
@@ -262,7 +264,7 @@ export function ProjectsPage() {
 					<span className="font-medium text-(--text)">Projects</span>
 				</nav>
 				<span className="min-w-2 flex-1" />
-				<SearchField value={query} onChange={setQuery} placeholder="Search projects" label="Search projects" className="hidden w-[200px] shrink-0 md:flex" />
+				<SearchField value={query} onChange={setQuery} placeholder="Search projects" label="Search projects" size="sm" className="hidden w-[200px] shrink-0 md:flex" />
 				<Btn size="sm" variant="primary" icon={Plus} onClick={() => setCreating(true)} className="shrink-0">
 					New project
 				</Btn>
@@ -304,13 +306,11 @@ export function ProjectsPage() {
 							<button
 								type="button"
 								onClick={() => setCreating(true)}
-								className="group/new flex min-h-[190px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-(--line-strong) px-6 text-center outline-none transition-colors hover:border-(--accent-line) hover:bg-(--accent-soft) focus-visible:shadow-(--focus)"
+								className="group/new flex min-h-[180px] flex-col items-center justify-center gap-1.5 rounded-card border border-dashed border-(--line-strong) px-6 text-center text-(--text-3) outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
 							>
-								<span className="inline-flex size-9 items-center justify-center rounded-full bg-(--bg-active) text-(--text-2) group-hover/new:bg-(--accent-soft) group-hover/new:text-(--accent-text)">
-									<Icon icon={Plus} size={16} />
-								</span>
+								<Icon icon={Plus} size={18} />
 								<span className="text-body font-medium text-(--text-2) group-hover/new:text-(--text)">New project</span>
-								<span className="max-w-[220px] text-small leading-4 text-(--text-4)">A goal, its repositories, and a coordinator that runs threads in parallel.</span>
+								<span className="text-small leading-4">Start from a goal or a repository</span>
 							</button>
 						</div>
 					) : list.length ? (

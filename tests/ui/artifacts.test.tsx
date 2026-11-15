@@ -127,7 +127,9 @@ describe('Artifacts', () => {
 		await waitFor(() => expect(client.getQueryData(['artifact-snippet', 's1', 'reports/findings.md'])).toBeDefined());
 		expect(screen.queryByText('END OF DOCUMENT')).toBeNull();
 		expect(client.getQueryData(['output', 's1', 'reports/findings.md'])).toBeUndefined();
+		// The first click picks the card for the sheet; Open there shows it full size.
 		await userEvent.click(screen.getByRole('link', { name: 'findings.md, document from Budget task' }));
+		await userEvent.click(within(screen.getByRole('complementary', { name: 'findings.md, picked' })).getByRole('link', { name: 'Open' }));
 		expect(await screen.findByText('END OF DOCUMENT')).toBeTruthy();
 	});
 
@@ -278,7 +280,14 @@ describe('Artifacts', () => {
 		expect(within(apps).getByText('Budget planner')).toBeTruthy();
 		expect(within(files).getByText('findings.md')).toBeTruthy();
 		expect(within(files).getByText('home.png')).toBeTruthy();
-		await userEvent.click(screen.getByRole('link', { name: 'Budget planner, app from Budget task' }));
+		// A click picks the card: the sheet beside the gallery says what it is and where it is from.
+		const card = screen.getByRole('link', { name: 'Budget planner, app from Budget task' });
+		await userEvent.click(card);
+		expect(router.state.location.pathname).toBe('/artifacts');
+		const sheet = screen.getByRole('complementary', { name: 'Budget planner, picked' });
+		expect(within(sheet).getByRole('link', { name: 'Budget task' })).toBeTruthy();
+		// A click on the picked card opens it, as the sheet's Open does.
+		await userEvent.click(card);
 		expect(router.state.location.pathname).toBe('/artifacts/s1');
 		expect(router.state.location.search).toEqual({ path: 'renders/budget-planner-a1b2c3.html' });
 	});

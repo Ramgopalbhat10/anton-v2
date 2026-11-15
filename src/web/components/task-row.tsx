@@ -24,7 +24,7 @@ export function TaskRow({ session, modelName, active = false }: { session: Sessi
 			data-active={active || undefined}
 			title={session.status === 'error' ? (session.errorMessage ?? undefined) : undefined}
 			className={cn(
-				'group/row flex h-9 min-w-0 items-center gap-2.5 px-3 outline-none transition-colors duration-(--t-fast)',
+				'group/row flex h-9 min-w-0 items-center gap-2.5 pr-4 pl-5 outline-none transition-colors duration-(--t-fast)',
 				active ? 'bg-(--bg-active)' : 'hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)',
 			)}
 		>
@@ -37,7 +37,7 @@ export function TaskRow({ session, modelName, active = false }: { session: Sessi
 			</span>
 			<span className="hidden w-[120px] shrink-0 truncate text-small text-(--text-3) lg:inline">{session.model ? modelName(session.model) : null}</span>
 			<span className="in-num hidden w-[64px] shrink-0 text-right text-small text-(--text-3) sm:inline">{session.usage.cost ? dollars(session.usage.cost) : null}</span>
-			<span className="in-num w-11 shrink-0 text-right text-micro text-(--text-4)" title={new Date(session.createdAt).toLocaleString()}>
+			<span className="in-num w-11 shrink-0 text-right text-small text-(--text-3)" title={new Date(session.createdAt).toLocaleString()}>
 				{age(session.createdAt)}
 			</span>
 		</Link>

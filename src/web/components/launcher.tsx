@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, BookOpen, EyeOff, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal } from 'lucide-react';
+import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal, TriangleAlert } from 'lucide-react';
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { HomeDashboard, homeSummary } from '@/components/home-dashboard';
@@ -195,6 +195,40 @@ function greeting(name?: string | null): string {
 	return first ? `${part}, ${first}` : part;
 }
 
+/** Ways to begin, as chips under the composer while it is empty: one fills the prompt, for you to finish and send. */
+const STARTERS: Record<'task' | 'chat', Array<{ icon: LucideIcon; label: string; prompt: string }>> = {
+	task: [
+		{ icon: GitPullRequest, label: 'Review my open pull requests', prompt: 'Review my open pull requests in this repository and tell me which are ready to merge.' },
+		{ icon: TriangleAlert, label: 'Fix the failing checks', prompt: 'Find the checks failing on the default branch, fix what breaks them and open a pull request.' },
+		{ icon: BookOpen, label: 'Explain how the code is laid out', prompt: 'Explain how this repository is laid out: its main parts, how they fit together, and where to start reading.' },
+		{ icon: FlaskConical, label: 'Add tests where they are thin', prompt: 'Find the part of this repository with the thinnest tests and add tests for it.' },
+	],
+	chat: [
+		{ icon: Globe, label: 'Research a topic on the web', prompt: 'Research this on the web and give me a short brief with sources: ' },
+		{ icon: FileText, label: 'Draft a document', prompt: 'Draft a document about ' },
+		{ icon: ChartNoAxesColumn, label: 'Build a small page or chart', prompt: 'Build a small interactive page that shows ' },
+		{ icon: CalendarClock, label: 'Plan my week', prompt: 'Help me plan my week. Here is what I have on: ' },
+	],
+};
+
+function Starters({ chat, onPick }: { chat: boolean; onPick: (prompt: string) => void }) {
+	return (
+		<div aria-label="Ways to begin" role="group" className="flex flex-wrap items-center gap-1.5 pt-1">
+			{STARTERS[chat ? 'chat' : 'task'].map((starter) => (
+				<button
+					key={starter.label}
+					type="button"
+					onClick={() => onPick(starter.prompt)}
+					className="inline-flex h-6 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+				>
+					<Icon icon={starter.icon} size={13} className="text-(--text-3)" />
+					{starter.label}
+				</button>
+			))}
+		</div>
+	);
+}
+
 export function Launcher() {
 	const navigate = useNavigate();
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
@@ -329,6 +363,7 @@ export function Launcher() {
 								onCancel={() => setAdding(false)}
 							/>
 						) : null}
+						{prompt.trim() ? null : <Starters chat={chat} onPick={setPrompt} />}
 						{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 					</div>
 

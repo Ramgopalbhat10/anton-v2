@@ -12,8 +12,9 @@ import {
 	Home,
 	GitBranch,
 	GitPullRequest,
-	List,
+	Inbox,
 	ListFilter,
+	ListTodo,
 	type LucideIcon,
 	Moon,
 	PanelLeft,
@@ -34,10 +35,10 @@ import {
 	X,
 } from 'lucide-react';
 import { memo, type ReactNode, useMemo, useState } from 'react';
-import { Avatar, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
+import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
 import { Count, toneFill, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
-import { NotificationsBell } from '@/components/notifications';
+import { loudUnread, NotificationsBell, useNotifications } from '@/components/notifications';
 import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
@@ -258,7 +259,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 				>
 					{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
 				</MenuItem>
-				<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
+				<MenuItem icon={ListTodo} onSelect={() => void navigate({ to: '/tasks' })}>
 					Open the task list
 				</MenuItem>
 				<MenuItem icon={RotateCcw} onSelect={() => onChange(DEFAULT_VIEW)}>
@@ -578,7 +579,6 @@ export function ChatSidebar({
 	onNavigate,
 	onCollapse,
 	onOpenPalette,
-	onOpenNotifications,
 }: {
 	/** Shown as a sheet over the page, on a phone. */
 	open: boolean;
@@ -587,8 +587,6 @@ export function ChatSidebar({
 	onNavigate: () => void;
 	onCollapse: () => void;
 	onOpenPalette: () => void;
-	/** The bell left of the sidebar toggle opens the Notifications dialog. */
-	onOpenNotifications: () => void;
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
 	const inProject = Boolean(params.spaceId);
@@ -603,6 +601,9 @@ export function ChatSidebar({
 		saveView(next);
 	};
 	const sessions = sessionsQuery.data?.sessions ?? [];
+	// Inbox counts what calls you over; Reviews the pull requests still open, as the tasks last read them.
+	const unread = loudUnread(useNotifications().data?.unread);
+	const openPulls = useMemo(() => sessions.filter((session) => session.pullRequest?.state === 'open' || session.pullRequest?.state === 'draft').length, [sessions]);
 	const { pinned, running, recent } = useMemo(() => sections(sessions, view, query), [sessions, view, query]);
 	// Recent draws a page of rows at a time, so a long history costs what it shows; the Tasks page lists them all.
 	const [recentShown, setRecentShown] = useState(RECENT_PAGE);
@@ -630,7 +631,6 @@ export function ChatSidebar({
 				</Link>
 				<div className="min-w-1 flex-1" />
 				<IconBtn icon={Search} size="sm" label="Search or jump to" onClick={onOpenPalette} />
-				<NotificationsBell size="sm" onOpen={onOpenNotifications} />
 				<IconBtn icon={PanelLeft} size="sm" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 				<IconBtn icon={X} size="sm" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
@@ -641,7 +641,12 @@ export function ChatSidebar({
 				className="sg-btn sg-btn--secondary mb-2 shrink-0 justify-start"
 			>
 				<Icon icon={inProject ? Waypoints : SquarePen} size={14} />
-				<span>{inProject ? 'New thread' : 'New task'}</span>
+				<span className="min-w-0 flex-1 truncate text-left">{inProject ? 'New thread' : 'New task'}</span>
+				{inProject ? null : (
+					<span className="max-md:hidden">
+						<Kbd keys="c" size="sm" />
+					</span>
+				)}
 			</Link>
 
 			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
@@ -650,14 +655,20 @@ export function ChatSidebar({
 					<NavIcon icon={Home} />
 					<span className="min-w-0 flex-1 truncate">Home</span>
 				</Link>
+				<Link to="/inbox" onClick={onNavigate} aria-label={unread ? `Inbox, ${unread} unread` : 'Inbox'} className={NAV_ROW}>
+					<NavIcon icon={Inbox} />
+					<span className="min-w-0 flex-1 truncate">Inbox</span>
+					{unread ? <Count tone="accent">{unread > 99 ? '99+' : unread}</Count> : null}
+				</Link>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
-					<NavIcon icon={List} />
+					<NavIcon icon={ListTodo} />
 					<span className="min-w-0 flex-1 truncate">Tasks</span>
 					{sessions.length ? <Count>{sessions.length}</Count> : null}
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
 					<span className="min-w-0 flex-1 truncate">Reviews</span>
+					{openPulls ? <Count>{openPulls}</Count> : null}
 				</Link>
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
