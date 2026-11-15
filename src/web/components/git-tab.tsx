@@ -28,7 +28,7 @@ const sideOf = (line: CodeLine): ReviewComment['side'] => (line.kind === 'remove
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
 		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] items-start gap-2 border-l-2 border-l-(--accent) px-2.5 py-2 font-sans">
-			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--accent-text)" />
+			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--text-3)" />
 			<div className="min-w-0 flex-1 text-small leading-[18px] whitespace-pre-wrap text-(--text)">
 				{outdated ? <div className="text-(--text-3)">Line {comment.line} has changed since this comment</div> : null}
 				{comment.text}
@@ -54,7 +54,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 				}}
 				placeholder="What should the agent change here?"
 				aria-label="Comment"
-				className="w-full resize-none rounded-card border border-(--line) bg-(--bg-raised) px-2 py-1.5 text-small leading-[18px] text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)"
+				className="sg-field w-full resize-none px-2 py-1.5 text-small leading-[18px]"
 			/>
 			<div className="flex justify-end gap-1.5">
 				<Btn size="xs" variant="ghost" onClick={onCancel}>
@@ -474,7 +474,7 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	const count = review.comments.length;
 	return (
 		<div className="in-pop sticky bottom-0 flex items-center gap-2 py-1.5 pr-1.5 pl-2">
-			<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--accent-text)">
+			<span className="inline-flex size-6 shrink-0 items-center justify-center text-(--text-3)">
 				<Icon icon={MessageSquare} size={14} />
 			</span>
 			<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">

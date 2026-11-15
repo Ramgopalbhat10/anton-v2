@@ -230,7 +230,7 @@ function Models({ subscription }: { subscription: Subscription }) {
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span className="truncate text-body text-(--text)">{model.name}</span>
 								{model.options?.map((option) => (
-									<span key={option} className="shrink-0 rounded-control bg-(--bg-active) px-1 py-px text-nano tracking-[0.04em] text-(--text-3)">
+									<span key={option} className="shrink-0 rounded-control bg-(--bg-active) px-1 py-px text-nano text-(--text-3)">
 										{option}
 									</span>
 								))}

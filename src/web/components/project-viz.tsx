@@ -5,7 +5,6 @@ import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instrument';
 import { ProjectRouteArt } from '@/components/illustrations';
-import { ProjectBay } from '@/components/project-rack';
 import { useNow } from '@/components/subagents';
 import { NextSteps, useOpenThread } from '@/components/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from '@/components/thread-glyph';
@@ -149,8 +148,7 @@ function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) 
 /**
  * The project's pulse: how many threads are open beside a sentence on what
  * the project comes to; every thread as a cell in a strip, in order of
- * state, with the states counted under it; the project's bay in the rack;
- * and recent activity.
+ * state, with the states counted under it; and recent activity.
  */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
@@ -164,7 +162,7 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 		<Card
 			icon={Activity}
 			title="Pulse"
-			sub={threadsWord(threads.length)}
+			sub={`${threadsWord(threads.length)} · ${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}
 			status={live ? <Status tone="accent" pulse>Live</Status> : <Status>Quiet</Status>}
 		>
 			<div className="flex flex-col gap-3 px-4 pt-1 pb-4">
@@ -200,9 +198,6 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 					))}
 				</div>
 			</div>
-			<CardSection label="Rack" hint={`${Math.min(counts.working, space.maxParallel)} of ${space.maxParallel} slots working${counts.queued ? ` · ${counts.queued} queued` : ''}`}>
-				<ProjectBay space={space} threads={threads} />
-			</CardSection>
 			<CardSection label={`Activity · last ${short(span)}`} hint={`${total} events`}>
 				<div className="flex flex-col gap-1.5">
 					<ActivityBars bars={bars} height={36} />

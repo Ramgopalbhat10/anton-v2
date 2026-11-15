@@ -106,7 +106,7 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 				type="button"
 				aria-expanded={open}
 				onClick={() => setOpen((current) => !current)}
-				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-full border border-(--line) bg-(--bg-raised) pr-3 pl-1.5 text-left text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
+				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-control bg-(--bg-raised) pr-2.5 pl-1.5 shadow-[inset_0_0_0_1px_var(--line)] text-left text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
 			>
 				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform duration-(--t-fast)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
 				<span className="flex shrink-0 items-center -space-x-1">
@@ -214,7 +214,7 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 	return (
 		<section className="in-card overflow-hidden" aria-label="Suggested threads">
 			<header className="flex items-center gap-2 px-3.5 pt-3 pb-2">
-				<Icon icon={ListPlus} size={13} className="text-(--accent-text)" />
+				<Icon icon={ListPlus} size={13} className="text-(--text-3)" />
 				<span className="flex-1 text-body font-medium">Suggested threads</span>
 				<Caption>{suggestions.length} proposed</Caption>
 			</header>
@@ -457,7 +457,7 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 						key={starter}
 						type="button"
 						onClick={() => onPick(starter)}
-						className="h-7 rounded-full border border-(--line) bg-(--bg-raised) px-3 text-small text-(--text-2) outline-none hover:border-(--line-strong) hover:text-(--text) focus-visible:shadow-(--focus)"
+						className="h-6 rounded-control px-2 text-small text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 					>
 						{starter.trim()}
 					</button>

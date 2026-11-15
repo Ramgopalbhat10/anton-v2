@@ -484,11 +484,13 @@ const StepsCard = memo(StepsCardView, (prev, next) => prev.live === next.live &&
 /** A proposed plan, shown in full, and whether you approved it. */
 const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answer: string | null }) {
 	const plan = field(part.input, 'plan');
+	// A plan that waits on you carries the accent's line; once approved it is a plain card again.
+	const proposed = Boolean(plan) && answer !== APPROVED;
 	return (
-		<div className="in-card overflow-hidden">
+		<div className={cn('in-card overflow-hidden', proposed && 'shadow-[inset_0_0_0_1px_var(--accent-line)]')}>
 			<div className="flex h-10 items-center gap-2 border-b border-(--line) px-3">
 				<Icon icon={ListChecks} size={14} className="text-(--text-3)" />
-				<span className="text-body font-semibold">Plan</span>
+				<span className="text-body font-medium">{proposed ? 'Proposed plan' : 'Plan'}</span>
 				<span className="ml-auto">
 					<Badge tone={!plan ? 'neutral' : answer === APPROVED ? 'success' : 'accent'}>{!plan ? 'Writing' : answer === APPROVED ? 'Approved' : 'Proposed'}</Badge>
 				</span>
@@ -570,7 +572,7 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 				</div>
 			) : null}
 			{/* The same for every message, so it waits for the pointer. */}
-			<div className="in-caption flex items-center gap-1.5 tracking-[0.06em] opacity-0 transition-opacity duration-(--t-fast) group-hover/user:opacity-100">
+			<div className="in-caption flex items-center gap-1.5 opacity-0 transition-opacity duration-(--t-fast) group-hover/user:opacity-100">
 				{meta.map((item, index) => (
 					<Fragment key={item + index}>
 						{index > 0 ? <span>·</span> : null}

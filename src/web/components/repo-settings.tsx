@@ -15,7 +15,7 @@ const FIELD = WELL_FIELD;
 
 /** A textarea on the same inset well as the fields. */
 export const AREA =
-	'w-full resize-y rounded-card border border-(--line) bg-(--bg-raised) px-2.5 py-2 text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)';
+	'sg-field w-full resize-y px-2 py-2';
 
 function Section({ title, help, info, children }: { title: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (

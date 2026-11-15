@@ -79,7 +79,7 @@ function Running({ view }: { view: ComputeView }) {
 								className="flex min-w-0 flex-1 flex-col gap-0.5 outline-none focus-visible:shadow-(--focus)"
 							>
 								<span className="truncate text-body font-medium">{task.title}</span>
-								<Facts items={[task.repo, `created ${age(task.createdAt)} ago`]} className="tracking-[0.04em] normal-case" />
+								<Facts items={[task.repo, `created ${age(task.createdAt)} ago`]} />
 							</Link>
 							<IconBtn icon={CircleStop} size="sm" label={`Stop ${task.title}`} disabled={stop.isPending} onClick={() => stop.mutate(task.id)} />
 						</div>

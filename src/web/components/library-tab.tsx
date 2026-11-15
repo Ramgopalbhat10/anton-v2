@@ -449,7 +449,7 @@ function FileCard({ library, output, onOpen }: { library: LibrarySource; output:
 				</span>
 			</span>
 			<span className="relative mt-auto flex items-center gap-1.5 p-2">
-				<span className="rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-nano tracking-[0.06em] text-(--text-2) backdrop-blur-sm">{extension(output.path)}</span>
+				<span className="rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-nano text-(--text-2) backdrop-blur-sm">{extension(output.path)}</span>
 				{/* A page drawn this small needs its name to be told apart. */}
 				{kind === 'page' && place.sessionId ? (
 					<span className="min-w-0 truncate rounded-control bg-(--bg-scrim) px-1.5 py-0.5 text-micro text-(--text) backdrop-blur-sm">{name}</span>
