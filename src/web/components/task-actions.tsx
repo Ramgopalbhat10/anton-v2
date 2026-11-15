@@ -148,7 +148,7 @@ function ProjectItems({ session }: { session: Session }) {
 						{others.map((space) => (
 							<MenuItem key={space.id} onSelect={() => move.mutate(space.id)}>
 								<span className="flex min-w-0 items-center gap-2">
-									<ProjectIcon value={space.icon} name={space.name} size={16} />
+									<ProjectIcon value={space.icon} name={space.name} size={14} />
 									<span className="truncate">{space.name}</span>
 								</span>
 							</MenuItem>

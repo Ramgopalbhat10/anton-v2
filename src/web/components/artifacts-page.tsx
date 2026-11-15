@@ -13,6 +13,7 @@ import { TopBar } from '@/components/page-frame';
 import { Btn, EmptyState, FilterChip, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, Spinner } from '@/components/signal';
 import { ADDED_FILES, api, type Artifact, outputUrl, SAFETY_NET_MS } from '@/lib/api';
 import { CATEGORIES, type Category, categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf, zipFolder } from '@/lib/artifacts';
+import { useDragScroll } from '@/lib/drag-scroll';
 import { useDeletedOutput } from '@/lib/deleted-outputs';
 import { age, fileSize } from '@/lib/format';
 import { useOnePane } from '@/lib/one-pane';
@@ -358,7 +359,7 @@ function ArtifactSheet({ artifact, onClose }: { artifact: Artifact; onClose: () 
 	}, [copied]);
 	const view = { to: '/artifacts/$taskId', params: { taskId: artifact.sessionId }, search: { path: artifact.path } } as const;
 	return (
-		<aside aria-label={`${artifact.title}, picked`} className="hidden w-[360px] shrink-0 flex-col border-l border-(--line) md:flex">
+		<aside aria-label={`${artifact.title}, picked`} className="absolute inset-y-0 right-0 z-20 hidden w-[360px] flex-col border-l border-(--line) bg-(--bg-panel) shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.55)] md:flex">
 			<header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-(--line) pr-2 pl-3.5">
 				<Icon icon={info.icon} size={14} className="shrink-0 text-(--text-3)" />
 				<h2 title={artifact.title} className="m-0 min-w-0 flex-1 truncate text-body font-medium text-(--text)">{artifact.title}</h2>
@@ -631,6 +632,7 @@ export function ArtifactsPage() {
 	const search = useSearch({ from: '/artifacts' });
 	const navigate = useNavigate();
 	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, refetchInterval: SAFETY_NET_MS });
+	const dragScroll = useDragScroll();
 	const all = artifacts.data?.artifacts ?? [];
 	const query = search.q ?? '';
 	const type = search.type;
@@ -671,7 +673,7 @@ export function ArtifactsPage() {
 			<TopBar crumbs={['Artifacts']}>
 				<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" label="Search artifacts" size="sm" className="w-[220px] max-w-[46vw] shrink" />
 			</TopBar>
-			<div className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4 [scrollbar-width:none]">
+			<div {...dragScroll} data-noscrollbar className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4">
 				<FilterChip label="All" count={found.length} on={!type} onToggle={() => setSearch({ q: query || undefined })} />
 				{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
 					<FilterChip
@@ -692,7 +694,7 @@ export function ArtifactsPage() {
 				<SortMenu sort={sort} onPick={setSort} />
 			</div>
 
-			<div className="flex min-h-0 flex-1">
+			<div className="relative flex min-h-0 flex-1">
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
 			{selecting ? <BulkActions selected={selected} shown={shown} keys={keys} setKeys={setKeys} busy={busy} setBusy={setBusy} finish={() => { setSelecting(false); setKeys(new Set()); }} /> : null}
 			{artifacts.isPending ? (

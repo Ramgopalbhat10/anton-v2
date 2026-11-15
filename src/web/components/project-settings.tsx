@@ -88,7 +88,7 @@ function General({ space }: { space: Space }) {
 				}
 			>
 				<div className="flex items-center gap-2.5">
-					<IconPicker value={icon} name={name} onChange={setIcon} size={36} />
+					<IconPicker value={icon} name={name} onChange={setIcon} size={28} />
 					<input aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" className={`${FIELD} h-9 flex-1`} />
 				</div>
 				<textarea
@@ -385,7 +385,7 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-4 text-body font-medium">
-				{space.data ? <SpaceMark space={space.data} size={20} /> : null}
+				{space.data ? <SpaceMark space={space.data} size={16} /> : null}
 				<span className="min-w-0 truncate text-(--text-2)">{space.data?.name ?? 'Project'}</span>
 				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 				<span className="shrink-0 text-(--text-2)">Settings</span>
