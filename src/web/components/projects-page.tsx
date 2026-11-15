@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Check, FolderGit2, FolderKanban, MessageSquare, Moon, Plus, Search, Settings, X } from 'lucide-react';
+import { Check, FolderGit2, FolderKanban, MessageSquare, Plus, Search, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';
 import { Caption } from '@/components/instrument';
 import { IconPicker, suggestIcon } from '@/components/project-icon';
 import { SpaceMark } from '@/components/project-sidebar';
-import { activity, ActivityBars } from '@/components/project-viz';
+import { activity, ActivityStrip } from '@/components/project-viz';
 import { AREA } from '@/components/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner } from '@/components/signal';
@@ -75,7 +75,7 @@ function ProjectCard({ space }: { space: Space }) {
 						<span className="text-micro text-(--text-3)">Working</span>
 					</div>
 					<span className="min-w-2 flex-1" />
-					<ActivityBars bars={activity(threads, now, 14).bars} height={14} className="mt-0.5 w-[96px] shrink-0" />
+					<ActivityStrip bars={activity(threads, now, 14).bars} className="mt-0.5 w-[96px] shrink-0" />
 				</div>
 				<div className="flex min-h-[22px] flex-wrap items-center gap-1 px-3.5 pt-2.5">
 					{repos.map((repo) => (
@@ -92,8 +92,8 @@ function ProjectCard({ space }: { space: Space }) {
 						</span>
 					) : null}
 				</div>
-				<div className="mx-3.5 mt-3 border-t border-(--line)" />
-				<div className="flex flex-col px-1.5 pt-1 pb-1.5" style={{ minHeight: CARD_ROWS * 26 }}>
+				<div className="mt-3 border-t border-(--line)" />
+								<div className="flex flex-col px-2 pt-1.5 pb-2" style={{ minHeight: CARD_ROWS * 26 }}>
 					{open.length ? (
 						open.slice(0, CARD_ROWS).map((thread) => (
 							<div key={thread.id} className="flex h-[26px] items-center gap-2 px-1.5">
@@ -103,10 +103,7 @@ function ProjectCard({ space }: { space: Space }) {
 							</div>
 						))
 					) : (
-						<div className="flex flex-1 items-center justify-center gap-1.5 text-small text-(--text-4)" style={{ minHeight: CARD_ROWS * 26 }}>
-							<Icon icon={Moon} size={12} />
-							All quiet{space.activeAt ? ` · active ${age(space.activeAt)} ago` : ''}
-						</div>
+						<div className="flex h-[26px] items-center px-1.5 text-small text-(--text-3)">All quiet{space.activeAt ? ` · active ${age(space.activeAt)} ago` : ''}</div>
 					)}
 				</div>
 			</div>

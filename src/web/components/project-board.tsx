@@ -70,14 +70,14 @@ export function ProjectBoard({ threads, onNewThread }: { threads: Session[]; onN
 	}
 	return (
 		<div className="h-full overflow-auto p-4">
-			<div className="grid h-full grid-flow-col auto-cols-[minmax(240px,1fr)] gap-3">
+			<div className="grid h-full grid-flow-col auto-cols-[minmax(184px,1fr)] gap-3">
 				{COLUMNS.map((column) => {
 					const items = columnThreads(threads, column.kinds);
 					return (
 						<section key={column.id} aria-label={column.label} className="flex min-h-0 min-w-0 flex-col gap-1.5">
 							<header className="flex h-7 shrink-0 items-center gap-1.5 px-1">
 								<Glyph kind={column.glyph} size={12} />
-								<span className="text-small font-medium text-(--text-2)">{column.label}</span>
+								<span className="truncate text-body font-medium text-(--text)">{column.label}</span>
 								<span className="in-num text-small text-(--text-3)">{items.length}</span>
 								<span className="flex-1" />
 								<IconBtn icon={Plus} size="xs" label={`New thread for ${column.label}`} onClick={onNewThread} />

@@ -89,6 +89,36 @@ const thread = (id: string, spaceId: string, title: string, threadState: string,
 	...patch,
 });
 const onRepo = (projectId: string, repo: string, slug: string) => ({ projectId, repo, branch: `anton/${slug}`, baseBranch: 'main', baseSha: 'abc123' });
+/** The one pull request the Reviews page lists, as GitHub would describe it. */
+const pull = {
+	url: 'https://github.com/acme/billing-api/pull/12',
+	number: 12,
+	repo: 'acme/billing-api',
+	title: 'Expose invoices over the API',
+	body: 'Adds `GET /invoices` and `GET /invoices/:id`, paged by cursor, behind the billing scope.',
+	author: 'anton',
+	state: 'open',
+	draft: false,
+	headBranch: 'anton/invoices-api',
+	headSha: 'abcdef1234567',
+	baseBranch: 'main',
+	createdAt: ago(95),
+	mergedAt: null,
+	mergedBy: null,
+	closedAt: null,
+	additions: 118,
+	deletions: 50,
+	changedFiles: 2,
+	mergeable: true,
+	approved: false,
+	commits: [{ sha: 'abcdef1234567', subject: 'Expose invoices over the API' }],
+	checks: [
+		{ name: 'test', status: 'passed', summary: 'Passed in 2m', url: 'https://github.com/acme/billing-api/actions' },
+		{ name: 'types', status: 'passed', summary: 'Passed in 41s', url: 'https://github.com/acme/billing-api/actions' },
+	],
+	discussion: [{ id: 'c1', kind: 'comment', author: 'perf', body: 'Should the list be paged by cursor or by offset?', path: null, line: null, at: ago(60), verdict: null }],
+};
+const review = { sessionId: 'th-api', title: pull.title, repo: pull.repo, url: pull.url, group: 'ready', draft: false, reviewing: null, conflicts: false, checks: { passed: 2, failed: 0, pending: 0 }, comments: 1, createdAt: pull.createdAt };
 const spaceThreads = [
 	thread('th-invoices', 'space-billing', 'Name the invoices table', 'waiting', { ...onRepo('p-billing', 'acme/billing-api', 'invoices-table'), asking: 'Invoices or billing for the table name?', lastReply: 'The schema is in. Before I write the migration: should the table be `invoices` or `billing_documents`?', lastInputAt: ago(42) }),
 	thread('th-schema', 'space-billing', 'Migrate the ledger schema', 'working', { ...onRepo('p-billing', 'acme/billing-api', 'ledger-schema'), working: true, status: 'running', lastReply: 'Rerunning the migration tests against the new ledger columns.', lastInputAt: ago(4) }),
@@ -291,7 +321,12 @@ export function mockApi(): Plugin {
 		}
 		if (path === '/api/compute') return json(res, { provider: 'local', app: null, running: [], others: 0 });
 		if (path === '/api/projects') return json(res, { projects });
-		if (path === '/api/reviews') return json(res, { reviews: [] });
+		if (path === '/api/reviews') return json(res, { reviews: [review] });
+		if (path === `${task}/pulls`) return json(res, { pulls: [{ url: pull.url, repo: pull.repo, number: pull.number, title: pull.title, head: pull.headBranch, base: pull.baseBranch, state: 'open', openedAt: pull.createdAt, mergedAt: null, current: true }] });
+		if (path === `${task}/pulls/12` || path === `${task}/pulls/12/metadata`) return json(res, pull);
+		if (path === `${task}/pulls/12/diff`) return json(res, { patch });
+		if (/^\/api\/projects\/[^/]+\/branches$/.test(path)) return json(res, { branches: ['main'] });
+		if (path === '/api/storage') return json(res, { objects: 1284, bytes: 412_000_000, lastCleanup: { at: ago(60 * 9), removed: 37, freedBytes: 18_400_000 } });
 		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
 		if (path === '/api/artifacts') return json(res, { artifacts });
 		if (path === '/api/notifications') return json(res, { notifications, unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0, ...notificationUnread } });

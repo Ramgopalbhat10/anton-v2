@@ -199,12 +199,16 @@ function ReviewDetail({ item, onBack }: { item: ReviewItem; onBack: () => void }
 						pulls={list.length ? list : [shown]}
 						onSelect={setChosen}
 						ownWork={!item.reviewing}
+						page
 					/>
 				</div>
 			</div>
 		</div>
 	);
 }
+
+/** Whether the list and the pull request fit side by side: the width the layout's `md:` classes split at. */
+const sideBySide = () => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 768px)').matches;
 
 /**
  * Reviews is a pull-request queue beside the pull request itself: the list
@@ -227,9 +231,10 @@ export function ReviewsPage() {
 	}, [items, tab]);
 	const flat = useMemo(() => sections.flatMap((section) => section.rows), [sections]);
 
-	// The panel always shows a pull request: the chosen one, or the first the tab has.
+	// Beside the list the panel always shows a pull request: the chosen one, or the first the tab has.
+	// Where the two cannot sit side by side the list comes first, and a pull request opens when picked.
 	useEffect(() => {
-		setSelected((current) => (current !== null && flat.some((item) => item.url === current) ? current : (flat[0]?.url ?? null)));
+		setSelected((current) => (current !== null && flat.some((item) => item.url === current) ? current : sideBySide() ? (flat[0]?.url ?? null) : null));
 	}, [flat]);
 
 	const counts = useMemo(() => Object.fromEntries(TABS.map((entry) => [entry.id, items.filter((item) => entry.test(item.group)).length])) as Record<TabId, number>, [items]);

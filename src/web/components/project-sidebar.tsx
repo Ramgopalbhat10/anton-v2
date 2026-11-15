@@ -37,7 +37,7 @@ const ROW =
 const LIFTED = 'data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 /** A sidebar section's heading: its label and count in quiet type, and actions on hover. */
-export function SidebarHeading({ label, count, open, onToggle, tone, children }: { label: string; count?: number; open: boolean; onToggle: () => void; tone?: string; children?: ReactNode }) {
+export function SidebarHeading({ label, count, open, onToggle, children }: { label: string; count?: number; open: boolean; onToggle: () => void; children?: ReactNode }) {
 	return (
 		<div className="group/header mt-2 flex h-6 items-center gap-1">
 			<button
@@ -46,7 +46,7 @@ export function SidebarHeading({ label, count, open, onToggle, tone, children }:
 				onClick={onToggle}
 				className="group/fold flex h-6 min-w-0 items-center gap-1.5 rounded-control px-2 text-(--text-3) outline-none hover:text-(--text-2) focus-visible:shadow-(--focus)"
 			>
-				<SectionLabel className={cn('truncate', tone)}>{label}</SectionLabel>
+				<SectionLabel className="truncate">{label}</SectionLabel>
 				{count ? <span className="in-num text-micro text-(--text-4)">{count}</span> : null}
 				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
 			</button>
@@ -172,7 +172,6 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 				count={threads.length}
 				open={open}
 				onToggle={() => setOpen((current) => !current)}
-				tone={state === 'waiting' ? 'text-(--warn)' : state === 'working' ? 'text-(--accent-text)' : state === 'review' || state === 'landing' ? 'text-(--ok)' : undefined}
 			/>
 			{open ? (
 				<div className="flex flex-col gap-px">
