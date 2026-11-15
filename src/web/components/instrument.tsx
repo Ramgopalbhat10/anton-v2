@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { X } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { Icon } from '@/components/signal';
+import { useDragScroll } from '@/lib/drag-scroll';
 import { cn } from '@/lib/utils';
 
 /** `attention` is what waits on you and `warning` is something off: both amber. The accent is live agent work. */
@@ -559,10 +560,12 @@ export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onS
 	);
 }
 
-/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s; `scrollbar` shows a thin one when they overflow. */
+/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s; it drags to scroll and `scrollbar` shows a thin one when they overflow. */
 export function PanelTabs({ label, children, scrollbar, className }: { label: string; children: ReactNode; scrollbar?: boolean; className?: string }) {
+	const dragScroll = useDragScroll();
 	return (
 		<div
+			{...dragScroll}
 			data-noscrollbar={scrollbar ? undefined : true}
 			role="tablist"
 			aria-label={label}

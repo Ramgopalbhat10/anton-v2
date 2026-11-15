@@ -1,7 +1,7 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { PanelTab, PanelTabs, Status } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';
 import { ProjectBoard } from '@/components/project-board';
@@ -15,6 +15,7 @@ import { useOnePane } from '@/lib/one-pane';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
+import { usePaneSlide } from '@/components/workspace-pane';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,21 @@ const LEGACY_VIEW: Record<string, ProjectView> = { Overview: 'activity', Library
 type DockState = { open: boolean; view: ProjectView };
 
 const dockKey = (spaceId: string) => `anton.project-panel.${spaceId}`;
+
+const DOCK_KEY = 'anton.project-dock-width';
+const DOCK_DEFAULT = 380;
+const DOCK_MIN = 320;
+/** The width the board keeps beside the dock when it is dragged wider. */
+const DOCK_RESERVE = 360;
+
+function savedDockWidth(): number | null {
+	try {
+		const value = Number(localStorage.getItem(DOCK_KEY));
+		return Number.isFinite(value) && value > 0 ? value : null;
+	} catch {
+		return null;
+	}
+}
 
 function readDock(spaceId: string): DockState {
 	try {
@@ -72,12 +88,28 @@ export function ProjectPage() {
 	const dockOpen = onePane ? paneOpen : saved.open;
 	const [expanded, setExpanded] = useState(false);
 	const [starting, setStarting] = useState(Boolean(search.new));
+	// The dock's width is yours to drag; it keeps enough room for the board beside it.
+	const [row, setRow] = useState<HTMLDivElement | null>(null);
+	const drag = useRef<{ pointer: number; x: number; width: number } | null>(null);
+	const [available, setAvailable] = useState(0);
+	const [requested, setRequested] = useState(savedDockWidth);
+	const [resizing, setResizing] = useState(false);
 	const asked = useRef(false);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
 	const models = useModels();
 	const modelName = useModelName();
 	const coordinatorModel = space.data?.coordinatorModel ?? models.data?.default ?? '';
 	const coordinatorName = coordinatorModel ? modelName(coordinatorModel) : '';
+	const slide = usePaneSlide(dockOpen);
+
+	useLayoutEffect(() => {
+		if (!row) return;
+		const measure = () => setAvailable(Math.round(row.getBoundingClientRect().width));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(row);
+		return () => observer.disconnect();
+	}, [row]);
 
 	const changeDock = useCallback(
 		(next: Partial<DockState>) => {
@@ -118,9 +150,24 @@ export function ProjectPage() {
 	if (!space.data) return <div className="flex-1" />;
 	const data = space.data;
 	const centerVisible = !(dockOpen && (onePane || expanded));
+	// Expanded or on a phone the dock covers the board, so it has no width of its own to keep.
+	const covers = expanded || onePane;
+	const minimum = Math.min(DOCK_MIN, available);
+	const maximum = Math.max(minimum, available - DOCK_RESERVE);
+	const clamp = (value: number) => Math.round(Math.min(maximum, Math.max(minimum, value)));
+	const dockWidth = available ? clamp(requested ?? DOCK_DEFAULT) : DOCK_DEFAULT;
+	const chooseDock = (value: number) => {
+		const next = clamp(value);
+		setRequested(next);
+		try {
+			localStorage.setItem(DOCK_KEY, String(next));
+		} catch {
+			// Resizing also works when browser storage is unavailable.
+		}
+	};
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1">
+		<div ref={setRow} className="flex min-h-0 min-w-0 flex-1">
 			<div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !centerVisible && 'hidden')}>
 				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 					<MenuButton />
@@ -129,7 +176,7 @@ export function ProjectPage() {
 							Projects
 						</Link>
 						<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
-						<SpaceMark space={data} size={18} />
+						<SpaceMark space={data} size={16} />
 						<span className="min-w-0 truncate font-medium text-(--text)">{data.name}</span>
 						{busy ? (
 							<Status tone="accent" pulse>
@@ -168,7 +215,7 @@ export function ProjectPage() {
 					) : saved.view === 'board' ? (
 						<ProjectBoard threads={threads} onNewThread={() => setStarting(true)} />
 					) : (
-						<div className="mx-auto flex w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
+						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
 							{saved.view === 'activity' ? <ProjectActivity space={data} threads={threads} /> : null}
 							{saved.view === 'prs' ? <ProjectPullRequests threads={threads} /> : null}
@@ -177,7 +224,58 @@ export function ProjectPage() {
 					)}
 				</div>
 			</div>
-			<aside className={cn('min-h-0 min-w-0 flex-col border-(--line)', dockOpen ? cn('flex', onePane || expanded ? 'flex-1' : 'w-[380px] shrink-0 border-l bg-(--bg-app)') : 'hidden')}>
+			{slide ? (
+			<aside
+				className={cn(
+					'min-h-0 min-w-0 flex-col',
+					covers ? cn('flex flex-1', slide === 'out' && 'hidden') : 'sg-project-dock relative flex border-l bg-(--bg-app)',
+				)}
+				data-slide={covers ? undefined : slide}
+				data-resizing={resizing || undefined}
+				style={covers ? undefined : ({ '--dock-width': available ? `${dockWidth}px` : `${DOCK_DEFAULT}px` } as CSSProperties)}
+			>
+				{!covers && slide === 'still' ? (
+					<div
+						role="separator"
+						aria-label="Resize the coordinator"
+						aria-orientation="vertical"
+						aria-valuemin={minimum}
+						aria-valuemax={maximum}
+						aria-valuenow={dockWidth}
+						aria-valuetext={`${dockWidth} pixels`}
+						tabIndex={0}
+						className="sg-workspace-resizer absolute inset-y-0 left-0 z-20 hidden w-1.5 cursor-col-resize touch-none outline-none md:block"
+						onKeyDown={(event) => {
+							const next = { ArrowLeft: dockWidth + 24, ArrowRight: dockWidth - 24, Home: minimum, End: maximum }[event.key];
+							if (next === undefined) return;
+							event.preventDefault();
+							chooseDock(next);
+						}}
+						onPointerDown={(event) => {
+							if (event.button !== 0) return;
+							event.preventDefault();
+							event.currentTarget.focus();
+							event.currentTarget.setPointerCapture(event.pointerId);
+							drag.current = { pointer: event.pointerId, x: event.clientX, width: dockWidth };
+							setResizing(true);
+						}}
+						onPointerMove={(event) => {
+							const start = drag.current;
+							if (start?.pointer === event.pointerId) chooseDock(start.width + start.x - event.clientX);
+						}}
+						onPointerUp={(event) => {
+							if (drag.current?.pointer !== event.pointerId) return;
+							event.currentTarget.releasePointerCapture(event.pointerId);
+							drag.current = null;
+							setResizing(false);
+						}}
+						onLostPointerCapture={() => {
+							drag.current = null;
+							setResizing(false);
+						}}
+					/>
+				) : null}
+				<div className="sg-project-dock-body flex min-h-0 min-w-0 flex-1 flex-col">
 				<div className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3.5">
 					<Icon icon={Workflow} size={14} className="shrink-0 text-(--text-3)" />
 					<span className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">Coordinator</span>
@@ -202,7 +300,9 @@ export function ProjectPage() {
 				) : (
 					<ProjectFeed space={data} agent={agent} threads={threads} onStartingChange={setStarting} />
 				)}
+				</div>
 			</aside>
+			) : null}
 		</div>
 	);
 }
@@ -249,7 +349,7 @@ export function ThreadPage() {
 				title="Back to the coordinator (Esc)"
 				className="flex min-w-0 shrink items-center gap-1.5 rounded-control py-0.5 pr-1 text-body text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)"
 			>
-				{space.data ? <SpaceMark space={space.data} size={18} /> : null}
+				{space.data ? <SpaceMark space={space.data} size={16} /> : null}
 				<span className="hidden max-w-[160px] truncate sm:inline">{space.data?.name ?? 'Project'}</span>
 			</Link>
 			<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />

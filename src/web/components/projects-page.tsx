@@ -173,7 +173,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 				</header>
 				<div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5">
 					<div className="flex items-center gap-2.5">
-						<IconPicker value={mark} name={name} onChange={setIcon} size={36} />
+						<IconPicker value={mark} name={name} onChange={setIcon} size={28} />
 						<input autoFocus aria-label="Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, like Billing v2" className={`${FIELD} h-9 flex-1`} />
 					</div>
 					<textarea aria-label="Goal" value={goal} onChange={(event) => setGoal(event.target.value)} rows={2} placeholder="Goal: what this project is for" className={`${AREA} text-body leading-[19px]`} />

@@ -32,6 +32,7 @@ import { MenuButton } from '@/components/nav';
 import { Badge, Btn, EmptyState, FilterChip, FilterMenu, Icon, IconBtn, Kbd, Spinner } from '@/components/signal';
 import { Glyph, type GlyphKind } from '@/components/thread-glyph';
 import { api, type AppNotification, type NotificationCategory, type NotificationKind, repoShort, SAFETY_NET_MS } from '@/lib/api';
+import { useDragScroll } from '@/lib/drag-scroll';
 import { age, plainPreview } from '@/lib/format';
 import { useOnePane } from '@/lib/one-pane';
 import { useSpaces } from '@/lib/spaces';
@@ -114,6 +115,7 @@ export function InboxPage() {
 	const spaces = useSpaces();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const onePane = useOnePane();
+	const dragScroll = useDragScroll();
 	const [filters, setFilters] = useState(readFilters);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [cursor, setCursor] = useState(-1);
@@ -238,7 +240,7 @@ export function InboxPage() {
 		<div className="flex min-h-0 flex-1">
 			<div className="flex min-h-0 w-full min-w-0 shrink-0 flex-col md:w-[380px] md:shadow-[-1px_0_0_var(--line)_inset]">
 				{header}
-				<div className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-3.5 [scrollbar-width:none]">
+				<div {...dragScroll} data-noscrollbar className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-3.5">
 					<FilterChip
 						label="Unread"
 						count={unreadCount}

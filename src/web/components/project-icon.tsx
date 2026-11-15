@@ -79,9 +79,10 @@ import { useMemo, useState } from 'react';
 import { EmptyLine, Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/* A project's mark is a drawn icon on a tinted tile, never an emoji. It is
-   saved as "<icon>" or "<icon>:<tint>", like "rocket:violet"; anything else
-   (an emoji from before, an icon since removed) draws the project's initial. */
+/* A project's mark is a drawn icon in the tint it was picked with, never an
+   emoji. It is saved as "<icon>" or "<icon>:<tint>", like "rocket:violet";
+   anything else (an emoji from before, an icon since removed) draws the
+   project's initial. */
 
 export type ProjectIconEntry = { key: string; icon: LucideIcon; label: string; words: string };
 
@@ -202,37 +203,29 @@ export function suggestIcon(name: string): string {
 	return 'folder';
 }
 
-/** A project's mark: its icon on a tile tinted to match, or its initial when it has none. */
+/** A project's mark: its icon at full size in the tint it was picked with, or its initial when it has none. */
 export function ProjectIcon({ value, name, size = 24, className }: { value: string | null | undefined; name: string; size?: number; className?: string }) {
 	const parsed = parseIcon(value);
-	const radius = Math.min(6, Math.round(size * 0.3));
 	if (!parsed) {
 		return (
 			<span
 				aria-hidden
-				className={cn('inline-flex shrink-0 items-center justify-center bg-(--bg-raised) font-medium text-(--accent-text)', className)}
-				style={{ width: size, height: size, borderRadius: radius, fontSize: Math.round(size * 0.48) }}
+				className={cn('inline-flex shrink-0 items-center justify-center font-medium leading-none text-(--accent-text)', className)}
+				style={{ width: size, height: size, fontSize: Math.round(size * 0.6) }}
 			>
 				{name.trim().charAt(0).toUpperCase() || 'P'}
 			</span>
 		);
 	}
-	const color = tintColor(parsed.tint);
 	return (
-		<span
+		<parsed.entry.icon
 			aria-hidden
 			data-icon={parsed.entry.key}
-			className={cn('inline-flex shrink-0 items-center justify-center', className)}
-			style={{
-				width: size,
-				height: size,
-				borderRadius: radius,
-				color,
-				background: `linear-gradient(180deg, color-mix(in srgb, ${color} 22%, var(--bg-raised)), color-mix(in srgb, ${color} 10%, var(--bg-raised)))`,
-			}}
-		>
-			<parsed.entry.icon size={Math.round(size * 0.56)} strokeWidth={size >= 28 ? 1.75 : 2} />
-		</span>
+			size={size}
+			strokeWidth={1.75}
+			className={cn('shrink-0', className)}
+			style={{ color: tintColor(parsed.tint) }}
+		/>
 	);
 }
 

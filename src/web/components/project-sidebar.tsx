@@ -12,7 +12,7 @@ import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from 
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
-/** A project's mark: its icon on a tinted tile, or its initial when it has none. */
+/** A project's mark: its icon in its tint, or its initial when it has none. */
 export function SpaceMark({ space, size = 24, className }: { space: Pick<Space, 'name' | 'icon'>; size?: number; className?: string }) {
 	return <ProjectIcon value={space.icon} name={space.name} size={size} className={className} />;
 }
@@ -115,7 +115,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 				<div className="flex flex-col gap-px">
 					{list.map((space) => (
 						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-7')}>
-							<SpaceMark space={space} size={16} />
+							<SpaceMark space={space} size={15} />
 							<span className="min-w-0 flex-1 truncate text-body font-medium">{space.name}</span>
 							<SpaceSignal space={space} />
 						</Link>
@@ -216,7 +216,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 							className="flex flex-col rounded-control bg-(--bg-hover) p-1.5 text-left shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
-								{space ? <SpaceMark space={space} size={26} /> : <span className="size-[26px]" />}
+								{space ? <SpaceMark space={space} size={20} /> : <span className="size-5" />}
 								<span className="flex min-w-0 flex-1 flex-col gap-px">
 									<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
 									<span className="in-num truncate text-micro text-(--text-3)">
@@ -233,7 +233,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 							.map((item) => (
 								<MenuItem key={item.id} checked={item.id === spaceId} hint={item.counts.waiting || undefined} onSelect={() => void navigate({ to: '/projects/$spaceId', params: { spaceId: item.id } })}>
 									<span className="flex min-w-0 items-center gap-2">
-										<SpaceMark space={item} size={18} />
+										<SpaceMark space={item} size={14} />
 										<span className="truncate">{item.name}</span>
 									</span>
 								</MenuItem>
