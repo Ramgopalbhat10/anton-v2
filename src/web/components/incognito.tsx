@@ -201,7 +201,9 @@ export function IncognitoPage() {
 						{chatting ? (
 							// The thread waits for something to show: mounting it on send would flash
 							// its empty state during the beat before the message lands.
-							<div className="min-h-0 min-w-0 flex-1">
+							// Thread must be a constrained flex child so its scrollport fills only
+							// the space above the composer, including when the draft grows.
+							<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 								{agent.messages.length > 0 || busy ? <Thread sessionId={id} agent={agent} composer={null} fresh /> : null}
 							</div>
 						) : null}
