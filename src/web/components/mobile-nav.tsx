@@ -23,7 +23,7 @@ function Item({ to, label, icon, on, children }: { to: string; label: string; ic
 			)}
 		>
 			<span className="relative">
-				<Icon icon={icon} size={20} />
+				<Icon icon={icon} size={18} />
 				{children}
 			</span>
 			{label}
@@ -43,9 +43,9 @@ export function MobileNav({ onNew }: { onNew: () => void }) {
 					type="button"
 					onClick={onNew}
 					aria-label="New task"
-					className="mx-1 my-2 flex size-11 items-center justify-center self-center rounded-card bg-(--accent) text-(--accent-fg) shadow-(--sh-1) outline-none focus-visible:shadow-(--focus)"
+					className="mx-1 flex h-9 w-11 items-center justify-center self-center rounded-dialog bg-(--accent) text-(--accent-fg) shadow-[inset_0_1px_0_rgb(255_255_255/0.14),var(--sh-1)] outline-none transition-colors duration-(--t-fast) hover:bg-(--accent-hover) focus-visible:shadow-(--focus)"
 				>
-					<Icon icon={Plus} size={20} />
+					<Icon icon={Plus} size={18} />
 				</button>
 				<Item to="/inbox" label="Inbox" icon={Inbox} on={pathname === '/inbox' || pathname.startsWith('/inbox/')}>
 					{unread ? <span aria-hidden className="absolute -top-0.5 -right-1 size-2 rounded-full bg-(--accent)" /> : null}

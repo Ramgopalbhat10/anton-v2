@@ -39,7 +39,7 @@ export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	return (
 		<span className="flex size-full flex-col items-center justify-center gap-1.5">
 			<Icon icon={info.icon} size={size} className={info.tone} />
-			{size >= 16 ? <span className="text-nano tracking-[0.08em] text-(--text-4)">{extensionOf(path)}</span> : null}
+			{size >= 16 ? <span className="text-nano text-(--text-4)">{extensionOf(path)}</span> : null}
 		</span>
 	);
 }
@@ -112,7 +112,7 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 		<>
 			<span className="relative block h-[96px] overflow-hidden border-b border-(--line) bg-(--bg-app)">
 				<OutputThumb item={item} />
-				<span className="absolute top-1.5 left-1.5 rounded-control border border-(--line) bg-(--bg-panel)/80 px-1 py-px text-nano leading-[14px] tracking-[0.06em] text-(--text-3) backdrop-blur-sm">
+				<span className="absolute top-1.5 left-1.5 rounded-control border border-(--line) bg-(--bg-panel)/80 px-1 py-px text-nano leading-[14px] text-(--text-3) backdrop-blur-sm">
 					{extensionOf(item.path)}
 				</span>
 			</span>

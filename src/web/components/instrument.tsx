@@ -30,7 +30,7 @@ export const toneFill = (tone: Tone) => FILL[tone];
 /** A tone for how much of a cap is used: calm, then amber from 80 percent, red when reached. */
 export const usedTone = (fraction: number): Tone => (fraction >= 1 ? 'danger' : fraction >= 0.8 ? 'warning' : 'accent');
 
-/** The mono, uppercase caption under gauges and in card footers. */
+/** The quiet caption under gauges, in card footers and beside a heading. */
 export function Caption({ children, className, tone }: { children: ReactNode; className?: string; tone?: Tone }) {
 	return <span className={cn('in-caption', tone && TEXT[tone], className)}>{children}</span>;
 }

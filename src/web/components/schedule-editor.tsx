@@ -130,7 +130,7 @@ function NextRuns({ schedule }: { schedule: Schedule }) {
 	return (
 		<div aria-live="polite" className="flex flex-col gap-1.5 rounded-card bg-(--bg-panel) px-3 py-2.5">
 			<div className="flex items-center gap-2">
-				<Icon icon={CalendarClock} size={13} className={problem ? 'text-(--bad)' : 'text-(--accent-text)'} />
+				<Icon icon={CalendarClock} size={13} className={problem ? 'text-(--bad)' : 'text-(--text-3)'} />
 				<span className={cn('min-w-0 flex-1 text-body', problem ? 'text-(--bad)' : 'text-(--text)')}>
 					{problem ?? `Runs ${describeSchedule(schedule)}`}
 				</span>

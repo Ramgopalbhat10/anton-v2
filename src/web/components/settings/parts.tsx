@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
 
 export const FIELD =
-	'h-8 min-w-0 rounded-card border border-(--line) bg-(--bg-raised) px-2.5 text-body text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)';
+	'sg-field h-7 min-w-0 px-2 text-body';
 
 /** A title with its info icon beside it, when there is more to say than its one line. */
 function Titled({ children, info }: { children: ReactNode; info?: ReactNode }) {
@@ -263,7 +263,7 @@ export function Select<T extends string | number | null>({
 					<button
 						type="button"
 						aria-label={label}
-						className="flex h-8 items-center gap-2 rounded-card border border-(--line) bg-(--bg-raised) px-2.5 text-left text-body whitespace-nowrap text-(--text) outline-none hover:border-(--line-strong) focus-visible:shadow-(--focus) data-[state=open]:border-(--line-strong)"
+						className="sg-field flex h-7 items-center gap-2 px-2 text-left text-body whitespace-nowrap hover:bg-(--bg-overlay)"
 					>
 						<Icon icon={icon} size={12} className="text-(--text-3)" />
 						<span className="min-w-0 flex-1 truncate">{current?.label ?? fallback}</span>

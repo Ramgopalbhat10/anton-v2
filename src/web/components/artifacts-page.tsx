@@ -132,7 +132,7 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	) : (
 		<span className="flex h-full flex-col items-center justify-center gap-2">
 			<Icon icon={info.icon} size={22} className={info.tone} />
-			<span className="text-nano tracking-[0.08em] text-(--text-3)">{extensionOf(artifact.path)}</span>
+			<span className="text-nano text-(--text-3)">{extensionOf(artifact.path)}</span>
 		</span>
 	);
 	// Large originals stay in the detail view; CSS resizing would still decode the full image here.

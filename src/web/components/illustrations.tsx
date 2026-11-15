@@ -3,7 +3,7 @@ import { type CSSProperties, createContext, type ReactNode, useContext, useId } 
 import { cn } from '@/lib/utils';
 
 /*
- * Anton's illustrations, drawn the way the rack is: flat trays and slim tiles,
+ * Anton's illustrations, drawn one way: flat trays and slim tiles,
  * soft white on near-black with a hairline edge, short rules for a label, and
  * a single light. The one accent marks what is lit or at work; everything else
  * stays grey, so a drawing sits in an empty state without shouting. Wires run
@@ -137,7 +137,7 @@ function Caption({ x, y, children, accent, anchor = 'start' }: { x: number; y: n
 	);
 }
 
-/** A slim tile standing in a tray, as on the rack: rules near the top, a light at the foot. */
+/** A slim tile standing in a tray: rules near the top, a light at the foot. */
 function Blade({ x, y, h = 56, lit, live, on }: { x: number; y: number; h?: number; lit?: boolean; live?: boolean; on?: boolean }) {
 	return (
 		<g>

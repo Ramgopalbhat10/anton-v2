@@ -35,7 +35,6 @@ const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
 const { ProjectRoutines } = await import('@/components/project-panel');
-const { ProjectBay, bayThreads } = await import('@/components/project-rack');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
 const { OutputViewerHost } = await import('@/components/output-viewer');
@@ -527,19 +526,6 @@ describe('threads', () => {
 		expect(within(row).queryByText(/idle/i)).toBeNull();
 		expect(row.querySelector('[data-glyph="idle"]')).toBeTruthy();
 		expect(screen.getByText('1 thread needs you')).toBeTruthy();
-	});
-
-	it('racks a project as a bay of its threads, and draws a thread out with what it asks', async () => {
-		expect(bayThreads(threads).map((item) => item.id)).toEqual(['asks', 'runs', 'pr', 'done']);
-		withRouter(() => <ProjectBay space={space} threads={threads} />);
-		expect(await screen.findByRole('group', { name: "Billing's threads as blades in its bay" })).toBeTruthy();
-		fireEvent.focus(screen.getByRole('link', { name: 'Pick a name, Needs you' }));
-		const card = await screen.findByRole('dialog', { name: 'Pick a name' });
-		expect(within(card).getByText('Asks you')).toBeTruthy();
-		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
-		await userEvent.type(within(card).getByRole('textbox', { name: 'Send a follow-up to Pick a name' }), 'Invoices');
-		await userEvent.click(within(card).getByRole('button', { name: 'Send to this thread' }));
-		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'asks', 'Invoices');
 	});
 
 	it('marks a project with a drawn icon picked from the list, never an emoji', async () => {

@@ -74,7 +74,7 @@ const TONE_TEXT: Record<UiTone, string> = {
 };
 
 const FIELD =
-  "h-8 w-full min-w-0 rounded-card border border-(--line) bg-(--bg-raised) px-2.5 text-body text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus) disabled:opacity-60";
+  "sg-field h-7 w-full min-w-0 px-2 text-body";
 
 /** Each input's starting value: what the agent set, else the first option, nothing, or off. */
 function startingValues(spec: UiSpec): Values {

@@ -110,7 +110,7 @@ function Form({ view }: { view: SandboxView }) {
 						spellCheck={false}
 						placeholder={'registry.npmjs.org\npypi.org\nfiles.pythonhosted.org'}
 						aria-label="Allowed domains"
-						className="w-full resize-y rounded-card border border-(--line) bg-(--bg-raised) px-2.5 py-2 font-mono text-small leading-[18px] text-(--text) outline-none placeholder:text-(--text-4) focus-visible:shadow-(--focus)"
+						className="sg-field w-full resize-y px-2 py-2 font-mono text-small leading-[18px]"
 					/>
 				</SubBlock>
 			</Block>
