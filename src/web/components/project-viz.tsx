@@ -85,6 +85,21 @@ export function ActivityBars({ bars, height = 32, className }: { bars: number[];
 	);
 }
 
+/**
+ * The same days as a strip of even cells, for a card: a day is empty, quiet or busy,
+ * so the strip reads as a rhythm and never as a chart to measure.
+ */
+export function ActivityStrip({ bars, className }: { bars: number[]; className?: string }) {
+	const max = Math.max(...bars, 1);
+	return (
+		<div role="img" aria-label={`Activity: ${bars.reduce((sum, bar) => sum + bar, 0)} events`} className={cn('flex h-3.5 gap-[2px]', className)}>
+			{bars.map((bar, index) => (
+				<span key={index} className={cn('min-w-0 flex-1 rounded-mark', bar === 0 ? 'bg-(--bg-active)' : bar / max > 0.5 ? 'bg-(--accent)' : 'bg-(--accent-soft)')} />
+			))}
+		</div>
+	);
+}
+
 const threadsWord = (count: number) => `${count} thread${count === 1 ? '' : 's'}`;
 
 /**

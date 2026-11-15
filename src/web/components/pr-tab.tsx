@@ -180,11 +180,38 @@ function Loading({ children }: { children: ReactNode }) {
 	);
 }
 
-export function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean }) {
+/**
+ * One pull request. In a task's panel it opens with its state, number and a link to GitHub over a small title.
+ * On a page of its own (`page`, as Reviews shows it) the page's bar already names the repository and links out,
+ * so the title leads at heading size and the state, branches and size follow on one line.
+ */
+export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = false }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean; page?: boolean }) {
 	const [section, setSection] = useState<Section>('changes');
 	const detail = useQuery({ queryKey: ['pull', sessionId, item.number], queryFn: () => api.pull(sessionId, item.number) });
 	const pull = detail.data;
-	const header = (
+	const header = page ? (
+		<div className="flex flex-col gap-2">
+			<h2 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.015em] text-pretty text-(--text)">{pull?.title ?? item.title}</h2>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-3)">
+				<StatePill state={pull?.state ?? item.state} size="sm" />
+				<PullPicker pulls={pulls} selected={item} onSelect={onSelect} />
+				{pull ? (
+					<>
+						<span className="text-(--text-2)">{pull.author}</span>
+						<span className="flex min-w-0 items-center gap-1">
+							<BranchChip name={pull.baseBranch} />
+							<span aria-label="from">←</span>
+							<BranchChip name={pull.headBranch} />
+						</span>
+						<span>opened {age(pull.createdAt)} ago</span>
+						<span className="in-num whitespace-nowrap">
+							{pull.changedFiles} {pull.changedFiles === 1 ? 'file' : 'files'} <span className="text-(--ok)">+{pull.additions}</span> <span className="text-(--bad)">−{pull.deletions}</span>
+						</span>
+					</>
+				) : null}
+			</div>
+		</div>
+	) : (
 		<div className="flex min-w-0 items-center gap-1.5">
 			<StatePill state={pull?.state ?? item.state} size="sm" />
 			<PullPicker pulls={pulls} selected={item} onSelect={onSelect} />
@@ -220,24 +247,26 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork }: { sessio
 		{ id: 'checks', label: 'Checks', count: pull.checks.length },
 	];
 	return (
-		<div className="flex flex-col gap-2.5">
+		<div className={cn('flex flex-col', page ? 'gap-4' : 'gap-2.5')}>
 			{header}
-			<div className="flex flex-col gap-1">
-				<h2 className="m-0 text-body-lg leading-[20px] font-medium text-pretty text-(--text)">{pull.title}</h2>
-				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-3)">
-					<span className="text-(--text-2)">{pull.author}</span>
-					<span className="flex min-w-0 items-center gap-1">
-						<BranchChip name={pull.baseBranch} />
-						<span aria-label="from">←</span>
-						<BranchChip name={pull.headBranch} />
-					</span>
-					<span>opened {age(pull.createdAt)} ago</span>
+			{page ? null : (
+				<div className="flex flex-col gap-1">
+					<h2 className="m-0 text-body-lg leading-[20px] font-medium text-pretty text-(--text)">{pull.title}</h2>
+					<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-3)">
+						<span className="text-(--text-2)">{pull.author}</span>
+						<span className="flex min-w-0 items-center gap-1">
+							<BranchChip name={pull.baseBranch} />
+							<span aria-label="from">←</span>
+							<BranchChip name={pull.headBranch} />
+						</span>
+						<span>opened {age(pull.createdAt)} ago</span>
+					</div>
 				</div>
-			</div>
+			)}
 			<MergeBox sessionId={sessionId} pull={pull} ownWork={ownWork} />
 			<Segmented label="Pull request" className="max-w-full self-start overflow-x-auto">
 				{sections.map((item) => (
-					<SegmentedItem key={item.id} size="sm" on={section === item.id} onClick={() => setSection(item.id)}>
+					<SegmentedItem key={item.id} size="sm" className="shrink-0" on={section === item.id} onClick={() => setSection(item.id)}>
 						{item.label}
 						{item.count !== undefined ? <Count className="h-4 min-w-4 px-1">{item.count}</Count> : null}
 					</SegmentedItem>
