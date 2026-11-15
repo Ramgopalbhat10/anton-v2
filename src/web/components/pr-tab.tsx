@@ -16,11 +16,11 @@ import { taskQueries } from '@/lib/task-queries';
 const STATE_LABEL: Record<PullRequestState, string> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
 const STATE_ICON = PR_ICON;
 
-/** The pull request's state as GitHub shows it: a coloured pill with its icon. */
+/** The pull request's state as a badge in its colour, with its icon. */
 function StatePill({ state, size = 'md' }: { state: PullRequestState | null; size?: 'sm' | 'md' }) {
 	return (
 		<span
-			className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border font-medium whitespace-nowrap', size === 'md' ? 'h-6 px-2.5 text-small' : 'h-5 px-1.5 text-micro')}
+			className={cn('inline-flex shrink-0 items-center gap-1 rounded-inner font-medium whitespace-nowrap', size === 'md' ? 'h-5 px-1.5 text-small' : 'h-[18px] px-1.5 text-micro')}
 			style={prChipStyle(state ?? 'unknown')}
 		>
 			<Icon icon={STATE_ICON[state ?? 'open']} size={size === 'md' ? 13 : 11} />

@@ -456,7 +456,7 @@ export function Chip({
 			title={title}
 			className={cn(
 				'inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro leading-none font-medium whitespace-nowrap',
-								mono && 'in-num',
+				mono && 'in-num',
 				CHIP[tone],
 				className,
 			)}
@@ -474,7 +474,7 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 		<span
 			className={cn(
 				'in-num inline-flex h-4 min-w-4 shrink-0 items-center justify-center text-micro',
-								tone === 'accent' ? 'rounded-full bg-(--accent) px-1 font-semibold text-(--accent-fg)' : 'text-(--text-4)',
+				tone === 'accent' ? 'rounded-full bg-(--accent) px-1 font-semibold text-(--accent-fg)' : 'text-(--text-4)',
 				className,
 			)}
 		>
@@ -520,8 +520,8 @@ export function SegmentedItem({
 			onClick={onClick}
 			className={cn(
 				'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-inner font-medium whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
-								size === 'sm' ? 'h-5 px-1.5 text-micro' : 'h-6 px-2.5 text-small',
-								on ? 'in-segment-on' : 'text-(--text-3) hover:text-(--text)',
+				size === 'sm' ? 'h-5 px-1.5 text-micro' : 'h-6 px-2.5 text-small',
+				on ? 'in-segment-on' : 'text-(--text-3) hover:text-(--text)',
 				className,
 			)}
 		>
@@ -551,7 +551,7 @@ export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onS
 			onClick={onSelect}
 			className={cn(
 				'inline-flex h-9 shrink-0 items-center gap-1.5 text-body font-medium whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus-inset)',
-								on ? 'text-(--text) shadow-[inset_0_-1.5px_0_var(--text)]' : 'text-(--text-3) hover:text-(--text)',
+				on ? 'text-(--text) shadow-[inset_0_-1.5px_0_var(--text)]' : 'text-(--text-3) hover:text-(--text)',
 			)}
 		>
 			{children}
@@ -611,8 +611,8 @@ export function PanelTab({
 				onClick={onSelect}
 				className={cn(
 					'flex h-full items-center gap-1.5 rounded-control pr-2 text-small font-medium whitespace-nowrap outline-none focus-visible:shadow-(--focus)',
-										mark ? 'pl-1.5' : 'pl-2',
-										on ? 'text-(--text)' : 'text-(--text-3) group-hover/tab:text-(--text)',
+					mark ? 'pl-1.5' : 'pl-2',
+					on ? 'text-(--text)' : 'text-(--text-3) group-hover/tab:text-(--text)',
 				)}
 			>
 				{mark ? (

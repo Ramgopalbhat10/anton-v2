@@ -57,8 +57,8 @@ export function SidebarHeading({ label, count, open, onToggle, tone, children }:
 }
 
 /**
- * A top-level group of the sidebar (Projects, Tasks): its name in small
- * capitals, its count, and a hairline running to its actions, so the sections
+ * A top-level group of the sidebar (Projects, Tasks): its name, its count,
+ * and its actions at the far end, which show on hover or focus. The sections
  * inside it (Running, Recent) read as its children. With `onToggle` the name
  * folds the group away.
  */
@@ -144,7 +144,7 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 		>
 			{active ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
 			<span className="relative inline-flex shrink-0 self-start pt-1">
-							<ThreadStateIcon thread={thread} size={14} />
+				<ThreadStateIcon thread={thread} size={14} />
 			</span>
 			<span className="relative flex min-w-0 flex-1 flex-col gap-px">
 				<span className="truncate text-body">{thread.title}</span>
@@ -218,8 +218,8 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
 								{space ? <SpaceMark space={space} size={26} /> : <span className="size-[26px]" />}
-																<span className="flex min-w-0 flex-1 flex-col gap-px">
-																	<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
+								<span className="flex min-w-0 flex-1 flex-col gap-px">
+									<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
 									<span className="in-num truncate text-micro text-(--text-3)">
 										{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
 									</span>

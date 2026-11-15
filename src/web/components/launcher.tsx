@@ -318,7 +318,7 @@ export function Launcher() {
 							{...attachments.dropZone}
 						>
 							<Mascot mood={mood} className="absolute right-6 bottom-[calc(100%-1px)]" />
-														<AttachmentTray attachments={attachments} className="px-3.5 pt-3" />
+							<AttachmentTray attachments={attachments} className="px-3.5 pt-3" />
 							<ComposerInput
 								autoFocus
 								value={prompt}

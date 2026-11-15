@@ -223,10 +223,10 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	return (
 		<>
 			<button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="flex h-[26px] min-w-0 items-center gap-2 rounded-control px-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
-							<span className={NODE}>
-								<Icon icon={open ? ChevronDown : ChevronRight} size={13} className="text-(--text-3)" />
-							</span>
-							<span className="text-body whitespace-nowrap text-(--text-3)">
+				<span className={NODE}>
+					<Icon icon={open ? ChevronDown : ChevronRight} size={13} className="text-(--text-3)" />
+				</span>
+				<span className="text-body whitespace-nowrap text-(--text-3)">
 					{part.state === 'streaming' ? 'Thinking…' : `Thought${words ? ` · ${words} words` : ''}`}
 				</span>
 			</button>
