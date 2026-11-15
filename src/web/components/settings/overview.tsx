@@ -18,7 +18,7 @@ function Open({ section, children }: { section: string; children: ReactNode }) {
 		<Link
 			to="/settings/$section"
 			params={{ section }}
-			className="inline-flex h-7 items-center gap-1 rounded-full bg-(--bg-overlay) px-3 text-small font-medium text-(--text-2) outline-none hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
+			className="sg-btn sg-btn--secondary sg-btn--sm"
 		>
 			{children}
 			<Icon icon={ArrowUpRight} size={12} />

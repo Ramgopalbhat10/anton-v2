@@ -384,9 +384,9 @@ function SectionHeader({
 				aria-expanded={open}
 				onClick={onToggle}
 				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-4) outline-none hover:text-(--text-2) focus-visible:shadow-(--focus)"
-							>
-								<SectionMark place={place} count={count} />
-								<span className="truncate text-micro font-medium">{label}</span>
+			>
+				<SectionMark place={place} count={count} />
+				<span className="truncate text-micro font-medium">{label}</span>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
@@ -443,7 +443,7 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 	);
 	return (
 		<div className="flex min-w-0 items-center gap-1.5 text-micro text-(--text-3)">
-					<span className="pointer-events-auto contents">
+			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
 			{details.length ? <span className="truncate">{details.join(' · ')}</span> : null}
@@ -507,7 +507,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 							)}
 						>
 							<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-1', live && 'text-(--accent-text)')}>
-															<TaskStatusIcon session={session} size={14} />
+								<TaskStatusIcon session={session} size={14} />
 							</span>
 							<div className="flex min-w-0 flex-1 flex-col gap-px">
 								<span className="truncate text-body">{session.title}</span>

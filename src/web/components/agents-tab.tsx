@@ -424,8 +424,8 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				</div>
 				<span
 					className={cn(
-						'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-micro',
-						run.status === 'failed' ? 'border-(--bad-line) text-(--bad)' : live ? 'border-(--accent-line) text-(--accent-text)' : 'border-(--line) text-(--text-2)',
+						'flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium',
+						run.status === 'failed' ? 'bg-(--bad-soft) text-(--bad)' : live ? 'bg-(--accent-soft) text-(--accent-text)' : 'bg-(--bg-active) text-(--text-2)',
 					)}
 				>
 					<StatusGlyph status={run.status} />
