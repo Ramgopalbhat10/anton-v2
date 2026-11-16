@@ -4,7 +4,7 @@ import type { AccountSignIn, Mailbox, OAuthClient, SubscriptionCredential, Subsc
 import { config } from '../config.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Accounts the agent's tools reach (Google) and the services on them (Gmail),

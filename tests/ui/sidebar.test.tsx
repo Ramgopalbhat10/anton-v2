@@ -48,7 +48,7 @@ const tasks = [
 ];
 
 function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} onOpenNotifications={() => {}} /> });
+	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),
@@ -76,6 +76,17 @@ describe('sidebar', () => {
 		vi.clearAllMocks();
 		localStorage.clear();
 		api.sessions.mockResolvedValue({ sessions: tasks });
+	});
+
+	it('links to the inbox with what is unread, leaving out sandboxes, and counts the pull requests still open', async () => {
+		api.notifications.mockResolvedValueOnce({ notifications: [], unread: { 'needs-you': 2, replies: 1, done: 0, failures: 0, sandboxes: 4 } });
+		open();
+		const inbox = await screen.findByRole('link', { name: 'Inbox, 3 unread' });
+		expect(inbox.getAttribute('href')).toBe('/inbox');
+		expect(within(inbox).getByText('3')).toBeTruthy();
+		// One task's pull request is open; the merged one is not counted.
+		await screen.findByText('Red checks');
+		expect(within(screen.getByRole('link', { name: /^Reviews/ })).getByText('1')).toBeTruthy();
 	});
 
 	it('moves a task waiting on you to Running the moment you answer it', async () => {

@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Activity, ArrowUpRight, ChevronRight, Globe, ListChecks, type LucideIcon, ShieldCheck } from 'lucide-react';
+import { Activity, ArrowUpRight, ChevronRight, Globe, ListChecks, type IconComponent, ShieldCheck } from '@/lib/icons';
 import { Status } from '@/components/instrument';
 import { Icon, Spinner, Switch } from '@/components/signal';
 import { api } from '@/lib/api';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';
 
 /** What else keeps the agent in bounds, and where each is set. */
-const ELSEWHERE: Array<{ section: string; icon: LucideIcon; title: string; body: string }> = [
+const ELSEWHERE: Array<{ section: string; icon: IconComponent; title: string; body: string }> = [
 	{ section: 'usage', icon: Activity, title: 'Spending caps', body: 'A task or the day stops when it reaches its cap.' },
 	{ section: 'sandboxes', icon: Globe, title: 'Allowed domains', body: 'Which sites a sandbox can reach.' },
 	{ section: 'general', icon: ListChecks, title: 'Plan mode', body: 'New tasks change nothing until you approve a plan.' },
@@ -58,14 +58,14 @@ export function GuardrailsPage() {
 							key={item.section}
 							to="/settings/$section"
 							params={{ section: item.section }}
-							className="flex min-h-11 items-center gap-3 rounded-tile px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)"
+							className="flex min-h-11 items-center gap-3 rounded-card px-2.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 						>
 							<RowIcon icon={item.icon} />
 							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 								<div className="text-body font-medium">{item.title}</div>
-								<div className="text-small text-(--text-tertiary)">{item.body}</div>
+								<div className="text-small text-(--text-3)">{item.body}</div>
 							</div>
-							<Icon icon={ChevronRight} size={12} className="text-(--icon-disabled)" />
+							<Icon icon={ChevronRight} size={12} className="text-(--text-4)" />
 						</Link>
 					))}
 				</List>

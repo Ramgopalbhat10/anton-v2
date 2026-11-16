@@ -94,7 +94,8 @@ test('Coordinator keeps its instructions fixed and gives the project state as a 
 	assert.doesNotMatch(render, /brief\.state|new Date/, 'nothing that changes between messages is in the instructions');
 	const hook = source.slice(source.indexOf('function useProjectState'));
 	assert.match(hook, /shown\?\.body === body && shown\.since < STATE_EVERY/);
-	assert.match(hook, /append\(\{ kind: 'signal', type: 'project-state', body \}\)/);
+	assert.match(hook, /append\(\{ kind: 'signal', type: STATE_SIGNAL, body \}\)/);
+	assert.match(source, /import \{ STATE_SIGNAL \} from '\.\.\/services\/context-prune\.ts';/, 'the name a model call knows an earlier state by');
 });
 
 test('the browser turns away raw GitHub files, which web_fetch reads in a second', async () => {

@@ -6,7 +6,7 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import type { SessionRecord } from '../core/types.ts';
 import { hasCommit } from './host-commits.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { getProviders } from '../providers/index.ts';
 import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, readUnpushedPatch, saveOutput, savedOutputs } from './checkpoints.ts';
 import { announce } from '../core/changes.ts';

@@ -1,6 +1,6 @@
 import { config } from '../config.ts';
 import { decide, yesOf } from './decisions.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { releaseSpare } from './spares.ts';
 import { prewarmMachine } from './workspace.ts';
 

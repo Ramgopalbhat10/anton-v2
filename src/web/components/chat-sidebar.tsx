@@ -2,55 +2,51 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
 	ArrowUpDown,
-	CalendarDays,
 	ChevronRight,
-	CircleDot,
-	Cpu,
 	Eye,
-	FolderGit2,
 	FolderKanban,
+	Home,
 	GitBranch,
 	GitPullRequest,
-	List,
+	Inbox,
 	ListFilter,
-	type LucideIcon,
+	ListTodo,
+	type IconComponent,
+	Moon,
 	PanelLeft,
 	Pin,
 	PinOff,
-	Plus,
 	RotateCcw,
 	Rows2,
 	Rows3,
 	Search,
 	Settings,
 	Shapes,
-	Server,
 	SlidersHorizontal,
 	Square,
+	SquarePen,
+	Sun,
 	Waypoints,
 	X,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
-import { SegmentMeter, usedTone } from '@/components/instrument';
+import { Count, toneFill, usedTone } from '@/components/instrument';
 import { Logo } from '@/components/illustrations';
-import { NotificationsBell } from '@/components/notifications';
+import { loudUnread, NotificationsBell, useNotifications } from '@/components/notifications';
 import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
+import { FacetSubmenus, FilterChips } from '@/components/task-filters';
 import { isLive, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 import {
 	activeAt,
 	DEFAULT_VIEW,
-	FACET_KEYS,
-	FACETS,
-	type FacetKey,
 	filterCount,
 	groups,
-	optionLabel,
 	readView,
 	repoName,
 	saveView,
@@ -63,16 +59,17 @@ import {
 } from '@/lib/task-view';
 import { useSpaceName } from '@/lib/spaces';
 import { openSettings } from '@/lib/settings-modal';
+import { toggleTheme, useTheme } from '@/lib/theme';
 import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
-/* The page you are on lifts out of the well as a small card, as the active task does. */
+/* A page in the sidebar: 28px, filled on the page you are on, as the open task is. */
 const NAV_ROW =
-	'group/nav relative flex h-[30px] items-center gap-2.5 rounded-control pr-1.5 pl-2 text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary) focus-visible:shadow-(--focus-ring) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text-primary)';
+	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
-/** A nav row's icon, lit in the accent on the page you are on. */
-function NavIcon({ icon }: { icon: LucideIcon }) {
-	return <Icon icon={icon} size={15} className="shrink-0 text-(--icon-tertiary) group-hover/nav:text-(--icon-secondary) group-data-[status=active]/nav:text-(--icon-primary)" />;
+/** A nav row's icon, bright on the page you are on. */
+function NavIcon({ icon }: { icon: IconComponent }) {
+	return <Icon icon={icon} size={15} className="shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)" />;
 }
 
 /** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
@@ -82,15 +79,24 @@ function SpentToday() {
 	const { today, limits } = budget.data;
 	const used = limits.dailyUsd ? today / limits.dailyUsd : 0;
 	return (
-		<Link to="/settings/$section" params={{ section: 'usage' }} className="flex min-w-0 flex-col gap-1.5 rounded-control px-1.5 py-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring)" title="Spent today">
-			<span className={cn('flex items-baseline justify-between gap-2 text-small', budget.data.blocked ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
-				<span>Spent today</span>
-				<span className="in-num">
-					<span className={budget.data.blocked ? undefined : 'text-(--text-secondary)'}>{dollars(today)}</span>
-					{limits.dailyUsd !== null ? ` of $${limits.dailyUsd}` : ''}
-				</span>
+		<Link to="/settings/$section" params={{ section: 'usage' }} className="-mx-1.5 flex min-w-0 flex-col gap-2 rounded-control px-1.5 py-1 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)" title="Spent today">
+			<span className={cn('flex items-baseline gap-1 text-small', budget.data.blocked ? 'text-(--bad)' : 'text-(--text-3)')}>
+				<span className="flex-1">Today</span>
+				<span className={cn('in-num', !budget.data.blocked && 'text-(--text-2)')}>{dollars(today)}</span>
+				{limits.dailyUsd !== null ? <span className={cn('in-num', !budget.data.blocked && 'text-(--text-4)')}>/ ${limits.dailyUsd}</span> : null}
 			</span>
-			{limits.dailyUsd !== null ? <SegmentMeter label="Today's spend against the daily cap" value={used} segments={32} tone={usedTone(used)} height={3} /> : null}
+			{limits.dailyUsd !== null ? (
+				<span
+					role="meter"
+					aria-label="Today's spend against the daily cap"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(Math.min(1, used) * 100)}
+					className="block h-1 overflow-hidden rounded-full bg-(--bg-active)"
+				>
+					<span className="block h-full rounded-full" style={{ width: `${Math.min(100, Math.max(used > 0 ? 2 : 0, used * 100))}%`, background: toneFill(usedTone(used)) }} />
+				</span>
+			) : null}
 		</Link>
 	);
 }
@@ -101,19 +107,17 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	return (
 		<nav
 			data-shown={shown}
-			className="sg-nav-rail glass-strong absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 border-r border-(--border-subtle) py-2 md:flex"
+			className="sg-nav-rail absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 bg-(--bg-app) py-3 md:flex"
 		>
-			<div className="mb-2">
-				<Logo />
+			<div className="mb-2 flex h-7 items-center">
+				<Logo size={18} />
 			</div>
-			<NotificationsBell size="sm" onOpen={onOpenNotifications} />
 			<IconBtn icon={PanelLeft} size="sm" label="Show sidebar" onClick={onExpand} />
-			<IconBtn icon={Plus} size="sm" label="New task" onClick={() => void navigate({ to: '/' })} />
+			<IconBtn icon={SquarePen} size="sm" label="New task" onClick={() => void navigate({ to: '/' })} />
+			<NotificationsBell size="sm" onOpen={onOpenNotifications} />
 		</nav>
 	);
 }
-
-const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
 /**
  * Sort, filter, group and what each row shows, in one menu with a submenu each.
@@ -159,32 +163,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 						Filter
 					</MenuSubTrigger>
 					<MenuSubContent>
-						{FACET_KEYS.map((key) => {
-							const options = FACETS[key].options(tasks);
-							return (
-								<MenuSub key={key}>
-									<MenuSubTrigger icon={FACET_ICON[key]} hint={view.filters[key].length || undefined}>
-										{FACETS[key].label}
-									</MenuSubTrigger>
-									<MenuSubContent>
-										{options.length ? (
-											options.map((option) => (
-												<MenuItem
-													key={option.value}
-													checked={view.filters[key].includes(option.value)}
-													hint={tasks.filter((task) => FACETS[key].test(task, option.value)).length}
-													onSelect={stay(() => onChange(toggleFilter(view, key, option.value)))}
-												>
-													{option.label}
-												</MenuItem>
-											))
-										) : (
-											<MenuItem disabled>No tasks yet</MenuItem>
-										)}
-									</MenuSubContent>
-								</MenuSub>
-							);
-						})}
+						<FacetSubmenus filters={view.filters} onToggle={(key, value) => onChange(toggleFilter(view, key, value))} tasks={tasks} />
 						<MenuSeparator />
 						<MenuItem icon={X} disabled={active === 0} onSelect={() => onChange({ ...view, filters: DEFAULT_VIEW.filters })}>
 							Clear filters
@@ -225,7 +204,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 					aria-checked={view.compact}
 					onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}
 					hint={
-						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent-base)' : 'bg-(--neutral-600)')}>
+						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent)' : 'bg-(--track)')}>
 							<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', view.compact ? 'translate-x-3' : 'translate-x-0.5')} />
 						</span>
 					}
@@ -245,7 +224,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 				>
 					{confirming ? `Click again to stop ${running === 1 ? 'it' : `all ${running}`}` : 'Stop every sandbox'}
 				</MenuItem>
-				<MenuItem icon={List} onSelect={() => void navigate({ to: '/tasks' })}>
+				<MenuItem icon={ListTodo} onSelect={() => void navigate({ to: '/tasks' })}>
 					Open the task list
 				</MenuItem>
 				<MenuItem icon={RotateCcw} onSelect={() => onChange(DEFAULT_VIEW)}>
@@ -253,28 +232,6 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 				</MenuItem>
 			</MenuContent>
 		</Menu>
-	);
-}
-
-/** The filters in use, each a chip that removes itself. */
-function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
-	const chips = FACET_KEYS.flatMap((key) => view.filters[key].map((value) => ({ key, value, label: optionLabel(key, value, tasks) })));
-	return (
-		<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-			{chips.map(({ key, value, label }) => (
-				<button
-					key={`${key}:${value}`}
-					type="button"
-					aria-label={`Remove the ${label} filter`}
-					onClick={() => onChange(toggleFilter(view, key, value))}
-					className="in-chosen flex h-[22px] max-w-full items-center gap-1 rounded-full pr-1 pl-2 text-micro outline-none focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={FACET_ICON[key]} size={10} />
-					<span className="truncate">{label}</span>
-					<Icon icon={X} size={10} />
-				</button>
-			))}
-		</div>
 	);
 }
 
@@ -313,7 +270,7 @@ function Toolbar({
 	if (open) {
 		// The search takes the heading's own row: same height, same place, the field where the name and rule were.
 		return (
-			<div className="mt-4 flex h-7 shrink-0 items-center gap-2 pr-2.5 pl-5">
+			<div className="mt-3 flex h-6 shrink-0 items-center gap-1 pl-0.5">
 				<SearchField size="sm" autoFocus value={query} onChange={onQuery} onEscape={close} placeholder="Search tasks" className="flex-1" />
 				<span className="-my-1 flex shrink-0 items-center">{actions}</span>
 			</div>
@@ -321,8 +278,8 @@ function Toolbar({
 	}
 	if (active) {
 		return (
-			<div className="flex min-h-7 items-center gap-1 pt-3 pr-2.5 pl-5">
-				<FilterChips view={view} onChange={onChange} tasks={tasks} />
+			<div className="mt-3 flex min-h-6 items-center gap-1 pl-2">
+				<FilterChips filters={view.filters} onToggle={(key, value) => onChange(toggleFilter(view, key, value))} tasks={tasks} />
 				<span className="flex shrink-0 items-center">{actions}</span>
 			</div>
 		);
@@ -337,12 +294,12 @@ function Toolbar({
 
 /** How each section of Tasks is marked beside its name: live work in the accent, the rest quiet. */
 function SectionMark({ place, count }: { place: Place; count: number }) {
-	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--icon-tertiary)" />;
+	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--text-3)" />;
 	const live = place === 'running' && count > 0;
 	return (
 		<span aria-hidden className="relative inline-flex size-[11px] shrink-0 items-center justify-center">
-			{live ? <span className="absolute inset-0 animate-ping rounded-full bg-(--accent-base) opacity-30" /> : null}
-			<span className={cn('size-[5px] rounded-full', live ? 'bg-(--accent-base)' : 'bg-(--text-disabled)')} />
+			{live ? <span className="absolute inset-0 animate-ping rounded-full bg-(--accent) opacity-30" /> : null}
+			<span className={cn('size-[5px] rounded-full', live ? 'bg-(--accent)' : 'bg-(--text-4)')} />
 		</span>
 	);
 }
@@ -364,24 +321,24 @@ function SectionHeader({
 	children?: ReactNode;
 }) {
 	return (
-		<div className="group/header mt-1.5 flex h-7 items-center gap-1 pr-2.5 pl-3">
+		<div className="group/header mt-1 flex h-6 items-center gap-1">
 			<button
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-tertiary) outline-none hover:text-(--text-secondary) focus-visible:shadow-(--focus-ring)"
+				className="group/fold flex h-6 min-w-0 items-center gap-2 rounded-control px-2 text-(--text-4) outline-none hover:text-(--text-2) focus-visible:shadow-(--focus)"
 			>
 				<SectionMark place={place} count={count} />
-				<span className="truncate text-small font-medium">{label}</span>
+				<span className="truncate text-micro font-medium">{label}</span>
 				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
-						<span className="in-num text-micro text-(--text-disabled) transition-opacity duration-(--duration-micro) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
+						<span className="in-num text-micro text-(--text-4) transition-opacity duration-(--t-fast) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
 					) : null}
 					<Icon
 						icon={ChevronRight}
 						size={12}
-						className="absolute text-(--icon-secondary) opacity-0 transition-[opacity,transform] duration-(--duration-overlay) ease-(--ease-out) group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100"
+						className="absolute text-(--text-2) opacity-0 transition-[opacity,transform] duration-(--t) ease-(--ease) group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100"
 						style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}
 					/>
 				</span>
@@ -428,7 +385,7 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 		(part): part is string => Boolean(part),
 	);
 	return (
-		<div className="flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
+		<div className="flex min-w-0 items-center gap-1.5 text-micro text-(--text-3)">
 			<span className="pointer-events-auto contents">
 				<TaskCues session={session} onCardChange={onCardChange} />
 			</span>
@@ -459,7 +416,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 				data-open={menuOpen || undefined}
 				onPointerEnter={armed ? undefined : () => setArmed(true)}
 				onFocus={armed ? undefined : () => setArmed(true)}
-				className={cn('group relative flex items-center rounded-control hover:bg-(--bg-hover)', view.compact ? 'h-[30px]' : 'h-[42px]', arriving && 'in-row-enter')}
+				className={cn('group relative flex items-center rounded-control hover:bg-(--bg-hover)', view.compact ? 'h-7' : 'h-10', arriving && 'in-row-enter')}
 			>
 				{active ? <div className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
 				{renaming ? (
@@ -474,7 +431,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								params={{ spaceId: session.spaceId, threadId: session.id }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus)"
 							/>
 						) : (
 							<Link
@@ -483,17 +440,17 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 								search={{ app: 'code' }}
 								onClick={onNavigate}
 								aria-label={session.title}
-								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus-ring)"
+								className="absolute inset-0 rounded-control outline-none focus-visible:shadow-(--focus)"
 							/>
 						)}
 						<div
 							className={cn(
-								'pointer-events-none relative flex h-full min-w-0 flex-1 items-center gap-2 pr-1.5 pl-2',
-								active || live ? 'text-(--text-primary)' : 'text-(--text-secondary) group-hover:text-(--text-primary)',
+								'pointer-events-none relative flex h-full min-w-0 flex-1 items-center gap-2 px-2',
+								active || live ? 'text-(--text)' : 'text-(--text-2) group-hover:text-(--text)',
 							)}
 						>
-							<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-[5px]', live && 'text-(--accent-text)')}>
-								<TaskStatusIcon session={session} size={view.compact ? 12 : 13} />
+							<span className={cn('inline-flex shrink-0', !view.compact && 'self-start pt-1', live && 'text-(--accent-text)')}>
+								<TaskStatusIcon session={session} size={14} />
 							</span>
 							<div className="flex min-w-0 flex-1 flex-col gap-px">
 								<span className="truncate text-body">{session.title}</span>
@@ -506,7 +463,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 									aria-label={note.text}
 									className={cn(
 										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-										note.tone === 'danger' ? 'bg-(--danger-base)' : 'bg-(--attention-base)',
+										note.tone === 'danger' ? 'bg-(--bad)' : 'bg-(--warn)',
 									)}
 								/>
 							) : null}
@@ -514,7 +471,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 					</>
 				)}
 				{renaming || !armed ? null : (
-					<div className="relative hidden shrink-0 items-center gap-px pr-1.5 group-focus-within:flex group-hover:flex group-data-open:flex">
+					<div className="relative hidden shrink-0 items-center gap-px pr-1 group-focus-within:flex group-hover:flex group-data-open:flex">
 						<HoverActions session={session} place={place} />
 						<TaskMenu session={session} size="xs" side="right" onRename={() => setRenaming(true)} onOpenChange={setMenuOpen} />
 					</div>
@@ -539,10 +496,10 @@ function sameRow(before: TaskRowProps, after: TaskRowProps): boolean {
 /** A section's rows, under a heading per repository when grouping. */
 function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {
 	return (
-		<div className="flex flex-col gap-0.5 px-3">
+		<div className="flex flex-col gap-px">
 			{groups(tasks, view.group).map((group) => (
-				<div key={group.key} className="flex flex-col gap-0.5">
-					{group.label ? <div className="truncate px-2.5 pt-1.5 pb-0.5 text-micro text-(--text-disabled)">{group.label}</div> : null}
+				<div key={group.key} className="flex flex-col gap-px">
+					{group.label ? <div className="truncate px-2 pt-1.5 pb-0.5 text-micro text-(--text-4)">{group.label}</div> : null}
 					{group.tasks.map((session) => (
 						<TaskRow key={session.id} session={session} place={place} view={view} active={activeId === session.id} onNavigate={onNavigate} />
 					))}
@@ -556,7 +513,7 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 const RECENT_PAGE = 50;
 
 function Empty({ children }: { children: ReactNode }) {
-	return <div className="px-5 py-1 text-small text-(--text-disabled)">{children}</div>;
+	return <div className="px-2 py-1 text-small text-(--text-4)">{children}</div>;
 }
 
 export function ChatSidebar({
@@ -565,7 +522,6 @@ export function ChatSidebar({
 	onNavigate,
 	onCollapse,
 	onOpenPalette,
-	onOpenNotifications,
 }: {
 	/** Shown as a sheet over the page, on a phone. */
 	open: boolean;
@@ -574,11 +530,10 @@ export function ChatSidebar({
 	onNavigate: () => void;
 	onCollapse: () => void;
 	onOpenPalette: () => void;
-	/** The bell left of the sidebar toggle opens the Notifications dialog. */
-	onOpenNotifications: () => void;
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
 	const inProject = Boolean(params.spaceId);
+	const theme = useTheme();
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const name = profile.data?.name ?? 'You';
 	const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
@@ -589,6 +544,9 @@ export function ChatSidebar({
 		saveView(next);
 	};
 	const sessions = sessionsQuery.data?.sessions ?? [];
+	// Inbox counts what calls you over; Reviews the pull requests still open, as the tasks last read them.
+	const unread = loudUnread(useNotifications().data?.unread);
+	const openPulls = useMemo(() => sessions.filter((session) => session.pullRequest?.state === 'open' || session.pullRequest?.state === 'draft').length, [sessions]);
 	const { pinned, running, recent } = useMemo(() => sections(sessions, view, query), [sessions, view, query]);
 	// Recent draws a page of rows at a time, so a long history costs what it shows; the Tasks page lists them all.
 	const [recentShown, setRecentShown] = useState(RECENT_PAGE);
@@ -607,59 +565,65 @@ export function ChatSidebar({
 		<aside
 			data-open={open}
 			data-collapsed={collapsed}
-			className="sg-nav glass-strong flex w-[288px] min-w-0 shrink-0 flex-col border-r border-(--border-subtle)"
+			className="sg-nav flex w-[min(288px,86vw)] min-w-0 shrink-0 flex-col bg-(--bg-app) p-2 md:w-(--nav-w,236px)"
 		>
-			<div className="flex h-12 shrink-0 items-center gap-2.5 pr-2.5 pl-4">
-				<Logo size={22} />
-				<div className="min-w-0 truncate text-body-lg font-semibold tracking-[-0.02em]">Anton</div>
-				<div className="min-w-1 flex-[1_1_4px]" />
-				<NotificationsBell onOpen={onOpenNotifications} />
-				<IconBtn icon={PanelLeft} size="xs" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
-				<IconBtn icon={X} size="xs" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
+			<div className="mb-1 flex h-9 shrink-0 items-center gap-0.5 pl-0.5">
+				<Link to="/" onClick={onNavigate} aria-label="Anton: home" className="flex h-7 min-w-0 items-center gap-2 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
+					<Logo size={18} />
+					<span className="truncate text-body font-semibold text-(--text)">Anton</span>
+				</Link>
+				<div className="min-w-1 flex-1" />
+				<IconBtn icon={Search} size="sm" label="Search or jump to" onClick={onOpenPalette} />
+				<IconBtn icon={PanelLeft} size="sm" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
+				<IconBtn icon={X} size="sm" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 			</div>
 
-			<div className="flex items-center gap-1 px-3 pb-2">
-				<Link
-					{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
-					onClick={onNavigate}
-					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-tile border border-(--card-border) bg-(--bg-hover) px-2.5 text-body font-medium text-(--text-primary) transition-colors duration-(--duration-micro) outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={inProject ? Waypoints : Plus} />
-					<span>{inProject ? 'New thread' : 'New task'}</span>
-				</Link>
-				<button
-					type="button"
-					onClick={onOpenPalette}
-					aria-label="Command palette"
-					title="Search or jump to"
-					className="flex h-8 shrink-0 items-center gap-1.5 rounded-tile pr-1.5 pl-2 text-(--icon-tertiary) outline-none hover:bg-(--bg-hover) hover:text-(--icon-secondary) focus-visible:shadow-(--focus-ring)"
-				>
-					<Icon icon={Search} size={14} />
-					<Kbd keys="mod+k" size="sm" />
-				</button>
-			</div>
+			<Link
+				{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
+				onClick={onNavigate}
+				className="sg-btn sg-btn--secondary mb-2 shrink-0 justify-start"
+			>
+				<Icon icon={inProject ? Waypoints : SquarePen} size={14} />
+				<span className="min-w-0 flex-1 truncate text-left">{inProject ? 'New thread' : 'New task'}</span>
+				{inProject ? null : (
+					<span className="max-md:hidden">
+						<Kbd keys="c" size="sm" />
+					</span>
+				)}
+			</Link>
 
 			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
-			<nav aria-label="Pages" className={cn('mx-3 flex flex-col gap-px', inProject && 'hidden')}>
+			<nav aria-label="Pages" className={cn('flex shrink-0 flex-col gap-px', inProject && 'hidden')}>
+				<Link to="/" onClick={onNavigate} activeOptions={{ exact: true }} className={NAV_ROW}>
+					<NavIcon icon={Home} />
+					<span className="min-w-0 flex-1 truncate">Home</span>
+				</Link>
+				<Link to="/inbox" onClick={onNavigate} aria-label={unread ? `Inbox, ${unread} unread` : 'Inbox'} className={NAV_ROW}>
+					<NavIcon icon={Inbox} />
+					<span className="min-w-0 flex-1 truncate">Inbox</span>
+					{unread ? <Count tone="accent">{unread > 99 ? '99+' : unread}</Count> : null}
+				</Link>
 				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
-					<NavIcon icon={List} />
-					<div className="min-w-0 flex-1 truncate text-body">Tasks</div>
+					<NavIcon icon={ListTodo} />
+					<span className="min-w-0 flex-1 truncate">Tasks</span>
+					{sessions.length ? <Count>{sessions.length}</Count> : null}
 				</Link>
 				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
-					<div className="min-w-0 flex-1 truncate text-body">Reviews</div>
+					<span className="min-w-0 flex-1 truncate">Reviews</span>
+					{openPulls ? <Count>{openPulls}</Count> : null}
 				</Link>
 				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
-					<div className="min-w-0 flex-1 truncate text-body">Projects</div>
+					<span className="min-w-0 flex-1 truncate">Projects</span>
 				</Link>
 				<Link to="/artifacts" onClick={onNavigate} className={NAV_ROW}>
 					<NavIcon icon={Shapes} />
-					<div className="min-w-0 flex-1 truncate text-body">Artifacts</div>
+					<span className="min-w-0 flex-1 truncate">Artifacts</span>
 				</Link>
 			</nav>
 
-			<div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto pt-1 *:shrink-0', inProject && 'hidden')}>
+			<div className={cn('-mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 *:shrink-0', inProject && 'hidden')}>
 				<ProjectsSection onNavigate={onNavigate} />
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
@@ -671,11 +635,9 @@ export function ChatSidebar({
 				<section aria-label="Running">
 					<SectionHeader {...header('running', 'Running', running.length)} />
 					{folded('running') ? null : sessionsQuery.isError ? (
-						<div className="px-5 py-1.5 text-small text-(--danger-text)">Could not load tasks.</div>
+						<div className="px-2 py-1.5 text-small text-(--bad)">Could not load tasks.</div>
 					) : sessionsQuery.isPending ? (
-						<div className="px-3">
-							<div className="h-11 rounded-tile bg-(--bg-skeleton)" />
-						</div>
+						<div className="h-10 rounded-control bg-(--bg-hover)" />
 					) : running.length ? (
 						rows(running, 'running')
 					) : (
@@ -688,7 +650,7 @@ export function ChatSidebar({
 						<>
 							{rows(recent.length > recentShown ? recent.slice(0, recentShown) : recent, 'recent')}
 							{recent.length > recentShown ? (
-								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mx-3 mt-0.5 text-(--text-tertiary)')}>
+								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mt-0.5 w-full font-normal text-(--text-3)')}>
 									Show {Math.min(RECENT_PAGE, recent.length - recentShown)} more
 								</button>
 							) : null}
@@ -700,10 +662,20 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="flex shrink-0 flex-col gap-1 border-t border-(--border-subtle) px-3 pt-2 pb-3">
-				<div className="flex items-center gap-2.5 px-1.5">
+			<div className="-mx-2 -mb-2 flex shrink-0 flex-col gap-1.5 border-t border-(--line) px-3.5 pt-2 pb-2.5">
+				<SpentToday />
+				<div className="flex items-center gap-2">
 					<Avatar name={name} />
-					<div className="min-w-0 flex-1 truncate text-body text-(--text-secondary)">{name}</div>
+					<div className="min-w-0 flex-1 truncate text-small font-medium text-(--text)">{name}</div>
+					<button
+						type="button"
+						onClick={toggleTheme}
+						aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+						title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+						className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm"
+					>
+						<Icon icon={theme === 'dark' ? Sun : Moon} size={14} />
+					</button>
 					<button
 						type="button"
 						onClick={() => {
@@ -717,7 +689,6 @@ export function ChatSidebar({
 						<Icon icon={Settings} size={14} />
 					</button>
 				</div>
-				<SpentToday />
 			</div>
 		</aside>
 	);

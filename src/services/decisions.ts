@@ -1,6 +1,6 @@
 import type { Answer, Decision, Question } from '../core/ports.ts';
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { recordUsage } from './usage.ts';
 
 /** Whether a decision model is set up; without one, every decision falls back to what Anton did before. */

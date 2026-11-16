@@ -7,7 +7,7 @@ import { connectorsFor, isWebServer, mcpServersFor, sealedSecretsFor } from './a
 import { mcpToolName } from './connector-tools.ts';
 import { ask, hasDecisionModel } from './decisions.ts';
 import { httpRequest } from './http-request.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { repoDir } from './git.ts';
 import { enabledMcpServers } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';

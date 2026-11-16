@@ -1,13 +1,11 @@
 import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Telescope, Workflow } from 'lucide-react';
+import { Bot, Braces, Cpu, GitPullRequest, ImagePlus, LayoutPanelTop, ListChecks, Workflow } from '@/lib/icons';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/signal';
 import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
-import { SkyBrightnessSlider } from '@/components/sky';
-import { setSkyMode, setSkyOn, type SkyMode, useSky, useSkyMode, useSkyOn } from '@/lib/sky';
 import { useGeneralSettings } from './general-settings';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 
@@ -77,7 +75,7 @@ function BackgroundModel({
 					only={only}
 				/>
 			) : (
-				<span className="text-small text-(--text-tertiary)">{fallbackLabel}</span>
+				<span className="text-small text-(--text-3)">{fallbackLabel}</span>
 			)}
 			<Switch
 				checked={value !== null}
@@ -105,8 +103,8 @@ const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string
 /** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
 function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {
 	const listed = useQuery({ queryKey: ['image-models'], queryFn: api.imageModels, staleTime: 5 * 60_000 });
-	if (!listed.data) return listed.error ? <span className="text-small text-(--danger-text)">Could not list image models</span> : <Spinner size={12} />;
-	if (!listed.data.available) return <span className="text-small text-(--text-tertiary)">Needs an OpenRouter key</span>;
+	if (!listed.data) return listed.error ? <span className="text-small text-(--bad)">Could not list image models</span> : <Spinner size={12} />;
+	if (!listed.data.available) return <span className="text-small text-(--text-3)">Needs an OpenRouter key</span>;
 	const { models, default: fallback } = listed.data;
 	const label = (id: string) => models.find((model) => model.id === unrouted(id))?.name ?? unrouted(id).replace(/^openrouter\//, '');
 	const vendors = new Map<string, ImageModelInfo[]>();
@@ -184,7 +182,6 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 					/>
 				</SettingRow>
 			</Block>
-			<Appearance />
 			<Block title="New tasks" icon={ListChecks}>
 				<SettingRow
 					title="Start in plan mode"
@@ -361,11 +358,11 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 			<div
 				role="group"
 				aria-label="Save changes"
-				className="flex items-center gap-3 self-stretch border-t border-(--border-subtle) pt-4"
+				className="flex items-center gap-3 self-stretch border-t border-(--line) pt-4"
 			>
 				<span className="min-w-0 flex-1 text-small">
 					{dirty ? (
-						<span className="inline-flex items-center gap-1.5 text-(--text-secondary)">
+						<span className="inline-flex items-center gap-1.5 text-(--text-2)">
 							<StatusDot tone="accent" />
 							Unsaved changes
 						</span>
@@ -373,7 +370,7 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved." />
 					)}
 				</span>
-				{dirty && save.error ? <span className="text-small text-(--danger-text)">{save.error.message}</span> : null}
+				{dirty && save.error ? <span className="text-small text-(--bad)">{save.error.message}</span> : null}
 				<Btn
 					size="sm"
 					variant="ghost"
@@ -400,48 +397,5 @@ export function GeneralPage() {
 			<PageHeading title="General">How new tasks start and how the agent works.</PageHeading>
 			{settings.data ? <Form settings={settings.data} /> : <Spinner size={12} />}
 		</>
-	);
-}
-
-/** How Anton looks in this browser: the sky behind it, and which pictures it shows. Kept in the browser, not on the server. */
-function Appearance() {
-	const on = useSkyOn();
-	const mode = useSkyMode();
-	const image = useSky();
-	return (
-		<Block title="Appearance" icon={Telescope}>
-			<SettingRow
-				title="Sky"
-				help={`A NASA picture behind Anton, as a pixel mesh. Now: ${image.title}.`}
-				info="It shows in full on Home and dimmed elsewhere. This setting is kept in this browser."
-			>
-				<Switch checked={on} onChange={setSkyOn} label={<span className="sr-only">Show the sky</span>} />
-			</SettingRow>
-			{on ? (
-				<SettingRow
-					title="Pictures"
-					help={mode === 'daily' ? 'NASA’s Astronomy Picture of the Day, the same all day.' : 'A new one of 24 pictures every hour.'}
-					info="The 24 hourly pictures are public-domain pictures from NASA's Image and Video Library that ship with Anton, so nothing is fetched. The picture of the day is read once a day by Anton's server from NASA and kept there; on a day it is a video, the hourly pictures show."
-				>
-					<Segmented label="Pictures" role="radiogroup">
-						{(
-							[
-								['hourly', 'Every hour'],
-								['daily', 'Picture of the day'],
-							] as Array<[SkyMode, string]>
-						).map(([value, label]) => (
-							<SegmentedItem key={value} role="radio" on={mode === value} onClick={() => setSkyMode(value)}>
-								{label}
-							</SegmentedItem>
-						))}
-					</Segmented>
-				</SettingRow>
-			) : null}
-			{on ? (
-				<SettingRow title="Brightness" help="How bright or dim the picture looks behind the app. Double-click the slider to reset.">
-					<SkyBrightnessSlider className="w-[220px] max-w-full [&_label]:sr-only" />
-				</SettingRow>
-			) : null}
-		</Block>
 	);
 }

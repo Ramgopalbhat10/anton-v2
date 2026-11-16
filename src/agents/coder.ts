@@ -4,7 +4,6 @@ import {
 	type AgentProps,
 	defineSubagent,
 	defineTool,
-	setProvider,
 	useAgentFinish,
 	useAgentStart,
 	useDelivery,
@@ -26,12 +25,6 @@ import { type ToolProfile, toolProfileFor } from '../core/tool-profile.ts';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { type ImageSight, sandboxTools } from '../flue/sandbox-tools.ts';
 import { taskSandbox, taskTools } from '../flue/task-sandbox.ts';
-import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
-import { withPruning } from '../flue/pruned-models.ts';
-import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
-import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
-import { devinProvider } from '../flue/devin-models.ts';
-import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { saveCheckpoint } from '../services/checkpoints.ts';
 import { repoDir } from '../services/git.ts';
 import { type BrowserInput, type BrowserState, takeScreenshot } from '../services/browser.ts';
@@ -40,7 +33,7 @@ import { autopilot, IRREVERSIBLE, MAX_ACTIONS, mayBeIrreversible, outcomeNote } 
 import { codeReport, RUN_MS } from '../services/browser-run.ts';
 import { browserPrompt, browserToolDescription } from '../services/browser-tool-text.ts';
 import { openPullRequest } from '../services/pull-requests.ts';
-import { agentModelFor, modelFor, routedModels } from '../services/sessions.ts';
+import { agentModelFor, modelFor } from '../services/sessions.ts';
 import { toUsage } from '../services/usage.ts';
 import {
 	agentSettingsNow,
@@ -81,8 +74,8 @@ import type { SealedSecretBrief } from '../services/sealed-secrets.ts';
 import { listRepoFiles, readRepoFile, searchRepo } from '../services/repo-snapshot.ts';
 import { globTask, grepTask, readTaskFile, taskFileBytes, taskRoot, workMachine } from '../services/task-files.ts';
 import { getSessionRecord } from '../db/sessions.ts';
-import { findModel, loadedModels } from '../services/models.ts';
-import { gatewayKey, gatewayKeyOf, gatewayToken, onPlan, planKey, planOf, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { findModel } from '../services/models.ts';
+import { onPlan, planOf } from '../services/subscriptions.ts';
 import { finishReply, replyFacts, replyTotal, startReply } from '../services/response-usage.ts';
 import { finishTrace, startTrace } from '../services/response-trace.ts';
 import { saveTrace } from '../db/traces.ts';
@@ -101,7 +94,7 @@ import { currentBrief, noteStep, runReport, type StepDetail, subagentRuns } from
 import { isLocalAddress, isRawFile } from '../services/browser-step.ts';
 import { pageForAgent } from '../services/page-memory.ts';
 import { isIncognitoId } from '../core/incognito.ts';
-import { logProblem } from '../services/log.ts';
+import { logProblem } from '../core/log.ts';
 import { recordLatestInput } from '../services/latest-input.ts';
 import { noteDelivery } from '../services/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../services/reply-check.ts';
@@ -120,33 +113,42 @@ import { threadFinished } from '../services/thread-reports.ts';
 import { PROJECT_FILES, readProjectFileForAgent, saveSpaceFiles } from '../services/space-files.ts';
 import { readAttachment } from '../services/attachments.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../services/connector-tools.ts';
-
-// Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
-// Calls through the gateways and ChatGPT and OpenCode plans send old tool results cleared once a conversation grows (withPruning).
-// A task's route (one provider first, or a sort) is part of the specifier its agent resolves; see src/core/model-route.ts.
-setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
-// Every model in Vercel AI Gateway's live list, with the key pasted in Settings › Subscriptions.
-setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
-// Models on a signed-in ChatGPT plan, each call with a fresh token from Settings › Subscriptions.
-setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
-// Models on a Claude plan, run by Claude Code on this server with Anton's tools; see docs/claude-code-subscription.md.
-setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
-// Models on an OpenCode Go plan and on a Cursor plan, with the key pasted in Settings › Subscriptions.
-setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
-setProvider(withPruning(devinProvider(loadedModels, () => planKey('devin'))));
-setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
+// Registers the model providers (OpenRouter, Vercel, the plans) before this agent resolves a model.
+import './providers.ts';
 
 /** Deliverables go here, outside the repo, so they never pollute the diff. */
 const OUTPUTS = '../outputs';
 
+/**
+ * What every explorer is told, whichever files it reads. In prod (Nov 2026, 106 explorer runs) one took 7 steps and
+ * 140k tokens at the median and 11 steps and 270k at the 90th percentile; the runs past that grew their context with
+ * whole files (two explorers of one reply read 238KB and 219KB and spent 639k and 725k tokens), and a 2,400-token
+ * final report took 30 s to write. Nothing told them when to stop or how long to answer.
+ */
+const EXPLORER_SCOPE =
+	'Answer the questions in your brief and nothing past them: once each is answered, or you see it cannot be answered from here, stop reading and report. ' +
+	'Most briefs need fewer than ten steps; past that, report what you have rather than widening the search.';
+const EXPLORER_READING =
+	'Search before you open files, then read only the lines that bear on the question, not whole large files: everything you read is sent again with each later step. ' +
+	'You cannot reach the web, so name anything only online documentation could settle.';
+const EXPLORER_SCRIPTS =
+	'When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.';
+// The task call hands the final message back to the Coder, so a report file is only extra writing and reading.
+const findingsReport = (canWrite: boolean) =>
+	'Report in about 500 words or fewer unless the brief asks for more: each finding with its files and lines and what they show, then what you could not settle.' +
+	(canWrite ? ` Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report. Do not commit, push, or open a pull request.` : '');
+
+/** Says what the Coder gets from an explorer and what it costs, in every explorer's description. */
+const EXPLORER_USE =
+	'It starts without this conversation, cannot reach the web, and the caller waits for its report: use it for an investigation across many files you cannot name yet, not for a few files you can.';
+
 function Explorer() {
 	return [
 		'You are the explorer specialist.',
-		'Investigate the repository using read, grep, glob, and bash.',
-		'Do not modify files in the repository.',
-		// The task call hands the final message back to the Coder, so a report file is only extra writing and reading.
-		`Answer with concise findings (files, lines and what they show), then stop. Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report.`,
-		'Do not commit, push, or open a pull request.',
+		'Investigate the repository with read, grep and glob, and with bash only for what reading cannot answer, such as git history; you change nothing.',
+		EXPLORER_SCOPE,
+		EXPLORER_READING,
+		findingsReport(true),
 	].join(' ');
 }
 
@@ -163,7 +165,7 @@ function Tester() {
 
 const explorer = defineSubagent({
 	name: 'explorer',
-	description: 'Read-only codebase investigation. Answers with its findings.',
+	description: `Read-only investigation of the repository, answering with its findings with files and lines. ${EXPLORER_USE}`,
 	agent: Explorer,
 });
 
@@ -249,9 +251,10 @@ function SnapshotExplorer(scripts: boolean, chat: boolean) {
 		chat
 			? 'Investigate the GitHub repositories your brief names with list_files, search_code and read_file, passing each call the repository as repo; you change nothing.'
 			: 'Investigate the repository with list_files, search_code and read_file, which show it at the commit this task started from (or, given repo, another GitHub repository); you change nothing.',
-		'Read as much as the brief needs, searching before reading whole files.',
-		...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
-		'Finish with a concise findings report: what you found, with files and lines, and anything you could not tell.',
+		EXPLORER_SCOPE,
+		EXPLORER_READING,
+		...(scripts ? [EXPLORER_SCRIPTS] : []),
+		findingsReport(false),
 	].join(' ');
 }
 
@@ -265,8 +268,8 @@ function useSnapshotExplorer(id: string, chat: boolean) {
 	const subagent = defineSubagent({
 		name: 'explorer',
 		description: chat
-			? 'Read-only investigation of GitHub repositories (name each as owner/name in the brief), reporting its findings with files and lines. Use it for questions that need many files read.'
-			: 'Read-only investigation of the repository as the task started, or of another GitHub repository the brief names as owner/name, reporting its findings with files and lines. Use it for questions that need many files read.',
+			? `Read-only investigation of GitHub repositories (name each as owner/name in the brief), reporting its findings with files and lines. ${EXPLORER_USE}`
+			: `Read-only investigation of the repository as the task started, or of another GitHub repository the brief names as owner/name, reporting its findings with files and lines. ${EXPLORER_USE}`,
 		agent: () => {
 			useRepoSnapshot(id, chat);
 			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
@@ -347,10 +350,11 @@ function TaskExplorer(id: string, scripts: boolean) {
 		[
 			'You are the explorer specialist.',
 			"Investigate with read, grep and glob, which show the task's files (or, given repo, another GitHub repository's) and need no sandbox; you change nothing.",
-			'Read as much as the brief needs, searching before reading whole files. Use bash only for what reading cannot answer, such as git history: it starts the sandbox.',
-			...(scripts ? ['When the next step is several reads or searches you can name now (every match of a search, each file of a folder), do them in one run_script program and return only the parts you need.'] : []),
-			`Answer with concise findings (files, lines and what they show), then stop. Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report.`,
-			'Do not commit, push, or open a pull request.',
+			'Use bash only for what reading cannot answer, such as git history: it starts the sandbox.',
+			EXPLORER_SCOPE,
+			EXPLORER_READING,
+			...(scripts ? [EXPLORER_SCRIPTS] : []),
+			findingsReport(true),
 		].join(' ') + repoInstructionsPrompt(repoInstructionsFor(id))
 	);
 }
@@ -359,7 +363,7 @@ function TaskExplorer(id: string, scripts: boolean) {
 function useTaskSubagents(id: string) {
 	const taskExplorer = defineSubagent({
 		name: 'explorer',
-		description: 'Read-only investigation of the repository, or of another GitHub repository the brief names as owner/name, answering with its findings with files and lines. Use it for questions that need many files read.',
+		description: `Read-only investigation of the repository, or of another GitHub repository the brief names as owner/name, answering with its findings with files and lines. ${EXPLORER_USE}`,
 		agent: () => {
 			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
 			const scripts = agentSettingsNow().codeMode;
@@ -1432,12 +1436,35 @@ const BUDGET_HINT = `A reply may run for up to ${hoursText(config.replyTimeoutMs
 /** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
 const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
 
+/**
+ * When to hand reading to the explorer. "Many files or areas" read differently by model family: over 249 prod replies
+ * (Nov 2026) Claude, Grok and DeepSeek never called task, while GPT-6.1 Sol did in 27-83% of replies, and its replies
+ * that did took a median 726 s and 2.04M tokens against 78 s and 72k for those that did not. One such reply sent two
+ * explorers overlapping briefs and one to read a library's source for what its docs page said. A number and the
+ * cost make the rule read the same to every model.
+ */
+const DELEGATE_HINT =
+	'Read the code yourself by default. Delegate to the explorer subagent only an investigation across many files you cannot name yet (about ten reads or more): it starts without this conversation, and you wait until it reports. ' +
+	'Give each explorer a question of its own, so no two read the same ground, and read the web yourself, since the explorer cannot. Build on its report, reading again only the lines you will change or quote.';
+
+/** "Task" is also an Anton task, so the brief rule names the subagent. */
+const BRIEF_HINT = 'Brief each subagent fully, since none sees this conversation: what to find out or do, what to leave out, and what to report.';
+
+/**
+ * The repository prompts are written for changes; a question read their checks, budget and "do not end on part of
+ * the request left undone" as a call to be exhaustive. The finish hint and the pull request rule already say they are
+ * for changes; this says what a question gets instead, and leaves every check on a change as it was.
+ */
+const ANSWER_HINT =
+	'When the user asks for an answer, an explanation or an analysis rather than a change, answer it from the code and the web without changing the repository, and stop once you can answer it; the checks, the pull request and the time budget below are for changes.';
+
 const READ_ONLY_PROMPT = [
 	'You are Anton, a coding agent for a GitHub repository.',
 	'You start read-only, with no sandbox: answer questions about the code with list_files, search_code and read_file, which show the repository at the commit this task started from.',
 	'When the task needs more (editing files, running commands or tests, installing anything, or opening a pull request), call start_workspace first, then carry on.',
 	'Do not start a workspace for questions you can answer by reading.',
-	'When a question needs many files read and weighed, delegate the reading to the explorer subagent with a complete brief; it reads the same snapshot and reports back, so your own context stays small. Build on its report and its file and line references; read a file again yourself only for the lines you must quote or check.',
+	DELEGATE_HINT,
+	BRIEF_HINT,
 	WEB_HINT,
 	'Be concise, and point to files and lines.',
 ].join(' ');
@@ -1460,13 +1487,14 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	`Save deliverables that are not code (screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,
 	OUTPUT_LINKS_HINT,
 	SCRATCH_HINT,
-	'Delegate an investigation across many files or areas to the explorer subagent, and build on its report, reading again only the lines you will change; when the change sits in a few files you can name, read them yourself instead.',
+	ANSWER_HINT,
+	DELEGATE_HINT,
+	BRIEF_HINT,
 	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
 	read,
 	edit,
 	FINISH_HINT,
 	BUDGET_HINT,
-	'Give each task a complete briefing; subagents do not see this conversation.',
 	'You do not have git push credentials: open_pull_request commits and pushes for you.',
 	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
@@ -1474,7 +1502,7 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
 	web,
-	'Be concise. Explain what you changed.',
+	'Be concise, and when you changed something, say what.',
 ].join(' ');
 
 const CHAT_PROMPT = [

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createClient } from '@libsql/client';
 import { config } from '../config.ts';
 import { bodyOf } from './latest-input.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /** A message the runtime accepted for the task but the agent has not read yet. */
 export type WaitingMessage = { id: string; text: string; at: string };

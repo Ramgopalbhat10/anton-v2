@@ -6,7 +6,7 @@ const MIN_WIDTH = 360;
 const CONVERSATION_WIDTH = 340;
 const NARROW_WIDTH = 248;
 
-/** As long as `--duration-sheet`: how long the workspace takes to slide in or out. */
+/** As long as `--t-slow`: how long the workspace takes to slide in or out. */
 const SLIDE_MS = 240;
 
 /** Where the workspace is in its slide: sliding in, sliding out, or standing open. */
@@ -84,7 +84,7 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 			ref={pane}
 			// Only beside the conversation does it slide out; covering it, it goes at once.
 			className={cn(
-				'sg-workspace relative flex min-h-0 min-w-0 flex-col border-(--border-subtle) md:border-l',
+				'sg-workspace relative flex min-h-0 min-w-0 flex-col border-(--line) md:border-l',
 				slide === 'out' && (expanded || compact ? 'hidden' : 'max-md:hidden'),
 			)}
 			data-expanded={expanded}

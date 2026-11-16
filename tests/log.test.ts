@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { logProblem, logRuntimeEvent, recentProblems } from '../src/services/log.ts';
+import { logProblem, logRuntimeEvent, recentProblems } from '../src/core/log.ts';
 
 test('problems are kept newest first, with the runtime warnings and failed replies', () => {
 	const quiet = console.warn;

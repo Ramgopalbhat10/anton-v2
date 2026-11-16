@@ -3,7 +3,7 @@ import { splitAttachments } from '../core/attachments.ts';
 import type { Usage } from '../core/types.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { recordUsage } from './usage.ts';
 
 /*

@@ -509,6 +509,17 @@ export type RuntimeConversation = {
 };
 
 /**
+ * One sign-in the program is running: approve at `url`, and the vendor's page
+ * shows a code that `complete` passes to the program. Anton relays the code
+ * only; the program trades it for its token and keeps that to itself.
+ */
+export type RuntimeSignIn = {
+	url: string;
+	complete(code: string): Promise<void>;
+	cancel(): void;
+};
+
+/**
  * A vendor's own agent program (Claude Code) that Anton drives as a model,
  * signed in through the program's own flow. Anton never sees its token: it
  * hands the program Anton's tools and runs every call the program makes.
@@ -522,6 +533,10 @@ export type AgentRuntime = {
 	readonly gateway: string;
 	/** The command to run once on the server to sign in, in the program's own flow. */
 	readonly signInCommand: string;
+	/** Starts the program's own sign-in from Anton: it gives the address to approve at, then takes the code the vendor's page shows. */
+	signIn?(): Promise<RuntimeSignIn>;
+	/** Signs the program out through its own command. */
+	signOut?(): Promise<void>;
 	/** Read again with `fresh`; otherwise the last answer is reused for a few minutes. */
 	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
 	listModels(): Promise<SubscriptionModel[]>;
@@ -814,26 +829,4 @@ export type AppsConnector = {
 	/** Revokes the grant at the provider, then removes the account. */
 	revokeConnectedAccount(id: string): Promise<void>;
 	runTool(toolSlug: string, input: { userId: string; connectedAccountId?: string | null; args: Record<string, unknown> }, signal?: AbortSignal): Promise<AppsExecution>;
-};
-
-/** One day's picture from a picture-of-the-day service: what it is, who made it, where to read about it, and the image to draw. */
-export type DailyPictureInfo = {
-	/** The day it is the picture for, `YYYY-MM-DD`. */
-	date: string;
-	title: string;
-	credit: string;
-	/** Its page at the source. */
-	link: string;
-	/** A web-sized image of it, to download once. */
-	imageUrl: string;
-};
-
-/**
- * A picture of the day (NASA's Astronomy Picture of the Day): the sky behind
- * the app can show it in place of the hourly ones. Null when the day's entry
- * is not a picture (a video) or the service cannot be read.
- */
-export type DailyPicture = {
-	today(signal?: AbortSignal): Promise<DailyPictureInfo | null>;
-	image(url: string, signal?: AbortSignal): Promise<{ bytes: Uint8Array; type: string }>;
 };

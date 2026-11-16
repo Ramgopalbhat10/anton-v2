@@ -11,6 +11,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
+import { mockSetup } from './mock-setup.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
 
@@ -26,7 +27,7 @@ function walk(dir: string, out: string[], limit: number) {
 function paths(): string[] {
 	const tracked = execSync('git ls-files', { cwd: root, encoding: 'utf8' }).trim().split('\n');
 	const vendored: string[] = [];
-	for (const dir of ['node_modules/@tanstack', 'node_modules/radix-ui', 'node_modules/@radix-ui', 'node_modules/lucide-react/dist/esm/icons']) walk(join(root, dir), vendored, 3000 + vendored.length);
+	for (const dir of ['node_modules/@tanstack', 'node_modules/radix-ui', 'node_modules/@radix-ui', 'node_modules/@hugeicons/core-free-icons/dist/esm']) walk(join(root, dir), vendored, 3000 + vendored.length);
 	return [...tracked, ...vendored.slice(0, 3000)].sort();
 }
 
@@ -65,6 +66,143 @@ const others = Array.from({ length: 30 }, (_, index) => ({
 	status: index < 4 ? 'running' : 'stopped',
 	createdAt: new Date(Date.parse(session.createdAt) - index * 3_600_000).toISOString(),
 }));
+
+/* Projects and their threads, so the Projects page and a project's Overview have something to show. */
+const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+const thread = (id: string, spaceId: string, title: string, threadState: string, patch: Record<string, unknown> = {}) => ({
+	...session,
+	id,
+	spaceId,
+	title,
+	threadState,
+	repo: '',
+	branch: '',
+	baseBranch: '',
+	baseSha: '',
+	prUrl: null,
+	pullRequest: null,
+	status: threadState === 'working' ? 'running' : 'stopped',
+	working: threadState === 'working',
+	createdAt: ago(60 * 24 * 3),
+	lastInputAt: ago(30),
+	checkpointAt: null,
+	resolvedAt: null,
+	...patch,
+});
+const onRepo = (projectId: string, repo: string, slug: string) => ({ projectId, repo, branch: `anton/${slug}`, baseBranch: 'main', baseSha: 'abc123' });
+/** The one pull request the Reviews page lists, as GitHub would describe it. */
+const pull = {
+	url: 'https://github.com/acme/billing-api/pull/12',
+	number: 12,
+	repo: 'acme/billing-api',
+	title: 'Expose invoices over the API',
+	body: 'Adds `GET /invoices` and `GET /invoices/:id`, paged by cursor, behind the billing scope.',
+	author: 'anton',
+	state: 'open',
+	draft: false,
+	headBranch: 'anton/invoices-api',
+	headSha: 'abcdef1234567',
+	baseBranch: 'main',
+	createdAt: ago(95),
+	mergedAt: null,
+	mergedBy: null,
+	closedAt: null,
+	additions: 118,
+	deletions: 50,
+	changedFiles: 2,
+	mergeable: true,
+	approved: false,
+	commits: [{ sha: 'abcdef1234567', subject: 'Expose invoices over the API' }],
+	checks: [
+		{ name: 'test', status: 'passed', summary: 'Passed in 2m', url: 'https://github.com/acme/billing-api/actions' },
+		{ name: 'types', status: 'passed', summary: 'Passed in 41s', url: 'https://github.com/acme/billing-api/actions' },
+	],
+	discussion: [{ id: 'c1', kind: 'comment', author: 'perf', body: 'Should the list be paged by cursor or by offset?', path: null, line: null, at: ago(60), verdict: null }],
+};
+const review = { sessionId: 'th-api', title: pull.title, repo: pull.repo, url: pull.url, group: 'ready', draft: false, reviewing: null, conflicts: false, checks: { passed: 2, failed: 0, pending: 0 }, comments: 1, createdAt: pull.createdAt };
+const spaceThreads = [
+	thread('th-invoices', 'space-billing', 'Name the invoices table', 'waiting', { ...onRepo('p-billing', 'acme/billing-api', 'invoices-table'), asking: 'Invoices or billing for the table name?', lastReply: 'The schema is in. Before I write the migration: should the table be `invoices` or `billing_documents`?', lastInputAt: ago(42) }),
+	thread('th-schema', 'space-billing', 'Migrate the ledger schema', 'working', { ...onRepo('p-billing', 'acme/billing-api', 'ledger-schema'), working: true, status: 'running', lastReply: 'Rerunning the migration tests against the new ledger columns.', lastInputAt: ago(4) }),
+	thread('th-api', 'space-billing', 'Expose invoices over the API', 'review', { ...onRepo('p-billing', 'acme/billing-api', 'invoices-api'), prUrl: 'https://github.com/acme/billing-api/pull/12', pullRequest: { state: 'open', checks: 'passed', runs: [] }, lastReply: 'Opened PR #12 with the invoices endpoints; checks are green.', lastInputAt: ago(95) }),
+	thread('th-settings', 'space-billing', 'Settings page for billing', 'idle', { ...onRepo('p-billing', 'acme/billing-api', 'billing-settings'), lastReply: 'The settings page is up for review whenever you want a look.', lastInputAt: ago(60 * 26) }),
+	thread('th-cleanup', 'space-billing', 'Prune stale webhook retries', 'resolved', { ...onRepo('p-billing', 'acme/billing-api', 'webhook-retries'), resolvedAt: ago(60 * 30), lastInputAt: ago(60 * 31), lastReply: 'Done: retries are pruned after 7 days.', asking: 'Want me to prune the dead-letter queue too?' }),
+	thread('th-docs-audit', 'space-docs', 'Audit the getting-started guide', 'idle', { lastReply: 'Read through the guide; a few sections still describe the old CLI.', lastInputAt: ago(60 * 50) }),
+	thread('th-docs-voice', 'space-docs', 'Tighten the docs voice', 'resolved', { resolvedAt: ago(60 * 70), lastInputAt: ago(60 * 71), lastReply: 'Rewrote the voice section in the imperative.' }),
+	thread('th-mobile-shell', 'space-mobile', 'App shell and navigation', 'resolved', { ...onRepo('p-mobile', 'acme/mobile', 'app-shell'), resolvedAt: ago(60 * 24 * 20), lastInputAt: ago(60 * 24 * 20), lastReply: 'Shell is in with tab navigation.' }),
+	thread('th-mobile-theme', 'space-mobile', 'Dark theme pass', 'resolved', { ...onRepo('p-mobile', 'acme/mobile', 'dark-theme'), resolvedAt: ago(60 * 24 * 18), lastInputAt: ago(60 * 24 * 18), lastReply: 'Theme tokens applied across screens.' }),
+];
+const counts = (threads: typeof spaceThreads) =>
+	threads.reduce(
+		(acc, item) => {
+			acc[item.threadState as keyof typeof acc] += 1;
+			return acc;
+		},
+		{ waiting: 0, working: 0, queued: 0, review: 0, landing: 0, idle: 0, resolved: 0 },
+	);
+const space = (id: string, name: string, goal: string, state: string, repoIds: string[], repos: Array<{ id: string; repoFullName: string; defaultBranch: string }>, threads: typeof spaceThreads, createdDaysAgo: number) => ({
+	id,
+	name,
+	icon: null,
+	goal,
+	instructions: '',
+	memory: '',
+	coordinatorModel: null,
+	coordinatorReasoning: null,
+	threadModel: null,
+	threadReasoning: null,
+	agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
+	maxParallel: 3,
+	autonomy: 'start',
+	state,
+	repoIds,
+	repos,
+	counts: counts(threads),
+	threads: threads.length,
+	activeAt: threads.map((item) => item.lastInputAt).sort().at(-1) ?? ago(60 * 24 * createdDaysAgo),
+	createdAt: ago(60 * 24 * createdDaysAgo),
+	updatedAt: ago(30),
+});
+const spaces = [
+	space('space-billing', 'Billing v2', 'Ship billing v2: invoices, proration, and the settings page.', 'active', ['p-billing'], [{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-billing'), 12),
+	space('space-docs', 'Docs refresh', 'Refresh the docs for the new CLI and tighten the voice.', 'active', [], [], spaceThreads.filter((item) => item.spaceId === 'space-docs'), 30),
+	space('space-mobile', 'Mobile app', 'First pass at the mobile app shell and theme.', 'archived', ['p-mobile'], [{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-mobile'), 60),
+];
+const notifications = [
+	{ id: 'n-ask', kind: 'question', category: 'needs-you', sessionId: 'th-invoices', spaceId: 'space-billing', title: 'Name the invoices table', body: 'The schema is in. Before I write the migration: should the table be `invoices` or `billing_documents`?', url: '/projects/space-billing/threads/th-invoices', createdAt: ago(12), read: false },
+	{ id: 'n-checks', kind: 'checks-failed', category: 'failures', sessionId: 'th-api', spaceId: 'space-billing', title: 'Expose invoices over the API', body: 'Checks failed on pull request #12: `ui-tests`.', url: '/projects/space-billing/threads/th-api', createdAt: ago(140), read: false },
+	{ id: 'n-reply', kind: 'replied', category: 'replies', sessionId: 'th-schema', spaceId: 'space-billing', title: 'Migrate the ledger schema', body: 'Reran the migration tests against the new ledger columns — all green now. The `ledger_entries` backfill takes about 40s on the fixture dataset.', url: '/projects/space-billing/threads/th-schema', createdAt: ago(300), read: false },
+	{ id: 'n-done', kind: 'done', category: 'done', sessionId: 'th-cleanup', spaceId: 'space-billing', title: 'Prune stale webhook retries', body: 'Done: retries are pruned after 7 days.', url: '/projects/space-billing/threads/th-cleanup', createdAt: ago(60 * 30), read: true },
+	{ id: 'n-merged', kind: 'merged', category: 'done', sessionId: 'perf-task', spaceId: null, title: 'Make the app fast while agents stream', body: 'Merged: the perf branch landed on main.', url: '/agents/perf-task', createdAt: ago(60 * 26), read: true },
+	{ id: 'n-sandbox', kind: 'sandbox-stopped', category: 'sandboxes', sessionId: 'th-mobile-shell', spaceId: 'space-mobile', title: 'App shell and navigation', body: 'Sandbox stopped after 5 idle minutes.', url: '/projects/space-mobile/threads/th-mobile-shell', createdAt: ago(60 * 50), read: true },
+];
+const notificationUnread = notifications.reduce<Record<string, number>>((acc, item) => {
+	if (!item.read) acc[item.category] = (acc[item.category] ?? 0) + 1;
+	return acc;
+}, {});
+const artifact = (sessionId: string, task: { title: string; spaceId: string | null; chat: boolean }, path: string, title: string, size: number, daysAgo: number, added = false) => ({
+	sessionId,
+	path,
+	title,
+	size,
+	mtimeMs: Date.now() - daysAgo * 86_400_000,
+	task,
+	...(added ? { added: true } : {}),
+});
+const billing = { title: 'Expose invoices over the API', spaceId: 'space-billing', chat: false };
+const artifacts = [
+	artifact('th-api', billing, 'renders/invoice-dashboard.html', 'Invoice dashboard', 84_000, 0.2),
+	artifact('th-schema', { title: 'Migrate the ledger schema', spaceId: 'space-billing', chat: false }, 'reports/migration-plan.md', 'Migration plan', 12_400, 0.8),
+	artifact('th-invoices', billing, 'charts/revenue-by-plan.png', 'Revenue by plan', 220_000, 1.4),
+	artifact('th-cleanup', billing, 'exports/invoices-2026.csv', 'Invoices export', 96_000, 2.1),
+	artifact('th-settings', billing, 'scripts/proration.py', 'Proration calculator', 8_300, 3.5),
+	artifact('th-docs-audit', { title: 'Audit the getting-started guide', spaceId: 'space-docs', chat: false }, 'notes/guide-gaps.md', 'Guide gaps', 5_100, 4.2),
+	artifact('perf-task', { title: 'Make the app fast while agents stream', spaceId: null, chat: false }, 'benchmarks/stream-latency.json', 'Stream latency bench', 41_000, 5.0),
+	artifact('added-files', { title: 'Added by you', spaceId: null, chat: false }, 'skills/day-trading/SKILL.md', 'SKILL.md', 3_200, 6.0, true),
+];
+const projects = [
+	{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
+	{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main', memory: '', warmedAt: ago(60 * 24 * 5), envKeys: [], setupScript: '', checkCommand: '', previewPorts: [], baseImage: null, followUps: true, reviewOthers: false, fullVm: false },
+];
 
 const models = Array.from({ length: 300 }, (_, index) => ({
 	id: index === 0 ? session.model : `vendor-${index % 20}/model-${index}`,
@@ -109,6 +247,10 @@ export function mockApi(): Plugin {
 	const handle = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
 		const url = new URL(req.url ?? '/', 'http://local');
 		let path = url.pathname;
+		if (path.startsWith('/__setup/') || path === '/api/connections' || path.startsWith('/api/setup')) {
+			void mockSetup(req, res, path, json).then((handled) => (handled ? undefined : next()));
+			return;
+		}
 		if (path === '/__perf/start') {
 			startedAt = Date.now();
 			return json(res, { ok: true });
@@ -127,7 +269,7 @@ export function mockApi(): Plugin {
 		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, { ...session, id: other[1] });
 		if (other && other[1] !== SESSION_ID) path = `${task}${other[2]}`;
 		if (path === '/api/health') return json(res, { ok: true, openRouter: true, providers: { sandbox: 'local', store: 'disk', git: 'github' } });
-		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...others] });
+		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...spaceThreads, ...others] });
 		if (path === task) return json(res, session);
 		if (path === `${task}/files`) return json(res, { source: 'live', at: null, paths: tree, changes: changed });
 		if (path === `${task}/file`) {
@@ -154,13 +296,45 @@ export function mockApi(): Plugin {
 		if (path === '/api/models') return json(res, { models, default: session.model, pinned: [] });
 		if (path === '/api/subscriptions') return json(res, { subscriptions: [] });
 		if (path === '/api/settings/commands') return json(res, { commands: [] });
+		if (path === '/api/settings/background-models') return json(res, { defaults: { webDigest: null, vision: null, compaction: null } });
+		if (path === '/api/settings/general')
+			return json(res, {
+				model: session.model,
+				reasoning: null,
+				planMode: false,
+				reviewPullRequests: true,
+				codeMode: true,
+				visualReplies: 'some',
+				pageNetwork: true,
+				imageModel: null,
+				titleModel: null,
+				titleModelDefault: session.model,
+				agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
+				compactAt: null,
+				claudeCodeCompactAt: null,
+				backgroundModels: { webDigest: null, vision: null, compaction: null },
+				backgroundReasoning: { webDigest: null, vision: null, compaction: null },
+			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
-		if (path === '/api/spaces') return json(res, { spaces: [] });
+		if (path === '/api/spaces') return json(res, { spaces });
+		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
+		if (spaceId) {
+			const found = spaces.find((item) => item.id === spaceId);
+			if (found) return json(res, found);
+			res.statusCode = 404;
+			return json(res, { error: 'No such project' });
+		}
 		if (path === '/api/compute') return json(res, { provider: 'local', app: null, running: [], others: 0 });
-		if (path === '/api/projects') return json(res, { projects: [] });
-		if (path === '/api/reviews') return json(res, { reviews: [] });
+		if (path === '/api/projects') return json(res, { projects });
+		if (path === '/api/reviews') return json(res, { reviews: [review] });
+		if (path === `${task}/pulls`) return json(res, { pulls: [{ url: pull.url, repo: pull.repo, number: pull.number, title: pull.title, head: pull.headBranch, base: pull.baseBranch, state: 'open', openedAt: pull.createdAt, mergedAt: null, current: true }] });
+		if (path === `${task}/pulls/12` || path === `${task}/pulls/12/metadata`) return json(res, pull);
+		if (path === `${task}/pulls/12/diff`) return json(res, { patch });
+		if (/^\/api\/projects\/[^/]+\/branches$/.test(path)) return json(res, { branches: ['main'] });
+		if (path === '/api/storage') return json(res, { objects: 1284, bytes: 412_000_000, lastCleanup: { at: ago(60 * 9), removed: 37, freedBytes: 18_400_000 } });
 		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
-		if (path === '/api/notifications') return json(res, { notifications: [], unread: {} });
+		if (path === '/api/artifacts') return json(res, { artifacts });
+		if (path === '/api/notifications') return json(res, { notifications, unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0, ...notificationUnread } });
 		if (path === `${task}/waiting`) return json(res, { messages: [] });
 		if (path === `${task}/joins`) return json(res, { joins: [] });
 		if (path === `${task}/todos`) return json(res, { list: null });

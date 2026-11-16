@@ -40,7 +40,7 @@ import {
 	Leaf,
 	Lightbulb,
 	Lock,
-	type LucideIcon,
+	type IconComponent,
 	Mail,
 	Map as MapIcon,
 	Megaphone,
@@ -73,17 +73,18 @@ import {
 	Workflow,
 	Wrench,
 	Zap,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { useMemo, useState } from 'react';
 import { EmptyLine, Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/* A project's mark is a drawn icon on a tinted tile, never an emoji. It is
-   saved as "<icon>" or "<icon>:<tint>", like "rocket:violet"; anything else
-   (an emoji from before, an icon since removed) draws the project's initial. */
+/* A project's mark is a drawn icon in the tint it was picked with, never an
+   emoji. It is saved as "<icon>" or "<icon>:<tint>", like "rocket:violet";
+   anything else (an emoji from before, an icon since removed) draws the
+   project's initial. */
 
-export type ProjectIconEntry = { key: string; icon: LucideIcon; label: string; words: string };
+export type ProjectIconEntry = { key: string; icon: IconComponent; label: string; words: string };
 
 /** The icons a project can wear, roughly grouped: work, product, infrastructure, people, the rest. */
 export const PROJECT_ICONS: ProjectIconEntry[] = [
@@ -169,7 +170,7 @@ export const ICON_TINTS = [
 	{ key: 'amber', label: 'Amber', color: '#e3a63f' },
 	{ key: 'green', label: 'Green', color: '#35c88a' },
 	{ key: 'pink', label: 'Pink', color: '#f472b6' },
-	{ key: 'gray', label: 'Gray', color: 'var(--neutral-300)' },
+	{ key: 'gray', label: 'Gray', color: 'var(--text-2)' },
 ] as const;
 
 export type IconTint = (typeof ICON_TINTS)[number]['key'];
@@ -179,7 +180,7 @@ const tintColor = (tint: string) => ICON_TINTS.find((item) => item.key === tint)
 /** The colour a project's mark is drawn in, for tinting what belongs to it; the accent when it has no icon. */
 export function iconTint(value: string | null | undefined): string {
 	const parsed = parseIcon(value);
-	return parsed ? tintColor(parsed.tint) : 'var(--accent-base)';
+	return parsed ? tintColor(parsed.tint) : 'var(--accent)';
 }
 
 /** What a saved icon names: the drawn icon and its tint, or nothing to draw. */
@@ -202,37 +203,29 @@ export function suggestIcon(name: string): string {
 	return 'folder';
 }
 
-/** A project's mark: its icon on a tile tinted to match, or its initial when it has none. */
+/** A project's mark: its icon at full size in the tint it was picked with, or its initial when it has none. */
 export function ProjectIcon({ value, name, size = 24, className }: { value: string | null | undefined; name: string; size?: number; className?: string }) {
 	const parsed = parseIcon(value);
-	const radius = Math.min(6, Math.round(size * 0.3));
 	if (!parsed) {
 		return (
 			<span
 				aria-hidden
-				className={cn('inline-flex shrink-0 items-center justify-center bg-(--well-bg) font-medium text-(--accent-text)', className)}
-				style={{ width: size, height: size, borderRadius: radius, fontSize: Math.round(size * 0.48) }}
+				className={cn('inline-flex shrink-0 items-center justify-center font-medium leading-none text-(--accent-text)', className)}
+				style={{ width: size, height: size, fontSize: Math.round(size * 0.6) }}
 			>
 				{name.trim().charAt(0).toUpperCase() || 'P'}
 			</span>
 		);
 	}
-	const color = tintColor(parsed.tint);
 	return (
-		<span
+		<parsed.entry.icon
 			aria-hidden
 			data-icon={parsed.entry.key}
-			className={cn('inline-flex shrink-0 items-center justify-center', className)}
-			style={{
-				width: size,
-				height: size,
-				borderRadius: radius,
-				color,
-				background: `linear-gradient(180deg, color-mix(in srgb, ${color} 22%, var(--well-bg)), color-mix(in srgb, ${color} 10%, var(--well-bg)))`,
-			}}
-		>
-			<parsed.entry.icon size={Math.round(size * 0.56)} strokeWidth={size >= 28 ? 1.75 : 2} />
-		</span>
+			size={size}
+			strokeWidth={1.5}
+			className={cn('shrink-0', className)}
+			style={{ color: tintColor(parsed.tint) }}
+		/>
 	);
 }
 
@@ -264,7 +257,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 				<button
 					type="button"
 					aria-label={parsed ? `Project icon: ${parsed.entry.label}. Change icon` : 'Choose an icon'}
-					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-control outline-none focus-visible:shadow-(--focus-ring) data-[state=open]:shadow-(--focus-ring)"
+					className="group/icon relative inline-flex shrink-0 items-center justify-center rounded-control outline-none focus-visible:shadow-(--focus) data-[state=open]:shadow-(--focus)"
 				>
 					<ProjectIcon value={value} name={name} size={size} className="transition-[filter] group-hover/icon:brightness-125" />
 				</button>
@@ -280,17 +273,17 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 						const content = event.currentTarget as HTMLElement;
 						requestAnimationFrame(() => content.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' }));
 					}}
-					className="z-50 flex w-[min(316px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text-primary) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex w-[min(316px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
 				>
-					<div className="flex items-center gap-2 border-b border-(--border-subtle) px-2.5 py-2">
-						<Icon icon={Search} size={13} className="text-(--icon-tertiary)" />
+					<div className="flex items-center gap-2 border-b border-(--line) px-2.5 py-2">
+						<Icon icon={Search} size={13} className="text-(--text-3)" />
 						<input
 							autoFocus
 							aria-label="Search icons"
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
 							placeholder="Search icons: billing, docs, ai…"
-							className="h-6 min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-(--text-disabled)"
+							className="h-6 min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-(--text-4)"
 						/>
 					</div>
 					<div role="listbox" aria-label="Icons" className="grid max-h-[212px] grid-cols-8 gap-1 overflow-y-auto p-2">
@@ -309,18 +302,18 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 										setOpen(false);
 									}}
 									className={cn(
-										'flex aspect-square items-center justify-center rounded-control border outline-none focus-visible:shadow-(--focus-ring)',
-										on ? 'border-transparent' : 'border-transparent text-(--icon-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)',
+										'flex aspect-square items-center justify-center rounded-control border outline-none focus-visible:shadow-(--focus)',
+										on ? 'border-transparent' : 'border-transparent text-(--text-2) hover:bg-(--bg-hover) hover:text-(--text)',
 									)}
 									style={on ? { color: tintColor(tint), background: `color-mix(in srgb, ${tintColor(tint)} 16%, transparent)`, borderColor: `color-mix(in srgb, ${tintColor(tint)} 40%, transparent)` } : undefined}
 								>
-									<entry.icon size={16} strokeWidth={1.9} />
+									<entry.icon size={16} strokeWidth={1.6} />
 								</button>
 							);
 						})}
 						{shown.length === 0 ? <EmptyLine className="col-span-8 px-1 py-3 text-center">No icon matches “{query}”</EmptyLine> : null}
 					</div>
-					<div className="flex items-center gap-2 border-t border-(--border-subtle) px-2.5 py-2">
+					<div className="flex items-center gap-2 border-t border-(--line) px-2.5 py-2">
 						<span className="in-caption">Tint</span>
 						<div role="radiogroup" aria-label="Tint" className="flex items-center gap-1.5">
 							{ICON_TINTS.map((item) => {
@@ -334,10 +327,10 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 										aria-label={item.label}
 										title={item.label}
 										onClick={() => onChange(iconValue(key ?? suggestIcon(name), item.key))}
-										className="relative flex size-[18px] items-center justify-center rounded-full outline-none focus-visible:shadow-(--focus-ring)"
+										className="relative flex size-[18px] items-center justify-center rounded-full outline-none focus-visible:shadow-(--focus)"
 										style={{ background: item.color, boxShadow: on ? `0 0 0 2px var(--bg-overlay), 0 0 0 3.5px ${item.color}` : undefined }}
 									>
-										{on ? <Check size={11} strokeWidth={3} className="text-(--neutral-950)" /> : null}
+										{on ? <Check size={11} strokeWidth={3} className="text-(--bg-app)" /> : null}
 									</button>
 								);
 							})}

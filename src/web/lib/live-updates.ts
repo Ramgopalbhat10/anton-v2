@@ -6,6 +6,7 @@ type Change =
 	| { kind: 'sessions' }
 	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
+	| { kind: 'setup' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
@@ -34,6 +35,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'page') return [['artifacts']];
 	// A sign-in finishing, or a plan's models changing, changes what the model picker offers.
 	if (change.kind === 'subscriptions') return [['subscriptions'], ['models'], ['connections'], ['health']];
+	if (change.kind === 'setup') return [['setup'], ['connections'], ['subscriptions'], ['models'], ['health'], ['compute']];
 	if (change.kind === 'models') return [['models']];
 	if (change.kind === 'notifications') return [['notifications']];
 	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];

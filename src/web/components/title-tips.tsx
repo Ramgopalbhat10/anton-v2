@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 /*
- * Every `title` in the app as the same dark tip: no arrow, Geist, on the
+ * Every `title` in the app as the same dark tip: no arrow, Inter, on the
  * app's own black, instead of the browser's yellow box. One listener on the
  * document takes an element's title into `data-tip` the first time the
  * pointer or focus reaches it (so the browser never draws its own), keeps it

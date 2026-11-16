@@ -48,6 +48,25 @@ function startingTurns(count: number): Message[] {
 	]).flat();
 }
 
+/** A coordinator's last turn passes a follow-up to a thread, so its quiet pill (`NoteRow`) shows on a project page. */
+function coordinatorTurn(): Message[] {
+	const message = 'New follow-up from the user: check whether the new library can render interactive UI in chat replies. Pull the latest main first and record the commit you inspected. Compare it with the current visual reply pipeline, not the older snapshot: feasibility, interactivity and state, streaming, security boundaries, dependencies and maturity. Analysis only: no implementation, dependency installs, code edits or pull request.';
+	return [
+		{ id: 'cu', role: 'user', purpose: 'user', display: 'visible', submissionId: 'sc', parts: [text('Check if this new library can be used for rendering interactive UI in the chat. Analysis only.')] },
+		{
+			id: 'ca',
+			role: 'assistant',
+			purpose: 'assistant',
+			display: 'visible',
+			submissionId: 'sc',
+			parts: [
+				{ type: 'dynamic-tool', toolName: 'message_thread', toolCallId: 'fixture-message', state: 'output-available', input: { thread: 'th-api', message }, output: 'Sent' },
+				text('I passed it to the thread; it will pull the latest main and compare the library with the current pipeline, analysis only.'),
+			],
+		},
+	];
+}
+
 function turnsFromUrl(): number {
 	const turns = Number(new URLSearchParams(location.search).get('turns') ?? 8);
 	return Number.isFinite(turns) && turns >= 0 ? Math.min(Math.floor(turns), 200) : 8;
@@ -57,7 +76,7 @@ export function createFlueClient({ url }: { url: string }) {
 	const turns = turnsFromUrl();
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: startingTurns(turns),
+		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? coordinatorTurn() : [])],
 		settlements: Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })),
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };

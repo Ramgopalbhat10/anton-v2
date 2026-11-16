@@ -1,6 +1,6 @@
-import { ArrowLeft, ChevronDown, CornerDownRight } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, CircleAlert, CircleStop } from '@/lib/icons';
 import { HoverCard } from 'radix-ui';
-import { memo, useRef, useState } from 'react';
+import { memo, type ReactNode, useRef, useState } from 'react';
 import { AgentsArt } from '@/components/illustrations';
 import { Markdown } from '@/components/markdown';
 import { EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';
@@ -114,14 +114,14 @@ function PhaseCard({ step, run, next, from, now }: { step: SubagentStep; run: Su
 		<>
 			<span className="flex items-center gap-1.5">
 				<span className="size-[7px] rounded-mark" style={{ background: stepTone(step) }} />
-				<span className={cn('in-caption', step.state === 'failed' ? 'text-(--danger-text)' : 'text-(--text-secondary)')}>{step.state === 'failed' ? 'Failed' : kind.label}</span>
+				<span className={cn('in-caption', step.state === 'failed' ? 'text-(--bad)' : 'text-(--text-2)')}>{step.state === 'failed' ? 'Failed' : kind.label}</span>
 				<span className="in-caption ml-auto">at {mark(start - from)}</span>
 			</span>
-			<span className="flex min-w-0 items-start gap-2 text-body leading-[18px] text-(--text-primary)">
-				<Icon icon={icon} size={13} className="mt-[2px] shrink-0 text-(--icon-tertiary)" />
+			<span className="flex min-w-0 items-start gap-2 text-body leading-[18px] text-(--text)">
+				<Icon icon={icon} size={13} className="mt-[2px] shrink-0 text-(--text-3)" />
 				<span className="line-clamp-3 min-w-0 break-words">{body}</span>
 			</span>
-			<span className="in-num text-micro text-(--text-tertiary)">
+			<span className="in-num text-micro text-(--text-3)">
 				{[tool === null ? null : `tool ${took(tool)}`, `phase ${took(Math.max(0, end - start))}`, lookOf(run.agent).label.toLowerCase()].filter(Boolean).join(' · ')}
 			</span>
 		</>
@@ -141,7 +141,7 @@ function Lane({ run, from, span, now }: { run: SubagentRun; from: number; span: 
 		<HoverCard.Root open={Boolean(step)} onOpenChange={(open) => (open ? undefined : setHover(null))}>
 			<HoverCard.Trigger asChild>
 				<span
-					className="relative ml-[26px] h-2.5 min-w-0 rounded-mark bg-(--segment-off)/60"
+					className="relative ml-[26px] h-2.5 min-w-0 rounded-mark bg-(--bg-active)/60"
 					onPointerOver={(event) => {
 						const bar = (event.target as HTMLElement).closest<HTMLElement>('[data-step]');
 						if (bar && Number(bar.dataset.step) !== hover?.index) setHover({ index: Number(bar.dataset.step), left: bar.offsetLeft });
@@ -150,7 +150,7 @@ function Lane({ run, from, span, now }: { run: SubagentRun; from: number; span: 
 				>
 					<span
 						aria-hidden
-						className="absolute inset-y-[4px] rounded-full bg-(--border-default)"
+						className="absolute inset-y-[4px] rounded-full bg-(--line-strong)"
 						style={{ left: `${at(Date.parse(run.startedAt))}%`, width: `${((runEnd(run, now) - Date.parse(run.startedAt)) / span) * 100}%` }}
 					/>
 					{run.steps.map((entry, index) => {
@@ -184,11 +184,11 @@ type Stat = { label: string; value: string; title?: string };
 /** Numbers side by side in a well, a mono caption over each: a run's or the task's. */
 function StatWell({ stats, label }: { stats: Stat[]; label: string }) {
 	return (
-		<dl aria-label={label} className="in-well m-0 grid divide-x divide-(--border-subtle)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
+		<dl aria-label={label} className="in-well m-0 grid divide-x divide-(--line)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
 			{stats.map((stat) => (
 				<div key={stat.label} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
 					<dt className="in-caption">{stat.label}</dt>
-					<dd className="in-num m-0 truncate text-small text-(--text-primary)" title={stat.title ?? stat.value}>
+					<dd className="in-num m-0 truncate text-small text-(--text)" title={stat.title ?? stat.value}>
 						{stat.value}
 					</dd>
 				</div>
@@ -215,7 +215,7 @@ function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: Subagent
 	return (
 		<section aria-label="Agents overview" className="flex flex-col gap-3 px-0.5">
 			<div className="flex items-start gap-3">
-				<span className="min-w-0 flex-1 text-body-lg leading-[20px] font-medium text-pretty text-(--text-primary)">{line.headline}</span>
+				<span className="min-w-0 flex-1 text-body-lg leading-[20px] font-medium text-pretty text-(--text)">{line.headline}</span>
 				{line.failed ? (
 					<span className="pt-0.5">
 						<Status tone="danger">{line.failed} failed</Status>
@@ -243,10 +243,10 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 	const line = runLine(run);
 	return (
 		<div className="group/run flex min-w-0 flex-col gap-2 px-3 py-2.5 hover:bg-(--bg-hover)">
-			<button type="button" onClick={onOpen} className="flex min-w-0 items-center gap-2 text-left outline-none focus-visible:shadow-(--focus-ring)">
+			<button type="button" onClick={onOpen} className="flex min-w-0 items-center gap-2 text-left outline-none focus-visible:shadow-(--focus)">
 				<AgentTile agent={run.agent} running={live} size={18} />
-				<span className="min-w-0 flex-1 truncate text-body text-(--text-primary) group-hover/run:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
-				<span className={cn('flex shrink-0 items-center gap-1.5 text-micro', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)')}>
+				<span className="min-w-0 flex-1 truncate text-body text-(--text) group-hover/run:underline">{titleOf(run.prompt, run.description ?? undefined)}</span>
+				<span className={cn('flex shrink-0 items-center gap-1.5 text-micro', run.status === 'failed' ? 'text-(--bad)' : 'text-(--text-3)')}>
 					<StatusGlyph status={run.status} />
 					<span className="in-num">{elapsed(runElapsed(run, now))}</span>
 				</span>
@@ -257,7 +257,7 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 					type="button"
 					tabIndex={-1}
 					onClick={onOpen}
-					className={cn('ml-[26px] truncate text-left text-small outline-none', run.status === 'failed' ? 'text-(--danger-text)' : 'text-(--text-tertiary)', live && 'agent-live-line')}
+					className={cn('ml-[26px] truncate text-left text-small outline-none', run.status === 'failed' ? 'text-(--bad)' : 'text-(--text-3)', live && 'agent-live-line')}
 				>
 					{line}
 				</button>
@@ -286,7 +286,7 @@ function Burst({ sessionId, runs, label, now }: { sessionId: string; runs: Subag
 				<span className="flex-1">{label}</span>
 				<span className="in-num">{elapsed(to - from)}</span>
 			</h3>
-			<div className="in-card flex flex-col divide-y divide-(--border-subtle) overflow-hidden">
+			<div className="in-card flex flex-col divide-y divide-(--line) overflow-hidden">
 				{runs.map((run) => (
 					<RunRow key={run.id} run={run} from={from} span={to - from} now={now} onOpen={() => focusRun(sessionId, run.id)} />
 				))}
@@ -320,41 +320,50 @@ const OUTCOME: Record<string, { label: string; tone: Tone }> = {
 /** How sure the decision model was of an action, dimmer as it gets less sure. */
 function Sureness({ p }: { p: number | null }) {
 	if (p === null) return null;
-	return <span className={cn('in-num shrink-0 text-micro', p >= 0.9 ? 'text-(--success-text)' : p >= 0.7 ? 'text-(--text-tertiary)' : 'text-(--warning-text)')}>{p.toFixed(2)}</span>;
+	return <span className={cn('in-num shrink-0 text-micro', p >= 0.9 ? 'text-(--ok)' : p >= 0.7 ? 'text-(--text-3)' : 'text-(--warn)')}>{p.toFixed(2)}</span>;
 }
 
 /**
- * What the decision model did inside a step: each action with how sure it was, how it ended, and what it cost.
- * A run_script step lists the calls its program made instead, with the decision model's share if it asked any.
+ * The calls a run_script step's program made, hanging off its node: the first few, and the rest
+ * a click away, so one busy script does not push the steps after it out of view.
  */
+function ScriptCalls({ detail }: { detail: StepDetail }) {
+	const [all, setAll] = useState(false);
+	const shown = all ? detail.actions : detail.actions.slice(0, SCRIPT_SHOWN);
+	const hidden = detail.actions.length - shown.length;
+	return (
+		<div className="flex min-w-0 flex-col gap-0.5 pl-5">
+			{shown.map((action, index) => (
+				<span key={index} className={cn('min-w-0 truncate font-mono text-nano leading-4', action.failed ? 'text-(--bad)' : 'text-(--text-3)')} title={action.what}>
+					{action.what}
+				</span>
+			))}
+			{hidden > 0 || all ? (
+				<button type="button" onClick={() => setAll(!all)} className="self-start rounded-inner text-micro text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
+					{all ? 'Show fewer calls' : `${hidden} more call${hidden === 1 ? '' : 's'}`}
+				</button>
+			) : null}
+		</div>
+	);
+}
+
+/** Calls of a script step listed before the rest fold away. */
+const SCRIPT_SHOWN = 4;
+
+/** What the decision model did inside a step: each action with how sure it was, how it ended, and what it cost. */
 function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	const outcome = detail.outcome ? OUTCOME[detail.outcome] : null;
-	if (detail.script) {
-		return (
-			<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
-				{detail.actions.map((action, index) => (
-					<span key={index} className="flex min-w-0 items-center gap-1.5 text-micro text-(--text-tertiary)">
-						<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
-						<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
-							{action.what}
-						</span>
-					</span>
-				))}
-			</div>
-		);
-	}
 	return (
-		<div className="flex min-w-0 flex-col gap-1 pt-1 pb-1.5 pl-[28px]">
+		<div className="flex min-w-0 flex-col gap-1 pl-5">
 			{detail.actions.map((action, index) => (
-				<span key={index} className="flex min-w-0 items-center gap-1.5 text-small text-(--text-tertiary)">
-					<Icon icon={CornerDownRight} size={10} className="shrink-0 text-(--icon-disabled)" />
-					<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--danger-text)')} title={action.what}>
+				<span key={index} className="flex min-w-0 items-center gap-1.5 text-small text-(--text-3)">
+					<span className={cn('min-w-0 flex-1 truncate', action.failed && 'text-(--bad)')} title={action.what}>
 						{action.what}
 					</span>
 					<Sureness p={action.p} />
 				</span>
 			))}
-			<span className="flex min-w-0 items-center gap-2 pl-4">
+			<span className="flex min-w-0 items-center gap-2">
 				{outcome ? <Status tone={outcome.tone}>{outcome.label}</Status> : live ? <Status tone="accent" pulse>Driving</Status> : null}
 				<Caption className="in-num ml-auto">
 					Jev {detail.decisions} · {fineDollars(detail.cost)}
@@ -364,33 +373,101 @@ function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	);
 }
 
-/**
- * A step in the execution timeline: the step as a sentence, a bar where it
- * fell in the run's time, and how long it took; a step the decision model
- * drove opens into its actions.
+/*
+ * A run as one trace: a ribbon of its time across the top, then a spine
+ * down the page from the brief, through each step, to the answer. Each step
+ * is a node on the spine in its kind's colour, at the time it started; the
+ * pause before it (the model thinking on what the last step returned) is a
+ * quiet line on the spine saying how long it took. Resting on a stretch
+ * of the ribbon lights its step, and a click on it scrolls there.
  */
-function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to: number; now: number }) {
+
+/** A pause between steps shorter than this is not worth a line of its own. */
+const THOUGHT_MS = 2000;
+
+/** Columns of a spine row: when, the node on the spine, and what happened. */
+const SPINE_ROW = 'grid grid-cols-[36px_16px_minmax(0,1fr)] gap-x-2';
+
+/** A node on the spine: a dot in the step's colour, ringed in the panel's own fill so the spine stops at it. */
+function Node({ tone, live, ring, children }: { tone: string; live?: boolean; ring?: boolean; children?: ReactNode }) {
+	return (
+		<span className="relative z-[1] flex h-5 items-center justify-center">
+			<span
+				className={cn('flex items-center justify-center rounded-full shadow-[0_0_0_3px_var(--bg-panel)]', live && 'in-pulse', children ? 'size-4' : 'size-2.5')}
+				style={ring ? { boxShadow: `inset 0 0 0 1.5px ${tone}, 0 0 0 3px var(--bg-panel)`, background: 'var(--bg-panel)' } : { background: tone }}
+			>
+				{children}
+			</span>
+		</span>
+	);
+}
+
+/** The run's time as one strip: a stretch per step, its tool's share solid and the pause after it faint. */
+function Ribbon({ run, from, to, now, lit, onLight, onPick }: { run: SubagentRun; from: number; to: number; now: number; lit: number | null; onLight: (index: number | null) => void; onPick: (index: number) => void }) {
+	const span = to - from;
+	const at = (ms: number) => Math.max(0, Math.min(100, ((ms - from) / span) * 100));
+	return (
+		<div className="flex flex-col gap-1">
+			<div aria-hidden className="relative h-3.5 overflow-hidden rounded-mark bg-(--bg-active)/60" onPointerLeave={() => onLight(null)}>
+				{run.steps.map((step, index) => {
+					const start = Date.parse(step.at);
+					const next = run.steps[index + 1];
+					const end = Math.max(start, next ? Date.parse(next.at) : runEnd(run, now));
+					const tool = step.durationMs ?? (step.state === 'running' ? Math.max(0, now - start) : end - start);
+					const tone = stepTone(step);
+					const width = at(end) - at(start);
+					const solid = end > start ? Math.min(100, (tool / (end - start)) * 100) : 100;
+					return (
+						<span
+							key={step.id}
+							onPointerEnter={() => onLight(index)}
+							onClick={() => onPick(index)}
+							className={cn('absolute inset-y-0 cursor-pointer transition-opacity duration-(--t-fast)', lit !== null && lit !== index && 'opacity-40', step.state === 'running' && 'in-pulse')}
+							style={{ left: `${at(start)}%`, width: `max(calc(${width}% - 1px), 2px)`, background: `linear-gradient(to right, ${tone} ${solid}%, color-mix(in srgb, ${tone} 28%, transparent) ${solid}%)` }}
+						/>
+					);
+				})}
+			</div>
+			<div aria-hidden className="in-num flex justify-between text-nano text-(--text-4)">
+				<span>0:00</span>
+				<span>{mark(span / 2)}</span>
+				<span>{mark(span)}</span>
+			</div>
+		</div>
+	);
+}
+
+/** A step on the spine: the pause before it, its node, the step as a sentence, how long its tool took, and what it did inside. */
+function SpineStep({ step, index, since, from, now, lit, onLight }: { step: SubagentStep; index: number; since: number; from: number; now: number; lit: boolean; onLight: (index: number | null) => void }) {
 	const { icon, body } = stepBody(step);
 	const start = Date.parse(step.at);
 	const spent = step.durationMs ?? (step.state === 'running' ? Math.max(0, now - start) : 0);
+	const thought = start - since;
 	const tone = stepTone(step);
+	const failed = step.state === 'failed';
 	return (
-		<li className="flex min-w-0 flex-col border-t border-(--border-subtle) first:border-t-0">
-			<span className="flex min-h-8 min-w-0 items-center gap-2.5 text-small text-(--text-tertiary)">
-				{/* A bare glyph, quiet: only the agent's own icon carries colour; the bar beside it keeps the kind's. */}
-				<span className="inline-flex size-[18px] shrink-0 items-center justify-center text-(--icon-tertiary)">
-					{step.state === 'running' ? <Spinner size={12} /> : <Icon icon={icon} size={13} className={step.state === 'failed' ? 'text-(--danger-text)' : undefined} />}
+		<li data-spine-step={index} className="flex min-w-0 flex-col" onPointerEnter={() => onLight(index)} onPointerLeave={() => onLight(null)}>
+			{thought >= THOUGHT_MS ? (
+				<span className={cn(SPINE_ROW, 'min-h-6 items-center')}>
+					<span />
+					<span />
+					<span className="in-num text-micro text-(--text-4)">thought {took(thought)}</span>
 				</span>
-				<span className={cn('line-clamp-2 min-w-0 flex-1 py-1 text-(--text-secondary)', step.state === 'failed' && 'text-(--danger-text)')}>{body}</span>
-				<span aria-hidden className="relative h-1 w-[72px] shrink-0 rounded-full bg-(--segment-off)">
-					<span
-						className={cn('absolute inset-y-0 rounded-full', step.state === 'running' && 'in-pulse')}
-						style={{ left: `${Math.min(100, ((start - from) / (to - from)) * 100)}%`, width: `max(${Math.min(100, (spent / (to - from)) * 100)}%, 2px)`, background: tone }}
-					/>
+			) : null}
+			<span className={cn(SPINE_ROW, 'rounded-control py-1 transition-colors duration-(--t-fast)', lit && 'bg-(--bg-hover)')}>
+				<span className="in-num pt-0.5 text-right text-micro leading-4 text-(--text-4)">{mark(start - from)}</span>
+				<Node tone={tone} live={step.state === 'running'} />
+				<span className="flex min-w-0 flex-col gap-1">
+					<span className="flex min-w-0 items-start gap-2">
+						<Icon icon={icon} size={12} className={cn('mt-[3px] shrink-0', failed ? 'text-(--bad)' : 'text-(--text-4)')} />
+						<span className={cn('line-clamp-2 min-w-0 flex-1 text-small leading-[18px] break-words', failed ? 'text-(--bad)' : 'text-(--text-2)')}>{body}</span>
+						<span className="in-num shrink-0 pt-px text-micro leading-4 text-(--text-4)">
+							{step.state === 'running' ? <Spinner size={10} /> : step.durationMs !== null ? took(spent) : ''}
+						</span>
+					</span>
+					{step.detail ? step.detail.script ? <ScriptCalls detail={step.detail} /> : <Decisions detail={step.detail} live={step.state === 'running'} /> : null}
 				</span>
-				<span className="in-num w-9 shrink-0 text-right text-micro text-(--text-disabled)">{step.durationMs !== null || step.state === 'running' ? took(spent) : ''}</span>
 			</span>
-			{step.detail ? <Decisions detail={step.detail} live={step.state === 'running'} /> : null}
 		</li>
 	);
 }
@@ -398,34 +475,39 @@ function StepRow({ step, from, to, now }: { step: SubagentStep; from: number; to
 function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentRun; now: number }) {
 	const live = run.status === 'running';
 	const [briefOpen, setBriefOpen] = useState(false);
+	const [lit, setLit] = useState<number | null>(null);
 	const root = useRef<HTMLDivElement>(null);
 	// While it works, keep the newest step in view, unless you scroll up to read.
 	const { following, follow } = useFollowLatest(root, { enabled: live, reset: run.id });
 	const jev = decisionsOf(run);
 	const from = Date.parse(run.startedAt);
 	const to = Math.max(from + 1000, from + runElapsed(run, now));
-	const stats: Stat[] = [
+	const look = lookOf(run.agent);
+	const facts = [
 		{ label: 'Time', value: elapsed(runElapsed(run, now)) },
 		{ label: 'Steps', value: String(run.steps.length) },
 		{ label: 'Tokens', value: tokens(run.tokens) },
 		...(jev.decisions ? [{ label: 'Jev', value: fineDollars(jev.cost) }] : []),
 		{ label: 'Model', value: run.model?.split('/').pop() ?? '—' },
 	];
+	const pick = (index: number) => root.current?.querySelector(`[data-spine-step="${index}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	const failed = run.status === 'failed';
+	const endTone = failed ? 'var(--bad)' : run.status === 'stopped' ? 'var(--text-4)' : 'var(--ok)';
 	return (
-		<div ref={root} className="flex min-h-0 flex-col gap-3">
+		<div ref={root} className="flex min-h-0 flex-col gap-4">
 			<div className="flex items-center gap-2">
 				<IconBtn icon={ArrowLeft} size="sm" label="All agents" onClick={() => focusRun(sessionId, null)} />
 				<AgentTile agent={run.agent} running={live} size={26} />
 				<div className="flex min-w-0 flex-1 flex-col">
-					<span className="text-micro font-medium" style={{ color: lookOf(run.agent).tone }}>
-						{lookOf(run.agent).label}
+					<span className="text-micro font-medium" style={{ color: look.tone }}>
+						{look.label}
 					</span>
-					<span className="truncate text-body font-medium text-(--text-primary)">{titleOf(run.prompt, run.description ?? undefined)}</span>
+					<span className="truncate text-body font-medium text-(--text)">{titleOf(run.prompt, run.description ?? undefined)}</span>
 				</div>
 				<span
 					className={cn(
-						'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-micro',
-						run.status === 'failed' ? 'border-(--danger-border) text-(--danger-text)' : live ? 'border-(--accent-border) text-(--accent-text)' : 'border-(--border-subtle) text-(--text-secondary)',
+						'flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium',
+						failed ? 'bg-(--bad-soft) text-(--bad)' : live ? 'bg-(--accent-soft) text-(--accent-text)' : 'bg-(--bg-active) text-(--text-2)',
 					)}
 				>
 					<StatusGlyph status={run.status} />
@@ -434,51 +516,80 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				{live ? <StopRunButton sessionId={sessionId} run={run} /> : null}
 			</div>
 
-			<StatWell stats={stats} label="This run" />
-
-			<section aria-label="Brief" className="in-card overflow-hidden">
-				<button
-					type="button"
-					aria-expanded={briefOpen}
-					onClick={() => setBriefOpen(!briefOpen)}
-					className="flex h-8 w-full items-center gap-2 px-3 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus-ring-inset)"
-				>
-					<span className="in-caption flex-1">Brief from the agent</span>
-					<Icon icon={ChevronDown} size={12} className="text-(--icon-tertiary) transition-transform" style={{ transform: briefOpen ? 'rotate(180deg)' : undefined }} />
-				</button>
-				<div className="border-t border-(--card-border) px-3 py-2.5 text-small leading-[18px] text-(--text-secondary)">
-					<p className={cn('m-0 whitespace-pre-wrap', !briefOpen && 'line-clamp-3')}>{run.prompt}</p>
-				</div>
+			<section aria-label="This run" className="flex flex-col gap-2">
+				<dl className="m-0 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+					{facts.map((fact) => (
+						<div key={fact.label} className="flex min-w-0 items-baseline gap-1.5">
+							<dt className="in-caption">{fact.label}</dt>
+							<dd className="in-num m-0 truncate text-small text-(--text)" title={fact.value}>
+								{fact.value}
+							</dd>
+						</div>
+					))}
+				</dl>
+				{run.steps.length ? <Ribbon run={run} from={from} to={to} now={now} lit={lit} onLight={setLit} onPick={pick} /> : null}
 			</section>
 
-			<section aria-label="Steps" className="flex min-h-0 flex-col gap-1.5">
-				<div className="flex items-center gap-3 px-0.5">
-					<h3 className="in-caption m-0 flex-1">Execution timeline</h3>
-					{jev.decisions ? <Caption className="in-num">{jev.decisions} Jev decisions</Caption> : null}
-				</div>
-				{run.steps.length ? (
-					<ol className="in-card m-0 flex list-none flex-col px-3 py-1">
-						{run.steps.map((step) => (
-							<StepRow key={step.id} step={step} from={from} to={to} now={now} />
-						))}
-					</ol>
-				) : (
-					<p className="m-0 px-0.5 text-small text-(--text-tertiary)">{live ? 'Reading the brief…' : 'No steps.'}</p>
-				)}
-				{live && run.writing ? (
-					<p className="agent-live-line m-0 flex gap-1.5 px-0.5 text-small leading-[18px]">
-						<span className="in-caption shrink-0">Writing</span>
-						<span className="line-clamp-3">{run.writing}</span>
-					</p>
-				) : null}
-			</section>
+			{/* The spine: one hairline from the brief's node to the answer's, behind every node on the way. */}
+			<div className="relative flex min-w-0 flex-col gap-1">
+				<span aria-hidden className="absolute top-3 bottom-3 left-[51px] w-px bg-(--line-strong)" />
 
-			{run.result ? (
-				<section aria-label={RESULT_LABEL[run.status]} className={cn('in-card px-3.5 py-3', run.status === 'failed' && 'border-(--danger-border)')}>
-					<h3 className={cn('in-caption m-0 mb-2', run.status === 'failed' && 'text-(--danger-text)')}>{RESULT_HEADING[run.status]}</h3>
-					<Markdown text={run.result} />
+				<section aria-label="Brief" className={SPINE_ROW}>
+					<span className="in-num pt-0.5 text-right text-micro leading-4 text-(--text-4)">0:00</span>
+					<Node tone={look.tone} ring />
+					<div className="flex min-w-0 flex-col gap-1 pb-2">
+						<button type="button" aria-expanded={briefOpen} onClick={() => setBriefOpen(!briefOpen)} className="flex h-5 items-center gap-1.5 self-start rounded-inner text-left outline-none focus-visible:shadow-(--focus)">
+							<span className="in-caption">Brief from the agent</span>
+							<Icon icon={ChevronDown} size={12} className="text-(--text-3) transition-transform" style={{ transform: briefOpen ? 'rotate(180deg)' : undefined }} />
+						</button>
+						<p className={cn('m-0 text-small leading-[18px] whitespace-pre-wrap text-(--text-2)', !briefOpen && 'line-clamp-3')}>{run.prompt}</p>
+					</div>
 				</section>
-			) : null}
+
+				<section aria-label="Steps" className="flex min-w-0 flex-col">
+					{run.steps.length ? (
+						<ol className="m-0 flex list-none flex-col gap-0.5 p-0">
+							{run.steps.map((step, index) => {
+								const before = run.steps[index - 1];
+								const since = before ? Date.parse(before.at) + (before.durationMs ?? 0) : from;
+								return <SpineStep key={step.id} step={step} index={index} since={since} from={from} now={now} lit={lit === index} onLight={setLit} />;
+							})}
+						</ol>
+					) : (
+						<p className={cn(SPINE_ROW, 'm-0')}>
+							<span />
+							<span />
+							<span className="text-small text-(--text-3)">{live ? 'Reading the brief…' : 'No steps.'}</span>
+						</p>
+					)}
+				</section>
+
+				{live ? (
+					<div className={cn(SPINE_ROW, 'pt-1')}>
+						<span className="in-num pt-0.5 text-right text-micro leading-4 text-(--accent-text)">{mark(to - from)}</span>
+						<Node tone="var(--accent)" live />
+						{run.writing ? (
+							<p className="agent-live-line m-0 flex gap-1.5 text-small leading-[18px]">
+								<span className="in-caption shrink-0">Writing</span>
+								<span className="line-clamp-3">{run.writing}</span>
+							</p>
+						) : (
+							<span className="in-shimmer text-small leading-5">Working</span>
+						)}
+					</div>
+				) : run.result ? (
+					<section aria-label={RESULT_LABEL[run.status]} className={cn(SPINE_ROW, 'pt-1')}>
+						<span className="in-num pt-0.5 text-right text-micro leading-4 text-(--text-4)">{mark(to - from)}</span>
+						<Node tone={endTone}>
+							<Icon icon={failed ? CircleAlert : run.status === 'stopped' ? CircleStop : Check} size={10} className="text-(--bg-panel)" />
+						</Node>
+						<div className={cn('in-card min-w-0 px-3.5 py-3', failed && 'shadow-[inset_0_0_0_1px_var(--bad-line)]')}>
+							<h3 className={cn('in-caption m-0 mb-2', failed && 'text-(--bad)')}>{RESULT_HEADING[run.status]}</h3>
+							<Markdown text={run.result} />
+						</div>
+					</section>
+				) : null}
+			</div>
 			<JumpToLatest show={!following} live onJump={follow} className="-mt-3" />
 		</div>
 	);
@@ -491,7 +602,7 @@ export function AgentsTab({ sessionId }: { sessionId: string }) {
 	const now = useNow(runs.some((run) => run.status === 'running'));
 	if (query.isPending) {
 		return (
-			<div className="flex h-7 items-center gap-2 text-small text-(--text-tertiary)">
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
 				<Spinner size={12} />
 				Loading the agents
 			</div>

@@ -34,8 +34,7 @@ const { InlineLinks, Markdown } = await import('@/components/markdown');
 const { ProjectSidebarBody } = await import('@/components/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
-const { ProjectPanel } = await import('@/components/project-panel');
-const { ProjectRack, bayThreads } = await import('@/components/project-rack');
+const { ProjectRoutines } = await import('@/components/project-panel');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
 const { OutputViewerHost } = await import('@/components/output-viewer');
@@ -126,7 +125,7 @@ describe('threads', () => {
 		expect((await screen.findByLabelText('Pull request #12 open · checks pass')).textContent).toBe('#12');
 		expect(await screen.findByLabelText('Source branch: anton/fix')).toBeTruthy();
 		expect(screen.getByLabelText('Target branch: main')).toBeTruthy();
-		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
+		expect(screen.getByText('Checks passed').querySelector('.icon-circle-check')).toBeTruthy();
 	});
 
 	it('shows failing draft checks in the thread peek', async () => {
@@ -168,7 +167,7 @@ describe('threads', () => {
 		const ready = screen.getByRole('article', { name: 'Add the endpoint' });
 		expect(within(ready).getByTitle('#12 open · checks pass').textContent).toBe('#12');
 		const failing = screen.getByRole('article', { name: 'Flaky' });
-		expect(within(failing).getByTitle('#3 open · checks failing').getAttribute('style')).toContain('--pr-open');
+		expect(within(failing).getByTitle('#3 open · checks failing').getAttribute('style')).toContain('--ok');
 		expect(within(failing).queryByText('Needs you')).toBeNull();
 		await userEvent.click(within(failing).getByRole('button', { name: 'Fix CI' }));
 		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'fail', expect.stringContaining('Checks are failing'));
@@ -331,7 +330,7 @@ describe('threads', () => {
 		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts: [{ type: 'text', text }] }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
 		withRouter(() => (
 			<>
-				<ProjectFeed space={space} agent={agent as never} threads={threads} starting={false} onStartingChange={() => {}} />
+				<ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />
 				<OutputViewerHost />
 			</>
 		));
@@ -341,6 +340,22 @@ describe('threads', () => {
 		expect(cards).toHaveLength(2);
 		await userEvent.click(screen.getByRole('link', { name: 'the diagram' }));
 		expect(await screen.findByRole('complementary', { name: 'Viewing diagram.png' })).toBeTruthy();
+	});
+
+	it('folds a message the coordinator sent a thread into one line that opens to the message', async () => {
+		const message = 'New follow-up: check the latest pull from main.\n\nCompare it with the current visual reply pipeline.';
+		const parts = [
+			{ type: 'dynamic-tool', toolName: 'message_thread', toolCallId: 'c1', state: 'output-available', input: { thread: 'pr', message }, output: 'Sent' },
+			{ type: 'text', text: 'Sent it on.' },
+		];
+		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const line = await screen.findByRole('button', { name: `Sent to ${threads[2].title}` });
+		expect(line.getAttribute('aria-expanded')).toBe('false');
+		expect(screen.queryByText(/Compare it with the current/)).toBeNull();
+		await userEvent.click(line);
+		expect(screen.getByText(/Compare it with the current/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Open the thread' })).toBeTruthy();
 	});
 
 	it('draws a thread named in a reply as a chip that opens it', async () => {
@@ -361,7 +376,7 @@ describe('threads', () => {
 		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
 		api.editSpace.mockResolvedValueOnce({ ...space, coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' });
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
-		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
@@ -384,7 +399,7 @@ describe('threads', () => {
 	it('saves a project routine route only when its form is submitted', async () => {
 		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
 		api.spaceAutomations.mockResolvedValueOnce({ automations: [] });
-		withRouter(() => <ProjectPanel space={space} threads={[]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		withRouter(() => <ProjectRoutines space={space} threads={[]} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'New routine' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
@@ -418,7 +433,7 @@ describe('threads', () => {
 	it('attaches files to the coordinator: saved to the project Library and sent with what they say', async () => {
 		const sendMessage = vi.fn(async () => undefined);
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['%PDF'], 'brief.pdf', { type: 'application/pdf' })], getData: () => '' } });
 		expect(await screen.findByText('brief.pdf')).toBeTruthy();
@@ -433,7 +448,7 @@ describe('threads', () => {
 		let reject!: (error: Error) => void;
 		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['old'], 'old.pdf', { type: 'application/pdf' })], getData: () => '' } });
 		await userEvent.type(box, 'Earlier message{Enter}');
@@ -452,7 +467,7 @@ describe('threads', () => {
 		api.attachToProject.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
 		const sendMessage = vi.fn(async (_text: string, _options?: unknown) => undefined);
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage, refresh: () => {} };
-		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} starting={false} onStartingChange={() => {}} />);
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
 		fireEvent.paste(box, { clipboardData: { files: [new File(['old image'], 'photo.png', { type: 'image/png' })], getData: () => '' } });
 		await screen.findByRole('button', { name: 'Remove photo.png' });
@@ -527,20 +542,6 @@ describe('threads', () => {
 		expect(within(row).queryByText(/idle/i)).toBeNull();
 		expect(row.querySelector('[data-glyph="idle"]')).toBeTruthy();
 		expect(screen.getByText('1 thread needs you')).toBeTruthy();
-	});
-
-	it('racks each project as a bay of its threads, and draws a thread out with what it asks', async () => {
-		expect(bayThreads(threads).map((item) => item.id)).toEqual(['asks', 'runs', 'pr', 'done']);
-		withRouter(() => <ProjectRack spaces={[space]} threads={threads} />);
-		expect(await screen.findByRole('group', { name: '1 projects as bays, their threads as blades' })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /Billing/ })).toBeTruthy();
-		fireEvent.focus(screen.getByRole('link', { name: 'Pick a name, Needs you' }));
-		const card = await screen.findByRole('dialog', { name: 'Pick a name' });
-		expect(within(card).getByText('Asks you')).toBeTruthy();
-		expect(within(card).getByText('Billing or invoices?')).toBeTruthy();
-		await userEvent.type(within(card).getByRole('textbox', { name: 'Send a follow-up to Pick a name' }), 'Invoices');
-		await userEvent.click(within(card).getByRole('button', { name: 'Send to this thread' }));
-		expect(api.nudgeThread).toHaveBeenCalledWith('space_1', 'asks', 'Invoices');
 	});
 
 	it('marks a project with a drawn icon picked from the list, never an emoji', async () => {
@@ -655,7 +656,7 @@ describe('project overview numbers', () => {
 				},
 			],
 		});
-		withRouter(() => <ProjectPanel space={{ ...space, repos: [] }} threads={[...runs, ...threads]} tab="Routines" onTab={() => {}} expanded={false} onToggleExpanded={() => {}} onClose={() => {}} />);
+		withRouter(() => <ProjectRoutines space={{ ...space, repos: [] }} threads={[...runs, ...threads]} />);
 		const strip = await screen.findByRole('group', { name: 'Recent runs' });
 		expect(within(strip).getAllByRole('button').map((cell) => cell.getAttribute('aria-label'))).toEqual(['Morning briefing · Oct 20: Done', 'Morning briefing · Oct 21: Failed', 'Morning briefing · Oct 22: Done']);
 		expect(screen.getByText('1h ago')).toBeTruthy();

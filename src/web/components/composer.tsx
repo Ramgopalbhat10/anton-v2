@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ListChecks, Send, SquareDashedMousePointer, Square, X } from 'lucide-react';
+import { ArrowUp, ListChecks, SquareDashedMousePointer, Square, X } from '@/lib/icons';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
@@ -34,24 +34,24 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 				<div
 					key={id}
 					title={`${element.selector}\n${element.url}`}
-					className="flex h-9 max-w-[260px] items-center gap-2 rounded-control border border-(--border-subtle) bg-(--well-bg) pr-1 pl-1"
+					className="flex h-9 max-w-[260px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-1"
 				>
 					{element.image ? (
 						<img src={`data:image/png;base64,${element.image}`} alt="" className="h-7 w-10 shrink-0 rounded-control bg-white object-contain" />
 					) : (
-						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-control bg-(--alpha-white-6) text-(--icon-tertiary)">
+						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-control bg-(--bg-active) text-(--text-3)">
 							<Icon icon={SquareDashedMousePointer} size={13} />
 						</span>
 					)}
 					<span className="flex min-w-0 flex-col">
-						<span className="truncate font-mono text-micro text-(--text-primary)">{elementLabel(element)}</span>
-						<span className="truncate text-micro text-(--text-tertiary)">{element.components[0]?.source ?? element.selector}</span>
+						<span className="truncate font-mono text-micro text-(--text)">{elementLabel(element)}</span>
+						<span className="truncate text-micro text-(--text-3)">{element.components[0]?.source ?? element.selector}</span>
 					</span>
 					<button
 						type="button"
 						aria-label={`Remove ${elementLabel(element)}`}
 						onClick={() => onRemove(id)}
-						className="inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+						className="inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--text-3) hover:bg-(--bg-hover) hover:text-(--text)"
 					>
 						<Icon icon={X} size={10} />
 					</button>
@@ -65,12 +65,13 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
 	return (
 		<Btn
-			size="xs"
-			variant={on ? 'secondary' : 'ghost'}
+			size="sm"
+			variant="ghost"
 			icon={ListChecks}
 			aria-pressed={on}
 			title={on ? 'Plan mode: the agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
 			onClick={() => onChange(!on)}
+			className={on ? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)] hover:bg-(--accent-soft) hover:text-(--accent-text)' : 'text-(--text-2)'}
 		>
 			Plan
 		</Btn>
@@ -217,11 +218,11 @@ export const Composer = memo(function Composer({
 			}}
 		>
 			{/* The agent's todo list, while the task has one; it renders nothing otherwise. */}
-			<div className="mx-auto mb-1.5 flex max-w-[700px] justify-center empty:hidden">
+			<div className="mx-auto mb-1.5 flex max-w-[720px] justify-center empty:hidden">
 				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
 			</div>
 			<div
-				className="in-card relative mx-auto flex max-w-[700px] flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)"
+				className="composer relative mx-auto flex max-w-[720px] flex-col gap-2 px-3 pt-3 pb-2"
 				{...attachments.dropZone}
 			>
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
@@ -235,7 +236,7 @@ export const Composer = memo(function Composer({
 					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Reply to Anton'}
 				/>
 				{blocked || blind || attachments.limitError || attachments.notice ? (
-					<div className={blocked ? 'text-small text-(--danger-text)' : 'text-small text-(--warning-text)'}>
+					<div className={blocked ? 'text-small text-(--bad)' : 'text-small text-(--warn)'}>
 						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.limitError ?? attachments.notice)}
 					</div>
 				) : null}
@@ -246,7 +247,7 @@ export const Composer = memo(function Composer({
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
 					{/* Enter sends, as everywhere; the hint speaks up only while the agent is running. */}
-					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-disabled) max-sm:invisible">
+					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-4) max-sm:invisible">
 						{busy ? (
 							<>
 								<span className="truncate">Send to the running agent</span>
@@ -254,8 +255,8 @@ export const Composer = memo(function Composer({
 							</>
 						) : null}
 					</div>
-					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
+					{busy ? <IconBtn icon={Square} variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
+					<IconBtn type="submit" icon={ArrowUp} variant="inverse" label="Send message" disabled={!ready} />
 				</div>
 			</div>
 		</form>

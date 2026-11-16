@@ -11,6 +11,8 @@ export type Change =
 	| { kind: 'sessions' }
 	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
+	/** A connection was saved or cleared in Settings › Connections. */
+	| { kind: 'setup' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }

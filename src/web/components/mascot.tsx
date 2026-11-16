@@ -21,10 +21,10 @@ const TORSO = [
 	'.FFFFF..FFFFD.',
 ];
 const FILL: Record<string, string> = {
-	T: 'var(--cyan-200)',
-	H: 'var(--cyan-300)',
-	F: 'var(--cyan-400)',
-	D: 'var(--cyan-600)',
+	T: 'var(--a-200)',
+	H: 'var(--a-300)',
+	F: 'var(--accent)',
+	D: 'var(--a-600)',
 };
 const INK = '#06181F';
 
@@ -57,15 +57,15 @@ const SPARK: Px[] = [[1, -4], [0, -3], [1, -3], [2, -3], [1, -2]];
  */
 const FIGURE = (
 	<>
-		<Pixels className="am-question" px={QUESTION} fill="var(--attention-base)" />
+		<Pixels className="am-question" px={QUESTION} fill="var(--warn)" />
 		<g className="am-zzz">
-			<Pixels className="am-z" px={ZZZ} fill="var(--cyan-200)" />
-			<Pixels className="am-z am-z2" px={ZZZ} fill="var(--cyan-200)" />
+			<Pixels className="am-z" px={ZZZ} fill="var(--a-200)" />
+			<Pixels className="am-z am-z2" px={ZZZ} fill="var(--a-200)" />
 		</g>
-		<Pixels className="am-spark" px={SPARK} fill="var(--cyan-200)" />
+		<Pixels className="am-spark" px={SPARK} fill="var(--a-200)" />
 		<g className="am-body">
 			<g className="am-upper">
-				<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--neutral-500)" />
+				<rect className="am-stalk" x={10} y={-1} width={1.02} height={1.02} fill="var(--text-4)" />
 				<rect className="am-led" x={10} y={-2} width={1.02} height={1.02} />
 				{torso.map(({ x, y, fill }) => (
 					<rect key={`${x},${y}`} x={x} y={y} width={1.02} height={1.02} fill={fill} />
@@ -73,11 +73,11 @@ const FIGURE = (
 				<Pixels className="am-eyes" px={EYES} fill={INK} />
 				<Pixels className="am-happy" px={HAPPY} fill={INK} />
 				<Pixels className="am-shut" px={SHUT} fill={INK} />
-				<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--cyan-500)" />
-				<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--cyan-600)" />
+				<Pixels className="am-arm-l" px={[[0, 5], [0, 6]]} fill="var(--a-600)" />
+				<Pixels className="am-arm-r" px={[[13, 5], [13, 6]]} fill="var(--a-600)" />
 			</g>
-			<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--cyan-700)" />
-			<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--cyan-700)" />
+			<Pixels className="am-leg-l" px={[[2, 9], [3, 9], [4, 9]]} fill="var(--a-700)" />
+			<Pixels className="am-leg-r" px={[[9, 9], [10, 9], [11, 9]]} fill="var(--a-700)" />
 		</g>
 	</>
 );

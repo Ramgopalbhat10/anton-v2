@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, Cpu, Globe, Timer } from 'lucide-react';
+import { Clock, Cpu, Globe, Timer } from '@/lib/icons';
 import { useState } from 'react';
 import { Btn, Spinner } from '@/components/signal';
 import { api, type SandboxSettings, type SandboxView } from '@/lib/api';
@@ -110,7 +110,7 @@ function Form({ view }: { view: SandboxView }) {
 						spellCheck={false}
 						placeholder={'registry.npmjs.org\npypi.org\nfiles.pythonhosted.org'}
 						aria-label="Allowed domains"
-						className="w-full resize-y rounded-tile border border-(--border-subtle) bg-(--well-bg) px-2.5 py-2 font-mono text-small leading-[18px] text-(--text-primary) outline-none placeholder:text-(--text-disabled) focus-visible:shadow-(--focus-ring)"
+						className="sg-field w-full resize-y px-2 py-2 font-mono text-small leading-[18px]"
 					/>
 				</SubBlock>
 			</Block>

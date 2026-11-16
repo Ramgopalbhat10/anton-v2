@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { after, test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { Worker } from 'node:worker_threads';
 import { mkdirSync } from 'node:fs';
 import { patchFlue, patchFlueEach } from '../scripts/patch-flue.ts';
 
@@ -28,7 +30,22 @@ const TASK = `async createTaskSession(options) {
 		};
 	}`;
 
-const OPEN = `function openDatabase(path) {
+const TRANSACTION = `function createNodeTransactionSync(db) {
+	return (closure) => {
+		db.exec("BEGIN");
+		try {
+			const result = closure();
+			db.exec("COMMIT");
+			return result;
+		} catch (error) {
+			db.exec("ROLLBACK");
+			throw error;
+		}
+	};
+}`;
+
+const OPEN = `${TRANSACTION}
+function openDatabase(path) {
 	const db = new DatabaseSync(path);
 	if (path !== ":memory:") db.exec("PRAGMA journal_mode=WAL");
 }`;
@@ -173,6 +190,69 @@ test('flue.db waits for a busy lock instead of failing at once', async () => {
 	assert.equal(readFileSync(new URL('node/index.mjs', dist), 'utf8'), patched, 'patching twice changes nothing');
 });
 
+const LOCK_FIRST = 'writes that take the lock as they begin';
+
+test('flue.db transactions take the write lock as they begin', async () => {
+	const dist = runtime('begin', `${BROKEN}\n${TASK}`);
+	assert.equal((await patchFlueEach(dist))[LOCK_FIRST], 'patched');
+	const patched = readFileSync(new URL('node/index.mjs', dist), 'utf8');
+	assert.match(patched, /db\.exec\("BEGIN IMMEDIATE"\);/);
+	assert.doesNotMatch(patched, /db\.exec\("BEGIN"\);/);
+	assert.match(patched, /busy_timeout=5000/, 'the busy timeout is patched in the same file');
+	assert.equal((await patchFlueEach(dist))[LOCK_FIRST], 'already');
+	assert.equal(readFileSync(new URL('node/index.mjs', dist), 'utf8'), patched, 'patching twice changes nothing');
+});
+
+/** The runtime's transaction wrapper, as `source` has it, over `db`. */
+function transactionOf(source: string, db: DatabaseSync): (closure: () => void) => void {
+	const wrapper = source.match(/function createNodeTransactionSync\(db\) \{[\s\S]*?\n\}/)![0];
+	return new Function(`${wrapper}; return createNodeTransactionSync;`)()(db);
+}
+
+test('a write that reads first waits for another connection\'s lock once patched, and fails at once before', async () => {
+	const dist = runtime('lock', `${BROKEN}\n${TASK}`);
+	await patchFlueEach(dist);
+	const patched = readFileSync(new URL('node/index.mjs', dist), 'utf8');
+	const file = path.join(dir, 'lock.db');
+	const db = new DatabaseSync(file);
+	db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE batches (seq INTEGER);');
+	// As the runtime saves a batch: the stream's row is read, then the batch written.
+	const append = (source: string): Error | null => {
+		try {
+			transactionOf(source, db)(() => {
+				db.prepare('SELECT count(*) FROM batches').get();
+				db.prepare('INSERT INTO batches VALUES (1)').run();
+			});
+			return null;
+		} catch (error) {
+			return error as Error;
+		}
+	};
+	// Another connection, as Litestream is, holds the write lock for a while: it says when it has it, then lets go.
+	const held = new Int32Array(new SharedArrayBuffer(4));
+	const holder = new Worker(
+		`const { workerData } = require('node:worker_threads');
+		const { DatabaseSync } = require('node:sqlite');
+		const other = new DatabaseSync(workerData.file);
+		other.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE; INSERT INTO batches VALUES (0);');
+		Atomics.store(workerData.held, 0, 1);
+		Atomics.notify(workerData.held, 0);
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
+		other.exec('COMMIT');
+		other.close();`,
+		{ eval: true, workerData: { file, held } },
+	);
+	const ended = new Promise((resolve) => holder.once('exit', resolve));
+	assert.equal(Atomics.wait(held, 0, 0, 10_000), 'ok', 'the other connection took the lock');
+	const before = Date.now();
+	assert.match(String(append(TRANSACTION)?.message), /database is locked/, 'a plain BEGIN that has read is refused the lock');
+	assert.ok(Date.now() - before < 300, 'and at once, whatever the busy timeout');
+	assert.equal(append(patched), null, 'BEGIN IMMEDIATE waits for the lock and writes');
+	await ended;
+	assert.equal((db.prepare('SELECT count(*) AS n FROM batches').get() as { n: number }).n, 2);
+	db.close();
+});
+
 test('the installed runtime is patched', () => {
 	const dist = new URL('../node_modules/@flue/runtime/dist/', import.meta.url);
 	const sources = readdirSync(dist).filter((name) => name.endsWith('.mjs')).map((name) => readFileSync(new URL(name, dist), 'utf8'));
@@ -182,5 +262,8 @@ test('the installed runtime is patched', () => {
 	assert.doesNotMatch(swap, /compaction: this\.config\.compaction\n/);
 	assert.ok(sources.some((source) => source.includes('compactionConfig?.reasoning ? { ...sessionModel, summaryReasoning: compactionConfig.reasoning }')));
 	assert.ok(sources.some((source) => source.includes('completionOptions.reasoning = model.summaryReasoning ?? "high"')));
-	assert.match(readFileSync(new URL('node/index.mjs', dist), 'utf8'), /busy_timeout=5000/);
+	const node = readFileSync(new URL('node/index.mjs', dist), 'utf8');
+	assert.match(node, /busy_timeout=5000/);
+	assert.match(node, /db\.exec\("BEGIN IMMEDIATE"\);/);
+	assert.doesNotMatch(node, /db\.exec\("BEGIN"\);/);
 });

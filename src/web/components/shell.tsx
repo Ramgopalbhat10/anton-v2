@@ -1,15 +1,17 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { FileDiff, PanelRight } from 'lucide-react';
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from '@/lib/icons';
+import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
+import { MobileNav } from '@/components/mobile-nav';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { NotificationsDialog, ReadNotificationsOf } from '@/components/notifications';
+import { ResizeHandle, useStoredState } from '@/components/split-pane';
+import { ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
-import { DiffStat, Icon, IconBtn } from '@/components/signal';
+import { Badge, DiffStat, Icon, IconBtn } from '@/components/signal';
 import { useChanges } from '@/components/git-tab';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/task-actions';
 import { Thread } from '@/components/thread';
@@ -28,8 +30,6 @@ import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/starting-task';
 import { ProjectSettingsModal } from '@/components/project-settings-modal';
 import { SettingsModal } from '@/components/settings/modal';
-import { Sky } from '@/components/sky';
-import { useSky, useSkyOn } from '@/lib/sky';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 
@@ -56,42 +56,26 @@ function TaskNotifications() {
 	return null;
 }
 
-/** How much of the sky a page lets through: all of it on Home, a hint behind an artifact you read, a little everywhere else. */
 /** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
-const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--elev-2)';
+const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--sh-1)';
 
-export function skyVeil(pathname: string): 'full' | 'dim' | 'faint' {
-	if (pathname === '/') return 'full';
-	// A conversation (a task, a thread, a project's coordinator) lets the sky through as much as a list does; an artifact you read stays nearly opaque.
-	if (pathname.startsWith('/artifacts/')) return 'faint';
-	return 'dim';
-}
-
-/**
- * This hour's sky behind the app, unless it is turned off in this browser.
- * Brightening it is for Home; a page you read keeps it at most as drawn.
- */
-function AppSky({ home }: { home: boolean }) {
-	const on = useSkyOn();
-	const image = useSky();
-	return on ? <Sky image={image} capped={!home} /> : null;
-}
+/** The sidebar's width on a wider screen: dragged by its edge between these, back to the default on a double-click. */
+const NAV_DEFAULT = 236;
+const NAV_MIN = 200;
+const NAV_MAX = 420;
 
 export function AppShell() {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
-	const skyOn = useSkyOn();
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
+	const [storedWidth, setNavWidth] = useStoredState('anton.sidebarWidth', NAV_DEFAULT);
+	// A width saved under other limits, or not a number at all, comes back inside these.
+	const navWidth = Number.isFinite(storedWidth) ? Math.min(NAV_MAX, Math.max(NAV_MIN, storedWidth)) : NAV_DEFAULT;
 	const [paletteOpen, setPaletteOpen] = useState(false);
-	const [notificationsOpen, setNotificationsOpen] = useState(false);
+	const navigate = useNavigate();
 	// An incognito chat shows no sidebar: its frame covers the whole page.
 	const incognito = pathname === '/incognito';
 	const closePalette = useCallback(() => setPaletteOpen(false), []);
-	const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
-	const openNotifications = useCallback(() => {
-		setNavOpen(false);
-		setNotificationsOpen(true);
-	}, []);
 	const closeNav = useCallback(() => setNavOpen(false), []);
 	// The same function on every render, so nothing that opens the sidebar draws again when the shell does.
 	const openNav = useCallback(() => setNavOpen(true), []);
@@ -100,6 +84,11 @@ export function AppShell() {
 		setNavOpen(false);
 		setPaletteOpen(true);
 	}, []);
+	// The rail's bell opens the Inbox page.
+	const openNotifications = useCallback(() => {
+		setNavOpen(false);
+		void navigate({ to: '/inbox' });
+	}, [navigate]);
 	useLiveUpdates();
 
 	useEffect(() => {
@@ -115,17 +104,25 @@ export function AppShell() {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
 				event.preventDefault();
 				setPaletteOpen((current) => !current);
+				return;
 			}
+			// C starts a new task from anywhere a key is not meant for a field, a menu, a dialog or the terminal.
+			if (event.key.toLowerCase() !== 'c' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+			const target = event.target as HTMLElement | null;
+			if (target?.closest('input, textarea, select, canvas, [contenteditable="true"], [role="dialog"], [role="menu"], [role="listbox"], .xterm, .cm-editor')) return;
+			if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+			event.preventDefault();
+			setNavOpen(false);
+			void navigate({ to: '/' });
 		}
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	}, []);
+	}, [navigate]);
 
 	return (
 		<NavContext.Provider value={openNav}>
 			{/* Padded by the safe-area insets, so on a phone the app clears its notch and home bar. */}
-			<div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text-primary)">
-				<AppSky home={pathname === '/'} />
+			<div className="flex h-dvh overflow-hidden bg-(--bg-app) pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-body leading-[18px] text-(--text)">
 				<button
 					type="button"
 					aria-label="Close sidebar"
@@ -136,7 +133,19 @@ export function AppShell() {
 				/>
 				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
 				{incognito ? null : (
-					<div className="sg-nav-column" data-collapsed={collapsed}>
+					<div className="sg-nav-column" data-collapsed={collapsed} style={{ '--nav-w': `${navWidth}px` } as CSSProperties}>
+						{collapsed ? null : (
+							<ResizeHandle
+								label="Resize the sidebar"
+								width={navWidth}
+								min={NAV_MIN}
+								max={NAV_MAX}
+								initial={NAV_DEFAULT}
+								onResize={setNavWidth}
+								// No edge of its own: the line shows only under the pointer, the keyboard or a drag.
+								className="absolute inset-y-0 right-0 z-10 hidden w-2 before:bg-transparent md:flex"
+							/>
+						)}
 						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
 						<ErrorBoundary label="The sidebar" className="m-3">
 							<ChatSidebar
@@ -145,19 +154,16 @@ export function AppShell() {
 								onNavigate={closeNav}
 								onCollapse={collapse}
 								onOpenPalette={openPalette}
-								onOpenNotifications={openNotifications}
 							/>
 						</ErrorBoundary>
 					</div>
 				)}
-				<main data-sky={skyOn ? skyVeil(pathname) : 'off'} className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
+				<main className={cn('app-main flex min-h-0 min-w-0 flex-1 flex-col', incognito ? 'app-main--alone' : 'max-md:pb-14')}>
 					<Outlet />
 				</main>
+				{incognito ? null : <MobileNav onNew={openPalette} />}
 				<ErrorBoundary label="The command palette" className={FLOATING}>
 					<CommandPalette open={paletteOpen} onClose={closePalette} />
-				</ErrorBoundary>
-				<ErrorBoundary label="Notifications" className={FLOATING}>
-					<NotificationsDialog open={notificationsOpen} onClose={closeNotifications} />
 				</ErrorBoundary>
 				<ErrorBoundary label="Settings" className={FLOATING}>
 					<SettingsModal />
@@ -182,7 +188,7 @@ function pullRequestAsk(session: Session): string {
 		: 'Open a pull request with the changes on this branch. Write a clear title and a short description.';
 }
 
-type StatusTone = { label: string; text: string; dot: string };
+type StatusTone = { label: string; tone: 'accent' | 'danger' | 'success' };
 
 /** The panel to show when the agent hands work to its browser or computer subagent, so its work can be watched. */
 function handingTo(message: UseFlueAgentResult['messages'][number] | undefined): 'Browser' | 'Computer' | null {
@@ -196,10 +202,10 @@ function handingTo(message: UseFlueAgentResult['messages'][number] | undefined):
 }
 
 // One object per state, so the header sees the same status from chunk to chunk.
-const WORKING: StatusTone = { label: 'Working', text: 'text-(--accent-text)', dot: 'bg-(--accent-base)' };
-const STOPPED: StatusTone = { label: 'Stopped', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
-const FAILED: StatusTone = { label: 'Failed', text: 'text-(--danger-text)', dot: 'bg-(--danger-base)' };
-const FINISHED: StatusTone = { label: 'Finished', text: 'text-(--success-text)', dot: 'bg-(--success-base)' };
+const WORKING: StatusTone = { label: 'Working', tone: 'accent' };
+const STOPPED: StatusTone = { label: 'Stopped', tone: 'danger' };
+const FAILED: StatusTone = { label: 'Failed', tone: 'danger' };
+const FINISHED: StatusTone = { label: 'Finished', tone: 'success' };
 
 function statusFor(agent: UseFlueAgentResult): StatusTone | null {
 	if (agent.status === 'submitted' || agent.status === 'streaming') return WORKING;
@@ -219,9 +225,31 @@ export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; o
 	if (!files.length) return null;
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
-	return <button type="button" onClick={() => onShowPanel('Changes')} aria-label={`Open Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}, ${added} additions, ${removed} deletions`} className="inline-flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-micro text-(--text-secondary) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus-ring)">
+	return <button type="button" onClick={() => onShowPanel('Changes')} aria-label={`Open Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}, ${added} additions, ${removed} deletions`} className="inline-flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-micro text-(--text-2) hover:bg-(--bg-hover) outline-none focus-visible:shadow-(--focus)">
 		<Icon icon={FileDiff} size={13} /><span className="in-num whitespace-nowrap">{files.length} {files.length === 1 ? 'file' : 'files'}</span><span className="in-num hidden sm:inline"><DiffStat added={added} removed={removed} /></span>
 	</button>;
+}
+
+/** The branch the task works on, once it has one; a click copies its name. */
+function BranchPill({ branch }: { branch: string }) {
+	const [copied, setCopied] = useState(false);
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 1600);
+		return () => clearTimeout(timer);
+	}, [copied]);
+	return (
+		<button
+			type="button"
+			title={copied ? 'Copied' : 'Copy the branch name'}
+			aria-label={`Branch ${branch}: copy its name`}
+			onClick={() => void navigator.clipboard.writeText(branch).then(() => setCopied(true), () => undefined)}
+			className="hidden h-6 max-w-[220px] min-w-0 shrink items-center gap-1.5 rounded-control px-1.5 text-small font-medium text-(--text-2) outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) xl:inline-flex"
+		>
+			<Icon icon={copied ? Check : GitBranch} size={13} className="shrink-0 text-(--text-3)" />
+			<span className="truncate font-mono text-micro">{branch}</span>
+		</button>
+	);
 }
 
 const TaskHeader = memo(function TaskHeader({
@@ -246,17 +274,32 @@ const TaskHeader = memo(function TaskHeader({
 	onAskForPullRequest: () => void;
 }) {
 	return (
-		<header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-2 md:pl-4">
+		<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 			<MenuButton />
 			{leading}
-			{/* The state is a dot; it says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
-			{status ? (
-				<span className={`flex shrink-0 items-center gap-1.5 text-small whitespace-nowrap ${status.text}`} title={status.label}>
-					<span className={cn('size-1.5 shrink-0 rounded-full', status.dot, status.label === 'Working' && 'in-pulse')} />
-					<span className={status.label === 'Finished' ? 'sr-only' : 'hidden sm:inline'}>{status.label}</span>
+			{/* Where the task works, as the crumb before its name; a project's thread says its project instead. */}
+			{!leading && session?.repo ? (
+				<span className="hidden min-w-0 shrink-[2] items-center gap-1.5 text-body text-(--text-3) md:flex">
+					<span className="truncate">{session.repo.split('/').pop()}</span>
+					<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 				</span>
 			) : null}
 			<TaskTitle session={session} editing={renaming} onEditingChange={onRenamingChange} />
+			{/* The state says Working or what went wrong in words, as finished is the usual state. Spend and tokens are in the composer's meter and the task menu. */}
+			{status ? (
+				status.label === 'Finished' ? (
+					<span className="sr-only">{status.label}</span>
+				) : (
+					<span title={status.label} className="inline-flex shrink-0">
+						<Badge tone={status.tone}>
+							<span className={cn('size-[5px] shrink-0 rounded-full bg-current', status.label === 'Working' && 'in-pulse')} />
+							<span className="hidden sm:inline">{status.label}</span>
+						</Badge>
+					</span>
+				)
+			) : null}
+			<span className="min-w-0 flex-1" />
+			{session && !isChat(session) && session.workspace && session.branch ? <BranchPill branch={session.branch} /> : null}
 			{session ? <PullRequestChip session={session} /> : null}
 			{session && !isChat(session) ? <HeaderChanges sessionId={session.id} onShowPanel={onShowPanel} /> : null}
 			{session ? <TaskMenu session={session} onRename={() => onRenamingChange(true)} onAskForPullRequest={onAskForPullRequest} /> : null}

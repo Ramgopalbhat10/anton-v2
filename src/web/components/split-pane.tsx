@@ -92,7 +92,7 @@ export function ResizeHandle({
 			className={cn(
 				'group/handle relative flex w-2.5 shrink-0 cursor-col-resize touch-none justify-center outline-none',
 				// A hairline that lights on hover, focus and drag.
-				'before:h-full before:w-px before:rounded-full before:bg-(--border-subtle) before:transition-colors before:duration-(--duration-micro) hover:before:bg-(--accent-border) focus-visible:before:bg-(--accent-base) data-dragging:before:bg-(--accent-base)',
+				'before:h-full before:w-px before:rounded-full before:bg-(--line) before:transition-colors before:duration-(--t-fast) hover:before:bg-(--accent-line) focus-visible:before:bg-(--accent) data-dragging:before:bg-(--accent)',
 				className,
 			)}
 		/>

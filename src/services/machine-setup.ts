@@ -4,7 +4,7 @@ import type { Project } from '../core/types.ts';
 import { DEFAULT_PREVIEW_PORTS } from '../db/projects.ts';
 import { getProviders } from '../providers/index.ts';
 import { checkoutTaskBranch, cloneRepo, initScratch, repoDir } from './git.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { resourcesFrom, type SandboxSettings } from './sandbox-settings.ts';
 
 /**

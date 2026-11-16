@@ -3,7 +3,7 @@ import { config } from '../config.ts';
 import { getProject, setWarmImage } from '../db/projects.ts';
 import { getProviders } from '../providers/index.ts';
 import { withEnv } from '../core/machine-env.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { machineRequest, previewEnv, setUpMachine } from './machine-setup.ts';
 import { type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from './secrets.ts';

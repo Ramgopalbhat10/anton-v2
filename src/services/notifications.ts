@@ -5,7 +5,7 @@ import { listApprovals } from '../db/mail-approvals.ts';
 import { deleteNotificationsOf, insertNotification, listNotificationRecords, type NotificationRecord, setNotificationsRead } from '../db/notifications.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { listToolApprovals } from '../db/tool-approvals.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * The Notifications dialog: the moments in a task worth a look, not every

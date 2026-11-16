@@ -90,7 +90,7 @@ describe('Artifacts', () => {
 		const { act } = await import('@testing-library/react');
 		act(() => callbacks.forEach((cb) => cb([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)));
 		expect(document.querySelectorAll('iframe').length).toBe(0);
-		expect(screen.getByText('Open to run app')).toBeTruthy();
+		expect(document.querySelector('[data-preview="app"]')).toBeTruthy();
 		expect(api.outputText).not.toHaveBeenCalledWith('s1', 'renders/budget-planner-a1b2c3.html');
 	});
 
@@ -127,7 +127,9 @@ describe('Artifacts', () => {
 		await waitFor(() => expect(client.getQueryData(['artifact-snippet', 's1', 'reports/findings.md'])).toBeDefined());
 		expect(screen.queryByText('END OF DOCUMENT')).toBeNull();
 		expect(client.getQueryData(['output', 's1', 'reports/findings.md'])).toBeUndefined();
+		// The first click picks the card for the sheet; Open there shows it full size.
 		await userEvent.click(screen.getByRole('link', { name: 'findings.md, document from Budget task' }));
+		await userEvent.click(within(screen.getByRole('complementary', { name: 'findings.md, picked' })).getByRole('link', { name: 'Open' }));
 		expect(await screen.findByText('END OF DOCUMENT')).toBeTruthy();
 	});
 
@@ -157,7 +159,7 @@ describe('Artifacts', () => {
 		await userEvent.keyboard(' ');
 		expect((checkbox as HTMLInputElement).checked).toBe(true);
 		expect(router.state.location.pathname).toBe('/artifacts');
-		await userEvent.click(screen.getByRole('tab', { name: /Images/ }));
+		await userEvent.click(screen.getByRole('button', { name: /Images/ }));
 		expect(screen.getByText('1 selected (1 hidden by filters)')).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Select all shown' }));
 		expect(screen.getByText('2 selected (1 hidden by filters)')).toBeTruthy();
@@ -278,17 +280,24 @@ describe('Artifacts', () => {
 		expect(within(apps).getByText('Budget planner')).toBeTruthy();
 		expect(within(files).getByText('findings.md')).toBeTruthy();
 		expect(within(files).getByText('home.png')).toBeTruthy();
-		await userEvent.click(screen.getByRole('link', { name: 'Budget planner, app from Budget task' }));
+		// A click picks the card: the sheet beside the gallery says what it is and where it is from.
+		const card = screen.getByRole('link', { name: 'Budget planner, app from Budget task' });
+		await userEvent.click(card);
+		expect(router.state.location.pathname).toBe('/artifacts');
+		const sheet = screen.getByRole('complementary', { name: 'Budget planner, picked' });
+		expect(within(sheet).getByRole('link', { name: 'Budget task' })).toBeTruthy();
+		// A click on the picked card opens it, as the sheet's Open does.
+		await userEvent.click(card);
 		expect(router.state.location.pathname).toBe('/artifacts/s1');
 		expect(router.state.location.search).toEqual({ path: 'renders/budget-planner-a1b2c3.html' });
 	});
 
 	it('narrows to one kind, and searches titles and tasks', async () => {
 		open('/artifacts');
-		await userEvent.click(await screen.findByRole('tab', { name: /Apps\s*1/ }));
+		await userEvent.click(await screen.findByRole('button', { name: /Apps,\s*1/ }));
 		expect(screen.getByText('Budget planner')).toBeTruthy();
 		expect(screen.queryByText('findings.md')).toBeNull();
-		await userEvent.click(screen.getByRole('tab', { name: /All\s*3/ }));
+		await userEvent.click(screen.getByRole('button', { name: /All,\s*3/ }));
 		await userEvent.type(screen.getByRole('textbox', { name: 'Search artifacts' }), 'landing');
 		expect(await screen.findByText('home.png')).toBeTruthy();
 		expect(screen.queryByText('Budget planner')).toBeNull();

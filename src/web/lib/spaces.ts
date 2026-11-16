@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { CircleAlert, CircleCheck, Clock, GitMerge, GitPullRequest, type LucideIcon, MessageCircleQuestion, Moon } from 'lucide-react';
+import { CircleAlert, CircleCheck, Clock, GitMerge, GitPullRequest, type IconComponent, MessageCircleQuestion, Moon } from '@/lib/icons';
 import type { Tone } from '@/components/instrument';
 import { useCallback, useMemo } from 'react';
 import { api, SAFETY_NET_MS, type Session, type Space, THREAD_STATES, type ThreadState } from '@/lib/api';
@@ -37,7 +37,7 @@ export function useThreads(spaceId: string) {
 	return { threads, isPending: sessions.isPending, isError: sessions.isError };
 }
 
-export type StateLook = { label: string; short: string; tone: Tone; icon: LucideIcon };
+export type StateLook = { label: string; short: string; tone: Tone; icon: IconComponent };
 
 /** How each state shows: amber waits on you, blue works, emerald is ready, neutral is quiet. */
 export const STATE_LOOK: Record<ThreadState, StateLook> = {
@@ -79,7 +79,8 @@ export const threadActiveAt = (thread: Session) => [thread.checkpointAt, thread.
 /** One line about the thread: its question when it waits on you, else its last words, else its brief. */
 export function threadLine(thread: Session, markdown = false): string {
 	if (thread.status === 'error') return thread.errorMessage ?? 'The thread failed.';
-	if (thread.asking) return thread.asking;
+	// A resolved thread is done: a question left from before it closed is not its line any more.
+	if (thread.asking && !thread.resolvedAt) return thread.asking;
 	const text = thread.lastReply ?? thread.brief ?? thread.lastInput ?? '';
 	// A heading only names what follows, so the first line of prose is preferred.
 	const lines = text.split('\n').filter((entry) => entry.trim() && !/^\s*(?:---+|\|)/.test(entry));

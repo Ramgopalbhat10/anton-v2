@@ -1,5 +1,5 @@
-import { FileDiff, Files, GitBranch, PanelLeftOpen, X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { FileDiff, Files, GitBranch, PanelLeftOpen, X } from '@/lib/icons';
+import type { IconComponent } from '@/lib/icons';
 import { type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { Icon, IconBtn } from '@/components/signal';
@@ -17,7 +17,7 @@ const SIDE_BY_SIDE_MIN = 520;
 /** What the explorer lists: the repository's files, the work not pushed yet, or everything the branch changed. */
 export type ExplorerMode = 'files' | 'changes' | 'branch';
 
-const MODES: Array<{ mode: ExplorerMode; icon: LucideIcon; label: string }> = [
+const MODES: Array<{ mode: ExplorerMode; icon: IconComponent; label: string }> = [
 	{ mode: 'files', icon: Files, label: 'Files' },
 	{ mode: 'changes', icon: FileDiff, label: 'Changes not pushed' },
 	{ mode: 'branch', icon: GitBranch, label: 'Whole branch' },
@@ -42,10 +42,10 @@ function ModeSwitch({ sessionId, mode }: { sessionId: string; mode: ExplorerMode
 						if (mode === 'files') showPanel('Changes');
 					}}
 					className={cn(
-						'inline-flex size-6 items-center justify-center rounded-control outline-none transition-colors duration-(--duration-micro) focus-visible:shadow-(--focus-ring)',
+						'inline-flex size-6 items-center justify-center rounded-control outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
 						mode === item.mode
 							? 'in-chosen'
-							: 'text-(--icon-tertiary) hover:bg-(--bg-hover) hover:text-(--icon-secondary)',
+							: 'text-(--text-3) hover:bg-(--bg-hover) hover:text-(--text-2)',
 					)}
 				>
 					<Icon icon={item.icon} size={13} />
@@ -116,14 +116,14 @@ export function EditorPane({
 	);
 
 	return (
-		<div ref={row} className="in-well flex min-h-0 flex-1 overflow-hidden">
+		<div ref={row} className="flex min-h-0 flex-1 overflow-hidden rounded-card bg-(--bg-surface)">
 			<div
 				aria-label={sideLabel}
 				hidden={!showSide}
 				className={cn('min-h-0 shrink-0 flex-col', showSide ? 'flex' : 'hidden', narrow && 'flex-1')}
 				style={narrow ? undefined : { width }}
 			>
-				<div className="flex h-9 shrink-0 items-center gap-1 border-b border-(--border-subtle) px-1.5">
+				<div className="flex h-9 shrink-0 items-center gap-1 border-b border-(--line) px-1.5">
 					<ModeSwitch sessionId={sessionId} mode={mode} />
 					<span className="flex-1" />
 					{/* Nothing is open beside it on a narrow pane, so there is nothing to put it away for. */}
@@ -134,7 +134,7 @@ export function EditorPane({
 			{showSide && !narrow ? (
 				<ResizeHandle label={`Resize the ${sideLabel.toLowerCase()}`} width={width} min={SIDE_MIN} max={sideMax} initial={SIDE_DEFAULT} onResize={setSideWidth} className="z-[2] -mx-[5px]" />
 			) : null}
-			<div className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg-inset)', showMain ? 'flex' : 'hidden')}>{main(sideToggle)}</div>
+			<div className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden', showMain ? 'flex' : 'hidden')}>{main(sideToggle)}</div>
 		</div>
 	);
 }
@@ -142,11 +142,11 @@ export function EditorPane({
 /** The bar along the top of the main column: the explorer's toggle while it is away, then what the pane puts there. */
 export function EditorBar({ sideToggle, children, className }: { sideToggle: ReactNode; children: ReactNode; className?: string }) {
 	return (
-		<div className={cn('flex h-9 shrink-0 items-center gap-1.5 border-b border-(--border-subtle) bg-[linear-gradient(180deg,var(--card-bg-top),var(--card-bg))] px-1.5', className)}>
+		<div className={cn('flex h-9 shrink-0 items-center gap-1.5 border-b border-(--line) px-1.5', className)}>
 			{sideToggle ? (
 				<>
 					{sideToggle}
-					<span aria-hidden className="h-4 w-px shrink-0 bg-(--border-subtle)" />
+					<span aria-hidden className="h-4 w-px shrink-0 bg-(--line)" />
 				</>
 			) : null}
 			{children}

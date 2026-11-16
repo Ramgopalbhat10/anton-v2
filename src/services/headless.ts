@@ -1,6 +1,6 @@
 import { runDueAutomations } from './automations.ts';
 import { runFollowUps } from './follow-ups.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { refreshPullRequests } from './pr-status.ts';
 import { scheduleWatchedPullRequests, watchRunningChecks } from './pr-watch.ts';
 import { runAutomaticReviews } from './review-tasks.ts';

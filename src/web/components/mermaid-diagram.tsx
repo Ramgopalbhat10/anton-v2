@@ -20,18 +20,18 @@ function loadMermaid(): Promise<Mermaid> {
 				startOnLoad: false,
 				securityLevel: 'strict',
 				theme: 'base',
-				fontFamily: token('--font-sans', 'ui-sans-serif, system-ui, sans-serif'),
+				fontFamily: token('--font', 'ui-sans-serif, system-ui, sans-serif'),
 				themeVariables: {
 					darkMode: true,
 					background: 'transparent',
-					primaryColor: token('--neutral-800', '#1f1f1f'),
-					primaryTextColor: token('--text-primary', '#ededed'),
-					primaryBorderColor: token('--border-strong', '#3a3a3a'),
-					lineColor: token('--text-tertiary', '#7a7a7a'),
-					secondaryColor: token('--neutral-750', '#262626'),
-					tertiaryColor: token('--neutral-850', '#181818'),
-					noteBkgColor: token('--neutral-800', '#1f1f1f'),
-					noteTextColor: token('--text-secondary', '#a1a1a1'),
+					primaryColor: token('--bg-overlay', '#1f1f1f'),
+					primaryTextColor: token('--text', '#ededed'),
+					primaryBorderColor: token('--line-strong', '#3a3a3a'),
+					lineColor: token('--text-3', '#7a7a7a'),
+					secondaryColor: token('--bg-active', '#262626'),
+					tertiaryColor: token('--bg-raised', '#181818'),
+					noteBkgColor: token('--bg-overlay', '#1f1f1f'),
+					noteTextColor: token('--text-2', '#a1a1a1'),
 					fontSize: '13px',
 				},
 			});
@@ -78,7 +78,7 @@ export function MermaidDiagram({ source }: { source: string }) {
 	}, [id, settled]);
 	if (!svg) return <CodeBlock code={source} language="mermaid" />;
 	return (
-		<figure className="sg-mermaid mb-2.5 overflow-x-auto rounded-tile border border-(--border-subtle) bg-(--bg-inset) px-3 py-3" aria-label="Diagram" data-stale={failed || undefined}>
+		<figure className="sg-mermaid mb-2.5 overflow-x-auto rounded-card border border-(--line) bg-(--bg-app) px-3 py-3" aria-label="Diagram" data-stale={failed || undefined}>
 			{/* Mermaid's own output, sanitized by it at securityLevel strict. */}
 			<div className="flex justify-center [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
 		</figure>

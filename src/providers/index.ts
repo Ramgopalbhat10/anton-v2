@@ -5,7 +5,6 @@ import type {
 	AgentRuntime,
 	AppsConnector,
 	BrowserHost,
-	DailyPicture,
 	DecisionModel,
 	GatewayAccount,
 	GitHost,
@@ -31,7 +30,6 @@ import { githubHost } from './github/host.ts';
 import { gmailMailbox } from './google/gmail.ts';
 import { googleSignIn } from './google/sign-in.ts';
 import { kernelBrowsers } from './kernel/browsers.ts';
-import { nasaApod } from './nasa/apod.ts';
 import { dockerSandboxProvider } from './docker/sandbox.ts';
 import { localSandboxProvider } from './local/sandbox.ts';
 import { modalSandboxProvider } from './modal/sandbox.ts';
@@ -88,7 +86,6 @@ export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeyS
  * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
  * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
  * `apps` is the apps platform (Composio) the Connectors page's Composio apps sign in and run through.
- * `daily` is NASA's picture of the day, which the sky can show in place of the hourly pictures; absent in tests.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
@@ -112,15 +109,21 @@ export type Providers = {
 	mailboxes?: Mailbox[];
 	/** The apps platform behind Settings › Connectors' Composio apps; absent in tests that do not set one. */
 	apps?: AppsConnector | null;
-	daily?: DailyPicture | null;
 };
 
 let providers: Providers | undefined;
+/** Whether `providers` is the real set, which a setting saved in Settings › Connections may rebuild; tests' fakes are left alone. */
+let real = false;
+/** The decision model in use, rebuilt when its model is changed in Settings › Connections. */
+let decisionModel: DecisionModel | null = null;
+
+const makeDecisions = (): DecisionModel | null =>
+	config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl: config.openrouter.apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
 
 /** The decision, vision, image and text models call OpenRouter with the key in use at the time, so they exist only while there is one. */
 function production(): Providers {
 	const { apiUrl, ttlMs } = config.openrouter;
-	const decisions = config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
+	decisionModel = makeDecisions();
 	const vision = openRouterVision({ apiUrl, apiKey: openRouterKey });
 	const images = openRouterImages({ apiUrl, apiKey: openRouterKey, ttlMs });
 	const text = openRouterText({ apiUrl, apiKey: openRouterKey });
@@ -139,7 +142,7 @@ function production(): Providers {
 			},
 		],
 		get decisions() {
-			return openRouterKey() ? decisions : null;
+			return openRouterKey() ? decisionModel : null;
 		},
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
@@ -158,16 +161,29 @@ function production(): Providers {
 		accounts: [googleSignIn()],
 		mailboxes: [gmailMailbox()],
 		apps: composioApps({ key: composioKeySlot }),
-		daily: nasaApod({ apiKey: config.nasaApiKey }),
 	};
 }
 
 export function getProviders(): Providers {
-	providers ??= production();
+	if (!providers) {
+		providers = production();
+		real = true;
+	}
 	return providers;
+}
+
+/**
+ * Rebuilds the providers whose settings are read as they are made, after one of them is saved in Settings ›
+ * Connections: the code host (its token) and the decision model. The rest wait for a restart.
+ */
+export function refreshLiveProviders(): void {
+	if (!providers || !real) return;
+	providers.git = githubHost(config.github);
+	decisionModel = makeDecisions();
 }
 
 /** Tests swap in fakes here. */
 export function setProviders(next: Providers): void {
 	providers = next;
+	real = false;
 }

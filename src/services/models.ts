@@ -5,7 +5,7 @@ import type { ModelCatalog, ModelEndpoint, ModelInfo, Reasoning } from '../core/
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { openRouterKey } from '../providers/openrouter/key.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { gatewayOffered, subscriptionModels } from './subscriptions.ts';
 
 let loaded: readonly ModelInfo[] = [];

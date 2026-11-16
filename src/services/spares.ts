@@ -8,7 +8,7 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, wasDeleted } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { repoDir } from './git.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { machineRequest, previewEnv, readMarker, readyFile, setUpMachine } from './machine-setup.ts';
 import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';
 import { sandboxSettings } from './sandbox-settings.ts';

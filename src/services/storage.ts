@@ -4,7 +4,7 @@ import { deletedSessionIds, listSessionRecords } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { type Checkpoint, whileNoCheckpointIsWritten } from './checkpoints.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /** The timeline shows this many entries, so older ones only take space. */
 const KEEP_CHECKPOINTS = 50;

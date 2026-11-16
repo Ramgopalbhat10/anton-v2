@@ -21,7 +21,6 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { RackCard } = await import('@/components/task-rack');
 const { ContextMeter } = await import('@/components/context-meter');
 const { ArcDial, DotMatrix, StackedDaysChart } = await import('@/components/charts');
 const { VmPanel } = await import('@/components/vm-panel');
@@ -49,37 +48,6 @@ function inRouter(ui: React.ReactNode, seed: Array<[unknown[], unknown]>) {
 	const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
 	return renderWithQueries(<RouterProvider router={router} />, seed);
 }
-
-describe('Rack card', () => {
-	const models: Array<[unknown[], unknown]> = [[['models'], { models: [planModel], default: planModel.id }]];
-
-	it('shows the task’s latest input, when it came, and that the task bills a plan', async () => {
-		const task: Session = session({
-			title: 'What is this project about?',
-			model: planModel.id,
-			lastInput: 'Is the app using SQLite for persistence?',
-			lastInputAt: new Date(Date.now() - 3 * 60_000).toISOString(),
-			createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
-			usage: { inputTokens: 60_000, outputTokens: 4_000, cost: 0 },
-		});
-		inRouter(<RackCard sessions={[task]} />, models);
-		fireEvent.focus(await screen.findByRole('link', { name: /What is this project about\?/ }));
-		const card = await screen.findByRole('dialog', { name: 'What is this project about?' });
-		expect(within(card).getByText('Latest input')).toBeTruthy();
-		expect(within(card).getByText('Is the app using SQLite for persistence?')).toBeTruthy();
-		expect(within(card).getByText('3m ago')).toBeTruthy();
-		expect(within(card).getByText('started 2h ago')).toBeTruthy();
-		expect(within(card).getByText('billed').previousElementSibling?.textContent).toBe('plan');
-	});
-
-	it('falls back to the first message for a task from before inputs were kept', async () => {
-		inRouter(<RackCard sessions={[session({ title: 'Fix the flaky upload test', lastInput: null, lastInputAt: null })]} />, models);
-		fireEvent.focus(await screen.findByRole('link', { name: /Fix the flaky upload test/ }));
-		const card = await screen.findByRole('dialog');
-		expect(within(card).getByText('Input')).toBeTruthy();
-		expect(within(card).getAllByText('Fix the flaky upload test').length).toBe(2);
-	});
-});
 
 describe('Context meter', () => {
 	const view: ContextView = {
@@ -197,7 +165,7 @@ describe('Spend matrix and dial', () => {
 		);
 		const matrix = screen.getByRole('figure', { name: 'Spend per day' });
 		// The busiest day fills its column; a quarter of it lights one cell; a quiet day none.
-		const lit = [...container.querySelectorAll('svg > g')].map((day) => day.querySelectorAll('rect[fill="var(--accent-base)"]').length);
+		const lit = [...container.querySelectorAll('svg > g')].map((day) => day.querySelectorAll('rect[fill="var(--accent)"]').length);
 		expect(lit).toEqual([4, 0, 1]);
 		expect(within(matrix).getByText('$0.04')).toBeTruthy();
 		expect(within(matrix).getByText('Today')).toBeTruthy();

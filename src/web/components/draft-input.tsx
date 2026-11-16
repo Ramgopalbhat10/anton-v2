@@ -200,7 +200,7 @@ export function DraftInput({
 			suppressContentEditableWarning
 			data-placeholder={placeholder}
 			className={cn(
-				'sg-draft min-h-[38px] max-h-52 w-full overflow-y-auto border-0 bg-transparent p-0 text-body leading-[22px] whitespace-pre-wrap break-words text-(--text-primary) outline-none',
+				'sg-draft min-h-[38px] max-h-52 w-full overflow-y-auto border-0 bg-transparent p-0 text-body leading-[22px] whitespace-pre-wrap break-words text-(--text) outline-none',
 				className,
 			)}
 			style={style}

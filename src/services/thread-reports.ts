@@ -5,7 +5,7 @@ import { getSessionRecord, listSessionRecords, updateSession } from '../db/sessi
 import { sendToAgent } from './agent-runner.ts';
 import { type ThreadState, threadState } from '../core/thread-state.ts';
 import { isWorking } from './activity.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { finishesWork } from './reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
 import { getSession } from './sessions.ts';

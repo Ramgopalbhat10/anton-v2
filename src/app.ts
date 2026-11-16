@@ -9,7 +9,7 @@ import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
-import { purgeIncognito } from './db.ts';
+import { purgeIncognito } from './db/adapter.ts';
 import { getSessionRecord } from './db/sessions.ts';
 import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
@@ -117,6 +117,7 @@ import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
 import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
+import { clearSlot, saveSlot, setupView, testSlot } from './services/setup.ts';
 import {
 	recordPlanLimit,
 	beginLogin,
@@ -131,8 +132,7 @@ import {
 	subscriptionsView,
 } from './services/subscriptions.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
-import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
-import { dailySky, dailySkyImage } from './services/sky.ts';
+import { logProblem, logRuntimeEvent, recentProblems } from './core/log.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
 import { recordWebCall } from './services/web-digest.ts';
 import { markNotifications, notificationsView, notifyFailedReply } from './services/notifications.ts';
@@ -365,14 +365,6 @@ const RUN_ON = v.picklist(['sandbox', 'host']);
 
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
 app.get('/api/usage', async (c) => c.json(await usageView()));
-// NASA's picture of the day for the sky, read once a day on the server (services/sky.ts); null while there is none.
-app.get('/api/sky/today', async (c) => c.json({ picture: await dailySky() }));
-app.get('/api/sky/today/image', async (c) => {
-	const image = await dailySkyImage();
-	if (!image) return c.json({ error: 'Not found' }, 404);
-	// The address names the day (`?d=`), so a browser may keep it.
-	return c.body(image.bytes as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': image.type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=86400, immutable' });
-});
 const cap = v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000)));
 app.put('/api/settings/limits', async (c) => {
 	const next = await body(c, v.object({ dailyUsd: cap, taskUsd: cap }));
@@ -571,6 +563,24 @@ app.post('/api/github/webhook', async (c) => {
 	return c.json({ ok: true, tasks: await gitHubDelivery(event, (delivery ?? {}) as Parameters<typeof gitHubDelivery>[1]) });
 });
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
+// Settings › Connections as Anton's setup: each slot's provider and values, checked before they are kept; secrets come back as their last four characters only.
+const setupInput = v.object({
+	provider: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
+	values: v.optional(v.record(v.pipe(v.string(), v.regex(/^[A-Z][A-Z0-9_]{1,63}$/)), v.pipe(v.string(), v.maxLength(4000))), {}),
+});
+app.get('/api/setup', async (c) => c.json(await setupView()));
+app.post('/api/setup/:slot/test', async (c) => {
+	const { provider, values } = await body(c, setupInput);
+	return c.json(await testSlot(c.req.param('slot'), provider, values));
+});
+app.put('/api/setup/:slot', async (c) => {
+	const { provider, values } = await body(c, setupInput);
+	return c.json(await saveSlot(c.req.param('slot'), provider, values));
+});
+app.delete('/api/setup/:slot', async (c) => {
+	await clearSlot(c.req.param('slot'), c.req.query('provider') ?? '');
+	return c.json({ ok: true });
+});
 app.get('/api/compute', async (c) => c.json(await computeView()));
 app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));
 app.get('/api/logs', (c) => c.json({ logs: recentProblems() }));

@@ -1,22 +1,25 @@
-import { Check, GitPullRequest, ListTodo, type LucideIcon, Rows3 } from 'lucide-react';
-import { type CSSProperties, createContext, type ReactNode, useContext, useId } from 'react';
+import { Check, GitPullRequest, ListTodo, type IconComponent, Rows3 } from '@/lib/icons';
+import { type CSSProperties, createContext, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /*
- * Anton's illustrations, drawn the way the rack is: flat trays and slim tiles,
- * soft white on near-black with a hairline edge, short rules for a label, and
- * a single light. The one accent marks what is lit or at work; everything else
+ * Anton's illustrations, drawn one way: flat trays and slim tiles in the
+ * text colour at a low strength (soft white on the dark theme, soft ink on
+ * the light one) with a hairline edge, short rules for a label, and a
+ * single light. The one accent marks what is lit or at work; everything else
  * stays grey, so a drawing sits in an empty state without shouting. Wires run
  * between parts and carry a slow dashed flow when something is moving.
  */
 
 /* ——— Parts ——— */
 
-const EDGE = 'rgba(255, 255, 255, 0.09)';
-const RULE = 'rgba(255, 255, 255, 0.16)';
-const RULE_FAINT = 'rgba(255, 255, 255, 0.08)';
-const WIRE = 'rgba(255, 255, 255, 0.16)';
-const ACCENT = 'var(--accent-base)';
+/** The text colour at a strength: soft white on the dark theme, soft ink on the light one, so a drawing holds on either. */
+const ink = (percent: number) => `color-mix(in srgb, var(--text) ${percent}%, transparent)`;
+const EDGE = ink(9);
+const RULE = ink(16);
+const RULE_FAINT = ink(8);
+const WIRE = ink(16);
+const ACCENT = 'var(--accent)';
 
 /** The drawing's own gradient ids, so two drawings on a page never share them. */
 const Ids = createContext('art');
@@ -27,20 +30,23 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 		<svg role="img" aria-label={label} viewBox={`0 0 ${w} ${h}`} width={w} height={h} fill="none" className={cn('fa-art block h-auto max-w-full overflow-visible', className)}>
 			<defs>
 				<linearGradient id={`${id}-tile`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: '#fff', stopOpacity: 0.1 }} />
-					<stop offset="1" style={{ stopColor: '#fff', stopOpacity: 0.035 }} />
+					<stop offset="0" style={{ stopColor: 'var(--text)', stopOpacity: 0.1 }} />
+					<stop offset="1" style={{ stopColor: 'var(--text)', stopOpacity: 0.035 }} />
 				</linearGradient>
 				<linearGradient id={`${id}-lit`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.34 }} />
-					<stop offset="1" style={{ stopColor: 'var(--cyan-300)', stopOpacity: 0.1 }} />
+					<stop offset="0" style={{ stopColor: 'var(--accent-text)', stopOpacity: 0.34 }} />
+					<stop offset="1" style={{ stopColor: 'var(--accent-text)', stopOpacity: 0.1 }} />
 				</linearGradient>
 				<radialGradient id={`${id}-glow`} cx="0.5" cy="0.5" r="0.5">
-					<stop offset="0" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0.28 }} />
-					<stop offset="1" style={{ stopColor: 'var(--cyan-400)', stopOpacity: 0 }} />
+					<stop offset="0" style={{ stopColor: 'var(--accent)', stopOpacity: 0.28 }} />
+					<stop offset="1" style={{ stopColor: 'var(--accent)', stopOpacity: 0 }} />
 				</radialGradient>
+				<filter id={`${id}-blur`} x="-100%" y="-100%" width="300%" height="300%">
+					<feGaussianBlur stdDeviation="3" />
+				</filter>
 				<linearGradient id={`${id}-screen`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: '#000', stopOpacity: 0.5 }} />
-					<stop offset="1" style={{ stopColor: '#000', stopOpacity: 0.28 }} />
+					<stop offset="0" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.9 }} />
+					<stop offset="1" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.6 }} />
 				</linearGradient>
 			</defs>
 			<Ids.Provider value={id}>{children}</Ids.Provider>
@@ -50,12 +56,12 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 
 /** A shallow tray that tiles stand in. */
 function Tray({ x, y, w, h, r = 10 }: { x: number; y: number; w: number; h: number; r?: number }) {
-	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill="rgba(255, 255, 255, 0.025)" stroke="rgba(255, 255, 255, 0.07)" />;
+	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={ink(2.5)} stroke={ink(7)} />;
 }
 
 /** An empty slot in a tray. */
 function Slot({ x, y, w, h, r = 4 }: { x: number; y: number; w: number; h: number; r?: number }) {
-	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke="rgba(255, 255, 255, 0.11)" strokeDasharray="1.5 2.5" />;
+	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke={ink(11)} strokeDasharray="1.5 2.5" />;
 }
 
 /** A tile: soft white, or lit in the accent, with a hairline all round. */
@@ -63,7 +69,7 @@ function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: numb
 	const id = useContext(Ids);
 	return (
 		<g className={className} style={style}>
-			<rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-${lit ? 'lit' : 'tile'})`} stroke={lit ? 'var(--accent-border)' : EDGE} />
+			<rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-${lit ? 'lit' : 'tile'})`} stroke={lit ? 'var(--accent-line)' : EDGE} />
 		</g>
 	);
 }
@@ -92,7 +98,7 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 					width={3.5}
 					height={6}
 					rx={0.8}
-					fill={index < level ? (on ? ACCENT : 'var(--neutral-500)') : 'rgba(255, 255, 255, 0.07)'}
+					fill={index < level ? (on ? ACCENT : 'var(--text-4)') : ink(7)}
 					fillOpacity={index < level && on ? 0.55 + (index / cells) * 0.45 : 1}
 				/>
 			))}
@@ -104,7 +110,7 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number; w: number | number[]; n?: number; gap?: number; faint?: boolean; lit?: boolean }) {
 	const widths = Array.isArray(w) ? w : Array.from({ length: n }, () => w);
 	return (
-		<g stroke={lit ? 'var(--cyan-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
+		<g stroke={lit ? 'var(--a-200)' : faint ? RULE_FAINT : RULE} strokeOpacity={lit ? 0.7 : 1}>
 			{widths.map((width, index) => (
 				<line key={index} x1={x} x2={x + width} y1={y + index * gap + 0.5} y2={y + index * gap + 0.5} />
 			))}
@@ -114,14 +120,14 @@ function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number
 
 /** A tile's light: grey, lit, or lit and pulsing while it works. */
 function Light({ x, y, size = 5, on, live }: { x: number; y: number; size?: number; on?: boolean; live?: boolean }) {
-	return <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={1} fill={on || live ? ACCENT : 'var(--neutral-600)'} className={live ? 'in-pulse' : undefined} />;
+	return <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={1} fill={on || live ? ACCENT : 'var(--track)'} className={live ? 'in-pulse' : undefined} />;
 }
 
 /** A wire between parts; lit ones carry a slow dashed flow. */
 function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }) {
 	return lit ? (
 		<g>
-			<path d={d} stroke="var(--accent-border)" strokeLinecap="round" />
+			<path d={d} stroke="var(--accent-line)" strokeLinecap="round" />
 			<path d={d} stroke={ACCENT} strokeDasharray="3 3" className="fa-flow" />
 		</g>
 	) : (
@@ -131,13 +137,13 @@ function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }
 
 function Caption({ x, y, children, accent, anchor = 'start' }: { x: number; y: number; children: ReactNode; accent?: boolean; anchor?: 'start' | 'middle' | 'end' }) {
 	return (
-		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font-sans)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-tertiary)'}>
+		<text x={x} y={y} textAnchor={anchor} fontFamily="var(--font)" fontSize={9} letterSpacing="0.02em" fill={accent ? 'var(--accent-text)' : 'var(--text-3)'}>
 			{children}
 		</text>
 	);
 }
 
-/** A slim tile standing in a tray, as on the rack: rules near the top, a light at the foot. */
+/** A slim tile standing in a tray: rules near the top, a light at the foot. */
 function Blade({ x, y, h = 56, lit, live, on }: { x: number; y: number; h?: number; lit?: boolean; live?: boolean; on?: boolean }) {
 	return (
 		<g>
@@ -194,7 +200,7 @@ export function ProjectArt({ className }: { className?: string }) {
  */
 export function SandboxArt({ className, label = 'idle' }: { className?: string; label?: string }) {
 	const on = label === 'ready' || label === 'running';
-	const prompt = on ? ACCENT : 'var(--neutral-500)';
+	const prompt = on ? ACCENT : 'var(--text-4)';
 	return (
 		<Art w={260} h={116} label={`A terminal on a compute unit, ${label}`} className={className}>
 			{on ? <Glow cx={208} cy={58} r={56} /> : null}
@@ -209,7 +215,7 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 			<Rules x={33} y={43.5} w={[46]} n={1} />
 			<Rules x={24} y={55} w={[104, 82, 94, 60]} faint gap={6} />
 			<path d="M24 82 l3.5 3 l-3.5 3" stroke={prompt} strokeLinecap="round" strokeLinejoin="round" />
-			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--neutral-600)'} className={on ? 'fa-blink' : undefined} />
+			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--track)'} className={on ? 'fa-blink' : undefined} />
 			{/* Two leads to the unit. */}
 			<Wire d="M160 46 H180" lit={on} broken={!on} />
 			<Wire d="M160 70 H180" lit={on} broken={!on} />
@@ -225,13 +231,13 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 				] as const
 			).map(([name, level], index) => (
 				<g key={name}>
-					<text x={190} y={46 + index * 14} fontFamily="var(--font-sans)" fontSize={6.5} letterSpacing="0.04em" fill="var(--text-disabled)">
+					<text x={190} y={46 + index * 14} fontFamily="var(--font)" fontSize={6.5} letterSpacing="0.04em" fill="var(--text-4)">
 						{name}
 					</text>
 					<Meter x={208} y={40.5 + index * 14} cells={7} level={level} on={on} />
 				</g>
 			))}
-			<line x1={190} x2={238} y1={84.5} y2={84.5} stroke={on ? 'var(--accent-border)' : EDGE} />
+			<line x1={190} x2={238} y1={84.5} y2={84.5} stroke={on ? 'var(--accent-line)' : EDGE} />
 			<Caption x={214} y={96} anchor="middle" accent={on}>
 				{label}
 			</Caption>
@@ -241,7 +247,7 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 
 /** A branch leaving main and heading for a pull request, its newest commit lit. */
 export function BranchArt({ className }: { className?: string }) {
-	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--neutral-700)'} stroke={lit ? 'var(--accent-border)' : 'rgba(255,255,255,0.22)'} />;
+	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--bg-active)'} stroke={lit ? 'var(--accent-line)' : ink(22)} />;
 	return (
 		<Art w={250} h={96} label="A branch leaving main, its newest commit lit, headed for a pull request" className={className}>
 			<Wire d="M10 70 H240" />
@@ -333,7 +339,7 @@ export function ChangesArt({ className, branch, base }: { className?: string; br
 				const y = 44 + index * 12;
 				return (
 					<g key={y}>
-						<rect x={20} y={y - 4} width={2} height={9} rx={1} fill={kind === 'add' ? ACCENT : kind === 'drop' ? 'var(--neutral-500)' : 'transparent'} />
+						<rect x={20} y={y - 4} width={2} height={9} rx={1} fill={kind === 'add' ? ACCENT : kind === 'drop' ? 'var(--text-4)' : 'transparent'} />
 						<Rules x={30} y={y} w={[width]} n={1} faint={kind === 'keep'} lit={kind === 'add'} />
 					</g>
 				);
@@ -347,48 +353,70 @@ export function ChangesArt({ className, branch, base }: { className?: string; br
 function MarkShapes() {
 	return (
 		<>
-			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#9EE1F3" />
-			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#3FB6D8" />
-			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#17627A" />
-			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round" />
+			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#A5A8FF" />
+			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#6E72F7" />
+			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#4547B8" />
+			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#0A0A0B" strokeWidth="1.75" strokeLinecap="round" />
 		</>
+	);
+}
+
+/** A small pool and a ring of the accent where the plug meets its socket, drawn only while it seats. */
+function Spark({ cx, cy }: { cx: number; cy: number }) {
+	const id = useContext(Ids);
+	return (
+		<g>
+			<circle className="fa-spark" cx={cx} cy={cy} r={10} fill={ACCENT} filter={`url(#${id}-blur)`} />
+			<circle className="fa-ring" cx={cx} cy={cy} r={7} stroke={ACCENT} strokeWidth={1.25} />
+		</g>
 	);
 }
 
 /**
  * Anton on the left, your plan on the right (its vendor's logo when there is
- * one), joined through a key in the middle: lit, with the wire carrying a flow
- * both ways, when you are signed in; open, the plug pulled, when you are not.
+ * one), joined by a plug and a socket: the plug pushed in and the wires lit,
+ * carrying a flow, when you are signed in; pulled out with a gap when you are
+ * not. When a plan connects while the drawing is on screen, the plug slides in
+ * with a small spark at the socket; a plan already connected never animates.
  */
 export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
+	const was = useRef(linked);
+	const [seating, setSeating] = useState(false);
+	useEffect(() => {
+		// Only a change from not connected to connected, never the first render.
+		const flipped = linked && !was.current;
+		was.current = linked;
+		if (!flipped) return;
+		setSeating(true);
+		const timer = setTimeout(() => setSeating(false), 1000);
+		return () => clearTimeout(timer);
+	}, [linked]);
+	// The plug body's left edge; its prongs reach 25 past it, into the socket at 150 when linked.
+	const plugX = linked ? 128 : 112;
+	const edge = linked ? 'var(--accent-line)' : ink(22);
+	const prong = linked ? 'var(--accent-text)' : 'var(--text-4)';
+	const slot = linked ? 'var(--accent-text)' : ink(20);
 	return (
 		<Art w={280} h={112} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
-			{linked ? (
-				<>
-					<Glow cx={140} cy={46} r={70} />
-					<Wire d="M86 46 H124" lit />
-					<Wire d="M156 46 H194" lit />
-				</>
-			) : (
-				<>
-					<Wire d="M86 46 H118" broken />
-					<Wire d="M162 46 H194" broken />
-				</>
-			)}
-			{/* The key between them: a check when signed in, an open plug when not. */}
-			{linked ? (
-				<g>
-					<rect x={124.5} y={34.5} width={31} height={23} rx={11.5} fill="var(--cyan-alpha-16)" stroke="var(--accent-border)" />
-					<path d="M133.5 46 l4 4 l9 -8.5" stroke="var(--accent-text)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+			{/* The cable from Anton to the plug, and the lead from the socket to the plan. */}
+			<g className={seating ? 'fa-arrive' : undefined}>
+				<Wire d={`M86 46 H${plugX - 3}`} lit={linked} />
+				<Wire d="M163 46 H194" lit={linked} />
+			</g>
+			{seating ? <Spark cx={150} cy={46} /> : null}
+			{/* The plug: a cable neck, a body and two prongs. The outer group places it; the inner one animates. */}
+			<g transform={`translate(${plugX} 0)`}>
+				<g className={seating ? 'fa-seat' : undefined}>
+					<line x1={18} x2={25} y1={42.5} y2={42.5} stroke={prong} strokeWidth={1.5} strokeLinecap="round" />
+					<line x1={18} x2={25} y1={49.5} y2={49.5} stroke={prong} strokeWidth={1.5} strokeLinecap="round" />
+					<rect x={0.5} y={39.5} width={18} height={13} rx={3} fill={linked ? 'var(--accent-soft)' : 'var(--bg-active)'} stroke={edge} />
+					<rect x={-4} y={43.5} width={5} height={5} rx={1.5} fill={linked ? 'var(--accent-line)' : ink(16)} />
 				</g>
-			) : (
-				<g>
-					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--neutral-700)" stroke={EDGE} />
-					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--neutral-500)" strokeLinecap="round" />
-					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--neutral-500)" strokeLinecap="round" />
-					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeDasharray="2 2" />
-				</g>
-			)}
+			</g>
+			{/* The socket: a taller housing on the plan's lead, its slots lit once the prongs are in. */}
+			<rect x={150.5} y={35.5} width={13} height={21} rx={3} fill="var(--bg-app)" stroke={edge} />
+			<line x1={150.5} x2={155} y1={42.5} y2={42.5} stroke={slot} strokeWidth={1.5} />
+			<line x1={150.5} x2={155} y1={49.5} y2={49.5} stroke={slot} strokeWidth={1.5} />
 			{/* Anton. */}
 			<Tile x={30} y={18} w={56} h={56} r={12} lit={linked} />
 			<g transform="translate(40 28) scale(2.15) translate(-3.5 -5.7)">
@@ -401,7 +429,7 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 				<foreignObject x={194} y={18} width={56} height={56}>
 					<div
 						aria-hidden
-						className={cn('flex size-full items-center justify-center text-[28px] [&_svg]:block', linked ? 'text-(--text-primary)' : 'text-(--text-tertiary)')}
+						className={cn('flex size-full items-center justify-center text-[28px] [&_svg]:block', linked ? 'text-(--text)' : 'text-(--text-3)')}
 						dangerouslySetInnerHTML={{ __html: logo }}
 					/>
 				</foreignObject>
@@ -414,8 +442,8 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 			<Caption x={58} y={92} anchor="middle">
 				Anton
 			</Caption>
-			<Caption x={140} y={76} anchor="middle" accent={linked}>
-				{linked ? 'signed in' : 'not connected'}
+			<Caption x={140} y={92} anchor="middle" accent={linked}>
+				{linked ? 'connected' : 'not connected'}
 			</Caption>
 			<Caption x={222} y={92} anchor="middle" accent={linked}>
 				{shortName(plan, 18)}
@@ -432,7 +460,7 @@ export function LinkArt({ className }: { className?: string }) {
 			<Wire d="M133 34 V64" lit />
 			{[30, 74, 118, 162].map((x) => (
 				<g key={x}>
-					<rect x={x + 0.5} y={64.5} width={29} height={17} rx={4} fill="rgba(0,0,0,0.35)" stroke={EDGE} />
+					<rect x={x + 0.5} y={64.5} width={29} height={17} rx={4} fill="var(--bg-app)" stroke={EDGE} />
 					<line x1={x + 9} x2={x + 21} y1={73.5} y2={73.5} stroke={x === 118 ? ACCENT : RULE_FAINT} />
 				</g>
 			))}
@@ -491,7 +519,7 @@ export function LibraryArt({ className }: { className?: string }) {
 
 /* ——— The project's route: four stations on a wire, lit in turn ——— */
 
-const STATIONS: Array<{ icon: LucideIcon }> = [{ icon: ListTodo }, { icon: Rows3 }, { icon: GitPullRequest }, { icon: Check }];
+const STATIONS: Array<{ icon: IconComponent }> = [{ icon: ListTodo }, { icon: Rows3 }, { icon: GitPullRequest }, { icon: Check }];
 
 /** The project's route; `active` lights the stages that are under way instead of taking turns. */
 export function ProjectRouteArt({ className, active }: { className?: string; active?: boolean[]; waiting?: boolean }) {
@@ -507,14 +535,14 @@ export function ProjectRouteArt({ className, active }: { className?: string; act
 				return (
 					<g key={index}>
 						<Tile x={x} y={8} w={44} h={44} r={9} />
-						<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--neutral-400)" />
+						<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--text-3)" />
 						<g
 							className={active ? undefined : 'fa-stage'}
 							data-first={index === 0 ? true : undefined}
 							style={{ '--stage': index, opacity: active ? (lit ? 1 : 0) : undefined } as CSSProperties}
 						>
 							<Tile x={x} y={8} w={44} h={44} r={9} lit />
-							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--cyan-200)" />
+							<Glyph x={x + 14} y={22} width={16} height={16} strokeWidth={1.6} color="var(--a-200)" />
 						</g>
 					</g>
 				);
@@ -535,10 +563,10 @@ export function Logo({ size = 20, className }: { size?: number; className?: stri
 	return (
 		<svg aria-hidden width={size} height={size} viewBox="3.5 5.7 17 17" className={cn('anton-logo shrink-0 overflow-visible', className)}>
 			<g className="al-cube">
-				<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#9EE1F3" />
-				<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#3FB6D8" />
-				<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#17627A" />
-				<g className="al-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+				<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#A5A8FF" />
+				<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#6E72F7" />
+				<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#4547B8" />
+				<g className="al-eyes" stroke="#0A0A0B" strokeWidth="1.75" strokeLinecap="round">
 					<path className="al-eye" d="M7.03 14.28v2.13" />
 					<path className="al-eye" d="M9.87 15.92v2.13" />
 				</g>

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -28,6 +28,17 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const spec = (id: string): DevinModel => ({ id, name: id === 'swe-2-flash' ? 'SWE-2 Flash' : 'SWE-2', contextWindow: 262144, maxTokens: 8192, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
 const info = (id = 'swe-2-flash'): ModelInfo => ({ id: `devin/${id}`, name: spec(id).name, vendor: 'Cognition', description: '', createdAt: 0, contextLength: 262144, maxOutput: 8192, vision: false, reasoning: [], defaultReasoning: 'off', price: spec(id).cost, subscription: 'Devin' });
 const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+
+test('all agents register Devin once through the shared provider module', () => {
+	const providers = readFileSync(new URL('../src/agents/providers.ts', import.meta.url), 'utf8');
+	assert.match(providers, /import \{ devinProvider \} from '\.\.\/flue\/devin-models\.ts';/);
+	assert.equal((providers.match(/setProvider\(withPruning\(devinProvider\(loadedModels, \(\) => planKey\('devin'\)\)\)\);/g) ?? []).length, 1);
+	for (const agent of ['coder', 'coordinator', 'reviewer']) {
+		const source = readFileSync(new URL(`../src/agents/${agent}.ts`, import.meta.url), 'utf8');
+		assert.match(source, /import '\.\/providers\.ts';/);
+		assert.doesNotMatch(source, /devinProvider|setProvider\(/, `${agent} must not duplicate provider registration`);
+	}
+});
 
 test('Devin prefers SWE-2 Flash, offers SWE-2 fallback, and reuses validation discovery', async () => {
 	let calls = 0;

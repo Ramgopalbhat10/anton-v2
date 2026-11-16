@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppNotification, NotificationsView } from '@/lib/api';
 import { session } from './render';
@@ -44,26 +43,25 @@ const api = vi.hoisted(() => ({
 	spaces: vi.fn(async () => ({ spaces: [{ id: 'sp1', name: 'Billing v2', state: 'active', counts: {} }] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { NotificationsBell, NotificationsDialog } = await import('@/components/notifications');
+const { NotificationsBell } = await import('@/components/notifications');
+const { InboxPage } = await import('@/components/inbox-page');
 
-function Harness() {
-	const [open, setOpen] = useState(false);
-	return (
-		<>
-			<NotificationsBell onOpen={() => setOpen(true)} />
-			<NotificationsDialog open={open} onClose={() => setOpen(false)} />
-		</>
-	);
-}
-
-function mount() {
-	const root = createRootRoute({ component: () => <><Harness /><Outlet /></> });
+function mount(path = '/') {
+	const root = createRootRoute({
+		component: () => (
+			<>
+				<NotificationsBell onOpen={() => {}} />
+				<Outlet />
+			</>
+		),
+	});
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: () => null }),
+		createRoute({ getParentRoute: () => root, path: '/inbox', component: InboxPage }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),
 		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/threads/$threadId', component: () => <div>Thread page</div> }),
 	]);
-	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
 	render(
 		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
 			<RouterProvider router={router} />
@@ -90,43 +88,41 @@ describe('Notifications', () => {
 		expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeTruthy();
 	});
 
-	it('opens as a dialog with every row, filtered by kind and by unread', async () => {
+	it('lists every row under its day, filtered by kind and by unread', async () => {
 		const user = userEvent.setup();
-		mount();
-		await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
-		const dialog = await screen.findByRole('dialog', { name: 'Notifications' });
-		expect(within(dialog).getByText('Pick a database')).toBeTruthy();
-		expect(within(dialog).getByText('Ship billing')).toBeTruthy();
-		expect(within(dialog).getByText('Billing v2')).toBeTruthy();
-		expect(within(dialog).getByText('api')).toBeTruthy();
+		mount('/inbox');
+		const list = await screen.findByRole('region', { name: 'Today' });
+		expect(within(list).getByText('Pick a database')).toBeTruthy();
+		expect(within(list).getByText('Ship billing')).toBeTruthy();
+		expect(within(list).getByText('Billing v2')).toBeTruthy();
+		expect(within(list).getByText('api')).toBeTruthy();
 
-		await user.click(within(dialog).getByRole('button', { name: /Failures/ }));
-		expect(within(dialog).getByText('Fix login')).toBeTruthy();
-		expect(within(dialog).queryByText('Pick a database')).toBeNull();
+		await user.click(screen.getByRole('button', { name: /Failures/ }));
+		expect(within(list).getByText('Fix login')).toBeTruthy();
+		expect(within(list).queryByText('Pick a database')).toBeNull();
 
-		await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
-		await user.click(within(dialog).getByRole('radio', { name: /Unread/ }));
-		expect(within(dialog).queryByText('Ship billing')).toBeNull();
-		expect(within(dialog).getByText('Refactor')).toBeTruthy();
+		await user.click(screen.getByRole('button', { name: 'Clear' }));
+		await user.click(screen.getByRole('button', { name: 'Unread, 3' }));
+		expect(within(list).queryByText('Ship billing')).toBeNull();
+		expect(within(list).getByText('Refactor')).toBeTruthy();
 	});
 
 	it('opens the task a row is about and marks it read', async () => {
 		const user = userEvent.setup();
-		const router = mount();
-		await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
-		await user.click(await screen.findByText('Pick a database'));
+		const router = mount('/inbox');
+		await user.click(await screen.findByRole('button', { name: /Pick a database/ }));
+		// The picked row shows beside the list; its way there opens the task.
+		const open = await screen.findByRole('button', { name: 'Open task' });
+		await user.click(open);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/agents/ask'));
 		expect(api.readNotifications).toHaveBeenCalledWith({ ids: ['ask'] });
-		expect(screen.queryByRole('dialog')).toBeNull();
-		expect(await screen.findByRole('button', { name: 'Notifications, 1 unread' })).toBeTruthy();
 	});
 
 	it('marks everything read at once', async () => {
 		const user = userEvent.setup();
-		mount();
-		await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
-		const dialog = await screen.findByRole('dialog', { name: 'Notifications' });
-		await user.click(within(dialog).getByRole('button', { name: /Mark all read/ }));
+		mount('/inbox');
+		await screen.findByRole('button', { name: /Pick a database/ });
+		await user.click(screen.getByRole('button', { name: /Mark all read/ }));
 		await waitFor(() => expect(screen.getByRole('button', { name: 'Notifications', hidden: true })).toBeTruthy());
 		expect(api.readNotifications).toHaveBeenCalledWith({ all: true });
 	});

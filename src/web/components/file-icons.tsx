@@ -45,9 +45,9 @@ export function FileIcon({ path }: { path: string }) {
 			width="14"
 			height="14"
 			data-icon-token={icon.token}
-			style={{ color: colors[icon.token ?? ''] ?? 'var(--icon-secondary)' }}
+			style={{ color: colors[icon.token ?? ''] ?? 'var(--text-2)' }}
 			viewBox={icon.viewBox ?? '0 0 16 16'}
-			className="shrink-0 text-(--icon-secondary)"
+			className="shrink-0 text-(--text-2)"
 		>
 			<use href={`#${id}${icon.name}`} />
 		</svg>

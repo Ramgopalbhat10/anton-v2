@@ -2,7 +2,7 @@ import type { Usage } from '../core/types.ts';
 import { unrouted } from '../core/model-route.ts';
 import { addSessionUsage, type SpendRow, spendBy, spendByMinute, spentSince } from '../db/sessions.ts';
 import { startOfToday } from './budget.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { type PlanUsage, planUsage } from './subscriptions.ts';
 
 /** What the runtime reports for one response; cached prompt tokens are still prompt tokens. */

@@ -1,6 +1,6 @@
 import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, RotateCw } from '@/lib/icons';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, StatusDot, Tab, Tabs, usedTone, Well } from '@/components/instrument';
@@ -66,7 +66,7 @@ function Lead({ title, info, children }: { title: string; info?: ReactNode; chil
 				{title}
 				{info ? <InfoTip label={`About ${title}`}>{info}</InfoTip> : null}
 			</h3>
-			<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--text-tertiary)">{children}</p>
+			<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--text-3)">{children}</p>
 		</div>
 	);
 }
@@ -88,7 +88,7 @@ function Pending({ subscription }: { subscription: Subscription }) {
 	return (
 		<>
 			<CardSection label="Finish signing in" hint={login.listening ? 'Listening on this computer' : 'Paste the address'}>
-				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-small leading-[18px] text-(--text-secondary)">
+				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-small leading-[18px] text-(--text-2)">
 					<li>
 						Approve Anton in the {subscription.name} tab.{' '}
 						<a href={login.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-(--accent-text) hover:underline">
@@ -214,7 +214,7 @@ function Models({ subscription }: { subscription: Subscription }) {
 	if (!subscription.models.length) {
 		return (
 			<CardSection label="By model">
-				<p className="m-0 text-small text-(--text-tertiary)">{subscription.name} has not listed any models for this account yet. Check again in a minute.</p>
+				<p className="m-0 text-small text-(--text-3)">{subscription.name} has not listed any models for this account yet. Check again in a minute.</p>
 			</CardSection>
 		);
 	}
@@ -224,26 +224,26 @@ function Models({ subscription }: { subscription: Subscription }) {
 				{subscription.models.map((model) => (
 					<li
 						key={model.id}
-						className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-tile px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_minmax(0,1fr)_auto]"
+						className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-card px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_minmax(0,1fr)_auto]"
 					>
 						<div className="flex min-w-0 flex-col">
 							<span className="flex min-w-0 items-center gap-1.5">
-								<span className="truncate text-body text-(--text-primary)">{model.name}</span>
+								<span className="truncate text-body text-(--text)">{model.name}</span>
 								{model.options?.map((option) => (
-									<span key={option} className="shrink-0 rounded-control bg-(--alpha-white-6) px-1 py-px text-nano tracking-[0.04em] text-(--text-tertiary)">
+									<span key={option} className="shrink-0 rounded-control bg-(--bg-active) px-1 py-px text-nano text-(--text-3)">
 										{option}
 									</span>
 								))}
 							</span>
-							<span className="truncate text-micro text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+							<span className="truncate text-micro text-(--text-4)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 						</div>
 						<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
-						<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
+						<span className="in-num hidden text-right text-micro text-(--text-3) sm:inline">{tokens(model.contextLength)}</span>
 						<div className="hidden min-w-0 items-center gap-2 sm:flex">
-							<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-(--segment-off)">
-								<div className="h-full rounded-full bg-(--accent-base)" style={{ width: `${model.tokens ? Math.max(3, (model.tokens / most) * 100) : 0}%` }} />
+							<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-(--bg-active)">
+								<div className="h-full rounded-full bg-(--accent)" style={{ width: `${model.tokens ? Math.max(3, (model.tokens / most) * 100) : 0}%` }} />
 							</div>
-							<span className="in-num w-10 shrink-0 text-right text-micro text-(--text-secondary)">{tokens(model.tokens)}</span>
+							<span className="in-num w-10 shrink-0 text-right text-micro text-(--text-2)">{tokens(model.tokens)}</span>
 						</div>
 						<div className="flex w-[124px] justify-end">
 							{model.id === current ? (
@@ -359,7 +359,6 @@ function Plan({ subscription }: { subscription: Subscription }) {
 	const connected = subscription.state === 'connected';
 	return (
 		<Card
-			icon={MessageSquareCode}
 			title={`${subscription.name} plan`}
 			sub={subscription.email ?? (subscription.login ? 'waiting for approval' : 'Plus or Pro')}
 			label={`${subscription.name} plan`}
@@ -389,7 +388,7 @@ function Plan({ subscription }: { subscription: Subscription }) {
 				<Lead title={`Waiting for ${subscription.name}`}>Approve Anton in the {subscription.name} tab, then finish here.</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title="The sign-in stopped working">
-					<span className="text-(--danger-text)">{subscription.problem}</span>
+					<span className="text-(--bad)">{subscription.problem}</span>
 				</Lead>
 			) : (
 				<Lead
@@ -409,7 +408,7 @@ function Command({ text, label }: { text: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
 		<div className="flex items-start gap-2">
-			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-control bg-(--well-bg) px-3 py-2 font-mono text-small leading-[18px] break-all whitespace-pre-wrap text-(--text-primary)">
+			<pre aria-label={label} className="m-0 min-w-0 flex-1 rounded-control bg-(--bg-raised) px-3 py-2 font-mono text-small leading-[18px] break-all whitespace-pre-wrap text-(--text)">
 				{text}
 			</pre>
 			<Btn
@@ -425,27 +424,86 @@ function Command({ text, label }: { text: string; label: string }) {
 	);
 }
 
+/** Waiting for the code Claude's page shows once you approve, which Claude Code on the server trades for its sign-in. */
+function ClaudePending({ subscription, finish }: { subscription: Subscription; finish: ReturnType<typeof useClaudeFinish> }) {
+	const saved = useSaved();
+	const [code, setCode] = useState('');
+	const login = subscription.login!;
+	const cancel = useMutation({ mutationFn: () => api.cancelSubscriptionLogin(subscription.id), onSuccess: saved });
+	return (
+		<>
+			<CardSection label="Finish signing in" hint="Paste the code">
+				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-small leading-[18px] text-(--text-2)">
+					<li>
+						Approve Claude Code in the Claude tab.{' '}
+						<a href={login.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-(--accent-text) hover:underline">
+							Open it again
+							<Icon icon={ExternalLink} size={11} />
+						</a>
+					</li>
+					<li>Claude then shows a code. Copy it and paste it here.</li>
+				</ol>
+				<form
+					className="flex flex-wrap items-center gap-2"
+					onSubmit={(event) => {
+						event.preventDefault();
+						finish.mutate(code);
+					}}
+				>
+					<input
+						value={code}
+						onChange={(event) => setCode(event.target.value)}
+						placeholder="Code from Claude"
+						aria-label="Code from Claude"
+						autoComplete="off"
+						spellCheck={false}
+						className={`${FIELD} min-w-[240px] flex-1 font-mono text-small`}
+					/>
+					<Btn type="submit" size="sm" variant="primary" disabled={!code.trim() || finish.isPending}>
+						{finish.isPending ? 'Connecting…' : 'Connect'}
+					</Btn>
+				</form>
+				<SaveState pending={finish.isPending} success={false} error={finish.error ?? cancel.error} />
+			</CardSection>
+			<CardFooter caption={`Started ${age(login.startedAt)} ago · expires after 10 min`}>
+				<Btn size="sm" variant="ghost" disabled={cancel.isPending || finish.isPending} onClick={() => cancel.mutate()}>
+					Cancel
+				</Btn>
+			</CardFooter>
+		</>
+	);
+}
+
+/** Hands Claude Code the code; held by the card, so a refused code's message stays after the sign-in ends. */
+function useClaudeFinish(subscription: Subscription) {
+	const saved = useSaved();
+	return useMutation({ mutationFn: (code: string) => api.finishSubscriptionLogin(subscription.id, code), onSuccess: saved });
+}
+
 /**
  * A Claude plan, run by Claude Code on Anton's server. Claude Code signs in
- * through its own flow, so the card shows the command to run once there, and
- * what Claude Code then says about the account; Anton never holds the token.
+ * through its own flow: Anton starts it, opens Claude to approve in a new tab,
+ * and passes back the code Claude shows. Anton never holds the token.
  */
 function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
+	const signIn = useSignIn(subscription);
+	const finish = useClaudeFinish(subscription);
+	const [confirming, setConfirming] = useState(false);
 	const refresh = useMutation({ mutationFn: () => api.refreshSubscriptionModels(subscription.id), onSuccess: saved });
+	const disconnect = useMutation({ mutationFn: () => api.disconnectSubscription(subscription.id), onSuccess: saved });
 	const connected = subscription.state === 'connected';
-	const status = STATUS[subscription.state];
+	const pending = !connected && Boolean(subscription.login);
+	const status = pending ? { tone: 'accent' as const, label: 'Signing in' } : STATUS[subscription.state];
 	const { enabled, countAtApiPrices } = subscription.options;
-	const signOut = subscription.signIn?.replace(/ login$/, ' logout');
 	return (
 		<Card
-			icon={Bot}
 			title={`${subscription.name} plan`}
-			sub={subscription.email ?? 'through Claude Code'}
+			sub={subscription.email ?? (pending ? 'waiting for approval' : 'through Claude Code')}
 			label={`${subscription.name} plan`}
 			status={
-				<Status tone={status.tone} pulse={connected}>
-					{connected ? 'Connected' : subscription.state === 'expired' ? 'Needs attention' : status.label}
+				<Status tone={status.tone} pulse={connected || pending}>
+					{connected ? 'Connected' : subscription.state === 'expired' && !pending ? 'Needs attention' : status.label}
 				</Status>
 			}
 		>
@@ -465,9 +523,11 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 				>
 					Billed to your {subscription.name} plan's usage, not per token.
 				</Lead>
+			) : pending ? (
+				<Lead title="Waiting for Claude">Approve Claude Code in the Claude tab, then paste the code it shows.</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title="Claude Code cannot use your plan">
-					<span className="text-(--danger-text)">{subscription.problem}</span>
+					<span className="text-(--bad)">{subscription.problem}</span>
 				</Lead>
 			) : (
 				<Lead
@@ -491,7 +551,7 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					/>
 					{subscription.extraUsageAt ? (
 						<CardSection label="Extra usage">
-							<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--warning-text)">
+							<p className="m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--warn)">
 								Your plan's limit ran out {age(subscription.extraUsageAt)} ago and calls now bill extra usage, which costs money. Turn it off at{' '}
 								<a href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer" className="text-(--accent-text) hover:underline">
 									claude.ai/settings/usage
@@ -502,34 +562,57 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					) : null}
 					{subscription.windows?.length ? <Windows windows={subscription.windows} /> : null}
 					<Models subscription={subscription} />
-					<PlanSettings subscription={subscription} error={refresh.error} />
-					{signOut ? (
-						<CardSection label="Sign out on the server">
-							<Command text={signOut} label="Command that signs Claude Code out" />
-						</CardSection>
-					) : null}
+					<PlanSettings subscription={subscription} error={refresh.error ?? disconnect.error} />
 				</>
+			) : pending ? (
+				<ClaudePending subscription={subscription} finish={finish} />
 			) : (
-				<CardSection label="Sign in on the server" hint="Once">
-					<Note info="Over ssh, for example. Claude Code shows a link: open it, approve, and paste the code it gives you back into the shell.">
-						Run this in a shell where Anton runs, then check again.
+				<CardSection label="Sign in with Claude" hint="Once">
+					<Note info="Claude Code runs the sign-in on this server and keeps the token to itself. Anton only passes it the code Claude shows.">
+						Opens Claude in a new tab. Approve there, then paste the code it shows.
 					</Note>
-					{subscription.signIn ? <Command text={subscription.signIn} label="Command that signs Claude Code in" /> : null}
-					<SaveState pending={refresh.isPending} success={false} error={refresh.error} />
+					<div>
+						<Btn
+							size="sm"
+							variant="primary"
+							icon={ExternalLink}
+							disabled={signIn.isPending}
+							onClick={() => {
+								finish.reset();
+								signIn.mutate(window.open('', '_blank'));
+							}}
+						>
+							{signIn.isPending ? 'Opening Claude…' : 'Sign in with Claude'}
+						</Btn>
+					</div>
+					<SaveState pending={signIn.isPending || refresh.isPending} success={false} error={finish.error ?? signIn.error ?? refresh.error} />
 				</CardSection>
 			)}
-			<CardFooter
-				caption={
-					<Caption className="inline-flex items-center gap-1.5">
-						For your own use only
-						<InfoTip>Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</InfoTip>
-					</Caption>
-				}
-			>
-				<Btn size="sm" variant={connected ? 'ghost' : 'primary'} icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-					{refresh.isPending ? 'Checking…' : 'Check again'}
-				</Btn>
-			</CardFooter>
+			{pending ? null : (
+				<CardFooter
+					caption={
+						<Caption className="inline-flex items-center gap-1.5">
+							For your own use only
+							<InfoTip>Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</InfoTip>
+						</Caption>
+					}
+				>
+					<Btn size="sm" variant="ghost" icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+						{refresh.isPending ? 'Checking…' : 'Check again'}
+					</Btn>
+					{connected ? (
+						<Btn
+							size="sm"
+							variant={confirming ? 'danger' : 'dangerGhost'}
+							disabled={disconnect.isPending}
+							onClick={() => (confirming ? disconnect.mutate() : setConfirming(true))}
+							onBlur={() => setConfirming(false)}
+						>
+							{disconnect.isPending ? 'Signing out…' : confirming ? 'Click again to sign out' : 'Sign out'}
+						</Btn>
+					) : null}
+				</CardFooter>
+			)}
 		</Card>
 	);
 }
@@ -578,18 +661,18 @@ function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; la
 					return (
 						<li key={window.label} className="flex min-w-0 flex-col gap-1.5">
 							<div className="flex min-w-0 items-baseline gap-2 text-small">
-								<span className="min-w-0 flex-1 truncate text-(--text-secondary)" title={window.label}>
+								<span className="min-w-0 flex-1 truncate text-(--text-2)" title={window.label}>
 									{window.label}
 								</span>
 								{window.resetsAt ? <Caption className="shrink-0 tracking-normal normal-case">resets {until(window.resetsAt)}</Caption> : null}
 								{window.limited ? (
-									<span className="in-num shrink-0 text-small text-(--danger-text)">Limit reached</span>
+									<span className="in-num shrink-0 text-small text-(--bad)">Limit reached</span>
 								) : (
 									<span className="in-num shrink-0">
-										<span className={cn('text-body', tone === 'accent' ? 'text-(--text-primary)' : tone === 'warning' ? 'text-(--warning-text)' : 'text-(--danger-text)')}>
+										<span className={cn('text-body', tone === 'accent' ? 'text-(--text)' : tone === 'warning' ? 'text-(--warn)' : 'text-(--bad)')}>
 											{Math.round(window.usedPercent)}%
 										</span>
-										<span className="text-micro text-(--text-tertiary)"> used</span>
+										<span className="text-micro text-(--text-3)"> used</span>
 									</span>
 								)}
 							</div>
@@ -668,7 +751,6 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 	const { enabled, countAtApiPrices } = subscription.options;
 	return (
 		<Card
-			icon={KeyRound}
 			title={`${subscription.name} plan`}
 			sub={subscription.email ?? copy.tagline}
 			label={`${subscription.name} plan`}
@@ -692,7 +774,7 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 				</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title={`${subscription.name} stopped taking the key`}>
-					<span className="text-(--danger-text)">{subscription.problem}</span>
+					<span className="text-(--bad)">{subscription.problem}</span>
 				</Lead>
 			) : (
 				<Lead title={`Run tasks on your ${subscription.name} plan`} info={copy.about}>
@@ -783,7 +865,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 	if (!subscription.models.length) {
 		return (
 			<CardSection label="Models">
-				<p className="m-0 text-small text-(--text-tertiary)">{subscription.name} has not listed any models for this key yet. Check again in a minute.</p>
+				<p className="m-0 text-small text-(--text-3)">{subscription.name} has not listed any models for this key yet. Check again in a minute.</p>
 			</CardSection>
 		);
 	}
@@ -804,21 +886,21 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 					{shown.map((model) => (
 						<li
 							key={model.id}
-							className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-tile px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_6.5rem_2.5rem_auto]"
+							className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-card px-2 py-1.5 hover:bg-(--bg-hover) sm:grid-cols-[minmax(0,1.1fr)_auto_2.5rem_6.5rem_2.5rem_auto]"
 						>
 							<div className="flex min-w-0 flex-col">
-								<span className="truncate text-body text-(--text-primary)">
-									{model.vendor ? <span className="text-(--text-tertiary)">{model.vendor}: </span> : null}
+								<span className="truncate text-body text-(--text)">
+									{model.vendor ? <span className="text-(--text-3)">{model.vendor}: </span> : null}
 									{model.name}
 								</span>
-								<span className="truncate text-micro text-(--text-disabled)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
+								<span className="truncate text-micro text-(--text-4)">{model.id.slice(model.id.indexOf('/') + 1)}</span>
 							</div>
 							<EffortRange levels={model.reasoning} preferred={model.defaultReasoning} className="hidden sm:inline-flex" />
-							<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline">{tokens(model.contextLength)}</span>
-							<span className="in-num hidden text-right text-micro text-(--text-tertiary) sm:inline" title="US dollars per million tokens in and out">
+							<span className="in-num hidden text-right text-micro text-(--text-3) sm:inline">{tokens(model.contextLength)}</span>
+							<span className="in-num hidden text-right text-micro text-(--text-3) sm:inline" title="US dollars per million tokens in and out">
 								{model.price ? `${dollars(model.price.input)} / ${dollars(model.price.output)}` : '—'}
 							</span>
-							<span className="in-num hidden text-right text-micro text-(--text-secondary) sm:inline">{tokens(model.tokens)}</span>
+							<span className="in-num hidden text-right text-micro text-(--text-2) sm:inline">{tokens(model.tokens)}</span>
 							<div className="flex w-[124px] justify-end">
 								{model.id === current ? (
 									<Status tone="accent">Default</Status>
@@ -842,14 +924,14 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 			)}
 			{ranked.length > GATEWAY_PAGE_SIZE ? (
 				<nav aria-label="Model pages" className="flex items-center justify-between gap-3">
-					<span className="in-num text-micro text-(--text-tertiary)">
+					<span className="in-num text-micro text-(--text-3)">
 						{at * GATEWAY_PAGE_SIZE + 1}–{at * GATEWAY_PAGE_SIZE + shown.length} of {ranked.length}
 					</span>
 					<span className="flex items-center gap-2">
 						<Btn size="xs" variant="ghost" icon={ChevronLeft} disabled={at === 0} onClick={() => setPage(at - 1)}>
 							Previous
 						</Btn>
-						<span className="in-num text-micro text-(--text-secondary)">
+						<span className="in-num text-micro text-(--text-2)">
 							Page {at + 1} of {pages}
 						</span>
 						<Btn size="xs" variant="ghost" disabled={at >= pages - 1} onClick={() => setPage(at + 1)}>
@@ -903,7 +985,6 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 	const { enabled } = subscription.options;
 	return (
 		<Card
-			icon={KeyRound}
 			title={subscription.name}
 			sub="models billed per token"
 			label={subscription.name}
@@ -1006,7 +1087,7 @@ function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; o
 		<Tab on={on} onSelect={onSelect} id={`plan-tab-${subscription.id}`} controls={`plan-panel-${subscription.id}`}>
 			{logo ? (
 				// LobeHub's one-colour logos take the text colour, sized by the font size.
-				<span aria-hidden className={cn('flex text-h3', on ? 'text-(--text-primary)' : 'text-(--text-secondary)')} dangerouslySetInnerHTML={{ __html: logo }} />
+				<span aria-hidden className={cn('flex text-h3', on ? 'text-(--text)' : 'text-(--text-2)')} dangerouslySetInnerHTML={{ __html: logo }} />
 			) : null}
 			{subscription.name}
 			<StatusDot title={connected ? 'Connected' : STATUS[subscription.state].label} tone={connected ? 'success' : subscription.state === 'expired' ? 'danger' : 'off'} />
@@ -1030,7 +1111,7 @@ export function SubscriptionsPage() {
 			{view.isPending ? (
 				<Spinner size={12} />
 			) : view.isError ? (
-				<p className="m-0 text-small text-(--danger-text)">{view.error.message}</p>
+				<p className="m-0 text-small text-(--bad)">{view.error.message}</p>
 			) : current ? (
 				<div className="flex flex-col gap-5">
 					<Tabs label="Plans">

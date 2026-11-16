@@ -1,6 +1,6 @@
 import { useFlueAgent } from '@flue/react';
 import { useNavigate } from '@tanstack/react-router';
-import { EyeOff, Send, Square, X } from 'lucide-react';
+import { EyeOff, Send, Square, X } from '@/lib/icons';
 import { type FormEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withAttachments } from '../../core/attachments';
 import { newIncognitoId } from '../../core/incognito';
@@ -92,7 +92,7 @@ function IncognitoComposer({
 	return (
 		<form ref={formRef} className={cn('relative mx-auto flex w-full max-w-[680px] flex-col gap-2 px-4 pt-1 pb-4', className)} onSubmit={submit} {...attachments.dropZone}>
 			<AttachmentTray attachments={attachments} />
-			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--border-strong)">
+			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)">
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
 				<ComposerInput
 					autoFocus={!busy}
@@ -102,7 +102,7 @@ function IncognitoComposer({
 					placeholder={busy ? 'Add to what Anton is doing' : 'Ask anything — this chat is never saved'}
 				/>
 				{attachments.notice || blind ? (
-					<div className="px-1 text-micro text-(--warning-text)">
+					<div className="px-1 text-micro text-(--warn)">
 						{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 					</div>
 				) : null}
@@ -201,7 +201,9 @@ export function IncognitoPage() {
 						{chatting ? (
 							// The thread waits for something to show: mounting it on send would flash
 							// its empty state during the beat before the message lands.
-							<div className="min-h-0 min-w-0 flex-1">
+							// Thread must be a constrained flex child so its scrollport fills only
+							// the space above the composer, including when the draft grows.
+							<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 								{agent.messages.length > 0 || busy ? <Thread sessionId={id} agent={agent} composer={null} fresh /> : null}
 							</div>
 						) : null}

@@ -1,5 +1,5 @@
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 let cached: Promise<string | null> | undefined;
 

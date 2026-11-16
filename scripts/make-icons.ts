@@ -11,12 +11,12 @@ import { chromium } from 'playwright-core';
  */
 
 const OUT = new URL('../src/web/public/icons/', import.meta.url);
-const TILE = '#101517';
+const TILE = '#0A0A0B';
 const VIEW = 'viewBox="3.5 5.7 17 17"';
-/** The mark in its cyan facets, or all in `one` colour with the eyes cut out (the badge). */
+/** the mark in its indigo facets, or all in `one` colour with the eyes cut out (the badge). */
 const mark = (one?: string) => {
-	const [top, left, right] = one ? [one, one, one] : ['#9EE1F3', '#3FB6D8', '#17627A'];
-	const eyes = '<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" stroke-width="1.75" stroke-linecap="round"/>';
+	const [top, left, right] = one ? [one, one, one] : ['#A5A8FF', '#6E72F7', '#4547B8'];
+	const eyes = '<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#0A0A0B" stroke-width="1.75" stroke-linecap="round"/>';
 	return (
 		(one ? '<mask id="m"><rect width="24" height="24" fill="#fff"/><path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#000" stroke-width="1.75" stroke-linecap="round"/></mask><g mask="url(#m)">' : '<g>') +
 		`<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="${top}"/><polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="${left}"/><polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="${right}"/>` +

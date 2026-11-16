@@ -3,7 +3,7 @@ import { isWorking } from './activity.ts';
 import { takeAsk, takePlan } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { changeGate, gate, loadGate, type Said } from './gate-state.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Whether the coding agent's reply waits on the user: a question to answer, a
