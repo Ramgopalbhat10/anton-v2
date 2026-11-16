@@ -116,7 +116,6 @@ function commentOf(kind: string, comment: Comment): PullRequestComment {
 	};
 }
 
-/** Line comments as a list under the summary, for when they cannot be placed on the diff. */
 function foldComments(body: string, comments: ReviewComment[]): string {
 	const list = comments.map((comment) => `- \`${comment.path}:${comment.line}\`: ${comment.body.replace(/\n+/g, ' ')}`);
 	return [body, ...(list.length ? [list.join('\n')] : [])].join('\n\n');
@@ -142,7 +141,6 @@ function stateOf(pull: PullRequest): PullRequestState {
 
 export type GitHubOptions = { token: string; apiUrl: string };
 
-/** GitHub over its REST API, authenticated with one token. */
 export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 	const urlOf = (path: string) => (path.startsWith(apiUrl) ? path : `${apiUrl}${path}`);
 
@@ -167,14 +165,9 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		return response;
 	}
 
-	/**
-	 * GET answers by URL with their ETag. Asked again, GitHub answers 304 when
-	 * nothing changed, which costs nothing from the rate limit, so a pull request
-	 * can be read every few seconds while its checks run.
-	 */
+	/** Asked again with its ETag, GitHub answers 304 when nothing changed, which costs nothing from the rate limit. */
 	const saved = new Map<string, { etag: string; text: string; next: string | null }>();
 
-	/** A GET of JSON, answered from `saved` when GitHub says it is unchanged; with the next page's URL, if any. */
 	async function cachedGet(path: string): Promise<{ text: string; next: string | null }> {
 		const url = urlOf(path);
 		const known = saved.get(url);
@@ -200,7 +193,6 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		return (await call(path, init)).json() as Promise<T>;
 	}
 
-	/** Every page of a list, following GitHub's `next` links. */
 	async function all<T>(path: string): Promise<T[]> {
 		const items: T[] = [];
 		let next: string | null = path;
@@ -237,7 +229,6 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		return { path, mode, type, sha };
 	}
 
-	/** Builds the commit's tree on the host as its first parent's tree plus its changes. */
 	async function writeTree(repo: string, commit: CommitData, source: CommitSource): Promise<string> {
 		if (commit.changes.length === 0) return commit.tree;
 		const entries = [];

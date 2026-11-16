@@ -1,11 +1,6 @@
-/** Where a gateway's key comes from: pasted in Settings › Subscriptions, or the server's own. */
 export type KeySource = 'settings' | 'environment';
 
-/**
- * A gateway's key as its calls use it: the one pasted in Settings ›
- * Subscriptions, which the subscriptions service sets when it loads or
- * changes, else the server's own from the environment.
- */
+/** The key pasted in Settings, which the subscriptions service sets when it loads or changes, else the server's own. */
 export type KeySlot = {
 	set(key: string | null): void;
 	get(): string | null;

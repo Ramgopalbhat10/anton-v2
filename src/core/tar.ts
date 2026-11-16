@@ -1,10 +1,9 @@
-/** One entry of a tar archive. `content` is kept only for regular files within the size limit. */
+/** `content` is kept only for regular files within the size limit. */
 export type TarEntry = {
 	path: string;
 	kind: 'file' | 'directory' | 'symlink' | 'other';
 	size: number;
 	content: Uint8Array | null;
-	/** Where a symlink points. */
 	target: string | null;
 };
 
@@ -38,7 +37,6 @@ function paxRecords(data: Buffer): Record<string, string> {
 	return records;
 }
 
-/** Reads exact byte counts from a stream of chunks. */
 function byteReader(source: AsyncIterable<Uint8Array>) {
 	const chunks = source[Symbol.asyncIterator]();
 	let buffered = Buffer.alloc(0);
@@ -75,11 +73,7 @@ function byteReader(source: AsyncIterable<Uint8Array>) {
 
 const KINDS: Record<string, TarEntry['kind']> = { '0': 'file', '\0': 'file', '7': 'file', '5': 'directory', '2': 'symlink' };
 
-/**
- * The entries of an uncompressed tar stream (ustar, pax and GNU long names),
- * read as they arrive. Files larger than `maxFileBytes` are listed without
- * their content, so a huge file never sits in memory.
- */
+/** Files larger than `maxFileBytes` are listed without their content, so a huge file never sits in memory. */
 export async function* readTar(source: AsyncIterable<Uint8Array>, maxFileBytes: number): AsyncGenerator<TarEntry> {
 	const reader = byteReader(source);
 	let pax: Record<string, string> = {};

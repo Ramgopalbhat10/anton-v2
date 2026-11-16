@@ -11,7 +11,6 @@ export function text(bytes: Uint8Array): string {
 	return decoder.decode(bytes);
 }
 
-/** Runs a command and returns stdout as text, throwing on a non-zero exit. */
 export async function run(machine: Machine, command: string, options?: ExecOptions): Promise<string> {
 	const result = await machine.exec(command, options);
 	if (result.exitCode !== 0) throw new CommandError(command, result);
@@ -27,10 +26,7 @@ export class CommandError extends Error {
 	}
 }
 
-/**
- * Normalises a client-supplied repo path and rejects anything that could
- * leave the repo: absolute paths, `..` segments and empty names.
- */
+/** Rejects anything that could leave the repo: absolute paths, `..` segments and empty names. */
 export function safeRelativePath(input: string): string {
 	const parts = input.split('/').filter((part) => part !== '' && part !== '.');
 	if (parts.length === 0 || input.startsWith('/') || parts.includes('..')) {

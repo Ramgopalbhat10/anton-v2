@@ -1,48 +1,27 @@
 import { createHash } from 'node:crypto';
 
-/*
- * What makes the desktop look like a computer's: a wallpaper, a taskbar
- * (tint2) with launchers, a clock and the open windows, icons on the desktop
- * (PCManFM), a dark window theme for Openbox, and dark GTK apps with Papirus
- * icons. All of it lives in the desktop's own folder and reaches its programs
- * through XDG_* variables, so a local machine never touches this computer's
- * own settings.
- */
+// All of the desktop's look lives in its own folder and reaches its programs through XDG_* variables,
+// so a local machine never touches this computer's own settings.
 
-/** Where one desktop keeps its settings, programs and wallpaper. */
 export type LookPaths = {
-	/** The desktop's folder. */
 	home: string;
-	/** The task's folder, where the terminal and file manager open. */
 	root: string;
 };
 
 /**
- * The variables the desktop's programs run with, so they find its settings and
- * theme. GTK_THEME makes GTK 3's apps dark (settings.ini's dark preference
- * alone leaves them light), and GTK2_RC_FILES does the same for GTK 2's, as
- * Debian's PCManFM is. Caches stay where they are: Playwright finds its
- * browsers in the usual one. SHELL is what the terminal runs, which leaves the
- * desktop's settings out of the shell.
+ * GTK_THEME makes GTK 3's apps dark (settings.ini's dark preference alone leaves them light), and GTK2_RC_FILES
+ * GTK 2's. Caches stay where they are: Playwright finds its browsers in the usual one.
  */
 export const lookEnv = ({ home }: LookPaths) =>
 	`XDG_CONFIG_HOME=${home}/config XDG_DATA_HOME=${home}/data GTK_THEME=Adwaita:dark GTK2_RC_FILES=${home}/gtkrc-2.0 NO_AT_BRIDGE=1 SHELL=${home}/bin/anton-shell`;
 
-/*
- * The wallpaper is Anton's own drawing: its cube mark, lit in Signal Cyan on a
- * floor of grid, wired to the machines it runs, one of them at work, as the
- * app's illustrations draw them. Isometric, at 1280×800, rendered in the
- * machine with rsvg-convert to the screen's size.
- */
 const ISO_ORIGIN = { x: 790, y: 360 };
 const COS30 = Math.cos(Math.PI / 6);
 
-/** A point on or above the floor: along the floor's two axes, and its height. */
 type Iso = [u: number, v: number, z: number];
 const iso = ([u, v, z]: Iso) => [ISO_ORIGIN.x + (u - v) * COS30, ISO_ORIGIN.y + (u + v) * 0.5 - z] as const;
 const isoPoints = (points: Iso[]) => points.map((point) => iso(point).map((n) => n.toFixed(1)).join(',')).join(' ');
 
-/** A block standing on the floor, its three faces filled and its outline and near edges drawn, as the mark's are. */
 function block(u: number, v: number, size: number, h: number, faces: { top: string; left: string; right: string }, edge: string, edgeWidth = 1): string {
 	const [u1, v1] = [u + size, v + size];
 	return [
@@ -57,7 +36,6 @@ function block(u: number, v: number, size: number, h: number, faces: { top: stri
 	].join('');
 }
 
-/** A machine the mark runs: a dark block with bars and a light on top, lit when at work. */
 function machine(u: number, v: number, lit: boolean): string {
 	const [size, h] = [80, 36];
 	const [x, y] = iso([u + size - 14, v + 14, h]).map((n) => n.toFixed(1));
@@ -73,7 +51,6 @@ function machine(u: number, v: number, lit: boolean): string {
 	);
 }
 
-/** A wire across the floor, square to the grid: solid cyan when it carries work, dashed when idle. */
 const wire = (points: Iso[], lit: boolean) =>
 	`<polyline points="${isoPoints(points)}" fill="none" stroke="${lit ? '#3FB6D8' : 'rgba(255,255,255,0.16)'}" stroke-width="${lit ? 2 : 1.5}"${lit ? '' : ' stroke-dasharray="4 6"'} stroke-linejoin="round"/>`;
 
@@ -122,10 +99,9 @@ ${block(-80, -80, 160, 160, { top: 'url(#top)', left: 'url(#left)', right: 'url(
 </svg>`;
 })();
 
-/** The rendered wallpaper's name changes with the drawing, so a machine that rendered an older one renders the new one. */
+/** Named by the drawing's hash, so a machine that rendered an older one renders the new one. */
 const WALLPAPER_PNG = `wallpaper-${createHash('sha256').update(WALLPAPER).digest('hex').slice(0, 10)}.png`;
 
-/** The programs on the taskbar, the desktop and the right-click menu. */
 const APPS = [
 	{ id: 'terminal', name: 'Terminal', icon: 'utilities-terminal', exec: 'lxterminal' },
 	{ id: 'browser', name: 'Web Browser', icon: 'chromium', exec: 'BROWSER' },
@@ -133,7 +109,6 @@ const APPS = [
 	{ id: 'editor', name: 'Text Editor', icon: 'accessories-text-editor', exec: 'l3afpad' },
 ] as const;
 
-/** The script that opens the sandbox's Chromium on the desktop: the one the browser tool installs, else one in the machine. */
 export const browserCommand = ({ home }: LookPaths) => `${home}/bin/anton-browser`;
 
 const browserScript = ({ home }: LookPaths) => `#!/bin/sh
@@ -144,7 +119,7 @@ b=$(NODE_PATH="$(npm root -g 2>/dev/null)" node -e "process.stdout.write(require
 exec env GOOGLE_API_KEY=no GOOGLE_DEFAULT_CLIENT_ID=no GOOGLE_DEFAULT_CLIENT_SECRET=no "$b" --no-sandbox --test-type --no-first-run --no-default-browser-check --start-maximized --user-data-dir=${home}/browser "$@"
 `;
 
-/** The terminal's shell: the machine's own settings, not the desktop's, for the programs run in it (git, npm and the rest). */
+/** The terminal's shell keeps the machine's own settings, not the desktop's, for git, npm and the rest. */
 const SHELL_SCRIPT = `#!/bin/sh
 unset XDG_CONFIG_HOME XDG_DATA_HOME
 SHELL=$(command -v bash || echo /bin/sh)
@@ -162,7 +137,6 @@ Icon=${app.icon}
 Terminal=false
 `;
 
-/** Openbox's window theme: dark, flat title bars. */
 const THEMERC = `border.width: 1
 padding.width: 8
 padding.height: 5
@@ -223,7 +197,6 @@ ${APPS.map((app) => `<item label="${app.name}"><action name="Execute"><command>$
 </openbox_menu>
 `;
 
-/** The taskbar along the bottom: launchers, the open windows, the date and time. */
 const tint2rc = (paths: LookPaths) => `# 1: the bar
 rounded = 0
 border_width = 1
@@ -322,7 +295,7 @@ gtk-icon-theme-name="Papirus-Dark"
 gtk-font-name="Inter 10"
 `;
 
-/** The terminal: dark, with colours that read on it (the default blue is too dark to). */
+/** The default blue is too dark to read on the dark terminal. */
 const LXTERMINAL = `[general]
 fontname=DejaVu Sans Mono 11
 bgcolor=rgb(16,16,18)
@@ -351,7 +324,7 @@ palette_color_14=rgb(164,227,255)
 palette_color_15=rgb(230,233,242)
 `;
 
-/** Writes the desktop's settings and renders its wallpaper: shell, run before its programs start. */
+/** Shell, run before the desktop's programs start. */
 export function writeLook(paths: LookPaths, screen: { width: number; height: number }): string {
 	const { home } = paths;
 	const files: Array<[string, string]> = [
@@ -377,9 +350,7 @@ export function writeLook(paths: LookPaths, screen: { width: number; height: num
 		`mkdir -p ${folders.join(' ')}`,
 		...files.map(([file, content]) => `cat > '${file}' <<'ANTON_EOF'\n${content}${content.endsWith('\n') ? '' : '\n'}ANTON_EOF`),
 		`chmod +x ${home}/bin/* ${home}/Desktop/*.desktop`,
-		// The task's folder on the desktop too, as a folder to open.
 		`ln -sfn '${paths.root}' '${home}/Desktop/Workspace'`,
-		// Openbox's own settings, with the theme above, its fonts, and one desktop.
 		`sed -e 's|<name>Clearlooks</name>|<name>Anton</name>|' -e 's|<name>sans</name>|<name>Inter</name>|g' -e 's|<size>[0-9]*</size>|<size>10</size>|g' -e 's|<number>4</number>|<number>1</number>|' /etc/xdg/openbox/rc.xml > ${home}/config/openbox/rc.xml`,
 		`[ -s ${home}/${WALLPAPER_PNG} ] || rsvg-convert -w ${screen.width} -h ${screen.height} ${home}/wallpaper.svg -o ${home}/${WALLPAPER_PNG}`,
 	].join('\n');

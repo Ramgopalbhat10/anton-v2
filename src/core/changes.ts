@@ -1,26 +1,19 @@
 import { EventEmitter } from 'node:events';
 import type { AgentNow } from './agent-now.ts';
 
-/**
- * What changed, so open pages refetch only that: the task list, one task's state, files, browser, computer, subagents, todo list or script calls,
- * a subscription sign-in, the MCP servers and connected accounts, the pinned models, a project's list, threads, files or settings, the
- * automations and routines (added, edited or run), or a page's state.
- * What an agent is doing this moment comes whole, since it changes too often to be fetched each time.
- */
+/** What changed, so open pages refetch only that. What an agent is doing this moment comes whole, as it changes too often to fetch. */
 export type Change =
 	| { kind: 'sessions' }
 	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
 	| { kind: 'subscriptions' }
-	/** A connection was saved or cleared in Settings › Connections. */
 	| { kind: 'setup' }
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
-	/** The Notifications dialog's list gained a row, or rows were read. */
 	| { kind: 'notifications' }
-	/** A copy of a page saved its state; `from` is that copy, so it skips its own echo. */
+	/** `from` is the copy that saved, so it skips its own echo. */
 	| { kind: 'page'; id: string; path: string; version: number; from: string }
 	| { kind: 'now'; id: string; now: AgentNow | null };
 
@@ -30,7 +23,6 @@ export function announce(change: Change): void {
 	bus.emit('change', change);
 }
 
-/** Calls `listener` on every change until the returned function is called. */
 export function onChange(listener: (change: Change) => void): () => void {
 	bus.on('change', listener);
 	return () => void bus.off('change', listener);

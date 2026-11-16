@@ -16,28 +16,18 @@ import { config } from '../config.ts';
 import { INCOGNITO_PREFIX } from '../core/incognito.ts';
 
 /**
- * Conversations, attachments, and accepted submissions are stored here so
- * they survive a restart. Swap in another adapter (Postgres, libSQL, ...)
- * when one host's SQLite file is no longer enough:
- * https://flueframework.com/docs/guide/database/
- *
- * Incognito chats are the exception: ids starting `inco_` are routed to a
- * second, in-memory database, so a throwaway conversation — its stream,
- * submissions and attachments — is never written to disk and dies with the
- * process. Every Flue key that carries the instance id (the stream path
- * `agents/<agent>/<id>`, the attachment's conversation id, the submission's
- * session key) contains the prefix, which is how each store picks a side.
+ * Incognito ids (`inco_…`) go to a second, in-memory database, so their conversations are never written to disk.
+ * Every Flue key that carries the instance id contains the prefix, which is how each store picks a side.
  */
 const durable = sqlite(path.join(config.dataDir, 'flue.db'));
-// A shared-cache in-memory URI: the adapter and this handle see the same database, so an
-// incognito chat can be purged row by row when its window closes rather than waiting for a restart.
+// Shared cache, so this handle sees the adapter's database and can purge an incognito chat when its window closes.
 const EPHEMERAL_URI = 'file:anton-incognito?mode=memory&cache=shared';
 const ephemeral = sqlite(EPHEMERAL_URI);
 const ephemeralSql = new DatabaseSync(EPHEMERAL_URI);
 
 const ephemeralKey = (value: string): boolean => value.includes(INCOGNITO_PREFIX);
 
-/** Which side of the pair a submission id lives on; learned at admission, probed once after. */
+/** Learned at admission, probed once after. */
 type Side = 'durable' | 'ephemeral';
 
 function routeSubmissions(disk: AgentSubmissionStore, mem: AgentSubmissionStore): AgentSubmissionStore {
@@ -47,7 +37,6 @@ function routeSubmissions(disk: AgentSubmissionStore, mem: AgentSubmissionStore)
 		const instance = parseSessionStorageKey(submission.sessionKey)?.instanceId;
 		return instance && ephemeralKey(instance) ? 'ephemeral' : 'durable';
 	};
-	/** The store owning a submission id: the admission map first, then a probe of the in-memory side (cheap), then disk. */
 	const pick = async (submissionId: string): Promise<AgentSubmissionStore> => {
 		const hit = known.get(submissionId);
 		if (hit) return hit === 'ephemeral' ? mem : disk;
@@ -60,7 +49,7 @@ function routeSubmissions(disk: AgentSubmissionStore, mem: AgentSubmissionStore)
 		const instance = parseSessionStorageKey(sessionKey)?.instanceId;
 		return instance && ephemeralKey(instance) ? mem : disk;
 	};
-	/** List results from both sides, in admission order; a session's rows all live on one side, so per-session order is untouched. */
+	/** A session's rows all live on one side, so per-session order is untouched. */
 	const merged = (left: AgentSubmission[], right: AgentSubmission[]): AgentSubmission[] =>
 		[...left, ...right].sort((a, b) => a.acceptedAt - b.acceptedAt || a.submissionId.localeCompare(b.submissionId));
 	const byInput = (input: { id: string }): AgentSubmissionStore => (ephemeralKey(input.id) ? mem : disk);
@@ -171,8 +160,7 @@ function routeStreams(disk: ConversationStreamStore, mem: ConversationStreamStor
 }
 
 function routeAttachments(disk: AttachmentStore, mem: AttachmentStore): AttachmentStore {
-	// The stream path (`agents/<agent>/<instance id>`) names the conversation; the in-memory side
-	// is picked when it holds an incognito id.
+	// The stream path (`agents/<agent>/<instance id>`) names the conversation.
 	const pick = (streamPath: string): AttachmentStore => (ephemeralKey(streamPath) ? mem : disk);
 	return {
 		put: (input: PutAttachmentInput) => pick(input.streamPath).put(input),
@@ -180,11 +168,7 @@ function routeAttachments(disk: AttachmentStore, mem: AttachmentStore): Attachme
 	};
 }
 
-/**
- * Deletes every row an incognito chat left in the in-memory database: its stream, batches,
- * fold checkpoints, attachments and submissions, matched by the instance id in their keys.
- * The schema is Flue's own; the tables are internal, so this mirrors the adapter's DDL.
- */
+/** The schema is Flue's own and its tables internal, so this mirrors the adapter's DDL. */
 export function purgeIncognito(id: string): void {
 	try {
 		const like = `%${id}%`;

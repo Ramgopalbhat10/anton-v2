@@ -8,11 +8,9 @@ export type InstalledPlugin = {
 	name: string;
 	description: string;
 	source: PluginSource;
-	/** The commit it was installed from. */
 	sha: string;
-	/** The marketplace it was picked from, or null when added by its address. */
 	marketplace: string | null;
-	/** What it was installed from, to show it and update it from the same place; null for plugins installed before it was kept. */
+	/** Null for plugins installed before it was kept. */
 	pick: PluginPick | null;
 	skills: ParsedSkill[];
 	mcpServers: string[];
@@ -49,7 +47,6 @@ export async function getPlugin(id: string): Promise<InstalledPlugin | null> {
 	return row ? toPlugin(row) : null;
 }
 
-/** Saves a plugin; installing the same source again replaces it, keeping whether it is on. */
 export async function savePlugin(plugin: Omit<InstalledPlugin, 'enabled' | 'installedAt'>): Promise<InstalledPlugin> {
 	const db = await appDb();
 	await db.execute({

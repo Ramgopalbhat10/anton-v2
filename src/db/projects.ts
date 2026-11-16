@@ -28,7 +28,7 @@ function toProject(row: Row): Project {
 	};
 }
 
-/** Repos whose pull requests Anton reviews, each with when that was turned on; only pull requests updated since count. */
+/** Only pull requests updated since `since` count. */
 export async function reviewedRepos(): Promise<Array<{ project: Project; since: string }>> {
 	const db = await appDb();
 	const result = await db.execute('SELECT * FROM projects WHERE review_others_at IS NOT NULL');
@@ -49,7 +49,6 @@ export async function getProject(id: string | null): Promise<Project | null> {
 	return result.rows[0] ? toProject(result.rows[0] as Row) : null;
 }
 
-/** Inserts the repo once; later calls refresh its default branch. */
 export async function upsertProject(repoFullName: string, defaultBranch: string): Promise<Project> {
 	const db = await appDb();
 	const now = new Date().toISOString();
@@ -64,10 +63,7 @@ export async function upsertProject(repoFullName: string, defaultBranch: string)
 	return toProject(result.rows[0] as Row);
 }
 
-/**
- * Saves a warm image built on `baseImage`; skipped when the base image changed
- * while the snapshot was being taken, since the image is built on the old one.
- */
+/** Skipped when the base image changed while the snapshot was taken, since the image is built on the old one. */
 export async function setWarmImage(id: string, image: string, baseImage: string | null = null): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -76,19 +72,17 @@ export async function setWarmImage(id: string, image: string, baseImage: string 
 	});
 }
 
-/** Drops the prepared images of repos on the default base image, after the default changes. */
 export async function retireDefaultWarmImages(): Promise<void> {
 	const db = await appDb();
 	await db.execute('UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE base_image IS NULL');
 }
 
-/** Drops one repo's prepared image, so a fresh one is built. */
 export async function clearWarmImage(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE id = ?', args: [id] });
 }
 
-/** Saves the settings; a new base image also drops the warm image, which was built from the old one. */
+/** A new base image also drops the warm image, which was built from the old one. */
 export async function setProjectSettings(id: string, settings: ProjectSettings): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -115,13 +109,12 @@ export async function setProjectSettings(id: string, settings: ProjectSettings):
 	});
 }
 
-/** The repo's notes as the user wrote them. */
 export async function setProjectMemory(id: string, memory: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE projects SET memory = ? WHERE id = ?', args: [memory, id] });
 }
 
-/** Adds a line to the repo's notes in one statement, so a note never overwrites another; false when it would not fit. */
+/** In one statement, so a note never overwrites another; false when it would not fit. */
 export async function appendProjectMemory(id: string, line: string, maxLength: number): Promise<boolean> {
 	const db = await appDb();
 	const result = await db.execute({
@@ -132,14 +125,12 @@ export async function appendProjectMemory(id: string, line: string, maxLength: n
 	return result.rowsAffected === 1;
 }
 
-/** Ids of every task on the repo, finished setting up or not. */
 export async function projectSessionIds(id: string): Promise<string[]> {
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT id FROM sessions WHERE project_id = ?', args: [id] });
 	return result.rows.map((row) => String(row.id));
 }
 
-/** Removes the repo with its automations and issue claims, and any task rows its caller has not already deleted. */
 export async function deleteProjectRecord(id: string): Promise<void> {
 	const db = await appDb();
 	const tables = ['automations', 'issue_tasks', 'sessions', 'space_repos'];

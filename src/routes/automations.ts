@@ -4,10 +4,8 @@ import { FREQUENCIES } from '../core/schedule.ts';
 import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from '../services/automations/automations.ts';
 import { REASONING, body } from './shared.ts';
 
-/** Automations: routines on a repository or a project, run on a schedule or by new issues. */
 const app = new Hono();
 
-/** When a routine runs; fields left out take their defaults, and `scheduleProblem` checks the whole. */
 const SCHEDULE = v.object({
 	frequency: v.picklist(FREQUENCIES),
 	time: v.optional(v.pipe(v.string(), v.regex(/^\d{2}:\d{2}$/))),

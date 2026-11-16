@@ -54,7 +54,7 @@ export async function listApprovals(sessionId: string): Promise<MailApproval[]> 
 	return (await db.execute({ sql: 'SELECT * FROM mail_approvals WHERE session_id = ? ORDER BY created_at', args: [sessionId] })).rows.map(toApproval);
 }
 
-/** Moves an approval from one state to the next; false when it was no longer in `from`, as when another press got there first. */
+/** False when it was no longer in `from`, as when another press got there first. */
 export async function moveApproval(id: string, from: ApprovalState, to: ApprovalState, sentId: string | null = null): Promise<boolean> {
 	const db = await appDb();
 	const result = await db.execute({

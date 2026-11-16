@@ -4,25 +4,15 @@ import { skillFilesReady } from '../services/sandbox/skill-files.ts';
 import { skillInParts } from '../services/context/skill-parts.ts';
 import { digestResult, WEB_TOOLS } from '../services/context/web-digest.ts';
 
-/**
- * An agent's own conversation: the coder's, the reviewer's or a coordinator's, each of which has
- * `read_full_result`. A subagent's runs in a session of its own under a task id, a tool's harness in a scope of its own.
- */
+/** A subagent's runs in a session of its own under a task id, a tool's harness in a scope of its own. */
 const isOwnConversation = (ctx: FlueExecutionContext) =>
 	Boolean(ctx.instanceId) && !ctx.taskId && (ctx.session === undefined || ctx.session === 'default') && (ctx.harness === undefined || ctx.harness === 'default');
 
-/** The runtime's tool that hands the agent a skill's instructions. */
 const SKILL_TOOL = 'activate_skill';
 
 /**
- * Cuts a long tool result before the runtime keeps it in the conversation
- * (src/services/context/tool-results.ts). Every tool call passes through the runtime's
- * execution interceptors with what it returned, so this sees web fetches,
- * connectors, scripts and subagents' answers alike. A long web search or fetch
- * is read out against its objective instead (src/services/context/web-digest.ts), and
- * an activated skill comes in parts (src/services/context/skill-parts.ts). A
- * subagent's own calls carry its task id; it has no `read_full_result`, so its
- * other long results keep their start and end.
+ * Every tool call passes through the runtime's execution interceptors, so this sees web fetches, connectors, scripts and
+ * subagents' answers alike. A subagent has no `read_full_result`, so its long results keep their start and end.
  */
 export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, ctx: FlueExecutionContext, next: () => Promise<T>): Promise<T> {
 	if (operation.type !== 'tool') return next();
@@ -31,7 +21,7 @@ export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, c
 	if (!subagent && !isOwnConversation(ctx)) return next();
 	if (WEB_TOOLS.has(toolName)) return next().then((result) => digestResult(ctx.instanceId!, toolCallId, toolName, result, subagent));
 	// A skill comes whole but for its file list, or in sections to read on from; a subagent's is never cut.
-	// Its files are copied into the sandbox in the background as it starts (skill-files.ts); a skill in use waits for them.
+	// Its files are copied into the sandbox in the background as it starts; a skill in use waits for them.
 	if (toolName === SKILL_TOOL)
 		return next().then(async (result) => {
 			await skillFilesReady(ctx.instanceId!);

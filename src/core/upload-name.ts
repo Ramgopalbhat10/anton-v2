@@ -1,10 +1,8 @@
-/** The single Library path component used for an uploaded file. */
 export function uploadName(name: string): string {
 	const base = name.split(/[\\/]/).pop()?.replace(/[^\w.\- ]+/g, '_').trim() || 'file';
 	return base === '.' || base === '..' ? 'file' : base;
 }
 
-/** Reserve a unique normalized name for each item in an upload batch. */
 export function uniqueUploadNames(names: string[]): string[] {
 	const used = new Set<string>();
 	return names.map((raw) => {

@@ -17,9 +17,8 @@ import { DESKTOP_PACKAGES } from '../../core/desktop.ts';
 export type ModalOptions = {
 	app: string;
 	baseImage: string;
-	/** Installed into every new image so the agent's screenshot tool starts fast. */
+	/** Installed into every new image so the screenshot tool starts fast. */
 	browserPackage: string;
-	/** Read and write whole files through the SDK's file API rather than a login shell (`ANTON_SANDBOX_FILE_API`); off until tried on a real sandbox. */
 	fileApi?: boolean;
 };
 
@@ -27,7 +26,7 @@ type State = { sandboxId: string };
 
 const ROOT = '/workspace';
 const TAG = 'anton-task';
-/** Toolchain every task gets. The image is cached by Modal after the first build. */
+/** Modal caches the image after the first build. */
 const toolchain = (browserPackage: string) => [
 	'RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep python3 python3-pip python3-venv ca-certificates procps less && rm -rf /var/lib/apt/lists/*',
 	'RUN command -v corepack >/dev/null && corepack enable || true',
@@ -38,11 +37,7 @@ const toolchain = (browserPackage: string) => [
 	`RUN mkdir -p ${ROOT}/outputs`,
 ];
 
-/**
- * One Modal sandbox per task. A stopped task comes back from the exit
- * snapshot Modal takes when its sandbox ends, so nothing is lost to the
- * idle timeout.
- */
+/** A stopped task comes back from the exit snapshot Modal takes when its sandbox ends. */
 export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	const client = new ModalClient();
 	let app: Promise<App> | undefined;
@@ -78,7 +73,7 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 		return previous?.experimentalGetExitSnapshot({ timeoutMs: 120_000 }).catch(() => null) ?? null;
 	}
 
-	/** Where a new sandbox starts from, best first: the task's own last state, a prepared image, the toolchain. */
+	/** Best first. */
 	async function startingImage(state: State | null, request: AcquireRequest): Promise<[Image, MachineOrigin]> {
 		const resumed = await exitImage(state);
 		if (resumed) return [resumed, 'resumed'];
@@ -134,7 +129,6 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
  */
 const OUTPUT_GRACE_MS = 1000;
 
-/** Reads a stream as it arrives; `settle` waits briefly for the end, then keeps what came. */
 function collect(stream: ReadableStream<Uint8Array>): { settle: () => Promise<Uint8Array> } {
 	const reader = stream.getReader();
 	const chunks: Uint8Array[] = [];
@@ -172,7 +166,6 @@ async function killTagged(sandbox: Sandbox, tag: string): Promise<void> {
 		.catch(() => undefined);
 }
 
-/** The shell's words for the file API's errors that say the file is not there or cannot be had; any other leaves the file to the shell. */
 function reasonOf(error: unknown): string | null {
 	if (error instanceof SandboxFilesystemNotFoundError) return 'No such file or directory';
 	if (error instanceof SandboxFilesystemIsADirectoryError) return 'Is a directory';
@@ -182,9 +175,8 @@ function reasonOf(error: unknown): string | null {
 }
 
 /**
- * Whole-file reads and writes through the SDK's file API (`sandbox.filesystem`), which runs Modal's own file tool
- * rather than `bash -l`. It takes absolute paths only, and has a read size limit; a relative path, a file past the
- * limit or an error it does not name go to the shell as before. Unlike `cat >`, its write makes missing folders.
+ * Through Modal's own file tool rather than `bash -l`. It takes absolute paths only and has a read size limit; anything
+ * else goes to the shell. Unlike `cat >`, its write makes missing folders.
  */
 function fileApi(sandbox: Sandbox): Pick<Machine, 'readFile' | 'writeFile'> {
 	return {

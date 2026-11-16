@@ -1,10 +1,8 @@
 import type { Machine } from './ports.ts';
 import { CommandError, quote } from './shell.ts';
 
-/** Reads of a file that came back a different size from it before the read is given up. */
 const READ_TRIES = 3;
 
-/** Why a file could not be read or written, in the words the shell uses, from a Node or provider error code. */
 const REASONS: Record<string, string> = {
 	ENOENT: 'No such file or directory',
 	EISDIR: 'Is a directory',
@@ -17,21 +15,14 @@ const REASONS: Record<string, string> = {
 
 export const reasonOf = (error: unknown): string => REASONS[(error as { code?: string })?.code ?? ''] ?? (error instanceof Error ? error.message : String(error));
 
-/**
- * The error a provider's own read or write gives (`Machine.readFile`, `writeFile`): the `CommandError` the shell's
- * gives, naming the same operation and path with the same reason, without the shell's own `bash: line 1:` before it.
- */
+/** The same `CommandError` the shell gives, without its `bash: line 1:` prefix. */
 export function fileError(operation: 'read' | 'write', path: string, reason: string): CommandError {
 	return new CommandError(`${operation} ${path}`, { stdout: new Uint8Array(), stderr: `${path}: ${reason}`, exitCode: 1 });
 }
 
 /**
- * Whole-file IO, through the machine's own file access when it has one (`Machine.readFile`, `writeFile`: no login
- * shell per read and write), else over `exec`, so every provider gets it for free. Through `exec`, the file's size
- * goes to stderr before its bytes, and a read that came back short is read again:
- * a provider can stop collecting output it is still sending (Modal keeps a second
- * of quiet after the command exits), and a cut file would otherwise pass for whole,
- * as a broken screenshot or a checkpoint with half a file.
+ * Through `exec`, the file's size goes to stderr before its bytes, and a short read is read again: a provider can stop
+ * collecting output it is still sending (Modal keeps a second of quiet after exit), and a cut file would pass for whole.
  */
 export async function readMachineFile(machine: Machine, path: string): Promise<Uint8Array> {
 	const direct = await machine.readFile?.(path);
@@ -58,7 +49,6 @@ export async function writeMachineFile(machine: Machine, path: string, content: 
 
 export type MachineFileInfo = { path: string; size: number; mtimeMs: number };
 
-/** Regular files under `dir`, relative to it. */
 export async function listMachineFiles(machine: Machine, dir: string): Promise<MachineFileInfo[]> {
 	const result = await machine.exec(`test -d ${quote(dir)} && cd ${quote(dir)} && find . -type f -printf '%P\\t%s\\t%T@\\n'`);
 	if (result.exitCode !== 0) return [];

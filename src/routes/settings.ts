@@ -16,7 +16,6 @@ import { connections } from '../services/settings/connections.ts';
 import { clearSlot, saveSlot, setupView, testSlot } from '../services/settings/setup.ts';
 import { REASONING, AGENT_MODEL, ENV, body } from './shared.ts';
 
-/** Settings pages: spending caps and usage, commands, sandboxes, General, guardrails, secrets, Connections and setup, compute, storage, and your profile. */
 const app = new Hono();
 
 app.get('/api/budget', async (c) => c.json(await budget(c.req.query('session') || undefined)));
@@ -60,10 +59,8 @@ app.put('/api/settings/sandbox', async (c) => {
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
 });
-/** The settings, with what an unset title model falls back to, so the page can show it. */
 const generalView = async (settings: GeneralSettings) => ({ ...settings, titleModelDefault: config.titleModel });
 app.get('/api/settings/general', async (c) => c.json(await generalView(await generalSettings())));
-/** A background model in Settings › General; null uses its default. */
 const BACKGROUND_MODEL = v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null);
 app.put('/api/settings/general', async (c) => {
 	const next = await body(
@@ -93,7 +90,6 @@ app.put('/api/settings/general', async (c) => {
 	);
 	return c.json(await generalView(await setGeneralSettings(next)));
 });
-// What each kind of background work runs on when Settings › General names no model for it.
 app.get('/api/settings/background-models', (c) => c.json({ defaults: backgroundDefaults() }));
 
 app.get('/api/settings/guardrails', async (c) => c.json(await guardrails()));
@@ -104,7 +100,7 @@ app.put('/api/secrets/shared', async (c) => {
 	const { env } = await body(c, v.object({ env: ENV }));
 	return c.json(await setSharedEnv(env));
 });
-// Sealed secrets: values the agent can name in http_request but never read (src/services/secrets/sealed-secrets.ts).
+// Sealed secrets: the agent can name them in http_request but never read them.
 app.get('/api/secrets/sealed', async (c) => c.json({ secrets: await sealedSecretsView() }));
 app.put('/api/secrets/sealed/:name', async (c) => {
 	const input = await body(
@@ -121,7 +117,7 @@ app.put('/api/secrets/sealed/:name', async (c) => {
 app.delete('/api/secrets/sealed/:name', async (c) => c.json({ secrets: await deleteSealedSecret(c.req.param('name')) }));
 
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
-// Settings › Connections as Anton's setup: each slot's provider and values, checked before they are kept; secrets come back as their last four characters only.
+// Secrets come back as their last four characters only.
 const setupInput = v.object({
 	provider: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
 	values: v.optional(v.record(v.pipe(v.string(), v.regex(/^[A-Z][A-Z0-9_]{1,63}$/)), v.pipe(v.string(), v.maxLength(4000))), {}),

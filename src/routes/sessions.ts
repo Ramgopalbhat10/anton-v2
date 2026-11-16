@@ -30,7 +30,6 @@ import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDi
 import { requestReview } from '../services/git/code-review.ts';
 import { REASONING, ROUTE, body, contentType, bytes } from './shared.ts';
 
-/** Tasks (`/api/sessions`): creating and editing them, their sandbox, checkpoints, Browser and Computer panels, traces, subagents, approvals, pull requests, files, Library and rendered pages. */
 const app = new Hono();
 
 const RUN_ON = v.picklist(['sandbox', 'host']);
@@ -41,16 +40,14 @@ app.post('/api/sessions', async (c) => {
 	const input = await body(
 		c,
 		v.object({
-			// Chosen by the page, which opens the task while it is made.
+			// Chosen by the page, so it can open the task while it is made.
 			id: v.optional(v.pipe(v.string(), v.uuid())),
-			// Left out for a chat, which has no repository.
 			projectId: v.optional(v.string()),
 			branch: v.optional(v.string()),
 			model: v.optional(v.string()),
 			reasoning: v.optional(REASONING),
 			route: v.optional(ROUTE),
 			title: v.optional(v.pipe(v.string(), v.maxLength(200))),
-			// The first message, which a fast model names the task from.
 			titleFrom: v.optional(v.pipe(v.string(), v.maxLength(40_000))),
 			planMode: v.optional(v.boolean()),
 			runOn: v.optional(RUN_ON),
@@ -58,8 +55,7 @@ app.post('/api/sessions', async (c) => {
 	);
 	return c.json(await createSession(input));
 });
-// An incognito chat has no session record: the thread's session lookups get empty views
-// rather than a 404 on every poll.
+// An incognito chat has no session record: its session lookups get empty views rather than a 404 on every poll.
 const INCOGNITO_SESSION_VIEWS: Record<string, unknown> = {
 	'': null,
 	'/waiting': { messages: [] },
@@ -102,9 +98,8 @@ app.patch('/api/sessions/:id', async (c) => {
 app.get('/api/sessions/:id/fallback', async (c) => c.json({ fallback: await fallbackModel(c.req.param('id')) }));
 app.post('/api/sessions/:id/fallback', async (c) => c.json(await switchToFallbackModel(c.req.param('id'))));
 app.post('/api/sessions/:id/fork', async (c) => c.json(await forkSession(c.req.param('id'))));
-// A project's thread keeps the files it saved, as project files; the answer says where.
 // Saving a task's files and stopping its sandbox can outlast the proxy's 100 seconds: past ANSWER_MS the
-// page hears it is under way, the work carries on, and the task list updates when it is done.
+// page hears it is under way and the work carries on.
 app.delete('/api/sessions/:id', async (c) => {
 	const id = c.req.param('id');
 	return c.json(await answerWithin(deleteTask(id), () => ({ kept: [], pending: true }), 'Deleting the task', id));
@@ -114,7 +109,6 @@ app.post('/api/sessions/:id/stop', async (c) => {
 	const id = c.req.param('id');
 	return c.json(await answerWithin(stopSession(id), () => getSession(id), 'Stopping the sandbox', id));
 });
-// Typing to a task starts its sandbox, so it is up, or nearly, when the message is sent.
 app.post('/api/sessions/:id/wake', async (c) => c.json(await wakeMachine(c.req.param('id'))));
 app.post('/api/sessions/:id/resume', async (c) => c.json(await resumeSession(c.req.param('id'))));
 app.get('/api/sessions/:id/checkpoints', async (c) => {
@@ -133,7 +127,6 @@ app.post('/api/sessions/:id/revert', async (c) => {
 	return c.json({ ok: true });
 });
 app.get('/api/sessions/:id/previews', async (c) => c.json(await previewsView(c.req.param('id'))));
-// The Browser panel: a hosted browser per task, seen through its live view and driven for the address bar, picking and drawing.
 app.get('/api/sessions/:id/browser', async (c) => c.json(await browserView(c.req.param('id'))));
 app.post('/api/sessions/:id/browser', async (c) => {
 	const { url } = await body(c, v.object({ url: v.optional(v.pipe(v.string(), v.maxLength(4000))) }));
@@ -156,21 +149,18 @@ app.post('/api/sessions/:id/browser/highlight/clear', async (c) => {
 	return c.json({ ok: true });
 });
 app.post('/api/sessions/:id/browser/screenshot', async (c) => c.json(await browserScreenshot(c.req.param('id'))));
-// The panel's live view is on screen: keep following its page for a while.
 app.post('/api/sessions/:id/browser/watch', async (c) => c.json(await watchBrowser(c.req.param('id'))));
-// The Computer panel: the desktop inside the task's sandbox. Viewing never starts it; Start computer does.
+// Viewing never starts the computer; Start computer does.
 app.get('/api/sessions/:id/computer', async (c) => c.json(await computerView(c.req.param('id'))));
 app.post('/api/sessions/:id/computer', async (c) => c.json(await startComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/stop', async (c) => c.json(await stopComputer(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/connect', async (c) => c.json(await connectComputer(c.req.param('id'))));
-// The sandbox browser's live view, which the panel shows when the agent browses there; it needs no desktop.
 app.post('/api/sessions/:id/computer/browser', async (c) => c.json(await connectBrowser(c.req.param('id'))));
 app.post('/api/sessions/:id/computer/control', async (c) => {
 	const { driver } = await body(c, v.object({ driver: v.picklist(['user', 'agent']) }));
 	return c.json(await setComputerControl(c.req.param('id'), driver));
 });
 app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await computerScreenshot(c.req.param('id'))));
-// A reply's trace: its model and tool calls on one clock, what went into each call's context, and the cache.
 app.get('/api/sessions/:id/traces/:trace', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	const trace = await getTrace(id, c.req.param('trace'));
@@ -181,7 +171,6 @@ app.get('/api/sessions/:id/subagents', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ runs: await subagentRuns(id) });
 });
-// One subagent stopped on its own: the agent gets what it had done and carries on.
 app.post('/api/sessions/:id/subagents/:run/stop', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	if (!(await stopSubagent(id, c.req.param('run')))) throw new ConflictError('That agent is not running, or cannot be stopped on its own; use Stop to stop the whole reply');
@@ -191,7 +180,7 @@ app.get('/api/sessions/:id/scripts', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ scripts: await scriptCalls(id) });
 });
-// Emails the agent asked to send; only your Send here sends one (services/connectors/mail.ts).
+// Only your Send here sends one.
 app.get('/api/sessions/:id/mail', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ approvals: await mailApprovals(id) });
@@ -201,7 +190,7 @@ app.post('/api/sessions/:id/mail/:approval', async (c) => {
 	const { send } = await body(c, v.object({ send: v.boolean() }));
 	return c.json(await decideSend(id, c.req.param('approval'), send));
 });
-// Connector tool calls the agent asked to run; only your Run here runs one (services/connectors/tool-approvals.ts).
+// Only your Run here runs one.
 app.get('/api/sessions/:id/tool-approvals', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ approvals: await toolApprovals(id) });
@@ -215,17 +204,14 @@ app.get('/api/sessions/:id/todos', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ list: await todosFor(id) });
 });
-// Where the agent read each message sent while it worked, for the thread to show it there.
 app.get('/api/sessions/:id/joins', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ joins: await joinsFor(id) });
 });
-// Messages the agent has not read yet, which no conversation the page loads holds until it does.
 app.get('/api/sessions/:id/waiting', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ messages: await waitingMessages(id) });
 });
-// What the agent is doing this moment; later changes come whole over /api/events.
 app.get('/api/sessions/:id/now', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ now: agentNow(id) });
@@ -235,7 +221,6 @@ app.get('/api/sessions/:id/context', async (c) => {
 	return c.json(await contextView(id));
 });
 app.get('/api/sessions/:id/pull-request', async (c) => c.json(await pullRequestView(c.req.param('id'))));
-// The PR panel: every pull request the task opened, each read from GitHub whole, and merged from there.
 app.get('/api/sessions/:id/pulls', async (c) => c.json({ pulls: await pullRequestsOf(c.req.param('id')) }));
 const pullNumber = (c: { req: { param: (name: 'number') => string } }) => {
 	const number = Number(c.req.param('number'));
@@ -258,23 +243,18 @@ app.get('/api/sessions/:id/output', async (c) => {
 	const path = c.req.query('path') ?? '';
 	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));
 });
-// A page the agent wrote with render_html: the frame page the thread shows, and the page inside it (src/services/artifacts/renders.ts).
 app.get('/api/sessions/:id/render-frame', async (c) => {
 	const { html, csp } = await pageFrame(c.req.param('id'), c.req.query('path') ?? '');
 	return c.html(html, 200, { 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
 });
 app.get('/api/sessions/:id/render', async (c) => {
 	const html = await renderPage(c.req.param('id'), c.req.query('path') ?? '');
-	// Served with its state as it stands, so never from a cache.
 	return c.html(html, 200, { 'Content-Security-Policy': PAGE_CSP, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
 });
-// The state every open copy of a page shares: its frame page reads it after a change elsewhere, and saves the page's own changes.
 app.get('/api/sessions/:id/page-state', async (c) => c.json(await pageState(c.req.param('id'), c.req.query('path') ?? ''), 200, { 'Cache-Control': 'no-store' }));
 app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null))));
-// A request the page makes, which its frame page hands to Anton to make for it (src/services/browser/page-fetch.ts).
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 
-// Adding a file to the Library: the body is the file, its name in the query.
 app.post('/api/sessions/:id/outputs', async (c) => {
 	const name = c.req.query('name') ?? '';
 	if (!name) throw new InvalidInputError('Name the file');
@@ -282,7 +262,6 @@ app.post('/api/sessions/:id/outputs', async (c) => {
 	const body = new Uint8Array(await c.req.arrayBuffer());
 	return c.json({ path: await uploadOutput(c.req.param('id'), name, body, c.req.header('content-type') || undefined) });
 });
-// A file attached to a message: saved to the task's Library and read as text for the message (src/services/artifacts/attachments.ts).
 app.post('/api/sessions/:id/attachments', async (c) => {
 	const name = c.req.query('name') ?? '';
 	if (!name) throw new InvalidInputError('Name the file');

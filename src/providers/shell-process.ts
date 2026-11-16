@@ -11,11 +11,7 @@ const MAX_STREAM_BYTES = 64 * 1024 * 1024;
 
 export type ProcessOptions = { cwd?: string; env: Record<string, string>; stdin?: Uint8Array; signal?: AbortSignal; timeoutMs?: number };
 
-/**
- * Runs a shell command's process (`bash -lc` here, `docker exec` into a container) to its end. A server it leaves in
- * the background may hold the output open for good, so it stops waiting once the process has exited and the output
- * has been quiet for a moment, and never keeps Anton's own process alive.
- */
+/** A server left in the background may hold the output open for good, so this stops waiting once the process exits and the output is quiet. */
 export function runProcess(file: string, args: string[], options: ProcessOptions): Promise<ExecResult> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(file, args, { cwd: options.cwd, env: options.env, signal: options.signal, timeout: options.timeoutMs });
@@ -50,7 +46,6 @@ export function runProcess(file: string, args: string[], options: ProcessOptions
 			});
 		};
 		child.on('error', reject);
-		// A server started in the background keeps the output open: stop waiting once it has been quiet for a moment.
 		child.on('exit', (code) => {
 			const check = () => {
 				const quiet = Date.now() - lastChunkAt;

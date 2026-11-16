@@ -5,16 +5,12 @@ type Row = Record<string, unknown>;
 /** `running` holds an approval while its tool call goes, so a second press cannot run it twice. */
 export type ToolApprovalState = 'pending' | 'running' | 'done' | 'declined' | 'failed';
 
-/** A connector tool call waiting on the user's Run: what to call, with which arguments, and what it answered. */
 export type ToolApproval = {
 	id: string;
 	sessionId: string;
-	/** The connector it belongs to, such as `composio:slack`. */
 	connector: string;
-	/** The tool's name as the agent called it. */
 	tool: string;
 	args: Record<string, unknown>;
-	/** Everything needed to run it on approval: toolkit, Composio slug and arguments. */
 	payload: { toolkit: string; slug: string; args: Record<string, unknown> };
 	state: ToolApprovalState;
 	result: string | null;
@@ -58,7 +54,7 @@ export async function listToolApprovals(sessionId: string): Promise<ToolApproval
 	return (await db.execute({ sql: 'SELECT * FROM tool_approvals WHERE session_id = ? ORDER BY created_at', args: [sessionId] })).rows.map(toApproval);
 }
 
-/** Moves an approval from one state to the next; false when it was no longer in `from`, as when another press got there first. */
+/** False when it was no longer in `from`, as when another press got there first. */
 export async function moveToolApproval(id: string, from: ToolApprovalState, to: ToolApprovalState, result: { result?: string | null; error?: string | null } = {}): Promise<boolean> {
 	const db = await appDb();
 	const done = to !== 'pending' && to !== 'running';

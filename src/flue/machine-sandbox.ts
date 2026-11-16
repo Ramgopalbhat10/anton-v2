@@ -6,20 +6,12 @@ import { CommandError, quote, text } from '../core/shell.ts';
 
 type ShellOptions = { cwd?: string; env?: Record<string, string>; timeoutMs?: number; signal?: AbortSignal };
 
-/**
- * How long a command through the sandbox runs when it names no timeout: a `grep -r /` must not hold the task for good.
- * The agent's own `bash` always names one (`COMMAND_TIMEOUT_MS` in shell-tool.ts); this is for the others, such as Flue's `grep`.
- */
+/** A `grep -r /` must not hold the task for good. The agent's own `bash` always names a timeout; this is for the others, such as Flue's `grep`. */
 export const EXEC_TIMEOUT_MS = 10 * 60_000;
 
 /**
- * Adapts any `Machine` to Flue's sandbox contract, so the agent is provider-agnostic.
- * While `canWrite` says no, the file tools refuse to write; it is asked at each call.
- * The values of `secrets` are replaced by their names in command output, so
- * the agent does not read them back by accident and repeat them; files are
- * read as they are, so an edit never writes a placeholder over a real value.
- * `clock` gives a line to end a command's result with, or nothing: how long
- * the reply has run (`reply-clock.ts`).
+ * Secrets' values are replaced by their names in command output, so the agent does not repeat them; files are read as
+ * they are, so an edit never writes a placeholder over a real value. `canWrite` is asked at each call.
  */
 export function machineSandbox(
 	machine: Machine,

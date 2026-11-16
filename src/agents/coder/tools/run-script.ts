@@ -4,10 +4,6 @@ import { runScript, type ScriptScope, scriptFromFile, scriptToolDescription } fr
 import { noteScriptCalls, type ScriptCall, shortInput } from '../../../services/tasks/script-runs.ts';
 import { noteStep } from '../../../services/tasks/subagent-runs.ts';
 
-/**
- * Code mode: one program that calls many tools, with only its result coming back; on in Settings > General.
- * Each call the program makes is kept for the thread and, in a subagent, shown on its step in the Agents panel.
- */
 export function useRunScript(id: string, scope: ScriptScope) {
 	useTool(
 		defineTool({

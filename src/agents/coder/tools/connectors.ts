@@ -4,12 +4,7 @@ import { noteAsk } from '../../../services/replies/asks.ts';
 import { httpRequest } from '../../../services/secrets/http-request.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../../../services/connectors/connector-tools.ts';
 
-/**
- * The user's connectors (Gmail, MCP servers), found and called on demand: the same two tools whatever is on, so
- * turning a connector on or off in the composer changes neither the tools nor the instructions and the cached
- * prompt holds. The tools run here with the sign-ins Anton keeps; the agent never sees a token, and sending an
- * email only asks the user, who presses Send in the thread.
- */
+/** The same two tools whatever is on, so turning a connector on or off keeps the cached prompt. The agent never sees a token. */
 export function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 	useTool(
 		defineTool({
@@ -39,10 +34,7 @@ export function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 	);
 }
 
-/**
- * One HTTP request sent from Anton's server, with the user's sealed secrets filled in there: the agent names
- * them and never sees them, in its shell, its files or this conversation. Offered while any is set.
- */
+/** Sealed secrets are filled in on Anton's server: the agent names them and never sees them. */
 export function useHttpRequest(id: string) {
 	useTool(
 		defineTool({

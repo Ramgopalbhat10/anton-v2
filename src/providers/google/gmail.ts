@@ -13,7 +13,6 @@ type GmailDraft = { id: string; message?: GmailMessage };
 const header = (part: Part | undefined, name: string) => part?.headers?.find((item) => item.name.toLowerCase() === name.toLowerCase())?.value ?? '';
 const decode = (data: string) => Buffer.from(data, 'base64url').toString('utf8');
 
-/** HTML as plain text: tags gone, blocks on their own lines, entities read. */
 export function htmlText(html: string): string {
 	return html
 		.replace(/<(script|style|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
@@ -31,7 +30,6 @@ export function htmlText(html: string): string {
 		.trim();
 }
 
-/** The message's own words: quoted earlier messages are left out, since the thread has them already. */
 export function withoutQuotes(text: string): string {
 	const lines = text.replace(/\r\n/g, '\n').split('\n');
 	const quoteStart = lines.findIndex((line, index) => index > 0 && /^On .{4,200} wrote:\s*$/.test(line.trim()));
@@ -105,10 +103,8 @@ const addresses = (value: string) =>
 /** A header value with no line breaks, so nothing the agent writes adds headers of its own. */
 const oneLine = (value: string) => value.replace(/[\r\n]+/g, ' ').trim();
 
-/** A header in RFC 2047 words when it is not plain ASCII. */
 const encodedWord = (value: string) => (/^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`);
 
-/** The draft as an RFC 2822 message, its text in base64 lines. */
 export function rawMessage(draft: MailDraftInput, reply: { inReplyTo: string; references: string } | null): string {
 	const lines = [
 		draft.to.length ? `To: ${draft.to.map(oneLine).join(', ')}` : '',
@@ -127,7 +123,6 @@ export function rawMessage(draft: MailDraftInput, reply: { inReplyTo: string; re
 	return Buffer.from(`${lines.join('\r\n')}\r\n\r\n${body}`, 'utf8').toString('base64url');
 }
 
-/** Gmail through its REST API, as the signed-in account. */
 export function gmailMailbox({ apiUrl = 'https://gmail.googleapis.com/gmail/v1' }: { apiUrl?: string } = {}): Mailbox {
 	async function call<T>(token: string, path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {
 		const timeout = AbortSignal.timeout(TIMEOUT_MS);
@@ -164,7 +159,6 @@ export function gmailMailbox({ apiUrl = 'https://gmail.googleapis.com/gmail/v1' 
 		};
 	}
 
-	/** What a reply needs from the conversation's latest message: the ids it answers, and the subject. */
 	async function replyHeaders(token: string, threadId: string, signal?: AbortSignal) {
 		const thread = await call<GmailThread>(token, `/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=Subject`, {}, signal);
 		const latest = thread.messages?.[thread.messages.length - 1];

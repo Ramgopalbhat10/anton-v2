@@ -20,17 +20,9 @@ import { currentBrief, noteStep, type StepDetail } from '../../../services/tasks
 import { withSettingsModel } from '../subagents.ts';
 import { mayNotUndo } from './browser.ts';
 
-/** Steps that point at something on the screen, and so need a position. */
 const POINTING = new Set<string>(['click', 'double_click', 'right_click', 'move', 'drag']);
 
-/**
- * One step on the sandbox's own desktop, the way a person uses a computer:
- * look, point, click, type, press keys, open a page or start a program. The
- * agent names what to point at in words; a vision model finds it on the
- * screenshot and, after the step, says what the screen shows, since a tool's
- * answer reaches the agent as text. The user watches in the Computer panel and
- * can take over, which stops the agent's steps until they hand it back.
- */
+/** The agent names what to point at in words; a vision model finds it and describes the screen after, since a tool's answer reaches the agent as text. */
 function computerTool(id: string) {
 	return defineTool({
 		name: 'computer',
@@ -66,7 +58,7 @@ function computerTool(id: string) {
 			let givenUp = false;
 			const controller = new AbortController();
 			const stepSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-			// A step that never returns would hold every later one, as steps run in turn: it is given up past its deadline.
+			// Steps run in turn, so one that never returns would hold every later one: it is given up past its deadline.
 			const takeStep = async () => {
 				// Checked in turn, as the user may take over while earlier steps run.
 				if (givenUp || signal?.aborted) return { output: { problem: 'The computer step was stopped.' } };
@@ -79,7 +71,6 @@ function computerTool(id: string) {
 				let cost = 0;
 				const note = () => noteStep(id, toolCallId, { outcome: null, actions, decisions: 0, cost });
 				const input: ComputerInput = { ...step };
-				// Finds what the agent named on the screen as it is now.
 				const find = async (what: string) => {
 					await ensureDesktop(machine, stepSignal);
 					stepSignal.throwIfAborted();
@@ -107,7 +98,6 @@ function computerTool(id: string) {
 					}
 					[input.toX, input.toY] = [found.at.x, found.at.y];
 				}
-				// A click on something that reads like buying, sending or deleting is put to the decision model first, unless the agent confirms it.
 				const clicking = step.action === 'click' || step.action === 'double_click';
 				if (clicking && target && !confirm && mayBeIrreversible(target)) {
 					const tally = newTally();
@@ -158,7 +148,6 @@ function Computer() {
 	].join(' ');
 }
 
-/** A subagent for work that needs a screen, so screenshots and their descriptions stay out of the coding agent's own context. */
 export function useComputerSubagent(id: string) {
 	const subagent = defineSubagent({
 		name: 'computer',

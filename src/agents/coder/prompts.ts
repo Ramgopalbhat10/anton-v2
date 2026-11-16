@@ -9,15 +9,15 @@ import { hoursText } from '../../services/replies/reply-clock.ts';
 import { PROJECT_FILES } from '../../services/projects/space-files.ts';
 import type { SetUpConnector } from '../../services/connectors/connector-tools.ts';
 
-/** Deliverables go here, outside the repo, so they never pollute the diff. */
+/** Outside the repo, so deliverables never pollute the diff. */
 export const OUTPUTS = '../outputs';
 
 export const IMAGE_HINT = 'When the user asks for an image, or a picture would serve them better than words, make it with generate_image; to change one, pass it in from rather than starting over.';
 
-/** The sealed secrets, by name and where each may go; never a value. */
+/** By name and where each may go; never a value. */
 export function sealedHint(secrets: SealedSecretBrief[]): string {
 	if (!secrets.length) return '';
-	// Only the ones the user set: a task that keeps a token adds one mid-task, and naming it here would change the prompt and lose its cache.
+	// Only the ones the user set: a token added mid-task would change the prompt and lose its cache.
 	const list = secrets
 		.filter((secret) => secret.byYou)
 		.map((secret) => `${secret.name} (to ${secret.hosts.join(', ')}${secret.proxied ? ', through its proxy' : ''})`)
@@ -26,7 +26,6 @@ export function sealedHint(secrets: SealedSecretBrief[]): string {
 	return `The user keeps sealed secrets you can use but never read${list ? `: ${list}` : ''}. ${kept} Use them only through http_request, as {{secret:NAME}} or {{totp:NAME}}; they are not in your shell or files, so never look for them there or ask the user to paste them. `;
 }
 
-/** The connectors the user set up, named so the agent reaches for them; whether each is on is connector_tools' to say. */
 export function connectorHint(connectors: SetUpConnector[]): string {
 	if (!connectors.length) return '';
 	const mail = connectors.some((connector) => connector.kind === 'mailbox');
@@ -36,7 +35,6 @@ export function connectorHint(connectors: SetUpConnector[]): string {
 	);
 }
 
-/** Where attached files are, for the agent: with a sandbox it can run its own tools on the originals. */
 export function attachmentHint(workspace: boolean, project: boolean): string {
 	return (
 		'Files the user attaches to a message arrive after it as <attachment> blocks holding their text (PDFs, office documents and spreadsheets converted); read the rest of a cut one with read_attachment. ' +
@@ -47,7 +45,6 @@ export function attachmentHint(workspace: boolean, project: boolean): string {
 	);
 }
 
-/** What a project's thread knows of its project, after the repo notes. */
 export function projectPrompt(project: ThreadProject | null, workspace: boolean, chat = false): string {
 	if (!project) return '';
 	return [
@@ -64,15 +61,10 @@ export function projectPrompt(project: ThreadProject | null, workspace: boolean,
 		.join(' ');
 }
 
-/**
- * The repo's AGENTS.md and CLAUDE.md at the task's base commit: a repository task's from start to end, a plan's or
- * review's while read-only; in a plan's or review's sandbox the runtime reads them from the repo itself.
- */
 export function repoInstructionsPrompt(instructions: string): string {
 	return instructions ? `\n\nThe repository's own instructions for agents (AGENTS.md, CLAUDE.md):\n${instructions}` : '';
 }
 
-/** The repo's notes, as part of the instructions; written by earlier tasks and the user. */
 export function memoryPrompt(memory: string): string {
 	return memory ? `\n\nNotes about this repository from earlier tasks and the user (they may be out of date; trust the code):\n${memory}` : '';
 }
@@ -83,7 +75,6 @@ export const TODO_HINT =
 
 export const WHILE_WORKING_HINT = 'The user can write to you while you work; their message reaches you between two steps. Answer it in a sentence in your next text, then carry on.';
 
-/** In a chat, a small app is best as a page: it works in the thread and on the Artifacts page, with no server to keep running. */
 export const APP_HINT =
 	'When asked for a small app that needs no server of its own (a tracker, a calculator, a game, a dashboard over data the user enters), build it as one page with render_html, keeping its data with window.anton.setState: ' +
 	'it works right in the thread and on the Artifacts page, and keeps what the user enters. Build files and run a server only for an app that needs a backend, packages or a build step, or when the user asks for source files. ' +
@@ -95,18 +86,15 @@ const SKILL_HINT =
 	'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start. ' +
 	"A skill you activated stays loaded: on later messages, work from its instructions above rather than activating it again, unless they are no longer in the conversation.";
 
-/** Where the sandbox keeps the installed skills' files, which `copySkillFiles` puts there. */
 const SKILL_FILES_HINT =
 	"An installed skill's supporting files (its references, scripts and kits) are also in the sandbox at ../skills/<skill name>/, beside your working folder: " +
 	'run or import them from there, or copy what you need into your work. read_skill_resource reads the same files.';
 
-/** The skill hint, and where a skill's files are when the sandbox has a copy. */
 export function skillHint(id: string, workspace: boolean): string {
 	const copied = workspace && pluginSkillsFor(id).some((skill) => Object.keys(skill.files).length > 0);
 	return copied ? `${SKILL_HINT} ${SKILL_FILES_HINT}` : SKILL_HINT;
 }
 
-/** What a task on This server can count on: it runs in a folder on Anton's own machine, with what that machine has. */
 export function hostHint(): string {
 	const { found, missing } = toolsOnHost();
 	return (
@@ -117,7 +105,6 @@ export function hostHint(): string {
 
 export const MENTION_HINT = 'When the user writes @ and a path, such as @src/app.ts, they mean that file in the repository.';
 
-/** How freely the agent draws its replies, by the Visual replies setting; off leaves only the ask card. */
 export function visualHint(level: 'off' | 'some' | 'more'): string {
 	const ask = 'When you need a decision only the user can make, call ask with two to four options rather than ending your reply with a question.';
 	if (level === 'off') return ask;
@@ -142,13 +129,11 @@ export const COMPUTER_HINT =
 	'For work that needs a screen (a desktop or GUI program, a native dialog, or a page that must be seen and used as a person would), delegate to the computer subagent with a complete brief; ' +
 	'it uses the sandbox\'s own desktop, which the user watches in the Computer panel. For ordinary web pages, prefer the browser subagent.';
 
-/** Another repository's code reads best file by file, not as rendered GitHub pages. */
 const OTHER_REPO_HINT =
 	"To read another GitHub repository's code, pass it as repo (owner/name, optionally @branch, tag or commit) to list_files, search_code and read_file, or to the explorer's brief: one download, then each read is local. Never the browser.";
 const WORKSPACE_OTHER_REPO_HINT =
 	"To read another GitHub repository's code, shallow-clone a public one outside the working folder (git clone --depth 1 <url> /tmp/<name>) and read it there, or use a GitHub connector for a private one. Never the browser.";
 
-/** A long web result comes back as what bears on the call's objective (src/services/context/web-digest.ts), so the objective decides what the agent gets. */
 const WEB_OBJECTIVE = 'Give each call an objective naming exactly what you need; leave full_content off unless you need a page whole.';
 const WEB = `When you need documentation, an error message explained or anything outside the repo, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
 const CHAT_WEB = `For current facts, documentation or anything you are unsure of, use web_search and web_fetch. ${WEB_OBJECTIVE}`;
@@ -160,50 +145,33 @@ const TASK_WEB_HINT = `${WEB} ${TASK_OTHER_REPO_HINT}`;
 const CHAT_WEB_HINT = `${CHAT_WEB} ${OTHER_REPO_HINT}`;
 const CHAT_WORKSPACE_WEB_HINT = `${CHAT_WEB} ${WORKSPACE_OTHER_REPO_HINT}`;
 
-/** Everything in the working folder shows in Changes, and in a repository goes into the pull request, so checking the work leaves nothing there. */
 const SCRATCH_HINT =
 	'Keep throwaway files out of the working folder, since everything in it shows in Changes (and in a repository, in the pull request): put scripts you write to check or test the work, their logs and screenshots in /tmp, and before you finish delete any you made in the folder. ' +
 	`A screenshot or report the user should see goes to ${OUTPUTS}.`;
 
-/**
- * Everything the agent reads rides along on every later model call, and a long tool result is cut (`read` pages, `grep`
- * caps its matches, `bash` keeps a long output's start and end), so reading is progressive: search, then the part that
- * matters, then follow the links.
- */
 const READ_HINT =
 	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a long result is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
 
-/**
- * A repository task's read, grep and glob number lines, page and need no sandbox; in a benchmark the agent read with
- * `sed -n` and searched with `rg` in bash 487 times against 31 calls of the file tools it had then.
- */
+/** In a benchmark the agent read with `sed -n` and `rg` in bash 487 times against 31 calls of the file tools. */
 const TASK_READ_HINT =
 	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a long result is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
 
-/** What a repository task's prompt says of its sandbox, which it gets on first use rather than by asking; `change` is how its tools change a file. */
 const taskStartHint = (change: string) =>
 	'read, grep and glob need no sandbox: until your first command or file change they show the repository as this task started, and after it the sandbox. ' +
 	`Your first command or ${change} starts the sandbox, which can take a minute or two the first time. Answer a question about the code by reading, not by running commands.`;
 
-/** Each step is a model call over the whole conversation, so changes the agent already knows go in one step, not one step each. */
 const EDIT_HINT =
 	'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list, and the edits to other files as calls in the same step. Read a file again only when you need lines you have not seen.';
 
-/** EDIT_HINT for the patch profile (`src/core/tool-profile.ts`), whose one apply_patch call takes changes to several files. */
 const PATCH_HINT =
 	'Make the changes you already know in one step: one apply_patch call can change several files and several places in each, so put them all in one patch. Read a file again only when you need lines you have not seen.';
 
-/** Most tasks that fall short do so by a test or two: a case the request named that was missed, or a nearby test the change broke. */
-/**
- * A requirement on the todo list is one the reply cannot end on without the list saying so (`todoReminder`). In every
- * repository prompt, not only the workspace's: a coding task starts read-only and writes its list before it starts one.
- */
+/** In every repository prompt: a coding task starts read-only and writes its todo list before it has a workspace. */
 export const REQUIREMENTS_HINT =
 	'When the request spells out behaviour (named functions, options, flags, fields, messages, output formats, defaults, error and fallback paths, edge cases), give each one its own item in your todo list, in the request\'s words, and mark it completed only once the code does it and you have checked it, with that check as its evidence: the command, request or step you ran and what it showed.';
 
-/** A focused check while iterating misses what a change breaks further off, and what the request named that no test covers yet. */
 const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
 	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
@@ -211,21 +179,14 @@ const FINISH_HINT =
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +
 	'A doubt you would report as a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of) is such a part: settle it first from the data, documents, examples, existing code and tests you have, trying each reading against them where that can decide it.';
 
-/**
- * A model with no word of its budget judged jobs too large for the time it thought it had and handed them back part-done,
- * minutes into replies that may run hours. From config only, never the clock: it sits in the cached system prompt.
- */
+/** Without it, models handed long jobs back part-done. From config only, never the clock: it is in the cached system prompt. */
 const BUDGET_HINT = `A reply may run for up to ${hoursText(config.replyTimeoutMs)}, so do a large job in full rather than scope it down or hand it back part-done.`;
 
-/** Links to the outputs folder draw in the thread as cards of what was made, which open full size. */
 const OUTPUT_LINKS_HINT = `In your reply, link each file you saved for the user by its path there, as [diagram.png](${OUTPUTS}/diagram.png): the thread shows the images and files a reply links as cards that open full size, and keeps the link.`;
 
 /**
- * When to hand reading to the explorer. "Many files or areas" read differently by model family: over 249 prod replies
- * (Nov 2026) Claude, Grok and DeepSeek never called task, while GPT-6.1 Sol did in 27-83% of replies, and its replies
- * that did took a median 726 s and 2.04M tokens against 78 s and 72k for those that did not. One such reply sent two
- * explorers overlapping briefs and one to read a library's source for what its docs page said. A number and the
- * cost make the rule read the same to every model.
+ * Over 249 prod replies (Nov 2026) only GPT-6.1 Sol called task (in 27-83% of replies), at a median 726 s and 2.04M
+ * tokens against 78 s and 72k without. A number and the cost make the rule read the same to every model.
  */
 const DELEGATE_HINT =
 	'Read the code yourself by default. Delegate to the explorer subagent only an investigation across many files you cannot name yet (about ten reads or more): it starts without this conversation, and you wait until it reports. ' +
@@ -234,11 +195,7 @@ const DELEGATE_HINT =
 /** "Task" is also an Anton task, so the brief rule names the subagent. */
 const BRIEF_HINT = 'Brief each subagent fully, since none sees this conversation: what to find out or do, what to leave out, and what to report.';
 
-/**
- * The repository prompts are written for changes; a question read their checks, budget and "do not end on part of
- * the request left undone" as a call to be exhaustive. The finish hint and the pull request rule already say they are
- * for changes; this says what a question gets instead, and leaves every check on a change as it was.
- */
+/** The repository prompts are written for changes; questions read their checks and budget as a call to be exhaustive. */
 const ANSWER_HINT =
 	'When the user asks for an answer, an explanation or an analysis rather than a change, answer it from the code and the web without changing the repository, and stop once you can answer it; the checks, the pull request and the time budget below are for changes.';
 
@@ -259,11 +216,6 @@ const PREVIEW_HINT =
 	'When the work also needs its UI checked in a browser, point that check (your script, or the browser subagent in the sandbox browser, in: sandbox) at the exact Preview URL rather than localhost, so one run checks the rendered app, its console errors and Preview together. Do not start a browser run only to look at Preview once check_preview passes. This exercises the URL from the sandbox, not the user’s network. Keep localhost testing for debugging, but do not treat it as a Preview URL test. ' +
 	'The HTTP check does not execute JavaScript or prove iframe embedding; report any unverified part honestly. A local-provider localhost URL points to the viewer’s computer, so remote reachability is not established. Never ask the user to run commands to fix Preview when you can do it yourself.';
 
-/**
- * The prompt of a task with a repository and a sandbox. A repository task has it from its first model call, saying
- * how its sandbox starts (`start`) and reading through its own read, grep and glob (`read`, `web`); a plan or review
- * gets it once its sandbox runs.
- */
 const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; read: string; web: string; edit: string }) => [
 	'You are Anton, an autonomous coding agent working in a real git repository on its own task branch.',
 	...start,
@@ -314,11 +266,7 @@ const chatWorkspacePrompt = (edit: string) => [
 	'Be concise.',
 ].join(' ');
 
-/**
- * The prompts that name the tools that change files, for each tool profile: the edit profile's as they always were,
- * the patch profile's naming apply_patch. Made once each, as the cached system prompt must not change while the
- * task's model does not.
- */
+/** Made once each: the cached system prompt must not change while the task's model does not. */
 export function workspacePrompts(profile: ToolProfile): { task: string; workspace: string; chatWorkspace: string } {
 	const edit = profile === 'patch' ? PATCH_HINT : EDIT_HINT;
 	return {
@@ -330,11 +278,6 @@ export function workspacePrompts(profile: ToolProfile): { task: string; workspac
 
 export const PROMPTS: Record<ToolProfile, ReturnType<typeof workspacePrompts>> = { edit: workspacePrompts('edit'), patch: workspacePrompts('patch') };
 
-/**
- * An incognito chat: the same assistant with no repository, no workspace and no sandbox —
- * it cannot run code or change files, and nothing it does is saved. Its tools are the
- * web, the user's connectors and ask.
- */
 export const INCOGNITO_PROMPT = [
 	'You are Anton in an incognito chat: a throwaway conversation that is never saved. There is no repository, no workspace and no sandbox — you cannot run code, change files or keep anything for later.',
 	'Answer questions directly, and do jobs on the web when asked.',
@@ -343,7 +286,6 @@ export const INCOGNITO_PROMPT = [
 	'Be concise.',
 ].join(' ');
 
-/** A task reviewing someone else's pull request: it reads and runs their change, and posts what it finds. */
 export function reviewPrompt(review: ReviewTask): string {
 	return [
 		`This task reviews pull request #${review.number} by @${review.author} (${review.url}), someone else's change: the sandbox has its head checked out on the task branch.`,

@@ -5,10 +5,8 @@ import { remember } from '../../../services/projects/memory.ts';
 import { TODOS_INPUT, updateTodos } from '../../../services/replies/todos.ts';
 import { runReport, subagentRuns } from '../../../services/tasks/subagent-runs.ts';
 
-/** Adds a note to the repo's memory, which every later task reads; a project's thread can save to the project's memory instead. */
 export function useRemember(id: string, project: ThreadProject | null, chat: boolean) {
 	const note = v.pipe(v.string(), v.minLength(1), v.description('One line'));
-	// A project's chat thread has no repository to keep notes for, only the project's memory.
 	if (chat) {
 		if (!project) return;
 		useTool(
@@ -46,11 +44,6 @@ export function useRemember(id: string, project: ThreadProject | null, chat: boo
 	);
 }
 
-/**
- * What the task's subagents did and are doing. Their own conversations never
- * reach the agent, only their answers; this lets it say what one did, why it
- * took long, or how far one got before it was stopped or failed.
- */
 export function useAgentRuns(id: string) {
 	useTool(
 		defineTool({
@@ -67,11 +60,7 @@ export function useAgentRuns(id: string) {
 	);
 }
 
-/**
- * The steps of the work in hand, ticked off as they finish; the user follows them in the pill above the composer.
- * The list is written whole once, and its statuses then updated by item number, since sending every item with its
- * evidence again to tick one off cost output tokens that stayed in the conversation (`TODOS_INPUT`).
- */
+/** Written whole once, then updated by item number: resending every item to tick one off cost output tokens that stayed in the conversation. */
 export function useTodos(id: string) {
 	useTool(
 		defineTool({

@@ -2,11 +2,6 @@ import { defineTool, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { listRepoFiles, readRepoFile, searchRepo } from '../../../services/sandbox/repo-snapshot.ts';
 
-/**
- * A chat's and a plan's or review's tools before its sandbox, answering from the repo at the task's base commit,
- * with no sandbox, clone or branch; given `repo`, from any GitHub repository instead, which is how a chat reads code
- * at all. A repository task's read, grep and glob (`useTaskWorkspace`) read the same snapshot until it has its workspace.
- */
 export function useRepoSnapshot(id: string, chat: boolean) {
 	const repo = v.optional(
 		v.pipe(

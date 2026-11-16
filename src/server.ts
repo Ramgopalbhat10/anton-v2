@@ -4,10 +4,6 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { routeUpgrades } from './core/upgrades.ts';
 
-/**
- * Production entry: the built Flue application, the built UI, and the
- * terminal WebSocket on one port. Run `npm run build` first.
- */
 const { loadFlueNodeApplication } = (await import(new URL('../dist/app.mjs', import.meta.url).href)) as {
 	loadFlueNodeApplication: () => Promise<{ fetch: (request: Request) => Response | Promise<Response>; stop: () => Promise<void> }>;
 };

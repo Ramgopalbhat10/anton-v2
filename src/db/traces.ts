@@ -1,7 +1,6 @@
 import type { Trace } from '../core/trace.ts';
 import { appDb } from './client.ts';
 
-/** Traces each task keeps, its latest replies'; older ones are dropped as new ones are saved. */
 export const KEEP_TRACES = 100;
 
 /** The latest traces, also kept in memory: a trace whose save failed (a locked database, say) still opens until a restart. */
@@ -28,7 +27,6 @@ export async function saveTrace(trace: Trace): Promise<void> {
 	);
 }
 
-/** One of a task's traces; null when it was never kept or has been dropped. */
 export async function getTrace(sessionId: string, id: string): Promise<Trace | null> {
 	const kept = recent.get(`${sessionId}/${id}`);
 	if (kept) return kept;

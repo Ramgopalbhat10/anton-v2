@@ -2,19 +2,16 @@ import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
 
-/** An app connected through Composio: the toolkit and its connected account's id and status, never its tokens. */
+/** Never its tokens. */
 export type ComposioAccountRow = {
 	toolkit: string;
 	name: string;
 	description: string;
 	category: string;
 	appUrl: string;
-	/** The logo URL Composio hosts for the toolkit, '' when it has none. */
 	logo: string;
 	enabled: boolean;
-	/** Composio's connected account id while a sign-in is pending or the account is live. */
 	accountId: string | null;
-	/** none (never connected), pending (a sign-in waits on the user), active, failed. */
 	status: 'none' | 'pending' | 'active' | 'failed';
 	statusReason: string | null;
 	connectedAt: string | null;
@@ -51,7 +48,7 @@ export async function getComposioAccount(toolkit: string): Promise<ComposioAccou
 	return row ? toRow(row) : null;
 }
 
-/** Adds an app, or refreshes its shown details; its connection state is kept. */
+/** Its connection state is kept. */
 export async function saveComposioAccount(account: Pick<ComposioAccountRow, 'toolkit' | 'name' | 'description' | 'category' | 'appUrl' | 'logo'>): Promise<void> {
 	const db = await appDb();
 	const now = new Date().toISOString();
@@ -67,7 +64,6 @@ export async function setComposioEnabled(toolkit: string, enabled: boolean): Pro
 	await db.execute({ sql: 'UPDATE composio_accounts SET enabled = ?, updated_at = ? WHERE toolkit = ?', args: [enabled ? 1 : 0, new Date().toISOString(), toolkit] });
 }
 
-/** A sign-in started: the account it will make, while the user is on Composio's page. */
 export async function markComposioPending(toolkit: string, accountId: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -76,7 +72,6 @@ export async function markComposioPending(toolkit: string, accountId: string): P
 	});
 }
 
-/** What Composio last said of the account; `accountId` and `connectedAt` are set only when given. */
 export async function markComposioStatus(toolkit: string, status: ComposioAccountRow['status'], reason: string | null, accountId?: string, connectedAt?: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -85,7 +80,6 @@ export async function markComposioStatus(toolkit: string, status: ComposioAccoun
 	});
 }
 
-/** Forgets the connection entirely: disconnected, or the account is gone at Composio. */
 export async function resetComposioConnection(toolkit: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({

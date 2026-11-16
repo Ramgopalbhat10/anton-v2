@@ -3,7 +3,6 @@ import * as v from 'valibot';
 import { catalog, installPlugin, marketplaces, pluginFile, pluginsView, previewPlugin, removePlugin, searchGitHub, setEnabled, setMarketplaces } from '../services/settings/plugins.ts';
 import { valid, body, bytes } from './shared.ts';
 
-/** Plugins and skills: installed plugins, marketplaces and their catalogs, and the GitHub skill search. */
 const app = new Hono();
 
 app.get('/api/plugins', async (c) => c.json({ plugins: await pluginsView(), marketplaces: await marketplaces() }));
