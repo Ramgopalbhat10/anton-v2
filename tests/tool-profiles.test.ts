@@ -62,7 +62,7 @@ async function readDescription(profile: 'edit' | 'patch') {
 }
 
 test('on the edit profile the prompts and the read tool are byte for byte what they were before profiles', async () => {
-	const { workspacePrompts } = await import('../src/agents/coder.ts');
+	const { workspacePrompts } = await import('../src/agents/coder/prompts.ts');
 	const prompts = workspacePrompts('edit');
 	assert.equal(prompts.task, frozen.task);
 	assert.equal(prompts.workspace, frozen.workspace);
@@ -73,7 +73,7 @@ test('on the edit profile the prompts and the read tool are byte for byte what t
 });
 
 test('on the patch profile the prompts name apply_patch and no tool it lacks, and keep every check the edit profile asks for', async () => {
-	const { workspacePrompts } = await import('../src/agents/coder.ts');
+	const { workspacePrompts } = await import('../src/agents/coder/prompts.ts');
 	const prompts = workspacePrompts('patch');
 	const tools = await readDescription('patch');
 	assert.deepEqual(tools.names, ['read', 'apply_patch', 'bash', 'grep', 'glob']);

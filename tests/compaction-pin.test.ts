@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -130,7 +130,13 @@ test('only a finished compaction of the Coder’s main conversation counts: not 
 });
 
 test('the Coder pins the message with every send-back and at the next message’s start, never on its own, and only in its main conversation', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	// The Coder's entry, where its hooks are, and all of its files, src/agents/coder/, together.
+	const source = readFileSync(new URL('../src/agents/coder/index.ts', import.meta.url), 'utf8');
+	const coderDir = new URL('../src/agents/coder/', import.meta.url);
+	const wholeCoder = readdirSync(coderDir, { recursive: true, encoding: 'utf8' })
+		.filter((file) => file.endsWith('.ts'))
+		.map((file) => readFileSync(new URL(file, coderDir), 'utf8'))
+		.join('\n');
 	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
 	// Every gate sends the reply back through sendBack, which puts the message first; no gate appends on its own.
 	assert.equal((gates.match(/await sendBack\(/g) ?? []).length, 6);
@@ -140,8 +146,8 @@ test('the Coder pins the message with every send-back and at the next message’
 	assert.match(source, /useAgentStart\(async \(\{ append \}\) => \{\n\t\t\tconst pinned = await takePinned\(id, \{ request: !\(delivery\.kind === 'user' && isRequest\(id, delivery\.body\)\) \}\);/);
 	// In the Coder's non-incognito hooks only: subagents run no hooks of the Coder's.
 	const hooks = source.slice(source.indexOf('\tif (!incognito) {\n\t\t// What the checks at a reply'), source.indexOf('\tif (incognito) {\n\t\t// An incognito reply keeps only'));
-	assert.equal((source.match(/takePinned\(/g) ?? []).length, (hooks.match(/takePinned\(/g) ?? []).length);
-	assert.equal((source.match(/takePinned\(/g) ?? []).length, 2);
+	assert.equal((wholeCoder.match(/takePinned\(/g) ?? []).length, (hooks.match(/takePinned\(/g) ?? []).length);
+	assert.equal((wholeCoder.match(/takePinned\(/g) ?? []).length, 2);
 	// The app notes compactions from the runtime's events.
 	assert.match(readFileSync(new URL('../src/app.ts', import.meta.url), 'utf8'), /noteCompaction\(event as Parameters<typeof noteCompaction>\[0\]\);/);
 });

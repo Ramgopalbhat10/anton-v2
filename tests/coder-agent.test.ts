@@ -1,22 +1,34 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+/** The Coder's source, split over src/agents/coder/: one of its files, or all of them together. */
+const CODER = new URL('../src/agents/coder/', import.meta.url);
+const coder = (file: string) => readFileSync(new URL(file, CODER), 'utf8');
+const wholeCoder = () =>
+	readdirSync(CODER, { recursive: true, encoding: 'utf8' })
+		.filter((file) => file.endsWith('.ts'))
+		.sort()
+		.map(coder)
+		.join('\n');
+
 test('Coder declares explorer, tester, and open_pull_request without useSandbox in specialists', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /name: 'explorer'/);
-	assert.match(source, /name: 'tester'/);
-	assert.match(source, /name: 'open_pull_request'/);
+	const source = wholeCoder();
+	const subagents = coder('subagents.ts');
+	assert.match(subagents, /name: 'explorer'/);
+	assert.match(subagents, /name: 'tester'/);
+	assert.match(coder('tools/git.ts'), /name: 'open_pull_request'/);
 	for (const tool of ['list_files', 'read_file', 'search_code', 'start_workspace']) assert.match(source, new RegExp(`name: '${tool}'`));
-	const explorerFn = source.slice(source.indexOf('function Explorer'), source.indexOf('function Tester'));
-	const testerFn = source.slice(source.indexOf('function Tester'), source.indexOf('const explorer'));
+	const explorerFn = subagents.slice(subagents.indexOf('function Explorer'), subagents.indexOf('function Tester'));
+	const testerFn = subagents.slice(subagents.indexOf('function Tester'), subagents.indexOf('const explorer'));
 	assert.doesNotMatch(explorerFn, /useSandbox/);
 	assert.doesNotMatch(testerFn, /useSandbox/);
 });
 
 test('workspace agents can check the actual Preview URL and are instructed to verify it in the sandbox browser', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	const workspace = source.slice(source.indexOf('function useWorkspace'), source.indexOf('const BROWSER_ACTIONS'));
+	const workspaceFile = coder('workspace.ts');
+	const source = coder('prompts.ts');
+	const workspace = workspaceFile.slice(workspaceFile.indexOf('function useWorkspace'));
 	assert.match(workspace, /name: 'check_preview'/);
 	assert.match(workspace, /checkPreview\(id, data\.port\)/);
 	const hint = source.slice(source.indexOf('const PREVIEW_HINT'), source.indexOf('const workspacePrompt'));
@@ -30,7 +42,7 @@ test('workspace agents can check the actual Preview URL and are instructed to ve
 });
 
 test('workspace agents batch the edits they know and do not run the same tests twice', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('prompts.ts');
 	assert.match(source, /const EDIT_HINT =\n\t'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list/);
 	assert.match(source, /const PATCH_HINT =\n\t'Make the changes you already know in one step: one apply_patch call can change several files and several places in each/);
 	// Both workspace prompts take the profile's hint in the place EDIT_HINT had.
@@ -41,7 +53,7 @@ test('workspace agents batch the edits they know and do not run the same tests t
 });
 
 test('the sandbox browser needs no desktop, and do keeps the opening notice after autopilot', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('tools/browser.ts');
 	const tool = source.slice(source.indexOf('function browserTool'), source.indexOf('function Browser()'));
 	assert.doesNotMatch(tool, /fresh/);
 	assert.match(source, /sandbox: "a browser inside the sandbox, which the user can watch and take over in the Computer panel/);
@@ -53,9 +65,9 @@ test('the sandbox browser needs no desktop, and do keeps the opening notice afte
 });
 
 test('Coder gives a workspace the computer subagent, whose tool sees through the vision port and never through the model it runs on', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('tools/computer.ts');
 	assert.match(source, /name: 'computer'/);
-	assert.match(source, /if \(sandboxed\) useComputerSubagent\(id\);/);
+	assert.match(coder('index.ts'), /if \(sandboxed\) useComputerSubagent\(id\);/);
 	const tool = source.slice(source.indexOf('function computerTool'), source.indexOf('function Computer()'));
 	// A model prompted through the harness keeps the subagent's tools and may act instead of answering.
 	assert.doesNotMatch(tool, /harness/);
@@ -63,9 +75,10 @@ test('Coder gives a workspace the computer subagent, whose tool sees through the
 });
 
 test('Coder reaches connectors through two fixed tools, so turning one on or off never changes its tools, and sending only asks', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /if \(connectors\.length\) useConnectorTools\(id, connectors\);/);
-	const tools = source.slice(source.indexOf('function useConnectorTools'), source.indexOf('function connectorHint'));
+	const source = wholeCoder();
+	assert.match(coder('index.ts'), /if \(connectors\.length\) useConnectorTools\(id, connectors\);/);
+	const connectors = coder('tools/connectors.ts');
+	const tools = connectors.slice(connectors.indexOf('function useConnectorTools'));
 	assert.match(tools, /name: 'connector_tools'/);
 	assert.match(tools, /name: 'connector_call'/);
 	// The agent never sends: the mailbox's send asks, and the task waits on the user's Send.
@@ -80,9 +93,9 @@ test('Coder reaches connectors through two fixed tools, so turning one on or off
 });
 
 test('Coder makes images through the image port whatever its model, with the tool only when there is one', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /if \(drawing\) useGenerateImage\(id\);/);
-	const tool = source.slice(source.indexOf('function useGenerateImage'), source.indexOf('const IMAGE_HINT'));
+	assert.match(coder('index.ts'), /if \(drawing\) useGenerateImage\(id\);/);
+	const replies = coder('tools/replies.ts');
+	const tool = replies.slice(replies.indexOf('function useGenerateImage'));
 	assert.match(tool, /name: 'generate_image'/);
 	assert.match(tool, /generateImage\(id, data, signal\)/);
 });
@@ -107,7 +120,7 @@ test('the browser turns away raw GitHub files, which web_fetch reads in a second
 });
 
 test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as long as ANTON_REPLY_TIMEOUT_HOURS says', async () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('index.ts');
 	assert.match(source, /Coder\.durability = \{ timeoutMs: config\.replyTimeoutMs \};/);
 	const { config } = await import('../src/config.ts');
 	assert.equal(config.replyTimeoutMs, 4 * 3_600_000);
@@ -115,7 +128,7 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as lon
 });
 
 test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('prompts.ts');
 	for (const prompt of ['const workspacePrompt', 'const chatWorkspacePrompt']) {
 		const start = source.indexOf(prompt);
 		assert.ok(start >= 0, prompt);
@@ -125,12 +138,12 @@ test('Coder checks a change against the whole request and a whole test suite bef
 	assert.match(finish, /whole test suite of the package or module you changed/);
 	assert.match(finish, /Do not end on part of the request left undone/);
 	assert.match(finish, /A doubt you would report as a caveat or a judgement call/);
-	assert.match(source, /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
-	assert.match(source, /startStallCheck\(id\);/);
+	assert.match(coder('index.ts'), /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
+	assert.match(coder('index.ts'), /startStallCheck\(id\);/);
 });
 
 test('Coder lists the request’s requirements as todos, and has a change read against the request before a coding reply ends', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('index.ts');
 	// In every repository and chat prompt: a coding task writes its list before it starts its workspace.
 	assert.equal(source.match(/\$\{TODO_HINT\} \$\{REQUIREMENTS_HINT\} \$\{WHILE_WORKING_HINT\}/g)?.length, 2);
 	// Only the message that starts a reply is its request: a joining one fires useAgentStart again, never useResponseStart.
@@ -142,8 +155,9 @@ test('Coder lists the request’s requirements as todos, and has a change read a
 });
 
 test('Coder writes its todo list whole once and updates its statuses by item number, alongside other tool calls', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	const tool = source.slice(source.indexOf('function useTodos'), source.indexOf('/** A question with options to tap'));
+	const source = wholeCoder();
+	const memory = coder('tools/memory.ts');
+	const tool = memory.slice(memory.indexOf('function useTodos'));
 	assert.match(tool, /input: TODOS_INPUT,/);
 	assert.match(tool, /run: async \(\{ data, toolCallId \}\) => \(\{ output: await updateTodos\(id, data, toolCallId\) \}\)/);
 	assert.match(tool, /For status updates send only changes, the items that changed by number\./);
@@ -153,7 +167,7 @@ test('Coder writes its todo list whole once and updates its statuses by item num
 });
 
 test('Coder tells a reply how long it may run, the same on every render, and sends a reply that ends with work undone back to do it', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('prompts.ts');
 	const budget = source.slice(source.indexOf('const BUDGET_HINT'), source.indexOf('/** Links to the outputs folder'));
 	// From config alone, never the clock: it sits in the cached system prompt.
 	assert.match(budget, /`A reply may run for up to \$\{hoursText\(config\.replyTimeoutMs\)\}, so do a large job in full rather than scope it down or hand it back part-done\.`/);
@@ -163,31 +177,33 @@ test('Coder tells a reply how long it may run, the same on every render, and sen
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,\n\tBUDGET_HINT,/, prompt);
 	}
 	// After the todo reminder, the stall check and the finish review, and never in plan mode or on a review task.
-	const finish = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
+	const index = coder('index.ts');
+	const finish = index.slice(index.indexOf('useAgentFinish(async'), index.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
 	assert.ok(finish.indexOf('finishReview(') < finish.indexOf('completionGate('));
 	assert.match(finish, /!planning && !review && !signal\.aborted \? await completionGate\(id, response\.toolCalls, \{ chat, workspace: workspace \|\| hasWorkspace\(id\), signal \}\) : null/);
-	assert.match(source, /startCompletionGate\(id\);/);
+	assert.match(index, /startCompletionGate\(id\);/);
 });
 
 test('Coder tells a long reply how long it has run, with a command’s result', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	assert.match(source, /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\) \+ jobNotice\(id\) \+ checkNotice\(id\)\)/);
-	assert.match(source, /startReplyClock\(id\);/);
+	assert.match(coder('workspace.ts'), /machineSandbox\(machine, repoDir\(machine\), \(\) => !isPlanning\(id\), secrets, undefined, \(\) => elapsedNote\(id\) \+ jobNotice\(id\) \+ checkNotice\(id\)\)/);
+	assert.match(coder('index.ts'), /startReplyClock\(id\);/);
 });
 
 test('Coder runs suites as background jobs wherever its prompt names them, and sends a reply back for a job left running or unread', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('prompts.ts');
+	const index = coder('index.ts');
+	const workspaceFile = coder('workspace.ts');
 	// The tools are on wherever the workspace is, and the workspace prompts are the only ones that name them.
-	const workspace = source.slice(source.indexOf('function useWorkspace'), source.indexOf('function useBackgroundJobs'));
+	const workspace = workspaceFile.slice(workspaceFile.indexOf('function useWorkspace'), workspaceFile.indexOf('function useBackgroundJobs'));
 	assert.match(workspace, /\n\tuseBackgroundJobs\(id\);\n/);
-	const jobs = source.slice(source.indexOf('function useBackgroundJobs'), source.indexOf('const BROWSER_ACTIONS'));
+	const jobs = workspaceFile.slice(workspaceFile.indexOf('function useBackgroundJobs'));
 	assert.match(jobs, /name: 'run_in_background'/);
 	assert.match(jobs, /name: 'check_job'/);
 	assert.match(jobs, /A server that should keep running is started with nohup instead/);
 	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/**', source.indexOf('const FINISH_HINT')));
 	assert.match(finish, /Start it with run_in_background \(independent suites side by side\) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures\./);
 	assert.doesNotMatch(finish, /log under \/tmp/);
-	const named = [...source.matchAll(/^const ([A-Z_]+) =[\s\S]*?(?=\n(?:const|function|\/\*\*) )/gm)].filter((match) => /run_in_background|check_job/.test(match[0])).map((match) => match[1]);
+	const named = [...source.matchAll(/^(?:export )?const ([A-Z_]+) =[\s\S]*?(?=\n(?:export )?(?:const|function|\/\*\*) )/gm)].filter((match) => /run_in_background|check_job/.test(match[0])).map((match) => match[1]);
 	assert.deepEqual(named, ['FINISH_HINT']);
 	const builder = source.slice(source.indexOf('const workspacePrompt'), source.indexOf(".join(' ')", source.indexOf('const workspacePrompt')));
 	assert.match(builder, /run_in_background/);
@@ -197,25 +213,25 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	}
 	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.
 	assert.equal(source.match(/\bFINISH_HINT\b/g)?.length, 3);
-	assert.match(source, /const prompt = workspace \? prompts\.chatWorkspace : CHAT_PROMPT;/);
-	assert.match(source, /const prompt = repoTask \? prompts\.task : workspace \? prompts\.workspace : READ_ONLY_PROMPT;/);
+	assert.match(index, /const prompt = workspace \? prompts\.chatWorkspace : CHAT_PROMPT;/);
+	assert.match(index, /const prompt = repoTask \? prompts\.task : workspace \? prompts\.workspace : READ_ONLY_PROMPT;/);
 	// A repository task has the tools from its first model call, as it has the prompt; the rest once they have a sandbox.
-	assert.match(source, /if \(repoTask\) useTaskWorkspace\(id, profile\);\n\telse if \(workspace\) useWorkspace\(id, chat, review, profile\);/);
-	const task = source.slice(source.indexOf('function useTaskWorkspace'), source.indexOf('function useSandboxChecks'));
+	assert.match(index, /if \(repoTask\) useTaskWorkspace\(id, profile\);\n\telse if \(workspace\) useWorkspace\(id, chat, review, profile\);/);
+	const task = workspaceFile.slice(workspaceFile.indexOf('function useTaskWorkspace'), workspaceFile.indexOf('function useSandboxChecks'));
 	assert.match(task, /\n\tuseBackgroundJobs\(id, \(task\) => workMachine\(task\)\);\n/);
 	// The tester stays, for a failure set too large to triage in the agent's own context.
 	assert.match(source, /Give a suite to the tester subagent only when triaging its failures would flood your own context/);
 	// After the todo reminder and the stall check, before the finish review; reset with each reply; a stopped reply stops its jobs.
-	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
+	const gates = index.slice(index.indexOf('useAgentFinish(async'), index.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
 	assert.ok(gates.indexOf('stallReminder(') < gates.indexOf('jobsGate('));
 	assert.ok(gates.indexOf('jobsGate(') < gates.indexOf('finishReview('));
 	assert.match(gates, /signal\.aborted \? null : await jobsGate\(id, response\.toolCalls, \{ signal \}\)/);
 	assert.match(gates, /if \(signal\.aborted\) \{\n\t\t\t\tvoid stopReplyJobs\(id\);/);
-	assert.match(source, /startJobsGate\(id\);/);
+	assert.match(index, /startJobsGate\(id\);/);
 });
 
 test('Coder runs the repository’s check only for a repository task in its sandbox, tells news with a command’s result, and waits for it at the end of a reply', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
+	const source = coder('index.ts');
 	assert.match(source, /watchRepoCheck\(id, repoTask && !runsOnHost\(id\)\);/);
 	// After the jobs gate, before the finish review; reset with each reply; a stopped reply stops its check.
 	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
@@ -227,8 +243,8 @@ test('Coder runs the repository’s check only for a repository task in its sand
 });
 
 test('a subagent on its own model has its summary written by that model at the effort the task’s own model writes one', () => {
-	const source = readFileSync(new URL('../src/agents/coder.ts', import.meta.url), 'utf8');
-	const helper = source.slice(source.indexOf('function withSettingsModel'), source.indexOf('function useRepoSnapshot'));
+	const source = coder('subagents.ts');
+	const helper = source.slice(source.indexOf('function withSettingsModel'), source.indexOf('function SnapshotExplorer'));
 	// Claude Code's models compact at their own point, with the summary compactionFor names; the rest at the runtime's point.
 	assert.match(helper, /choice\.model\.startsWith\('claude-code\/'\) \? compactionFor\(choice\.model\) : \{ reasoning: COMPACTION_SUMMARY_EFFORT \}/);
 	// A subagent on the task's model takes the task's compaction, as before.

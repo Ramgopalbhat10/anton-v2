@@ -13,7 +13,7 @@ const MAX_LENGTH = 2000;
 /**
  * Keeps a task's latest input: one you typed, a follow-up, or an
  * automation's prompt. The coding agent calls this for every message it is
- * given (`useLatestInput` in `coder.ts`).
+ * given (`useLatestInput` in `src/agents/coder/index.ts`).
  */
 export async function recordLatestInput(id: string, text: string, at = new Date(), delivered = true): Promise<void> {
 	// Attached files show by name, not by the text they carry.

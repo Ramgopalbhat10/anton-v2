@@ -3,7 +3,7 @@ import { createAgentRouter } from '@flue/runtime/routing';
 import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import * as v from 'valibot';
-import { Coder } from './agents/coder.ts';
+import { Coder } from './agents/coder/index.ts';
 import { Reviewer } from './agents/reviewer.ts';
 import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';

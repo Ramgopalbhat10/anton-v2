@@ -139,7 +139,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter, ChatGPT-plan, Claude Code, OpenCode Go and Cursor implementations |
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
-| `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |
+| `src/agents/coder/` | The Flue agent (`index.ts`), its prompts, subagents and tools |
 | `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
 | `src/app.ts` | HTTP routes |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
