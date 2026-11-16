@@ -1,15 +1,18 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, Plus, Settings, Waypoints } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, ListFilter, Plus, Search, Settings, Waypoints, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';
-import { Icon, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel } from '@/components/signal';
+import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, SectionLabel } from '@/components/signal';
+import { FacetSubmenus, FilterChips } from '@/components/task-filters';
+import { TaskPeek } from '@/components/task-peek';
 import { ThreadStateIcon } from '@/components/thread-card';
 import { Glyph } from '@/components/thread-glyph';
 import { repoShort, type Session, type Space, type ThreadState } from '@/lib/api';
 import { age } from '@/lib/format';
 import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { openProjectSettings } from '@/lib/project-settings-modal';
+import { DEFAULT_VIEW, FACET_KEYS, type FacetKey, filterCount, matches, type TaskView, toggleIn } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 /** A project's mark: its icon in its tint, or its initial when it has none. */
@@ -135,27 +138,101 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; active: boolean; repos: number; onNavigate: () => void }) {
 	const state = thread.threadState ?? 'idle';
 	return (
-		<Link
-			to="/projects/$spaceId/threads/$threadId"
-			params={{ spaceId: thread.spaceId ?? '', threadId: thread.id }}
-			onClick={onNavigate}
-			aria-current={active ? 'page' : undefined}
-			className={cn(ROW, 'h-10', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
-		>
-			{active ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
-			<span className="relative inline-flex shrink-0 self-start pt-1">
-				<ThreadStateIcon thread={thread} size={14} />
-			</span>
-			<span className="relative flex min-w-0 flex-1 flex-col gap-px">
-				<span className="truncate text-body">{thread.title}</span>
-				<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
-					<PrStatus thread={thread} />
-					<span className="min-w-0 truncate">
-					{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+		<TaskPeek session={thread} disabled={false}>
+			<Link
+				to="/projects/$spaceId/threads/$threadId"
+				params={{ spaceId: thread.spaceId ?? '', threadId: thread.id }}
+				onClick={onNavigate}
+				aria-current={active ? 'page' : undefined}
+				className={cn(ROW, 'h-10', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
+			>
+				{active ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
+				<span className="relative inline-flex shrink-0 self-start pt-1">
+					<ThreadStateIcon thread={thread} size={14} />
+				</span>
+				<span className="relative flex min-w-0 flex-1 flex-col gap-px">
+					<span className="truncate text-body">{thread.title}</span>
+					<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
+						<PrStatus thread={thread} />
+						<span className="min-w-0 truncate">
+						{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+						</span>
 					</span>
 				</span>
-			</span>
-		</Link>
+			</Link>
+		</TaskPeek>
+	);
+}
+
+/** Threads narrow by these; their state is what the sections already group by. */
+const THREAD_FACETS = FACET_KEYS.filter((key) => key !== 'status');
+
+/**
+ * The heading over a project's threads, with search and filters at its end, as the
+ * sidebar's Tasks has: searching takes the heading's row, and filters in use show
+ * as chips in its place.
+ */
+function ThreadsToolbar({
+	threads,
+	shown,
+	filters,
+	onToggle,
+	onClear,
+	query,
+	onQuery,
+}: {
+	threads: Session[];
+	shown: number;
+	filters: TaskView['filters'];
+	onToggle: (key: FacetKey, value: string) => void;
+	onClear: () => void;
+	query: string;
+	onQuery: (next: string) => void;
+}) {
+	const [searching, setSearching] = useState(false);
+	const close = () => {
+		onQuery('');
+		setSearching(false);
+	};
+	const open = searching || Boolean(query);
+	const active = filterCount(filters);
+	const actions = (
+		<>
+			{open ? <IconBtn icon={X} size="xs" label="Close search" onClick={close} /> : <IconBtn icon={Search} size="xs" label="Search threads" onClick={() => setSearching(true)} />}
+			<Menu>
+				<MenuTrigger asChild>
+					<IconBtn icon={ListFilter} size="xs" label="Filter threads" className={cn(active > 0 && 'text-(--accent-text)')} />
+				</MenuTrigger>
+				<MenuContent side="right" align="start" sideOffset={6} className="w-[224px]">
+					<FacetSubmenus filters={filters} onToggle={onToggle} tasks={threads} keys={THREAD_FACETS} />
+					<MenuSeparator />
+					<MenuItem icon={X} disabled={active === 0} onSelect={onClear}>
+						Clear filters
+					</MenuItem>
+				</MenuContent>
+			</Menu>
+		</>
+	);
+	if (open) {
+		return (
+			<div className="mt-3 flex h-6 shrink-0 items-center gap-1 pl-0.5">
+				<SearchField size="sm" autoFocus value={query} onChange={onQuery} onEscape={close} placeholder="Search threads" className="flex-1" />
+				<span className="-my-1 flex shrink-0 items-center">{actions}</span>
+			</div>
+		);
+	}
+	if (active) {
+		return (
+			<div className="mt-3 flex min-h-6 items-center gap-1 pl-2">
+				<FilterChips filters={filters} onToggle={onToggle} tasks={threads} />
+				<span className="flex shrink-0 items-center">{actions}</span>
+			</div>
+		);
+	}
+	return (
+		<GroupHeading label="Threads" count={shown}>
+			{actions}
+		</GroupHeading>
 	);
 }
 
@@ -194,7 +271,16 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 	const spaces = useSpaces();
 	const { threads } = useThreads(spaceId);
 	const space = spaces.data?.spaces.find((item) => item.id === spaceId);
-	const groups = groupByState(threads);
+	// Each project keeps its own filters while the page is open; a search is for the project in front of you.
+	const [filtersBy, setFiltersBy] = useState<Record<string, TaskView['filters']>>({});
+	const [query, setQuery] = useState('');
+	useEffect(() => setQuery(''), [spaceId]);
+	const filters = filtersBy[spaceId] ?? DEFAULT_VIEW.filters;
+	const setFilters = (next: TaskView['filters']) => setFiltersBy((current) => ({ ...current, [spaceId]: next }));
+	const words = query.trim().toLowerCase();
+	const shown = threads.filter((thread) => matches(thread, filters) && (!words || thread.title.toLowerCase().includes(words)));
+	const narrowed = shown.length !== threads.length;
+	const groups = groupByState(shown);
 	const coordinatorActive = !threadId;
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
@@ -267,11 +353,24 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						<span className="relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
 					</Link>
 				</div>
+				{threads.length ? (
+					<ThreadsToolbar
+						threads={threads}
+						shown={shown.length}
+						filters={filters}
+						onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
+						onClear={() => setFilters(DEFAULT_VIEW.filters)}
+						query={query}
+						onQuery={setQuery}
+					/>
+				) : null}
 				{groups.map((group) => (
 					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
 				))}
 				{threads.length === 0 ? (
 					<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
+				) : narrowed && shown.length === 0 ? (
+					<div className="px-2 pt-2 text-small text-(--text-4)">No thread matches.</div>
 				) : null}
 			</div>
 		</div>

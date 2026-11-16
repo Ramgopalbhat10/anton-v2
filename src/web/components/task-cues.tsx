@@ -103,7 +103,7 @@ export function TaskCues({ session, onCardChange }: { session: Session; onCardCh
 			</Link>,
 		);
 	}
-	if (session.asking && !session.working) {
+	if (session.asking && !session.working && !session.resolvedAt) {
 		cues.push(
 			<Link
 				key="asking"

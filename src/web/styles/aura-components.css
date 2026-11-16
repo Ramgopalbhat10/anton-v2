@@ -472,7 +472,9 @@
  .sg-nav[data-open='false'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
 }
 @media (min-width: 768px) {
- .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: 236px; overflow: hidden; transition: width var(--t-slow) var(--ease); }
+ .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: var(--nav-w, 236px); overflow: hidden; transition: width var(--t-slow) var(--ease); }
+ /* While its edge is dragged the column follows the pointer, not an easing. */
+ .sg-nav-column:has(> [data-dragging]) { transition: none; user-select: none; }
  .sg-nav-column[data-collapsed='true'] { width: 48px; }
  .sg-nav[data-collapsed='true'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
 }
@@ -520,7 +522,8 @@
 
 
 
-.sg-markdown .sg-code pre{padding:10px 12px}
+/* The block is the card: its code sits straight in it, without the edge a bare pre gets. */
+.sg-markdown .sg-code pre{padding:10px 12px;border-radius:0;background:transparent;box-shadow:none}
 .sg-markdown .sg-file-ref{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer}
 .sg-markdown .sg-file-ref code{color:var(--accent-text)}
 .sg-markdown .sg-file-ref:hover code{background:var(--accent-soft)}

@@ -8,8 +8,8 @@ import { StatusDot } from '@/components/instrument';
 import { TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
-import { activeAt, repoName, taskNote } from '@/lib/task-view';
-import { useSpaceName } from '@/lib/spaces';
+import { activeAt, repoName } from '@/lib/task-view';
+import { stateOf, useSpaceName } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 /*
@@ -27,8 +27,8 @@ function localDay(at: Date): number {
 	return Math.floor((at.getTime() - at.getTimezoneOffset() * 60_000) / DAY);
 }
 
-/** Whether a task waits on you: it asks something, has a plan to approve, or failed. */
-export const needsYou = (session: Session) => Boolean(taskNote(session)?.attention);
+/** Whether a task waits on you: it asks something, has a plan to approve, or failed; the same state its mark shows, so a done thread never lands here. */
+export const needsYou = (session: Session) => stateOf(session) === 'waiting';
 /** Whether the agent is at work on a task right now, or its sandbox is starting for it. */
 export const isRunning = (session: Session) => session.working || session.status === 'starting';
 

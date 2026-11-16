@@ -206,10 +206,9 @@ export function EmptyState({
 	className?: string;
 }) {
 	if (art) {
-		// The drawing gets the whole width: the drafting grid runs edge to edge and
-		// the words sit on it, under the drawing.
+		// The drawing sits straight on what holds it, with the words under it.
 		return (
-			<div className={cn('in-well in-grid flex w-full flex-col items-center gap-5 px-6 pt-10 pb-9 text-center', className)}>
+			<div className={cn('flex w-full flex-col items-center gap-5 px-6 pt-10 pb-9 text-center', className)}>
 				<div className="flex w-full justify-center">{art}</div>
 				<div className="flex flex-col items-center gap-1">
 					<div className="text-body-lg leading-[20px] font-semibold tracking-[-0.005em] text-(--text)">{title}</div>

@@ -3,19 +3,22 @@ import { type CSSProperties, createContext, type ReactNode, useContext, useId } 
 import { cn } from '@/lib/utils';
 
 /*
- * Anton's illustrations, drawn one way: flat trays and slim tiles,
- * soft white on near-black with a hairline edge, short rules for a label, and
- * a single light. The one accent marks what is lit or at work; everything else
+ * Anton's illustrations, drawn one way: flat trays and slim tiles in the
+ * text colour at a low strength (soft white on the dark theme, soft ink on
+ * the light one) with a hairline edge, short rules for a label, and a
+ * single light. The one accent marks what is lit or at work; everything else
  * stays grey, so a drawing sits in an empty state without shouting. Wires run
  * between parts and carry a slow dashed flow when something is moving.
  */
 
 /* ——— Parts ——— */
 
-const EDGE = 'rgba(255, 255, 255, 0.09)';
-const RULE = 'rgba(255, 255, 255, 0.16)';
-const RULE_FAINT = 'rgba(255, 255, 255, 0.08)';
-const WIRE = 'rgba(255, 255, 255, 0.16)';
+/** The text colour at a strength: soft white on the dark theme, soft ink on the light one, so a drawing holds on either. */
+const ink = (percent: number) => `color-mix(in srgb, var(--text) ${percent}%, transparent)`;
+const EDGE = ink(9);
+const RULE = ink(16);
+const RULE_FAINT = ink(8);
+const WIRE = ink(16);
 const ACCENT = 'var(--accent)';
 
 /** The drawing's own gradient ids, so two drawings on a page never share them. */
@@ -27,20 +30,20 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 		<svg role="img" aria-label={label} viewBox={`0 0 ${w} ${h}`} width={w} height={h} fill="none" className={cn('fa-art block h-auto max-w-full overflow-visible', className)}>
 			<defs>
 				<linearGradient id={`${id}-tile`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: '#fff', stopOpacity: 0.1 }} />
-					<stop offset="1" style={{ stopColor: '#fff', stopOpacity: 0.035 }} />
+					<stop offset="0" style={{ stopColor: 'var(--text)', stopOpacity: 0.1 }} />
+					<stop offset="1" style={{ stopColor: 'var(--text)', stopOpacity: 0.035 }} />
 				</linearGradient>
 				<linearGradient id={`${id}-lit`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: 'var(--a-300)', stopOpacity: 0.34 }} />
-					<stop offset="1" style={{ stopColor: 'var(--a-300)', stopOpacity: 0.1 }} />
+					<stop offset="0" style={{ stopColor: 'var(--accent-text)', stopOpacity: 0.34 }} />
+					<stop offset="1" style={{ stopColor: 'var(--accent-text)', stopOpacity: 0.1 }} />
 				</linearGradient>
 				<radialGradient id={`${id}-glow`} cx="0.5" cy="0.5" r="0.5">
 					<stop offset="0" style={{ stopColor: 'var(--accent)', stopOpacity: 0.28 }} />
 					<stop offset="1" style={{ stopColor: 'var(--accent)', stopOpacity: 0 }} />
 				</radialGradient>
 				<linearGradient id={`${id}-screen`} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" style={{ stopColor: '#000', stopOpacity: 0.5 }} />
-					<stop offset="1" style={{ stopColor: '#000', stopOpacity: 0.28 }} />
+					<stop offset="0" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.9 }} />
+					<stop offset="1" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.6 }} />
 				</linearGradient>
 			</defs>
 			<Ids.Provider value={id}>{children}</Ids.Provider>
@@ -50,12 +53,12 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 
 /** A shallow tray that tiles stand in. */
 function Tray({ x, y, w, h, r = 10 }: { x: number; y: number; w: number; h: number; r?: number }) {
-	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill="rgba(255, 255, 255, 0.025)" stroke="rgba(255, 255, 255, 0.07)" />;
+	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={ink(2.5)} stroke={ink(7)} />;
 }
 
 /** An empty slot in a tray. */
 function Slot({ x, y, w, h, r = 4 }: { x: number; y: number; w: number; h: number; r?: number }) {
-	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke="rgba(255, 255, 255, 0.11)" strokeDasharray="1.5 2.5" />;
+	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke={ink(11)} strokeDasharray="1.5 2.5" />;
 }
 
 /** A tile: soft white, or lit in the accent, with a hairline all round. */
@@ -92,7 +95,7 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 					width={3.5}
 					height={6}
 					rx={0.8}
-					fill={index < level ? (on ? ACCENT : 'var(--text-4)') : 'rgba(255, 255, 255, 0.07)'}
+					fill={index < level ? (on ? ACCENT : 'var(--text-4)') : ink(7)}
 					fillOpacity={index < level && on ? 0.55 + (index / cells) * 0.45 : 1}
 				/>
 			))}
@@ -241,7 +244,7 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 
 /** A branch leaving main and heading for a pull request, its newest commit lit. */
 export function BranchArt({ className }: { className?: string }) {
-	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--bg-active)'} stroke={lit ? 'var(--accent-line)' : 'rgba(255,255,255,0.22)'} />;
+	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--bg-active)'} stroke={lit ? 'var(--accent-line)' : ink(22)} />;
 	return (
 		<Art w={250} h={96} label="A branch leaving main, its newest commit lit, headed for a pull request" className={className}>
 			<Wire d="M10 70 H240" />
@@ -386,7 +389,7 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--bg-active)" stroke={EDGE} />
 					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--text-4)" strokeLinecap="round" />
 					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--text-4)" strokeLinecap="round" />
-					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeDasharray="2 2" />
+					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke={ink(14)} strokeDasharray="2 2" />
 				</g>
 			)}
 			{/* Anton. */}
@@ -432,7 +435,7 @@ export function LinkArt({ className }: { className?: string }) {
 			<Wire d="M133 34 V64" lit />
 			{[30, 74, 118, 162].map((x) => (
 				<g key={x}>
-					<rect x={x + 0.5} y={64.5} width={29} height={17} rx={4} fill="rgba(0,0,0,0.35)" stroke={EDGE} />
+					<rect x={x + 0.5} y={64.5} width={29} height={17} rx={4} fill="var(--bg-app)" stroke={EDGE} />
 					<line x1={x + 9} x2={x + 21} y1={73.5} y2={73.5} stroke={x === 118 ? ACCENT : RULE_FAINT} />
 				</g>
 			))}

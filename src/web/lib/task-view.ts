@@ -45,6 +45,11 @@ function prNote(session: Session): TaskNote | null {
 export function taskNote(session: Session): TaskNote | null {
 	if (session.status === 'starting') return { text: 'Starting sandbox', tone: 'accent', attention: false };
 	if (session.working) return { text: 'Working', tone: 'accent', attention: false };
+	// A resolved thread is done: a question or plan left from before it closed no longer waits on you.
+	if (session.resolvedAt) {
+		const pr = prNote(session);
+		return pr ? { ...pr, attention: false } : isLive(session) ? { text: 'Sandbox running', tone: 'muted', attention: false } : null;
+	}
 	if (session.status === 'error') return { text: 'Failed', tone: 'danger', attention: true };
 	if (planReady(session)) return { text: 'Plan ready for review', tone: 'attention', attention: true };
 	if (session.asking) return { text: 'Waiting on you', tone: 'attention', attention: true };
@@ -141,13 +146,16 @@ export const filterCount = (filters: TaskView['filters']) => FACET_KEYS.reduce((
 /** The option's label, for a chip. */
 export const optionLabel = (key: FacetKey, value: string, tasks: Session[]) => FACETS[key].options(tasks).find((option) => option.value === value)?.label ?? value;
 
-/** Toggles one option; a single-choice facet keeps only the new one. */
-export function toggleFilter(view: TaskView, key: FacetKey, value: string): TaskView {
-	const current = view.filters[key];
+/** Toggles one option in a set of filters; a single-choice facet keeps only the new one. */
+export function toggleIn(filters: TaskView['filters'], key: FacetKey, value: string): TaskView['filters'] {
+	const current = filters[key];
 	const single = 'single' in FACETS[key];
 	const next = current.includes(value) ? current.filter((item) => item !== value) : single ? [value] : [...current, value];
-	return { ...view, filters: { ...view.filters, [key]: next } };
+	return { ...filters, [key]: next };
 }
+
+/** Toggles one option of the view's filters. */
+export const toggleFilter = (view: TaskView, key: FacetKey, value: string): TaskView => ({ ...view, filters: toggleIn(view.filters, key, value) });
 
 export type Sections = { pinned: Session[]; running: Session[]; recent: Session[] };
 

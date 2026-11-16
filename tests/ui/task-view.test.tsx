@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { FACETS, taskNote } from '@/lib/task-view';
+import { needsYou } from '@/components/home-dashboard';
 import { session } from './render';
 
 describe('Task notes', () => {
@@ -14,6 +15,13 @@ describe('Task notes', () => {
 		expect(taskNote(session({ planMode: true, usage: { inputTokens: 10, outputTokens: 10, cost: 0 } }))?.attention ?? false).toBe(false);
 		expect(taskNote(session({ planMode: true, plan: '1. Change app.ts' }))).toEqual({ text: 'Plan ready for review', tone: 'attention', attention: true });
 		expect(taskNote(session({ planMode: false, plan: '1. Change app.ts' }))?.attention ?? false).toBe(false);
+	});
+
+	it('a resolved thread no longer waits on you, whatever its last reply asked', () => {
+		const done = session({ resolvedAt: '2026-11-01T00:00:00Z', asking: 'What would you like next?' });
+		expect(taskNote(done)?.attention ?? false).toBe(false);
+		expect(needsYou(done)).toBe(false);
+		expect(needsYou(session({ asking: 'What would you like next?' }))).toBe(true);
 	});
 });
 

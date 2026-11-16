@@ -342,6 +342,22 @@ describe('threads', () => {
 		expect(await screen.findByRole('complementary', { name: 'Viewing diagram.png' })).toBeTruthy();
 	});
 
+	it('folds a message the coordinator sent a thread into one line that opens to the message', async () => {
+		const message = 'New follow-up: check the latest pull from main.\n\nCompare it with the current visual reply pipeline.';
+		const parts = [
+			{ type: 'dynamic-tool', toolName: 'message_thread', toolCallId: 'c1', state: 'output-available', input: { thread: 'pr', message }, output: 'Sent' },
+			{ type: 'text', text: 'Sent it on.' },
+		];
+		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const line = await screen.findByRole('button', { name: `Sent to ${threads[2].title}` });
+		expect(line.getAttribute('aria-expanded')).toBe('false');
+		expect(screen.queryByText(/Compare it with the current/)).toBeNull();
+		await userEvent.click(line);
+		expect(screen.getByText(/Compare it with the current/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Open the thread' })).toBeTruthy();
+	});
+
 	it('draws a thread named in a reply as a chip that opens it', async () => {
 		const router = withRouter(() => (
 			<InlineLinks.Provider value={(href, children) => (href === '#thread-asks' ? <ThreadChip thread={threads[0]}>{children}</ThreadChip> : null)}>

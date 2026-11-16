@@ -2,12 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
 	ArrowUpDown,
-	CalendarDays,
 	ChevronRight,
-	CircleDot,
-	Cpu,
 	Eye,
-	FolderGit2,
 	FolderKanban,
 	Home,
 	GitBranch,
@@ -26,7 +22,6 @@ import {
 	Search,
 	Settings,
 	Shapes,
-	Server,
 	SlidersHorizontal,
 	Square,
 	SquarePen,
@@ -43,18 +38,15 @@ import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/task-actions';
 import { TaskCues } from '@/components/task-cues';
 import { TaskPeek } from '@/components/task-peek';
+import { FacetSubmenus, FilterChips } from '@/components/task-filters';
 import { isLive, TaskStatusIcon } from '@/components/task-status';
 import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 import {
 	activeAt,
 	DEFAULT_VIEW,
-	FACET_KEYS,
-	FACETS,
-	type FacetKey,
 	filterCount,
 	groups,
-	optionLabel,
 	readView,
 	repoName,
 	saveView,
@@ -127,8 +119,6 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	);
 }
 
-const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
-
 /**
  * Sort, filter, group and what each row shows, in one menu with a submenu each.
  * Picking a filter or a detail keeps the menu open, so several can be picked.
@@ -173,32 +163,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 						Filter
 					</MenuSubTrigger>
 					<MenuSubContent>
-						{FACET_KEYS.map((key) => {
-							const options = FACETS[key].options(tasks);
-							return (
-								<MenuSub key={key}>
-									<MenuSubTrigger icon={FACET_ICON[key]} hint={view.filters[key].length || undefined}>
-										{FACETS[key].label}
-									</MenuSubTrigger>
-									<MenuSubContent>
-										{options.length ? (
-											options.map((option) => (
-												<MenuItem
-													key={option.value}
-													checked={view.filters[key].includes(option.value)}
-													hint={tasks.filter((task) => FACETS[key].test(task, option.value)).length}
-													onSelect={stay(() => onChange(toggleFilter(view, key, option.value)))}
-												>
-													{option.label}
-												</MenuItem>
-											))
-										) : (
-											<MenuItem disabled>No tasks yet</MenuItem>
-										)}
-									</MenuSubContent>
-								</MenuSub>
-							);
-						})}
+						<FacetSubmenus filters={view.filters} onToggle={(key, value) => onChange(toggleFilter(view, key, value))} tasks={tasks} />
 						<MenuSeparator />
 						<MenuItem icon={X} disabled={active === 0} onSelect={() => onChange({ ...view, filters: DEFAULT_VIEW.filters })}>
 							Clear filters
@@ -270,28 +235,6 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 	);
 }
 
-/** The filters in use, each a chip that removes itself. */
-function FilterChips({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
-	const chips = FACET_KEYS.flatMap((key) => view.filters[key].map((value) => ({ key, value, label: optionLabel(key, value, tasks) })));
-	return (
-		<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-			{chips.map(({ key, value, label }) => (
-				<button
-					key={`${key}:${value}`}
-					type="button"
-					aria-label={`Remove the ${label} filter`}
-					onClick={() => onChange(toggleFilter(view, key, value))}
-					className="flex h-5 max-w-full items-center gap-1 rounded-inner bg-(--accent-soft) pr-1 pl-1.5 text-micro font-medium text-(--accent-text) outline-none focus-visible:shadow-(--focus)"
-				>
-					<Icon icon={FACET_ICON[key]} size={10} />
-					<span className="truncate">{label}</span>
-					<Icon icon={X} size={10} />
-				</button>
-			))}
-		</div>
-	);
-}
-
 /** Search every task, and the view menu, above the sections they shape. */
 function Toolbar({
 	view,
@@ -336,7 +279,7 @@ function Toolbar({
 	if (active) {
 		return (
 			<div className="mt-3 flex min-h-6 items-center gap-1 pl-2">
-				<FilterChips view={view} onChange={onChange} tasks={tasks} />
+				<FilterChips filters={view.filters} onToggle={(key, value) => onChange(toggleFilter(view, key, value))} tasks={tasks} />
 				<span className="flex shrink-0 items-center">{actions}</span>
 			</div>
 		);
@@ -622,7 +565,7 @@ export function ChatSidebar({
 		<aside
 			data-open={open}
 			data-collapsed={collapsed}
-			className="sg-nav flex w-[min(288px,86vw)] min-w-0 shrink-0 flex-col bg-(--bg-app) p-2 md:w-[236px]"
+			className="sg-nav flex w-[min(288px,86vw)] min-w-0 shrink-0 flex-col bg-(--bg-app) p-2 md:w-(--nav-w,236px)"
 		>
 			<div className="mb-1 flex h-9 shrink-0 items-center gap-0.5 pl-0.5">
 				<Link to="/" onClick={onNavigate} aria-label="Anton: home" className="flex h-7 min-w-0 items-center gap-2 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
