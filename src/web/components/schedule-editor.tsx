@@ -60,7 +60,6 @@ function Field({ label, children, className }: { label: string; children: React.
 	);
 }
 
-/** A searchable list of every time zone, with its offset now; yours and UTC first. */
 function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: string) => void }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
@@ -121,7 +120,6 @@ function TimeZonePicker({ value, onChange }: { value: string; onChange: (zone: s
 	);
 }
 
-/** Its next runs on its own clock, and on yours when that differs. */
 function NextRuns({ schedule }: { schedule: Schedule }) {
 	const problem = scheduleProblem(schedule);
 	const runs = problem ? [] : nextRuns(schedule, new Date(), 3);
@@ -149,10 +147,6 @@ function NextRuns({ schedule }: { schedule: Schedule }) {
 	);
 }
 
-/**
- * When a routine runs: how often, at what time on which days, in which time zone (yours to begin with), or a
- * cron expression; with what that comes to in words and its next runs.
- */
 export function ScheduleEditor({ value, onChange }: { value: Schedule; onChange: (schedule: Schedule) => void }) {
 	const set = (change: Partial<Schedule>) => onChange({ ...value, ...change });
 	const { frequency } = value;

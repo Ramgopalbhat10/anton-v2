@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/**
- * Anton's mascot: the sandbox cube from the app's drawings, in pixels, on
- * two legs, with an antenna whose light says what the agent does. It sits
- * on the composer's top edge. Each mood is a pose plus a few CSS loops
- * (`.anton-mascot` in instrument.css); with reduced motion only the pose stays.
- */
+/** Each mood is a pose plus CSS loops (`.anton-mascot` in instrument.css); with reduced motion only the pose stays. */
 export type MascotMood = 'idle' | 'working' | 'waiting' | 'done' | 'sleeping';
 
 /** One letter per grid pixel, x from the left, y from the top of the body; `.` is empty. */
@@ -30,7 +25,6 @@ const INK = '#06181F';
 
 type Px = [x: number, y: number];
 
-/** Each pixel once, as runs along a row, so a pose is a handful of rects. */
 function Pixels({ px, fill, className }: { px: Px[]; fill: string; className?: string }) {
 	return (
 		<g className={className} fill={fill}>
@@ -51,10 +45,7 @@ const QUESTION: Px[] = [[1, -6], [2, -6], [3, -6], [3, -5], [2, -4], [2, -2]];
 const ZZZ: Px[] = [[12, -6], [13, -6], [14, -6], [13, -5], [12, -4], [13, -4], [14, -4]];
 const SPARK: Px[] = [[1, -4], [0, -3], [1, -3], [2, -3], [1, -2]];
 
-/**
- * The figure itself never changes: the mood shows by CSS on the classes, so it is made once
- * here and every render of the mascot (a keystroke can stir it) passes the same element.
- */
+/** Made once: the mood shows by CSS on the classes, so every render (a keystroke can stir it) passes the same element. */
 const FIGURE = (
 	<>
 		<Pixels className="am-question" px={QUESTION} fill="var(--warn)" />
@@ -89,12 +80,7 @@ const ROAM_RIGHT = 6;
 const STEP_MS = 85;
 const between = (low: number, high: number) => low + Math.random() * (high - low);
 
-/**
- * While working, it walks to a spot along the composer's edge, stands a
- * while, and walks on, and now and then hops on the spot: chosen at random,
- * so it never loops. Otherwise it walks back to where it stands. Reduced
- * motion keeps it still.
- */
+/** While working it wanders along the composer's edge at random, so it never loops; otherwise it walks back. Reduced motion keeps it still. */
 function useRoam(working: boolean) {
 	const [walk, setWalk] = useState({ x: 0, ms: 0, walking: false });
 	const [hop, setHop] = useState(0);
@@ -165,11 +151,7 @@ const DONE_MS = 2400;
 /** Quiet time before it nods off; anything you do (typing, a new turn) wakes it. */
 const SLEEP_MS = 4 * 60_000;
 
-/**
- * The mood from what the agent does: working while it runs, a hop when a turn
- * ends, a question while the task waits on you, and asleep after a while
- * with nothing happening. `stir` changes when you do something (a keystroke).
- */
+/** `stir` changes when you do something (a keystroke), which wakes it. */
 export function useMascotMood({ busy, waiting, stir }: { busy: boolean; waiting: boolean; stir?: unknown }): MascotMood {
 	const [done, setDone] = useState(false);
 	const [sleeping, setSleeping] = useState(false);

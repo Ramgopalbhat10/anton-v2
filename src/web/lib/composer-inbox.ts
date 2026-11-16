@@ -2,12 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { ImageAttachment } from '@/lib/attachments';
 import type { PickedElement } from '@/lib/api';
 
-/**
- * Things other panels hand to a task's composer: an element picked in the
- * Browser panel, a drawing on its page, or text a page in the thread hands
- * over. The composer takes them into its draft as they arrive, where they can
- * be edited or removed before sending.
- */
+/** What other panels hand to a task's composer (a picked element, a drawing, text from a page), taken into its draft as it arrives. */
 export type InboxItem = { kind: 'element'; id: string; element: PickedElement } | { kind: 'image'; image: ImageAttachment } | { kind: 'text'; text: string };
 
 const inboxes = new Map<string, InboxItem[]>();
@@ -19,14 +14,12 @@ export function addToComposer(sessionId: string, item: InboxItem): void {
 	for (const listener of listeners) listener();
 }
 
-/** Takes everything waiting for the task's composer, leaving its inbox empty. */
 export function takeFromInbox(sessionId: string): InboxItem[] {
 	const items = inboxes.get(sessionId) ?? EMPTY;
 	if (items.length) inboxes.delete(sessionId);
 	return items;
 }
 
-/** What is waiting for the task's composer, kept current. */
 export function useInbox(sessionId: string): InboxItem[] {
 	return useSyncExternalStore(
 		(listener) => {
@@ -43,11 +36,7 @@ export function elementLabel(element: PickedElement): string {
 	return `<${element.tag}>${component ? ` in ${component}` : ''}`;
 }
 
-/**
- * What the agent reads about a picked element: where it is on which page,
- * the components that render it and where they are, its key styles, and its
- * HTML. Enough to find the code without a description of the screen.
- */
+/** What the agent reads about a picked element: enough to find the code without a description of the screen. */
 export function elementContext(element: PickedElement): string {
 	const lines = [`<selected_element page="${element.url}"${element.title ? ` title="${element.title.replace(/"/g, "'")}"` : ''}>`];
 	lines.push(`Element: <${element.tag}> at \`${element.selector}\`${element.text ? `, text "${element.text.slice(0, 160)}"` : ''}`);

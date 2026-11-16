@@ -18,7 +18,6 @@ export function elapsed(ms: number): string {
 	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-/** Wall-clock time for message meta: "14:02". */
 export function clock(iso: string): string {
 	return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
@@ -52,17 +51,13 @@ export function fineDollars(amount: number): string {
 	return amount < 0.01 ? `$${amount.toFixed(4)}` : dollars(amount);
 }
 
-/** A file's size in the unit that reads best. */
 export function fileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/**
- * Markdown read as one line of plain words, for a preview: no emphasis marks,
- * code ticks, headings, list markers or link targets, and no doubled "Done".
- */
+/** Markdown as one line of plain words for a preview, with no doubled "Done". */
 export function plainPreview(markdown: string): string {
 	return markdown
 		.replace(/```[\s\S]*?```/g, ' ')

@@ -19,7 +19,6 @@ function Dot({ checks }: { checks: Checks }) {
 	return <span className={cn('size-1.5 shrink-0 rounded-full', checks === 'pending' && 'animate-pulse')} style={{ background: prTone(checksTone(checks)) }} />;
 }
 
-/** Each check on the pull request's head commit, failing ones first. */
 function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest: PullRequest & { checks: Checks }; url: string }) {
 	const order: Checks[] = ['failed', 'pending', 'passed'];
 	const runs = [...pullRequest.runs].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
@@ -62,7 +61,6 @@ function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest:
 	);
 }
 
-/** A dot in the colour of its checks, after the pull request's number; links to them, and resting on it lists each one. */
 function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; pullRequest: PullRequest & { checks: Checks }; prUrl: string; onCardChange: (open: boolean) => void }) {
 	const url = `${prUrl}/checks`;
 	return (
@@ -87,13 +85,7 @@ function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; p
 	);
 }
 
-/**
- * The few things worth acting on from the sidebar, each a link and in words, not icons (the
- * row's status icon already says what state it is in): a plan to review, a question for you,
- * the pull request by number in its state's colour, and a dot while its checks fail or run.
- * Passing checks say nothing; resting on the row tells the rest. `onCardChange` tells the row
- * while the checks card is open.
- */
+/** In words, not icons: the row's status icon already says the state. Passing checks say nothing. `onCardChange` tells the row while the checks card is open. */
 export function TaskCues({ session, onCardChange }: { session: Session; onCardChange: (open: boolean) => void }) {
 	const cues: ReactNode[] = [];
 	if (planReady(session)) {

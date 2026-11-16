@@ -10,7 +10,6 @@ import { StatusDot } from '@/components/instrument';
 export const FIELD =
 	'sg-field h-7 min-w-0 px-2 text-body';
 
-/** A title with its info icon beside it, when there is more to say than its one line. */
 function Titled({ children, info }: { children: ReactNode; info?: ReactNode }) {
 	if (!info) return <>{children}</>;
 	return (
@@ -21,7 +20,6 @@ function Titled({ children, info }: { children: ReactNode; info?: ReactNode }) {
 	);
 }
 
-/** A settings page's title and what it decides in a line, with actions on the right. */
 export function PageHeading({ title, children, info, actions }: { title: string; children?: ReactNode; info?: ReactNode; actions?: ReactNode }) {
 	return (
 		<div className="flex flex-wrap items-start gap-4">
@@ -37,13 +35,7 @@ export function PageHeading({ title, children, info, actions }: { title: string;
 	);
 }
 
-/**
- * One titled block within a settings page: its title and what it decides sit
- * above, and its rows in a card below, with a footer for the save that
- * applies them. A product's block shows its own mark by its title; `info` is
- * the rest of what it decides, behind an icon by its title. `className` dresses
- * the card (a danger zone's red edge, say).
- */
+/** `info` is the rest of what it decides, behind an icon by its title; `className` dresses the card (a danger zone's red edge). */
 export function Block({
 	title,
 	mark,
@@ -90,7 +82,6 @@ export function Block({
 	);
 }
 
-/** A part of a block under its own mono label, ruled off from what is above it. */
 export function SubBlock({ label, help, info, children }: { label?: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="-mx-4 mt-2 flex flex-col gap-2 border-t border-(--line) px-4 pt-3.5">
@@ -106,7 +97,6 @@ export function SubBlock({ label, help, info, children }: { label?: string; help
 	);
 }
 
-/** A line of explanation in a card, with the rest behind an info icon at its end. */
 export function Note({ children, info, className }: { children: ReactNode; info?: ReactNode; className?: string }) {
 	return (
 		<p className={cn('m-0 max-w-[72ch] text-small leading-[18px] text-pretty text-(--text-3)', className)}>
@@ -121,7 +111,6 @@ export function Note({ children, info, className }: { children: ReactNode; info?
 	);
 }
 
-/** The icon at the start of a list row: a bare glyph, no tile behind it. */
 export function RowIcon({ icon }: { icon: IconComponent }) {
 	return (
 		<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--text-2)">
@@ -130,11 +119,7 @@ export function RowIcon({ icon }: { icon: IconComponent }) {
 	);
 }
 
-/**
- * A setting as a row: what it is in a line, with its control on the right;
- * `info` is the rest, behind an icon by its title. On a phone a wide control
- * drops below. Rows in a block are ruled apart.
- */
+/** `info` is the rest, behind an icon by its title. On a phone a wide control drops below. */
 export function SettingRow({ title, help, info, children }: { title: ReactNode; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--line) py-3 first:border-t-0 first:pt-0.5 last:pb-0.5">
@@ -149,12 +134,10 @@ export function SettingRow({ title, help, info, children }: { title: ReactNode; 
 	);
 }
 
-/** Rows of one kind (repositories, sandboxes, problems): a card of its own, or plain rows inside a block. */
 export function List({ children }: { children: ReactNode }) {
 	return <div className="in-list in-card flex flex-col gap-0.5">{children}</div>;
 }
 
-/** The helper agents a model can be picked for, as Settings › General and a project's settings list them. */
 export const HELPERS: Array<{ agent: HelperAgent; title: string; help: string; info?: string }> = [
 	{ agent: 'explorer', title: 'Explorer', help: 'Reads and searches the code.' },
 	{ agent: 'tester', title: 'Tester', help: 'Runs the tests and reports failures.' },
@@ -218,7 +201,6 @@ export function size(bytes: number): string {
 	return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-/** Inline result of a save: saving, saved, or what went wrong. */
 export function SaveState({ pending, success, error, saved = 'Saved.' }: { pending: boolean; success: boolean; error: Error | null; saved?: string }) {
 	if (error) return <span className="text-small text-(--bad)">{error.message}</span>;
 	if (success && !pending)

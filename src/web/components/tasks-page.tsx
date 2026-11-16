@@ -12,14 +12,6 @@ import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
 import { threadActiveAt } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-/**
- * Tasks is a dense, grouped list: the kind tabs and the search sit in the
- * top bar, the attribute filters are chips under it, and the rows are one
- * line each under a header per state group. J and K move the cursor, Enter
- * opens the task under it.
- */
-
-/** The tabs across the top: what kind of work the list holds. */
 const KINDS = [
 	{ id: 'all', label: 'All', test: () => true },
 	{ id: 'repo', label: 'Repository', test: (session: Session) => !isChat(session) },

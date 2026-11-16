@@ -41,11 +41,7 @@ function readCollapsed() {
 	}
 }
 
-/**
- * Watches the task list for notifications on its own, so a change to the list does not re-render the whole shell.
- * Also starts the service worker that shows pushed notifications, opens their tasks when tapped, and tells the
- * server while this page is in front of you, so your phone stays quiet then.
- */
+/** Its own component, so a change to the task list does not re-render the whole shell. */
 function TaskNotifications() {
 	useTaskNotifications();
 	useOpenFromNotifications();
@@ -56,10 +52,8 @@ function TaskNotifications() {
 	return null;
 }
 
-/** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
 const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--sh-1)';
 
-/** The sidebar's width on a wider screen: dragged by its edge between these, back to the default on a double-click. */
 const NAV_DEFAULT = 236;
 const NAV_MIN = 200;
 const NAV_MAX = 420;
@@ -84,7 +78,6 @@ export function AppShell() {
 		setNavOpen(false);
 		setPaletteOpen(true);
 	}, []);
-	// The rail's bell opens the Inbox page.
 	const openNotifications = useCallback(() => {
 		setNavOpen(false);
 		void navigate({ to: '/inbox' });
@@ -190,7 +183,6 @@ function pullRequestAsk(session: Session): string {
 
 type StatusTone = { label: string; tone: 'accent' | 'danger' | 'success' };
 
-/** The panel to show when the agent hands work to its browser or computer subagent, so its work can be watched. */
 function handingTo(message: UseFlueAgentResult['messages'][number] | undefined): 'Browser' | 'Computer' | null {
 	for (const part of message?.parts ?? []) {
 		if (part.type !== 'dynamic-tool' || part.toolName !== 'task' || part.state !== 'input-available') continue;
@@ -215,10 +207,6 @@ function statusFor(agent: UseFlueAgentResult): StatusTone | null {
 	return null;
 }
 
-/**
- * The task's header: its state, title, pull request and menu. Memoized, as
- * the workspace around it re-renders with every streamed chunk.
- */
 /** Current unpushed work, available even when the workspace is closed. */
 export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; onShowPanel: (name: PanelName) => void }) {
 	const { files } = useChanges(sessionId);
@@ -230,7 +218,6 @@ export function HeaderChanges({ sessionId, onShowPanel }: { sessionId: string; o
 	</button>;
 }
 
-/** The branch the task works on, once it has one; a click copies its name. */
 function BranchPill({ branch }: { branch: string }) {
 	const [copied, setCopied] = useState(false);
 	useEffect(() => {
@@ -277,7 +264,6 @@ const TaskHeader = memo(function TaskHeader({
 		<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">
 			<MenuButton />
 			{leading}
-			{/* Where the task works, as the crumb before its name; a project's thread says its project instead. */}
 			{!leading && session?.repo ? (
 				<span className="hidden min-w-0 shrink-[2] items-center gap-1.5 text-body text-(--text-3) md:flex">
 					<span className="truncate">{session.repo.split('/').pop()}</span>
@@ -308,22 +294,15 @@ const TaskHeader = memo(function TaskHeader({
 	);
 });
 
-/** Which workspace panels a task has open, which one shows, and whether the workspace is open at all. */
 export type TaskPanels = { tabs: PanelName[]; active: PanelName | null; open: boolean };
 
-/** A task or thread opens with the panels you pinned, in the menu's order with the first one shown; with none pinned, on the list of panels to open. */
 export function startingPanels(): TaskPanels {
 	const pinned = readPinnedPanels();
 	const tabs = panels.map((panel) => panel.name).filter((name) => pinned.includes(name));
 	return { tabs, active: tabs[0] ?? null, open: true };
 }
 
-/**
- * A change to the workspace's panels that keeps one identity, so the memoized
- * panels skip the stream's renders. Each change builds on the one before it,
- * not on the last render: closing a tab changes the tabs and then which one is
- * shown, in one click, and the second must not bring back the first's tabs.
- */
+/** Keeps one identity, so the memoized panels skip the stream's renders. Each change builds on the one before it, not on the last render: closing a tab changes the tabs and then the shown one in one click. */
 export function usePanelChange(
 	panels: TaskPanels,
 	onPanelsChange: (next: TaskPanels) => void,
@@ -338,7 +317,6 @@ export function usePanelChange(
 	}, []);
 }
 
-/** The task's coding agent; sending it a message shows the task working at once, everywhere it is listed, and a reply started anywhere shows as working. */
 function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	const queryClient = useQueryClient();
 	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
@@ -364,11 +342,6 @@ function useTaskAgent(sessionId: string): UseFlueAgentResult {
 	return useMemo(() => ({ ...agent, status, sendMessage }), [agent, status, sendMessage]);
 }
 
-/**
- * A task's conversation beside its workspace: the page for a task, and for a
- * project's thread. Where the panels' state lives (the address and the page,
- * or the browser per thread) is up to the page around it.
- */
 export function TaskWorkspace({
 	sessionId,
 	panels,
@@ -381,7 +354,6 @@ export function TaskWorkspace({
 	onPanelsChange: (next: TaskPanels) => void;
 	/** A panel to open, such as History from the sidebar's Rewind; asking again opens it again. */
 	panelRequest?: PanelName;
-	/** Shown before the title, such as the project a thread belongs to. */
 	leading?: ReactNode;
 }) {
 	const [expanded, setExpanded] = useState(false);
@@ -484,10 +456,8 @@ export function SessionPage() {
 	const navigate = useNavigate();
 	const [panels, setPanels] = useState<Omit<TaskPanels, 'open'>>(startingPanels);
 	const open = search.app !== 'closed';
-	// A task you just started opens at once, as a skeleton until the server has made it.
 	const starting = useStarting(sessionId);
 	const session = useQuery({ ...taskQueries.session(sessionId), enabled: !starting });
-	// A project's thread opens inside its project, beside the coordinator and its other threads.
 	const spaceId = session.data?.spaceId;
 	useEffect(() => {
 		if (spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId: sessionId }, search: { panel: search.panel }, replace: true });

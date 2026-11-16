@@ -11,23 +11,9 @@ import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
 import { taskQueries } from '@/lib/task-queries';
 
-/*
- * The Browser panel: a real Chromium on Kernel, one per task, shown through
- * its live view. Anton draws the address bar and drives the same browser for
- * it, for picking an element to send to the agent (its HTML, the React
- * components around it, a picture), and for drawing on the page.
- */
-
 type Viewport = { width: number; height: number };
 
-/*
- * Kernel bills the browser for every second its live view plays (and while
- * Anton or the agent is connected); with nothing connected it stands by, free,
- * keeping its pages and sign-ins. So the live view plays only while it can be
- * seen: not in a hidden window, and not after a spell with no sign of you or
- * the agent. While it plays, the panel tells Anton so, to keep the address bar
- * following the page.
- */
+/* Kernel bills every second the live view plays; with nothing connected the browser stands by, free. So it plays only while it can be seen and you or the agent were about recently. */
 const PAUSE_AFTER_MS = 5 * 60_000;
 const WATCH_EVERY_MS = 20_000;
 
@@ -37,7 +23,6 @@ const onVisibility = (notify: () => void) => {
 };
 export const useWindowShown = () => useSyncExternalStore(onVisibility, () => document.visibilityState !== 'hidden');
 
-/** Whether the live view should play, and a way to wake it: paused after a spell with nobody about, woken by the agent at work or by you. */
 function useLiveViewAwake(on: boolean, agentBusy: boolean, url: string | undefined): [boolean, () => void] {
 	const shown = useWindowShown();
 	const [paused, setPaused] = useState(false);
@@ -61,7 +46,6 @@ function useLiveViewAwake(on: boolean, agentBusy: boolean, url: string | undefin
 	useEffect(() => {
 		lastSeen.current = Date.now();
 	}, [shown, url]);
-	// The agent at work in it: worth watching.
 	useEffect(() => {
 		if (agentBusy) wake();
 	}, [agentBusy, wake]);
@@ -91,10 +75,7 @@ function Paused({ onResume }: { onResume: () => void }) {
 	);
 }
 
-/**
- * The live view, remounted if no frames arrive in time: it reports when video
- * plays, and a connection that stalls does not retry by itself.
- */
+/** Remounted if no frames arrive in time: a stalled connection does not retry by itself. */
 function LiveView({ url, onPlaying }: { url: string; onPlaying: (playing: boolean) => void }) {
 	const frame = useRef<HTMLIFrameElement>(null);
 	const [attempt, setAttempt] = useState(0);
@@ -176,7 +157,6 @@ function OpenForm({ sessionId, available }: { sessionId: string; available: bool
 	);
 }
 
-/** Moves within the page and between pages; the field shows where the page is, and takes an address or a search. */
 function AddressBar({ sessionId, view, children }: { sessionId: string; view: NonNullable<BrowserView['browser']>; children: React.ReactNode }) {
 	const queryClient = useQueryClient();
 	const page = view.page;
@@ -220,7 +200,6 @@ function AddressBar({ sessionId, view, children }: { sessionId: string; view: No
 	);
 }
 
-/** While picking, a pane over the live view that turns the pointer into highlights, and a click into an element for the message. */
 function PickLayer({ sessionId, viewport, onPicked, onCancel }: { sessionId: string; viewport: Viewport; onPicked: (label: string) => void; onCancel: () => void }) {
 	const busy = useRef(false);
 	const latest = useRef<{ x: number; y: number } | null>(null);
@@ -300,7 +279,6 @@ export function BrowserTab({ sessionId }: { sessionId: string }) {
 	const scale = Math.min(room.width / viewport.width, room.height / viewport.height);
 	const size = { width: Math.floor(viewport.width * scale), height: Math.floor(viewport.height * scale) };
 	const [picking, setPicking] = useState(false);
-	// A picture of the page while drawing on it.
 	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
 	const [playing, setPlaying] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);

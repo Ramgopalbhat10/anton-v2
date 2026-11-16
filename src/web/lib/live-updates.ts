@@ -12,18 +12,15 @@ type Change =
 	| { kind: 'spaces' }
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
-	/** The Notifications dialog's list gained a row, or rows were read. */
 	| { kind: 'notifications' }
 	| PageChange
 	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
 	| { kind: 'now'; id: string; now: AgentNow | null };
 
-/** A copy of a page saved its state (src/services/artifacts/renders.ts). */
 export type PageChange = { kind: 'page'; id: string; path: string; version: number; from: string };
 
 const pageListeners = new Set<(change: PageChange) => void>();
 
-/** Calls `listener` whenever a page's state is saved, so a page shown here can fetch it; returns the function that stops it. */
 export function onPageChange(listener: (change: PageChange) => void): () => void {
 	pageListeners.add(listener);
 	return () => void pageListeners.delete(listener);
@@ -39,7 +36,6 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'models') return [['models']];
 	if (change.kind === 'notifications') return [['notifications']];
 	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
-	// A routine added, edited or run: a repo's automations and a project's routines show it.
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts'], ['reviews']];
@@ -47,24 +43,17 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
 	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
 	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id]];
-	// The Browser panel's page moved, or the browser opened or closed.
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
-	// The Computer panel's desktop started, or who drives it changed.
 	if (change.kind === 'task' && change.what === 'computer') return [['computer', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
-	// A run_script program called a tool: only its row in the thread reads it.
 	if (change.kind === 'task' && change.what === 'scripts') return [['scripts', change.id]];
-	// The agent wrote its todo list: only the pill above the composer reads it.
 	if (change.kind === 'task' && change.what === 'todos') return [['todos', change.id]];
 	if (change.kind === 'task' && change.what === 'joins') return [['joins', change.id]];
-	// An email the agent asked to send was asked, sent or turned down: only its card reads it.
 	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
-	// A connector tool call waiting on Run was asked, run or turned down: only its card reads it.
 	if (change.kind === 'task' && change.what === 'approvals') return [['tool-approvals', change.id]];
 	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
 	// A model turn ended: the context meter, and what the task and the day have spent, moved. Its tool calls send their own `files`.
 	if (change.kind === 'task' && change.what === 'usage') return [['context', change.id], ['session', change.id], ['sessions'], ['budget'], ['usage'], ['space-usage']];
-	// A tool call can change files, and can start or stop a dev server.
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;
 	return [
@@ -76,7 +65,6 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 		// A reply's spend: which project it counts toward is the server's to know.
 		['space-usage'],
 		['compute'],
-		// A pull request opened, or its checks or review moved.
 		['reviews'],
 		['session', change.id],
 		// A reply starting or ending reads the messages waiting for it, or drops them on a Stop.
@@ -84,7 +72,6 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 		['context', change.id],
 		['checkpoints', change.id],
 		['pull-request', change.id],
-		// The PR panel: the task's pull requests, and the one open in it.
 		['pulls', change.id],
 		['pull', change.id],
 		// The sandbox starting or stopping starts or ends its desktop.
@@ -109,11 +96,7 @@ function refetcher(queryClient: QueryClient) {
 	};
 }
 
-/**
- * Listens for what changed on the server and refetches just that, so the
- * task list, a task's status and its files update as they happen. After a
- * dropped connection everything is refetched, since changes may have been missed.
- */
+/** Refetches just what the server says changed; after a dropped connection everything is refetched, since changes may have been missed. */
 export function useLiveUpdates() {
 	const queryClient = useQueryClient();
 	useEffect(() => {

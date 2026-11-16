@@ -8,12 +8,7 @@ import { SettingsOverview } from './overview';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from './routes';
 import { SkillDetailPage } from './skill-detail';
 
-/*
- * Settings as a card over the page you are on. The card runs the settings
- * pages on a router of its own, in memory, so moving between sections never
- * disturbs the page behind; a link inside it to anywhere else in the app
- * closes the card and goes there in the app itself.
- */
+/* The card runs the settings pages on a memory router of its own, so moving between sections never disturbs the page behind. */
 
 const AppRouter = createContext<AnyRouter | null>(null);
 

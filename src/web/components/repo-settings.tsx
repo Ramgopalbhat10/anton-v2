@@ -13,7 +13,6 @@ export type Variable = { name: string; value: string; stored: boolean };
 
 const FIELD = WELL_FIELD;
 
-/** A textarea on the same inset well as the fields. */
 export const AREA =
 	'sg-field w-full resize-y px-2 py-2';
 
@@ -255,7 +254,7 @@ function MemoryEditor({ project }: { project: Project }) {
 	);
 }
 
-/** Removes the repo after a second click, since its tasks go with it. */
+/** Asks twice, since the repo's tasks go with it. */
 function RemoveRepo({ project }: { project: Project }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -284,7 +283,7 @@ function RemoveRepo({ project }: { project: Project }) {
 	);
 }
 
-/** Per-repository sandbox settings; tasks already running keep theirs until their sandbox restarts. */
+/** Tasks already running keep their settings until their sandbox restarts. */
 export function RepoSettingsPage() {
 	const { projectId } = useParams({ from: '/settings/repos/$projectId' });
 	const projects = useProjects();

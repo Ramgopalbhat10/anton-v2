@@ -23,7 +23,6 @@ export function focusFile(sessionId: string, path: string, line?: number): void 
 	for (const listener of focusListeners) listener();
 }
 
-/** Picks a changed file in the Changes panel. */
 export function focusChange(sessionId: string, path: string): void {
 	changeFocus.set(sessionId, { path, at: Date.now() });
 	for (const listener of focusListeners) listener();

@@ -90,7 +90,6 @@ function Running({ view }: { view: ComputeView }) {
 	);
 }
 
-/** Where sandboxes run and which are up right now. */
 export function ComputePage() {
 	const compute = useQuery({ queryKey: ['compute'], queryFn: api.compute });
 	const view = compute.data;

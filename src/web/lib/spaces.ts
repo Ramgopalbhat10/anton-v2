@@ -5,7 +5,6 @@ import { useCallback, useMemo } from 'react';
 import { api, SAFETY_NET_MS, type Session, type Space, THREAD_STATES, type ThreadState } from '@/lib/api';
 import { threadState } from '../../core/thread-state';
 
-/** Every project, newest activity first. */
 export function useSpaces() {
 	return useQuery({ queryKey: ['spaces'], queryFn: api.spaces, refetchInterval: SAFETY_NET_MS });
 }
@@ -25,11 +24,7 @@ const NO_THREADS: Session[] = [];
 /** Whether `useThreads` has its list yet, so a thread missing from it is gone (deleted, or moved out), not still loading. */
 export const threadsLoaded = (threads: Session[]) => threads !== NO_THREADS;
 
-/**
- * A project's threads, newest first, from the task list every page already
- * keeps current. The list keeps its identity until the tasks change, so the
- * panels and cards it feeds can skip renders.
- */
+/** A project's threads, newest first, from the task list every page keeps current; it keeps its identity until the tasks change, so its readers skip renders. */
 export function useThreads(spaceId: string) {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const all = sessions.data?.sessions;
@@ -53,7 +48,7 @@ export const STATE_LOOK: Record<ThreadState, StateLook> = {
 /** A failed thread waits on you too, but says so in red. */
 export const failed = (thread: Session) => thread.status === 'error' || thread.pullRequest?.checks === 'failed';
 
-/** Where the task stands, as the server says; worked out the same way (src/core/thread-state.ts) when it does not. */
+/** As the server says; worked out the same way (src/core/thread-state.ts) when it does not. */
 export const stateOf = (thread: Session): ThreadState =>
 	thread.threadState ??
 	threadState({
@@ -68,12 +63,10 @@ export const stateOf = (thread: Session): ThreadState =>
 		brief: thread.brief ?? null,
 	});
 
-/** Threads in the project's order of states, each group newest first. */
 export function groupByState(threads: Session[]): Array<{ state: ThreadState; threads: Session[] }> {
 	return THREAD_STATES.map((state) => ({ state, threads: threads.filter((thread) => stateOf(thread) === state) })).filter((group) => group.threads.length > 0);
 }
 
-/** When the thread last did something. */
 export const threadActiveAt = (thread: Session) => [thread.checkpointAt, thread.lastInputAt, thread.createdAt].filter((at): at is string => Boolean(at)).sort().pop() ?? thread.createdAt;
 
 /** One line about the thread: its question when it waits on you, else its last words, else its brief. */
@@ -92,11 +85,7 @@ export function threadLine(thread: Session, markdown = false): string {
 	return plain(prose ?? lines[0] ?? '');
 }
 
-/** The project's mark: its emoji, or its initial. */
-/**
- * Each thread keeps its own open panels and the one shown, so switching back
- * to a thread finds them as they were. Kept in the browser.
- */
+/** Each thread keeps its own open panels, in the browser. */
 const panelsKey = (threadId: string) => `anton.thread-panels.${threadId}`;
 
 export type ThreadPanels<Name extends string> = { tabs: Name[]; active: Name | null; open: boolean };
@@ -118,9 +107,7 @@ export function saveThreadPanels<Name extends string>(threadId: string, panels: 
 	}
 }
 
-/** Thread reports reach the coordinator as a message; the feed shows them as a quiet row, not a bubble. */
-/** `routine` marks a thread one of the project's routines just started. */
-/** One thread's line in a report; `started` says who started it just now, when the coordinator did not. */
+/** One thread's line in a coordinator report; `started` says who started it just now, when the coordinator did not. */
 export type Report = { id: string; title: string; state: ThreadState; text: string; started: 'you' | 'routine' | null };
 
 export function parseReports(text: string): Report[] | null {

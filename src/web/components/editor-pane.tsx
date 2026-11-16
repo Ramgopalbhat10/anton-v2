@@ -6,15 +6,12 @@ import { Icon, IconBtn } from '@/components/signal';
 import { cn } from '@/lib/utils';
 import { setChangesScope, ShowPanel } from '@/lib/workspace';
 
-/** The side column's width: remembered, and kept between these bounds; the main column beside it takes the rest. */
 const SIDE_DEFAULT = 220;
 const SIDE_MIN = 140;
-/** The main column keeps at least this much room. */
 const MAIN_MIN = 200;
 /** Below this the side and main columns take turns at full width, as on a phone, rather than squeezing side by side. */
 const SIDE_BY_SIDE_MIN = 520;
 
-/** What the explorer lists: the repository's files, the work not pushed yet, or everything the branch changed. */
 export type ExplorerMode = 'files' | 'changes' | 'branch';
 
 const MODES: Array<{ mode: ExplorerMode; icon: IconComponent; label: string }> = [
@@ -23,7 +20,6 @@ const MODES: Array<{ mode: ExplorerMode; icon: IconComponent; label: string }> =
 	{ mode: 'branch', icon: GitBranch, label: 'Whole branch' },
 ];
 
-/** The explorer's switches between Files and Changes: the same column, listing something else. */
 function ModeSwitch({ sessionId, mode }: { sessionId: string; mode: ExplorerMode }) {
 	const showPanel = useContext(ShowPanel);
 	return (
@@ -55,16 +51,7 @@ function ModeSwitch({ sessionId, mode }: { sessionId: string; mode: ExplorerMode
 	);
 }
 
-/**
- * The editor layout Files and Changes share, in one frame: an explorer on
- * the left, which switches between the repository's files and what changed,
- * and what you opened from it on the right. The explorer can be resized or
- * put away; on a narrow pane the two take turns: the explorer until
- * something is open, then the open thing with a button back to it.
- *
- * `main` is given that button, for the bar at its top; it is null while the
- * explorer shows beside it, since the explorer's own header puts it away.
- */
+/** Files and Changes share this frame: an explorer and what you opened from it, taking turns on a narrow pane. `main` gets the button back to the explorer; null while the explorer shows beside it. */
 export function EditorPane({
 	name,
 	sessionId,
@@ -139,7 +126,6 @@ export function EditorPane({
 	);
 }
 
-/** The bar along the top of the main column: the explorer's toggle while it is away, then what the pane puts there. */
 export function EditorBar({ sideToggle, children, className }: { sideToggle: ReactNode; children: ReactNode; className?: string }) {
 	return (
 		<div className={cn('flex h-9 shrink-0 items-center gap-1.5 border-b border-(--line) px-1.5', className)}>

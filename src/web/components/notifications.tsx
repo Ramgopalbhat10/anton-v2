@@ -5,13 +5,6 @@ import { IconBtn } from '@/components/signal';
 import { api, type NotificationCategory, type NotificationsView, SAFETY_NET_MS } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-/**
- * The bell beside the sidebar toggle and the Inbox page it opens: the moments
- * in your tasks worth a look (src/services/notify/notifications.ts), not every step.
- * The list updates from server events; opening a task reads its rows.
- */
-
-/** The filters, in the order they matter: what waits on you first, what went wrong, what finished, what was said, and the machines. */
 export const CATEGORIES: Array<{ id: NotificationCategory; label: string }> = [
 	{ id: 'needs-you', label: 'Needs you' },
 	{ id: 'failures', label: 'Failures' },
@@ -27,11 +20,9 @@ export function useNotifications() {
 	return useQuery({ queryKey: ['notifications'], queryFn: api.notifications, refetchInterval: SAFETY_NET_MS });
 }
 
-/** Unread rows that call you over: everything but sandboxes starting and stopping. */
 export const loudUnread = (unread: NotificationsView['unread'] | undefined) =>
 	unread ? CATEGORIES.filter((category) => !QUIET.includes(category.id)).reduce((sum, category) => sum + (unread[category.id] ?? 0), 0) : 0;
 
-/** The bell: a count of unread rows, amber while something waits on you and red when something failed. */
 export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: () => void; size?: 'xs' | 'sm'; className?: string }) {
 	const { data } = useNotifications();
 	const count = loudUnread(data?.unread);
@@ -55,8 +46,7 @@ export function NotificationsBell({ onOpen, size = 'xs', className }: { onOpen: 
 	);
 }
 
-/** Opening a task reads its rows, and a row that arrives while you look at it is read at once. A component of its own, so the list changing never re-renders the task. */
-/** Marks a task's notifications read while you look at it. Memoized: the task page around it draws on every chunk of a reply. */
+/** A component of its own, so the list changing never re-renders the task. Memoized: the task page draws on every chunk of a reply. */
 export const ReadNotificationsOf = memo(function ReadNotificationsOf({ sessionId }: { sessionId: string }): null {
 	const queryClient = useQueryClient();
 	const { data } = useNotifications();

@@ -20,10 +20,6 @@ import { useDraftWake } from '@/lib/wake';
 import { chooseProject, NO_REPO, useProjects } from '@/lib/projects';
 import { parseRouted } from '../../core/model-route';
 
-/**
- * The repo a task works on, or No repository for a chat: a question, a job on
- * the web, or work in a scratch sandbox, with no branch or pull request.
- */
 function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[]; value?: Project; onChange: (id: string) => void; onAdd: () => void }) {
 	const navigate = useNavigate();
 	return (
@@ -79,10 +75,8 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 	);
 }
 
-/** Repos offered at once; typing narrows them. */
 const REPOS_SHOWN = 8;
 
-/** Adds a GitHub repo, picked from those Anton's token can reach or typed by name. */
 export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => void; onCancel: () => void }) {
 	const [name, setName] = useState('');
 	const queryClient = useQueryClient();
@@ -145,11 +139,6 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 
 type Stage = { title: string; note: string; icon: IconComponent };
 
-/**
- * How a task runs, left to right, as one quiet line under the composer: it reads
- * first, then takes its own branch, starts a sandbox only when it has to edit or
- * run code, and ends in a pull request. Each stage lights in turn.
- */
 function Route({ repo, branch, planMode }: { repo?: string; branch: string; planMode: boolean }) {
 	const stages: Stage[] = [
 		{ title: planMode ? 'Plans' : 'Reads', note: repo ?? 'the repository', icon: planMode ? ListChecks : BookOpen },
@@ -160,7 +149,6 @@ function Route({ repo, branch, planMode }: { repo?: string; branch: string; plan
 	return <RouteLine label="How a task runs" stages={stages} />;
 }
 
-/** A chat's route: no repository, so it answers, browses, and runs things in a scratch sandbox only when it must. */
 function ChatRoute() {
 	const stages: Stage[] = [
 		{ title: 'Asks', note: 'no repository', icon: MessageSquare },
@@ -188,7 +176,6 @@ function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
 	);
 }
 
-/** Home's greeting: the time of day, and your first name once it is known. */
 function greeting(name?: string | null): string {
 	const hour = new Date().getHours();
 	const part = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -196,7 +183,6 @@ function greeting(name?: string | null): string {
 	return first ? `${part}, ${first}` : part;
 }
 
-/** Ways to begin, as chips under the composer while it is empty: one fills the prompt, for you to finish and send. */
 const STARTERS: Record<'task' | 'chat', Array<{ icon: IconComponent; label: string; prompt: string }>> = {
 	task: [
 		{ icon: GitPullRequest, label: 'Review my open pull requests', prompt: 'Review my open pull requests in this repository and tell me which are ready to merge.' },

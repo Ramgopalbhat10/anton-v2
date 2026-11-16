@@ -79,7 +79,6 @@ function KindChoice({ value, onChange }: { value: Automation['kind']; onChange: 
 	);
 }
 
-/** An automation's settings: a new one, or with `automation` the one being changed. */
 function AutomationForm({ projectId, automation, onDone }: { projectId: string; automation?: Automation; onDone: () => void }) {
 	const refresh = useRefresh(projectId);
 	const models = useModels();
@@ -152,7 +151,7 @@ function AutomationForm({ projectId, automation, onDone }: { projectId: string; 
 	);
 }
 
-/** Tasks this repo starts on its own. Each change saves at once, apart from the settings form. */
+/** Each change saves at once, apart from the settings form. */
 export function Automations({ projectId }: { projectId: string }) {
 	const [adding, setAdding] = useState(false);
 	const list = useQuery({ queryKey: queryKey(projectId), queryFn: () => api.automations(projectId), refetchInterval: SAFETY_NET_MS });

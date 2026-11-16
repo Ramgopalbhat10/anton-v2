@@ -59,7 +59,6 @@ export function IconBtn({
 	);
 }
 
-/** Waiting: a ring with an arc of the accent going round (`.sg-spinner` in instrument.css). */
 export function Spinner({ size = 14, tone = 'accent' }: { size?: number; tone?: 'accent' | 'neutral' | 'onAccent' }) {
 	return (
 		<span role="status" aria-label="Loading" className={cn('sg-spinner', tone !== 'accent' && `sg-spinner--${tone}`)} style={{ width: size, height: size }}>
@@ -103,7 +102,6 @@ export function Avatar({ name, size = 'sm' }: { name: string; size?: 'xs' | 'sm'
 	);
 }
 
-/** Uppercase group label: "RUNNING", "RECENT", "ADD A PANEL". */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
 	return (
 		<div className={cn('text-small leading-4 font-medium text-(--text-3)', className)}>
@@ -112,11 +110,7 @@ export function SectionLabel({ children, className }: { children: ReactNode; cla
 	);
 }
 
-/**
- * The rest of what a setting means, behind an info icon beside its label:
- * a popover that opens while the pointer rests on the icon, and on a tap
- * where there is no pointer to rest.
- */
+/** Opens while the pointer rests on the icon, and on a tap where there is no pointer. */
 export function InfoTip({ children, label = 'More about this' }: { children: ReactNode; label?: string }) {
 	const [open, setOpen] = useState(false);
 	const leaving = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -170,7 +164,6 @@ export function InfoTip({ children, label = 'More about this' }: { children: Rea
 	);
 }
 
-/** Small meta text: timestamps, repo/branch facts, counts. */
 export function Meta({ children, className }: { children: ReactNode; className?: string }) {
 	return <span className={cn('text-small text-(--text-3)', className)}>{children}</span>;
 }
@@ -184,11 +177,7 @@ export function DiffStat({ added, removed }: { added: number; removed: number })
 	);
 }
 
-/**
- * Empty state, sized by what holds it and not by the screen: a whole panel
- * or page takes `art` (a drawing on the drafting grid), a card or a tab takes
- * an `icon` or just the words, and a list takes `EmptyLine`.
- */
+/** Sized by what holds it, not by the screen: a panel or page takes `art`, a card or tab an `icon` or just words, and a list takes `EmptyLine`. */
 export function EmptyState({
 	icon,
 	art,
@@ -198,7 +187,6 @@ export function EmptyState({
 	className,
 }: {
 	icon?: IconComponent;
-	/** A drawing shown in place of the icon; the drafting grid then spans the width and holds the words too. */
 	art?: ReactNode;
 	title: string;
 	body?: ReactNode;
@@ -206,7 +194,6 @@ export function EmptyState({
 	className?: string;
 }) {
 	if (art) {
-		// The drawing sits straight on what holds it, with the words under it.
 		return (
 			<div className={cn('flex w-full flex-col items-center gap-5 px-6 pt-10 pb-9 text-center', className)}>
 				<div className="flex w-full justify-center">{art}</div>
@@ -234,7 +221,6 @@ export function EmptyState({
 	);
 }
 
-/** The smallest empty state: one quiet line where a list or a search's results would be. */
 export function EmptyLine({ children, className }: { children: ReactNode; className?: string }) {
 	return <p className={cn('m-0 px-2 py-1.5 text-small leading-[18px] text-(--text-3)', className)}>{children}</p>;
 }
@@ -291,7 +277,6 @@ export function MenuItem({
 /** Items that belong together, under a MenuLabel, so a screen reader says the group's name. */
 export const MenuGroup = MenuPrimitive.Group;
 
-/** A menu item that opens a menu of its own beside it. */
 export const MenuSub = MenuPrimitive.Sub;
 
 export function MenuSubTrigger({
@@ -342,7 +327,6 @@ export function MenuSeparator() {
 	return <MenuPrimitive.Separator className="-mx-1 my-1 h-px shrink-0 bg-(--line)" />;
 }
 
-/** A picker's trigger, as a quiet pill: the model, repository and branch choosers in a composer's bar. */
 export function PickerChip({
 	icon,
 	label,
@@ -365,7 +349,6 @@ export function PickerChip({
 	);
 }
 
-/** An on/off switch with its label; the whole row toggles. */
 export function Switch({
 	checked,
 	onChange,
@@ -411,7 +394,6 @@ export function Switch({
 
 const BAR_TONE = { accent: 'bg-(--accent)', warning: 'bg-(--warn)', danger: 'bg-(--bad)' } as const;
 
-/** A thin meter: how much of something is used, from 0 to 100. */
 export function ProgressBar({ value, tone = 'accent', label }: { value: number; tone?: keyof typeof BAR_TONE; label: string }) {
 	const clamped = Math.min(100, Math.max(0, value));
 	return (
@@ -433,12 +415,10 @@ const BADGE_TONE = {
 	outline: 'text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)]',
 } as const;
 
-/** A short status word on a row: Connected, Default, Failing. */
 export function Badge({ tone = 'neutral', children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
 	return <span className={cn('inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium whitespace-nowrap', BADGE_TONE[tone])}>{children}</span>;
 }
 
-/** One attribute filter: a hairline chip that opens a menu of what it can be, tinted when it is set. */
 export function FilterMenu({
 	icon,
 	label,
@@ -487,11 +467,6 @@ export function FilterMenu({
 	);
 }
 
-/**
- * A filter that toggles on and off, in a row of them. Off is a hairline chip;
- * on takes the soft accent, since a filter is something you act on. A count
- * sits after the name, a mark before it.
- */
 export function FilterChip({
 	label,
 	on,
@@ -505,7 +480,6 @@ export function FilterChip({
 	on: boolean;
 	onToggle: () => void;
 	icon?: IconComponent;
-	/** A dot or glyph of its own before the name. */
 	mark?: ReactNode;
 	count?: number;
 	size?: 'sm' | 'md';
@@ -532,10 +506,7 @@ export function FilterChip({
 	);
 }
 
-/**
- * The one search field: a well with a magnifier, the query and a way to clear
- * it. Escape clears it too, or does what `onEscape` says.
- */
+/** Escape clears it too, or does what `onEscape` says. */
 export function SearchField({
 	value,
 	onChange,
@@ -551,13 +522,11 @@ export function SearchField({
 	value: string;
 	onChange: (value: string) => void;
 	placeholder: string;
-	/** What a screen reader calls it, when the placeholder is not enough. */
 	label?: string;
 	size?: 'sm' | 'md';
 	autoFocus?: boolean;
 	inputRef?: Ref<HTMLInputElement>;
 	onEscape?: () => void;
-	/** Shown at the end while the field is empty: a shortcut, a count. */
 	trailing?: ReactNode;
 	className?: string;
 }) {

@@ -26,7 +26,7 @@ function sameInputs(before: ThreadRow[], after: ThreadRow[]): boolean {
 	return a.length === b.length && a.every((message, index) => message === b[index]);
 }
 
-/** The rail of your messages beside the conversation; drawn again only when they change, not on each chunk of a reply. */
+/** Drawn again only when your messages change, not on each chunk of a reply. */
 export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }: Props) {
 	const [active, setActive] = useState<string | null>(null);
 	const [open, setOpen] = useState(false);
@@ -45,7 +45,6 @@ export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }:
 					<div className="line-clamp-2 break-words font-semibold text-(--text)">{selected.input}</div>
 				</div>
 			) : null}
-			{/* One visible handle opens the rail on both touch and pointer devices. */}
 			<button ref={handle} type="button" aria-label={open ? 'Hide chat navigation' : 'Show chat navigation'} aria-expanded={open}
 				onClick={() => { setOpen(!open); setActive(null); }}
 				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-4 items-center justify-center rounded-l-control text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus) [@media(hover:hover)]:group-hover/nav:pointer-events-none [@media(hover:hover)]:group-hover/nav:opacity-0 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100`}>

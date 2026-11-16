@@ -1,13 +1,8 @@
-/**
- * A composer that changes dock: the page records its box before the move and plays it back
- * as a FLIP — the same control appears to glide into place rather than jump. Only the
- * painted transform moves; the layout box never does.
- */
+/** A composer that changes dock plays a FLIP from its old box; only the painted transform moves, never the layout box. */
 function still(): boolean {
 	return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-/** Play `el` from `from`'s box to the box it is in now. */
 export function flyFrom(el: Element, from: DOMRect, duration = 460) {
 	if (still()) return;
 	const to = el.getBoundingClientRect();

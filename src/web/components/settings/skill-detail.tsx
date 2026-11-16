@@ -14,7 +14,6 @@ import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
 
 type DetailTab = 'overview' | 'skills' | 'files';
 
-/** The pick the page's search params name, if they name one. */
 export function pickOf(search: ViewSearch): PluginPick | null {
 	if (search.plugin) return { plugin: search.plugin };
 	if (search.address) return { address: search.address };
@@ -34,7 +33,6 @@ export function usePreview(pick: PluginPick | null) {
 
 const githubUrl = (preview: PluginPreview, path = preview.source.path) => `https://github.com/${preview.source.repo}/tree/${preview.sha}${path ? `/${path}` : ''}`;
 
-/** The file on the Artifacts page a skill was installed from. */
 function AddedFileLink({ path }: { path: string }) {
 	return (
 		<Link to="/artifacts/$taskId" params={{ taskId: ADDED_FILES }} search={{ path }} className="inline-flex min-w-0 items-center gap-1 outline-none hover:underline">
@@ -44,10 +42,8 @@ function AddedFileLink({ path }: { path: string }) {
 	);
 }
 
-/** Paths relative to the plugin's folder, which the file tree shows. */
 const within = (preview: PluginPreview, path: string) => (preview.source.path ? path.slice(preview.source.path.length + 1) : path);
 
-/** Every folder above a path, so the tree opens to it. */
 const foldersOf = (path: string) =>
 	path
 		.split('/')
@@ -82,7 +78,6 @@ function imagePath(base: string, src: string): string | null {
 	return out.length ? out.join('/') : null;
 }
 
-/** One image file of the plugin, fetched on demand and shown from a blob URL. */
 function PluginImage({ repo, sha, path, alt, className }: { repo: string; sha: string; path: string; alt?: string; className?: string }) {
 	const type = IMAGE_TYPES[path.split('.').pop()?.toLowerCase() ?? ''];
 	const file = useQuery({
@@ -106,11 +101,7 @@ function PluginImage({ repo, sha, path, alt, className }: { repo: string; sha: s
 	return <img src={url} alt={alt ?? ''} loading="lazy" className={className} />;
 }
 
-/**
- * How a plugin file's images draw: a relative src resolves against the file's
- * folder inside the plugin and is fetched like any other file; a remote src
- * (a README's badges) draws directly. A plugin image opens its file on click.
- */
+/** A relative src resolves against the file's folder inside the plugin and is fetched like any file; a remote src (a README's badges) draws directly. */
 function usePluginImages(preview: PluginPreview, file: string, onOpen?: (path: string) => void): FileImages {
 	return useMemo(() => {
 		const listed = new Set(preview.files.map((path) => within(preview, path)));
@@ -296,7 +287,6 @@ function Skills({ preview, onView }: { preview: PluginPreview; onView: (path: st
 	);
 }
 
-/** Installs one skill of a larger plugin on its own, by its folder's address. */
 function InstallOne({ preview, folder }: { preview: PluginPreview; folder: string }) {
 	const install = usePluginMutation(() => api.installPlugin({ address: `${preview.source.repo}/${folder}` }));
 	return (
@@ -393,7 +383,6 @@ function Files({ preview, selected, onOpen }: { preview: PluginPreview; selected
 	);
 }
 
-/** The first file worth reading: the README, or the first skill's instructions. */
 function firstFile(preview: PluginPreview): string {
 	const skill = preview.files.find((path) => path.endsWith('/SKILL.md') || path === 'SKILL.md');
 	const path = preview.readme ?? skill ?? preview.files[0];
@@ -470,7 +459,6 @@ function Detail({ preview }: { preview: PluginPreview }) {
 	);
 }
 
-/** A plugin or skill, looked through before or after installing it: its README, skills and every file. */
 export function SkillDetailPage() {
 	const search = useSearch({ from: '/settings/skills/view' });
 	const pick = pickOf(search);

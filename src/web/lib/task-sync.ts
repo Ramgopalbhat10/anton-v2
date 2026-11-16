@@ -3,13 +3,7 @@ import type { Session } from '@/lib/api';
 
 type List = { sessions: Session[] };
 
-/**
- * A task is read two ways: in the list (the sidebar, a project's threads) and
- * on its own (its page's header, thread and composer). Whichever read lands
- * last is written into the other, so the header never shows a title or a
- * Working the sidebar has moved on from because its own read was dropped or
- * came back slower.
- */
+/** A task is read in the list and on its own; whichever read lands last is written into the other, so the header never lags the sidebar. */
 export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: Query<unknown, unknown, unknown>): void {
 	const [key, id] = query.queryKey;
 	if (key === 'sessions' && query.queryKey.length === 1) {
@@ -31,7 +25,6 @@ export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: 
 	}
 }
 
-/** The app's query client, with a task's two reads kept in step. */
 export function appQueryClient(): QueryClient {
 	const queryClient: QueryClient = new QueryClient({
 		queryCache: new QueryCache({ onSuccess: (data, query) => keepTasksInStep(queryClient, data, query) }),

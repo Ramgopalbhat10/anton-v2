@@ -23,13 +23,8 @@ export function countKinds(threads: Session[]): Record<GlyphKind, number> {
 
 const ms = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : NaN);
 const hhmm = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-/** A span without its seconds, for captions: "1h 3m". */
 const short = (span: number) => elapsed(span).replace(/ \d+s$/, '');
 
-/**
- * The project's threads as one thin bar split by state, done ones hatched:
- * the project's shape at a glance in the sidebar and on its card.
- */
 export function StateSplit({ threads, className, height = 4 }: { threads: Session[]; className?: string; height?: number }) {
 	const counts = countKinds(threads);
 	const shown = KINDS.filter((kind) => counts[kind] > 0);
@@ -62,7 +57,6 @@ export function activity(threads: Session[], now: number, bins = 24) {
 	return { bars, span, total: events.length };
 }
 
-/** Activity as bars, the current stretch lit in the accent and the busiest one brighter. */
 export function ActivityBars({ bars, height = 32, className }: { bars: number[]; height?: number; className?: string }) {
 	const max = Math.max(...bars, 1);
 	const peak = bars.indexOf(Math.max(...bars));
@@ -85,10 +79,7 @@ export function ActivityBars({ bars, height = 32, className }: { bars: number[];
 	);
 }
 
-/**
- * The same days as a strip of even cells, for a card: a day is empty, quiet or busy,
- * so the strip reads as a rhythm and never as a chart to measure.
- */
+/** A day is empty, quiet or busy, so the strip reads as a rhythm, never as a chart to measure. */
 export function ActivityStrip({ bars, className }: { bars: number[]; className?: string }) {
 	const max = Math.max(...bars, 1);
 	return (
@@ -102,11 +93,6 @@ export function ActivityStrip({ bars, className }: { bars: number[]; className?:
 
 const threadsWord = (count: number) => `${count} thread${count === 1 ? '' : 's'}`;
 
-/**
- * What the project comes to in a sentence, the most pressing first (it needs
- * you, it works, it waits on review, it is quiet), and a line of what else
- * holds, or when it last moved.
- */
 export function pulseLine(threads: Session[], now: number): { headline: string; tone?: 'attention' | 'accent' | 'success'; why: string } {
 	const counts = countKinds(threads);
 	const needs = counts.waiting + counts.failed;
@@ -131,7 +117,6 @@ export function pulseLine(threads: Session[], now: number): { headline: string; 
 	return { headline: 'All threads resolved', why: moved };
 }
 
-/** One thread in the Pulse's strip: a cell in its state's colour that names it on a point and opens it. */
 function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) {
 	const kind = glyphKind(thread);
 	return (
@@ -160,11 +145,6 @@ function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) 
 	);
 }
 
-/**
- * The project's pulse: how many threads are open beside a sentence on what
- * the project comes to; every thread as a cell in a strip, in order of
- * state, with the states counted under it; and recent activity.
- */
 export function ProjectPulse({ space, threads }: { space: Space; threads: Session[] }) {
 	const counts = countKinds(threads);
 	const live = counts.working > 0;
@@ -226,11 +206,6 @@ export function ProjectPulse({ space, threads }: { space: Space; threads: Sessio
 	);
 }
 
-/**
- * Threads waiting on you as tracks: your messages and the thread's reply as
- * dots on a line of time, then an amber stretch from its reply to now, the
- * time it has been on you. Longest first.
- */
 export function WaitTracks({ threads }: { threads: Session[] }) {
 	const open = useOpenThread();
 	const now = useNow(false);
@@ -333,7 +308,6 @@ function TitleWithTail({ title }: { title: string }) {
 	);
 }
 
-/** A bar's label beside it: the side with room. */
 function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: 'danger' | 'success' }) {
 	const right = at > 72;
 	return (
@@ -349,11 +323,6 @@ function Chip({ at, children, tone }: { at: number; children: ReactNode; tone: '
 	);
 }
 
-/**
- * When each thread ran, as a schedule on a clock grid: running bars lit and
- * sweeping, time waiting on you hatched amber up to the now line, failures
- * outlined red with a label, queued threads dashed after now.
- */
 export function ScheduleTimeline({ threads }: { threads: Session[] }) {
 	const open = useOpenThread();
 	const live = threads.some((thread) => stateOf(thread) === 'working');
@@ -495,11 +464,7 @@ const DATA = ['var(--data-1)', 'var(--data-2)', 'var(--data-3)', 'var(--data-4)'
 /** Below a cent a month the work ran on a plan or free models, so tokens say what it did and dollars do not. */
 const NEGLIGIBLE_USD = 0.01;
 
-/**
- * What the project costs: the month's figure, the last two weeks as bars with
- * the peak named, and the threads that did most. A project whose spend is
- * negligible (its models on a plan) is measured in tokens instead.
- */
+/** A project whose spend is negligible (its models on a plan) is measured in tokens instead. */
 export function BurnCard({ space }: { space: Space }) {
 	const usage = useQuery({ queryKey: ['space-usage', space.id], queryFn: () => api.spaceUsage(space.id) });
 	const data = usage.data;
@@ -583,10 +548,6 @@ export function BurnCard({ space }: { space: Space }) {
 	);
 }
 
-/**
- * The project's route, drawn as on the New task page: plan, threads, review,
- * done, the stages taking turns and saying what each does.
- */
 export function ProjectRoute({ space }: { space: Space }) {
 	const stages = [
 		{ title: 'Plan', note: 'the coordinator splits the goal' },

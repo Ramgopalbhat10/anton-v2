@@ -5,13 +5,7 @@ import { api, type McpServer } from '@/lib/api';
 import type { Brand, BrandId } from '@/lib/brand-icons';
 import { cn } from '@/lib/utils';
 
-/**
- * Connectors drawn as the products they are: Gmail, Google, and each MCP
- * server by the product its address belongs to, else MCP's own mark. A mark's
- * icon takes the same props as an app icon (`IconProps`), so it goes wherever one does
- * (`Icon`, a tool row); `MarkTile` puts it on the light tile apps use for
- * their icons, the same in both themes.
- */
+/** Connectors drawn as their products; `MarkTile` puts a mark on the light tile apps use, the same in both themes. */
 
 export type Mark = {
 	title: string;
@@ -36,7 +30,6 @@ function glyph(name: string, viewBox: string, paths: Path[], fill = 'currentColo
 	return Glyph as IconComponent;
 }
 
-/** Gmail's M in its four colours. */
 export const GMAIL: Mark = {
 	title: 'Gmail',
 	icon: glyph('Gmail', '52 42 88 66', [
@@ -94,7 +87,6 @@ export function brandMark(brand: Brand): Mark {
 
 type Brands = typeof import('@/lib/brand-icons');
 
-/** The product a server's address belongs to: its host's domain, or any domain above it, in the list. */
 export function serverMark(url: string, brands: Brands | undefined): Mark {
 	if (!brands) return MCP;
 	let host: string;
@@ -121,7 +113,6 @@ export function useServerMark(url: string): Mark {
 	return serverMark(url, useBrands());
 }
 
-/** The mark of the server a tool named `mcp__<server>__<tool>` belongs to, or null for any other tool. */
 export function toolServerMark(toolName: string, servers: McpServer[] | undefined, brands: Brands | undefined): Mark | null {
 	const server = /^mcp__(.+?)__/.exec(toolName)?.[1];
 	if (!server) return null;
@@ -132,7 +123,6 @@ export function toolServerMark(toolName: string, servers: McpServer[] | undefine
 
 const imageMarks = new Map<string, Mark>();
 
-/** A mark drawn from an image URL, like the logo an apps platform hosts for a toolkit; decorative like every mark. */
 export function imageMark(title: string, src: string): Mark {
 	let mark = imageMarks.get(src);
 	if (!mark) {
@@ -146,25 +136,17 @@ export function imageMark(title: string, src: string): Mark {
 	return mark;
 }
 
-/**
- * An app connected through an apps platform: its product's own mark when the
- * address names one Anton knows, else the logo the platform hosts for it, else MCP's.
- */
+/** Its product's own mark when the address names one Anton knows, else the logo the platform hosts, else MCP's. */
 export function useComposioMark(logo: string | null | undefined, url: string, title: string): Mark {
 	const mark = useServerMark(url);
 	return mark === MCP && logo ? imageMark(title, logo) : mark;
 }
 
-/** The MCP servers of Settings › Connectors, for drawing a tool call by its server. */
 export function useMcpServers(enabled = true): McpServer[] | undefined {
 	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors, enabled, staleTime: 60_000 }).data?.mcpServers;
 }
 
-/**
- * A mark on a light tile, as an app icon is drawn. The tile is a soft grey,
- * not white, so a page of them does not glare on the dark canvas. With
- * `label` it names the product to a screen reader; without, it is decoration.
- */
+/** A soft grey tile, not white, so a page of them does not glare on the dark canvas. With `label` it is named to a screen reader; without, it is decoration. */
 export function MarkTile({ mark, size = 26, label, className }: { mark: Mark; size?: number; label?: string; className?: string }) {
 	const Glyph = mark.icon;
 	return (

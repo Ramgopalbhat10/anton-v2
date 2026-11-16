@@ -26,11 +26,7 @@ import './styles.css';
 const queryClient = appQueryClient();
 bootTheme();
 
-/*
- * Home and a task are in the first download; every other page loads its code
- * the first time you go to it. Settings never draws as a page (it opens as a
- * card, whose pages load with it), so its routes only name where they live.
- */
+/* Home and a task are in the first download; every other page loads its code on first visit. */
 const IncognitoPage = lazyRouteComponent(() => import('@/components/incognito'), 'IncognitoPage');
 const ProjectsPage = lazyRouteComponent(() => import('@/components/projects-page'), 'ProjectsPage');
 const ProjectPage = lazyRouteComponent(() => import('@/components/project-page'), 'ProjectPage');
@@ -65,7 +61,6 @@ const indexRoute = createRoute({
 	component: HomePage,
 });
 
-// A throwaway chat inside a dark frame: each visit is a new conversation, and leaving ends it.
 const incognitoRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/incognito',
@@ -145,7 +140,6 @@ const artifactsRoute = createRoute({
 const artifactRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/artifacts/$taskId',
-	// The file in that task's Library to show.
 	validateSearch: (search: Record<string, unknown>): { path: string } => ({ path: typeof search.path === 'string' ? search.path : '' }),
 	component: ArtifactView,
 });
@@ -162,11 +156,7 @@ const inboxRoute = createRoute({
 	component: InboxPage,
 });
 
-/**
- * Settings opens as a card over the page you are on (SettingsModal in the
- * shell), not as a page: going to any settings address opens the card there
- * and leaves you where you were, or on Home when you arrived by the address.
- */
+/** Settings opens as a card over the page you are on (SettingsModal in the shell); its address opens the card there, or over Home when you arrived by it. */
 const settingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/settings',

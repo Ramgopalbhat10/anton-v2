@@ -1,4 +1,3 @@
-/** What stands out in typed text: a web link, a `/command` at its start, or an `@path` file reference. */
 export type RichKind = 'link' | 'command' | 'file';
 export type RichRange = { kind: RichKind; start: number; end: number };
 
@@ -7,7 +6,6 @@ const RICH = /(https?:\/\/[^\s<>"'`]+)|(^\/[\w-]+(?=\s|$))|((?:^|(?<=\s))@[^\s@]
 /** Punctuation that ends a sentence rather than a link or a path. */
 const TRAILING = /[.,;:!?'")\]}]+$/;
 
-/** Where links, commands and file references sit in a message, in order. */
 export function richRanges(text: string): RichRange[] {
 	const ranges: RichRange[] = [];
 	for (const match of text.matchAll(RICH)) {

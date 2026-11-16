@@ -10,7 +10,6 @@ import { useRefreshTask } from '@/components/source-bar';
 import { api, isChat, repoShort } from '@/lib/api';
 import { taskQueries } from '@/lib/task-queries';
 
-/** xterm's palette in Aura's hues: the app canvas, secondary text, an accent cursor, the state hues for its colours. */
 const theme = {
 	background: '#0a0a0b',
 	foreground: '#a1a1aa',

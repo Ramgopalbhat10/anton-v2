@@ -2,12 +2,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { api, type PushView } from '@/lib/api';
 
-/**
- * Notifications with no Anton tab open: the service worker (public/sw.js)
- * takes what the server pushes and shows it, on a phone with Anton on its
- * home screen or in a browser in the background. This device turns them on
- * from Settings › Notifications, or by allowing notifications when asked.
- */
+/** The service worker (public/sw.js) shows what the server pushes, so notifications arrive with no Anton tab open. */
 
 const OFF_KEY = 'anton.push.off';
 
@@ -46,7 +41,6 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 	return (await registration?.pushManager.getSubscription().catch(() => null)) ?? null;
 }
 
-/** What this device is called in the list, from its browser: "iPhone", "Android phone", "Chrome on Mac". */
 export function deviceName(): string {
 	const agent = navigator.userAgent;
 	if (/iPhone/.test(agent)) return 'iPhone';
@@ -114,12 +108,7 @@ export async function turnOffPush(): Promise<PushView> {
 	return view;
 }
 
-/**
- * Turns notifications on for this device when it already allows them and
- * nobody turned them off here: a browser that said yes to the tab's
- * notifications gets them with the tab closed too. Run at each start, so the
- * server lists this device again if it forgot it, or the browser renewed it.
- */
+/** Turns notifications on when this device already allows them and nobody turned them off here. Run at each start, so the server relists a device it forgot or the browser renewed. */
 export async function turnOnIfAllowed(): Promise<void> {
 	if (pushSupport() !== 'ready' || Notification.permission !== 'granted' || turnedOff()) return;
 	const view = await api.push().catch(() => null);
@@ -196,7 +185,6 @@ export function onInstallChange(listener: () => void): () => void {
 	return () => void installListeners.delete(listener);
 }
 
-/** Shows the browser's own install dialog; true when Anton was installed. */
 export async function promptInstall(): Promise<boolean> {
 	const prompt = installPrompt;
 	if (!prompt) return false;

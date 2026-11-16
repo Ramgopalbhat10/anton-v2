@@ -29,14 +29,8 @@ export const panels = [
 export type PanelName = (typeof panels)[number]['name'];
 
 /**
- * Each panel takes only the task's id and keeps itself current from its own
- * queries, so it is memoized: nothing the conversation beside it does, such
- * as streaming a reply, re-renders a file tree or a diff.
- *
- * Most panels load their code the first time one is opened, so a page that
- * never opens the terminal or the desktop never downloads xterm or noVNC.
- * Changes and Library are in the page already: the header and the file
- * viewer use their parts.
+ * Each panel takes only the task's id and keeps itself current, so it is memoized: streaming a reply never re-renders a
+ * file tree. Most panels load their code on first open, so xterm and noVNC download only when used.
  */
 const PrTab = lazy(() => import('@/components/pr-tab').then((module) => ({ default: module.PrTab })));
 const AgentsTab = lazy(() => import('@/components/agents-tab').then((module) => ({ default: module.AgentsTab })));
@@ -60,11 +54,7 @@ const VIEWS: Record<PanelName, ComponentType<{ sessionId: string }>> = {
 	History: memo(HistoryTab),
 };
 
-/**
- * Starts the task's sandbox from where it stopped, shown while it is not
- * running. Until then the panels show the task's files as they were last
- * saved, or as the branch was when the task began.
- */
+/** Until it runs, the panels show the files as last saved, or as the branch was when the task began. */
 function ResumeButton({ sessionId }: { sessionId: string }) {
 	const session = useQuery(taskQueries.session(sessionId));
 	const resume = useResume(sessionId);
@@ -127,7 +117,6 @@ export const VmPanel = memo(function VmPanel({
 	return (
 		<WorkspacePane expanded={expanded} narrow={current === null && !expanded}>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 border-b border-(--line) px-2">
-				{/* On a phone the workspace covers the conversation; this goes back to it. */}
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
 				<PanelTabs label="Workspace panels">
 					{tabs.map((name) => (

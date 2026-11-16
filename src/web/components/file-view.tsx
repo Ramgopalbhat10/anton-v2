@@ -9,8 +9,6 @@ import { Icon, Spinner } from '@/components/signal';
 import { highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 
-/** A folder tree and a file viewer, shared by a task's Files panel and plugin previews. */
-
 type TreeNode = { name: string; path: string; children: Map<string, TreeNode>; file: boolean };
 
 export function buildTree(paths: string[]): TreeNode {
@@ -31,11 +29,7 @@ export function buildTree(paths: string[]): TreeNode {
 	return root;
 }
 
-/**
- * The tree with each run of folders that hold only one folder folded into
- * one row, `src/web/components`, as editors show a sparse tree. Each folded
- * row takes its deepest folder's path.
- */
+/** Folds each run of single-child folders into one row (`src/web/components`), as editors show a sparse tree; the row takes its deepest folder's path. */
 export function compactTree(node: TreeNode): TreeNode {
 	const children = new Map<string, TreeNode>();
 	for (const [key, child] of node.children) {
@@ -66,7 +60,6 @@ const STATUS_BG: Record<string, string> = {
 	D: 'bg-(--bad-soft)',
 };
 
-/** A file's git status as a small lettered chip: A added, M modified, D deleted. */
 export function StatusChip({ status }: { status: string }) {
 	return (
 		<span className={cn('in-num inline-flex size-4 shrink-0 items-center justify-center rounded-control text-nano font-medium', STATUS_TONE[status], STATUS_BG[status])}>
@@ -145,18 +138,13 @@ export function Branch({
 	);
 }
 
-/** True when two reads of a file returned the same bytes. */
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 	if (a.length !== b.length) return false;
 	for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
 	return true;
 }
 
-/**
- * A number for each distinct read of a file. The highlighted copy is kept by
- * it, so a refetch that brings the same bytes reuses the colours it has
- * rather than highlighting the file again and caching another copy.
- */
+/** A number per distinct read: the highlighted copy is kept by it, so a refetch with the same bytes reuses its colours rather than highlighting again. */
 const versions = new WeakMap<Uint8Array, number>();
 let nextVersion = 0;
 function versionOf(bytes: Uint8Array): number {
@@ -165,7 +153,6 @@ function versionOf(bytes: Uint8Array): number {
 	return version;
 }
 
-/** Decodes a file for display, or returns null for binary content. */
 function asText(bytes: Uint8Array): string | null {
 	if (bytes.subarray(0, 8000).includes(0)) return null;
 	return new TextDecoder().decode(bytes);
@@ -185,7 +172,6 @@ export const IMAGE_TYPES: Record<string, string> = {
 
 export const isMarkdown = (path: string) => /\.(md|markdown|mdown)$/i.test(path);
 
-/** Two icons for how a Markdown file shows: its source, or rendered. */
 export function MarkdownToggle({ preview, onChange, className }: { preview: boolean; onChange: (preview: boolean) => void; className?: string }) {
 	return (
 		<Segmented label="Show Markdown as" role="radiogroup" className={className}>
@@ -204,12 +190,7 @@ export function MarkdownToggle({ preview, onChange, className }: { preview: bool
 	);
 }
 
-/**
- * One file: an image shown, Markdown rendered or as source, code highlighted
- * with line numbers, or a note for binary content. `read` fetches its bytes.
- * Pass `preview` to choose how Markdown shows from outside, as a tab bar does;
- * without it the file has its own icons for that, in its top corner.
- */
+/** Pass `preview` to choose how Markdown shows from outside, as a tab bar does; without it the file has its own toggle. */
 export function FileView({
 	path,
 	queryKey,
@@ -223,7 +204,6 @@ export function FileView({
 	queryKey: unknown[];
 	read: () => Promise<Uint8Array>;
 	preview?: boolean;
-	/** A line to bring into view and mark, as when a reply links to it. */
 	line?: number;
 	/** How the file's own images draw, as a plugin preview resolves them. */
 	images?: FileImagesValue | null;

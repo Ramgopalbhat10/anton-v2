@@ -12,7 +12,7 @@ export const GROUPS: Array<{ id: SectionGroup; label: string; desc: string }> = 
 /** What names a settings page, without the page: the command palette lists these without loading any settings code. */
 export type SectionInfo = { id: string; group: SectionGroup; label: string; icon: IconComponent; desc: string };
 
-/** Every settings page, in nav order. A new page is one entry here and its page in `sections.tsx`. */
+/** In nav order. A new page is one entry here and its page in `sections.tsx`. */
 export const SECTION_LIST: SectionInfo[] = [
 	{ id: 'general', group: 'anton', label: 'General', icon: Settings2, desc: 'The model and mode new tasks start with' },
 	{ id: 'subscriptions', group: 'anton', label: 'Subscriptions', icon: CreditCard, desc: 'Plans you already pay for, and your gateway keys' },

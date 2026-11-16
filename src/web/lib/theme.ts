@@ -1,11 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-/*
- * Light is a peer theme, not an afterthought: the same tokens resolve to
- * paper neutrals. The choice lives in localStorage; before one is made the
- * system preference decides, and dark stays the product's own default.
- */
-
 export type Theme = 'dark' | 'light';
 const KEY = 'anton.theme';
 
@@ -45,7 +39,6 @@ export function bootTheme() {
 	applyTheme(stored() ?? systemTheme());
 }
 
-/** Flip to the other theme and remember it. */
 export function toggleTheme() {
 	const next = current === 'dark' ? 'light' : 'dark';
 	try {

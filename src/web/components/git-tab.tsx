@@ -104,14 +104,12 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 }
 
 
-/** A file's diff as text, the way `git diff` prints its lines. */
 function diffText(file: FileDiff): string {
 	return file.lines
 		.map((line) => (line.kind === 'hunk' ? `@@ ${line.text} @@` : `${line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}${line.text}`))
 		.join('\n');
 }
 
-/** A file's changed lines, with line comments for the agent where `commenting` is given. */
 function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenting }) {
 	// The line being commented on, by its number, so a refetch that shifts the diff keeps the form on its line.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
@@ -159,7 +157,6 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 	);
 }
 
-/** Copies text, and says so on the item for a moment. */
 function useCopied(): [string | null, (what: string, text: string) => void] {
 	const [copied, setCopied] = useState<string | null>(null);
 	return [
@@ -172,10 +169,7 @@ function useCopied(): [string | null, (what: string, text: string) => void] {
 	];
 }
 
-/**
- * A changed file's actions: open it in Files, copy its path or diff, and
- * put it back as it was, after a second pick, since that cannot be undone.
- */
+/** Revert asks twice, since it cannot be undone. */
 function FileMenu({ file, sessionId, revertTo }: { file: FileDiff; sessionId?: string; revertTo: 'base' | 'pushed' }) {
 	const queryClient = useQueryClient();
 	const showPanel = useContext(ShowPanel);
@@ -250,7 +244,6 @@ function FileMenu({ file, sessionId, revertTo }: { file: FileDiff; sessionId?: s
 	);
 }
 
-/** Which changed files show their diff: the ones you opened or closed, else a few small ones open by themselves. */
 function useOpenFiles(files: FileDiff[]) {
 	const [chosen, setChosen] = useState<Map<string, boolean>>(() => new Map());
 	// A handful of files open by themselves; a longer list opens only its first, so it reads as a list.
@@ -267,7 +260,6 @@ function useOpenFiles(files: FileDiff[]) {
 
 type OpenFiles = ReturnType<typeof useOpenFiles>;
 
-/** Opens or closes every file's diff at once. */
 function ExpandAll({ open }: { open: OpenFiles }) {
 	return (
 		<IconBtn
@@ -280,10 +272,7 @@ function ExpandAll({ open }: { open: OpenFiles }) {
 	);
 }
 
-/**
- * Changed files as a list, each one's diff opening right under it. A file's
- * row stays at the top while you read down its diff.
- */
+/** A file's row stays at the top while you read down its diff. */
 function ChangeList({
 	files,
 	open,
@@ -294,7 +283,6 @@ function ChangeList({
 }: {
 	files: FileDiff[];
 	open: OpenFiles;
-	/** The file picked in the explorer: opened, and scrolled to. */
 	selected?: { path: string; at: number } | null;
 	sessionId?: string;
 	revertTo?: 'base' | 'pushed';
@@ -364,11 +352,7 @@ function ChangeList({
 	);
 }
 
-/**
- * The diff and commits of a task, kept in one query per scope so the tab
- * count and the panel agree. The count is always the unpushed work: what
- * GitHub does not have yet, so it reads 0 once a pull request has it all.
- */
+/** One query per scope, so the tab count and the panel agree. The count is always the unpushed work, so it reads 0 once a pull request has it all. */
 export function useChanges(sessionId: string, scope: ChangesScope = 'unpushed') {
 	const changes = useQuery({
 		queryKey: ['changes', sessionId, scope],
@@ -379,7 +363,6 @@ export function useChanges(sessionId: string, scope: ChangesScope = 'unpushed') 
 	return { changes, files };
 }
 
-/** Totals for a list of changed files: "3 files +12 -4". */
 function FilesSummary({ files }: { files: FileDiff[] }) {
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
@@ -395,10 +378,6 @@ function FilesSummary({ files }: { files: FileDiff[] }) {
 	);
 }
 
-/**
- * A diff on its own, outside the editor layout, as the PR and History
- * panels show one: its totals, then each file with its diff under it.
- */
 export function DiffList({
 	files,
 	empty,
@@ -409,7 +388,6 @@ export function DiffList({
 	files: FileDiff[];
 	empty?: string;
 	sessionId?: string;
-	/** The task's branch and the one it came off, named in the empty drawing. */
 	branch?: string;
 	base?: string;
 }) {
@@ -431,7 +409,6 @@ export function DiffList({
 	);
 }
 
-/** Commits on the branch, newest first, in the explorer under the changed files. */
 function CommitList({ log, title }: { log: ChangesPayload['log']; title: string }) {
 	const [shown, setShown] = useState(true);
 	if (log.length === 0) return null;
@@ -465,7 +442,6 @@ function CommitList({ log, title }: { log: ChangesPayload['log']; title: string 
 	);
 }
 
-/** Draft comments waiting to go to the agent as one message. */
 function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> }) {
 	const send = useContext(SendToAgent);
 	const [sending, setSending] = useState(false);
@@ -509,7 +485,6 @@ function ReviewBar({ review }: { review: ReturnType<typeof useReviewComments> })
 	);
 }
 
-/** Every folder above the changed files, so the Changes tree opens with all of them in view. */
 function foldersOf(paths: string[]): Set<string> {
 	const folders = new Set<string>();
 	for (const path of paths) {
@@ -519,7 +494,6 @@ function foldersOf(paths: string[]): Set<string> {
 	return folders;
 }
 
-/** The lines a file adds, or removes when it only removes, beside it in the explorer. */
 function LinesFigure({ file }: { file: FileDiff | undefined }) {
 	if (!file || file.added + file.removed === 0) return null;
 	return file.added ? (
@@ -529,13 +503,7 @@ function LinesFigure({ file }: { file: FileDiff | undefined }) {
 	);
 }
 
-/**
- * The Changes panel, in the editor layout Files uses too: the changed files
- * as a tree in the explorer, and beside it every changed file with its diff
- * opening under it. It shows the work GitHub does not have yet by default,
- * so a merged pull request leaves it empty; the explorer's branch switch
- * shows everything the task changed since it began, and its commits.
- */
+/** Shows the work GitHub does not have yet by default, so a merged pull request leaves it empty; the branch switch shows all the task changed. */
 export function GitTab({ sessionId }: { sessionId: string }) {
 	const scope = useChangesScope(sessionId);
 	const { changes, files } = useChanges(sessionId, scope);

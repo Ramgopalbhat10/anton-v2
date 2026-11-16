@@ -69,11 +69,6 @@ function saveDock(spaceId: string, state: DockState) {
 	}
 }
 
-/**
- * A project: its threads as a board by state in the main view, with the
- * coordinator docked on the right — it plans, starts threads and reports
- * back. Files, activity, pull requests and routines are views of the board.
- */
 export function ProjectPage() {
 	const { spaceId } = useParams({ from: '/projects/$spaceId' });
 	const search = useSearch({ from: '/projects/$spaceId' });
@@ -88,7 +83,6 @@ export function ProjectPage() {
 	const dockOpen = onePane ? paneOpen : saved.open;
 	const [expanded, setExpanded] = useState(false);
 	const [starting, setStarting] = useState(Boolean(search.new));
-	// The dock's width is yours to drag; it keeps enough room for the board beside it.
 	const [row, setRow] = useState<HTMLDivElement | null>(null);
 	const drag = useRef<{ pointer: number; x: number; width: number } | null>(null);
 	const [available, setAvailable] = useState(0);
@@ -307,7 +301,6 @@ export function ProjectPage() {
 	);
 }
 
-/** True when a key press is meant for a field, a menu or a dialog rather than the page. */
 function typing(event: KeyboardEvent): boolean {
 	const target = event.target as HTMLElement | null;
 	if (!target || event.defaultPrevented) return true;
@@ -315,11 +308,7 @@ function typing(event: KeyboardEvent): boolean {
 	return Boolean(document.querySelector('[role="dialog"], [role="menu"]'));
 }
 
-/**
- * A project's thread in the main view: its own conversation and composer,
- * with its own workspace panels kept per thread, so switching back finds
- * them as they were. Escape goes back to the coordinator.
- */
+/** Its workspace panels are kept per thread, so switching back finds them as they were. Escape goes back to the coordinator. */
 export function ThreadPage() {
 	const { spaceId, threadId } = useParams({ from: '/projects/$spaceId/threads/$threadId' });
 	const search = useSearch({ from: '/projects/$spaceId/threads/$threadId' });
@@ -355,7 +344,6 @@ export function ThreadPage() {
 			<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 		</>
 	);
-	// A thread you just started opens at once, as a skeleton until the server has made it.
 	if (starting) return <StartingTask starting={starting} workspace={panels.open} leading={leading} onDiscard={() => void navigate({ to: '/projects/$spaceId', params: { spaceId } })} />;
 	return (
 		<TaskWorkspace

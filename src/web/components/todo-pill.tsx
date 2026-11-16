@@ -18,7 +18,6 @@ function Done() {
 	);
 }
 
-/** A ring that fills as items are done; a check once they all are. */
 function Progress({ done, total }: { done: number; total: number }) {
 	if (total > 0 && done === total) return <Done />;
 	const size = 14;
@@ -41,7 +40,6 @@ function Progress({ done, total }: { done: number; total: number }) {
 	);
 }
 
-/** Done is a check, the step in hand spins while the agent works, the rest are dashed circles still to come. */
 function Mark({ status, working }: { status: Todo['status']; working: boolean }) {
 	if (status === 'completed') return <Done />;
 	if (status === 'in_progress' && working) return <Spinner size={14} />;
@@ -55,12 +53,7 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
 	);
 }
 
-/**
- * The agent's todo list as a pill above the composer: how many steps are done,
- * and the list itself on hover, focus or a click (which keeps it open). It
- * follows the agent live, refetched only when it writes a new list, and shows
- * only the latest list, while the task has one.
- */
+/** Refetched only when the agent writes a new list. */
 export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId: string; busy: boolean }) {
 	const todos = useQuery({ ...taskQueries.todos(sessionId), staleTime: Infinity });
 	const [open, setOpen] = useState(false);
@@ -93,7 +86,6 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 		<PopoverPrimitive.Root
 			open={open}
 			onOpenChange={(next) => {
-				// Escape or a click outside.
 				if (!next) {
 					cancelClose();
 					setPinned(false);

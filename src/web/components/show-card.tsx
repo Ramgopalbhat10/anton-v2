@@ -41,12 +41,7 @@ import { outputUrl } from "@/lib/api";
 import { useDeletedOutput } from "@/lib/deleted-outputs";
 import { cn } from "@/lib/utils";
 
-/*
- * A card the agent drew with its `show` tool (src/core/ui-spec.ts has the
- * catalog). Sorting, switching a chart to its table, inputs and formulas all
- * work here in the browser; a button or a form's submit sends the user's next
- * message, and once one has followed the card shows what was sent.
- */
+/* A card from the agent's `show` tool (catalog in src/core/ui-spec.ts); a button or a form's submit sends your next message. */
 
 type Values = Record<string, unknown>;
 
@@ -56,10 +51,8 @@ type ShowState = {
   set: (name: string, value: unknown) => void;
   /** Buttons and forms can send: the card is in the latest reply, nothing has followed it, and the agent is not working. */
   canSend: boolean;
-  /** The message that followed the card, if any. */
   answer: string | null;
   send: (text: string) => void;
-  /** Inside a form that was sent: its inputs keep what was sent. */
   sent: boolean;
 };
 
@@ -76,7 +69,6 @@ const TONE_TEXT: Record<UiTone, string> = {
 const FIELD =
   "sg-field h-7 w-full min-w-0 px-2 text-body";
 
-/** Each input's starting value: what the agent set, else the first option, nothing, or off. */
 function startingValues(spec: UiSpec): Values {
   const values: Values = {};
   walk(spec.children, (node) => {
@@ -242,7 +234,6 @@ function Table({ node }: { node: Extract<UiNode, { type: "table" }> }) {
   );
 }
 
-/** A chart with its title, and a switch to read it as a table. */
 function Chart({ node }: { node: Extract<UiNode, { type: "chart" }> }) {
   const [asTable, setAsTable] = useState(false);
   const table: Extract<UiNode, { type: "table" }> = {
@@ -614,7 +605,6 @@ function Form({ node }: { node: Extract<UiNode, { type: "form" }> }) {
   );
 }
 
-/** A picture from the task's Library; once you deleted it, a note saying so. */
 function LibraryImage({
   sessionId,
   path,

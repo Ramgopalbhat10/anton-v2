@@ -3,7 +3,6 @@ import type { ModelInfo, Reasoning } from './api';
 export type Filter = 'reasoning' | 'vision' | 'free' | 'long';
 export type Sort = 'newest' | 'cheapest' | 'context';
 
-/** Each filter is one predicate, so adding a filter is one line. */
 export const FILTERS: Record<Filter, { label: string; test: (model: ModelInfo) => boolean }> = {
 	reasoning: { label: 'Reasoning', test: (model) => model.reasoning.length > 0 },
 	vision: { label: 'Vision', test: (model) => model.vision },
@@ -19,7 +18,6 @@ export const SORTS: Record<Sort, { label: string; compare: (a: ModelInfo, b: Mod
 
 export const NEXT_SORT: Record<Sort, Sort> = { newest: 'cheapest', cheapest: 'context', context: 'newest' };
 
-/** Gateways by the `<gateway>` a model id starts with. */
 const GATEWAYS: Record<string, string> = { openrouter: 'OpenRouter', vercel: 'Vercel AI Gateway' };
 
 /** Where a model's calls go: the plan you signed in to, such as "ChatGPT", or the gateway that lists it. */
@@ -110,7 +108,6 @@ export function costTier(model: ModelInfo): number {
 
 const HUES = ['#B98BE8', '#8FC98D', '#E0AC63', '#DCC98A', '#E58FA8', '#6fcde8', '#f2c173', '#9ee1f3'];
 
-/** A stable hue per vendor, so a vendor's models read as one family in the list. */
 export function vendorHue(vendor: string): string {
 	let hash = 0;
 	for (const char of vendor) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
@@ -140,11 +137,7 @@ export function listedModels(models: ModelInfo[]): ModelInfo[] {
 	return models.filter((model) => !model.variant);
 }
 
-/**
- * A model and the variants the vendor offers of it: the model the picker
- * lists, the contexts it comes in (null for its standard one), whether it has
- * a fast mode, which of them `model` is, and the model for any choice of them.
- */
+/** A model and its vendor variants: the listed model, its contexts (null for standard), whether it has a fast mode, which of them `model` is, and the model for any choice. */
 export type ModelOptions = {
 	base: ModelInfo;
 	contexts: Array<{ tag: string | null; tokens: number }>;

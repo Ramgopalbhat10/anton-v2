@@ -1,14 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-/*
- * Every `title` in the app as the same dark tip: no arrow, Inter, on the
- * app's own black, instead of the browser's yellow box. One listener on the
- * document takes an element's title into `data-tip` the first time the
- * pointer or focus reaches it (so the browser never draws its own), keeps it
- * as the element's accessible name when it has no other, and shows the tip
- * above it (below when there is no room). Radix tooltips share the look
- * through `.tip` in styles.css.
- */
+/* Every `title` shows as the same dark tip: one document listener moves a title into `data-tip` when the pointer or focus first reaches it, so the browser never draws its own, and keeps it as the accessible name when there is no other. */
 
 const DELAY = 450;
 /** Moving from one tip to the next within this long shows the next at once. */

@@ -1,11 +1,4 @@
-/*
- * The logos of the services Settings › Connections sets up, drawn bare in the
- * text colour like every other icon. LobeHub's MIT-licensed set
- * (@lobehub/icons-static-svg) has the model gateways, plans and GitHub; Docker,
- * Modal, SQLite and Turso are Simple Icons' (CC0), inlined since the app does
- * not otherwise depend on that set. A service without a logo here takes an
- * icon from lib/icons instead.
- */
+/* Logos of the services Settings › Connections sets up: LobeHub's MIT set, plus Docker, Modal, SQLite and Turso from Simple Icons (CC0). */
 import claudecode from '@lobehub/icons-static-svg/icons/claudecode.svg?raw';
 import cursor from '@lobehub/icons-static-svg/icons/cursor.svg?raw';
 import github from '@lobehub/icons-static-svg/icons/github.svg?raw';

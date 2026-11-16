@@ -1,9 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
 
-/**
- * An element's size, kept current as it changes. Give the returned callback to
- * the element's `ref`; it works for an element that mounts later, too.
- */
+/** An element's size, kept current; pass the callback to `ref`, which works for an element that mounts later too. */
 export function useElementSize<T extends HTMLElement>() {
 	const [element, setElement] = useState<T | null>(null);
 	const [size, setSize] = useState({ width: 0, height: 0 });

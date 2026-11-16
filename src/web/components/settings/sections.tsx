@@ -42,7 +42,6 @@ const PAGES: Record<string, ComponentType> = {
 	commands: CommandsPage,
 };
 
-/** Every settings page, in nav order, with its page. */
 export const SECTIONS: SettingsSection[] = SECTION_LIST.map((section) => ({ ...section, Page: PAGES[section.id] }));
 
 export const sectionById = (id: string | undefined) => SECTIONS.find((section) => section.id === id);

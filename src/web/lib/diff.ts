@@ -10,10 +10,7 @@ export type FileDiff = {
 	lines: DiffLine[];
 };
 
-/**
- * Parse a unified `git diff` patch into per-file line lists. Binary patches
- * list the file with no lines.
- */
+/** Binary patches list the file with no lines. */
 export function parsePatch(patch: string): FileDiff[] {
 	const files: FileDiff[] = [];
 	let current: FileDiff | null = null;

@@ -26,7 +26,6 @@ const GROUPS: Record<ReviewGroup, { label: string; help: string }> = {
 /** The order the queue lists its groups in: what waits on you first, what is done last. */
 const OPEN_GROUPS: ReviewGroup[] = ['ready', 'failing', 'checking', 'unknown'];
 
-/** The tabs across the queue: open work, then what already landed or died. */
 const TABS = [
 	{ id: 'open', label: 'Open', test: (group: ReviewGroup) => group !== 'merged' && group !== 'closed' },
 	{ id: 'merged', label: 'Merged', test: (group: ReviewGroup) => group === 'merged' },
@@ -46,7 +45,6 @@ function rowState(item: ReviewItem): PullRequestState | null {
 	return item.draft ? 'draft' : 'open';
 }
 
-/** One pull request as a dense two-line row: its state glyph, title and flags, then number, repo, checks and age. */
 function ReviewRow({ item, selected, onSelect }: { item: ReviewItem; selected: boolean; onSelect: () => void }) {
 	const state = rowState(item);
 	const number = prNumber(item.url);
@@ -91,11 +89,7 @@ function ReviewRow({ item, selected, onSelect }: { item: ReviewItem; selected: b
 	);
 }
 
-/**
- * Any pull request, by its link: Anton reviews it in a task of its own (its
- * own pull requests in the task that opened them), with a security pass,
- * posts the review on GitHub and opens the task.
- */
+/** Any pull request by its link: Anton reviews it in a task of its own (its own pull requests in the task that opened them) and posts the review on GitHub. */
 function ReviewAny({ open, onToggle }: { open: boolean; onToggle: () => void }) {
 	const [url, setUrl] = useState('');
 	const navigate = useNavigate();
@@ -156,7 +150,6 @@ function queueItem(item: ReviewItem): PullRequestItem {
 	};
 }
 
-/** The selected pull request as the task's PR panel shows it: state, branches, checks, discussion and the merge box. */
 function ReviewDetail({ item, onBack }: { item: ReviewItem; onBack: () => void }) {
 	const pulls = useQuery(taskQueries.pulls(item.sessionId));
 	const list = useMemo(() => pulls.data?.pulls ?? [], [pulls.data]);
@@ -210,11 +203,6 @@ function ReviewDetail({ item, onBack }: { item: ReviewItem; onBack: () => void }
 /** Whether the list and the pull request fit side by side: the width the layout's `md:` classes split at. */
 const sideBySide = () => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 768px)').matches;
 
-/**
- * Reviews is a pull-request queue beside the pull request itself: the list
- * on the left keeps what each waits on, the panel on the right is the task's
- * own PR view — branches, checks, discussion and the merge box.
- */
 export function ReviewsPage() {
 	// Pull request state lives on GitHub, which tells Anton nothing, so this asks again every few minutes.
 	const reviews = useQuery({ queryKey: ['reviews'], queryFn: api.reviews, refetchInterval: 5 * 60_000 });

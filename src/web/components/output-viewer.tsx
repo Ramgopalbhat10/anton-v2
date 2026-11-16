@@ -17,13 +17,6 @@ import { cn } from '@/lib/utils';
 import { closeViewer, openViewer, stepViewer, useViewer, type ViewerItem, type ViewerState } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
 
-/*
- * What the agent made, where you read its reply: cards under the reply for
- * the files it saved and linked, and a viewer beside the conversation that
- * shows one full size. An image can be marked up there (a pen, arrows, boxes,
- * text) and handed to the composer, to ask the agent about what you circled.
- */
-
 const keyOf = (item: ViewerItem) => `${item.sessionId}\n${item.path}`;
 
 function download(item: ViewerItem) {
@@ -33,7 +26,6 @@ function download(item: ViewerItem) {
 	link.click();
 }
 
-/** A file's kind as an icon and its extension, where there is no picture of it. */
 export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	const info = categoryInfo(categoryOf(path));
 	return (
@@ -44,11 +36,6 @@ export function FileFace({ path, size = 20 }: { path: string; size?: number }) {
 	);
 }
 
-/**
- * Where a file you deleted was: in a reply (a page, an image), as a card's
- * picture, or full size in the viewer. It says so plainly, rather than
- * drawing a broken image or an empty page.
- */
 export function DeletedArtifact({ path, variant = 'block', className }: { path: string; variant?: 'block' | 'thumb' | 'stage'; className?: string }) {
 	const noun = deletedNoun(path);
 	if (variant === 'thumb') {
@@ -84,7 +71,6 @@ export function DeletedArtifact({ path, variant = 'block', className }: { path: 
 	);
 }
 
-/** An image of the file, or its kind when it is not one or cannot be read. */
 export function OutputThumb({ item, className, fit }: { item: ViewerItem; className?: string; fit?: 'cover' | 'contain' }) {
 	const [broken, setBroken] = useState(false);
 	// A wide picture (a chart, a banner) is shown whole; others fill the card from their top, as a page's screenshot reads.
@@ -105,7 +91,6 @@ export function OutputThumb({ item, className, fit }: { item: ViewerItem; classN
 	);
 }
 
-/** One file a reply made; one you deleted stays in its place, saying so, and opens nothing. */
 function OutputCard({ item, items, composer }: { item: ViewerItem; items: ViewerItem[]; composer: string | null }) {
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 	const face = (
@@ -150,13 +135,8 @@ function OutputCard({ item, items, composer }: { item: ViewerItem; items: Viewer
 	);
 }
 
-/** How many cards a reply shows before the rest go behind one that counts them. */
 const SHOWN = 6;
 
-/**
- * The files a reply made, as cards: images as pictures, other files as their
- * kind. A card opens the file in the viewer, the reply's others a step away.
- */
 export function OutputCards({ items, composer }: { items: ViewerItem[]; composer: string | null }) {
 	if (items.length === 0) return null;
 	const shown = items.length > SHOWN ? items.slice(0, SHOWN - 1) : items;
@@ -181,7 +161,6 @@ export function OutputCards({ items, composer }: { items: ViewerItem[]; composer
 	);
 }
 
-/** A file full size, as the Library and Artifacts show it: a page live, a document rendered, an image, a table. */
 export function OutputPreview({ item, code = false, title }: { item: ViewerItem; code?: boolean; title?: string }) {
 	const { sessionId, path } = item;
 	const app = categoryOf(path) === 'app';
@@ -205,7 +184,6 @@ export function OutputPreview({ item, code = false, title }: { item: ViewerItem;
 	return <Preview sessionId={sessionId} path={path} />;
 }
 
-/** The image fit to the viewer; a click shows it at its own size, to look closer. */
 function ImageStage({ item }: { item: ViewerItem }) {
 	const [actual, setActual] = useState(false);
 	const [broken, setBroken] = useState(false);
@@ -244,7 +222,7 @@ function ImageStage({ item }: { item: ViewerItem }) {
 /** The longest side a picture is drawn on at, so a huge screenshot stays quick to mark up and send. */
 const MAX_SIDE = 2400;
 
-/** The image as a PNG data URL at a size fit to draw on: Sketch flattens the marks onto it, so it must carry its own bytes. */
+/** A PNG data URL: Sketch flattens the marks onto it, so it must carry its own bytes. */
 async function rasterize(url: string): Promise<{ src: string; width: number; height: number }> {
 	const image = new Image();
 	image.src = url;
@@ -262,7 +240,6 @@ async function rasterize(url: string): Promise<{ src: string; width: number; hei
 	return { src: canvas.toDataURL('image/png'), width, height };
 }
 
-/** Drawing on the image, fit to the viewer; "Add to chat" puts the drawing in the composer. */
 function MarkupStage({ item, composer, onDone }: { item: ViewerItem; composer: string; onDone: (added: boolean) => void }) {
 	const picture = useQuery({
 		queryKey: ['viewer-picture', item.sessionId, item.path],
@@ -305,11 +282,7 @@ function MarkupStage({ item, composer, onDone }: { item: ViewerItem; composer: s
 /** The narrowest side panel the viewer takes the place of; a narrower one leaves it at its own width. */
 const DOCK_MIN = 440;
 
-/**
- * Where the viewer sits: over the page's side panel when it has one wide
- * enough, so the conversation stays as it was beside it; else at its own
- * width along the right edge.
- */
+/** Over the page's side panel when it has one wide enough, so the conversation stays as it was; else at its own width along the right edge. */
 function useDock(): CSSProperties | undefined {
 	const [box, setBox] = useState<DOMRect | null>(null);
 	useLayoutEffect(() => {
@@ -331,7 +304,6 @@ function useDock(): CSSProperties | undefined {
 	return box ? { top: box.top, left: box.left, width: box.width, height: box.height, bottom: 'auto' } : undefined;
 }
 
-/** The viewer's frame: what is open, where it is among the reply's files, and what can be done with it. */
 function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 	const item = viewer.items[viewer.index];
 	const image = isImagePath(item.path);
@@ -455,7 +427,6 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 	);
 }
 
-/** The viewer, once for the app: it closes when you go to another page. */
 export function OutputViewerHost(): ReactNode {
 	const viewer = useViewer();
 	const pathname = useRouterState({ select: (state) => state.location.pathname });

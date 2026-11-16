@@ -2,18 +2,11 @@ import { Check, GitPullRequest, ListTodo, type IconComponent, Rows3 } from '@/li
 import { type CSSProperties, createContext, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-/*
- * Anton's illustrations, drawn one way: flat trays and slim tiles in the
- * text colour at a low strength (soft white on the dark theme, soft ink on
- * the light one) with a hairline edge, short rules for a label, and a
- * single light. The one accent marks what is lit or at work; everything else
- * stays grey, so a drawing sits in an empty state without shouting. Wires run
- * between parts and carry a slow dashed flow when something is moving.
- */
+/* Drawn in the text colour at a low strength with hairline edges; only the accent marks what is lit or at work. */
 
 /* ——— Parts ——— */
 
-/** The text colour at a strength: soft white on the dark theme, soft ink on the light one, so a drawing holds on either. */
+/** The text colour at a strength, so a drawing holds on either theme. */
 const ink = (percent: number) => `color-mix(in srgb, var(--text) ${percent}%, transparent)`;
 const EDGE = ink(9);
 const RULE = ink(16);
@@ -54,17 +47,14 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 	);
 }
 
-/** A shallow tray that tiles stand in. */
 function Tray({ x, y, w, h, r = 10 }: { x: number; y: number; w: number; h: number; r?: number }) {
 	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={ink(2.5)} stroke={ink(7)} />;
 }
 
-/** An empty slot in a tray. */
 function Slot({ x, y, w, h, r = 4 }: { x: number; y: number; w: number; h: number; r?: number }) {
 	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} stroke={ink(11)} strokeDasharray="1.5 2.5" />;
 }
 
-/** A tile: soft white, or lit in the accent, with a hairline all round. */
 function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: number; w: number; h: number; r?: number; lit?: boolean; className?: string; style?: CSSProperties }) {
 	const id = useContext(Ids);
 	return (
@@ -74,19 +64,16 @@ function Tile({ x, y, w, h, r = 4, lit, className, style }: { x: number; y: numb
 	);
 }
 
-/** A recessed screen, darker than the tile it is set in. */
 function Screen({ x, y, w, h, r = 5 }: { x: number; y: number; w: number; h: number; r?: number }) {
 	const id = useContext(Ids);
 	return <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={r} fill={`url(#${id}-screen)`} stroke={EDGE} />;
 }
 
-/** A soft pool of the accent behind something lit. */
 function Glow({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 	const id = useContext(Ids);
 	return <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-glow)`} />;
 }
 
-/** A meter of a few cells, `level` of them lit (or grey when the unit is off). */
 function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: number; level: number; on: boolean }) {
 	return (
 		<g>
@@ -106,7 +93,6 @@ function Meter({ x, y, cells = 8, level, on }: { x: number; y: number; cells?: n
 	);
 }
 
-/** Short rules, like the label on a drive. */
 function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number; w: number | number[]; n?: number; gap?: number; faint?: boolean; lit?: boolean }) {
 	const widths = Array.isArray(w) ? w : Array.from({ length: n }, () => w);
 	return (
@@ -118,12 +104,10 @@ function Rules({ x, y, w, n = 3, gap = 3.5, faint, lit }: { x: number; y: number
 	);
 }
 
-/** A tile's light: grey, lit, or lit and pulsing while it works. */
 function Light({ x, y, size = 5, on, live }: { x: number; y: number; size?: number; on?: boolean; live?: boolean }) {
 	return <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={1} fill={on || live ? ACCENT : 'var(--track)'} className={live ? 'in-pulse' : undefined} />;
 }
 
-/** A wire between parts; lit ones carry a slow dashed flow. */
 function Wire({ d, lit, broken }: { d: string; lit?: boolean; broken?: boolean }) {
 	return lit ? (
 		<g>
@@ -143,7 +127,6 @@ function Caption({ x, y, children, accent, anchor = 'start' }: { x: number; y: n
 	);
 }
 
-/** A slim tile standing in a tray: rules near the top, a light at the foot. */
 function Blade({ x, y, h = 56, lit, live, on }: { x: number; y: number; h?: number; lit?: boolean; live?: boolean; on?: boolean }) {
 	return (
 		<g>
@@ -156,7 +139,6 @@ function Blade({ x, y, h = 56, lit, live, on }: { x: number; y: number; h?: numb
 
 /* ——— Empty and quiet states ——— */
 
-/** A tray of slots, the first few filled and the next one arriving, lit. */
 export function TasksArt({ className }: { className?: string }) {
 	const xs = Array.from({ length: 8 }, (_, index) => 26 + index * 22);
 	return (
@@ -169,7 +151,6 @@ export function TasksArt({ className }: { className?: string }) {
 	);
 }
 
-/** A coordinator wired to three threads, one of them at work: a project. */
 export function ProjectArt({ className }: { className?: string }) {
 	return (
 		<Art w={240} h={124} label="A coordinator wired to three threads running side by side" className={className}>
@@ -193,18 +174,12 @@ export function ProjectArt({ className }: { className?: string }) {
 	);
 }
 
-/**
- * A sandbox: a terminal window wired to the compute unit it runs on, whose
- * meters (processor, memory, disk) and light say its state. Lit and at work
- * when ready or running; grey and still when idle or stopped.
- */
 export function SandboxArt({ className, label = 'idle' }: { className?: string; label?: string }) {
 	const on = label === 'ready' || label === 'running';
 	const prompt = on ? ACCENT : 'var(--text-4)';
 	return (
 		<Art w={260} h={116} label={`A terminal on a compute unit, ${label}`} className={className}>
 			{on ? <Glow cx={208} cy={58} r={56} /> : null}
-			{/* The terminal. */}
 			<Tile x={10} y={10} w={150} h={96} r={9} />
 			{[21, 28, 35].map((x) => (
 				<circle key={x} cx={x} cy={21} r={2} fill={RULE} />
@@ -216,10 +191,8 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 			<Rules x={24} y={55} w={[104, 82, 94, 60]} faint gap={6} />
 			<path d="M24 82 l3.5 3 l-3.5 3" stroke={prompt} strokeLinecap="round" strokeLinejoin="round" />
 			<rect x={33} y={81.5} width={5} height={8} rx={1} fill={on ? ACCENT : 'var(--track)'} className={on ? 'fa-blink' : undefined} />
-			{/* Two leads to the unit. */}
 			<Wire d="M160 46 H180" lit={on} broken={!on} />
 			<Wire d="M160 70 H180" lit={on} broken={!on} />
-			{/* The compute unit. */}
 			<Tile x={180} y={14} w={68} h={88} r={9} lit={on} />
 			<Rules x={190} y={24} w={[22, 14]} gap={4} lit={on} />
 			<Light x={238} y={26} on={on} live={on} />
@@ -245,7 +218,6 @@ export function SandboxArt({ className, label = 'idle' }: { className?: string; 
 	);
 }
 
-/** A branch leaving main and heading for a pull request, its newest commit lit. */
 export function BranchArt({ className }: { className?: string }) {
 	const commit = (x: number, y: number, lit?: boolean) => <rect key={`${x}-${y}`} x={x - 3.5} y={y - 3.5} width={7} height={7} rx={2} fill={lit ? ACCENT : 'var(--bg-active)'} stroke={lit ? 'var(--accent-line)' : ink(22)} />;
 	return (
@@ -269,7 +241,6 @@ export function BranchArt({ className }: { className?: string }) {
 	);
 }
 
-/** Storage: three drives in a stack, the middle one at work. */
 export function StorageArt({ className }: { className?: string }) {
 	return (
 		<Art w={200} h={108} label="A stack of storage drives, one lit" className={className}>
@@ -287,7 +258,6 @@ export function StorageArt({ className }: { className?: string }) {
 	);
 }
 
-/** An agent with three subagents wired to it, one of them at work. */
 export function AgentsArt({ className }: { className?: string }) {
 	const subs: Array<[number, number, boolean]> = [
 		[36, 18, false],
@@ -315,7 +285,6 @@ export function AgentsArt({ className }: { className?: string }) {
 
 const shortName = (name: string, max = 34) => (name.length > max ? `${name.slice(0, max - 1)}…` : name);
 
-/** A file's diff being written, line by line, on the task's branch. */
 export function ChangesArt({ className, branch, base }: { className?: string; branch?: string; base?: string }) {
 	const rows: Array<[number, 'add' | 'keep' | 'drop']> = [
 		[110, 'keep'],
@@ -349,7 +318,6 @@ export function ChangesArt({ className, branch, base }: { className?: string; br
 	);
 }
 
-/** The mark's facets, for drawing Anton inside an illustration. */
 function MarkShapes() {
 	return (
 		<>
@@ -361,7 +329,6 @@ function MarkShapes() {
 	);
 }
 
-/** A small pool and a ring of the accent where the plug meets its socket, drawn only while it seats. */
 function Spark({ cx, cy }: { cx: number; cy: number }) {
 	const id = useContext(Ids);
 	return (
@@ -372,13 +339,7 @@ function Spark({ cx, cy }: { cx: number; cy: number }) {
 	);
 }
 
-/**
- * Anton on the left, your plan on the right (its vendor's logo when there is
- * one), joined by a plug and a socket: the plug pushed in and the wires lit,
- * carrying a flow, when you are signed in; pulled out with a gap when you are
- * not. When a plan connects while the drawing is on screen, the plug slides in
- * with a small spark at the socket; a plan already connected never animates.
- */
+/** Anton and your plan joined by a plug: pushed in when signed in, pulled out when not. It slides in only when a plan connects on screen. */
 export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
 	const was = useRef(linked);
 	const [seating, setSeating] = useState(false);
@@ -398,13 +359,12 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 	const slot = linked ? 'var(--accent-text)' : ink(20);
 	return (
 		<Art w={280} h={112} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
-			{/* The cable from Anton to the plug, and the lead from the socket to the plan. */}
 			<g className={seating ? 'fa-arrive' : undefined}>
 				<Wire d={`M86 46 H${plugX - 3}`} lit={linked} />
 				<Wire d="M163 46 H194" lit={linked} />
 			</g>
 			{seating ? <Spark cx={150} cy={46} /> : null}
-			{/* The plug: a cable neck, a body and two prongs. The outer group places it; the inner one animates. */}
+			{/* The outer group places the plug; the inner one animates. */}
 			<g transform={`translate(${plugX} 0)`}>
 				<g className={seating ? 'fa-seat' : undefined}>
 					<line x1={18} x2={25} y1={42.5} y2={42.5} stroke={prong} strokeWidth={1.5} strokeLinecap="round" />
@@ -413,16 +373,13 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 					<rect x={-4} y={43.5} width={5} height={5} rx={1.5} fill={linked ? 'var(--accent-line)' : ink(16)} />
 				</g>
 			</g>
-			{/* The socket: a taller housing on the plan's lead, its slots lit once the prongs are in. */}
 			<rect x={150.5} y={35.5} width={13} height={21} rx={3} fill="var(--bg-app)" stroke={edge} />
 			<line x1={150.5} x2={155} y1={42.5} y2={42.5} stroke={slot} strokeWidth={1.5} />
 			<line x1={150.5} x2={155} y1={49.5} y2={49.5} stroke={slot} strokeWidth={1.5} />
-			{/* Anton. */}
 			<Tile x={30} y={18} w={56} h={56} r={12} lit={linked} />
 			<g transform="translate(40 28) scale(2.15) translate(-3.5 -5.7)">
 				<MarkShapes />
 			</g>
-			{/* The plan. */}
 			<Tile x={194} y={18} w={56} h={56} r={12} lit={linked} />
 			{logo ? (
 				// The vendor's own logo, as its tab shows it; one-colour logos take the text colour.
@@ -452,7 +409,6 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 	);
 }
 
-/** A row of ports, a plug lined up over one of them. */
 export function LinkArt({ className }: { className?: string }) {
 	return (
 		<Art w={220} h={100} label="A row of ports with a plug lined up to one" className={className}>
@@ -470,7 +426,6 @@ export function LinkArt({ className }: { className?: string }) {
 	);
 }
 
-/** Saved states of the files in a row, an earlier one lifted out to look at. */
 export function HistoryArt({ className }: { className?: string }) {
 	const xs = [24, 56, 88, 120, 152, 184];
 	return (
@@ -490,7 +445,6 @@ export function HistoryArt({ className }: { className?: string }) {
 	);
 }
 
-/** Files on a shelf, one lifted out. */
 export function LibraryArt({ className }: { className?: string }) {
 	const files: Array<[number, number, number]> = [
 		[28, 22, 48],
@@ -553,12 +507,7 @@ export function ProjectRouteArt({ className, active }: { className?: string; act
 
 /* ——— The mark ——— */
 
-/**
- * Anton's mark: the composer mascot's head, its cube drawn in three flat
- * facets with two eyes on the lit face. Hovered, it hops and glances
- * (`.anton-logo` in instrument.css). The favicon and app icons are drawn
- * from the same shapes (scripts/make-icons.ts); keep the two in step.
- */
+/** Anton's mark. The favicon and app icons are drawn from the same shapes (scripts/make-icons.ts); keep them in step. */
 export function Logo({ size = 20, className }: { size?: number; className?: string }) {
 	return (
 		<svg aria-hidden width={size} height={size} viewBox="3.5 5.7 17 17" className={cn('anton-logo shrink-0 overflow-visible', className)}>

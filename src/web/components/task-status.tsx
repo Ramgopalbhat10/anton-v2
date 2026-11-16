@@ -10,11 +10,7 @@ export function liveLabel(session: Session): string {
 	return session.working ? 'Working' : 'Running';
 }
 
-/**
- * Where the task stands as one mark: the same glyph and the same states (Needs you, Working, Idle, Done…) a
- * project shows its threads with, so a task reads the same in the sidebar, the task list and its project.
- * Whether its sandbox runs is said apart, by the list it is in.
- */
+/** The same glyph and states a project shows its threads with; whether its sandbox runs is said apart, by the list it is in. */
 export function TaskStatusIcon({ session, size = 14 }: { session: Session; size?: number }) {
 	const kind = glyphKind(session);
 	return <Glyph kind={kind} size={size} title={KIND_LABEL[kind]} />;

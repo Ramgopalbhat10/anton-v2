@@ -1,7 +1,6 @@
 /** An image picked for the next message: the bytes for the agent and a URL for the preview. */
 export type ImageAttachment = { id: string; filename: string; mimeType: string; data: string; preview: string };
 
-/** An image from its base64 bytes. */
 export const imageFromBase64 = (data: string, filename: string, mimeType = 'image/png', id: string = crypto.randomUUID()): ImageAttachment => ({
 	id,
 	filename,
@@ -10,7 +9,6 @@ export const imageFromBase64 = (data: string, filename: string, mimeType = 'imag
 	preview: `data:${mimeType};base64,${data}`,
 });
 
-/** An image from a data URL, as a file reader or a canvas gives one. */
 export function imageFromDataUrl(url: string, filename: string): ImageAttachment {
 	return imageFromBase64(url.slice(url.indexOf(',') + 1), filename, /^data:([^;,]+)/.exec(url)?.[1] ?? 'image/png');
 }
@@ -37,12 +35,7 @@ function readAsDataUrl(file: File): Promise<string> {
 /** Whether the model is handed the file as a picture: an image it can see, small enough to send as one. */
 export const sentAsImage = (file: File) => IMAGE_TYPES.has(file.type) && file.size <= MAX_IMAGE_BYTES;
 
-/**
- * Sorts the files the user picked, pasted or dropped: images the model sees go
- * as images, every other file (and an image too large to send as one) as a
- * file. `imagesAsFiles` sends images as files too, where a message carries no
- * pictures (a new thread's brief). Says why any were left out.
- */
+/** Sorts picked, pasted or dropped files: images the model sees go as images, anything else (and an image too large) as a file; `imagesAsFiles` sends images as files too. Says why any were left out. */
 export async function readAttachments(
 	files: File[],
 	room: { images: number; files: number },
@@ -69,7 +62,6 @@ export async function readAttachments(
 /** Images as the agent runtime takes them with a message. */
 export const deliveredImages = (images: ImageAttachment[]) => images.map(({ data, mimeType, filename }) => ({ type: 'image' as const, data, mimeType, filename }));
 
-/** An image back as a file, to save it where a message carries no pictures of its own (the project Library). */
 export function imageFile(image: ImageAttachment): File {
 	const bytes = Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0));
 	return new File([bytes], image.filename, { type: image.mimeType });

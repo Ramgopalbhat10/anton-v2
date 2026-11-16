@@ -10,7 +10,6 @@ export function useProjects() {
 /** Picked in place of a repo for a chat, which has none; remembered like a repo. */
 export const NO_REPO = 'none';
 
-/** Remembers the repo of the last task, or that it was a chat, so the next one starts the same way. */
 export function rememberProject(id: string) {
 	try {
 		localStorage.setItem(KEY, id);

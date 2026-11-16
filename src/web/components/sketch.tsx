@@ -3,11 +3,7 @@ import { type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Btn, IconBtn } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/*
- * Drawing on a picture of the page, to show the agent what you mean: a pen,
- * lines, arrows, boxes, ellipses and text in a few colours, with undo. The
- * marks are SVG over the picture; "Add to chat" flattens both into a PNG.
- */
+/* The marks are SVG over the picture; "Add to chat" flattens both into a PNG. */
 
 type Tool = 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text';
 type Point = { x: number; y: number };
@@ -100,7 +96,6 @@ function MarkShape({ mark }: { mark: Mark }) {
 	}
 }
 
-/** The picture with the marks on it, as a PNG data URL at the picture's own size. */
 async function flatten(svg: SVGSVGElement, width: number, height: number): Promise<string> {
 	const markup = new XMLSerializer().serializeToString(svg);
 	const image = new Image();
@@ -113,11 +108,7 @@ async function flatten(svg: SVGSVGElement, width: number, height: number): Promi
 	return canvas.toDataURL('image/png');
 }
 
-/**
- * Draws over `src` (a picture as a data URL, so the flattened PNG holds it)
- * shown at the size of the area it covers, which has the picture's shape.
- * `onAttach` gets the result as a PNG data URL.
- */
+/** `src` is a data URL, so the flattened PNG holds it. */
 export function Sketch({
 	src,
 	width,
@@ -131,7 +122,6 @@ export function Sketch({
 	height: number;
 	onClose: () => void;
 	onAttach: (png: string) => void;
-	/** The tools under the picture rather than over its foot, where there is room for them. */
 	toolbarBelow?: boolean;
 }) {
 	const svg = useRef<SVGSVGElement>(null);
@@ -183,7 +173,6 @@ export function Sketch({
 		return () => window.removeEventListener('keydown', onKey);
 	}, []);
 
-	/** The pointer in the picture's own pixels. */
 	function at(event: PointerEvent): Point {
 		const box = svg.current!.getBoundingClientRect();
 		return { x: ((event.clientX - box.left) / box.width) * width, y: ((event.clientY - box.top) / box.height) * height };

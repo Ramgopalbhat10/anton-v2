@@ -3,11 +3,6 @@ import { Fragment, type ReactNode } from 'react';
 import { MenuButton } from '@/components/nav';
 import { Icon } from '@/components/signal';
 
-/**
- * The bar along the top of the work panel: where you are, as crumbs with the
- * last one bright, and the page's actions on the right. On a phone the menu
- * button leads it.
- */
 export function TopBar({ crumbs, children }: { crumbs: ReactNode[]; children?: ReactNode }) {
 	return (
 		<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-3 pl-2 md:pl-4">

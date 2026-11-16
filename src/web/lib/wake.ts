@@ -6,10 +6,9 @@ import { newTaskId } from '@/lib/starting';
 const HEARTBEAT_MS = 30_000;
 
 /**
- * While a new task's prompt has text, a sandbox for it starts on the server, under the id the task will be made
- * with, so it is set up by the time the task is sent. It is asked for again while the text stays and the page is in
- * view, and let go when the text is cleared, the repo or branch changes, or the page goes. Returns what to call for
- * the new task's id: the woken one when there is one, so the task finds its sandbox, else a new one.
+ * Starts a sandbox for a new task while its prompt has text, under the id the task will be made with; asked again while
+ * the text stays and the page is in view, let go when it is cleared, the repo or branch changes, or the page goes.
+ * Returns the id to make the task with: the woken one, so the task finds its sandbox.
  */
 export function useDraftWake({ projectId, branch, typed, enabled }: { projectId?: string; branch?: string; typed: boolean; enabled: boolean }): () => string {
 	const draft = useRef<string | null>(null);
@@ -56,10 +55,7 @@ export function useDraftWake({ projectId, branch, typed, enabled }: { projectId?
 /** At most one wake per this while a message to a task is typed: the server keeps a started machine up its idle minutes. */
 const SESSION_WAKE_MS = 60_000;
 
-/**
- * Starts a stopped task's sandbox as a message to it is typed, so the machine is up, or nearly, when it is sent. The
- * server decides whether the task is one that needs it.
- */
+/** Starts a stopped task's sandbox as a message to it is typed; the server decides whether the task needs it. */
 export function useSessionWake(sessionId: string, typed: boolean, stopped: boolean): void {
 	const last = useRef(0);
 	useEffect(() => {

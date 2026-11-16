@@ -8,7 +8,6 @@ import { age } from '@/lib/format';
 import { canPromptInstall, currentSubscription, deviceIdOf, isInstalled, isIos, onInstallChange, promptInstall, pushSupport, turnOffPush, turnOnPush } from '@/lib/push';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';
 
-/** The id this browser is listed under, once its subscription is known; null when it has none. */
 function useThisDevice(view: PushView | undefined): string | null | undefined {
 	const [id, setId] = useState<string | null | undefined>(undefined);
 	useEffect(() => {
@@ -132,7 +131,6 @@ function Devices({ view, thisDevice }: { view: PushView; thisDevice: string | nu
 	);
 }
 
-/** Putting Anton on the home screen: a button where the browser offers one, else how to do it. */
 function Install() {
 	const [, rerender] = useState(0);
 	useEffect(() => onInstallChange(() => rerender((count) => count + 1)), []);

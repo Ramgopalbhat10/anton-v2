@@ -13,12 +13,10 @@ const PROBLEMS_SHOWN = 50;
 
 type LogEntry = Awaited<ReturnType<typeof api.logs>>['logs'][number];
 
-/** One problem on one line: what went wrong, how often and when, with the raw detail a click away. */
 function ProblemRow({ entry, count, first, last }: { entry: LogEntry; count: number; first: string; last: boolean }) {
 	const [open, setOpen] = useState(false);
 	return (
 		<div className="relative flex items-start gap-3 py-1.5 pl-1">
-			{/* A rail through the dots, so the list reads as a timeline. */}
 			{last ? null : <span className="absolute top-[22px] bottom-[-8px] left-[7px] w-px bg-(--line)" />}
 			<span
 				className="relative mt-[9px] size-[7px] shrink-0 rounded-full ring-4 ring-(--bg-surface)"
