@@ -52,8 +52,7 @@ function itemsFor(trigger: Trigger | null, paths: string[], commands: Command[],
 	}));
 }
 
-/** Skills every new task gets from the installed plugins; a task also has its repo's own. */
-/** The paths `@` offers: the task's files, or a repository's before a task has one. Made out here so the query cache never keeps the composer's scope. */
+/** Made out here so the query cache never keeps the composer's scope. */
 const pathsQuery = (sessionId?: string, projectId?: string, branch?: string): { queryKey: QueryKey; queryFn: () => Promise<{ paths: string[] }> } =>
 	sessionId ? { queryKey: ['files', sessionId], queryFn: () => api.files(sessionId) } : { queryKey: ['project-files', projectId, branch], queryFn: () => api.projectFiles(projectId ?? '', branch) };
 
@@ -61,11 +60,7 @@ function activeSkills(plugins: Plugin[]): SkillSummary[] {
 	return plugins.flatMap((plugin) => plugin.skills.filter((skill) => skill.active).map(({ name, description }) => ({ name, description })));
 }
 
-/**
- * Completion for a message box: `/` at the start offers saved commands and skills, `@`
- * offers files from the task or selected repository branch. Pass `onKeyDown` first in the box's key handler;
- * it returns true when it used the key.
- */
+/** Pass `onKeyDown` first in the box's key handler; it returns true when it used the key. */
 export function useSuggestions({
 	text,
 	setText,

@@ -26,7 +26,6 @@ function Open({ section, children }: { section: string; children: ReactNode }) {
 	);
 }
 
-/** Today's spend against the daily cap, and the shape of the last 30 days. */
 function SpendCard() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget() });
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage });
@@ -70,7 +69,6 @@ function SpendCard() {
 	);
 }
 
-/** Tasks by state, and how many hold a sandbox right now. */
 function TasksCard() {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 	const all = sessions.data?.sessions ?? [];
@@ -126,7 +124,6 @@ function TasksCard() {
 	);
 }
 
-/** Repositories, ranked by how many tasks have worked on each. */
 function ReposCard() {
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
@@ -184,7 +181,6 @@ function StorageCard() {
 	);
 }
 
-/** Every settings page by group, with a few numbers worth seeing first. */
 export function SettingsOverview() {
 	return (
 		<div className="flex flex-col gap-6">

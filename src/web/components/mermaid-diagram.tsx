@@ -2,11 +2,7 @@ import type { Mermaid } from 'mermaid';
 import { useEffect, useId, useState } from 'react';
 import { CodeBlock, useSettled } from '@/components/code-block';
 
-/*
- * A ```mermaid block in a reply, drawn as a diagram. Mermaid is large, so it
- * loads only when a reply has one. It runs at its strictest: labels are text,
- * clicks and links in the diagram do nothing, and its SVG is sanitized.
- */
+/* Mermaid is large, so it loads only when a reply has a diagram. It runs at its strictest: labels are text, clicks and links do nothing, and its SVG is sanitized. */
 
 let loading: Promise<Mermaid> | null = null;
 let queue: Promise<unknown> = Promise.resolve();

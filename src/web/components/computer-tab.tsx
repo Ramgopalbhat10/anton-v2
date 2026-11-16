@@ -13,20 +13,11 @@ import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
 import { taskQueries } from '@/lib/task-queries';
 
-/*
- * The Computer panel: the desktop inside the task's sandbox, shown over VNC
- * (noVNC in the page, through a short-lived address Anton asks the sandbox
- * for), and the sandbox's headless browser, shown from its live view. You
- * watch the agent at work, or take over to use it yourself, which makes the
- * agent wait until you give it back. Looking at the panel never starts the
- * sandbox; Start computer does, and the agent's first sandbox browser step
- * brings the browser up.
- */
+/* Looking at the panel never starts the sandbox; Start computer does, and the agent's first sandbox browser step brings the browser up. */
 
 /** The screen stops streaming after a spell with no sign of you or the agent; the computer keeps running. */
 const PAUSE_AFTER_MS = 5 * 60_000;
 
-/** Whether the screen should stream, and a way to wake it. */
 function useScreenAwake(on: boolean, agentBusy: boolean): [boolean, () => void] {
 	const shown = useWindowShown();
 	const [paused, setPaused] = useState(false);
@@ -68,10 +59,7 @@ function useScreenAwake(on: boolean, agentBusy: boolean): [boolean, () => void] 
 
 type Link = { state: 'connecting' | 'connected' | 'closed'; error?: string };
 
-/**
- * The screen itself, connected while it is mounted. A connection that drops
- * uncleanly is tried again twice, each with a fresh address.
- */
+/** A connection that drops uncleanly is tried again twice, each with a fresh address. */
 function Screen({ sessionId, viewOnly, onLink }: { sessionId: string; viewOnly: boolean; onLink: (link: Link) => void }) {
 	const target = useRef<HTMLDivElement>(null);
 	const client = useRef<RFB | null>(null);
@@ -120,13 +108,7 @@ const BUTTONS = ['left', 'middle', 'right'] as const;
 /** Mouse moves sent at most this often, as each is a step in the sandbox's browser. */
 const MOVE_MS = 30;
 
-/**
- * The sandbox browser's tab, from its live view: JPEG frames drawn on a
- * canvas, and once you take over, your mouse and keyboard sent back in the
- * tab's own pixels. Only the latest frame is drawn when they come faster
- * than the page can draw them. A connection that drops uncleanly is tried
- * again twice, each with a fresh address.
- */
+/** Only the latest frame is drawn when frames come faster than the page can draw. A connection that drops uncleanly is tried again twice, each with a fresh address. */
 function BrowserScreen({ sessionId, viewOnly, onLink, canvas }: { sessionId: string; viewOnly: boolean; onLink: (link: Link) => void; canvas: React.RefObject<HTMLCanvasElement | null> }) {
 	const socket = useRef<WebSocket | null>(null);
 	const lastMove = useRef(0);
@@ -285,7 +267,6 @@ export function ComputerTab({ sessionId }: { sessionId: string }) {
 	const size = { width: Math.floor(screen.width * scale), height: Math.floor(screen.height * scale) };
 	const [showing, wake] = useScreenAwake(running || browsing, Boolean(computer?.agentBusy));
 	const [link, setLink] = useState<Link>({ state: 'connecting' });
-	// Mounting the screen again connects again.
 	const [connection, setConnection] = useState(0);
 	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);

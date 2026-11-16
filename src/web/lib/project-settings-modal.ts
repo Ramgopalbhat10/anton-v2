@@ -1,10 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/*
- * A project's settings open as a card over the page you are on, the way the
- * app's Settings do (components/project-settings.tsx). This holds which
- * project's card is open, and at which section.
- */
+/* Which project's settings card is open over the page, and at which section. */
 
 export const PROJECT_SECTIONS = ['general', 'instructions', 'memory', 'repositories', 'usage', 'lifecycle'] as const;
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number];
@@ -28,7 +24,6 @@ export function closeProjectSettings() {
 	emit();
 }
 
-/** Which project's settings are open, and where; null when closed. */
 export function useProjectSettings(): ProjectSettingsAt | null {
 	return useSyncExternalStore(
 		(listener) => {

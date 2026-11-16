@@ -1,11 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/**
- * The workspace panels you pinned, in the order you pinned them: a task or a
- * thread opens with these as its tabs, and with none pinned it opens on the
- * list of panels to pick from. Kept in this browser, like the panels each
- * thread had open; nothing is lost without storage, only the pins.
- */
+/** The workspace panels you pinned, in pin order: a task opens with these as its tabs. Kept in this browser. */
 const KEY = 'anton.pinned-panels';
 const NONE: string[] = [];
 
@@ -25,7 +20,6 @@ function read(): string[] {
 		const parsed = JSON.parse(raw ?? 'null') as unknown;
 		if (Array.isArray(parsed)) names = parsed.filter((name): name is string => typeof name === 'string');
 	} catch {
-		// A stored value that is not a list pins nothing.
 	}
 	cached = { raw, names };
 	return names;
@@ -44,7 +38,6 @@ function subscribe(listener: () => void): () => void {
 	};
 }
 
-/** The pinned panels' names, as stored; the caller keeps only the names it knows. */
 export const readPinnedPanels = (): string[] => read();
 
 export function togglePinnedPanel(name: string): void {

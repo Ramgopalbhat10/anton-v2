@@ -20,21 +20,13 @@ import { useOnePane } from '@/lib/one-pane';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 
-/*
- * Everything the agent made, in every task: apps (the pages it drew, which
- * keep their state wherever they are open) and files, as cards with what each
- * looks like. A card picks the artifact, which opens in a sheet beside the
- * gallery with where it came from; from there, or on a second click, it
- * opens here full size, with its source.
- */
-
 export type ArtifactsSearch = { type?: Category; q?: string };
 
 const artifactKey = (artifact: Pick<Artifact, 'sessionId' | 'path'>) => JSON.stringify([artifact.sessionId, artifact.path]);
 
 const when = (artifact: Artifact) => age(new Date(artifact.mtimeMs).toISOString());
 
-/** Where the task an artifact came from is: a project's thread opens inside its project. A file you added is from none. */
+/** A project's thread opens inside its project; a file you added is from no task. */
 function TaskLink({ artifact, className, children }: { artifact: Artifact; className?: string; children: ReactNode }) {
 	if (artifact.added) return <span className={className}>{children}</span>;
 	return artifact.task.spaceId ? (
@@ -55,10 +47,7 @@ function download(artifact: Artifact) {
 	link.click();
 }
 
-/**
- * Deletes an artifact from its task's Library. It leaves this page at once;
- * a reply that showed it says it was deleted (src/web/lib/deleted-outputs.ts).
- */
+/** It leaves this page at once; a reply that showed it says it was deleted. */
 function useDeleteArtifact(artifact: Artifact, onDeleted?: () => void) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -88,7 +77,6 @@ function useNearViewport<T extends Element>(): [React.RefObject<T | null>, boole
 	return [ref, near];
 }
 
-/** The first lines of a text file, faded out at the card's edge. */
 function Snippet({ artifact }: { artifact: Artifact }) {
 	const text = useQuery({
 		queryKey: ['artifact-snippet', artifact.sessionId, artifact.path],
@@ -103,7 +91,7 @@ function Snippet({ artifact }: { artifact: Artifact }) {
 	);
 }
 
-/** An app's card well: a drawn browser window with a chart in it, since the page only runs when it is open. */
+/** Drawn, since an app's page runs only when it is open. */
 function AppThumb() {
 	return (
 		<span data-preview="app" aria-hidden className="absolute inset-0 flex items-center justify-center bg-(--bg-app)">
@@ -147,16 +135,12 @@ function Thumb({ artifact }: { artifact: Artifact }) {
 	);
 }
 
-/** The skill a file you added was installed as, if it was. */
 function useInstalledFrom(artifact: Artifact, enabled: boolean) {
 	const plugins = useQuery({ queryKey: ['plugins'], queryFn: api.plugins, enabled, staleTime: 30_000 });
 	return plugins.data?.plugins.find((plugin) => plugin.source.repo === ADDED_FILES && plugin.source.path === artifact.path) ?? null;
 }
 
-/**
- * Installs a Markdown file you added as a skill, or a skill's folder zipped with its scripts, or updates the
- * skill it was installed as. Its name comes from the SKILL.md's front matter, so any file name will do. The menu stays open to say how it went.
- */
+/** The skill's name comes from the SKILL.md's front matter, so any file name will do. The menu stays open to say how it went. */
 function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolean }) {
 	const queryClient = useQueryClient();
 	const known = useInstalledFrom(artifact, open);
@@ -196,7 +180,7 @@ function InstallSkillItem({ artifact, open }: { artifact: Artifact; open: boolea
 	);
 }
 
-/** Opening it elsewhere, saving it, going to the task it came from, or deleting it. Delete asks twice inside the menu. */
+/** Delete asks twice inside the menu. */
 function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 	const navigate = useNavigate();
 	const app = categoryOf(artifact.path) === 'app';
@@ -259,7 +243,6 @@ function ArtifactMenu({ artifact }: { artifact: Artifact }) {
 	);
 }
 
-/** One artifact: what it looks like, its name, and the task it came from. The whole card opens it; its menu sits above the link. */
 type Selection = { keys: Set<string>; toggle: (artifact: Artifact) => void; disabled: boolean };
 /** The card the sheet shows, and how a card asks to be it; absent where a card opens the artifact straight away. */
 type Picking = { key: string | null; pick: (artifact: Artifact) => void };
@@ -330,7 +313,6 @@ function Grid({ items, selection, picking }: { items: Artifact[]; selection?: Se
 	);
 }
 
-/** A fact about the picked artifact: its name on the left, what it is on the right. */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="flex items-start gap-2">
@@ -340,7 +322,6 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 	);
 }
 
-/** The picked artifact beside the gallery: what it looks like, what it is, the task it came from, and the ways to take it. */
 function ArtifactSheet({ artifact, onClose }: { artifact: Artifact; onClose: () => void }) {
 	const router = useRouter();
 	const info = categoryInfo(categoryOf(artifact.path));
@@ -440,11 +421,7 @@ function matches(artifact: Artifact, query: string): boolean {
 	return words.every((word) => haystack.includes(word));
 }
 
-/**
- * Adds files of your own, such as a skill's SKILL.md, which any task can then be given from the composer's + menu.
- * A folder goes in as one .zip named for it, and a folder with a SKILL.md is installed as a skill straight away,
- * scripts and all.
- */
+/** A folder goes in as one .zip named for it; one with a SKILL.md is installed as a skill straight away. */
 function AddFiles() {
 	const picker = useRef<HTMLInputElement>(null);
 	const folderPicker = useRef<HTMLInputElement>(null);
@@ -602,7 +579,6 @@ function sortArtifacts(items: Artifact[], sort: SortId): Artifact[] {
 	return sorted;
 }
 
-/** The order the gallery lies in, picked from a quiet menu on the row's right. */
 function SortMenu({ sort, onPick }: { sort: SortId; onPick: (sort: SortId) => void }) {
 	const label = SORTS.find((entry) => entry.id === sort)?.label ?? 'Newest first';
 	return (
@@ -627,7 +603,6 @@ function SortMenu({ sort, onPick }: { sort: SortId; onPick: (sort: SortId) => vo
 	);
 }
 
-/** Every artifact, newest first: apps on top, then the files; or one kind, picked above. */
 export function ArtifactsPage() {
 	const search = useSearch({ from: '/artifacts' });
 	const navigate = useNavigate();
@@ -735,7 +710,6 @@ export function ArtifactsPage() {
 	);
 }
 
-/** One artifact, full size: an app live (or its source), a document rendered (or its text), any other file as the Library shows it. */
 export function ArtifactView() {
 	const { taskId: sessionId } = useParams({ from: '/artifacts/$taskId' });
 	const { path = '' } = useSearch({ from: '/artifacts/$taskId' });
@@ -824,7 +798,6 @@ export function ArtifactView() {
 	);
 }
 
-/** Copies the file's text, read when first asked for. */
 function CopiedText({ sessionId, path }: { sessionId: string; path: string }) {
 	const content = useQuery({ queryKey: ['output', sessionId, path], queryFn: () => api.outputText(sessionId, path), staleTime: 60_000 });
 	return content.data !== undefined ? <CopyButton text={content.data} label="Copy contents" className="sg-btn--sm" /> : null;

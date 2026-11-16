@@ -1,12 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { api, type ComposioAccount, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer } from '@/lib/api';
 
-/**
- * Connectors as the composer's + menu and Settings › Connectors list them: each mailbox whose account is
- * connected, each MCP server added, and each app connected through Composio, with one on/off state for
- * every task. The agent loads a connector's tools only when it uses them, so turning one on costs nothing
- * until then and never changes the cached prompt.
- */
+/** One on/off state per connector for every task; the agent loads a connector's tools only when it uses them, so a toggle never changes the cached prompt. */
 
 export type ConnectorState = 'on' | 'off' | 'needs-sign-in';
 

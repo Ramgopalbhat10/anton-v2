@@ -1,12 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-/*
- * The file viewer beside the conversation: what an agent made (a screenshot,
- * a diagram, a report) opened full size from a card or a link in a reply,
- * with the chat still beside it. One for the whole app, opened from anywhere.
- */
-
-/** A file in a task's Library. */
 export type ViewerItem = { sessionId: string; path: string };
 
 export type ViewerState = {
@@ -26,7 +19,6 @@ function set(next: ViewerState | null): void {
 
 export const sameItem = (a: ViewerItem, b: ViewerItem) => a.sessionId === b.sessionId && a.path === b.path;
 
-/** Opens `item` in the viewer, with the rest of `items` a step away. */
 export function openViewer(item: ViewerItem, items: ViewerItem[], composer: string | null): void {
 	const list = items.some((other) => sameItem(other, item)) ? items : [item];
 	set({ items: list, index: list.findIndex((other) => sameItem(other, item)), composer });

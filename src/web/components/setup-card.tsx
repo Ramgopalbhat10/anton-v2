@@ -6,25 +6,17 @@ import type { SetupSlot, SetupView } from '@/lib/api';
 import { SERVICE_LOGOS } from '@/lib/service-logos';
 import { openSettings } from '@/lib/settings-modal';
 
-/*
- * Home's card while Anton cannot run a task yet (no model to answer): the
- * slots a first task needs, each with its provider and whether it is ready,
- * and the way to Settings › Connections, where each is set up. It takes the
- * composer's place until a model is connected.
- */
-
 const LOGO: Record<string, string> = { openrouter: 'openrouter', vercel: 'vercel', github: 'github', modal: 'modal', docker: 'docker' };
 const GLYPH: Record<string, IconComponent> = { local: Monitor, s3: Cloud, disk: HardDrive };
 const SLOT_ICON: Record<string, IconComponent> = { models: Brain, git: GitBranch, sandbox: Box, store: HardDrive };
 
-/** Whether a needed slot is ready, from what is set rather than a live check: a model to answer, a token, a provider. */
+/** From what is set rather than a live check. */
 export function isReady(slot: SetupSlot, setup: SetupView): boolean {
 	if (slot.id === 'models') return setup.canRunTasks;
 	if (slot.id === 'git') return slot.options[0]?.fields.some((field) => field.env === 'ANTON_GITHUB_TOKEN' && field.source !== null) ?? false;
 	return slot.provider !== null;
 }
 
-/** How many slots a first task needs are not set up yet. */
 export const setupLeft = (setup: SetupView) => setup.slots.filter((slot) => slot.required && !isReady(slot, setup)).length;
 
 function SlotMark({ slot }: { slot: SetupSlot }) {

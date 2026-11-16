@@ -36,7 +36,6 @@ function useSave(space: Space) {
 	});
 }
 
-/** Name, goal, the coordinator's and threads' models, each helper agent's, how many threads run at once, and whether the coordinator starts them. */
 function General({ space }: { space: Space }) {
 	const models = useModels();
 	const general = useGeneralSettings();
@@ -133,7 +132,6 @@ function General({ space }: { space: Space }) {
 	);
 }
 
-/** A text the coordinator and every thread read, saved on its own. */
 function TextBlock({
 	space,
 	field,
@@ -179,7 +177,6 @@ function TextBlock({
 	);
 }
 
-/** The repositories threads can work on; with none, threads work as chats. */
 function Repositories({ space }: { space: Space }) {
 	const save = useSave(space);
 	const projects = useProjects();
@@ -243,7 +240,6 @@ function Repositories({ space }: { space: Space }) {
 	);
 }
 
-/** What the project has spent: today and this month, by thread and by model. */
 function Usage({ space }: { space: Space }) {
 	const usage = useQuery({ queryKey: ['space-usage', space.id], queryFn: () => api.spaceUsage(space.id) });
 	const data = usage.data;
@@ -378,7 +374,6 @@ function Section({ space, section }: { space: Space; section: ProjectSection }) 
 	}
 }
 
-/** The card's frame: the project and section as crumbs with a close button, the sections on the left, the section beside them. */
 export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; section: ProjectSection }) {
 	const space = useSpace(spaceId);
 	const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];

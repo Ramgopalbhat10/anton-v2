@@ -2,7 +2,6 @@ import { Menu } from '@/lib/icons';
 import { createContext, useContext } from 'react';
 import { IconBtn } from '@/components/signal';
 
-/** Opens the sidebar drawer on narrow screens. */
 export const NavContext = createContext<() => void>(() => {});
 
 export function MenuButton() {

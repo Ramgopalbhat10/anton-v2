@@ -21,11 +21,6 @@ import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { defaultSchedule, type Frequency, type Schedule, scheduleProblem } from '../../core/schedule';
 
-/**
- * Activity, read top to bottom: the project's pulse (what it comes to, its
- * states, its bay in the rack, activity), what waits on you as tracks of time, the schedule of every
- * thread to now, what is ready for review, and what it all costs.
- */
 export function ProjectActivity({ space, threads }: { space: Space; threads: Session[] }) {
 	const ready = threads.filter((thread) => ['review', 'landing'].includes(stateOf(thread)));
 	const openThread = useOpenThread();
@@ -73,17 +68,11 @@ export function ProjectActivity({ space, threads }: { space: Space; threads: Ses
 	);
 }
 
-/** The folder of the project's Library that holds what its threads saved, a folder each. */
 const FROM_THREADS = 'From threads';
-/** The threads whose files the Library lists, newest first. */
 const LISTED_THREADS = 24;
 
 type Entry = { place: Place; agentPath: string; remove: () => Promise<unknown> };
 
-/**
- * The project's Library, shown as a task's is: the files you add for every
- * thread, and under From threads a folder for each thread with what it saved.
- */
 export function ProjectFiles({ space, threads }: { space: Space; threads: Session[] }) {
 	const queryClient = useQueryClient();
 	const files = useQuery({ queryKey: ['space-files', space.id], queryFn: () => api.spaceFiles(space.id) });
@@ -163,17 +152,14 @@ export function ProjectPullRequests({ threads }: { threads: Session[] }) {
 /** Chats, for a routine without a repository: a Select item needs a value, and '' is its own. */
 const NO_REPO = 'none';
 
-/** The runs a strip shows, newest at the right. */
 const RUNS_SHOWN = 14;
 
-/** A run's bar: green once it delivered, red when it failed, amber while it asks, blue while it works. */
 const RUN_COLOR: Record<GlyphKind, string> = {
 	...STATE_COLOR,
 	resolved: 'color-mix(in oklab, var(--ok) 62%, var(--bg-overlay))',
 	idle: 'color-mix(in oklab, var(--ok) 40%, var(--bg-active))',
 };
 
-/** A routine's recent runs as bars in their thread's state colour, oldest first, each opening its thread. */
 function RunStrip({ runs }: { runs: Session[] }) {
 	const open = useOpenThread();
 	const shown = runs.slice(-RUNS_SHOWN);
@@ -202,14 +188,12 @@ function RunStrip({ runs }: { runs: Session[] }) {
 
 const FREQUENCY_WORD: Record<Frequency, string> = { hourly: 'Hourly', daily: 'Daily', weekdays: 'Weekdays', weekly: 'Weekly', monthly: 'Monthly', cron: 'Cron' };
 
-/** What a routine is called: the name its first run gave it, else the start of what it does. */
 function routineName(automation: Automation): string {
 	if (automation.title) return automation.title;
 	if (automation.kind === 'issues') return `Issues labeled “${automation.label}”`;
 	return automation.prompt.split('\n')[0].trim() || whenItRuns(automation);
 }
 
-/** A small arrow between what starts a routine and where its threads work. */
 const Flow = () => <Icon icon={ArrowRight} size={11} className="text-(--text-3)" />;
 
 function RoutineRow({ automation, space, runs }: { automation: Automation; space: Space; runs: Session[] }) {
@@ -331,7 +315,6 @@ function RoutineRow({ automation, space, runs }: { automation: Automation; space
 	);
 }
 
-/** A routine's settings: a new one, or with `automation` the one being changed. */
 function RoutineForm({ space, automation, onDone }: { space: Space; automation?: Automation; onDone: () => void }) {
 	const queryClient = useQueryClient();
 	const [pickedKind, setKind] = useState<Automation['kind']>(automation?.kind ?? 'schedule');
@@ -438,7 +421,6 @@ function RoutineForm({ space, automation, onDone }: { space: Space; automation?:
 	);
 }
 
-/** Work that starts on its own as threads of this project: on a schedule, or from labeled issues. */
 export function ProjectRoutines({ space, threads }: { space: Space; threads: Session[] }) {
 	const routines = useQuery({ queryKey: ['space-automations', space.id], queryFn: () => api.spaceAutomations(space.id) });
 	const [adding, setAdding] = useState(false);

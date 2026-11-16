@@ -11,7 +11,6 @@ import { taskQueries } from '@/lib/task-queries';
 /** The tools that ask the user to send an email: the thread draws each as the email with Send and Don't send. */
 export const MAIL_SEND_TOOLS = new Set(['gmail_send']);
 
-/** The approval a send call made, named at the end of its result. */
 export function approvalOf(output: unknown): string | null {
 	const text = typeof output === 'string' ? output : output && typeof output === 'object' && typeof (output as { output?: unknown }).output === 'string' ? (output as { output: string }).output : '';
 	return /\[approval:(mail_[\w-]+)\]/.exec(text)?.[1] ?? null;
@@ -28,11 +27,7 @@ function Row({ label, value }: { label: string; value: string }) {
 	);
 }
 
-/**
- * An email the agent asked to send, as it will go: Send sends it from Anton's
- * server, never from the agent, and the agent hears of it as your next message.
- * What happened is kept on the server, so a reload shows it.
- */
+/** Send sends it from Anton's server, never from the agent, and the agent hears of it as your next message. */
 export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
 	const { send: reply, busy } = useContext(ReplyActions);
 	const queryClient = useQueryClient();

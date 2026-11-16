@@ -3,7 +3,6 @@ import type { ThemedToken, ThemeRegistration } from 'shiki';
 /** Larger files show as plain text: highlighting them would stall the page. */
 const MAX_CHARS = 300_000;
 
-/** Shiki's language for a path, by extension or by a few well-known file names. */
 export function languageFor(path: string, known: Record<string, unknown>): string | null {
 	const name = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
 	const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name;
@@ -14,10 +13,7 @@ export function languageFor(path: string, known: Record<string, unknown>): strin
 
 const syntax = (name: string) => `var(--syntax-${name})`;
 
-/**
- * Code in the page's own syntax colours: every token is painted with a `--syntax-*` variable
- * (styles/aura-tokens.css), so a block follows the light and dark themes without being highlighted again.
- */
+/** Every token is painted with a `--syntax-*` variable, so a block follows the theme without being highlighted again. */
 const THEME: ThemeRegistration = {
 	name: 'aura',
 	type: 'dark',
@@ -46,10 +42,7 @@ const THEME: ThemeRegistration = {
 	],
 };
 
-/**
- * Colored tokens for each line, or null when the file is too large or its
- * language unknown. Shiki and each grammar load only when first needed.
- */
+/** Null when the file is too large or its language unknown. Shiki and each grammar load on first use. */
 export async function highlight(code: string, path: string): Promise<ThemedToken[][] | null> {
 	if (code.length > MAX_CHARS) return null;
 	const { bundledLanguages, codeToTokens } = await import('shiki');

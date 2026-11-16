@@ -1,20 +1,12 @@
 import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
 import type { Join } from '@/lib/api';
 
-/**
- * Puts each message sent while the agent worked where the agent read it. The
- * runtime lists such a message after the whole reply it joined, so it would
- * read as asked after it was answered; Anton notes after which tool call the
- * agent read it (src/services/tasks/joins.ts), and the reply is cut there, its first
- * part, your message, then the rest of the reply.
- */
+/** The runtime lists a message sent while the agent worked after the whole reply it joined, so the reply is cut after the tool call where the agent read it (joins.ts). */
 
-/** A message in the thread, or part of a reply cut where a message joined it. */
 export type ThreadRow = {
 	message: FlueConversationMessage;
 	/** The stretch of a cut reply this row shows; its first carries the header, its last the footer. */
 	segment?: { key: string; parts: FlueConversationPart[]; first: boolean; last: boolean };
-	/** A message moved into the reply it joined. */
 	joined?: boolean;
 };
 
@@ -47,12 +39,7 @@ function slice(parts: FlueConversationPart[], from: number, to: number): FlueCon
 	return cut;
 }
 
-/**
- * The thread's rows: each message sent while the agent worked moved into the
- * reply it joined, once the agent read it. `answeredBy` is each message's
- * settlement: the reply that answered it. A message not read yet, or one Anton
- * did not note (from before it did), stays where the runtime lists it.
- */
+/** Each message sent while the agent worked moved into the reply it joined; `answeredBy` is the reply that answered each message. */
 export function placeJoined(messages: FlueConversationMessage[], joins: Join[], answeredBy: Map<string, string | undefined>, liveReply?: FlueConversationMessage): ThreadRow[] {
 	if (!joins.length) return messages.map((message) => ({ message }));
 	const unused = [...joins];

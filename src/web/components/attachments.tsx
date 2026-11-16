@@ -15,7 +15,6 @@ const EXTENSION_ICONS: Array<[RegExp, IconComponent]> = [
 	[/\.(pdf|docx?|docm|odt|rtf|md|markdown|txt|epub|log)$/i, FileText],
 ];
 
-/** A glyph for a file by its name. */
 export function fileGlyph(name: string): IconComponent {
 	return EXTENSION_ICONS.find(([pattern]) => pattern.test(name))?.[1] ?? FileGlyph;
 }
@@ -26,7 +25,6 @@ export function fileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** One file as a chip: its glyph, name and a note under it, with a remove button while it is a draft. */
 function FileChip({ name, note, title, onRemove }: { name: string; note: string; title?: string; onRemove?: () => void }) {
 	return (
 		<div title={title ?? name} className="flex h-9 max-w-[240px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-2">
@@ -63,11 +61,7 @@ function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
 	});
 }
 
-/**
- * The attachments every composer shares: picked with the paperclip, pasted, or
- * dropped on the box. `imagesAsFiles` is for a box whose message carries no
- * pictures (a new thread's brief), where images are saved as files.
- */
+/** `imagesAsFiles` is for a box whose message carries no pictures (a new thread's brief), where images are saved as files. */
 export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: boolean } = {}) {
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<FileAttachment[]>([]);
@@ -86,7 +80,6 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 		},
 		[imagesAsFiles],
 	);
-	/** Images handed over by a panel (a drawing, a picked element's picture). */
 	const addImages = useCallback((added: ImageAttachment[]) => {
 		const room = MAX_IMAGES - latest.current.images.length;
 		setImages((before) => [...before, ...added.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
@@ -115,7 +108,6 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 			void attach([...event.dataTransfer.files]);
 		},
 	};
-	/** Empties the draft's attachments and hands them over, for sending. */
 	const take = useCallback(() => {
 		const taken = latest.current;
 		setImages([]);
@@ -148,7 +140,6 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 	};
 }
 
-/** The draft's images as thumbnails and its files as chips, each removable. */
 export function AttachmentTray({ attachments, className }: { attachments: Attachments; className?: string }) {
 	const { images, files, removeImage, removeFile } = attachments;
 	if (images.length === 0 && files.length === 0) return null;
@@ -174,7 +165,6 @@ export function AttachmentTray({ attachments, className }: { attachments: Attach
 	);
 }
 
-/** The paperclip: picks any files, images included. */
 export function AttachButton({ attachments, label = 'Attach files' }: { attachments: Attachments; label?: string }) {
 	const picker = useRef<HTMLInputElement>(null);
 	return (
@@ -194,7 +184,6 @@ export function AttachButton({ attachments, label = 'Attach files' }: { attachme
 	);
 }
 
-/** The files a sent message carried, as chips under it. */
 export function SentAttachments({ files, className }: { files: AttachmentRef[]; className?: string }) {
 	if (!files.length) return null;
 	return (

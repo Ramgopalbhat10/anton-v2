@@ -1,8 +1,4 @@
-/**
- * What Settings › Connectors says about the connectors it offers: Gmail, and
- * remote MCP servers that sign in with OAuth, added with a click. A server you
- * add by its own address is described by its address alone.
- */
+/** What Settings › Connectors says about the connectors it offers; a server added by its own address is described by its address alone. */
 
 export type CatalogEntry = {
 	/** `gmail`, or the name an MCP server is added under. */
@@ -12,7 +8,6 @@ export type CatalogEntry = {
 	tagline: string;
 	description: string;
 	category: string;
-	/** An MCP server's address; Gmail has none. */
 	url?: string;
 	/** The logo an apps platform hosts for it, drawn when its address names no product Anton knows. */
 	logo?: string;
@@ -32,7 +27,6 @@ export const GMAIL_ENTRY: CatalogEntry = {
 	docs: 'https://developers.google.com/gmail/api',
 };
 
-/** Gmail's tools, by what the sign-in and switches allow. */
 export const GMAIL_TOOLS = [
 	{ name: 'gmail_search', needs: 'read', about: 'Search with Gmail’s search syntax, newest first' },
 	{ name: 'gmail_read_thread', needs: 'read', about: 'Read a conversation in full' },
@@ -113,18 +107,12 @@ export const MCP_CATALOG: CatalogEntry[] = [
 	},
 ];
 
-/** The catalog entry for an added server: the one at its address, if Anton offers it. */
 export function catalogEntryFor(url: string): CatalogEntry | undefined {
 	const origin = URL.canParse(url) ? new URL(url).origin : url;
 	return MCP_CATALOG.find((entry) => entry.url && new URL(entry.url).origin === origin);
 }
 
-/**
- * Apps connected through Composio: `id` is the toolkit's slug at Composio,
- * `url` the app's own address so its mark is the product's. Composio hosts
- * each sign-in and runs each tool; Anton shows the app as a connector like
- * any other. Apps with a first-party MCP server above are not repeated here.
- */
+/** Apps connected through Composio: `id` is the toolkit's slug, `url` the app's own address so its mark is the product's. Apps with a first-party MCP server above are not repeated. */
 export const COMPOSIO_CATALOG: CatalogEntry[] = [
 	{
 		id: 'slack',
@@ -378,7 +366,6 @@ export const COMPOSIO_CATALOG: CatalogEntry[] = [
 	},
 ];
 
-/** The catalog entry for an app connected through Composio, by its toolkit slug. */
 export function composioEntryFor(toolkit: string): CatalogEntry | undefined {
 	return COMPOSIO_CATALOG.find((entry) => entry.id === toolkit);
 }

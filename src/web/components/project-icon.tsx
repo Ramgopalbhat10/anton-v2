@@ -79,14 +79,10 @@ import { useMemo, useState } from 'react';
 import { EmptyLine, Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/* A project's mark is a drawn icon in the tint it was picked with, never an
-   emoji. It is saved as "<icon>" or "<icon>:<tint>", like "rocket:violet";
-   anything else (an emoji from before, an icon since removed) draws the
-   project's initial. */
+/* Saved as "<icon>" or "<icon>:<tint>" ("rocket:violet"); anything else (an old emoji, a removed icon) draws the project's initial. */
 
 export type ProjectIconEntry = { key: string; icon: IconComponent; label: string; words: string };
 
-/** The icons a project can wear, roughly grouped: work, product, infrastructure, people, the rest. */
 export const PROJECT_ICONS: ProjectIconEntry[] = [
 	{ key: 'folder', icon: Folder, label: 'Folder', words: 'general misc files' },
 	{ key: 'rocket', icon: Rocket, label: 'Rocket', words: 'launch release ship deploy' },
@@ -163,7 +159,6 @@ export const PROJECT_ICONS: ProjectIconEntry[] = [
 
 const BY_KEY = new Map(PROJECT_ICONS.map((entry) => [entry.key, entry]));
 
-/** The tints a mark can take: a project's own colour, the one place the page lets you pick one. */
 export const ICON_TINTS = [
 	{ key: 'cyan', label: 'Cyan', color: '#3fb6d8' },
 	{ key: 'violet', label: 'Violet', color: '#a78bfa' },
@@ -183,7 +178,6 @@ export function iconTint(value: string | null | undefined): string {
 	return parsed ? tintColor(parsed.tint) : 'var(--accent)';
 }
 
-/** What a saved icon names: the drawn icon and its tint, or nothing to draw. */
 export function parseIcon(value: string | null | undefined): { entry: ProjectIconEntry; tint: IconTint } | null {
 	const [key, tint] = (value ?? '').split(':');
 	const entry = key ? BY_KEY.get(key) : undefined;
@@ -193,7 +187,6 @@ export function parseIcon(value: string | null | undefined): { entry: ProjectIco
 
 export const iconValue = (key: string, tint: IconTint) => (tint === 'cyan' ? key : `${key}:${tint}`);
 
-/** An icon to start a new project with, from the words in its name; a folder when nothing fits. */
 export function suggestIcon(name: string): string {
 	const words = name.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 1);
 	for (const word of words) {
@@ -203,7 +196,6 @@ export function suggestIcon(name: string): string {
 	return 'folder';
 }
 
-/** A project's mark: its icon at full size in the tint it was picked with, or its initial when it has none. */
 export function ProjectIcon({ value, name, size = 24, className }: { value: string | null | undefined; name: string; size?: number; className?: string }) {
 	const parsed = parseIcon(value);
 	if (!parsed) {
@@ -229,10 +221,7 @@ export function ProjectIcon({ value, name, size = 24, className }: { value: stri
 	);
 }
 
-/**
- * The icon picker: the mark as a button that opens a searchable grid of
- * icons and a row of tints. Choosing either saves the pair as one value.
- */
+/** Choosing an icon or a tint saves the pair as one value. */
 export function IconPicker({ value, name, onChange, size = 36 }: { value: string | null; name: string; onChange: (value: string) => void; size?: number }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
@@ -269,7 +258,6 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 					sideOffset={6}
 					collisionPadding={12}
 					onOpenAutoFocus={(event) => {
-						// Focus the search, and bring the icon in use into view.
 						const content = event.currentTarget as HTMLElement;
 						requestAnimationFrame(() => content.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' }));
 					}}

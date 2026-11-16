@@ -1,11 +1,6 @@
 import type { ImageAttachment } from '@/lib/attachments';
 
-/**
- * A prompt typed on the launcher, waiting for its new task's thread to send
- * it. Its text is kept in sessionStorage so a reload before the thread loads
- * keeps it; its images, too large for that, only in memory, for the moment
- * the launcher hands over to the thread.
- */
+/** The text is kept in sessionStorage so a reload before the thread loads keeps it; images, too large for that, only in memory. */
 const key = (sessionId: string) => `anton.pending.${sessionId}`;
 const pendingImages = new Map<string, ImageAttachment[]>();
 

@@ -2,10 +2,7 @@ import { isLive } from '@/components/task-status';
 import { type GlyphKind, glyphKind } from '@/components/thread-glyph';
 import type { Session } from '@/lib/api';
 
-/**
- * How the sidebar lists tasks: which ones (filters), in what order, grouped
- * how, and what each row says under its title. Kept in the browser.
- */
+/** How the sidebar lists tasks; kept in the browser. */
 export type TaskView = {
 	sort: SortKey;
 	group: 'none' | 'repo';
@@ -56,7 +53,6 @@ export function taskNote(session: Session): TaskNote | null {
 	return prNote(session) ?? (isLive(session) ? { text: 'Sandbox running', tone: 'muted', attention: false } : null);
 }
 
-/** When the task last did something: its last checkpoint, or when it started. */
 export const activeAt = (session: Session) => session.checkpointAt ?? session.createdAt;
 
 /** A repository's short name; chats have none, so they read and group as Chats. */
@@ -114,10 +110,7 @@ const CREATED: Record<string, { label: string; test: (session: Session) => boole
 
 const fixed = (choices: typeof STATUS) => () => Object.entries(choices).map(([value, { label }]) => ({ value, label }));
 
-/**
- * What tasks can be narrowed by. Options in one facet widen (any of them);
- * facets narrow each other (all of them). `single` facets take one option.
- */
+/** Options in one facet widen (any of them); facets narrow each other (all of them). `single` facets take one option. */
 export const FACETS = {
 	status: { label: 'Status', options: fixed(STATUS), test: (session: Session, value: string) => STATUS[value]?.test(session) ?? true },
 	sandbox: { label: 'Sandbox', options: fixed(SANDBOX), test: (session: Session, value: string) => SANDBOX[value]?.test(session) ?? true },
@@ -143,7 +136,6 @@ export const matches = (session: Session, filters: TaskView['filters']) =>
 
 export const filterCount = (filters: TaskView['filters']) => FACET_KEYS.reduce((count, key) => count + filters[key].length, 0);
 
-/** The option's label, for a chip. */
 export const optionLabel = (key: FacetKey, value: string, tasks: Session[]) => FACETS[key].options(tasks).find((option) => option.value === value)?.label ?? value;
 
 /** Toggles one option in a set of filters; a single-choice facet keeps only the new one. */
@@ -154,7 +146,6 @@ export function toggleIn(filters: TaskView['filters'], key: FacetKey, value: str
 	return { ...filters, [key]: next };
 }
 
-/** Toggles one option of the view's filters. */
 export const toggleFilter = (view: TaskView, key: FacetKey, value: string): TaskView => ({ ...view, filters: toggleIn(view.filters, key, value) });
 
 export type Sections = { pinned: Session[]; running: Session[]; recent: Session[] };

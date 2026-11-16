@@ -22,7 +22,6 @@ const STATUS: Record<Subscription['state'], { tone: 'success' | 'danger' | 'neut
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' });
 
-/** Writes what a call returned into the list, and refetches the models it changes. */
 function useSaved() {
 	const queryClient = useQueryClient();
 	return (saved: Subscription) => {
@@ -34,10 +33,7 @@ function useSaved() {
 	};
 }
 
-/**
- * Opens the vendor's sign-in in a new tab. The caller opens the tab during the
- * click, before the server answers, so popup blockers let it through.
- */
+/** The caller opens the tab during the click, before the server answers, so popup blockers let it through. */
 function useSignIn(subscription: Subscription) {
 	const saved = useSaved();
 	return useMutation({
@@ -58,7 +54,6 @@ function useSignIn(subscription: Subscription) {
 	});
 }
 
-/** The card's lead under its drawing: a headline, what it means in a line, and the rest behind an info icon. */
 function Lead({ title, info, children }: { title: string; info?: ReactNode; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1 px-4 pt-1 pb-3.5">
@@ -71,14 +66,12 @@ function Lead({ title, info, children }: { title: string; info?: ReactNode; chil
 	);
 }
 
-/** Where a plan's models are found in the picker. */
 const Named = ({ gateway }: { gateway: string }) => (
 	<>
 		Their names start with <InlineCode>{gateway}/</InlineCode>.
 	</>
 );
 
-/** Waiting for ChatGPT to send the browser back: caught by Anton on this computer, or pasted from the address bar. */
 function Pending({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const [address, setAddress] = useState('');
@@ -132,7 +125,6 @@ function Pending({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** The two ways in: sign in from this browser, or bring a sign-in made on another computer. */
 function Connect({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const signIn = useSignIn(subscription);
@@ -193,11 +185,6 @@ function Connect({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/**
- * The plan's models as a ranked list, the way a usage card shows them: name
- * and id, the efforts it takes, its context, a bar for this month's tokens,
- * and a way to make it the default for new tasks.
- */
 function Models({ subscription }: { subscription: Subscription }) {
 	const queryClient = useQueryClient();
 	const settings = useGeneralSettings();
@@ -268,10 +255,7 @@ function Models({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/**
- * Whether the plan's models are offered, and whether their calls count toward the spending caps.
- * `pricedAs` names whose prices a call is counted at; null when the plan has none to count at.
- */
+/** `pricedAs` names whose prices a call is counted at; null when the plan has none to count at. */
 function PlanSettings({ subscription, error, pricedAs }: { subscription: Subscription; error?: Error | null; pricedAs?: string | null }) {
 	const saved = useSaved();
 	const options = useMutation({
@@ -315,7 +299,6 @@ function PlanSettings({ subscription, error, pricedAs }: { subscription: Subscri
 	);
 }
 
-/** A signed-in plan: its account and token, its models, and how its calls are counted. */
 function Connected({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const [confirming, setConfirming] = useState(false);
@@ -403,7 +386,6 @@ function Plan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** A command to run on the server, with a button that copies it. */
 function Command({ text, label }: { text: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
@@ -424,7 +406,6 @@ function Command({ text, label }: { text: string; label: string }) {
 	);
 }
 
-/** Waiting for the code Claude's page shows once you approve, which Claude Code on the server trades for its sign-in. */
 function ClaudePending({ subscription, finish }: { subscription: Subscription; finish: ReturnType<typeof useClaudeFinish> }) {
 	const saved = useSaved();
 	const [code, setCode] = useState('');
@@ -474,17 +455,13 @@ function ClaudePending({ subscription, finish }: { subscription: Subscription; f
 	);
 }
 
-/** Hands Claude Code the code; held by the card, so a refused code's message stays after the sign-in ends. */
+/** Held by the card, so a refused code's message stays after the sign-in ends. */
 function useClaudeFinish(subscription: Subscription) {
 	const saved = useSaved();
 	return useMutation({ mutationFn: (code: string) => api.finishSubscriptionLogin(subscription.id, code), onSuccess: saved });
 }
 
-/**
- * A Claude plan, run by Claude Code on Anton's server. Claude Code signs in
- * through its own flow: Anton starts it, opens Claude to approve in a new tab,
- * and passes back the code Claude shows. Anton never holds the token.
- */
+/** Claude Code signs in through its own flow: Anton starts it, opens Claude to approve, and passes back the code Claude shows. Anton never holds the token. */
 function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const signIn = useSignIn(subscription);
@@ -617,7 +594,6 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** What a key plan's card says, by plan; a plan not listed here gets plain wording. */
 const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; howTo: string; placeholder: string; pricedAs: string | null; terms?: string }> = {
 	'opencode-go': {
 		tagline: 'open coding models',
@@ -641,7 +617,6 @@ const KEY_PLANS: Record<string, { tagline: string; lead: string; about: string; 
 	},
 };
 
-/** The plan's own limits, as the vendor reports them: how much of each window is used and when it resets. */
 function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; label?: string }) {
 	return (
 		<CardSection label={label} hint="As the vendor reports them">
@@ -675,7 +650,6 @@ function Windows({ windows, label = 'Plan limits' }: { windows: PlanWindow[]; la
 	);
 }
 
-/** The form that takes a key: pasted, checked with the vendor on the server, and kept there. */
 function KeyForm({ subscription, howTo, placeholder }: { subscription: Subscription; howTo: string; placeholder: string }) {
 	const saved = useSaved();
 	const [key, setKey] = useState('');
@@ -722,7 +696,6 @@ function KeyForm({ subscription, howTo, placeholder }: { subscription: Subscript
 	);
 }
 
-/** A plan used with a key from the vendor's dashboard: OpenCode Go, Cursor. */
 function KeyPlan({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const [confirming, setConfirming] = useState(false);
@@ -820,14 +793,8 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** How many of a gateway's models one page of its list shows. */
 export const GATEWAY_PAGE_SIZE = 20;
 
-/**
- * A gateway's models, which run to hundreds: a search over name, vendor and
- * id, then a page at a time, the ones you used this month first. Each row has
- * its price per million tokens in and out, beside what a plan's row shows.
- */
 function GatewayModels({ subscription }: { subscription: Subscription }) {
 	const queryClient = useQueryClient();
 	const settings = useGeneralSettings();
@@ -936,7 +903,6 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** What each gateway's tab says about it and its key. */
 const GATEWAY_COPY: Record<string, { howTo: string; placeholder: string; billed: string; pitch: string; uses: string; pricedAs: string }> = {
 	openrouter: {
 		howTo: "Make a key on OpenRouter's keys page and paste it here.",
@@ -956,11 +922,6 @@ const GATEWAY_COPY: Record<string, { howTo: string; placeholder: string; billed:
 	},
 };
 
-/**
- * A gateway (OpenRouter, Vercel AI Gateway): no plan, but a key, pasted here or
- * set on the server. Its models bill per token and count toward the spending
- * caps at their price.
- */
 function GatewayPlan({ subscription }: { subscription: Subscription }) {
 	const copy = GATEWAY_COPY[subscription.gateway] ?? GATEWAY_COPY.openrouter;
 	const saved = useSaved();
@@ -1069,7 +1030,6 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 	);
 }
 
-/** The tab for one plan: its vendor's logo, its name and whether it is connected. */
 function PlanTab({ subscription, on, onSelect }: { subscription: Subscription; on: boolean; onSelect: () => void }) {
 	const logo = logoFor({ id: `${subscription.gateway}/` });
 	const connected = subscription.state === 'connected';

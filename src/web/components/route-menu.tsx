@@ -7,21 +7,18 @@ import { dollars, sourceOf, tokens, vendorHue } from '@/lib/model-catalog';
 import { hostLogo } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 
-/** The sorts a gateway ranks a model's providers by, each with what it puts first. */
 export const ROUTE_SORT: Record<RouteSort, { label: string; hint: string; icon: IconComponent }> = {
 	price: { label: 'Price', hint: 'cheapest first', icon: CircleDollarSign },
 	throughput: { label: 'Throughput', hint: 'fastest output first', icon: Gauge },
 	latency: { label: 'Latency', hint: 'quickest first token first', icon: Timer },
 };
 
-/** What a route says, in a few words, for the chip's tooltip and the menu's heading. */
 export function routeLabel(route: ModelRoute | null, endpoints: ModelEndpoint[] = []): string {
 	if (!route) return 'Default routing';
 	if (route.provider) return `Prefers ${endpoints.find((endpoint) => endpoint.slug === route.provider)?.name ?? route.provider}`;
 	return `Sorted by ${ROUTE_SORT[route.sort!].label.toLowerCase()}`;
 }
 
-/** A hosting provider on a small tile: its logo when the set has one, else two letters in its hue. */
 export function HostMark({ slug, name, size = 14 }: { slug: string; name: string; size?: number }) {
 	const logo = hostLogo(slug);
 	const hue = vendorHue(name);
@@ -40,7 +37,6 @@ export function HostMark({ slug, name, size = 14 }: { slug: string; name: string
 	);
 }
 
-/** One provider's line: its mark and name, then its price per million tokens and, where known, its speed. */
 function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 	const speed = endpoint.throughput ? `${Math.round(endpoint.throughput)} tok/s` : endpoint.latency ? `${endpoint.latency.toFixed(1)}s` : null;
 	return (
@@ -55,7 +51,6 @@ function ProviderLine({ endpoint }: { endpoint: ModelEndpoint }) {
 	);
 }
 
-/** The routing buttons: as small as the pin beside them, lit once one is set. */
 const CONTROL =
 	'inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--text-3) outline-none hover:bg-(--bg-active) hover:text-(--text-2) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)';
 
@@ -66,14 +61,7 @@ function useEndpoints(model: ModelInfo, enabled = true) {
 
 type RouteProps = { route: ModelRoute | null; onChange: (route: ModelRoute | null) => void };
 
-/**
- * Where the gateway sends this choice's calls, as two icon menus beside a
- * gateway model's pin in the picker: a provider to try first, and a sort over
- * all of them. They exclude each other, so once one is set only its icon
- * stays: the provider's mark, or the sort's icon. The gateway falls back to
- * its own routing when the provider fails, so a route never stops a call that
- * would otherwise work.
- */
+/** A provider to try first, or a sort over all of them; once one is set only its icon stays. The gateway falls back to its own routing when the provider fails, so a route never stops a call. */
 export function RouteControls({ model, route, onChange, className }: RouteProps & { model: ModelInfo; className?: string }) {
 	return (
 		// Clicks in the menus reach the row through React's tree; they are not a pick.
@@ -181,7 +169,6 @@ function SortMenu({ route, onChange }: RouteProps) {
 	);
 }
 
-/** The route on the picker's own button, so it shows with the panel closed: the provider's mark or the sort's icon. */
 export function RouteBadge({ model, route, size }: { model: ModelInfo; route: ModelRoute; size: number }) {
 	const listed = useEndpoints(model, Boolean(route.provider)).data?.endpoints ?? [];
 	const name = route.provider ? (listed.find((endpoint) => endpoint.slug === route.provider)?.name ?? route.provider) : '';

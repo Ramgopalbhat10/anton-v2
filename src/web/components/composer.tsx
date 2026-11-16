@@ -26,7 +26,6 @@ const ELEMENT_ONLY = 'Look at the selected element.';
 
 type Element = Extract<InboxItem, { kind: 'element' }>;
 
-/** Elements picked in the Browser panel: a picture of each and what it is, removable before sending. */
 function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (id: string) => void }) {
 	return (
 		<div className="flex flex-wrap gap-1.5">
@@ -61,7 +60,6 @@ function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (
 	);
 }
 
-/** Plan mode: the agent investigates and proposes a plan, and changes nothing until the plan is approved. */
 export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
 	return (
 		<Btn
@@ -78,12 +76,7 @@ export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boole
 	);
 });
 
-/**
- * Messages sent while the agent works join its current turn: it reads them
- * after the step it is on, so they redirect it without stopping it.
- * Memoized: the thread around it re-renders with every streamed chunk, and
- * the draft need not.
- */
+/** Messages sent while the agent works join its current turn. Memoized: the thread around it re-renders with every streamed chunk, and the draft need not. */
 export const Composer = memo(function Composer({
 	sessionId,
 	busy,
@@ -102,9 +95,7 @@ export const Composer = memo(function Composer({
 	const attachments = useAttachments();
 	const { images, addImages } = attachments;
 	const [elements, setElements] = useState<Element[]>([]);
-	/** What is being attached while a message with files is on its way. */
 	const [sending, setSending] = useState<string | null>(null);
-	// What the Browser panel hands over (a picked element, a drawing) joins the draft.
 	const inbox = useInbox(sessionId);
 	useEffect(() => {
 		if (!inbox.length) return;
@@ -188,10 +179,8 @@ export const Composer = memo(function Composer({
 				setElements([]);
 				const attaching = taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`;
 				setSending(attaching);
-				// The message shows in the thread at once; it goes once its files are in the task's Library.
 				if (attaching) onPending?.({ text: typed.trim(), attaching });
 				try {
-					// Files go to the task's Library first, and the message carries what they say.
 					const attached = await Promise.all(taken.files.map((file) => api.attachToTask(sessionId, file.file)));
 					// Only a /command waits to read the saved commands, so any other message goes at once.
 					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
@@ -217,7 +206,6 @@ export const Composer = memo(function Composer({
 				}
 			}}
 		>
-			{/* The agent's todo list, while the task has one; it renders nothing otherwise. */}
 			<div className="mx-auto mb-1.5 flex max-w-[720px] justify-center empty:hidden">
 				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
 			</div>
@@ -243,10 +231,8 @@ export const Composer = memo(function Composer({
 				<div className="flex flex-nowrap items-center gap-1.5">
 					<ComposerPlus attachments={attachments} run={run} />
 					<ModelPicker value={choice} onChange={edit} route={route} onRoute={setRoute} />
-					{/* A chat has no code to plan changes to. */}
 					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
 					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
-					{/* Enter sends, as everywhere; the hint speaks up only while the agent is running. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-4) max-sm:invisible">
 						{busy ? (
 							<>

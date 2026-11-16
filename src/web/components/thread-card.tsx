@@ -23,14 +23,13 @@ import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../core/outputs';
 import { taskQueries } from '@/lib/task-queries';
 
-/** The state as a drawn glyph, for list rows: a turning ring while it works, a calling dot while it waits on you. */
 export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
 	return <ThreadGlyph thread={thread} size={size} />;
 }
 
 type Step = { label: string; icon: IconComponent; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' | 'PR' } | { stop: true } | { href: string });
 
-/** The next steps a thread offers in its state; each sends that instruction to the thread, as if you typed it. */
+/** Each step sends its instruction to the thread, as if you typed it. */
 export function nextSteps(thread: Session): Step[] {
 	const state: ThreadState = stateOf(thread);
 	const pr = thread.prUrl ? thread.pullRequest : null;
@@ -46,7 +45,6 @@ export function nextSteps(thread: Session): Step[] {
 	return [];
 }
 
-/** Opens a project's thread in the main view, with one of its panels when asked. */
 export function useOpenThread() {
 	const navigate = useNavigate();
 	return (thread: Session, panel?: 'Changes' | 'PR') => {
@@ -55,7 +53,6 @@ export function useOpenThread() {
 	};
 }
 
-/** The card's buttons: each next step, plus opening the thread. */
 export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm' | 'xs' }) {
 	const queryClient = useQueryClient();
 	const open = useOpenThread();
@@ -98,11 +95,7 @@ export function NextSteps({ thread, size = 'sm' }: { thread: Session; size?: 'sm
 	);
 }
 
-/**
- * What a row says beyond its glyph and title, as chips: its pull request,
- * and its state only where the glyph alone would not do (it needs you, it
- * failed, it waits for a slot). Everything else is in the peek.
- */
+/** Its state only where the glyph alone would not do (it needs you, it failed, it waits for a slot); everything else is in the peek. */
 export function ThreadChips({ thread }: { thread: Session }) {
 	const state = stateOf(thread);
 	const checksFailing = thread.pullRequest?.checks === 'failed';
@@ -120,11 +113,9 @@ export function ThreadChips({ thread }: { thread: Session }) {
 	);
 }
 
-/** A chip that does something: the look of a Chip, with a hover and a click of its own. */
 const CHIP_BUTTON =
 	'inline-flex h-5 max-w-[168px] shrink-0 items-center gap-1 rounded-control border border-(--line) bg-(--bg-hover) px-1.5 text-micro leading-none whitespace-nowrap text-(--text-2) outline-none transition-colors duration-(--t-fast) hover:border-(--line-strong) hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)';
 
-/** A file's look on a chip: a speck of the picture, or its kind's icon. */
 function FileMark({ item }: { item: ViewerItem }) {
 	const [broken, setBroken] = useState(false);
 	if (isImagePath(item.path) && !broken) {
@@ -142,7 +133,6 @@ function FileMark({ item }: { item: ViewerItem }) {
 	return <Icon icon={info.icon} size={11} className={cn('shrink-0', info.tone)} />;
 }
 
-/** The file larger, with its name: what a file chip shows on hover. */
 function FilePeek({ item }: { item: ViewerItem }) {
 	return (
 		<>
@@ -195,11 +185,7 @@ function MoreFiles({ items, open, className }: { items: ViewerItem[]; open: (ite
 	);
 }
 
-/**
- * What a thread made, as chips after its pull request: its newest file, a
- * peek of it on hover, and +N for the rest, listed in a popover. A click opens
- * a file in the viewer beside the conversation. `onPeek` says when one of them shows a peek, so the row's own stays shut.
- */
+/** `onPeek` says when one of them shows a peek, so the row's own stays shut. */
 export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?: (peeking: boolean) => void }) {
 	const outputs = useThreadOutputs(thread.id);
 	if (outputs.length === 0) return null;
@@ -227,7 +213,6 @@ export function ThreadOutputChips({ thread, onPeek }: { thread: Session; onPeek?
 	);
 }
 
-/** How long it has worked, or how long since it last did anything. */
 function phaseOf(thread: Session, now: number): string {
 	const state = stateOf(thread);
 	if (state === 'working') return elapsed(now - new Date(thread.lastInputAt ?? thread.createdAt).getTime());
@@ -236,10 +221,6 @@ function phaseOf(thread: Session, now: number): string {
 	return ago === 'now' ? 'just now' : `${ago} ago`;
 }
 
-/**
- * What a thread made, in its peek's footer: a tile for each of its newest
- * files, as many as there is `room` for, then +N; each opens in the viewer.
- */
 function PeekFiles({ thread, room }: { thread: Session; room: number }) {
 	const outputs = useThreadOutputs(thread.id);
 	const items: ViewerItem[] = outputs.map((output) => ({ sessionId: thread.id, path: output.path }));
@@ -264,10 +245,6 @@ function PeekFiles({ thread, room }: { thread: Session; room: number }) {
 	);
 }
 
-/**
- * Everything a row leaves out, on hover: its state, where it works and for
- * how long, what it last said or asks, its pull request, and its next steps.
- */
 export function ThreadPeek({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const state = stateOf(thread);
@@ -341,12 +318,7 @@ const CALLING = new Set<ThreadState>(['waiting', 'review', 'landing']);
 
 export type ThreadNow = { text: string; done: number; total: number };
 
-/**
- * What a working thread is on, live: the step of its todo list in hand and how
- * far down the list it is, else what its agent does this moment, else its
- * brief. Both follow the agent as it goes (`live-updates.ts`): a new list
- * refetches its query, and the moment arrives whole. Null when it is not working.
- */
+/** The todo step in hand, else what its agent does this moment, else its brief; null when it is not working. Both follow the agent through live-updates.ts. */
 export function useThreadNow(thread: Session): ThreadNow | null {
 	const working = stateOf(thread) === 'working';
 	const todos = useQuery({ ...taskQueries.todos(thread.id), staleTime: Infinity, enabled: working });
@@ -358,11 +330,7 @@ export function useThreadNow(thread: Session): ThreadNow | null {
 	return { text: now ? nowText(now, 'replying') : threadLine(thread) || nowText(null, 'replying'), done: 0, total: 0 };
 }
 
-/**
- * A thread's line: what it works on while it works, shimmering, with how many
- * of its steps are done; else what it last said. A new line rises into place,
- * so a step ticking over reads as progress.
- */
+/** A new line rises into place, so a step ticking over reads as progress. */
 function LiveLine({ text, live, className }: { text: string; live: ThreadNow | null; className?: string }) {
 	return (
 		<div className={cn('flex min-w-0 items-center gap-1.5 text-small leading-[17px] text-(--text-3)', className)}>
@@ -378,17 +346,9 @@ function LiveLine({ text, live, className }: { text: string; live: ThreadNow | n
 	);
 }
 
-/** A thread's card in the feed: its own border, as wide as what it says. */
 export const THREAD_CARD = 'in-tile flex w-fit max-w-full min-w-0 flex-col px-3 py-1.5';
 
-/**
- * A thread in a reply, as a card that follows it live: its glyph, title and
- * the step it is on while it works (else what it last said), then its pull
- * request and files as chips. A thread that asks something of you (it waits
- * on you, or its pull request is ready) opens out with that line and its next
- * steps as buttons. Resting on it shows the rest; clicking opens it.
- * `ThreadRows` stacks them.
- */
+/** A thread that asks something of you opens out with that line and its next steps as buttons. `ThreadRows` stacks them. */
 export function ThreadRow({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const state = stateOf(thread);
@@ -447,7 +407,6 @@ export function ThreadRow({ thread }: { thread: Session }) {
 	);
 }
 
-/** Threads in a reply: a card each, stacked. */
 export function ThreadRows({ children, label }: { children: ReactNode; label?: string }) {
 	return (
 		<section aria-label={label} className="flex min-w-0 flex-col items-start gap-1.5">
@@ -456,10 +415,6 @@ export function ThreadRows({ children, label }: { children: ReactNode; label?: s
 	);
 }
 
-/**
- * A thread named in the middle of a sentence: its glyph and title as a chip,
- * the same peek on hover, and a click opens it.
- */
 export function ThreadChip({ thread, children }: { thread: Session; children?: ReactNode }) {
 	const open = useOpenThread();
 	return (

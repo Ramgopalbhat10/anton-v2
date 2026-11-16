@@ -1,8 +1,6 @@
 /**
- * The agent calls every connector tool through `connector_call` ({ tool, arguments }), so turning a connector
- * on or off never changes its tool list. The thread draws such a call as the tool it ran, so a Gmail send
- * still shows as the email with Send, and a server's tool with the server's mark. Kept per part, so a call
- * that did not change keeps its object and the rows memoized on it skip the render.
+ * The agent calls every connector tool through `connector_call` ({ tool, arguments }); the thread draws it as the tool it ran.
+ * Kept per part, so an unchanged call keeps its object and the rows memoized on it skip the render.
  */
 
 export const CONNECTOR_CALL = 'connector_call';

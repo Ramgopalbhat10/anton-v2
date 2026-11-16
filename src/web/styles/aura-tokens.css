@@ -1,12 +1,7 @@
-/* ==========================================================================
-   AURA — the design system for Anton.
-   Tier 1 primitives → tier 2 semantic tokens → components.
-   Components only ever read tier 2.
-   ========================================================================== */
+/* AURA: tier 1 primitives → tier 2 semantic tokens → components. Components only ever read tier 2. */
 
 /* ---- Tier 1: primitives. Fixed across themes. ---- */
 :root {
-	/* Neutrals: zinc, a hair cool. */
 	--n-0: #000000;
 	--n-25: #070708;
 	--n-50: #0a0a0b;
@@ -24,7 +19,6 @@
 	--n-900: #ededef;
 	--n-950: #fafafa;
 
-	/* Accent: Aura indigo. */
 	--a-200: #c7c9ff;
 	--a-300: #a5a8ff;
 	--a-400: #8a8eff;
@@ -32,7 +26,6 @@
 	--a-600: #5a5de0;
 	--a-700: #4547b8;
 
-	/* State hues. */
 	--green-400: #3dd68c;
 	--amber-400: #f5b544;
 	--red-400: #f2555a;
@@ -65,12 +58,11 @@
 	/* The off part of a control: a switch's track, a slider's rail. */
 	--track: var(--n-400);
 
-	/* Lines: default for structure, strong for controls, focus for the keyboard. */
 	--line: rgba(255, 255, 255, 0.07);
 	--line-strong: rgba(255, 255, 255, 0.11);
 	--line-focus: var(--a-400);
 
-	/* Text: four levels and the inverse. Icons use the same levels. */
+	/* Icons use the same levels as text. */
 	--text: var(--n-900);
 	--text-2: var(--n-700);
 	--text-3: var(--n-600);
@@ -118,7 +110,7 @@
 	--focus: 0 0 0 1px var(--bg-panel), 0 0 0 3px rgba(138, 142, 255, 0.55);
 	--focus-inset: inset 0 0 0 1.5px var(--line-focus);
 
-	/* Syntax: technical surfaces share one mono voice; syntax never uses the accent. */
+	/* Syntax never uses the accent. */
 	--syntax-text: var(--text-2);
 	--syntax-comment: var(--text-4);
 	--syntax-punctuation: var(--text-3);
@@ -141,7 +133,6 @@
 	--data-5: var(--a-200);
 	--data-6: var(--n-500);
 
-	/* Drawings: the grid, ticks and line art of illustrations and gauges. */
 	--grid-line: rgba(255, 255, 255, 0.035);
 	--grid-mark: rgba(255, 255, 255, 0.14);
 	--line-art: rgba(255, 255, 255, 0.34);
@@ -213,9 +204,7 @@
 
 /* ---- Scales. The same in both themes. ---- */
 :root {
-	/* Type: Inter for the interface, JetBrains Mono for what the agent reads
-	   and writes (code, paths, branch names, commands). Three weights: 400 for
-	   reading, 500 for actions and labels, 600 for hierarchy. */
+	/* Inter for the interface, JetBrains Mono for code, paths and commands. Three weights: 400 reading, 500 actions and labels, 600 hierarchy. */
 	--font: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 	--fs-11: 11px;
@@ -246,7 +235,6 @@
 	--h-md: 28px;
 	--h-lg: 32px;
 
-	/* Motion confirms a change; it does not ask for attention. */
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 	--t-fast: 90ms;
 	--t: 160ms;

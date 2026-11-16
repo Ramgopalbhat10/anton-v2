@@ -9,9 +9,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Tailwind's and shadcn's names resolve to Aura's semantic tokens, so a
-   utility (font-mono, bg-popover) and any primitive left on the shadcn layer
-   draw in the same system. */
+/* Tailwind's and shadcn's names resolve to Aura's semantic tokens, so utilities and shadcn primitives draw in the same system. */
 @theme inline {
 	--font-sans: var(--font);
 	--font-mono: var(--mono);
@@ -72,10 +70,7 @@ textarea::placeholder {
 	cursor: default;
 }
 
-/* Whatever you can press says so: buttons, links, tabs, menu items, options,
-   switches, summaries and labels of a control. Unlayered, so it wins over a
-   component's own cursor-default; what is disabled, or asks for another
-   cursor (resize, grab, text, zoom, help), keeps its own. */
+/* Unlayered, so it wins over a component's own cursor-default; what is disabled, or asks for another cursor, keeps its own. */
 :is(
 		button,
 		a[href],
@@ -104,16 +99,12 @@ textarea::placeholder {
 	cursor: pointer;
 }
 
-/* A sticky header over a list (a picker's sections, a page's tabs): the fill of
-   the surface it sits on (`--surface-fill`, set by .in-pop and .settings-card),
-   so it is the same colour as the rest of that surface and hides what scrolls
-   under it. */
+/* The fill of the surface it sits on (`--surface-fill`, set by .in-pop and .settings-card), so it hides what scrolls under it. */
 .sticky-veil {
 	background: var(--surface-fill, var(--bg-panel));
 }
 
-/* Tooltips: every title (components/title-tips.tsx) and every Radix tooltip,
-   as one tip with no arrow. A tip names an action. */
+/* Every title (components/title-tips.tsx) and every Radix tooltip. */
 .tip {
 	/* Its own width, not what is left of the window: a fixed tip near the right
 	   edge would otherwise shrink to a sliver and wrap letter by letter before
@@ -189,8 +180,6 @@ textarea::placeholder {
 	}
 }
 
-/* The work panel: every page sits in one panel, inset on the window's canvas
-   beside the sidebar. On a phone the panel is the whole window. */
 .app-main {
 	position: relative;
 	z-index: 1;
@@ -205,14 +194,11 @@ textarea::placeholder {
 		border-radius: var(--r-8);
 		box-shadow: var(--sh-1);
 	}
-	/* With no sidebar beside it (an incognito chat), the panel keeps its margin all round. */
 	.app-main--alone {
 		margin-left: 8px;
 	}
 }
 
-/* The composer: the one surface with a 12px corner and a shadow of its own
-   under it. With focus inside, its edge and a soft ring take the accent. */
 .composer,
 .home-composer {
 	border-radius: var(--r-12);
@@ -224,25 +210,19 @@ textarea::placeholder {
 .home-composer:focus-within {
 	box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 0 4px var(--accent-soft), var(--sh-composer);
 }
-/* Home's dashboard cards. */
 .home-panel {
 	border-radius: var(--r-8);
 	background: var(--bg-surface);
 	box-shadow: inset 0 0 0 1px var(--line);
 	min-height: 176px;
 }
-/*
- * A finished row of a conversation skips layout and paint while it is off screen, and keeps the
- * height it last drew at, so a long conversation costs about what its visible rows cost.
- * The clip margin leaves room for the cards' shadows, which paint containment would cut.
- */
+/* Off-screen finished rows skip layout and paint and keep their last height; the clip margin leaves room for card shadows, which paint containment would cut. */
 .thread-row-settled {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 240px;
 	overflow-clip-margin: 16px;
 }
 
-/* The activity heatmap: nothing, then four steps of the accent. */
 :root {
 	--heat-0: var(--bg-active);
 	--heat-1: color-mix(in srgb, var(--accent) 28%, transparent);
@@ -251,7 +231,6 @@ textarea::placeholder {
 	--heat-4: var(--accent);
 }
 
-/* The Settings card (settings/modal.tsx): a card over a dimmed app, full screen on a phone. */
 .settings-overlay {
 	background: var(--bg-scrim);
 	animation: settings-fade var(--t) var(--ease);

@@ -2,7 +2,6 @@ import { Frontmatter, useFrontmatter } from '@/components/frontmatter';
 import { FileImages, Markdown, type FileImages as FileImagesValue } from '@/components/markdown';
 import { cn } from '@/lib/utils';
 
-/** A document's complete frontmatter and sanitized Markdown, identical in Overview and Files. */
 export function DocumentMarkdown({ text, images, className }: { text: string; images?: FileImagesValue | null; className?: string }) {
 	const front = useFrontmatter(text);
 	return (

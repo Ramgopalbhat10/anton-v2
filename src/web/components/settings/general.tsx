@@ -38,7 +38,6 @@ const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; inf
 	},
 ];
 
-/** One kind of background work: its default model, or one picked for it. */
 function BackgroundModel({
 	title,
 	help,
@@ -56,7 +55,6 @@ function BackgroundModel({
 	info: string;
 	only?: (model: ModelInfo) => boolean;
 	value: string | null;
-	/** The effort picked with the model; null uses the model's default. */
 	reasoning: Reasoning | null;
 	fallback: string;
 	fallbackLabel: string;
@@ -100,7 +98,6 @@ const COMPACT_POINTS: Array<{ value: GeneralSettings['compactAt']; label: string
 	{ value: null, label: 'Full' },
 ];
 
-/** The image model generate_image draws with: Anton's default, or one of OpenRouter's image models, by maker. */
 function ImageModelPicker({ value, onChange, disabled }: { value: string | null; onChange: (value: string | null) => void; disabled: boolean }) {
 	const listed = useQuery({ queryKey: ['image-models'], queryFn: api.imageModels, staleTime: 5 * 60_000 });
 	if (!listed.data) return listed.error ? <span className="text-small text-(--bad)">Could not list image models</span> : <Spinner size={12} />;
@@ -137,10 +134,7 @@ function ImageModelPicker({ value, onChange, disabled }: { value: string | null;
 
 export { useGeneralSettings };
 
-/**
- * Changes gather in a draft until Save sends them all, and Cancel puts the
- * page back as it was saved; the launcher picks them up for the next task.
- */
+/** Changes gather in a draft until Save; Cancel puts the page back as saved. */
 function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 	const queryClient = useQueryClient();
 	const models = useModels();

@@ -1,9 +1,6 @@
 import type { SkillsTab, ViewSearch } from './skills';
 
-/*
- * What each settings page keeps in its address. The app's router and the
- * Settings card's own router (modal.tsx) both read addresses with these.
- */
+/* The app's router and the Settings card's own router (modal.tsx) both read addresses with these. */
 
 /** The Skills page keeps its tab and search here, so coming back from a plugin finds them again; Connectors hears here how a Google sign-in went. */
 export const sectionSearch = (search: Record<string, unknown>): { tab?: SkillsTab; q?: string; connected?: string; problem?: string } => ({

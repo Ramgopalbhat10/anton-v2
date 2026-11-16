@@ -11,12 +11,7 @@ const clobberPrefix = 'user-content-';
 
 const inlineMarkdown = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
 
-/**
- * READMEs sometimes put Markdown badges/emphasis inside HTML wrappers. CommonMark
- * leaves that text raw. Parse only text originating inside an HTML element, not
- * ordinary Markdown (where escaped punctuation must remain escaped) or code.
- * Sanitization runs AFTER this pass, including anything this parser produces.
- */
+/** READMEs put Markdown inside HTML wrappers, which CommonMark leaves raw: parse only text inside an HTML element, never code or plain Markdown. Sanitization runs after this pass. */
 function markdownInHtml() {
 	return (tree: Root, file: { value: unknown }) => {
 		const source = String(file.value);

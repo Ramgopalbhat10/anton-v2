@@ -23,12 +23,6 @@ import { cn } from '@/lib/utils';
 /** Rows a card keeps room for, so cards in a row line up whatever each holds. */
 const CARD_ROWS = 3;
 
-/**
- * A project as a quiet card: its mark and goal, three figures (open threads,
- * what needs you, what works) over a strip of its recent activity, its
- * repositories as outline badges, and its latest open threads underneath.
- * The whole card opens the project; the gear opens its settings.
- */
 function ProjectCard({ space }: { space: Space }) {
 	const { threads } = useThreads(space.id);
 	const open = threads.filter((thread) => stateOf(thread) !== 'resolved');
@@ -111,7 +105,6 @@ function ProjectCard({ space }: { space: Space }) {
 	);
 }
 
-/** The projects at a glance, over the cards: how many, what needs you, what works, what is open. */
 function Summary({ spaces }: { spaces: Space[] }) {
 	const sum = (pick: (space: Space) => number) => spaces.reduce((total, space) => total + pick(space), 0);
 	const waiting = sum((space) => space.counts.waiting);
@@ -133,7 +126,6 @@ function Summary({ spaces }: { spaces: Space[] }) {
 	);
 }
 
-/** Name, goal and, optionally, repositories for a new project, and a first message for its coordinator. */
 function NewProjectDialog({ onClose }: { onClose: () => void }) {
 	const navigate = useNavigate();
 	const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -234,7 +226,6 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 	);
 }
 
-/** Every project, waiting ones first, and the way to make a new one. */
 export function ProjectsPage() {
 	const search = useSearch({ from: '/projects' });
 	const navigate = useNavigate();

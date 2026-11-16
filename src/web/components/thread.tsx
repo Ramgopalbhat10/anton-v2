@@ -69,7 +69,6 @@ const APPROVED = 'Your plan is approved. Go ahead and build it.';
 /** Tools whose calls draw in the reply itself rather than as a step; one that failed stays a step, with its error. */
 const DRAWN: Record<string, 'ask' | 'show' | 'page' | 'image'> = { ask: 'ask', show: 'show', render_html: 'page', [IMAGE_TOOL]: 'image' };
 
-/** The Library path of an image generate_image made, and the model that drew it, from the tool's result. */
 function madeImageOf(part: ToolPart): { path: string; model: string } | null {
 	if (part.state !== 'output-available') return null;
 	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
@@ -78,7 +77,6 @@ function madeImageOf(part: ToolPart): { path: string; model: string } | null {
 	return path ? { path, model: field(output, 'model') } : null;
 }
 
-/** What a page from render_html says it is, from the tool's result. */
 function pageOf(part: ToolPart): { path: string; title: string; height: number } | null {
 	if (part.state !== 'output-available') return null;
 	const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
@@ -87,7 +85,6 @@ function pageOf(part: ToolPart): { path: string; title: string; height: number }
 	return path ? { path, title: field(output, 'title') || 'Page', height: Number(field(output, 'height')) || 360 } : null;
 }
 
-/** Whether a reply ends waiting on approval of a plan it proposed. */
 function proposesPlan(message: FlueConversationMessage | undefined): boolean {
 	return Boolean(
 		message?.role === 'assistant' &&
@@ -101,7 +98,6 @@ function pathsOf(part: ToolPart): string[] {
 	return part.toolName === 'edit' || part.toolName === 'write' ? [field(part.input, 'path')] : [];
 }
 
-/** Files a reply wrote or edited, in the order it first touched them. */
 function changedPaths(parts: FlueConversationPart[]): string[] {
 	const paths: string[] = [];
 	for (const part of parts) {
@@ -114,7 +110,6 @@ function changedPaths(parts: FlueConversationPart[]): string[] {
 	return paths;
 }
 
-/** The pull request a reply opened, with its title. */
 function openedPullRequest(parts: FlueConversationPart[]): { url: string; title: string } | null {
 	for (const part of [...parts].reverse()) {
 		if (part.type !== 'dynamic-tool' || part.toolName !== 'open_pull_request' || part.state !== 'output-available') continue;
@@ -125,7 +120,6 @@ function openedPullRequest(parts: FlueConversationPart[]): { url: string; title:
 	return null;
 }
 
-/** The task whose thread is showing, for links into its Library. */
 const SessionId = createContext('');
 
 /** The screenshot and browser tools return a path relative to the repo; the Library lists it relative to outputs. */
@@ -136,14 +130,7 @@ function screenshotPath(part: ToolPart): string {
 	return (field(record, key) || field(record.output, key)).replace(/^\.\.\/outputs\//, '');
 }
 
-/**
- * The files a reply made for you, in the order it first names them: those
- * its words link to in the outputs folder, its screenshots, and files it
- * wrote there. Files you attached (uploads/) are yours, not its. A file
- * it saved along the way but did not link is shown only while the Library
- * still has it (`kept`, once known): a check screenshot it later deleted is
- * not one it made for you.
- */
+/** Files a reply made for you: those it links in outputs, its screenshots, and files it wrote there, not uploads/. One it saved but did not link shows only while the Library still has it (`kept`). */
 function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null, deleted: Set<string> = new Set()): string[] {
 	const named: { path: string; linked: boolean }[] = [];
 	const drawn = new Set(parts.flatMap((part) => (part.type === 'dynamic-tool' && part.toolName === IMAGE_TOOL ? [madeImageOf(part)?.path ?? ''] : [])));
@@ -164,7 +151,6 @@ function replyOutputs(parts: FlueConversationPart[], kept: Set<string> | null, d
 	return paths;
 }
 
-/** Plain text from a tool result, whichever shape the tool returned. */
 function outputText(output: unknown): string {
 	if (typeof output === 'string') return output;
 	if (!output || typeof output !== 'object') return '';
@@ -205,17 +191,11 @@ function toBlocks(parts: FlueConversationPart[]): Block[] {
 	return blocks;
 }
 
-/** True when two lists hold the same items in the same order, so a list rebuilt each render can still skip one. */
 function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 	return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
-/*
- * Every streamed chunk gives the reply being written a new object, and only
- * that one: the parts and messages before it keep theirs. The pieces below
- * are memoized on those objects, so a chunk re-renders the reply it lands in
- * and not the whole conversation.
- */
+/* Every streamed chunk gives only the reply being written a new object; the pieces below are memoized on those objects, so a chunk re-renders the reply it lands in and not the whole conversation. */
 
 const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	const [open, setOpen] = useState(false);
@@ -237,7 +217,6 @@ const ThoughtRow = memo(function ThoughtRow({ part }: { part: ReasoningPart }) {
 	);
 });
 
-/** A run_script program as the thread shows it: its code, or the saved file it ran and the args it was given. */
 function scriptText(input: unknown): string {
 	const file = field(input, 'file');
 	if (!file) return field(input, 'code').trim();
@@ -245,13 +224,12 @@ function scriptText(input: unknown): string {
 	return args && Object.keys(args).length ? `${file}\nargs ${JSON.stringify(args)}` : file;
 }
 
-/** The calls a run_script program made, read from Anton (the runtime only has the program and its result); live while it runs. */
+/** Read from Anton, as the runtime only has the program and its result; live while it runs. */
 function useScriptCalls(sessionId: string, toolCallId: string, enabled: boolean): ScriptCall[] {
 	const { data } = useQuery({ ...taskQueries.scripts(sessionId), enabled: enabled && Boolean(sessionId) });
 	return data?.scripts[toolCallId] ?? [];
 }
 
-/** Each call of a program on its own line: the tool (an MCP server's with the server's mark), its input, and how long it took or that it failed. */
 function ScriptCalls({ calls }: { calls: ScriptCall[] }) {
 	const mcp = calls.some((call) => call.tool.startsWith('mcp__'));
 	const servers = useMcpServers(mcp);
@@ -392,7 +370,6 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 	);
 });
 
-/** What kind of work a step was, for the strip on a steps card. */
 function stepTone(step: Step): string {
 	return step.type === 'reasoning' ? 'var(--track)' : toolTone(step.toolName, step.state === 'output-error');
 }
@@ -400,10 +377,6 @@ function stepTone(step: Step): string {
 /** Steps shown in a card's strip; a long turn shows its latest. */
 const STRIP = 36;
 
-/**
- * One mark per step, coloured by what it did (commands blue, edits violet,
- * the browser amber, failures red), so a turn's shape reads before it opens.
- */
 function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 	const shown = steps.slice(-STRIP);
 	return (
@@ -422,7 +395,6 @@ function StepStrip({ steps, live }: { steps: Step[]; live: boolean }) {
 	);
 }
 
-/** A step's mark, at the head of its line in the worklog. */
 const NODE = 'inline-flex size-3.5 shrink-0 items-center justify-center';
 
 function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean; duration?: number }) {
@@ -481,7 +453,6 @@ function StepsCardView({ steps, live, duration }: { steps: Step[]; live: boolean
 /** Its steps list is rebuilt each render; the card re-renders only when a step in it changed. */
 const StepsCard = memo(StepsCardView, (prev, next) => prev.live === next.live && prev.duration === next.duration && sameItems(prev.steps, next.steps));
 
-/** A proposed plan, shown in full, and whether you approved it. */
 const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answer: string | null }) {
 	const plan = field(part.input, 'plan');
 	// A plan that waits on you carries the accent's line; once approved it is a plain card again.
@@ -500,12 +471,7 @@ const PlanCard = memo(function PlanCard({ part, answer }: { part: ToolPart; answ
 	);
 });
 
-/**
- * While plan mode is on and the agent's last reply proposed a plan, approving
- * turns plan mode off first, so the agent has its full tools for the message
- * that follows. A reply with no plan (a question, plan mode just turned on)
- * has nothing to approve.
- */
+/** Approving turns plan mode off first, so the agent has its full tools for the message that follows. */
 function ApproveBar({ sessionId, send }: { sessionId: string; send: (text: string) => Promise<void> }) {
 	const queryClient = useQueryClient();
 	const [approving, setApproving] = useState(false);
@@ -537,14 +503,9 @@ type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
 /** Your message gets a new object each chunk (the client gives it back its local id), so it compares by its parts. */
 const UserMessage = memo(UserMessageView, (prev, next) => prev.message.parts === next.message.parts && prev.note === next.note && sameItems(prev.meta, next.meta));
 
-/**
- * A message sent while the agent works joins the reply in hand: the agent reads it between two
- * steps and answers within that reply. The runtime lists it after the whole reply, so it says so,
- * rather than reading as a message nobody answered.
- */
+/** The runtime lists a message sent while the agent works after the whole reply, so it says so rather than read as a message nobody answered. */
 const JOINING = 'Anton reads this between its steps';
 const JOINED = 'Read while Anton worked on the reply above';
-/** Once Anton has noted where it read the message, the message shows there, inside the reply. */
 const JOINED_HERE = 'Sent while Anton worked, read here';
 
 function UserMessageView({ message, meta, note }: { message: FlueConversationMessage; meta: string[]; note?: string }) {
@@ -584,16 +545,11 @@ function UserMessageView({ message, meta, note }: { message: FlueConversationMes
 	);
 }
 
-/**
- * The usage the agent attached when the response finished, if any: its subagents' calls included, split by who made them,
- * and whether a plan paid. Every call sends the conversation again, so the tokens add up each call's context; `context` is
- * the largest one call held, against the model's window (0 when not known). Older replies have no `context` or `plan`.
- */
+/** Every call sends the conversation again, so the tokens add up each call's context; `context` is the largest one call held (0 when not known). Older replies have no `context` or `plan`. */
 type ReplyUsageView = Usage & {
 	parts: { main: UsagePart; subagents: UsagePart } | null;
 	billing: 'plan' | 'api' | null;
 	context: { peak: number; window: number } | null;
-	/** The plan that ran the reply, by its gateway and name. */
 	plan: { gateway: string; name: string } | null;
 	/** Counted from the text sent, as the provider (Cursor) reports no one call's tokens or cache. */
 	estimated: boolean;
@@ -619,7 +575,6 @@ function usageOf(message: FlueConversationMessage): ReplyUsageView | null {
 
 const callsOf = (usage: ReplyUsageView) => (usage.parts ? usage.parts.main.calls + usage.parts.subagents.calls : 0);
 
-/** Where the conversation was compacted during a reply: the context it summarized, and what the next call held. */
 type CompactionView = { at: string; before: number; after: number | null };
 
 function compactionsOf(message: FlueConversationMessage): CompactionView[] {
@@ -627,7 +582,6 @@ function compactionsOf(message: FlueConversationMessage): CompactionView[] {
 	return Array.isArray(list) ? list.filter((entry): entry is CompactionView => typeof entry?.before === 'number') : [];
 }
 
-/** A compaction, in the conversation where it happened: older turns from here up are summarized for the agent. */
 function CompactionMark({ compaction }: { compaction: CompactionView }) {
 	return (
 		<div role="separator" aria-label="Conversation compacted" className="flex items-center gap-3 py-1 text-micro text-(--text-3)">
@@ -647,7 +601,6 @@ function CompactionMark({ compaction }: { compaction: CompactionView }) {
 	);
 }
 
-/** The plan a reply ran on: its vendor's logo and name. */
 function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 	const logo = plan ? logoFor({ id: `${plan.gateway}/` }) : undefined;
 	return (
@@ -658,10 +611,8 @@ function PlanChip({ plan }: { plan: ReplyUsageView['plan'] }) {
 	);
 }
 
-/** Cached input in a darker shade of the input's hue: the same tokens, at a lower price. */
 const USAGE_COLORS = { cached: 'var(--a-700)', input: 'var(--data-1)', output: 'var(--data-2)' };
 
-/** The reply's numbers laid out: its tokens by kind on one bar, then who made its calls and what each cost. */
 function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {
 	const total = usage.inputTokens + usage.outputTokens;
 	const cached = Math.min(usage.cachedTokens ?? 0, usage.inputTokens);
@@ -750,7 +701,6 @@ function ReplyUsagePeek({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: (
 	);
 }
 
-/** The reply's tokens, every model call it made counted, how many calls, and what it cost; resting on it breaks it down. */
 function ReplyUsageLine({ usage, onTrace }: { usage: ReplyUsageView; onTrace?: () => void }) {
 	const calls = callsOf(usage);
 	return (
@@ -794,7 +744,6 @@ type AssistantMessageProps = {
 	message: FlueConversationMessage;
 	live: boolean;
 	last: boolean;
-	/** The user's message that followed this reply, for its cards to show what was picked. */
 	answer: string | null;
 	/** The stretch shown, when a message sent while it worked cut the reply: the header goes on its first, the cards and usage on its last. */
 	segment?: ThreadRow['segment'];
@@ -803,7 +752,7 @@ type AssistantMessageProps = {
 	enter?: boolean;
 };
 
-/** A reply, drawn again only when its props change; one that fails to draw says so in its place, and the rest of the conversation stays. */
+/** One that fails to draw says so in its place, and the rest of the conversation stays. */
 const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageProps) {
 	return (
 		<ErrorBoundary label="This reply">
@@ -839,7 +788,6 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 		[made, sessionId],
 	);
 	const usage = usageOf(message);
-	// The reply's trace, when one was kept: its model and tool calls on one clock, opened from the footer.
 	const traceId = typeof message.metadata?.traceId === 'string' ? message.metadata.traceId : null;
 	const [tracing, setTracing] = useState(false);
 	const openTrace = useCallback(() => setTracing(true), []);
@@ -915,7 +863,6 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 	);
 }
 
-/** The text a drawn block adds to Copy response: the question and its options, or what a card says. */
 function copiedText(block: Block): string[] {
 	if (block.kind === 'ask') {
 		const options = (block.part.input as { options?: Array<{ label?: string }> } | undefined)?.options ?? [];
@@ -930,7 +877,6 @@ function copiedText(block: Block): string[] {
 	return [];
 }
 
-/** A card or page still being drawn. */
 function Drawing({ what }: { what: string }) {
 	return (
 		<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--line) px-3 text-small text-(--text-3)">
@@ -948,7 +894,6 @@ const PageBlock = memo(function PageBlock({ sessionId, part }: { sessionId: stri
 	return <HtmlFrame sessionId={sessionId} path={page.path} title={page.title} height={page.height} />;
 });
 
-/** A width:height the tool was asked for, as CSS; square when it named none. */
 function aspectOf(input: unknown): string {
 	const [width, height] = field(input, 'aspect_ratio').split(':').map(Number);
 	return width > 0 && height > 0 ? `${width} / ${height}` : '1 / 1';
@@ -957,7 +902,6 @@ function aspectOf(input: unknown): string {
 /** A light checkerboard under an image asked for with a transparent background, so a dark mark on it still shows. */
 const CHECKERBOARD = { background: 'repeating-conic-gradient(var(--text) 0% 25%, var(--text) 0% 50%) 50% / 16px 16px' };
 
-/** An image the agent made: a frame of its shape while the model draws, then the image, which opens full size. */
 const ImageBlock = memo(function ImageBlock({ sessionId, part }: { sessionId: string; part: ToolPart }) {
 	const made = madeImageOf(part);
 	const prompt = field(part.input, 'prompt');
@@ -1017,11 +961,7 @@ function Notice({ children }: { children: ReactNode }) {
 	);
 }
 
-/**
- * Under the latest failed reply of a task not on the default model: one tap moves it there and sends it on.
- * A plan that turns its model away (a free plan without it, a quota used up) fails the same way however
- * often it is sent again, so it says so; nothing switches by itself, since another model may bill another account.
- */
+/** A plan that turns its model away fails the same way however often it is sent, so it says so; nothing switches by itself, since another model may bill another account. */
 function RetryOnDefault({ refused, onRetry }: { refused: boolean; onRetry: (text: string) => void }) {
 	const sessionId = useContext(SessionId);
 	const queryClient = useQueryClient();
@@ -1071,7 +1011,6 @@ const SettlementNotice = memo(function SettlementNotice({ message, retry }: { me
 	);
 });
 
-/** Milliseconds since a moment, ticking each second while shown. */
 function useSince(since: string | null): number {
 	const [clock, setClock] = useState(() => Date.now());
 	useEffect(() => {
@@ -1083,17 +1022,12 @@ function useSince(since: string | null): number {
 	return since ? Math.max(0, clock - new Date(since).getTime()) : 0;
 }
 
-/** What the agent is doing this moment and for how long, from the task's latest `now`. */
 function useNow(sessionId: string) {
 	const now = useQuery(taskQueries.now(sessionId)).data?.now ?? null;
 	return { now, took: useSince(now?.since ?? null) };
 }
 
-/**
- * The live steps card's header: what the agent is doing, catching a slow
- * light, and for how long, so a closed card still says what is going on.
- * Its own component, so the clock ticking re-renders it and not the card.
- */
+/** Its own component, so the clock ticking re-renders it and not the card. */
 function NowLabel() {
 	const { now, took } = useNow(useContext(SessionId));
 	return (
@@ -1108,11 +1042,7 @@ function NowLabel() {
 	);
 }
 
-/**
- * The line at the foot of a working thread: what the agent is doing this
- * moment and for how long. The thread shows a step only once it is whole, so
- * without it a file being written or a long think reads as nothing happening.
- */
+/** The thread shows a step only once it is whole, so without this a file being written or a long think reads as nothing happening. */
 function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyPhase; quiet: boolean }) {
 	const heard = useNow(sessionId);
 	// Text is written only into a reply still being written; once the reply is whole, the agent is wrapping up whatever was last heard.
@@ -1131,13 +1061,7 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
 	);
 }
 
-/**
- * The foot of a working thread. A message sent while the agent works waits for
- * its next step; while a subagent runs, that step comes only when the subagent
- * finishes, so this says so and lets you stop it to have the message read now.
- * Otherwise it says what the agent is doing, unless the live steps card's
- * header already does, or the reply's text streaming does.
- */
+/** While a subagent runs, a waiting message is read only when it finishes, so this says so and lets you stop it. Otherwise it says what the agent is doing, unless the steps card or streaming text already does. */
 const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
@@ -1165,7 +1089,6 @@ const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sess
 
 const textOf = (message: FlueConversationMessage) => messageText(message).trim();
 
-/** What you asked, as the message it becomes once the conversation lists it. */
 function openingMessage(text: string): FlueConversationMessage {
 	return { id: 'opening', role: 'user', display: 'visible', parts: [{ type: 'text', text, state: 'done' }] } as FlueConversationMessage;
 }
@@ -1185,13 +1108,7 @@ const rowKey = (row: ThreadRow) => row.segment?.key ?? row.message.id;
 /** How long the thread trusts a file list nothing has marked stale. */
 const FILE_LINKS_FRESH_MS = 30_000;
 
-/**
- * File references in replies link to the task's files, and open in the Files panel at their line.
- *
- * Every tool call marks the file list stale. The thread only reads what is cached, so it never
- * refetches the whole list after each call: it fetches it when the page opens and when a reply
- * starts or ends, and takes the Files panel's fresher list whenever that panel is open.
- */
+/** Every tool call marks the file list stale; the thread reads only what is cached, fetching on open and when a reply starts or ends, and takes the Files panel's fresher list while it is open. */
 function useThreadFileLinks(sessionId: string, busy: boolean): FileLinks {
 	const showPanel = useContext(ShowPanel);
 	const queryClient = useQueryClient();
@@ -1232,7 +1149,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		const unread = unreadByServer.filter((message) => !listed.has(message.id) && !listed.has(message.text.trim()));
 		return unread.length ? [...shown, ...unread.map(waitingMessage)] : shown;
 	}, [conversation, unreadByServer]);
-	// A chat's messages carry no repository or branch under them.
 	const repo = session.data && !isChat(session.data) ? session.data.repo : undefined;
 	const branch = session.data ? branchLabel(session.data) : undefined;
 	const meta = useMemo(() => (repo && branch ? [repo, branch] : []), [repo, branch]);
@@ -1244,7 +1160,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const settlements = agent.settlements;
 	const joins = useQuery(taskQueries.joins(sessionId)).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
-	// Messages sent while Anton worked, moved into the reply where it read them.
 	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, liveReply), [messages, joins, answeredBy, liveReply]);
 	const notes = useMemo(() => {
 		const live = liveReply ? messages.indexOf(liveReply) : -1;
@@ -1276,7 +1191,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 		});
 		return map;
 	}, [rows]);
-	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
 	const { following, follow, release } = useFollowLatest(scroller, { reset: sessionId });
 	const navigateToInput = useCallback((id: string) => {
 		const el = scroller.current;
@@ -1316,7 +1230,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const fileLinks = useThreadFileLinks(sessionId, busy);
 	const planned = Boolean(session.data?.planMode) && !busy && proposesPlan(messages[messages.length - 1]);
 
-	// A message you sent with files shows while they upload; the ones you send rise in.
 	const { pending, onPending, rises } = useSends();
 	// Read as the page draws, so a task or thread you just started shows what you asked from its first frame,
 	// as the page it opened from did, until the conversation lists it.
@@ -1397,7 +1310,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 							</div>
 						) : null}
 						{firstPrompt ? (
-							// A task or thread you just started: what you asked, on its way to the agent, laid out as the message it becomes.
 							<div className="flex flex-col gap-5">
 								<UserMessage message={openingMessage(firstPrompt)} meta={meta} />
 								{busy ? null : session.data?.threadState === 'queued' ? (
@@ -1412,7 +1324,6 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 						) : messages.length === 0 && !busy && !agent.historyReady ? (
 							<HistorySkeleton />
 						) : messages.length === 0 && !busy && session.data?.brief ? (
-							// A queued thread: its brief, which it is given once a slot frees.
 							<div className="flex flex-col gap-2.5">
 								<div className="flex flex-col items-end">
 									<SentText text={splitAttachments(session.data.brief).text || session.data.brief} className="max-w-[min(520px,100%)]" />

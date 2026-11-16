@@ -1,10 +1,4 @@
-/**
- * The marks of products people add as MCP servers, so a server shows as the
- * product it is: 24×24 paths from Simple Icons 16.35.0 (CC0,
- * https://simpleicons.org), each with its brand's colour. Google's own mark is
- * drawn in brand-marks.tsx. Every mark is its owner's trademark, used here only
- * to name their product. Loaded on first use, not with the app.
- */
+/** Marks of products people add as MCP servers: 24×24 paths from Simple Icons 16.35.0 (CC0), each its owner's trademark, used only to name the product. Loaded on first use. */
 
 export type Brand = { title: string; hex: string; path: string };
 

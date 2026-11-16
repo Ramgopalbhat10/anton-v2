@@ -1,11 +1,7 @@
 import type { IconComponent } from '@/lib/icons';
 import { AppWindow, Braces, FileText, Image, Package, Sheet } from '@/lib/icons';
 
-/*
- * What kind of thing an artifact is, for the Artifacts page: apps (pages the
- * agent drew, and any other HTML file) first, as the ones you come back to
- * and use, then documents, images, data and code.
- */
+/* Kinds on the Artifacts page, in the order it lists them: apps (pages and any other HTML) first, as the ones you come back to. */
 
 export type Category = 'app' | 'document' | 'image' | 'data' | 'code' | 'other';
 
@@ -27,16 +23,11 @@ export const categoryInfo = (key: Category) => CATEGORIES.find((category) => cat
 export const nameOf = (path: string) => path.split('/').pop() ?? path;
 export const extensionOf = (path: string) => (nameOf(path).includes('.') ? (nameOf(path).split('.').pop()?.toUpperCase() ?? 'FILE') : 'FILE');
 
-/** Whether a file reads as text, so a card can show its first lines and the viewer its source. */
 export const isText = (path: string) => /\.(md|markdown|txt|log|csv|tsv|json|jsonl|ya?ml|xml|html?|[cm]?[jt]sx?|py|go|rs|rb|java|kt|swift|c|cc|cpp|h|cs|php|sh|sql|css|scss|diff|patch|toml|ini)$/i.test(path);
 
 export const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 
-/**
- * A folder picked from disk as one .zip named for it, so a skill's folder (SKILL.md with its scripts beside it)
- * can be added and installed whole: Artifacts holds files, not folders. Paths inside keep the folder's own name
- * at the top, as zipping the folder by hand does; `skill` says whether it holds a SKILL.md to install.
- */
+/** A picked folder as one .zip named for it, paths under the folder's name as zipping by hand gives, since Artifacts holds files, not folders. `skill`: it holds a SKILL.md. */
 export async function zipFolder(files: File[]): Promise<{ file: File; skill: boolean }> {
 	const { zipSync } = await import('fflate');
 	const entries: Record<string, Uint8Array> = {};

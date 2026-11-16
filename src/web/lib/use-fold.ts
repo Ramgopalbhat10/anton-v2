@@ -1,15 +1,8 @@
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
-/** How long opening out or folding back takes. */
 const EASE_MS = 220;
 
-/**
- * Text that keeps to a few lines until it is opened out to its whole height
- * (`cap`, a share of the window, stops it growing, and it scrolls), and folds
- * back. Heights come from the box's own line height and padding, so it fits
- * wherever it is used. The height eases only on a toggle, so typing never waits on it.
- * `content` is what the box shows, to measure again when it changes.
- */
+/** Text kept to a few lines until opened to its whole height (`cap`, a share of the window, stops it), then folded back. The height eases only on a toggle, so typing never waits on it. */
 export function useFold(box: () => HTMLElement | null, content: unknown, { lines, cap }: { lines: number; cap?: number }) {
 	const [open, setOpen] = useState(false);
 	const [heights, setHeights] = useState<{ folded: number; whole: number; long: boolean } | null>(null);

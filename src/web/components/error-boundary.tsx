@@ -8,17 +8,12 @@ const isChunkError = (error: unknown) =>
 	error instanceof Error && /dynamically imported module|Importing a module script failed|error loading dynamically imported module|Failed to fetch/i.test(error.message);
 
 type Props = {
-	/** What failed, as the reader knows it: "The sidebar", "This reply". */
 	label: string;
 	children: ReactNode;
 	className?: string;
 };
 
-/**
- * Keeps a failure where it happened. A part of the page that throws while drawing shows a short
- * notice with Try again in its place, and the rest of the page keeps working, instead of the whole
- * app turning into the router's error page.
- */
+/** Keeps a failure where it happened: the part that threw shows a notice with Try again, instead of the whole app turning into the router's error page. */
 export class ErrorBoundary extends Component<Props, { error: unknown }> {
 	state: { error: unknown } = { error: null };
 
@@ -54,7 +49,6 @@ export class ErrorBoundary extends Component<Props, { error: unknown }> {
 	}
 }
 
-/** A part of the page whose code loads when it is first shown: a spinner while it loads, and the notice above if it fails. */
 export function LazyPart({ label, children, className }: Props) {
 	return (
 		<ErrorBoundary label={label} className={className}>

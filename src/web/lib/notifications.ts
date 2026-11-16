@@ -5,10 +5,7 @@ import { serviceWorker, turnOnIfAllowed } from '@/lib/push';
 
 const supported = () => typeof Notification !== 'undefined';
 
-/**
- * Asks once, from a click or keypress, since browsers ignore requests made without one.
- * Allowing it also turns on notifications for when no tab is open.
- */
+/** Must run from a click or keypress: browsers ignore requests made without one. */
 export function askToNotify(): void {
 	if (supported() && Notification.permission === 'default') void Notification.requestPermission().then(() => turnOnIfAllowed()).catch(() => undefined);
 }
@@ -31,10 +28,7 @@ async function notify(session: Session): Promise<void> {
 	};
 }
 
-/**
- * A notification when a task's agent stops working while you are looking at
- * another tab or window. Uses the same list as the sidebar.
- */
+/** Notifies when a task's agent stops working while you are on another tab or window. */
 export function useTaskNotifications(): void {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const wasWorking = useRef(new Set<string>());

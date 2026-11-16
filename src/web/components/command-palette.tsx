@@ -16,10 +16,8 @@ import { TaskStatusIcon } from '@/components/task-status';
 type Entry = {
 	id: string;
 	label: string;
-	/** The kind or context shown at the row's right edge. */
 	meta: string;
 	icon: IconComponent;
-	/** Drawn in the icon's place: a task's state glyph, as the sidebar shows it. */
 	mark?: ReactNode;
 	/** Where the row goes, so ⌘↵ can open it in a new tab. */
 	href?: string;
@@ -36,7 +34,6 @@ const PAGES = [
 	{ to: '/artifacts', label: 'Artifacts', icon: Shapes },
 ] as const;
 
-/** ⌘K palette: describe a task to start it, or jump to an existing one. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
 	const navigate = useNavigate();
 	const create = useCreateChat();
@@ -117,7 +114,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 					},
 				};
 			});
-		// Settings pages only once something is typed, so the list stays about tasks.
 		const settings = SECTION_LIST.filter((section) => needle && section.label.toLowerCase().includes(needle)).map((section): Entry => ({
 			id: `settings-${section.id}`,
 			label: section.label,

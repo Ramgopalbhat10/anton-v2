@@ -9,17 +9,11 @@ const NARROW_WIDTH = 248;
 /** As long as `--t-slow`: how long the workspace takes to slide in or out. */
 const SLIDE_MS = 240;
 
-/** Where the workspace is in its slide: sliding in, sliding out, or standing open. */
 export type PaneSlide = 'in' | 'out' | 'still';
 
-/** The slide of the workspace around it, from `usePaneSlide`; a pane outside one stands open. */
 export const PaneSlideContext = createContext<PaneSlide>('still');
 
-/**
- * Slides a workspace in and out as `open` changes: null while it is closed, so
- * it is unmounted, and kept mounted while it slides out. A workspace open when
- * the page first draws stands there without sliding in.
- */
+/** Null while closed, so the workspace is unmounted; kept mounted while it slides out. One open when the page first draws does not slide in. */
 export function usePaneSlide(open: boolean): PaneSlide | null {
 	const [slide, setSlide] = useState<PaneSlide | null>(open ? 'still' : null);
 	const last = useRef(open);
@@ -42,11 +36,7 @@ function savedWidth(): number | null {
 	}
 }
 
-/**
- * One workspace width shared by Files, Changes, Terminal and the other panels.
- * `narrow` is the slim column it takes while no panel is chosen yet, so the
- * conversation keeps the room until there is something to show beside it.
- */
+/** `narrow` is the slim column it takes while no panel is chosen, so the conversation keeps the room. */
 export function WorkspacePane({ expanded, narrow = false, children }: { expanded: boolean; narrow?: boolean; children: ReactNode }) {
 	const pane = useRef<HTMLElement>(null);
 	const drag = useRef<{ pointer: number; x: number; width: number } | null>(null);

@@ -6,7 +6,6 @@ import { api, type CheckRun, type PullRequestDetail } from '@/lib/api';
 import { age } from '@/lib/format';
 import { prTone } from '@/components/pr-status';
 
-/** Checks in a phrase: "2 failing, 5 passing". */
 function checksPhrase(checks: CheckRun[]): string {
 	const count = (status: CheckRun['status']) => checks.filter((check) => check.status === status).length;
 	const parts = [
@@ -27,10 +26,7 @@ export function MergeMethodMenu({ method, onChange, disabled }: { method: MergeM
 		</MenuContent></Menu>;
 }
 
-/**
- * Where the pull request stands for merging, and the Merge button: squash,
- * by default, after a second click, since a merge cannot be undone.
- */
+/** Merge squashes by default, after a second click, since a merge cannot be undone. */
 export function MergeBox({ sessionId, pull, ownWork, initialConfirming = false, initialMethod = 'squash', onMerged, compact = false }: { sessionId: string; pull: PullRequestDetail; ownWork: boolean; initialConfirming?: boolean; initialMethod?: MergeMethod; onMerged?: (pull: PullRequestDetail) => void; compact?: boolean }) {
 	const queryClient = useQueryClient();
 	const [method, setMethod] = useState<MergeMethod>(initialMethod);

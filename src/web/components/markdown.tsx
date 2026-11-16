@@ -8,11 +8,7 @@ import { documentPlugins } from '@/lib/document-markdown';
 import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import type { ViewerItem } from '@/lib/viewer';
 
-/**
- * Where a reply's file references lead: `src/app.ts:42` in inline code
- * becomes a link when the task has that file, and opens it at that line.
- * Without a provider (a file's own Markdown, a plan), references stay code.
- */
+/** `src/app.ts:42` in inline code becomes a link when the task has that file; without a provider, references stay code. */
 export type FileLinks = { has: (path: string) => boolean; open: (path: string, line?: number) => void };
 export const FileLinks = createContext<FileLinks | null>(null);
 
@@ -41,7 +37,6 @@ function InlineCode({ children }: { children?: ReactNode }) {
 	);
 }
 
-/** The text and language of a fenced block, from the code element react-markdown puts in it. */
 function fenced(children: ReactNode): { code: string; language?: string } | null {
 	const child = Array.isArray(children) ? children[0] : children;
 	if (!isValidElement<{ className?: string; children?: ReactNode }>(child)) return null;
@@ -51,36 +46,18 @@ function fenced(children: ReactNode): { code: string; language?: string } | null
 	return { code, language };
 }
 
-/**
- * Links leave the app; raw HTML in replies is never rendered (react-markdown's
- * default). Images become links, so a reply can't make the browser load a URL
- * on its own, which would let anything the agent read leak out in the URL;
- * only the task's own files, served by Anton, draw as pictures.
- */
+/** Raw HTML in replies is never rendered. Images become links, so a reply cannot make the browser load a URL that leaks what the agent read; only the task's own files draw as pictures. */
 const InLink = createContext(false);
 
-/**
- * Links a reply's surroundings draw themselves: given a link's href and its
- * words, a chip in their place, or null to leave it a link. The project feed
- * draws `#thread-…` links as thread chips this way.
- */
+/** Lets a reply's surroundings draw a link as a chip (the project feed's `#thread-…` links), or null to leave it a link. */
 export type InlineLinks = (href: string, children: ReactNode) => ReactNode | null;
 export const InlineLinks = createContext<InlineLinks | null>(null);
 
-/**
- * Files a reply names in a task's Library, as the agent knows them
- * (`../outputs/shot.png`): a link to one opens it in the viewer, and an
- * image of one draws in place. Without a provider such links stay as written.
- */
+/** Library files a reply names (`../outputs/shot.png`): a link opens the viewer, an image draws in place. Without a provider they stay as written. */
 export type OutputLinks = { resolve: (href: string) => ViewerItem | null; open: (item: ViewerItem) => void };
 export const OutputLinks = createContext<OutputLinks | null>(null);
 
-/**
- * A surface that can draw a markdown file's own images, such as a plugin
- * preview: `render` draws an image src — a file fetched on demand, a
- * remote badge — or returns null to leave the usual link. Without a provider
- * images stay links, so a reply can't make the browser fetch a URL.
- */
+/** Draws a Markdown file's own images (a plugin preview), or null for the usual link. Without a provider images stay links, so a reply cannot make the browser fetch a URL. */
 export type FileImages = {
 	render?: (src: string, alt: string | undefined, inLink: boolean) => ReactNode | null;
 };
@@ -89,14 +66,12 @@ export const FileImages = createContext<FileImages | null>(null);
 /** A click that means "here": a modified or middle click still opens the link in a tab. */
 const plainClick = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 
-/** A relative link to a file the task has, such as `src/app.ts`, which the Files panel opens. */
 function repoFile(href: string, links: FileLinks | null): string | null {
 	if (!links || /^[a-z][a-z\d+.-]*:|^[#/]/i.test(href)) return null;
 	const path = href.replace(/^\.\//, '').replace(/[?#].*$/, '');
 	return links.has(path) ? path : null;
 }
 
-/** A link to a file in the task's Library, opening it in the viewer; struck through once you deleted the file. */
 function OutputLink({ item, open, children }: { item: ViewerItem; open: (item: ViewerItem) => void; children: ReactNode }) {
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 	if (deleted) {
@@ -124,7 +99,6 @@ function OutputLink({ item, open, children }: { item: ViewerItem; open: (item: V
 	);
 }
 
-/** A picture of a file in the task's Library, drawn in place; once you deleted it, a line saying so. */
 function OutputImage({ item, alt, open }: { item: ViewerItem; alt?: string; open: (item: ViewerItem) => void }) {
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 	if (deleted) {
@@ -222,12 +196,7 @@ const CONTINUES = /^(\s|[*+-](\s|$)|\d{1,9}[.)](\s|$)|>|\|)/;
 /** What can tie blocks together across a blank line: link references, footnotes, and HTML comments or raw blocks. */
 const SPANNING = /^ {0,3}\[[^\]]+\]:|\[\^|<(!--|!\[CDATA\[|\?|pre|script|style|textarea)/im;
 
-/**
- * Splits Markdown into top-level blocks that parse the same apart as
- * together: at a blank line, outside fenced code, before a line that starts
- * a fresh block. Text that ties blocks together (references, footnotes, raw
- * HTML that can span blank lines) stays whole.
- */
+/** Splits Markdown into top-level blocks that parse the same apart as together; text that ties blocks together (references, footnotes, raw HTML) stays whole. */
 export function markdownBlocks(text: string): string[] {
 	if (SPANNING.test(text)) return [text];
 	const lines = text.split('\n');
@@ -260,12 +229,7 @@ const Block = memo(function Block({ text }: { text: string }) {
 	);
 });
 
-/**
- * Agent replies as GitHub-flavored markdown: headings, lists, tables, links
- * and code blocks. Parsing is the expensive part, so a reply is parsed a
- * block at a time and a block that has not changed is not parsed again:
- * while a reply streams, only its last block is.
- */
+/** Parsing is the expensive part, so a reply is parsed a block at a time and an unchanged block is not parsed again: while a reply streams, only its last block is. */
 export const Markdown = memo(function Markdown({ text, html = false }: {
 	text: string;
 	/** Sanitized HTML for file/document previews, not replies. */

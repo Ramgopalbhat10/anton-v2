@@ -7,13 +7,7 @@ import { isChat, repoShort, type Session } from '@/lib/api';
 import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-/**
- * A task as one dense line, the way the Tasks list reads them: its state's
- * glyph, title and pull request, then where it works, its model, what it
- * cost and how long ago. The right-hand facts are fixed-width and tabular,
- * so the columns line up from row to row; `active` is the list's keyboard
- * cursor, not a state the task is in.
- */
+/** The right-hand facts are fixed-width and tabular so the columns line up; `active` is the list's keyboard cursor, not a task state. */
 export function TaskRow({ session, modelName, active = false }: { session: Session; modelName: (model: string) => string; active?: boolean }) {
 	const chat = isChat(session);
 	return (

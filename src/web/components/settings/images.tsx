@@ -90,7 +90,6 @@ function Prepared({ project, view }: { project: Project; view: SandboxView }) {
 	);
 }
 
-/** The image sandboxes start from, and each repository's prepared image on top of it. */
 export function ImagesPage() {
 	const view = useQuery({ queryKey: ['sandbox-settings'], queryFn: api.sandboxSettings });
 	const projects = useProjects();

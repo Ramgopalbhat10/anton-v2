@@ -3,13 +3,7 @@ import { api } from '@/lib/api';
 import { categoryOf } from '@/lib/artifacts';
 import { isImagePath } from '../../core/outputs';
 
-/*
- * Files you deleted from a task's Library (there or on the Artifacts page).
- * A reply that drew one, linked it or carded it says it was deleted instead
- * of showing a broken picture or page. Read from the task's Library listing,
- * the query its Library panel and the reply's cards share, which a delete
- * refreshes everywhere at once (live-updates.ts).
- */
+/* A reply that drew, linked or carded a file you deleted says so rather than show it broken; read from the Library listing a delete refreshes everywhere. */
 
 /** Whether the task's file was deleted; false while unknown, or with no task. */
 export function useDeletedOutput(sessionId: string | null | undefined, path: string | null | undefined): boolean {
@@ -23,7 +17,6 @@ export function useDeletedOutput(sessionId: string | null | undefined, path: str
 	return deleted.data ?? false;
 }
 
-/** What to call a deleted file: a page, an image, or a file. */
 export function deletedNoun(path: string): string {
 	if (categoryOf(path) === 'app') return 'page';
 	if (isImagePath(path)) return 'image';

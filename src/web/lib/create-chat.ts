@@ -20,19 +20,14 @@ export type NewChat = {
 	reasoning?: Reasoning;
 	route?: ModelRoute | null;
 	planMode?: boolean;
-	/** Where its commands run; its sandbox when left out. */
 	runOn?: RunOn;
 	prompt?: string;
-	/** Sent with the first message, as the model sees images. */
 	images?: ImageAttachment[];
 	/** Saved to the new task's Library and read as text for the first message. */
 	files?: FileAttachment[];
 };
 
-/**
- * Creates a task on a repo and branch, or a chat without `projectId`, and opens it at once: its page shows it as a
- * skeleton while the server makes it. A prompt becomes its title and first message, with any files attached to it.
- */
+/** Creates a task (a chat without `projectId`) and opens it at once; its page shows a skeleton while the server makes it. */
 export function useCreateChat(): (chat: NewChat) => void {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();

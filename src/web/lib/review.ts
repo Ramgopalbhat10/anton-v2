@@ -33,7 +33,6 @@ export function useReviewComments(sessionId: string) {
 
 const snippet = (code: string) => (code.trim().length > 120 ? `${code.trim().slice(0, 117)}...` : code.trim());
 
-/** One message the agent can work through: where each comment is, the code it is on, and what it says. */
 export function reviewMessage(comments: ReviewComment[]): string {
 	const items = comments.map((comment, index) => {
 		const where = `${comment.path}, ${comment.side === 'old' ? 'removed line' : 'line'} ${comment.line}`;

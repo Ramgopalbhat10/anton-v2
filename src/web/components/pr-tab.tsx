@@ -16,7 +16,6 @@ import { taskQueries } from '@/lib/task-queries';
 const STATE_LABEL: Record<PullRequestState, string> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
 const STATE_ICON = PR_ICON;
 
-/** The pull request's state as a badge in its colour, with its icon. */
 function StatePill({ state, size = 'md' }: { state: PullRequestState | null; size?: 'sm' | 'md' }) {
 	return (
 		<span
@@ -29,7 +28,6 @@ function StatePill({ state, size = 'md' }: { state: PullRequestState | null; siz
 	);
 }
 
-/** A branch name in a chip you can copy from. */
 function BranchChip({ name }: { name: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
@@ -53,7 +51,6 @@ function BranchChip({ name }: { name: string }) {
 	);
 }
 
-/** The pull request's number, and a menu to pick another of the task's pull requests when it has more than one. */
 function PullPicker({ pulls, selected, onSelect }: { pulls: PullRequestItem[]; selected: PullRequestItem; onSelect: (number: number) => void }) {
 	if (pulls.length < 2) return <span className="in-num shrink-0 text-small text-(--text-2)">#{selected.number}</span>;
 	return (
@@ -180,11 +177,7 @@ function Loading({ children }: { children: ReactNode }) {
 	);
 }
 
-/**
- * One pull request. In a task's panel it opens with its state, number and a link to GitHub over a small title.
- * On a page of its own (`page`, as Reviews shows it) the page's bar already names the repository and links out,
- * so the title leads at heading size and the state, branches and size follow on one line.
- */
+/** On a page of its own (`page`, as Reviews shows it) the page's bar already names the repository and links out, so the title leads. */
 export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = false }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean; page?: boolean }) {
 	const [section, setSection] = useState<Section>('changes');
 	const detail = useQuery({ queryKey: ['pull', sessionId, item.number], queryFn: () => api.pull(sessionId, item.number) });
@@ -289,11 +282,6 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 	);
 }
 
-/**
- * The PR panel: the pull requests the task opened, newest first, each as
- * GitHub's page shows it (state, branches, checks, discussion, commits and
- * its diff), with a Merge button that squashes by default.
- */
 export function PrTab({ sessionId }: { sessionId: string }) {
 	const pulls = useQuery(taskQueries.pulls(sessionId));
 	const session = useQuery(taskQueries.session(sessionId)).data;

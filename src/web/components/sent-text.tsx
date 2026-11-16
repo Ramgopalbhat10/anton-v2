@@ -6,11 +6,6 @@ import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
 
-/**
- * What you typed, as you typed it, with its links, a `/command` and `@` file
- * references marked as the composer marks them; a reference to a file the task
- * has opens it in Files.
- */
 export function RichText({ text }: { text: string }) {
 	const files = useContext(FileLinks);
 	const pieces = useMemo(() => splitRich(text, 0, text.length, richRanges(text)), [text]);
@@ -40,7 +35,6 @@ export function RichText({ text }: { text: string }) {
 /** Lines a sent message shows until it is opened out. */
 const SENT_FOLD = { lines: 8 };
 
-/** A sent message's bubble: a long one folds to a few lines, faded at the foot, with a chevron to show it whole. */
 export function SentText({ text, className }: { text: string; className?: string }) {
 	const body = useRef<HTMLDivElement>(null);
 	const box = useCallback(() => body.current, []);
@@ -82,12 +76,7 @@ export type PendingChange = PendingSend | 'sent' | null;
 /** The id the runtime's client gives a message this page sent, which it keeps once the conversation lists it. */
 const OWN_SEND = 'local:';
 
-/**
- * A conversation's sends as they happen: the message waiting on its files, and which of
- * the messages this page sent rise in as they appear. One that takes over from its waiting
- * message is already in place, so it does not rise again; neither does the conversation's
- * first message, which the page that opened it showed already.
- */
+/** A send that takes over from its waiting message is already in place, so it does not rise again; neither does the conversation's first message. */
 export function useSends() {
 	const [pending, setPending] = useState<PendingSend | null>(null);
 	const handedOver = useRef(false);

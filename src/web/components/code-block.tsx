@@ -33,11 +33,7 @@ export function CopyButton({ text, label = 'Copy', className }: { text: string; 
 	);
 }
 
-/**
- * A short stand-in for a block's text in its query key: the cache hashes the key on every
- * render, and a long block as its own key was hashed whole each time. 53 bits (cyrb53) and
- * the length, so two blocks in view practically never share one. Worked out once per settled text.
- */
+/** A short stand-in for the text in the query key, which the cache hashes every render: 53 bits (cyrb53) plus the length, so blocks in view practically never collide. */
 function textHash(text: string): string {
 	let h1 = 0xdeadbeef;
 	let h2 = 0x41c6ce57;
@@ -51,10 +47,6 @@ function textHash(text: string): string {
 	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/**
- * A fenced code block in a reply: highlighted by Shiki once it stops
- * changing, with its language and a copy button above it.
- */
 export function CodeBlock({ code, language, className }: { code: string; language?: string; className?: string }) {
 	const text = code.replace(/\n$/, '');
 	const settled = useSettled(text);

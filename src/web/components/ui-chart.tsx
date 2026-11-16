@@ -8,14 +8,7 @@ import {
 import { useElementSize } from "@/lib/use-element-size";
 import { cn } from "@/lib/utils";
 
-/*
- * The charts a reply's `show` card draws, in the instrument style of the
- * Usage charts: hairline guides, mono labels, thin bars with a rounded end,
- * 2px lines, one tooltip that follows the pointer or the arrow keys, and a
- * legend whenever there is more than one series. Series take the data
- * colours in a fixed order; a donut's slices do the same, past five folded
- * into "Other".
- */
+/* Series take the data colours in a fixed order; a donut's slices past five fold into "Other". */
 
 type ChartNode = Extract<UiNode, { type: "chart" }>;
 
@@ -62,7 +55,6 @@ export function rangeTicks(low: number, high: number): number[] {
   return ticks;
 }
 
-/** Large numbers short on the axis: 1.2K, 3M. */
 function axisLabel(value: number, format?: UiFormat): string {
   if (format === "percent" || format === "currency" || format === "duration")
     return formatValue(value, format);
@@ -96,7 +88,6 @@ function Legend({
   );
 }
 
-/** A path for a bar with a rounded end away from the baseline and a square foot on it. */
 function barPath(
   x: number,
   width: number,
@@ -484,7 +475,6 @@ function DonutChart({ node }: { node: ChartNode }) {
     const sweep = (slice.value / total) * Math.PI * 2;
     const start = angle;
     angle += sweep;
-    // A small gap between slices, in the surface colour.
     const pad = slices.length > 1 ? Math.min(0.03, sweep / 4) : 0;
     const a = start + pad;
     const b = angle - pad;

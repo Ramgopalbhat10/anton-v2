@@ -10,17 +10,8 @@ import { SERVICE_LOGOS } from '@/lib/service-logos';
 import { cn } from '@/lib/utils';
 import { FIELD, Note, PageHeading } from './parts';
 
-/*
- * Settings › Connections: what Anton runs on, and on a new server where it is
- * set up. Each slot (models, code host, sandboxes, storage, and the optional
- * database, decision model and web search) picks a provider, takes the values
- * it needs, and is tested before it is saved (src/services/settings/setup.ts). A value
- * the server's environment gives shows locked with its variable's name; one
- * saved here takes its place. The live checks (`api.connections`) say how each
- * stands.
- */
+/* Each slot is tested before it is saved (src/services/settings/setup.ts); a value from the server's environment shows locked with its variable's name, and one saved here takes its place. */
 
-/** What each provider is, in a line under the picker, and its mark: a logo, else an icon. */
 const PROVIDERS: Record<string, { help: string; logo?: string; icon?: IconComponent }> = {
 	'models:openrouter': { help: 'A gateway to most models, billed per token.', logo: 'openrouter' },
 	'models:vercel': { help: 'Vercel’s gateway, billed per token.', logo: 'vercel' },
@@ -39,7 +30,6 @@ const PROVIDERS: Record<string, { help: string; logo?: string; icon?: IconCompon
 	'web:off': { help: 'The agent has no web tools.', icon: X },
 };
 
-/** What a field looks like empty, what it is for, and where to get it. */
 const FIELDS: Record<string, { placeholder?: string; help?: string; link?: [string, string] }> = {
 	OPENROUTER_API_KEY: { placeholder: 'sk-or-v1-…', link: ['Get a key', 'https://openrouter.ai/keys'] },
 	AI_GATEWAY_API_KEY: { placeholder: 'vck_…', link: ['Get a key', 'https://vercel.com/ai-gateway'] },
@@ -58,7 +48,6 @@ const FIELDS: Record<string, { placeholder?: string; help?: string; link?: [stri
 	ANTON_WEB_MCP_URL: { placeholder: 'https://…/mcp' },
 };
 
-/** What a slot is for, under its title while it is not set up. */
 const WHAT: Record<string, string> = {
 	models: 'Who answers: every reply, plan and review comes from here.',
 	git: 'Reads your repositories and opens pull requests. Chats work without it.',
@@ -85,7 +74,6 @@ const STATE: Record<State, { tone: Tone; label: string }> = {
 	checking: { tone: 'accent', label: 'Checking…' },
 };
 
-/** A provider's mark, bare in the text colour like every icon. */
 function Mark({ slot, option, size = 16 }: { slot: string; option: string | null; size?: number }) {
 	const look = option ? PROVIDERS[`${slot}:${option}`] : undefined;
 	const logo = look?.logo ? SERVICE_LOGOS[look.logo] : undefined;

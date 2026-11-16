@@ -22,7 +22,6 @@ export const TONE: Record<Tone, string> = {
 
 const CHECKS = { passed: 'checks pass', failed: 'checks failing', pending: 'checks running' } as const;
 
-/** A fact as a spec-sheet row: what it is on the left, its value on the right. */
 function Fact({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
 	return (
 		<div className="flex min-h-7 items-center gap-3 border-t border-(--line) text-small first:border-t-0">
@@ -34,7 +33,6 @@ function Fact({ label, children, mono }: { label: string; children: ReactNode; m
 
 const ago = (iso: string) => (age(iso) === 'now' ? 'just now' : `${age(iso)} ago`);
 
-/** Everything worth knowing about a task at a glance: its numbers first, then where it lives. */
 function Peek({ session }: { session: Session }) {
 	const modelName = useModelName();
 	const note = taskNote(session);
@@ -101,7 +99,7 @@ function Peek({ session }: { session: Session }) {
 	);
 }
 
-/** A card beside a sidebar row once the pointer rests on it; never while the row's menu is open. */
+/** Never shown while the row's menu is open. */
 export function TaskPeek({ session, disabled, children }: { session: Session; disabled: boolean; children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	return (

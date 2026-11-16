@@ -29,7 +29,6 @@ const toneOf = (share: number) => (share >= 0.9 ? 'var(--bad)' : share >= 0.7 ? 
 
 const percent = (value: number, of: number) => (of > 0 ? `${((value / of) * 100).toFixed(value / of < 0.1 ? 1 : 0)}%` : '—');
 
-/** A ring that fills as the context does. */
 function Ring({ share, size = 14 }: { share: number; size?: number }) {
 	const r = (size - 3) / 2;
 	const length = 2 * Math.PI * r;
@@ -61,7 +60,6 @@ function Row({ color, label, value, share, help, pattern }: { color: string; lab
 	);
 }
 
-/** The window as one bar: each part in its colour, the room kept for compaction hatched at the end, the rest free. */
 function Bar({ view }: { view: ContextView }) {
 	const buffer = Math.max(0, view.window - view.autocompactAt);
 	return (
@@ -77,7 +75,6 @@ function Bar({ view }: { view: ContextView }) {
 	);
 }
 
-/** For a model on a plan: its use as Anton saw it, and where its limits are. */
 function PlanSection({ plan }: { plan: PlanUsage }) {
 	const limitRecent = plan.limitHitAt !== null && Date.now() - new Date(plan.limitHitAt).getTime() < 24 * 3600_000;
 	return (
@@ -115,7 +112,6 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
 	);
 }
 
-/** For a model billed per token: this task's spend, and today's against the daily cap. */
 function SpendSection({ sessionId }: { sessionId: string }) {
 	const budget = useQuery(taskQueries.budget(sessionId));
 	if (!budget.data) return null;
@@ -142,11 +138,6 @@ function SpendSection({ sessionId }: { sessionId: string }) {
 	);
 }
 
-/**
- * How full this task's context window is, beside the composer. Open it for
- * the breakdown: what fills the window, how far it is from being compacted,
- * and what the task's model costs, on a plan or per token.
- */
 export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { sessionId: string; model: string }) {
 	const [open, setOpen] = useState(false);
 	const context = useQuery(taskQueries.context(sessionId));

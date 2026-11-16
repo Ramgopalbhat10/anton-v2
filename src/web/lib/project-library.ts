@@ -1,22 +1,12 @@
 import type { Session } from '@/lib/api';
 
-/**
- * How the project's Library lays out what its threads saved: under From
- * threads, a folder per thread named for it, holding its files. Folders Anton
- * keeps for the agent's own tools (pages under renders/, images under
- * images/) are left out of the path there, so a run's page sits one click
- * inside its thread's folder; the thread's own Library keeps them.
- */
+/** The project's Library has a folder per thread under From threads; Anton's own folders (renders/, images/) are left out of the path there. */
 
-/** Folders Anton files the agent's pages and images in (`RENDER_DIR`, `IMAGE_DIR`), not ones anyone chose. */
 const ANTON_FOLDERS = ['renders/', 'images/'];
 
 const day = (at: string) => new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-/**
- * A folder name for each thread, by id: its title, with the day it started when another thread has the same
- * title (a routine's runs, say), and its id when even that is shared. A slash would make a folder of its own.
- */
+/** A folder name per thread: its title, plus its day when another has the same title, plus its id when even that is shared. A slash would make a folder of its own. */
 export function threadFolders(threads: Session[]): Map<string, string> {
 	const titleOf = (thread: Session) => thread.title.replaceAll('/', '∕').trim() || 'Untitled';
 	const count = (names: string[]) => names.reduce((counts, name) => counts.set(name, (counts.get(name) ?? 0) + 1), new Map<string, number>());

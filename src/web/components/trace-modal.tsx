@@ -38,14 +38,6 @@ import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { type AgentSpan, cacheShare, cacheVerdict, type CompactionSpan, type ModelSpan, PART_LABELS, type ToolSpan, type Trace, TRACE_PARTS, type TraceMessage, type TracePart } from '../../core/trace';
 
-/*
- * A reply's trace, opened from its footer: the reply's totals, then every
- * model call and tool call it made on one clock, each subagent's calls under
- * the call that started it, and the step picked in a card beside them: what
- * went into a model call's context, whether the provider's cache held and
- * why, and each tool call's input and output.
- */
-
 const PART_COLORS: Record<TracePart, string> = {
 	messages: 'var(--data-1)',
 	systemPrompt: 'var(--data-2)',
@@ -72,14 +64,12 @@ const TONE_TEXT: Record<Tone, string> = {
 	danger: 'text-(--bad)',
 };
 
-/** Waiting on others, as the hatching under a group's own calls. */
 const hatch = (hue: string): CSSProperties => ({
 	backgroundImage: `repeating-linear-gradient(135deg, color-mix(in oklab, ${hue} 34%, transparent) 0 1.5px, transparent 1.5px 6px)`,
 	boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${hue} 30%, transparent)`,
 });
 const toolFill = (hue: string) => `color-mix(in oklab, ${hue} 46%, var(--bg-active))`;
 
-/** The trace modal, over the whole app; Escape or the scrim closes it. */
 export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string; traceId: string; onClose: () => void }) {
 	const trace = useQuery({ queryKey: ['trace', sessionId, traceId], queryFn: () => api.trace(sessionId, traceId), staleTime: Infinity, retry: 1 });
 	return createPortal(
@@ -132,11 +122,9 @@ function TraceHeader({ sub, children, onClose }: { sub: ReactNode; children?: Re
 	);
 }
 
-/** Room before the first bar, and after the last for its label, inside the timeline. */
 const LEAD = 12;
 const tail = (narrow: boolean) => (narrow ? 72 : 118);
 
-/** A layout choice kept in this browser: the steps column's width and how the timeline is stretched. */
 function useStored<T>(key: string, fallback: T): [T, (value: T) => void] {
 	const [value, setValue] = useState<T>(() => {
 		try {
@@ -160,10 +148,8 @@ function useStored<T>(key: string, fallback: T): [T, (value: T) => void] {
 	return [value, keep];
 }
 
-/** How the timeline is stretched: to fit its width, to read its typical call, or by a factor you chose. */
 type Zoom = 'fit' | 'auto' | number;
 
-/** The timeline's geometry: its column, how wide its track is drawn, and how to stretch it about a point on screen. */
 function useTimeline(trace: Trace) {
 	const scroller = useRef<HTMLDivElement | null>(null);
 	const [measure, box] = useElementSize<HTMLDivElement>();
@@ -385,13 +371,11 @@ function TraceStatsRow({ stats, trace }: { stats: ReturnType<typeof traceStats>;
 	);
 }
 
-/** Where a time falls along the track, as a CSS length inside it. */
 const pos = (ms: number, total: number) => `${Math.max(0, Math.min(100, (ms / total) * 100))}%`;
 
 /** The steps column's own background, so the timeline scrolls under it; a row's state is laid over it. */
 const STICKY = 'sticky left-0 border-r border-(--line) bg-(--bg-overlay)';
 
-/** The handle on the steps column's edge: drag to widen it or narrow it, double-click to set it back. */
 function ColumnGrip({ line }: { line: Timeline }) {
 	return (
 		<span
@@ -471,7 +455,6 @@ function TimeAxis({
 	);
 }
 
-/** The handle at the timeline's end: drag it right to stretch the timeline, left to squeeze it back. */
 function StretchGrip({ line }: { line: Timeline }) {
 	return (
 		<span
@@ -518,7 +501,6 @@ function GridLines({ line, ticks, changes }: { line: Timeline; ticks: number[]; 
 	);
 }
 
-/** Model names from the catalog, with the id's own last part when it isn't listed. */
 type ModelNames = { of: (span: Pick<ModelSpan, 'model' | 'served'>) => string; short: (span: Pick<ModelSpan, 'model' | 'served'>) => string; name: (model: string) => string };
 
 function useModelNames(): ModelNames {
@@ -536,7 +518,6 @@ function useModelNames(): ModelNames {
 	}, [models.data]);
 }
 
-/** A gateway's logo and name: OpenRouter, a ChatGPT plan, Claude Code. */
 function Provider({ gateway, size = 13 }: { gateway: string; size?: number }) {
 	const logo = logoFor({ id: `${gateway}/` });
 	return (
@@ -547,7 +528,6 @@ function Provider({ gateway, size = 13 }: { gateway: string; size?: number }) {
 	);
 }
 
-/** The header's line: the agent's model and gateway, and the others the reply ran on. */
 function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; when: string }) {
 	const used = modelsUsed(trace);
 	const main = used.find((use) => use.model === trace.model) ?? used[0];
@@ -592,7 +572,6 @@ function ReplyModels({ trace, names, when }: { trace: Trace; names: ModelNames; 
 	);
 }
 
-/** A row's icon: the agent's mark, a subagent's tile, the model's vendor, or what kind of tool it was. */
 function RowIcon({ node }: { node: TraceNode }) {
 	const span = node.span;
 	if (!span) return <Logo size={16} />;
@@ -616,7 +595,6 @@ function RowIcon({ node }: { node: TraceNode }) {
 	);
 }
 
-/** What a row says: a short name and, dimmer, what it worked on. */
 function rowText(node: TraceNode, trace: Trace, names?: ModelNames): { label: ReactNode; sub: string } {
 	const span = node.span;
 	if (!span) return { label: 'Anton', sub: trace.model ? (names?.name(trace.model) ?? shortModel(trace.model)) : '' };
@@ -840,9 +818,7 @@ function Legend({ swatch, children }: { swatch: CSSProperties; children: ReactNo
 	);
 }
 
-/* ------------------------------------------------------------------ */
-/* The picked step, in a card beside the timeline.                      */
-/* ------------------------------------------------------------------ */
+/* The picked step, in a card beside the timeline. */
 
 function StepCard({ node, trace, names, onClose, onSelect }: { node: TraceNode; trace: Trace; names: ModelNames; onClose: () => void; onSelect: (key: string) => void }) {
 	const span = node.span;
@@ -901,7 +877,6 @@ function Section({ title, hint, children }: { title: string; hint?: ReactNode; c
 	);
 }
 
-/** Text as it was sent or returned, in a well, scrolling past a height. */
 function Pre({ text, tall }: { text: string; tall?: boolean }) {
 	if (!text.trim()) return <span className="text-small text-(--text-4)">Empty</span>;
 	return (
@@ -911,7 +886,6 @@ function Pre({ text, tall }: { text: string; tall?: boolean }) {
 	);
 }
 
-/** A fold under a section: a line that opens onto what it names. */
 function Fold({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	return (
@@ -1248,7 +1222,6 @@ function ReplyDetail({ trace, names, onSelect }: { trace: Trace; names: ModelNam
 	);
 }
 
-/** The footer's action: opens the reply's trace. */
 export function TraceButton({ onOpen }: { onOpen: () => void }) {
 	return <IconBtn size="xs" icon={TraceIcon} label="Trace this reply" onClick={onOpen} />;
 }

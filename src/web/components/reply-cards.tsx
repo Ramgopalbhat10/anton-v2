@@ -18,16 +18,6 @@ import { type FileDiff as Diff, parsePatch } from "@/lib/diff";
 import { cn } from "@/lib/utils";
 import { focusChange, ShowPanel } from "@/lib/workspace";
 
-/*
- * Cards a reply carries for what Anton already knows: a question to answer
- * with a tap, the files a turn changed, and the pull request it opened.
- */
-
-/**
- * How a card in a reply answers: by sending the user's next message. `live`
- * is false while the agent works; `answer` is the message that followed the
- * reply, once there is one, so a card shows what was picked after a reload.
- */
 export type ReplyActions = { send: (text: string) => void; busy: boolean };
 export const ReplyActions = createContext<ReplyActions>({
   send: () => undefined,
@@ -67,7 +57,6 @@ function askOf(input: unknown): {
   return { question: field(input, "question"), options, recommended };
 }
 
-/** A question from the ask tool: tap an option to answer with it, or type an answer in the composer. */
 export const AskCard = memo(function AskCard({
   input,
   place,
@@ -161,11 +150,6 @@ export const AskCard = memo(function AskCard({
   );
 });
 
-/**
- * A question once answered, as Claude shows a decided card: the question, and
- * under it what was picked (its letter) or what you wrote instead. The
- * options it did not take are no longer worth the room.
- */
 function AnsweredCard({
   question,
   answer,
@@ -206,7 +190,6 @@ function AnsweredCard({
   );
 }
 
-/** The files this turn changed, from the task's diff, each opening in the Changes panel. */
 export const ChangesCard = memo(function ChangesCard({
   sessionId,
   paths,
@@ -323,7 +306,6 @@ function ChatMerge({ sessionId, url }: { sessionId: string; url: string }) {
   </div>;
 }
 
-/** The pull request a turn opened: its number and title, and its state and checks as GitHub last reported them. */
 export const PullRequestCard = memo(function PullRequestCard({
   sessionId,
   url,

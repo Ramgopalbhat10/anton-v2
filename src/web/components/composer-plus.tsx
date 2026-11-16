@@ -12,7 +12,6 @@ import { type ConnectorItem, connectorItems, setConnectorOn } from '@/lib/connec
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-/** A switch drawn inside a menu row, which toggles as the row is picked. */
 function RowSwitch({ on }: { on: boolean }) {
 	return (
 		<span aria-hidden className={cn('relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors duration-(--t-fast)', on ? 'bg-(--accent)' : 'bg-(--track)')}>
@@ -92,7 +91,6 @@ const ARTIFACTS_SHOWN = 30;
 
 const matchesQuery = (artifact: Artifact, query: string) => `${artifact.title} ${artifact.path} ${artifact.task.title}`.toLowerCase().includes(query);
 
-/** Files you added, then what the agent made, newest first, each narrowed by the search. */
 function forContext(artifacts: Artifact[], query: string) {
 	const needle = query.trim().toLowerCase();
 	const found = needle ? artifacts.filter((item) => matchesQuery(item, needle)) : artifacts;
@@ -101,7 +99,6 @@ function forContext(artifacts: Artifact[], query: string) {
 
 const sizeText = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 
-/** One file: its kind's icon, its name, and where it came from (or how big it is, for one you added). */
 function ArtifactRow({ artifact, added, onAdd }: { artifact: Artifact; added: boolean; onAdd: (artifact: Artifact) => void }) {
 	const info = categoryInfo(categoryOf(artifact.path));
 	const detail = artifact.added ? sizeText(artifact.size) : artifact.task.title;
@@ -128,7 +125,6 @@ function ArtifactRow({ artifact, added, onAdd }: { artifact: Artifact; added: bo
 	);
 }
 
-/** Attaches a file from the Artifacts page to the message, as if it were picked from disk. */
 function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
@@ -208,11 +204,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 	);
 }
 
-/**
- * The composer's + menu: attach files, and turn connectors on or off, as Claude's composer does. A connector's
- * switch is one state for every task, read by the agent as it calls a tool: its tools load only when a task uses
- * them, so a connector that is on costs no context until then and flipping one never changes the cached prompt.
- */
+/** A connector's switch is one state for every task; its tools load only when a task uses them, so flipping one never changes the cached prompt. */
 export function ComposerPlus({ attachments, label = 'Attach files', side = 'top', run }: { attachments: Attachments; label?: string; side?: 'top' | 'bottom'; run?: RunChoice }) {
 	const picker = useRef<HTMLInputElement>(null);
 	const navigate = useNavigate();

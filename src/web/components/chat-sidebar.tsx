@@ -63,16 +63,13 @@ import { toggleTheme, useTheme } from '@/lib/theme';
 import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
-/* A page in the sidebar: 28px, filled on the page you are on, as the open task is. */
 const NAV_ROW =
 	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
-/** A nav row's icon, bright on the page you are on. */
 function NavIcon({ icon }: { icon: IconComponent }) {
 	return <Icon icon={icon} size={15} className="shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)" />;
 }
 
-/** Today's spend against the daily cap, so it is visible before it blocks anything: a figure over a small block meter. */
 function SpentToday() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget(), refetchInterval: SAFETY_NET_MS });
 	if (!budget.data) return null;
@@ -101,7 +98,6 @@ function SpentToday() {
 	);
 }
 
-/** Collapsed sidebar: a 48px rail with the mark, show-sidebar and new-task, fading in as the sidebar slides away. */
 export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: boolean; onExpand: () => void; onOpenNotifications: () => void }) {
 	const navigate = useNavigate();
 	return (
@@ -119,16 +115,12 @@ export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: b
 	);
 }
 
-/**
- * Sort, filter, group and what each row shows, in one menu with a submenu each.
- * Picking a filter or a detail keeps the menu open, so several can be picked.
- */
+/** Picking a filter or a detail keeps the menu open, so several can be picked. */
 function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: TaskView) => void; tasks: Session[] }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const active = filterCount(view.filters);
 	const running = tasks.filter(isLive).length;
-	// Stopping every sandbox at once asks twice, inside the menu.
 	const [confirming, setConfirming] = useState(false);
 	const stopAll = useMutation({ mutationFn: api.stopAllSandboxes, onSettled: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }) });
 	const stay = (change: () => void) => (event: Event) => {
@@ -235,7 +227,6 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 	);
 }
 
-/** Search every task, and the view menu, above the sections they shape. */
 function Toolbar({
 	view,
 	onChange,
@@ -268,7 +259,6 @@ function Toolbar({
 		</>
 	);
 	if (open) {
-		// The search takes the heading's own row: same height, same place, the field where the name and rule were.
 		return (
 			<div className="mt-3 flex h-6 shrink-0 items-center gap-1 pl-0.5">
 				<SearchField size="sm" autoFocus value={query} onChange={onQuery} onEscape={close} placeholder="Search tasks" className="flex-1" />
@@ -284,7 +274,6 @@ function Toolbar({
 			</div>
 		);
 	}
-	// The group's heading: Pinned, Running and Recent are its sections.
 	return (
 		<GroupHeading label="Tasks" count={tasks.length}>
 			{actions}
@@ -292,7 +281,6 @@ function Toolbar({
 	);
 }
 
-/** How each section of Tasks is marked beside its name: live work in the accent, the rest quiet. */
 function SectionMark({ place, count }: { place: Place; count: number }) {
 	if (place === 'pinned') return <Icon icon={Pin} size={11} className="shrink-0 text-(--text-3)" />;
 	const live = place === 'running' && count > 0;
@@ -304,7 +292,6 @@ function SectionMark({ place, count }: { place: Place; count: number }) {
 	);
 }
 
-/** A section's heading inside Tasks: click it to fold the section away. Its actions show while the pointer is on it. */
 function SectionHeader({
 	place,
 	label,
@@ -330,7 +317,6 @@ function SectionHeader({
 			>
 				<SectionMark place={place} count={count} />
 				<span className="truncate text-micro font-medium">{label}</span>
-				{/* The count, and in its place on hover or focus the chevron that says the section folds. */}
 				<span className="relative inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center">
 					{count ? (
 						<span className="in-num text-micro text-(--text-4) transition-opacity duration-(--t-fast) group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0">{count}</span>
@@ -356,7 +342,6 @@ function SectionHeader({
 
 type Place = 'pinned' | 'running' | 'recent';
 
-/** On hover: pinned tasks offer Unpin, running ones fork and stop, the rest Pin. All have the task menu. */
 function HoverActions({ session, place }: { session: Session; place: Place }) {
 	const queryClient = useQueryClient();
 	const stop = useMutation({
@@ -377,10 +362,8 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 	return <IconBtn icon={pinned ? PinOff : Pin} size="xs" label={pinned ? 'Unpin' : 'Pin to top'} onClick={() => pin.mutate()} disabled={pin.isPending} />;
 }
 
-/** The line under a row's title: links to act on (pull request, CI, a plan to review), then the details the view asks for. */
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
 	const spaceName = useSpaceName(session.spaceId);
-	// A thread names its project where a task names its repository: one place, in words.
 	const details = [show.repo && (spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
@@ -394,10 +377,6 @@ function Subtitle({ session, show, onCardChange }: { session: Session; show: Tas
 	);
 }
 
-/**
- * One task in the sidebar. The whole row links to the task, under the links its line holds;
- * its actions show on hover and stay while its menu is open, and resting on it shows a card of details.
- */
 type TaskRowProps = { session: Session; place: Place; view: TaskView; active: boolean; onNavigate: () => void };
 
 const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate }: TaskRowProps) {
@@ -481,11 +460,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 	);
 }, sameRow);
 
-/**
- * A row draws again only when what it shows changed. The list's tasks are new objects whenever
- * one is added above them (the cache shares unchanged values by position, and every task moved
- * down one), so a task is compared field by field: its nested values are still shared when equal.
- */
+/** The list's tasks are new objects whenever one is added above them (the cache shares values by position), so a task is compared field by field. */
 function sameRow(before: TaskRowProps, after: TaskRowProps): boolean {
 	if (before.place !== after.place || before.view !== after.view || before.active !== after.active || before.onNavigate !== after.onNavigate) return false;
 	if (before.session === after.session) return true;
@@ -493,7 +468,6 @@ function sameRow(before: TaskRowProps, after: TaskRowProps): boolean {
 	return keys.length === Object.keys(before.session).length && keys.every((key) => Object.is(before.session[key], after.session[key]));
 }
 
-/** A section's rows, under a heading per repository when grouping. */
 function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; place: Place; view: TaskView; activeId?: string; onNavigate: () => void }) {
 	return (
 		<div className="flex flex-col gap-px">
@@ -509,7 +483,6 @@ function Rows({ tasks, place, view, activeId, onNavigate }: { tasks: Session[]; 
 	);
 }
 
-/** Rows of Recent drawn at first, and added by each Show more. */
 const RECENT_PAGE = 50;
 
 function Empty({ children }: { children: ReactNode }) {
@@ -523,9 +496,7 @@ export function ChatSidebar({
 	onCollapse,
 	onOpenPalette,
 }: {
-	/** Shown as a sheet over the page, on a phone. */
 	open: boolean;
-	/** Slid away to the rail, on a wider screen. */
 	collapsed: boolean;
 	onNavigate: () => void;
 	onCollapse: () => void;
@@ -544,7 +515,6 @@ export function ChatSidebar({
 		saveView(next);
 	};
 	const sessions = sessionsQuery.data?.sessions ?? [];
-	// Inbox counts what calls you over; Reviews the pull requests still open, as the tasks last read them.
 	const unread = loudUnread(useNotifications().data?.unread);
 	const openPulls = useMemo(() => sessions.filter((session) => session.pullRequest?.state === 'open' || session.pullRequest?.state === 'draft').length, [sessions]);
 	const { pinned, running, recent } = useMemo(() => sections(sessions, view, query), [sessions, view, query]);
