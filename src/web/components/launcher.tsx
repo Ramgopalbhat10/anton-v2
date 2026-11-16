@@ -4,6 +4,7 @@ import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, 
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { HomeDashboard, homeSummary } from '@/components/home-dashboard';
+import { SetupCard } from '@/components/setup-card';
 import { TopBar } from '@/components/page-frame';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';
@@ -233,6 +234,9 @@ export function Launcher() {
 	const navigate = useNavigate();
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
+	// Until a model can answer, the composer gives way to the setup card.
+	const setup = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 60_000 });
+	const needsSetup = setup.data ? !setup.data.canRunTasks : false;
 	const [prompt, setPrompt] = useState('');
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [projectId, setProjectId] = useState('');
@@ -306,10 +310,14 @@ export function Launcher() {
 					<div className="flex w-full flex-col gap-3">
 						<div className="mb-2 flex flex-col gap-1">
 							<h1 className="m-0 text-h1 leading-[30px] font-semibold tracking-[-0.02em] text-(--text)">{greeting(profile.data?.name)}</h1>
-							<p className="m-0 text-body-lg leading-5 text-(--text-2)">{sessions.data ? homeSummary(sessions.data.sessions) : chat ? 'Ask anything, or hand off a job on the web.' : 'What should Anton work on?'}</p>
+							<p className="m-0 text-body-lg leading-5 text-(--text-2)">
+								{needsSetup ? 'Connect what Anton needs, then start a task here.' : sessions.data ? homeSummary(sessions.data.sessions) : chat ? 'Ask anything, or hand off a job on the web.' : 'What should Anton work on?'}
+							</p>
 						</div>
 
+						{needsSetup && setup.data ? <SetupCard setup={setup.data} /> : null}
 						<form
+							hidden={needsSetup}
 							className="home-composer in-enter relative flex flex-col"
 							onSubmit={(event) => {
 								event.preventDefault();
@@ -363,8 +371,8 @@ export function Launcher() {
 								onCancel={() => setAdding(false)}
 							/>
 						) : null}
-						{prompt.trim() ? null : <Starters chat={chat} onPick={setPrompt} />}
-						{chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
+						{prompt.trim() || needsSetup ? null : <Starters chat={chat} onPick={setPrompt} />}
+						{needsSetup ? null : chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 					</div>
 
 					<HomeDashboard />

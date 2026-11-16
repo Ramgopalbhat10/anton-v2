@@ -34,7 +34,7 @@ Source: code exploration (no `SECURITY_MODEL.md` exists) plus the owner's answer
 
 ## Assets
 - **GitHub token** (`ANTON_GITHUB_TOKEN`, Contents + PRs read/write): push to the owner's repos. Critical.
-- **Plan and API keys:** ChatGPT sign-in tokens, OpenRouter / Vercel / OpenCode Go / Cursor keys (stored in settings in `anton.db`), Claude Code sign-in in `<dataDir>/claude-code`, Modal, Tigris, Turso, Kernel, Google OAuth client and Gmail tokens, webhook secret, VAPID keys, repo/shared sandbox env secrets (`secrets.ts`, redacted by `src/core/redact.ts` when `hideSecrets`). Critical.
+- **Plan and API keys:** ChatGPT sign-in tokens, OpenRouter / Vercel / OpenCode Go / Cursor keys (stored in settings in `anton.db`), Claude Code sign-in in `<dataDir>/claude-code`, Modal, Tigris, Turso, Kernel (from the environment, or saved in Settings › Connections to `<dataDir>/anton.env`, mode 0600, plain text like `.env`), Google OAuth client and Gmail tokens, webhook secret, VAPID keys, repo/shared sandbox env secrets (`secrets.ts`, redacted by `src/core/redact.ts` when `hideSecrets`). Critical.
 - **Gmail / connector access:** read and draft mail, send only after owner approval. Critical.
 - **Task data:** `anton.db` (repos, tasks, settings, usage, secrets), `flue.db` (all conversations), checkpoints and outputs in the bucket. High.
 - **Spend:** Modal compute, model usage, Kernel browser seconds; capped by `budget.ts`. Medium–High.

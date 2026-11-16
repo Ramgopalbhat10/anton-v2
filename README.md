@@ -12,6 +12,8 @@ npm install
 cp .env.example .env
 ```
 
+Every value is optional at first: on a new server, Settings › Connections walks through what Anton needs (a model key, GitHub, sandboxes, storage), tests each value and saves it to `data/anton.env`, which is read over `.env` at start. A value set in the environment shows there locked, with its variable's name.
+
 ## Run
 
 ```sh

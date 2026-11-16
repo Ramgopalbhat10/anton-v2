@@ -8,6 +8,8 @@ const { api, iPhone } = vi.hoisted(() => {
 	return { iPhone, api: {
 	budget: vi.fn(async () => ({ limits: { dailyUsd: 10, taskUsd: null }, today: 1.25, task: null, blocked: null })),
 	sessions: vi.fn(async () => ({ sessions: [] })),
+	// A server that can run tasks: Home shows the composer, and the Settings nav no count by Connections.
+	setup: vi.fn(async () => ({ slots: [], plans: ['ChatGPT plan'], canRunTasks: true })),
 	usage: vi.fn(async () => ({ since: '2026-10-01T00:00:00Z', today: 1.25, month: 3, byRepo: [], byModel: [], daily: [] })),
 	storage: vi.fn(async () => ({ objects: 0, bytes: 0, lastCleanup: null })),
 	projects: vi.fn(async () => ({ projects: [] })),

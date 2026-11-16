@@ -117,6 +117,7 @@ import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
 import { requestReview } from './services/code-review.ts';
 import { computeView, stopAllSandboxes } from './services/compute.ts';
 import { connections } from './services/connections.ts';
+import { clearSlot, saveSlot, setupView, testSlot } from './services/setup.ts';
 import {
 	recordPlanLimit,
 	beginLogin,
@@ -562,6 +563,24 @@ app.post('/api/github/webhook', async (c) => {
 	return c.json({ ok: true, tasks: await gitHubDelivery(event, (delivery ?? {}) as Parameters<typeof gitHubDelivery>[1]) });
 });
 app.get('/api/connections', async (c) => c.json({ connections: await connections() }));
+// Settings › Connections as Anton's setup: each slot's provider and values, checked before they are kept; secrets come back as their last four characters only.
+const setupInput = v.object({
+	provider: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
+	values: v.optional(v.record(v.pipe(v.string(), v.regex(/^[A-Z][A-Z0-9_]{1,63}$/)), v.pipe(v.string(), v.maxLength(4000))), {}),
+});
+app.get('/api/setup', async (c) => c.json(await setupView()));
+app.post('/api/setup/:slot/test', async (c) => {
+	const { provider, values } = await body(c, setupInput);
+	return c.json(await testSlot(c.req.param('slot'), provider, values));
+});
+app.put('/api/setup/:slot', async (c) => {
+	const { provider, values } = await body(c, setupInput);
+	return c.json(await saveSlot(c.req.param('slot'), provider, values));
+});
+app.delete('/api/setup/:slot', async (c) => {
+	await clearSlot(c.req.param('slot'), c.req.query('provider') ?? '');
+	return c.json({ ok: true });
+});
 app.get('/api/compute', async (c) => c.json(await computeView()));
 app.post('/api/compute/stop-all', async (c) => c.json(await stopAllSandboxes()));
 app.get('/api/logs', (c) => c.json({ logs: recentProblems() }));

@@ -111,11 +111,18 @@ export type Providers = {
 };
 
 let providers: Providers | undefined;
+/** Whether `providers` is the real set, which a setting saved in Settings › Connections may rebuild; tests' fakes are left alone. */
+let real = false;
+/** The decision model in use, rebuilt when its model is changed in Settings › Connections. */
+let decisionModel: DecisionModel | null = null;
+
+const makeDecisions = (): DecisionModel | null =>
+	config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl: config.openrouter.apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
 
 /** The decision, vision, image and text models call OpenRouter with the key in use at the time, so they exist only while there is one. */
 function production(): Providers {
 	const { apiUrl, ttlMs } = config.openrouter;
-	const decisions = config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
+	decisionModel = makeDecisions();
 	const vision = openRouterVision({ apiUrl, apiKey: openRouterKey });
 	const images = openRouterImages({ apiUrl, apiKey: openRouterKey, ttlMs });
 	const text = openRouterText({ apiUrl, apiKey: openRouterKey });
@@ -134,7 +141,7 @@ function production(): Providers {
 			},
 		],
 		get decisions() {
-			return openRouterKey() ? decisions : null;
+			return openRouterKey() ? decisionModel : null;
 		},
 		subscriptions: [chatGptSubscription()],
 		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
@@ -157,11 +164,25 @@ function production(): Providers {
 }
 
 export function getProviders(): Providers {
-	providers ??= production();
+	if (!providers) {
+		providers = production();
+		real = true;
+	}
 	return providers;
+}
+
+/**
+ * Rebuilds the providers whose settings are read as they are made, after one of them is saved in Settings ›
+ * Connections: the code host (its token) and the decision model. The rest wait for a restart.
+ */
+export function refreshLiveProviders(): void {
+	if (!providers || !real) return;
+	providers.git = githubHost(config.github);
+	decisionModel = makeDecisions();
 }
 
 /** Tests swap in fakes here. */
 export function setProviders(next: Providers): void {
 	providers = next;
+	real = false;
 }
