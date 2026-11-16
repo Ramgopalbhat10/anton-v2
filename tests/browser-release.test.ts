@@ -12,7 +12,7 @@ process.env.ANTON_DATA_DIR = dir;
 // Connections are let go this long after their last use (15 seconds in Anton).
 process.env.ANTON_BROWSER_RELEASE_MS = '80';
 
-const { browserConnected, browserView, closeBrowser, navigate, openBrowser, watchBrowser } = await import('../src/services/live-browser.ts');
+const { browserConnected, browserView, closeBrowser, navigate, openBrowser, watchBrowser } = await import('../src/services/browser/live-browser.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');

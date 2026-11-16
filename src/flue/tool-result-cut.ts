@@ -1,8 +1,8 @@
 import { type FlueExecutionContext, type FlueExecutionOperation, instrument } from '@flue/runtime';
-import { cutHeadAndTail, cutResult } from '../services/tool-results.ts';
-import { skillFilesReady } from '../services/skill-files.ts';
-import { skillInParts } from '../services/skill-parts.ts';
-import { digestResult, WEB_TOOLS } from '../services/web-digest.ts';
+import { cutHeadAndTail, cutResult } from '../services/context/tool-results.ts';
+import { skillFilesReady } from '../services/sandbox/skill-files.ts';
+import { skillInParts } from '../services/context/skill-parts.ts';
+import { digestResult, WEB_TOOLS } from '../services/context/web-digest.ts';
 
 /**
  * An agent's own conversation: the coder's, the reviewer's or a coordinator's, each of which has
@@ -16,11 +16,11 @@ const SKILL_TOOL = 'activate_skill';
 
 /**
  * Cuts a long tool result before the runtime keeps it in the conversation
- * (src/services/tool-results.ts). Every tool call passes through the runtime's
+ * (src/services/context/tool-results.ts). Every tool call passes through the runtime's
  * execution interceptors with what it returned, so this sees web fetches,
  * connectors, scripts and subagents' answers alike. A long web search or fetch
- * is read out against its objective instead (src/services/web-digest.ts), and
- * an activated skill comes in parts (src/services/skill-parts.ts). A
+ * is read out against its objective instead (src/services/context/web-digest.ts), and
+ * an activated skill comes in parts (src/services/context/skill-parts.ts). A
  * subagent's own calls carry its task id; it has no `read_full_result`, so its
  * other long results keep their start and end.
  */

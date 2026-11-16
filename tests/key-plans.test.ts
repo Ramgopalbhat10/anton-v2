@@ -11,8 +11,8 @@ process.env.ANTON_DATA_DIR = dir;
 const { openCodeGoPlan, toSubscriptionModel, toWindows, nameOf } = await import('../src/providers/opencode-go/plan.ts');
 const { apiFor, openCodeGoProvider, SESSION_HEADER } = await import('../src/flue/opencode-go-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
-const subscriptions = await import('../src/services/subscriptions.ts');
-const { listModels } = await import('../src/services/models.ts');
+const subscriptions = await import('../src/services/models/subscriptions.ts');
+const { listModels } = await import('../src/services/models/models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
 const realFetch = globalThis.fetch;

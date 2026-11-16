@@ -14,7 +14,7 @@ import { FIELD, Note, PageHeading } from './parts';
  * Settings › Connections: what Anton runs on, and on a new server where it is
  * set up. Each slot (models, code host, sandboxes, storage, and the optional
  * database, decision model and web search) picks a provider, takes the values
- * it needs, and is tested before it is saved (src/services/setup.ts). A value
+ * it needs, and is tested before it is saved (src/services/settings/setup.ts). A value
  * the server's environment gives shows locked with its variable's name; one
  * saved here takes its place. The live checks (`api.connections`) say how each
  * stands.
@@ -71,7 +71,7 @@ const WHAT: Record<string, string> = {
 
 const ICONS: Record<string, IconComponent> = { models: Brain, git: GitBranch, sandbox: Box, store: HardDrive, database: Database, decisions: Split, web: Globe };
 
-/** The live check behind each slot (src/services/connections.ts). */
+/** The live check behind each slot (src/services/settings/connections.ts). */
 const CHECK_ID: Record<string, string> = { models: 'models', git: 'git', sandbox: 'sandbox', store: 'store', database: 'database', decisions: 'decisions', web: 'web' };
 
 type State = 'ok' | 'set' | 'restart' | 'failing' | 'off' | 'optional' | 'checking';

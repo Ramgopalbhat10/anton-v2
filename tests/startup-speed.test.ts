@@ -10,8 +10,8 @@ import { createClient } from '@libsql/client';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-startup-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { unsettledTasks } = await import('../src/services/agent-runner.ts');
-const { knownServerTools, resetMcpToolsForTests, warmServerTools } = await import('../src/services/mcp-tools.ts');
+const { unsettledTasks } = await import('../src/services/tasks/agent-runner.ts');
+const { knownServerTools, resetMcpToolsForTests, warmServerTools } = await import('../src/services/connectors/mcp-tools.ts');
 
 after(async () => {
 	await resetMcpToolsForTests();

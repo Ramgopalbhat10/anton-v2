@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * The bell beside the sidebar toggle and the Inbox page it opens: the moments
- * in your tasks worth a look (src/services/notifications.ts), not every step.
+ * in your tasks worth a look (src/services/notify/notifications.ts), not every step.
  * The list updates from server events; opening a task reads its rows.
  */
 

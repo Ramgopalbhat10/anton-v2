@@ -12,9 +12,9 @@ process.env.COMPOSIO_API_KEY = 'ck_env';
 const { setProviders } = await import('../src/providers/index.ts');
 const { composioApps } = await import('../src/providers/composio/index.ts');
 const { composioKeySlot } = await import('../src/providers/composio/key.ts');
-const composio = await import('../src/services/composio.ts');
-const approvals = await import('../src/services/tool-approvals.ts');
-const connectorTools = await import('../src/services/connector-tools.ts');
+const composio = await import('../src/services/connectors/composio.ts');
+const approvals = await import('../src/services/connectors/tool-approvals.ts');
+const connectorTools = await import('../src/services/connectors/connector-tools.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, apps: composioApps({ key: composioKeySlot }) });

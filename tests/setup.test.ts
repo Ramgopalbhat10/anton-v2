@@ -18,7 +18,7 @@ writeFileSync(path.join(dir, 'anton.env'), 'ANTON_WEB_MCP_URL="https://saved.exa
 const { config } = await import('../src/config.ts');
 const savedEnv = await import('../src/saved-env.ts');
 const { setProviders } = await import('../src/providers/index.ts');
-const setup = await import('../src/services/setup.ts');
+const setup = await import('../src/services/settings/setup.ts');
 
 setProviders({
 	sandbox: { name: 'local' } as never,

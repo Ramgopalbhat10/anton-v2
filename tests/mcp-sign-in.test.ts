@@ -7,8 +7,8 @@ import { after, beforeEach, test } from 'node:test';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-mcp-sign-in-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const servers = await import('../src/services/mcp-servers.ts');
-const signIns = await import('../src/services/mcp-sign-in.ts');
+const servers = await import('../src/services/connectors/mcp-servers.ts');
+const signIns = await import('../src/services/connectors/mcp-sign-in.ts');
 
 const realFetch = globalThis.fetch;
 after(() => {

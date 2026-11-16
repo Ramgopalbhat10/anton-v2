@@ -73,7 +73,7 @@ test('Coder reaches connectors through two fixed tools, so turning one on or off
 	assert.doesNotMatch(tools, /sendDraft|decideSend/);
 	// Nothing about whether a connector is on reaches the prompt or a tool's definition: only the connectors set up are named.
 	assert.doesNotMatch(source, /useMcpConnection\(\{[^}]*connector/);
-	const tools2 = readFileSync(new URL('../src/services/connector-tools.ts', import.meta.url), 'utf8');
+	const tools2 = readFileSync(new URL('../src/services/connectors/connector-tools.ts', import.meta.url), 'utf8');
 	assert.match(tools2, /access\.send\s*\?/);
 	assert.match(tools2, /requestSend\(task, id, checked\(send, args\)\.draft_id, signal\)/);
 	assert.doesNotMatch(tools2, /sendDraft|decideSend/);
@@ -95,11 +95,11 @@ test('Coordinator keeps its instructions fixed and gives the project state as a 
 	const hook = source.slice(source.indexOf('function useProjectState'));
 	assert.match(hook, /shown\?\.body === body && shown\.since < STATE_EVERY/);
 	assert.match(hook, /append\(\{ kind: 'signal', type: STATE_SIGNAL, body \}\)/);
-	assert.match(source, /import \{ STATE_SIGNAL \} from '\.\.\/services\/context-prune\.ts';/, 'the name a model call knows an earlier state by');
+	assert.match(source, /import \{ STATE_SIGNAL \} from '\.\.\/services\/context\/context-prune\.ts';/, 'the name a model call knows an earlier state by');
 });
 
 test('the browser turns away raw GitHub files, which web_fetch reads in a second', async () => {
-	const { isRawFile } = await import('../src/services/browser-step.ts');
+	const { isRawFile } = await import('../src/services/browser/browser-step.ts');
 	assert.ok(isRawFile('https://raw.githubusercontent.com/acme/app/main/src/driver.ts'));
 	assert.ok(isRawFile('gist.githubusercontent.com/ada/1/raw/notes.md'));
 	assert.ok(!isRawFile('https://github.com/acme/app/pulls'));

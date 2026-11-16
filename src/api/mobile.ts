@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import type { Session } from '../core/types.ts';
-import { getSession, listSessions } from '../services/sessions.ts';
-import { waitingMessages } from '../services/waiting.ts';
-import { subagentRuns } from '../services/subagent-runs.ts';
-import { agentNow } from '../services/agent-now.ts';
-import { pullRequestView } from '../services/pull-requests.ts';
-import { spacesView, spaceView } from '../services/spaces.ts';
-import { listModels, pinnedModels } from '../services/models.ts';
-import { defaultModel } from '../services/general.ts';
+import { getSession, listSessions } from '../services/tasks/sessions.ts';
+import { waitingMessages } from '../services/tasks/waiting.ts';
+import { subagentRuns } from '../services/tasks/subagent-runs.ts';
+import { agentNow } from '../services/tasks/agent-now.ts';
+import { pullRequestView } from '../services/git/pull-requests.ts';
+import { spacesView, spaceView } from '../services/projects/spaces.ts';
+import { listModels, pinnedModels } from '../services/models/models.ts';
+import { defaultModel } from '../services/models/general.ts';
 import { NotFoundError } from '../core/errors.ts';
 
 /**

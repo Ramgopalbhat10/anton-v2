@@ -46,7 +46,7 @@ export type RunOn = 'sandbox' | 'host';
 /** Where tasks can run: the sandbox provider's name, and whether this server is a choice of its own. */
 export type RunnersView = { sandbox: string; host: boolean };
 
-/** A sealed secret, which the agent can use in http_request but never read (src/services/sealed-secrets.ts). */
+/** A sealed secret, which the agent can use in http_request but never read (src/services/secrets/sealed-secrets.ts). */
 export type SealedSecret = { name: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: { by: 'you' } | { by: 'task'; taskId: string }; updatedAt: string };
 export type SealedSecretChange = { value?: string | null; hosts: string[]; proxy?: string | null; readsDirect?: boolean | null };
 
@@ -511,7 +511,7 @@ export type ContextView = {
 };
 export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans?: PlanUsage[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
-/** One value a connection needs (src/services/setup.ts): where it comes from now, and the value itself unless it is a secret, whose last four characters stand in. */
+/** One value a connection needs (src/services/settings/setup.ts): where it comes from now, and the value itself unless it is a secret, whose last four characters stand in. */
 export type SetupField = { env: string; label: string; secret: boolean; optional: boolean; fallback: string | null; source: 'saved' | 'environment' | null; value: string | null; hint: string | null };
 export type SetupOption = { id: string; label: string; fields: SetupField[] };
 /** A slot of Settings › Connections: `provider` is the one the next start uses; `restart` says it differs from what runs now. */
@@ -694,16 +694,16 @@ export type ScriptCall = { tool: string; input: string; state: 'running' | 'done
 export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number; script?: boolean };
 export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null; detail?: StepDetail };
 /** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
-/** The agent's latest todo list for a task (src/services/todos.ts); each one it writes replaces the last. */
+/** The agent's latest todo list for a task (src/services/replies/todos.ts); each one it writes replaces the last. */
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export type Todo = { content: string; status: TodoStatus; evidence?: string };
 export type TodoList = { todos: Todo[]; updatedAt: string };
 
-/** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/joins.ts). */
+/** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/tasks/joins.ts). */
 export type Join = { text: string; afterTool: string; final: boolean; at: string };
-/** A message the agent has not read yet (src/services/waiting.ts), by the runtime's submission id. */
+/** A message the agent has not read yet (src/services/tasks/waiting.ts), by the runtime's submission id. */
 export type WaitingMessage = { id: string; text: string; at: string };
-/** What the agent is doing this moment (src/services/agent-now.ts). */
+/** What the agent is doing this moment (src/services/tasks/agent-now.ts). */
 export type { AgentNow };
 
 export type SubagentRun = {
@@ -724,13 +724,13 @@ export type SubagentRun = {
 	result: string | null;
 };
 
-/** A device that gets notifications with no Anton tab open (src/services/push.ts). */
+/** A device that gets notifications with no Anton tab open (src/services/notify/push.ts). */
 export type PushDevice = { id: string; name: string; addedAt: string; lastSentAt: string | null; lastError: string | null };
 /** `publicKey` is empty when the server cannot send notifications. */
 export type PushView = { publicKey: string; devices: PushDevice[]; finished: boolean };
 export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
 
-/** A moment in a task worth a look, for the Notifications dialog (src/services/notifications.ts). */
+/** A moment in a task worth a look, for the Notifications dialog (src/services/notify/notifications.ts). */
 export type NotificationKind =
 	| 'question'
 	| 'plan'
@@ -760,9 +760,9 @@ export type AppNotification = {
 export type NotificationsView = { notifications: AppNotification[]; unread: Record<NotificationCategory, number> };
 
 export type Output = { path: string; size: number; mtimeMs: number };
-/** Who holds the files you add on the Artifacts page: no task (src/services/added-files.ts). */
+/** Who holds the files you add on the Artifacts page: no task (src/services/artifacts/added-files.ts). */
 export const ADDED_FILES = 'added-files';
-/** Something the agent made in a task, for the Artifacts page (src/services/artifacts.ts). */
+/** Something the agent made in a task, for the Artifacts page (src/services/artifacts/artifacts.ts). */
 export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean }; /** You added it on the Artifacts page, so it is from no task. */ added?: boolean };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[]; /** Files you deleted from the Library, which replies show as deleted. */ deleted: string[] };
 

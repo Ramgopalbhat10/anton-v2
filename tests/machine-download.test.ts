@@ -47,7 +47,7 @@ setProviders({
 	sandbox: {} as SandboxProvider,
 	models: {} as ModelCatalog,
 } as never);
-const { downloadInto } = await import('../src/services/machine-download.ts');
+const { downloadInto } = await import('../src/services/sandbox/machine-download.ts');
 
 /** A machine that is a folder on this computer, recording each command it runs. */
 function folderMachine(): Machine & { commands: string[] } {

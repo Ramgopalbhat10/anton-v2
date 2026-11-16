@@ -182,7 +182,7 @@ export const migrations: string[][] = [
 	],
 	// 35: where a gateway sends a task's model calls (`src/core/model-route.ts`): one provider first, or a sort; null leaves it to the gateway.
 	[`ALTER TABLE sessions ADD COLUMN route_json TEXT`],
-	// 36: each reply's trace (`src/services/response-trace.ts`): its model and tool calls on one clock, what went into each call's context, and the cache.
+	// 36: each reply's trace (`src/services/context/response-trace.ts`): its model and tool calls on one clock, what went into each call's context, and the cache.
 	[
 		`CREATE TABLE IF NOT EXISTS response_traces (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at TEXT NOT NULL, trace_json TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS response_traces_session ON response_traces (session_id, created_at)`,
@@ -205,7 +205,7 @@ export const migrations: string[][] = [
 	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
 	// 39: each helper agent's own model for the project's threads, as JSON of Settings › General's agentModels; NULL follows it.
 	[`ALTER TABLE spaces ADD COLUMN agent_models TEXT`],
-	// 40: a routine's gate, a skill's script that says whether a due run is worth a thread (`src/services/routine-gate.ts`),
+	// 40: a routine's gate, a skill's script that says whether a due run is worth a thread (`src/services/automations/routine-gate.ts`),
 	// and what it last answered, as JSON.
 	[`ALTER TABLE automations ADD COLUMN gate TEXT`, `ALTER TABLE automations ADD COLUMN last_gate TEXT`],
 	// 41: apps connected through Composio (Settings › Connectors), one row per toolkit: its Composio connected
@@ -218,7 +218,7 @@ export const migrations: string[][] = [
 	// 42: the logo Composio hosts for each app, so a connector Composio knows but Anton's brand
 	// list does not still draws as the product it is.
 	[`ALTER TABLE composio_accounts ADD COLUMN logo TEXT NOT NULL DEFAULT ''`],
-	// 43: the Notifications dialog's list (`src/services/notifications.ts`): only the moments worth a look, each about one
+	// 43: the Notifications dialog's list (`src/services/notify/notifications.ts`): only the moments worth a look, each about one
 	// task. `key` names what a row stands for (a task's last reply, its sandbox, its pull request), so a newer one replaces it.
 	[
 		`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, key TEXT NOT NULL, kind TEXT NOT NULL, session_id TEXT, space_id TEXT, title TEXT NOT NULL, body TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT)`,
@@ -226,11 +226,11 @@ export const migrations: string[][] = [
 		`CREATE INDEX IF NOT EXISTS notifications_key ON notifications (key)`,
 		`CREATE INDEX IF NOT EXISTS notifications_session ON notifications (session_id)`,
 	],
-	// 44: the state of a task's checks at the end of a reply (`src/services/gate-state.ts`): its request, what the finish
+	// 44: the state of a task's checks at the end of a reply (`src/services/replies/gate-state.ts`): its request, what the finish
 	// review last read and how often it ran, the completion gate's rounds, the reply's clock and closing words, as JSON.
 	// A reply the runtime resumes after a restart ends with the same checks as it would have without one.
 	[`CREATE TABLE IF NOT EXISTS task_gate_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`],
-	// 45: a repository's check command (`src/services/repo-check.ts`), run in a task's sandbox after the agent changes files; empty runs none.
+	// 45: a repository's check command (`src/services/sandbox/repo-check.ts`), run in a task's sandbox after the agent changes files; empty runs none.
 	[`ALTER TABLE projects ADD COLUMN check_command TEXT NOT NULL DEFAULT ''`],
 ];
 

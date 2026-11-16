@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, isRequest, MAX_REVIEWS, noteRequest, requestFor, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/finish-review.ts');
+const { findingsOf, finishReview, isRequest, MAX_REVIEWS, noteRequest, requestFor, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/replies/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -216,7 +216,7 @@ test('a chat whose reply worked in its sandbox and left no diff checks what it m
 
 test('the review reads the whole change since the task began, not only what is unpushed, and not a change the reply left as it found it', async () => {
 	const { readFileSync } = await import('node:fs');
-	const source = readFileSync(new URL('../src/services/finish-review.ts', import.meta.url), 'utf8');
+	const source = readFileSync(new URL('../src/services/replies/finish-review.ts', import.meta.url), 'utf8');
 	// Once the pull request holds everything, the unpushed diff is empty: the review would read nothing.
 	assert.match(source, /return \(await changesView\(id, 'branch'\)\)\.patch;/);
 	asked = [];
@@ -337,7 +337,7 @@ test('on a later reply of a large branch, the files that reply changed are the o
 });
 
 test('the reviewer judges only what a diff can show, and a reasonable reading of the request', async () => {
-	const { reviewPrompt } = await import('../src/services/finish-review.ts');
+	const { reviewPrompt } = await import('../src/services/replies/finish-review.ts');
 	const prompt = reviewPrompt('Run the whole suite and report which tests fail.', 'diff --git a/x b/x');
 	assert.match(prompt, /Judge only what a diff can show\. A request to run commands or tests, report results, explain or answer something is not missing from the change\./);
 	assert.match(prompt, /follows a reasonable reading, it is not missing/);

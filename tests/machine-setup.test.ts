@@ -12,7 +12,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
-const { INSTALLED, readMarker, setUpMachine } = await import('../src/services/machine-setup.ts');
+const { INSTALLED, readMarker, setUpMachine } = await import('../src/services/sandbox/machine-setup.ts');
 
 const local = localSandboxProvider(dir);
 setProviders({ sandbox: local, git: { gitAuthEnv: () => ({}), cloneUrl: () => '' } as unknown as GitHost } as never);

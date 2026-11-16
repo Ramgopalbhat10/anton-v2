@@ -38,7 +38,7 @@ setProviders({
 });
 const { upsertProject } = await import('../src/db/projects.ts');
 const { listSessionRecords } = await import('../src/db/sessions.ts');
-const { projectFiles } = await import('../src/services/files.ts');
+const { projectFiles } = await import('../src/services/artifacts/files.ts');
 
 test('project file suggestions follow branch refs, reuse commit trees, and never create a task or sandbox', async () => {
 	const project = await upsertProject('acme/demo', 'main');

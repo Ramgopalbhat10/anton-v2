@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { agentNow, detailOf, recordAgentNow } = await import('../src/services/agent-now.ts');
+const { agentNow, detailOf, recordAgentNow } = await import('../src/services/tasks/agent-now.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 const main = { instanceId: 'task-1' };

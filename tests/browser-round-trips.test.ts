@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import type { ExecOptions, ExecResult, Machine } from '../src/core/ports.ts';
 import { desktopLayout, desktopRunning } from '../src/core/desktop.ts';
 
-const { browse } = await import('../src/services/browser.ts');
-const { ensureDesktop, forgetDesktop } = await import('../src/services/computer.ts');
+const { browse } = await import('../src/services/browser/browser.ts');
+const { ensureDesktop, forgetDesktop } = await import('../src/services/browser/computer.ts');
 
 const answer = new TextEncoder().encode(JSON.stringify({ url: 'http://localhost:3000/', title: 'App', status: 200, problem: null, snapshot: '- button "Add one"' }));
 

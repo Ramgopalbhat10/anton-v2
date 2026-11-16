@@ -4,9 +4,9 @@ import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { withPruning } from '../flue/pruned-models.ts';
 import { chatGptPlanProvider } from '../flue/subscription-models.ts';
-import { loadedModels } from '../services/models.ts';
-import { routedModels } from '../services/sessions.ts';
-import { gatewayKey, gatewayKeyOf, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
+import { loadedModels } from '../services/models/models.ts';
+import { routedModels } from '../services/tasks/sessions.ts';
+import { gatewayKey, gatewayKeyOf, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/models/subscriptions.ts';
 
 /**
  * The model providers every agent resolves through, registered once at module

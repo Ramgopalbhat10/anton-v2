@@ -4,16 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import type { DecisionModel } from '../src/core/ports.ts';
-import type { TodoList } from '../src/services/todos.ts';
+import type { TodoList } from '../src/services/replies/todos.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-completion-gate-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { carryOn, completionGate, MAX_ROUNDS, startCompletionGate, undoneByRule } = await import('../src/services/completion-gate.ts');
-const { finishReview, noteRequest, startFinishReview } = await import('../src/services/finish-review.ts');
-const { checkReply, recordReplyText } = await import('../src/services/reply-check.ts');
+const { carryOn, completionGate, MAX_ROUNDS, startCompletionGate, undoneByRule } = await import('../src/services/replies/completion-gate.ts');
+const { finishReview, noteRequest, startFinishReview } = await import('../src/services/replies/finish-review.ts');
+const { checkReply, recordReplyText } = await import('../src/services/replies/reply-check.ts');
 
 const providers = (decisions: DecisionModel | null) =>
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'x', list: async () => [] }, text: null, decisions });

@@ -4,8 +4,8 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { codeReport, quickjsExecute } from '../src/services/browser-run.ts';
-import { browserFunctions } from '../src/services/browser-step.ts';
+import { codeReport, quickjsExecute } from '../src/services/browser/browser-run.ts';
+import { browserFunctions } from '../src/services/browser/browser-step.ts';
 
 /** The sandbox's Playwright, where this computer has it. */
 const playwright = (() => {

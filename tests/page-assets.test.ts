@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { inlineAssets, resolveAsset } = await import('../src/services/page-assets.ts');
+const { inlineAssets, resolveAsset } = await import('../src/services/artifacts/page-assets.ts');
 
 const files = (entries: Record<string, string>) => async (path: string) => (path in entries ? new TextEncoder().encode(entries[path]) : null);
 

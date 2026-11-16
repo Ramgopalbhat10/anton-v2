@@ -9,7 +9,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-judge-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { needsTheUser, partsOf, trimToJob } = await import('../src/services/page-judge.ts');
+const { needsTheUser, partsOf, trimToJob } = await import('../src/services/browser/page-judge.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 
 let asked: Array<{ state: Record<string, unknown>; questions: Record<string, Question> }> = [];
@@ -65,7 +65,7 @@ test('only a page that looks like a sign-in wall or human check is asked about, 
 });
 
 test('a tally counts each call the step made and what it judged, for the Agents panel', async () => {
-	const { newTally } = await import('../src/services/decisions.ts');
+	const { newTally } = await import('../src/services/models/decisions.ts');
 	const tally = newTally();
 	await trimToJob('t1', 'Report the top stories', 'https://news.ycombinator.com/', page, tally);
 	await needsTheUser('t1', 'https://example.com/login', 'Sign in', '- textbox "Password"', tally);

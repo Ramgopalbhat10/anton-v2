@@ -12,14 +12,14 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-sealed-'));
 process.env.ANTON_DATA_DIR = dir;
 delete process.env.ANTON_SECRETS_KEY;
 
-const sealed = await import('../src/services/sealed-secrets.ts');
-const { httpRequest } = await import('../src/services/http-request.ts');
-const { closeEgressConnections, egressFetch, proxyLabel, proxyParts } = await import('../src/services/egress.ts');
+const sealed = await import('../src/services/secrets/sealed-secrets.ts');
+const { httpRequest } = await import('../src/services/secrets/http-request.ts');
+const { closeEgressConnections, egressFetch, proxyLabel, proxyParts } = await import('../src/services/secrets/egress.ts');
 const { totp, base32Bytes } = await import('../src/core/totp.ts');
 const { getSetting } = await import('../src/db/settings.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
-const { readOutput } = await import('../src/services/checkpoints.ts');
+const { readOutput } = await import('../src/services/git/checkpoints.ts');
 setProviders({ sandbox: { name: 'none', find: async () => null, running: async () => new Set() } as never, store: diskStore(path.join(dir, 'objects')), git: {} as never, models: { name: 'x', list: async () => [] } });
 
 after(() => {

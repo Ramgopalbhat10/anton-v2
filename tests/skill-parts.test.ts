@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { groupResources, skillInParts } from '../src/services/skill-parts.ts';
-import { readFullResult } from '../src/services/tool-results.ts';
+import { groupResources, skillInParts } from '../src/services/context/skill-parts.ts';
+import { readFullResult } from '../src/services/context/tool-results.ts';
 
 const BASE = '/.flue/packaged-skills/skill%3Adiagrams%3Aabc';
 const files = ['SKILL-notes.md', 'references/style.md', 'references/types.md', 'scripts/export.py'];

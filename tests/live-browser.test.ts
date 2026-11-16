@@ -10,7 +10,7 @@ import type { BrowserHost, HostedBrowser } from '../src/core/ports.ts';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-browser-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { addressToUrl, agentBrowse, agentBusy, browserView, browserScreenshot, closeBrowser, inspectAt, navigate, openBrowser } = await import('../src/services/live-browser.ts');
+const { addressToUrl, agentBrowse, agentBusy, browserView, browserScreenshot, closeBrowser, inspectAt, navigate, openBrowser } = await import('../src/services/browser/live-browser.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');

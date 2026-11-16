@@ -173,36 +173,36 @@ const fakeCatalog: ModelCatalog = {
 const { useDatabase } = await import('../src/db/client.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
-const { recordAgentEvent } = await import('../src/services/activity.ts');
-const { handleTerminalUpgrade } = await import('../src/services/terminal.ts');
+const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
+const { handleTerminalUpgrade } = await import('../src/services/tasks/terminal.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
-const { addProject, updateSettings } = await import('../src/services/projects.ts');
-const { addMcpServer, enabledMcpServers, mcpServersView, removeMcpServer, toggleMcpServer, updateMcpServer } = await import('../src/services/mcp-servers.ts');
+const { addProject, updateSettings } = await import('../src/services/projects/projects.ts');
+const { addMcpServer, enabledMcpServers, mcpServersView, removeMcpServer, toggleMcpServer, updateMcpServer } = await import('../src/services/connectors/mcp-servers.ts');
 const { getProject, setWarmImage } = await import('../src/db/projects.ts');
-const { previewsView } = await import('../src/services/previews.ts');
-const { checkPreview } = await import('../src/services/preview-check.ts');
-const { browse, closeBrowser, takeScreenshot } = await import('../src/services/browser.ts');
-const sessions = await import('../src/services/sessions.ts');
-const files = await import('../src/services/files.ts');
-const { forgetMachine, machineFor } = await import('../src/services/workspace.ts');
-const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint } = await import('../src/services/checkpoints.ts');
-const { assertWithinBudget, budget, setLimits } = await import('../src/services/budget.ts');
-const { cleanUpStorage, storageView } = await import('../src/services/storage.ts');
-const { restoreCheckpoint } = await import('../src/services/restore.ts');
-const { dayKey, toUsage, usageView } = await import('../src/services/usage.ts');
-const { connections } = await import('../src/services/connections.ts');
-const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox-settings.ts');
-const { rebuildPreparedImage } = await import('../src/services/projects.ts');
-const { computeView, stopAllSandboxes } = await import('../src/services/compute.ts');
+const { previewsView } = await import('../src/services/browser/previews.ts');
+const { checkPreview } = await import('../src/services/browser/preview-check.ts');
+const { browse, closeBrowser, takeScreenshot } = await import('../src/services/browser/browser.ts');
+const sessions = await import('../src/services/tasks/sessions.ts');
+const files = await import('../src/services/artifacts/files.ts');
+const { forgetMachine, machineFor } = await import('../src/services/sandbox/workspace.ts');
+const { listCheckpoints, readCheckpoint, readCheckpointPatchAt, saveCheckpoint } = await import('../src/services/git/checkpoints.ts');
+const { assertWithinBudget, budget, setLimits } = await import('../src/services/models/budget.ts');
+const { cleanUpStorage, storageView } = await import('../src/services/settings/storage.ts');
+const { restoreCheckpoint } = await import('../src/services/git/restore.ts');
+const { dayKey, toUsage, usageView } = await import('../src/services/models/usage.ts');
+const { connections } = await import('../src/services/settings/connections.ts');
+const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox/sandbox-settings.ts');
+const { rebuildPreparedImage } = await import('../src/services/projects/projects.ts');
+const { computeView, stopAllSandboxes } = await import('../src/services/tasks/compute.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
-const { openPullRequest, pullRequestView } = await import('../src/services/pull-requests.ts');
-const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
-const { addAutomation, removeAutomation, runAutomation, runDueAutomations, setAutomationEnabled } = await import('../src/services/automations.ts');
-const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/follow-ups.ts');
+const { openPullRequest, pullRequestView } = await import('../src/services/git/pull-requests.ts');
+const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts');
+const { addAutomation, removeAutomation, runAutomation, runDueAutomations, setAutomationEnabled } = await import('../src/services/automations/automations.ts');
+const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/git/follow-ups.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 const { config: settings } = await import('../src/config.ts');
-const { buildPreparedImage } = await import('../src/services/prepared-images.ts');
-const { releaseSpare, sparesWaiting, wakeSpare } = await import('../src/services/spares.ts');
+const { buildPreparedImage } = await import('../src/services/sandbox/prepared-images.ts');
+const { releaseSpare, sparesWaiting, wakeSpare } = await import('../src/services/sandbox/spares.ts');
 // Image builds and sandboxes woken while typing run in the background; the tests that cover them turn them on.
 settings.prepareImages = false;
 settings.wakeSandbox = false;
@@ -795,8 +795,8 @@ test('connections are checked through the ports, and Compute lists and stops run
 });
 
 test('a sandbox stops the idle minutes after its agent finishes, not while its agent works or a terminal is open', async () => {
-	const { holdTerminal, stopIdleSandboxes } = await import('../src/services/idle-stop.ts');
-	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	const { holdTerminal, stopIdleSandboxes } = await import('../src/services/tasks/idle-stop.ts');
+	const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Idle' });
 	await sessions.resumeSession(session.id);
@@ -846,7 +846,7 @@ test('sandbox settings reach new machines, and a new default base image retires 
 });
 
 test('General settings decide how a new task starts when the launcher does not say', async () => {
-	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const { generalSettings, setGeneralSettings } = await import('../src/services/models/general.ts');
 	const project = await addProject('acme/demo');
 	const before = await generalSettings();
 	assert.equal(before.codeMode, true, 'code mode is on unless turned off');
@@ -854,7 +854,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	assert.equal(before.imageModel, null, 'images use ANTON_IMAGE_MODEL unless one is chosen');
 	assert.equal(before.compactAt, 200_000, 'long conversations compact at 200K unless set otherwise');
 	// Titles are written by ANTON_TITLE_MODEL unless another OpenRouter model is chosen.
-	const { titleModel } = await import('../src/services/general.ts');
+	const { titleModel } = await import('../src/services/models/general.ts');
 	const { config } = await import('../src/config.ts');
 	assert.equal(before.titleModel, null);
 	assert.equal(await titleModel(), config.titleModel);
@@ -883,8 +883,8 @@ test('General settings decide how a new task starts when the launcher does not s
 		backgroundModels: { webDigest: 'openrouter/plain/no-reasoning', vision: null, compaction: 'openrouter/plain/no-reasoning' },
 		backgroundReasoning: { webDigest: 'low', vision: 'high', compaction: 'medium' },
 	});
-	const { backgroundModel, backgroundReasoning } = await import('../src/services/general.ts');
-	const { compactionFor } = await import('../src/services/context-usage.ts');
+	const { backgroundModel, backgroundReasoning } = await import('../src/services/models/general.ts');
+	const { compactionFor } = await import('../src/services/context/context-usage.ts');
 	assert.equal(backgroundModel('webDigest'), 'openrouter/plain/no-reasoning', 'a chosen background model is used at once');
 	assert.equal(backgroundModel('vision'), config.visionModel, 'the rest keep their defaults');
 	assert.equal(compactionFor('openrouter/moonshotai/kimi-k2.6')?.model, 'openrouter/plain/no-reasoning', 'compaction summaries come from the chosen model');
@@ -908,7 +908,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	await sessions.deleteSession(other.id);
 
 	// Each helper agent can have its own model; the others keep the task's.
-	const { agentSettingsNow, primeAgent } = await import('../src/services/agent-runner.ts');
+	const { agentSettingsNow, primeAgent } = await import('../src/services/tasks/agent-runner.ts');
 	const agentModels = { explorer: { model: 'openrouter/plain/no-reasoning', reasoning: null }, tester: null, browser: null, computer: null, reviewer: { model: 'openrouter/moonshotai/kimi-k2.6', reasoning: 'high' as const } };
 	await assert.rejects(() => setGeneralSettings({ ...before, agentModels: { ...agentModels, tester: { model: 'openrouter/nobody/unknown', reasoning: null } } }), /Unknown model/);
 	await setGeneralSettings({ ...before, agentModels });
@@ -918,7 +918,7 @@ test('General settings decide how a new task starts when the launcher does not s
 });
 
 test('shared variables reach every repo under its own, and their values stay out of what the agent reads', async () => {
-	const { secretsView, setSharedEnv, setGuardrails, secretsToHide } = await import('../src/services/secrets.ts');
+	const { secretsView, setSharedEnv, setGuardrails, secretsToHide } = await import('../src/services/secrets/secrets.ts');
 	const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
 	const project = await addProject('acme/secrets');
 	const settings = await updateSettings(project.id, { env: { API_KEY: 'repo-key-123456' }, setupScript: '', previewPorts: [], baseImage: null });
@@ -948,7 +948,7 @@ test('shared variables reach every repo under its own, and their values stay out
 });
 
 test('the review queue groups the agent\'s pull requests by what each waits on', async () => {
-	const { reviewQueue } = await import('../src/services/reviews.ts');
+	const { reviewQueue } = await import('../src/services/git/reviews.ts');
 	const project = await addProject('acme/demo');
 	const opened = async (title: string, state: PullRequestActivity) => {
 		const session = await sessions.createSession({ projectId: project.id, title });
@@ -1170,7 +1170,7 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 });
 
 test('each task keeps its pull request state and checks, read in the background until it is finished', async () => {
-	const { refreshPullRequests } = await import('../src/services/pr-status.ts');
+	const { refreshPullRequests } = await import('../src/services/git/pr-status.ts');
 	const project = await addProject('acme/status');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Status' });
 	const status = async () => (await sessions.getSession(session.id)).pullRequest;
@@ -1199,7 +1199,7 @@ test('each task keeps its pull request state and checks, read in the background 
 });
 
 test('a pull request whose checks run is read every few seconds until they finish, and a GitHub webhook has it read at once', async () => {
-	const { checkPullRequest, gitHubDelivery, isWatched, readWatchedPullRequests, signedByGitHub, watchPullRequest } = await import('../src/services/pr-watch.ts');
+	const { checkPullRequest, gitHubDelivery, isWatched, readWatchedPullRequests, signedByGitHub, watchPullRequest } = await import('../src/services/git/pr-watch.ts');
 	const project = await addProject('acme/watched');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Watched' });
 	const status = async () => (await sessions.getSession(session.id)).pullRequest;
@@ -1258,8 +1258,8 @@ test('a pull request whose checks run is read every few seconds until they finis
 });
 
 test('each pull request the agent opens or updates is reviewed, and the review is posted on it for follow-ups to fix', async () => {
-	const { postReview, requestReview, MAX_REVIEWS, REVIEW_MARK, CLEAN_MARK } = await import('../src/services/code-review.ts');
-	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const { postReview, requestReview, MAX_REVIEWS, REVIEW_MARK, CLEAN_MARK } = await import('../src/services/git/code-review.ts');
+	const { generalSettings, setGeneralSettings } = await import('../src/services/models/general.ts');
 	const project = await addProject('acme/reviewed');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Reviewed' });
 	await assert.rejects(() => requestReview(session.id, { automatic: false }), /no pull request/);
@@ -1325,7 +1325,7 @@ function pushFromSeed(branch: string, files: Record<string, string>, message: st
 }
 
 test('a pull request with merge conflicts: the agent hears of it, merges the newer base without credentials, and pushes the merge', async () => {
-	const { mergeBaseBranch } = await import('../src/services/base-merge.ts');
+	const { mergeBaseBranch } = await import('../src/services/git/base-merge.ts');
 	git(seed, 'branch', '-q', '-f', 'origin-trunk', 'main');
 	pushFromSeed('trunk', { 'trunk.txt': 'start\n' }, 'Start trunk');
 	const project = await addProject('acme/merging');
@@ -1374,7 +1374,7 @@ test('a pull request with merge conflicts: the agent hears of it, merges the new
 });
 
 test('a base the agent merges in with git of its own is no part of the task\'s change, once the host says it is the base', async () => {
-	const { taskPatch } = await import('../src/services/finish-review.ts');
+	const { taskPatch } = await import('../src/services/replies/finish-review.ts');
 	const changed = (patch: string | null) => [...(patch ?? '').matchAll(/^diff --git a\/(\S+)/gm)].map((match) => match[1]);
 	git(seed, 'branch', '-q', '-f', 'origin-fetched', 'main');
 	pushFromSeed('fetched', { 'fetched.txt': 'start\n' }, 'Start fetched');
@@ -1425,8 +1425,8 @@ test('a base the agent merges in with git of its own is no part of the task\'s c
 });
 
 test('any pull request can be reviewed in a task of its own, with a security pass, and again after its author pushes', async () => {
-	const { postReview } = await import('../src/services/code-review.ts');
-	const { reviewPullRequest, runAutomaticReviews, pullRequestUrl } = await import('../src/services/review-tasks.ts');
+	const { postReview } = await import('../src/services/git/code-review.ts');
+	const { reviewPullRequest, runAutomaticReviews, pullRequestUrl } = await import('../src/services/git/review-tasks.ts');
 	assert.equal(pullRequestUrl('https://github.com/acme/reviewing/pull/7/files?w=1'), 'https://github.com/acme/reviewing/pull/7');
 	assert.throws(() => pullRequestUrl('https://example.test/pull/7'), /GitHub pull request link/);
 
@@ -1453,7 +1453,7 @@ test('any pull request can be reviewed in a task of its own, with a security pas
 	activity = { state: 'open', headSha: first, checks: [], comments: [] };
 	const repo = await addProject('acme/reviewing');
 	await updateSettings(repo.id, { env: { REVIEW_SECRET: 'kept-from-outsiders' }, setupScript: 'echo "$REVIEW_SECRET ${SHARED_SECRET:-no-shared}" > ../setup-saw.txt', previewPorts: [], baseImage: null });
-	const { setSharedEnv } = await import('../src/services/secrets.ts');
+	const { setSharedEnv } = await import('../src/services/secrets/secrets.ts');
 	await setSharedEnv({ SHARED_SECRET: 'never-in-reviews' });
 	delivered.length = 0;
 	const session = await reviewPullRequest('https://github.com/acme/reviewing/pull/7');
@@ -1496,7 +1496,7 @@ test('any pull request can be reviewed in a task of its own, with a security pas
 	activity = { state: 'open', headSha: second, checks: [], comments: [] };
 	delivered.length = 0;
 	await reviewPullRequest('https://github.com/acme/reviewing/pull/7/files');
-	const { requestReview } = await import('../src/services/code-review.ts');
+	const { requestReview } = await import('../src/services/git/code-review.ts');
 	await assert.rejects(() => requestReview(session.id, { automatic: false }), /already starting/, 'a second request never races the first in the sandbox');
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await waitFor(() => delivered.some((message) => message.id === session.id));
@@ -1541,7 +1541,7 @@ function fakeDecisions(asked: Array<Record<string, unknown>>): DecisionModel {
 }
 
 test('a decision model keeps thanks from waking the agent and a readme change from being reviewed', async () => {
-	const { requestReview } = await import('../src/services/code-review.ts');
+	const { requestReview } = await import('../src/services/git/code-review.ts');
 	const { getProviders } = await import('../src/providers/index.ts');
 	const providers = getProviders();
 	const asked: Array<Record<string, unknown>> = [];
@@ -1587,7 +1587,7 @@ test('a decision model keeps thanks from waking the agent and a readme change fr
 });
 
 test('run_script runs a program over the read-only repo and the decision model, and returns only what it gives back', async () => {
-	const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
+	const { runScript, scriptToolDescription } = await import('../src/services/sandbox/code-mode.ts');
 	const { getProviders } = await import('../src/providers/index.ts');
 	const providers = getProviders();
 	const asked: Array<Record<string, unknown>> = [];
@@ -1629,7 +1629,7 @@ test('run_script runs a program over the read-only repo and the decision model, 
 });
 
 test('run_script runs a program saved in the workspace by path, with args ahead of it, and nothing outside it', async () => {
-	const { runScript, scriptFromFile, workspacePath } = await import('../src/services/code-mode.ts');
+	const { runScript, scriptFromFile, workspacePath } = await import('../src/services/sandbox/code-mode.ts');
 	assert.equal(workspacePath('/w', '/w/repo', '../skills/x/scripts/a.js'), '/w/skills/x/scripts/a.js');
 	assert.equal(workspacePath('/w', '/w/repo', '/w/outputs/b.js'), '/w/outputs/b.js');
 	assert.throws(() => workspacePath('/w', '/w/repo', '../../etc/passwd'), /outside the workspace/);
@@ -1645,9 +1645,9 @@ test('run_script runs a program saved in the workspace by path, with args ahead 
 });
 
 test('a task with sealed secrets can send http_request from a program, with the same checks as the tool', async () => {
-	const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
-	const { primeAgent } = await import('../src/services/agent-runner.ts');
-	const sealedSecrets = await import('../src/services/sealed-secrets.ts');
+	const { runScript, scriptToolDescription } = await import('../src/services/sandbox/code-mode.ts');
+	const { primeAgent } = await import('../src/services/tasks/agent-runner.ts');
+	const sealedSecrets = await import('../src/services/secrets/sealed-secrets.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Scripted requests' });
 	await primeAgent(session.id);
@@ -1672,11 +1672,11 @@ test('an MCP connector is found and called on demand, from connector tools and p
 	const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
 	const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
 	const { z } = await import('zod');
-	const { directServer, runScript, scriptServers, scriptToolDescription } = await import('../src/services/code-mode.ts');
-	const { primeAgent } = await import('../src/services/agent-runner.ts');
-	const { callConnectorTool, connectorToolsText } = await import('../src/services/connector-tools.ts');
-	const { resetMcpToolsForTests } = await import('../src/services/mcp-tools.ts');
-	const { forgetScriptCalls, noteScriptCalls, scriptCalls } = await import('../src/services/script-runs.ts');
+	const { directServer, runScript, scriptServers, scriptToolDescription } = await import('../src/services/sandbox/code-mode.ts');
+	const { primeAgent } = await import('../src/services/tasks/agent-runner.ts');
+	const { callConnectorTool, connectorToolsText } = await import('../src/services/connectors/connector-tools.ts');
+	const { resetMcpToolsForTests } = await import('../src/services/connectors/mcp-tools.ts');
+	const { forgetScriptCalls, noteScriptCalls, scriptCalls } = await import('../src/services/tasks/script-runs.ts');
 	let connects = 0;
 	const tokens: string[] = [];
 	// A stateless MCP server: one server and transport per request, as a remote one may be.
@@ -1822,7 +1822,7 @@ test('MCP server tokens are kept on save and never shown', async () => {
 });
 
 test('stopping a task stops its working agent', async () => {
-	const { setAgentAbort } = await import('../src/services/activity.ts');
+	const { setAgentAbort } = await import('../src/services/tasks/activity.ts');
 	const aborted: string[] = [];
 	setAgentAbort(async (id) => void aborted.push(id));
 	const project = await addProject('acme/demo');
@@ -1836,8 +1836,8 @@ test('stopping a task stops its working agent', async () => {
 });
 
 test('a reply that crosses a spending cap is stopped at its next model call', async () => {
-	const { setAgentAbort } = await import('../src/services/activity.ts');
-	const { stopIfOverBudget } = await import('../src/services/budget.ts');
+	const { setAgentAbort } = await import('../src/services/tasks/activity.ts');
+	const { stopIfOverBudget } = await import('../src/services/models/budget.ts');
 	const aborted: string[] = [];
 	setAgentAbort(async (id) => void aborted.push(id));
 	const project = await addProject('acme/demo');
@@ -1890,7 +1890,7 @@ test('pushes rebuild the agent\'s own commits on the host with the same hashes, 
 });
 
 test('a task reads the repo without a sandbox, clone or branch', async () => {
-	const { listRepoFiles, readRepoFile, searchRepo } = await import('../src/services/repo-snapshot.ts');
+	const { listRepoFiles, readRepoFile, searchRepo } = await import('../src/services/sandbox/repo-snapshot.ts');
 	// A branch of the fake GitHub with folders, a long path, a link and a file too large to keep.
 	const work = path.join(dir, 'snapshot-seed');
 	execFileSync('git', ['clone', '-q', remote, work]);
@@ -1944,11 +1944,11 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 });
 
 test('a chat has no repository: a scratch sandbox when it needs one, its files and changes, and no pull request', async () => {
-	const { listRepoFiles } = await import('../src/services/repo-snapshot.ts');
-	const { primeAgent, isChat } = await import('../src/services/agent-runner.ts');
-	const { SCRATCH_BASE } = await import('../src/services/git.ts');
-	const { remember } = await import('../src/services/memory.ts');
-	const { moveToSpace } = await import('../src/services/spaces.ts');
+	const { listRepoFiles } = await import('../src/services/sandbox/repo-snapshot.ts');
+	const { primeAgent, isChat } = await import('../src/services/tasks/agent-runner.ts');
+	const { SCRATCH_BASE } = await import('../src/services/git/git.ts');
+	const { remember } = await import('../src/services/projects/memory.ts');
+	const { moveToSpace } = await import('../src/services/projects/spaces.ts');
 	const chat = await sessions.createSession({ title: 'What is the weather in Paris?', planMode: true });
 	assert.equal(chat.projectId, null);
 	assert.equal(chat.repo, '');
@@ -2018,7 +2018,7 @@ test('checkpoints and restore keep odd file names, symlinks and executables as t
 });
 
 test('usage is counted for every model call, as it ends', async () => {
-	const { recordTurnUsage } = await import('../src/services/usage.ts');
+	const { recordTurnUsage } = await import('../src/services/models/usage.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Per call' });
 	const call = (cost: number) => ({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0, cost: { total: cost } });
@@ -2032,7 +2032,7 @@ test('usage is counted for every model call, as it ends', async () => {
 
 test('plan mode: the agent cannot write until the plan is approved, and plan-first automations start in it', async () => {
 	const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
-	const { isPlanning, primeAgent } = await import('../src/services/agent-runner.ts');
+	const { isPlanning, primeAgent } = await import('../src/services/tasks/agent-runner.ts');
 	const project = await addProject('acme/planned');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Plan it', planMode: true });
 	assert.equal(session.planMode, true);
@@ -2078,8 +2078,8 @@ test('open pages hear about task changes as they happen', async () => {
 });
 
 test('repo memory: the agent adds notes, the user edits them, and every task reads them', async () => {
-	const { remember, saveMemory, MAX_MEMORY } = await import('../src/services/memory.ts');
-	const { memoryFor, primeAgent } = await import('../src/services/agent-runner.ts');
+	const { remember, saveMemory, MAX_MEMORY } = await import('../src/services/projects/memory.ts');
+	const { memoryFor, primeAgent } = await import('../src/services/tasks/agent-runner.ts');
 	const project = await addProject('acme/remembered');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Learn' });
 	assert.match(await remember(session.id, 'Tests need   Docker\nrunning.'), /Saved/);
@@ -2107,9 +2107,9 @@ test('repo memory: the agent adds notes, the user edits them, and every task rea
 });
 
 test('removing a repo deletes its tasks, machines and automations, and the profile names the host account', async () => {
-	const { removeProject, projects } = await import('../src/services/projects.ts');
+	const { removeProject, projects } = await import('../src/services/projects/projects.ts');
 	const { listAutomations } = await import('../src/db/automations.ts');
-	const { profileName } = await import('../src/services/profile.ts');
+	const { profileName } = await import('../src/services/settings/profile.ts');
 	const project = await addProject('acme/removed');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Goes away' });
 	await machineFor(session.id);
@@ -2126,7 +2126,7 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 });
 
 test("a task's agent gets the repo's skills and installed plugins' skills, the repo's winning a name", async () => {
-	const { installPlugin, pluginsView, primeSkills, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/plugins.ts');
+	const { installPlugin, pluginsView, primeSkills, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/settings/plugins.ts');
 	const skillMd = (name: string) => `---\nname: ${name}\ndescription: Use when asked to ${name}.\n---\nDo ${name} carefully.\n`;
 	git(seed, 'checkout', '-q', '-b', 'with-skills');
 	for (const [file, content] of Object.entries({
@@ -2164,8 +2164,8 @@ test("a task's agent gets the repo's skills and installed plugins' skills, the r
 });
 
 test('one file goes back to the base branch, and the repo picker leaves out added repos', async () => {
-	const { revertFile } = await import('../src/services/restore.ts');
-	const { addableRepos } = await import('../src/services/projects.ts');
+	const { revertFile } = await import('../src/services/git/restore.ts');
+	const { addableRepos } = await import('../src/services/projects/projects.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Revert one' });
 	const machine = await machineFor(session.id);
@@ -2190,7 +2190,7 @@ test('one file goes back to the base branch, and the repo picker leaves out adde
 const pathsIn = (patch: string) => [...patch.matchAll(/^diff --git a\/(\S+)/gm)].map((match) => match[1]);
 
 test('Changes holds only what GitHub lacks, and after a squash merge the next pull request starts on a new branch with only the new work', async () => {
-	const { pullRequestsOf } = await import('../src/services/pull-requests.ts');
+	const { pullRequestsOf } = await import('../src/services/git/pull-requests.ts');
 	git(seed, 'branch', '-q', '-f', 'origin-squashed', 'main');
 	pushFromSeed('squashed', { 'start.txt': 'start\n' }, 'Start');
 	const project = await addProject('acme/squash');
@@ -2214,7 +2214,7 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 	assert.deepEqual(saved.unpushed?.files.map((file) => file.path), ['one.txt', 'two.txt'], 'a checkpoint keeps the unpushed work for when the sandbox stops');
 
 	// Reverting in the unpushed view drops only the edits since the push.
-	await (await import('../src/services/restore.ts')).revertFile(session.id, 'one.txt', 'pushed');
+	await (await import('../src/services/git/restore.ts')).revertFile(session.id, 'one.txt', 'pushed');
 	assert.equal((await run(machine, 'cat one.txt')).trim(), 'one', 'the pushed version stays');
 
 	// GitHub squashes the pull request into one new commit on the base.
@@ -2244,7 +2244,7 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 
 test('retargeting a PR at the same commit invalidates its metadata only when a ref changes', async () => {
 	const { onChange } = await import('../src/core/changes.ts');
-	const { readPullRequest } = await import('../src/services/pr-status.ts');
+	const { readPullRequest } = await import('../src/services/git/pr-status.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Retarget PR' });
 	const url = 'https://example.test/pull/9998';
@@ -2271,7 +2271,7 @@ test('retargeting a PR at the same commit invalidates its metadata only when a r
 });
 
 test('PR detail can read the current PR on an older task without a history record', async () => {
-	const { pullRequestDetail, pullRequestMetadata } = await import('../src/services/pull-requests.ts');
+	const { pullRequestDetail, pullRequestMetadata } = await import('../src/services/git/pull-requests.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Older PR' });
 	await updateSession(session.id, { prUrl: 'https://example.test/pull/9876' });
@@ -2282,7 +2282,7 @@ test('PR detail can read the current PR on an older task without a history recor
 });
 
 test("a thread's own pull request merges from the PR panel by squashing", async () => {
-	const { mergePullRequest, pullRequestDetail } = await import('../src/services/pull-requests.ts');
+	const { mergePullRequest, pullRequestDetail } = await import('../src/services/git/pull-requests.ts');
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id, title: 'Merge me' });
 	const machine = await machineFor(session.id);
@@ -2303,7 +2303,7 @@ test("a thread's own pull request merges from the PR panel by squashing", async 
 });
 
 test('a repository task or a routine run starts its sandbox ahead of the agent, but a chat, a plan or a task with a machine does not', async () => {
-	const { prewarmMachine, isStarting, liveMachine } = await import('../src/services/workspace.ts');
+	const { prewarmMachine, isStarting, liveMachine } = await import('../src/services/sandbox/workspace.ts');
 	const project = await addProject('acme/prewarm');
 	const chat = await sessions.createSession({ title: 'What is new?' });
 	const plan = await sessions.createSession({ projectId: project.id, title: 'Plan it', planMode: true });
@@ -2419,7 +2419,7 @@ test("a routine's sandbox wakes shortly before its run, and the run starts on it
 test('typing to a stopped task starts its sandbox, but not for a chat or a plan that never had one', async () => {
 	settings.wakeSandbox = true;
 	try {
-		const { wakeMachine, liveMachine } = await import('../src/services/workspace.ts');
+		const { wakeMachine, liveMachine } = await import('../src/services/sandbox/workspace.ts');
 		const project = await addProject('acme/demo');
 		const task = await sessions.createSession({ projectId: project.id, title: 'Come back' });
 		await machineFor(task.id);
@@ -2440,7 +2440,7 @@ test('typing to a stopped task starts its sandbox, but not for a chat or a plan 
 });
 
 test('preview hostnames reach the sandbox for Vite, but localhost does not', async () => {
-	const { previewHosts } = await import('../src/services/workspace.ts');
+	const { previewHosts } = await import('../src/services/sandbox/workspace.ts');
 	const machine = (urls: Record<number, string | null>) =>
 		({ previewUrl: async (port: number) => urls[port] ?? null }) as unknown as Parameters<typeof previewHosts>[0];
 	assert.equal(await previewHosts(machine({ 3000: 'https://a1.modal.host', 5173: 'https://b2.modal.host/', 9: null }), [3000, 5173, 9]), 'a1.modal.host,b2.modal.host');

@@ -1,5 +1,5 @@
 import { type FlueExecutionContext, type FlueExecutionOperation, instrument } from '@flue/runtime';
-import { endOverTime, onSubagentStop } from '../services/subagent-runs.ts';
+import { endOverTime, onSubagentStop } from '../services/tasks/subagent-runs.ts';
 
 /**
  * The longest a subagent runs before its task call answers with what it had done, so one that is stuck

@@ -1,8 +1,8 @@
 import { Type } from '@earendil-works/pi-ai';
 import { type Sandbox, type SandboxDriver, type SandboxToolFactory, sandboxFromDriver } from '@flue/runtime';
-import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/repo-snapshot.ts';
+import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/sandbox/repo-snapshot.ts';
 import type { ToolProfile } from '../core/tool-profile.ts';
-import type { GlobInput, GrepInput, ReadInput } from '../services/task-files.ts';
+import type { GlobInput, GrepInput, ReadInput } from '../services/sandbox/task-files.ts';
 import { changeTools, type ImageSight, imageResult, imageType, text, type Tool } from './sandbox-tools.ts';
 import { createShellTool } from './shell-tool.ts';
 

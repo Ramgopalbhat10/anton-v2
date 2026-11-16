@@ -2,7 +2,7 @@ import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
 
-/** One row of the Notifications dialog, about one task (src/services/notifications.ts says which moments make one). */
+/** One row of the Notifications dialog, about one task (src/services/notify/notifications.ts says which moments make one). */
 export type NotificationRecord = {
 	id: string;
 	/** What the row stands for, such as a task's last reply; a newer row with the same key replaces it. */

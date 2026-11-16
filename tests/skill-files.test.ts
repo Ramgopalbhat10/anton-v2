@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import { localSandboxProvider } from '../src/providers/local/sandbox.ts';
-import { copySkillFiles, copySkillFilesSoon, skillFilesReady, skillsDir } from '../src/services/skill-files.ts';
+import { copySkillFiles, copySkillFilesSoon, skillFilesReady, skillsDir } from '../src/services/sandbox/skill-files.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-skill-files-'));
 after(() => rmSync(dir, { recursive: true, force: true }));

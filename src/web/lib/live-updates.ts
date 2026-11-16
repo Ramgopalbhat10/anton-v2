@@ -18,7 +18,7 @@ type Change =
 	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
 	| { kind: 'now'; id: string; now: AgentNow | null };
 
-/** A copy of a page saved its state (src/services/renders.ts). */
+/** A copy of a page saved its state (src/services/artifacts/renders.ts). */
 export type PageChange = { kind: 'page'; id: string; path: string; version: number; from: string };
 
 const pageListeners = new Set<(change: PageChange) => void>();

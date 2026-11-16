@@ -11,12 +11,12 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { upsertProject, getProject } = await import('../src/db/projects.ts');
-const { MAX_CHECK_COMMAND, updateSettings } = await import('../src/services/projects.ts');
+const { MAX_CHECK_COMMAND, updateSettings } = await import('../src/services/projects/projects.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
 const { machineSandbox } = await import('../src/flue/machine-sandbox.ts');
 const { createShellTool } = await import('../src/flue/shell-tool.ts');
-const { gate, loadGate, restartGates } = await import('../src/services/gate-state.ts');
-const check = await import('../src/services/repo-check.ts');
+const { gate, loadGate, restartGates } = await import('../src/services/replies/gate-state.ts');
+const check = await import('../src/services/sandbox/repo-check.ts');
 const { checkGate, checkNotice, forgetRepoCheck, hasRepoCheck, noteRepoCheckEvent, repoCheckRuns, setRepoCheckDeps, settledRepoCheck, startCheckGate, stopRepoCheck, watchRepoCheck } = check;
 
 test('a repository’s check command is empty until set, saved trimmed, kept when a save leaves it out, and refused when too long', async () => {

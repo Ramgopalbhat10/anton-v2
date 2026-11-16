@@ -2,7 +2,7 @@
  * The components the agent can put in a reply with its `show` tool: a small
  * tree of cards, text, figures, tables, charts and inputs, drawn in the
  * thread with Anton's own components. The server checks a tree against these
- * types and limits before the user sees it (src/services/show.ts); the page
+ * types and limits before the user sees it (src/services/artifacts/show.ts); the page
  * draws it (src/web/components/show-card.tsx). Both read this file, so it
  * imports nothing.
  */

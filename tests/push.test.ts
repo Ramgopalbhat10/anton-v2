@@ -16,7 +16,7 @@ const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession, updateSession } = await import('../src/db/sessions.ts');
 const { setSetting } = await import('../src/db/settings.ts');
-const push = await import('../src/services/push.ts');
+const push = await import('../src/services/notify/push.ts');
 
 /** A browser's side of a subscription: its key pair and auth secret. */
 function browser(endpoint = `https://push.example/${randomBytes(6).toString('hex')}`) {
