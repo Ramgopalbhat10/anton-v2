@@ -1,6 +1,6 @@
 import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from '@/lib/icons';
+import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, RotateCw } from '@/lib/icons';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, StatusDot, Tab, Tabs, usedTone, Well } from '@/components/instrument';
@@ -359,7 +359,6 @@ function Plan({ subscription }: { subscription: Subscription }) {
 	const connected = subscription.state === 'connected';
 	return (
 		<Card
-			icon={MessageSquareCode}
 			title={`${subscription.name} plan`}
 			sub={subscription.email ?? (subscription.login ? 'waiting for approval' : 'Plus or Pro')}
 			label={`${subscription.name} plan`}
@@ -499,7 +498,6 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	const { enabled, countAtApiPrices } = subscription.options;
 	return (
 		<Card
-			icon={Bot}
 			title={`${subscription.name} plan`}
 			sub={subscription.email ?? (pending ? 'waiting for approval' : 'through Claude Code')}
 			label={`${subscription.name} plan`}
@@ -743,7 +741,6 @@ function KeyPlan({ subscription }: { subscription: Subscription }) {
 	const { enabled, countAtApiPrices } = subscription.options;
 	return (
 		<Card
-			icon={KeyRound}
 			title={`${subscription.name} plan`}
 			sub={subscription.email ?? copy.tagline}
 			label={`${subscription.name} plan`}
@@ -978,7 +975,6 @@ function GatewayPlan({ subscription }: { subscription: Subscription }) {
 	const { enabled } = subscription.options;
 	return (
 		<Card
-			icon={KeyRound}
 			title={subscription.name}
 			sub="models billed per token"
 			label={subscription.name}
