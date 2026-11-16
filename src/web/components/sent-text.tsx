@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from '@/lib/icons';
 import { Fragment, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { FileLinks, fileRef } from '@/components/markdown';
 import { IconBtn, Spinner } from '@/components/signal';

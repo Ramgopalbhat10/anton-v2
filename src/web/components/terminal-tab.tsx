@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { RotateCw, SquareTerminal } from 'lucide-react';
+import { RotateCw, SquareTerminal } from '@/lib/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Facts, Status } from '@/components/instrument';
 import { Btn, Icon } from '@/components/signal';

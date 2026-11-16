@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronLeft, ChevronRight, GitPullRequest, Github, MessageSquare, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GitPullRequest, Github, MessageSquare, ShieldCheck } from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { BranchArt } from '@/components/illustrations';
 import { Count, Segmented, SegmentedItem } from '@/components/instrument';

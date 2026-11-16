@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type LucideIcon, MessageSquare, Plus, Settings, Sparkle, SquareTerminal, TriangleAlert } from 'lucide-react';
+import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type IconComponent, MessageSquare, Plus, Settings, Sparkle, SquareTerminal, TriangleAlert } from '@/lib/icons';
 import { type CSSProperties, useState } from 'react';
 import { PlanToggle } from '@/components/composer';
 import { HomeDashboard, homeSummary } from '@/components/home-dashboard';
@@ -142,7 +142,7 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 	);
 }
 
-type Stage = { title: string; note: string; icon: LucideIcon };
+type Stage = { title: string; note: string; icon: IconComponent };
 
 /**
  * How a task runs, left to right, as one quiet line under the composer: it reads
@@ -196,7 +196,7 @@ function greeting(name?: string | null): string {
 }
 
 /** Ways to begin, as chips under the composer while it is empty: one fills the prompt, for you to finish and send. */
-const STARTERS: Record<'task' | 'chat', Array<{ icon: LucideIcon; label: string; prompt: string }>> = {
+const STARTERS: Record<'task' | 'chat', Array<{ icon: IconComponent; label: string; prompt: string }>> = {
 	task: [
 		{ icon: GitPullRequest, label: 'Review my open pull requests', prompt: 'Review my open pull requests in this repository and tell me which are ready to merge.' },
 		{ icon: TriangleAlert, label: 'Fix the failing checks', prompt: 'Find the checks failing on the default branch, fix what breaks them and open a pull request.' },

@@ -11,7 +11,7 @@ import {
 	Inbox,
 	ListFilter,
 	ListTodo,
-	type LucideIcon,
+	type IconComponent,
 	Moon,
 	PanelLeft,
 	Pin,
@@ -28,7 +28,7 @@ import {
 	Sun,
 	Waypoints,
 	X,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/signal';
 import { Count, toneFill, usedTone } from '@/components/instrument';
@@ -68,7 +68,7 @@ const NAV_ROW =
 	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 /** A nav row's icon, bright on the page you are on. */
-function NavIcon({ icon }: { icon: LucideIcon }) {
+function NavIcon({ icon }: { icon: IconComponent }) {
 	return <Icon icon={icon} size={15} className="shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)" />;
 }
 

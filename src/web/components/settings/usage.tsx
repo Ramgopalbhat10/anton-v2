@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, ArrowUpRight, CalendarDays, ChevronDown, Coins, CreditCard, Folder, Gauge } from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarDays, ChevronDown, Coins, CreditCard, Folder, Gauge } from '@/lib/icons';
 import { useMemo, useState } from 'react';
 import { DATA_COLORS, dayKey, lastDays, shortDay, StackedDaysChart, type StackRow } from '@/components/charts';
 import { Card, CardFooter, CardSection, Figure, Segmented, SegmentedItem, ShareRow, SplitBar, StatRow, Status, TickGauge, usedTone } from '@/components/instrument';

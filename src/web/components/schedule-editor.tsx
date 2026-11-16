@@ -1,4 +1,4 @@
-import { CalendarClock, Check, ChevronDown, Clock, Globe, Search } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, Clock, Globe, Search } from '@/lib/icons';
 import { useMemo, useState } from 'react';
 import {
 	clockTime,

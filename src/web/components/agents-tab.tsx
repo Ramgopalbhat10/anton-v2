@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ChevronDown, CircleAlert, CircleStop } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, CircleAlert, CircleStop } from '@/lib/icons';
 import { HoverCard } from 'radix-ui';
 import { memo, type ReactNode, useRef, useState } from 'react';
 import { AgentsArt } from '@/components/illustrations';

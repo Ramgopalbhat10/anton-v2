@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Braces, FileText, Image, Package, Sheet } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { AppWindow, Braces, FileText, Image, Package, Sheet } from '@/lib/icons';
 
 /*
  * What kind of thing an artifact is, for the Artifacts page: apps (pages the
@@ -9,7 +9,7 @@ import { AppWindow, Braces, FileText, Image, Package, Sheet } from 'lucide-react
 
 export type Category = 'app' | 'document' | 'image' | 'data' | 'code' | 'other';
 
-export const CATEGORIES: Array<{ key: Category; label: string; one: string; icon: LucideIcon; tone: string; test: RegExp }> = [
+export const CATEGORIES: Array<{ key: Category; label: string; one: string; icon: IconComponent; tone: string; test: RegExp }> = [
 	{ key: 'app', label: 'Apps', one: 'App', icon: AppWindow, tone: 'text-(--data-2)', test: /\.html?$/i },
 	{ key: 'document', label: 'Documents', one: 'Document', icon: FileText, tone: 'text-(--data-1)', test: /\.(md|markdown|txt|log|pdf|rtf|docx?)$/i },
 	{ key: 'image', label: 'Images', one: 'Image', icon: Image, tone: 'text-(--data-5)', test: /\.(png|jpe?g|gif|webp|svg|avif)$/i },

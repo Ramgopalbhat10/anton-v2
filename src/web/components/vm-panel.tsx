@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from 'lucide-react';
+import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from '@/lib/icons';
 import { type ComponentType, lazy, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace-pane';
 import { LazyPart } from '@/components/error-boundary';

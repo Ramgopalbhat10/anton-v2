@@ -1,7 +1,7 @@
 import { PrStatus } from '@/components/pr-status';
 import { useQuery } from '@tanstack/react-query';
 import { HoverCard } from 'radix-ui';
-import { Activity, Clock, Flame, MessageCircleQuestion } from 'lucide-react';
+import { Activity, Clock, Flame, MessageCircleQuestion } from '@/lib/icons';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Caption, Card, CardSection, ShareRow, Status } from '@/components/instrument';
 import { ProjectRouteArt } from '@/components/illustrations';

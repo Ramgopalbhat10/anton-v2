@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight } from '@/lib/icons';
 import { type ReactNode, useMemo } from 'react';
 import { PrStatus } from '@/components/pr-status';
 import { Badge, Icon } from '@/components/signal';

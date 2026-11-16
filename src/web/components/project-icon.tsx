@@ -40,7 +40,7 @@ import {
 	Leaf,
 	Lightbulb,
 	Lock,
-	type LucideIcon,
+	type IconComponent,
 	Mail,
 	Map as MapIcon,
 	Megaphone,
@@ -73,7 +73,7 @@ import {
 	Workflow,
 	Wrench,
 	Zap,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { useMemo, useState } from 'react';
 import { EmptyLine, Icon } from '@/components/signal';
@@ -84,7 +84,7 @@ import { cn } from '@/lib/utils';
    anything else (an emoji from before, an icon since removed) draws the
    project's initial. */
 
-export type ProjectIconEntry = { key: string; icon: LucideIcon; label: string; words: string };
+export type ProjectIconEntry = { key: string; icon: IconComponent; label: string; words: string };
 
 /** The icons a project can wear, roughly grouped: work, product, infrastructure, people, the rest. */
 export const PROJECT_ICONS: ProjectIconEntry[] = [
@@ -222,7 +222,7 @@ export function ProjectIcon({ value, name, size = 24, className }: { value: stri
 			aria-hidden
 			data-icon={parsed.entry.key}
 			size={size}
-			strokeWidth={1.75}
+			strokeWidth={1.5}
 			className={cn('shrink-0', className)}
 			style={{ color: tintColor(parsed.tint) }}
 		/>
@@ -307,7 +307,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 									)}
 									style={on ? { color: tintColor(tint), background: `color-mix(in srgb, ${tintColor(tint)} 16%, transparent)`, borderColor: `color-mix(in srgb, ${tintColor(tint)} 40%, transparent)` } : undefined}
 								>
-									<entry.icon size={16} strokeWidth={1.9} />
+									<entry.icon size={16} strokeWidth={1.6} />
 								</button>
 							);
 						})}

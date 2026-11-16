@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Code, Eye, Folder, FolderOpen } from 'lucide-react';
+import { Code, Eye, Folder, FolderOpen } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { DocumentMarkdown } from '@/components/document-markdown';
 import { FileIcon } from '@/components/file-icons';

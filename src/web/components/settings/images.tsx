@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Layers, Package, RefreshCw } from 'lucide-react';
+import { Layers, Package, RefreshCw } from '@/lib/icons';
 import { useState } from 'react';
 import { Status } from '@/components/instrument';
 import { Btn, Spinner } from '@/components/signal';

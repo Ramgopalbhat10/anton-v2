@@ -1,7 +1,7 @@
 import { unrouted } from '../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { BookOpen, ChevronRight, Coins, FolderGit2, Gauge, Layers, type LucideIcon, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from 'lucide-react';
+import { BookOpen, ChevronRight, Coins, FolderGit2, Gauge, Layers, type IconComponent, Plus, ScrollText, Settings2, Trash2, Waypoints, X } from '@/lib/icons';
 import { useEffect, useState } from 'react';
 import { Caption, ShareRow, StatRow } from '@/components/instrument';
 import { ModelPicker, useModels } from '@/components/model-picker';
@@ -322,7 +322,7 @@ function Lifecycle({ space }: { space: Space }) {
 	);
 }
 
-const SECTIONS: Array<{ id: ProjectSection; label: string; icon: LucideIcon }> = [
+const SECTIONS: Array<{ id: ProjectSection; label: string; icon: IconComponent }> = [
 	{ id: 'general', label: 'General', icon: Settings2 },
 	{ id: 'instructions', label: 'Instructions', icon: ScrollText },
 	{ id: 'memory', label: 'Memory', icon: BookOpen },

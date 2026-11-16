@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { HardDrive, Trash2 } from 'lucide-react';
+import { HardDrive, Trash2 } from '@/lib/icons';
 import { StorageArt } from '@/components/illustrations';
 import { Card, CardFooter, CardSection, Figure, StatRow, Status, Well } from '@/components/instrument';
 import { Btn, Spinner } from '@/components/signal';

@@ -1,4 +1,4 @@
-import { Check, GitPullRequest, ListTodo, type LucideIcon, Rows3 } from 'lucide-react';
+import { Check, GitPullRequest, ListTodo, type IconComponent, Rows3 } from '@/lib/icons';
 import { type CSSProperties, createContext, type ReactNode, useContext, useId } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -494,7 +494,7 @@ export function LibraryArt({ className }: { className?: string }) {
 
 /* ——— The project's route: four stations on a wire, lit in turn ——— */
 
-const STATIONS: Array<{ icon: LucideIcon }> = [{ icon: ListTodo }, { icon: Rows3 }, { icon: GitPullRequest }, { icon: Check }];
+const STATIONS: Array<{ icon: IconComponent }> = [{ icon: ListTodo }, { icon: Rows3 }, { icon: GitPullRequest }, { icon: Check }];
 
 /** The project's route; `active` lights the stages that are under way instead of taking turns. */
 export function ProjectRouteArt({ className, active }: { className?: string; active?: boolean[]; waiting?: boolean }) {

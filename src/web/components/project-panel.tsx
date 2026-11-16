@@ -1,6 +1,6 @@
 import { PrStatus } from '@/components/pr-status';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, ListChecks, MessageSquare, Pencil, Play, Plus, Tag, Trash2 } from 'lucide-react';
+import { ArrowRight, CalendarClock, ChevronDown, CircleDot, Clock, Filter, Github, GitPullRequest, LayoutDashboard, ListChecks, MessageSquare, Pencil, Play, Plus, Tag, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
 import { Caption, Card, Chip, Pips } from '@/components/instrument';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, STATE_COLOR } from '@/components/thread-glyph';

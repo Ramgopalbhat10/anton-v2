@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircleDot, Clock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { CircleDot, Clock, Pencil, Play, Plus, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
 import { ModelPicker, useModels } from '@/components/model-picker';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/schedule-editor';

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { FileDiff, Folder, Search } from 'lucide-react';
+import { FileDiff, Folder, Search } from '@/lib/icons';
 import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { FileIcon, FileIcons } from '@/components/file-icons';

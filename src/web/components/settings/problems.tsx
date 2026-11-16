@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowUpRight, ChevronDown, RotateCw, TriangleAlert } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, RotateCw, TriangleAlert } from '@/lib/icons';
 import { useState } from 'react';
 import { Card, CardFooter, CardSection, SplitBar, Status } from '@/components/instrument';
 import { Btn, EmptyLine, Icon, Spinner } from '@/components/signal';

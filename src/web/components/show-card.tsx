@@ -6,7 +6,7 @@ import {
   FileText,
   Send,
   Table2,
-} from "lucide-react";
+} from "@/lib/icons";
 import {
   createContext,
   Fragment,

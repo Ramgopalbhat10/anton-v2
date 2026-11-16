@@ -1,6 +1,6 @@
 import type { FlueConversationMessage, FlueConversationPart, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, Clock, CornerDownRight, FoldVertical, ListChecks } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronRight, CircleAlert, CircleStop, Clock, CornerDownRight, FoldVertical, ListChecks } from '@/lib/icons';
 import { createContext, Fragment, memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { TraceIcon } from '@/components/trace-icon';
 import { Disclosure } from '@/components/disclosure';

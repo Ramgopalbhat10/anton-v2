@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from '@/lib/icons';
 import { type ClipboardEvent, useCallback, useRef } from 'react';
 import { DraftInput, type DraftHandle } from '@/components/draft-input';
 import { IconBtn } from '@/components/signal';

@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from '@/lib/icons';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 import { type PatchedFile, patchedFiles } from '../../core/apply-patch';
@@ -157,7 +157,7 @@ function counts(added: number, removed?: number): ReactNode {
 }
 
 /** An apply_patch call as the files it changed: one by what happened to it, several by their names and lines in all. */
-function describePatch(files: PatchedFile[]): { icon: LucideIcon; body: ReactNode } {
+function describePatch(files: PatchedFile[]): { icon: IconComponent; body: ReactNode } {
 	if (files.length === 1) {
 		const [file] = files;
 		if (file.change === 'add') return { icon: FilePlus, body: <>Wrote <Em>{file.path}</Em>{counts(file.added)}</> };
@@ -193,7 +193,7 @@ function inRepo(input: unknown): ReactNode {
 	) : null;
 }
 
-export function describeTool(part: ToolCall): { icon: LucideIcon; body: ReactNode } {
+export function describeTool(part: ToolCall): { icon: IconComponent; body: ReactNode } {
 	const input = part.input;
 	switch (part.toolName) {
 		// read_file, search_code and list_files are the read-only tools of chats, plans and reviews before their sandbox,

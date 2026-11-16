@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ListChecks, SquareDashedMousePointer, Square, X } from 'lucide-react';
+import { ArrowUp, ListChecks, SquareDashedMousePointer, Square, X } from '@/lib/icons';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachmentTray, useAttachments } from '@/components/attachments';

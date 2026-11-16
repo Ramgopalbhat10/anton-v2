@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
-import { ChevronLeft, ChevronRight, Download, ExternalLink, FileX2, PencilLine, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FileX2, PencilLine, X } from '@/lib/icons';
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useState } from 'react';
 import { HtmlFrame } from '@/components/html-frame';
 import { kindOf, PREVIEWS, Source, TextFile } from '@/components/library-tab';

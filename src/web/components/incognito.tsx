@@ -1,6 +1,6 @@
 import { useFlueAgent } from '@flue/react';
 import { useNavigate } from '@tanstack/react-router';
-import { EyeOff, Send, Square, X } from 'lucide-react';
+import { EyeOff, Send, Square, X } from '@/lib/icons';
 import { type FormEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withAttachments } from '../../core/attachments';
 import { newIncognitoId } from '../../core/incognito';

@@ -1,4 +1,4 @@
-import { CircleAlert, ClipboardList } from 'lucide-react';
+import { CircleAlert, ClipboardList } from '@/lib/icons';
 import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/instrument';

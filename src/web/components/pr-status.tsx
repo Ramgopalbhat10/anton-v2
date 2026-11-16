@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, type IconComponent } from '@/lib/icons';
 import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,7 +31,7 @@ const PR_HUE: Record<PrTone, [color: string, soft: string]> = {
 export const prTone = (tone: PrTone) => PR_HUE[tone][0];
 export const prColor = (state?: State | null) => prTone(state ?? 'unknown');
 export const checksTone = (checks: 'passed' | 'pending' | 'failed'): PrTone => ({ passed: 'passed', pending: 'running', failed: 'failing' } as const)[checks];
-export const PR_ICON: Record<State, LucideIcon> = { open: GitPullRequest, draft: GitPullRequestDraft, merged: GitMerge, closed: GitPullRequestClosed };
+export const PR_ICON: Record<State, IconComponent> = { open: GitPullRequest, draft: GitPullRequestDraft, merged: GitMerge, closed: GitPullRequestClosed };
 
 /** A badge tinted in a PR tone: its text in the colour, on the soft fill of it. */
 export const prChipStyle = (tone: PrTone): CSSProperties => ({ color: PR_HUE[tone][0], background: PR_HUE[tone][1] });

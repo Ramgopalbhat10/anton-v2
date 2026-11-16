@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, SquareTerminal, Trash2 } from 'lucide-react';
+import { Plus, SquareTerminal, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
 import { Status } from '@/components/instrument';
 import { Btn, EmptyLine, IconBtn, Spinner } from '@/components/signal';

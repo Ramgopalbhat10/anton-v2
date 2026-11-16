@@ -1,7 +1,7 @@
 import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from 'lucide-react';
+import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from '@/lib/icons';
 import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';

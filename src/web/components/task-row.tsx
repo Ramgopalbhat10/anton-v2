@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { Github, MessageSquare } from 'lucide-react';
+import { Github, MessageSquare } from '@/lib/icons';
 import { Icon } from '@/components/signal';
 import { TaskStatusIcon } from '@/components/task-status';
 import { PrStatus } from '@/components/pr-status';

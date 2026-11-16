@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellRing, Download, ListChecks, MonitorSmartphone, Send, Smartphone, Trash2 } from 'lucide-react';
+import { BellRing, Download, ListChecks, MonitorSmartphone, Send, Smartphone, Trash2 } from '@/lib/icons';
 import { useEffect, useState } from 'react';
 import { Status } from '@/components/instrument';
 import { Btn, EmptyLine, IconBtn, Spinner, Switch } from '@/components/signal';

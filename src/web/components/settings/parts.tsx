@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { ChevronDown } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { ChevronDown } from '@/lib/icons';
 import { Children, type ReactNode } from 'react';
 import { ModelPicker } from '@/components/model-picker';
 import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/signal';
@@ -56,7 +56,7 @@ export function Block({
 }: {
 	title: string;
 	/** Kept for callers; blocks no longer draw an icon by their title. */
-	icon?: LucideIcon;
+	icon?: IconComponent;
 	mark?: ReactNode;
 	help?: ReactNode;
 	info?: ReactNode;
@@ -122,7 +122,7 @@ export function Note({ children, info, className }: { children: ReactNode; info?
 }
 
 /** The icon at the start of a list row: a bare glyph, no tile behind it. */
-export function RowIcon({ icon }: { icon: LucideIcon }) {
+export function RowIcon({ icon }: { icon: IconComponent }) {
 	return (
 		<span className="inline-flex size-8 shrink-0 items-center justify-center text-(--text-2)">
 			<Icon icon={icon} size={17} />
@@ -243,7 +243,7 @@ export function Select<T extends string | number | null>({
 	fallback = 'Custom',
 }: {
 	label: string;
-	icon: LucideIcon;
+	icon: IconComponent;
 	value: T;
 	options: Array<{ value: T; label: string }>;
 	onChange: (value: T) => void;

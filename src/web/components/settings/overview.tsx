@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from 'lucide-react';
+import { Activity, ArrowUpRight, Box, ChevronRight, Folder, HardDrive } from '@/lib/icons';
 import type { ReactNode } from 'react';
 import { ArcDial, DotMatrix, lastDays } from '@/components/charts';
 import { SandboxArt, StorageArt } from '@/components/illustrations';

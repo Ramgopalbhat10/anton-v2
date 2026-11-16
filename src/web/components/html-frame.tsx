@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ExternalLink, Maximize2 } from 'lucide-react';
+import { ExternalLink, Maximize2 } from '@/lib/icons';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/signal';
 import { addToComposer } from '@/lib/composer-inbox';

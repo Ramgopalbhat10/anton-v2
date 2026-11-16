@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight } from '@/lib/icons';
 import { Fragment, type ReactNode } from 'react';
 import { MenuButton } from '@/components/nav';
 import { Icon } from '@/components/signal';

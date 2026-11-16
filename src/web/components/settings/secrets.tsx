@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, Folder, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Folder, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
 import { storedVariables, toEnv, VariablesEditor } from '@/components/repo-settings';
 import { Status } from '@/components/instrument';

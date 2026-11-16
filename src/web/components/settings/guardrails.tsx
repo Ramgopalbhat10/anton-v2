@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Activity, ArrowUpRight, ChevronRight, Globe, ListChecks, type LucideIcon, ShieldCheck } from 'lucide-react';
+import { Activity, ArrowUpRight, ChevronRight, Globe, ListChecks, type IconComponent, ShieldCheck } from '@/lib/icons';
 import { Status } from '@/components/instrument';
 import { Icon, Spinner, Switch } from '@/components/signal';
 import { api } from '@/lib/api';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';
 
 /** What else keeps the agent in bounds, and where each is set. */
-const ELSEWHERE: Array<{ section: string; icon: LucideIcon; title: string; body: string }> = [
+const ELSEWHERE: Array<{ section: string; icon: IconComponent; title: string; body: string }> = [
 	{ section: 'usage', icon: Activity, title: 'Spending caps', body: 'A task or the day stops when it reaches its cap.' },
 	{ section: 'sandboxes', icon: Globe, title: 'Allowed domains', body: 'Which sites a sandbox can reach.' },
 	{ section: 'general', icon: ListChecks, title: 'Plan mode', body: 'New tasks change nothing until you approve a plan.' },

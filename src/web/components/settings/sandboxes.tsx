@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, Cpu, Globe, Timer } from 'lucide-react';
+import { Clock, Cpu, Globe, Timer } from '@/lib/icons';
 import { useState } from 'react';
 import { Btn, Spinner } from '@/components/signal';
 import { api, type SandboxSettings, type SandboxView } from '@/lib/api';

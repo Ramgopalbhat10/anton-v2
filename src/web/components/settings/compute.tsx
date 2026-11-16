@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Box, CircleStop } from 'lucide-react';
+import { Box, CircleStop } from '@/lib/icons';
 import { useState } from 'react';
 import { SandboxArt } from '@/components/illustrations';
 import { Card, CardFooter, CardSection, Facts, Figure, Status, StatusDot, Well } from '@/components/instrument';

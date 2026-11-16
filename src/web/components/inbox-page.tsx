@@ -12,7 +12,7 @@ import {
 	FolderGit2,
 	GitMerge,
 	Hand,
-	type LucideIcon,
+	type IconComponent,
 	ListChecks,
 	MessageCircleQuestion,
 	MessageSquareText,
@@ -23,7 +23,7 @@ import {
 	ServerOff,
 	Wallet,
 	X,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, useNotifications } from '@/components/notifications';
 import { Markdown } from '@/components/markdown';
@@ -45,7 +45,7 @@ import { cn } from '@/lib/utils';
  */
 
 /** How each kind reads: its words, and its mark — a task-state glyph where the moment is a state, else an icon in the colour of what happened. */
-const LOOK: Record<NotificationKind, { label: string; icon: LucideIcon; glyph?: GlyphKind; color?: string }> = {
+const LOOK: Record<NotificationKind, { label: string; icon: IconComponent; glyph?: GlyphKind; color?: string }> = {
 	question: { label: 'Asked you', icon: MessageCircleQuestion, glyph: 'waiting' },
 	plan: { label: 'Plan ready', icon: ListChecks, glyph: 'review' },
 	approval: { label: 'Needs approval', icon: Hand, glyph: 'waiting' },

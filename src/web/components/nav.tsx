@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react';
+import { Menu } from '@/lib/icons';
 import { createContext, useContext } from 'react';
 import { IconBtn } from '@/components/signal';
 

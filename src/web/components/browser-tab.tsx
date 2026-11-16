@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, Pause, PencilLine, Power, RotateCw, SquareDashedMousePointer } from 'lucide-react';
+import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, Pause, PencilLine, Power, RotateCw, SquareDashedMousePointer } from '@/lib/icons';
 import { type FormEvent, type PointerEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Sketch } from '@/components/sketch';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/signal';

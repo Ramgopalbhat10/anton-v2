@@ -6,7 +6,7 @@ import {
   FileDiff,
   GitMerge,
   MessageCircleQuestion,
-} from "lucide-react";
+} from "@/lib/icons";
 import { createContext, memo, useContext, useMemo, useState } from "react";
 import { FileIcon, FileIcons } from "@/components/file-icons";
 import { DiffBars, PathName } from "@/components/instrument";
