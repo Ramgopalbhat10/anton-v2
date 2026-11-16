@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { after, beforeEach, test } from 'node:test';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Message } from '@earendil-works/pi-ai';
@@ -10,7 +13,7 @@ import type { AgentRuntime, AgentRuntimeStatus, ModelInfo, RuntimeContent, Runti
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-claude-code-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { childEnv, isExtraUsageNotice, statusFrom, toModels, toRuntimeEvents, toWindows, windowOf } = await import('../src/providers/claude-code/runtime.ts');
+const { childEnv, isExtraUsageNotice, startSignIn, statusFrom, toModels, toRuntimeEvents, toWindows, windowOf } = await import('../src/providers/claude-code/runtime.ts');
 const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, IDLE_MS, sweepIdle, transcript } = await import('../src/flue/claude-code-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/subscriptions.ts');
@@ -542,6 +545,112 @@ test('the Claude plan shows what Claude Code says, lists its models when signed 
 	const signedOut = await subscriptions.refreshSubscriptionModels('claude');
 	assert.equal(signedOut.state, 'signed-out');
 	assert.deepEqual(signedOut.models, []);
+});
+
+/** `claude auth login` as a child process: what it prints, and what it is sent. */
+function fakeLogin() {
+	const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; stdin: PassThrough; kill: () => boolean };
+	child.stdout = new PassThrough();
+	child.stderr = new PassThrough();
+	child.stdin = new PassThrough();
+	let sent = '';
+	child.stdin.on('data', (chunk: Buffer) => (sent += chunk.toString()));
+	child.kill = () => {
+		child.emit('exit', null);
+		return true;
+	};
+	const started: { command?: string; args?: string[]; env?: Record<string, string> } = {};
+	const start = (command: string, args: string[], env: Record<string, string>) => {
+		Object.assign(started, { command, args, env });
+		return child as unknown as ChildProcessWithoutNullStreams;
+	};
+	return { child, start, started, sent: () => sent };
+}
+
+const AUTHORIZE = 'https://claude.com/cai/oauth/authorize?code=true&client_id=c&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&state=s';
+
+test('signing in runs `claude auth login` with no browser, gives its address, and passes it the code Claude shows', async () => {
+	const login = fakeLogin();
+	const starting = startSignIn('/opt/claude', '/data/claude-code', login.start);
+	login.child.stdout.write('Opening browser to sign in…\n');
+	login.child.stdout.write(`If the browser didn't open, visit: \x1b[1m${AUTHORIZE}\x1b[0m\nPaste code here if prompted > `);
+	const signIn = await starting;
+	assert.equal(signIn.url, AUTHORIZE);
+	assert.deepEqual([login.started.command, login.started.args], ['/opt/claude', ['auth', 'login', '--claudeai']]);
+	assert.equal(login.started.env?.CLAUDE_CONFIG_DIR, '/data/claude-code');
+	assert.equal(login.started.env?.BROWSER, 'true', 'nothing opens on the server');
+	assert.equal(login.started.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+
+	const finishing = signIn.complete('  abc#state \n');
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(login.sent(), 'abc#state\n');
+	login.child.stdout.write('Login successful.\n');
+	login.child.emit('exit', 0);
+	await finishing;
+});
+
+test('a refused code reports what Claude Code said, and a sign-in that never gives an address fails', async () => {
+	const login = fakeLogin();
+	const starting = startSignIn('/opt/claude', '/data/claude-code', login.start);
+	login.child.stdout.write(`visit: ${AUTHORIZE}\nPaste code here if prompted > `);
+	const signIn = await starting;
+	const finishing = signIn.complete('wrong');
+	login.child.stdout.write('Login failed: Request failed with status code 400\n');
+	login.child.emit('exit', 1);
+	await assert.rejects(finishing, /^Error: Login failed: Request failed with status code 400$/);
+	await assert.rejects(signIn.complete('again'), /sign-in has ended/);
+
+	const broken = fakeLogin();
+	const failing = startSignIn('/opt/claude', '/data/claude-code', broken.start);
+	broken.child.stderr.write('error: unknown option --claudeai\n');
+	broken.child.emit('exit', 1);
+	await assert.rejects(failing, /unknown option --claudeai/);
+});
+
+test('the Claude plan signs in and out from Anton when Claude Code can, and a wrong code ends that sign-in', async () => {
+	const { appDb } = await import('../src/db/client.ts');
+	await (await appDb()).execute("DELETE FROM settings WHERE key LIKE 'subscription%'");
+	subscriptions.resetSubscriptionsForTests();
+	const fake = fakeRuntime({ signedIn: false, email: null, plan: null });
+	let signedIn = false;
+	const codes: string[] = [];
+	const cancelled: string[] = [];
+	fake.runtime.status = async () => ({ signedIn, email: signedIn ? 'ada@example.com' : null, plan: signedIn ? 'max' : null, version: '2.5.0', problem: null });
+	fake.runtime.signIn = async () => ({
+		url: AUTHORIZE,
+		cancel: () => cancelled.push(AUTHORIZE),
+		complete: async (code) => {
+			codes.push(code);
+			if (code !== 'abc#state') throw new Error('Login failed: Request failed with status code 400');
+			signedIn = true;
+		},
+	});
+	fake.runtime.signOut = async () => {
+		signedIn = false;
+	};
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, subscriptions: [], runtimes: [fake.runtime] });
+
+	const waiting = await subscriptions.beginLogin('claude');
+	assert.equal(waiting.state, 'signed-out');
+	assert.equal(waiting.login?.url, AUTHORIZE);
+	assert.equal(waiting.login?.redirectUri, 'https://platform.claude.com/oauth/code/callback');
+
+	await assert.rejects(subscriptions.finishLogin('claude', 'wrong'), /Login failed: Request failed with status code 400\. Sign in again for a new code\./);
+	assert.equal((await subscriptions.subscriptionsView())[0].login, null, 'a refused code ends the sign-in');
+	await assert.rejects(subscriptions.finishLogin('claude', 'abc#state'), /No sign-in is waiting/);
+
+	await subscriptions.beginLogin('claude');
+	const cancelledView = await subscriptions.cancelLogin('claude');
+	assert.equal(cancelledView.login, null);
+	assert.ok(cancelled.length >= 2, 'the ended and cancelled sign-ins stop Claude Code');
+
+	await subscriptions.beginLogin('claude');
+	const done = await subscriptions.finishLogin('claude', 'abc#state');
+	assert.deepEqual([done.state, done.email, done.login], ['connected', 'ada@example.com', null]);
+	assert.deepEqual(codes, ['wrong', 'abc#state']);
+
+	const out = await subscriptions.disconnect('claude');
+	assert.deepEqual([out.state, out.models], ['signed-out', []]);
 });
 
 test('after a restart the Claude plan’s saved models are offered before Claude Code has started, and a sign-out it finds takes them away', async () => {
