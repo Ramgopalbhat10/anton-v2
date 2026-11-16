@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Sparkles, X, Zap } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { ArrowLeftRight, ChevronDown, ChevronRight, CircleAlert, FoldVertical, ListTree, Minus, Plus, Sparkles, X, Zap } from '@/lib/icons';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TraceIcon } from '@/components/trace-icon';
@@ -605,7 +605,7 @@ function RowIcon({ node }: { node: TraceNode }) {
 			</span>
 		);
 	}
-	const icon: LucideIcon = span.kind === 'model' ? Sparkles : span.kind === 'compaction' ? FoldVertical : describeTool({ toolName: span.tool, input: parsedInput(span) }).icon;
+	const icon: IconComponent = span.kind === 'model' ? Sparkles : span.kind === 'compaction' ? FoldVertical : describeTool({ toolName: span.tool, input: parsedInput(span) }).icon;
 	return (
 		<span
 			className="inline-flex size-[18px] shrink-0 items-center justify-center"

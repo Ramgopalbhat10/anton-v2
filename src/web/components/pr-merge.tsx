@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, CircleAlert, CircleCheck, CircleDot, CircleX, GitMerge, GitPullRequestClosed } from 'lucide-react';
+import { ChevronDown, CircleAlert, CircleCheck, CircleDot, CircleX, GitMerge, GitPullRequestClosed } from '@/lib/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/signal';
 import { api, type CheckRun, type PullRequestDetail } from '@/lib/api';

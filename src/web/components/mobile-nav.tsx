@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { GitPullRequest, House, Inbox, ListTodo, Plus } from 'lucide-react';
+import { GitPullRequest, House, Inbox, ListTodo, Plus } from '@/lib/icons';
 import type { ReactNode } from 'react';
 import { loudUnread, useNotifications } from '@/components/notifications';
 import { Icon } from '@/components/signal';

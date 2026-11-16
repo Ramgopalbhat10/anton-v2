@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { Check, ChevronDown, ChevronRight, Info, Search, X } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { Check, ChevronDown, ChevronRight, Info, Search, X } from '@/lib/icons';
 import { DropdownMenu as MenuPrimitive, Popover } from 'radix-ui';
 import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -10,9 +10,9 @@ type Variant = 'primary' | 'inverse' | 'secondary' | 'ghost' | 'danger' | 'dange
 
 const ICON_SIZE: Record<Size, number> = { xs: 12, sm: 13, md: 14, lg: 16 };
 
-export function Icon({ icon: Glyph, size = 14, className, style }: { icon: LucideIcon; size?: number; className?: string; style?: CSSProperties }) {
-	// Lucide line icons at one stroke, whatever their size.
-	return <Glyph aria-hidden size={size} strokeWidth={1.75} className={cn('shrink-0', className)} style={style} />;
+export function Icon({ icon: Glyph, size = 14, className, style }: { icon: IconComponent; size?: number; className?: string; style?: CSSProperties }) {
+	// Hugeicons line icons at their own 1.5 stroke, whatever their size (src/web/lib/icons.tsx).
+	return <Glyph aria-hidden size={size} strokeWidth={1.5} className={cn('shrink-0', className)} style={style} />;
 }
 
 export function Btn({
@@ -24,7 +24,7 @@ export function Btn({
 	children,
 	type = 'button',
 	...rest
-}: ComponentProps<'button'> & { variant?: Variant; size?: Size; icon?: LucideIcon; block?: boolean }) {
+}: ComponentProps<'button'> & { variant?: Variant; size?: Size; icon?: IconComponent; block?: boolean }) {
 	return (
 		<button
 			type={type}
@@ -45,7 +45,7 @@ export function IconBtn({
 	className,
 	type = 'button',
 	...rest
-}: ComponentProps<'button'> & { icon: LucideIcon; label: string; variant?: Variant; size?: Size }) {
+}: ComponentProps<'button'> & { icon: IconComponent; label: string; variant?: Variant; size?: Size }) {
 	return (
 		<button
 			type={type}
@@ -197,7 +197,7 @@ export function EmptyState({
 	children,
 	className,
 }: {
-	icon?: LucideIcon;
+	icon?: IconComponent;
 	/** A drawing shown in place of the icon; the drafting grid then spans the width and holds the words too. */
 	art?: ReactNode;
 	title: string;
@@ -270,7 +270,7 @@ export function MenuItem({
 	className,
 	children,
 	...props
-}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: LucideIcon; checked?: boolean; hint?: ReactNode }) {
+}: ComponentProps<typeof MenuPrimitive.Item> & { icon?: IconComponent; checked?: boolean; hint?: ReactNode }) {
 	return (
 		<MenuPrimitive.Item className={cn('sg-menu-item outline-none', className)} {...props}>
 			{icon ? (
@@ -300,7 +300,7 @@ export function MenuSubTrigger({
 	className,
 	children,
 	...props
-}: ComponentProps<typeof MenuPrimitive.SubTrigger> & { icon?: LucideIcon; hint?: ReactNode }) {
+}: ComponentProps<typeof MenuPrimitive.SubTrigger> & { icon?: IconComponent; hint?: ReactNode }) {
 	return (
 		<MenuPrimitive.SubTrigger className={cn('sg-menu-item outline-none data-[state=open]:bg-(--bg-active)', className)} {...props}>
 			{icon ? (
@@ -348,7 +348,7 @@ export function PickerChip({
 	label,
 	height = 26,
 	...rest
-}: ComponentProps<'button'> & { icon: LucideIcon; label: string; height?: 26 | 28 }) {
+}: ComponentProps<'button'> & { icon: IconComponent; label: string; height?: 26 | 28 }) {
 	return (
 		<button
 			type="button"
@@ -448,7 +448,7 @@ export function FilterMenu({
 	options,
 	onPick,
 }: {
-	icon: LucideIcon;
+	icon: IconComponent;
 	label: string;
 	anyLabel: string;
 	value: string | null;
@@ -504,7 +504,7 @@ export function FilterChip({
 	label: string;
 	on: boolean;
 	onToggle: () => void;
-	icon?: LucideIcon;
+	icon?: IconComponent;
 	/** A dot or glyph of its own before the name. */
 	mark?: ReactNode;
 	count?: number;

@@ -1,5 +1,5 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ChevronRight, List, type LucideIcon, X } from 'lucide-react';
+import { ChevronRight, List, type IconComponent, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useState } from 'react';
 import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/signal';
 import { closeSettings } from '@/lib/settings-modal';
@@ -14,7 +14,7 @@ const NAV_ITEM =
 	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 /** A nav item's bare icon, lit on the page you are on. */
-function NavIcon({ icon }: { icon: LucideIcon }) {
+function NavIcon({ icon }: { icon: IconComponent }) {
 	return (
 		<span className="inline-flex shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)">
 			<Icon icon={icon} size={14} />

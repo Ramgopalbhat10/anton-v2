@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Cloud, FileStack, Paperclip, Plug, Plus, Search, Server, Settings2, TriangleAlert } from 'lucide-react';
+import { Cloud, FileStack, Paperclip, Plug, Plus, Search, Server, Settings2, TriangleAlert } from '@/lib/icons';
 import { useRef, useState } from 'react';
 import type { Attachments } from '@/components/attachments';
 import { GMAIL, MarkTile, useComposioMark } from '@/components/brand-marks';

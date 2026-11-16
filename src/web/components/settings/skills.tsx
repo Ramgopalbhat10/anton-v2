@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Blocks, FileText, Github, Plus, ScrollText, Search, Settings2, Star, Store, Trash2, X } from 'lucide-react';
+import { Blocks, FileText, Github, Plus, ScrollText, Search, Settings2, Star, Store, Trash2, X } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/instrument';

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouter, useSearch } from '@tanstack/react-router';
-import { ArrowUpRight, Check, CheckSquare, ChevronDown, ChevronLeft, Download, ExternalLink, FolderUp, Link2, Maximize2, MoreVertical, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { ArrowUpRight, Check, CheckSquare, ChevronDown, ChevronLeft, Download, ExternalLink, FolderUp, Link2, Maximize2, MoreVertical, Sparkles, Trash2, Upload, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton } from '@/components/code-block';
 import { frameUrl } from '@/components/html-frame';

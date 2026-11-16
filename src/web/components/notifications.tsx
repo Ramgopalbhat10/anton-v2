@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
+import { Bell } from '@/lib/icons';
 import { memo, useEffect } from 'react';
 import { IconBtn } from '@/components/signal';
 import { api, type NotificationCategory, type NotificationsView, SAFETY_NET_MS } from '@/lib/api';

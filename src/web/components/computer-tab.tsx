@@ -1,6 +1,6 @@
 import RFB from '@novnc/novnc';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Globe, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from 'lucide-react';
+import { Bot, Globe, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from '@/lib/icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWindowShown } from '@/components/browser-tab';
 import { Sketch } from '@/components/sketch';

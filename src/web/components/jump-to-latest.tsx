@@ -1,4 +1,4 @@
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown } from '@/lib/icons';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';

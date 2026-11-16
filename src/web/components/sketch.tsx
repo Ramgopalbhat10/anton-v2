@@ -1,4 +1,4 @@
-import { ArrowUpRight, Circle, Minus, Pencil, Redo2, Square, Trash2, Type, Undo2 } from 'lucide-react';
+import { ArrowUpRight, Circle, Minus, Pencil, Redo2, Square, Trash2, Type, Undo2 } from '@/lib/icons';
 import { type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Btn, IconBtn } from '@/components/signal';
 import { cn } from '@/lib/utils';

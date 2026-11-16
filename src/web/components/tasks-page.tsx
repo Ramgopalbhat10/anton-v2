@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, Plus, Search, X } from '@/lib/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TasksArt } from '@/components/illustrations';
 import { useModelName } from '@/components/model-picker';

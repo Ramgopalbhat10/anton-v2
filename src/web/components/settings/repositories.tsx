@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, Folder, GitBranch, Plus } from 'lucide-react';
+import { ChevronRight, Folder, GitBranch, Plus } from '@/lib/icons';
 import { useState } from 'react';
 import { Caption, StatusDot } from '@/components/instrument';
 import { AddRepo } from '@/components/launcher';

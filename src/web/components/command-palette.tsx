@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CircleCheck, FolderKanban, GitPullRequest, type LucideIcon, Plus, Search, Settings, Shapes, Inbox, ListTodo } from 'lucide-react';
+import { CircleCheck, FolderKanban, GitPullRequest, type IconComponent, Plus, Search, Settings, Shapes, Inbox, ListTodo } from '@/lib/icons';
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { SECTION_LIST } from '@/components/settings/section-list';
 import { Badge, Icon, Kbd, SectionLabel } from '@/components/signal';
@@ -18,7 +18,7 @@ type Entry = {
 	label: string;
 	/** The kind or context shown at the row's right edge. */
 	meta: string;
-	icon: LucideIcon;
+	icon: IconComponent;
 	/** Drawn in the icon's place: a task's state glyph, as the sidebar shows it. */
 	mark?: ReactNode;
 	/** Where the row goes, so ⌘↵ can open it in a new tab. */

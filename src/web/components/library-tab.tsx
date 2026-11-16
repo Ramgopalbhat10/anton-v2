@@ -1,7 +1,7 @@
 import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileTree, useFileTree } from '@pierre/trees/react';
-import type { LucideIcon } from 'lucide-react';
-import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileText, Image, LayoutGrid, List as List_, MoreVertical, Plus, Sheet, Trash2 } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileText, Image, LayoutGrid, List as List_, MoreVertical, Plus, Sheet, Trash2 } from '@/lib/icons';
 import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CodeBlock } from '@/components/code-block';
 import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/html-frame';
@@ -296,7 +296,7 @@ function ItemActions({
 		mutationFn: () => library.remove!(path),
 		onSuccess: library.refresh,
 	});
-	const actions: Array<{ icon: LucideIcon; label: string; run: (event: Event | React.MouseEvent) => void; danger?: boolean; keep?: boolean } | null> = [
+	const actions: Array<{ icon: IconComponent; label: string; run: (event: Event | React.MouseEvent) => void; danger?: boolean; keep?: boolean } | null> = [
 		{ icon: ExternalLink, label: 'Open', run: onOpen },
 		{
 			icon: Copy,

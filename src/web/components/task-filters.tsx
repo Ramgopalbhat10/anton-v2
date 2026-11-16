@@ -1,4 +1,4 @@
-import { CalendarDays, CircleDot, Cpu, FolderGit2, GitPullRequest, type LucideIcon, Server, X } from 'lucide-react';
+import { CalendarDays, CircleDot, Cpu, FolderGit2, GitPullRequest, type IconComponent, Server, X } from '@/lib/icons';
 import { Icon, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger } from '@/components/signal';
 import type { Session } from '@/lib/api';
 import { FACET_KEYS, FACETS, type FacetKey, optionLabel, type TaskView } from '@/lib/task-view';
@@ -11,7 +11,7 @@ import { FACET_KEYS, FACETS, type FacetKey, optionLabel, type TaskView } from '@
 
 type Filters = TaskView['filters'];
 
-export const FACET_ICON: Record<FacetKey, LucideIcon> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
+export const FACET_ICON: Record<FacetKey, IconComponent> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
 /**
  * A submenu per facet, each option with how many tasks it matches. Picking one

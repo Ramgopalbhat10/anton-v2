@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from 'lucide-react';
+import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Count, StatusDot } from '@/components/instrument';

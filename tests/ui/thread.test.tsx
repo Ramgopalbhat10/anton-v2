@@ -263,7 +263,7 @@ describe('Thread', () => {
 		expect(header.getAttribute('aria-expanded')).toBe('true');
 		// One mark: the spinner, with the chevron kept for the pointer.
 		expect(within(header).getByRole('status')).toBeTruthy();
-		expect(header.querySelector('svg.lucide-chevron-down')?.getAttribute('class')).toContain('hidden');
+		expect(header.querySelector('svg.icon-chevron-down')?.getAttribute('class')).toContain('hidden');
 		fireEvent.click(header);
 		expect(screen.getByRole('button', { name: /Writing app\.js/ }).getAttribute('aria-expanded')).toBe('false');
 		expect(screen.queryByRole('button', { name: /Worked/ })).toBeNull();
@@ -303,7 +303,7 @@ describe('Thread', () => {
 		const worked = screen.getByRole('button', { name: /Worked/ });
 		// Done, only the chevron.
 		expect(within(worked).queryByRole('status')).toBeNull();
-		expect(worked.querySelector('svg.lucide-chevron-down')?.getAttribute('class')).not.toContain('hidden');
+		expect(worked.querySelector('svg.icon-chevron-down')?.getAttribute('class')).not.toContain('hidden');
 	});
 
 	it('counts a task working on the server as busy, though this page sent nothing', () => {

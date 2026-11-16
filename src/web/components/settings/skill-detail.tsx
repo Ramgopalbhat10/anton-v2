@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, Download, FileText, Info, PanelLeftOpen, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Download, FileText, Info, PanelLeftOpen, RefreshCw, Trash2, X } from '@/lib/icons';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { DocumentMarkdown } from '@/components/document-markdown';
 import { FileIcons } from '@/components/file-icons';

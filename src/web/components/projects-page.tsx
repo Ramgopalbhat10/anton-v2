@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Check, FolderGit2, FolderKanban, MessageSquare, Plus, Search, Settings, X } from 'lucide-react';
+import { Check, FolderGit2, FolderKanban, MessageSquare, Plus, Search, Settings, X } from '@/lib/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ProjectArt } from '@/components/illustrations';

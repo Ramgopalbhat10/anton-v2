@@ -26,7 +26,7 @@ describe('pull request presentation', () => {
 		render(<PrStatus thread={thread} link full />);
 		const chip = screen.getByRole('link', { name: 'Pull request #42 merged' });
 		expect(chip.textContent).toBe('#42');
-		expect(chip.querySelector('.lucide-git-merge')).toBeTruthy();
+		expect(chip.querySelector('.icon-git-merge')).toBeTruthy();
 		expect(chip.className).toContain('rounded-inner');
 		expect(chip.style.background).toContain('--merged-soft');
 		expect(within(chip).queryByText(/merged/i)).toBeNull();

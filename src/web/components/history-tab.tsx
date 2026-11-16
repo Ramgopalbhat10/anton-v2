@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, ChevronLeft, History, RotateCcw } from 'lucide-react';
+import { Check, ChevronLeft, History, RotateCcw } from '@/lib/icons';
 import { useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { useRefreshTask } from '@/components/source-bar';

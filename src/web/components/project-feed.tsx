@@ -2,7 +2,7 @@ import { unrouted } from '../../core/model-route';
 import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAgentResult } from '@flue/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from 'lucide-react';
+import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from '@/lib/icons';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerPlus } from '@/components/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/attachments';

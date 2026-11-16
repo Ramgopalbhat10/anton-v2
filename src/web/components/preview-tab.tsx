@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, Globe, Monitor, Play, RotateCw } from 'lucide-react';
+import { ArrowUpRight, Globe, Monitor, Play, RotateCw } from '@/lib/icons';
 import { useState } from 'react';
 import { useResume } from '@/components/source-bar';
 import { LinkArt, SandboxArt } from '@/components/illustrations';

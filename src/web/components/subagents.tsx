@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
-import { AppWindow, Bot, Check, ChevronRight, CircleAlert, CircleStop, FlaskConical, Monitor, Square, Telescope } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { AppWindow, Bot, Check, ChevronRight, CircleAlert, CircleStop, FlaskConical, Monitor, Square, Telescope } from '@/lib/icons';
 import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { HoverPeek } from '@/components/hover-peek';
 import { Chip } from '@/components/instrument';
@@ -18,7 +18,7 @@ import { taskQueries } from '@/lib/task-queries';
  * the thread and the Agents panel.
  */
 
-type Look = { icon: LucideIcon; tone: string; label: string };
+type Look = { icon: IconComponent; tone: string; label: string };
 
 const LOOKS: Record<string, Look> = {
 	browser: { icon: AppWindow, tone: 'var(--data-3)', label: 'Browser' },

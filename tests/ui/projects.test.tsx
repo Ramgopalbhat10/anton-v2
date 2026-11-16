@@ -125,7 +125,7 @@ describe('threads', () => {
 		expect((await screen.findByLabelText('Pull request #12 open · checks pass')).textContent).toBe('#12');
 		expect(await screen.findByLabelText('Source branch: anton/fix')).toBeTruthy();
 		expect(screen.getByLabelText('Target branch: main')).toBeTruthy();
-		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
+		expect(screen.getByText('Checks passed').querySelector('.icon-circle-check')).toBeTruthy();
 	});
 
 	it('shows failing draft checks in the thread peek', async () => {

@@ -1,6 +1,6 @@
 import { unrouted } from '../../../core/model-route';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, MessageSquareCode, RotateCw } from '@/lib/icons';
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/illustrations';
 import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, StatusDot, Tab, Tabs, usedTone, Well } from '@/components/instrument';

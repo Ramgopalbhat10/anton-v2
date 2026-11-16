@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
-import { Box, Brain, CreditCard, Database, GitBranch, Globe, HardDrive, Link, RotateCw, Split } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { Box, Brain, CreditCard, Database, GitBranch, Globe, HardDrive, Link, RotateCw, Split } from '@/lib/icons';
 import { Card, CardSection, Figure, type Part, SplitBar, Status } from '@/components/instrument';
 import { Btn, Spinner } from '@/components/signal';
 import { api, type Connection } from '@/lib/api';
 import { PageHeading } from './parts';
 
-const ICONS: Record<string, LucideIcon> = { git: GitBranch, sandbox: Box, store: HardDrive, models: Brain, decisions: Split, web: Globe, database: Database };
+const ICONS: Record<string, IconComponent> = { git: GitBranch, sandbox: Box, store: HardDrive, models: Brain, decisions: Split, web: Globe, database: Database };
 
 const STATE = {
 	ok: { tone: 'success', label: 'Connected' },

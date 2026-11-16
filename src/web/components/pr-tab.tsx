@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { DiffList } from '@/components/git-tab';
 import { Count, Segmented, SegmentedItem } from '@/components/instrument';

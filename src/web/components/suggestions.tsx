@@ -1,5 +1,5 @@
 import { type QueryKey, useQuery } from '@tanstack/react-query';
-import { Blocks, FileText, SquareSlash } from 'lucide-react';
+import { Blocks, FileText, SquareSlash } from '@/lib/icons';
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/signal';
 import { api, type Command, type Plugin, type SkillSummary } from '@/lib/api';

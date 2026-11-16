@@ -1,6 +1,6 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from 'lucide-react';
+import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { PanelTab, PanelTabs, Status } from '@/components/instrument';
 import { MenuButton } from '@/components/nav';

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, CloudCheck, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Send, Undo2, X } from 'lucide-react';
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, CloudCheck, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Send, Undo2, X } from '@/lib/icons';
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/editor-pane';
 import { Disclosure } from '@/components/disclosure';

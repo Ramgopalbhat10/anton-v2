@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { BookOpen, Box, Plus, Trash2, Workflow, X } from 'lucide-react';
+import { BookOpen, Box, Plus, Trash2, Workflow, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/automations';
 import { Block, FIELD as WELL_FIELD, PageHeading, SaveState, SubBlock } from '@/components/settings/parts';

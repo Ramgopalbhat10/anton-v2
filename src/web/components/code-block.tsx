@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy } from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { IconBtn } from '@/components/signal';
 import { highlight } from '@/lib/highlight';

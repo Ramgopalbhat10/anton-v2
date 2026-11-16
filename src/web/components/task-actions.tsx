@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from 'lucide-react';
+import { CircleCheck, Copy, FolderKanban, FolderMinus, GitBranch, GitPullRequest, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, ScanSearch, Settings, Square, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
 import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';

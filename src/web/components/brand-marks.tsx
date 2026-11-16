@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LucideIcon, LucideProps } from 'lucide-react';
+import type { IconComponent, IconProps } from '@/lib/icons';
 import { forwardRef } from 'react';
 import { api, type McpServer } from '@/lib/api';
 import type { Brand, BrandId } from '@/lib/brand-icons';
@@ -8,22 +8,22 @@ import { cn } from '@/lib/utils';
 /**
  * Connectors drawn as the products they are: Gmail, Google, and each MCP
  * server by the product its address belongs to, else MCP's own mark. A mark's
- * icon takes the same props as a Lucide icon, so it goes wherever one does
+ * icon takes the same props as an app icon (`IconProps`), so it goes wherever one does
  * (`Icon`, a tool row); `MarkTile` puts it on the light tile apps use for
  * their icons, the same in both themes.
  */
 
 export type Mark = {
 	title: string;
-	icon: LucideIcon;
+	icon: IconComponent;
 	/** The tile's colour for a mark too light to read on white; its icon is then drawn dark. */
 	tile?: string;
 };
 
 type Path = { d: string; fill?: string };
 
-function glyph(name: string, viewBox: string, paths: Path[], fill = 'currentColor'): LucideIcon {
-	const Glyph = forwardRef<SVGSVGElement, LucideProps>(function Glyph({ size = 24, color, strokeWidth: _stroke, absoluteStrokeWidth: _absolute, ...rest }, ref) {
+function glyph(name: string, viewBox: string, paths: Path[], fill = 'currentColor'): IconComponent {
+	const Glyph = forwardRef<SVGSVGElement, IconProps>(function Glyph({ size = 24, color, strokeWidth: _stroke, absoluteStrokeWidth: _absolute, ...rest }, ref) {
 		return (
 			<svg ref={ref} xmlns="http://www.w3.org/2000/svg" viewBox={viewBox} width={size} height={size} fill={color ?? fill} {...rest}>
 				{paths.map((path) => (
@@ -33,7 +33,7 @@ function glyph(name: string, viewBox: string, paths: Path[], fill = 'currentColo
 		);
 	});
 	Glyph.displayName = name;
-	return Glyph as LucideIcon;
+	return Glyph as IconComponent;
 }
 
 /** Gmail's M in its four colours. */
@@ -136,11 +136,11 @@ const imageMarks = new Map<string, Mark>();
 export function imageMark(title: string, src: string): Mark {
 	let mark = imageMarks.get(src);
 	if (!mark) {
-		const Icon = forwardRef<HTMLImageElement, LucideProps>(function Icon({ size = 24 }, ref) {
+		const Icon = forwardRef<HTMLImageElement, IconProps>(function Icon({ size = 24 }, ref) {
 			return <img ref={ref} src={src} width={size} height={size} alt="" aria-hidden />;
 		});
 		Icon.displayName = title;
-		mark = { title, icon: Icon as unknown as LucideIcon };
+		mark = { title, icon: Icon as unknown as IconComponent };
 		imageMarks.set(src, mark);
 	}
 	return mark;

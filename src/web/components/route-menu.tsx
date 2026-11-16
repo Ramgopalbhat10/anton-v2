@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowDownWideNarrow, CircleDollarSign, Gauge, type LucideIcon, Server, Timer } from 'lucide-react';
+import { ArrowDownWideNarrow, CircleDollarSign, Gauge, type IconComponent, Server, Timer } from '@/lib/icons';
 import { Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from '@/components/signal';
 import { api, type ModelEndpoint, type ModelInfo, type ModelRoute, type RouteSort } from '@/lib/api';
 import { dollars, sourceOf, tokens, vendorHue } from '@/lib/model-catalog';
@@ -8,7 +8,7 @@ import { hostLogo } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 
 /** The sorts a gateway ranks a model's providers by, each with what it puts first. */
-export const ROUTE_SORT: Record<RouteSort, { label: string; hint: string; icon: LucideIcon }> = {
+export const ROUTE_SORT: Record<RouteSort, { label: string; hint: string; icon: IconComponent }> = {
 	price: { label: 'Price', hint: 'cheapest first', icon: CircleDollarSign },
 	throughput: { label: 'Throughput', hint: 'fastest output first', icon: Gauge },
 	latency: { label: 'Latency', hint: 'quickest first token first', icon: Timer },

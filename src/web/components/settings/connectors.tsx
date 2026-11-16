@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, Check, Copy, ExternalLink, Plus, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, Plus, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
 import { GMAIL, GOOGLE, type Mark, MarkTile, MCP, useComposioMark, useServerMark } from '@/components/brand-marks';
 import { Status } from '@/components/instrument';

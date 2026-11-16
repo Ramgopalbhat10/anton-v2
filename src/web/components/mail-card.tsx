@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Send, X } from 'lucide-react';
+import { Check, Send, X } from '@/lib/icons';
 import { memo, useContext } from 'react';
 import { GMAIL, MarkTile } from '@/components/brand-marks';
 import { ReplyActions, type ReplyPlace } from '@/components/reply-cards';

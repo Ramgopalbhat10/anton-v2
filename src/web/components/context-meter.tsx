@@ -1,6 +1,6 @@
 import { unrouted } from '../../core/model-route';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, useState } from 'react';
 import { DATA_COLORS } from '@/components/charts';

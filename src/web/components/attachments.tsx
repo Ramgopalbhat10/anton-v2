@@ -1,4 +1,4 @@
-import { File as FileGlyph, FileArchive, FileCode, FileImage, FileSpreadsheet, FileText, type LucideIcon, Paperclip, Presentation, X } from 'lucide-react';
+import { File as FileGlyph, FileArchive, FileCode, FileImage, FileSpreadsheet, FileText, type IconComponent, Paperclip, Presentation, X } from '@/lib/icons';
 import { type ClipboardEvent, type DragEvent, useCallback, useRef, useState } from 'react';
 import { Icon, IconBtn } from '@/components/signal';
 import type { AttachmentRef } from '../../core/attachments';
@@ -6,7 +6,7 @@ import { uniqueUploadNames } from '../../core/upload-name';
 import { type FileAttachment, type ImageAttachment, MAX_FILES, MAX_IMAGES, readAttachments } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
-const EXTENSION_ICONS: Array<[RegExp, LucideIcon]> = [
+const EXTENSION_ICONS: Array<[RegExp, IconComponent]> = [
 	[/\.(xlsx|xlsm|xlsb|xls|ods|numbers|csv|tsv)$/i, FileSpreadsheet],
 	[/\.(pptx|pptm|ppt|odp|key)$/i, Presentation],
 	[/\.(png|jpe?g|gif|webp|svg|heic|bmp|tiff?)$/i, FileImage],
@@ -16,7 +16,7 @@ const EXTENSION_ICONS: Array<[RegExp, LucideIcon]> = [
 ];
 
 /** A glyph for a file by its name. */
-export function fileGlyph(name: string): LucideIcon {
+export function fileGlyph(name: string): IconComponent {
 	return EXTENSION_ICONS.find(([pattern]) => pattern.test(name))?.[1] ?? FileGlyph;
 }
 

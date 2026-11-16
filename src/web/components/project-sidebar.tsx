@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, ListFilter, Plus, Search, Settings, Waypoints, X } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, ListFilter, Plus, Search, Settings, Waypoints, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
 import { PrStatus } from '@/components/pr-status';
 import { ProjectIcon } from '@/components/project-icon';

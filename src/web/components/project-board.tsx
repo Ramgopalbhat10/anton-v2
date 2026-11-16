@@ -1,4 +1,4 @@
-import { FolderGit2, MessageSquare, Plus } from 'lucide-react';
+import { FolderGit2, MessageSquare, Plus } from '@/lib/icons';
 import { PrStatus } from '@/components/pr-status';
 import { Btn, Icon, IconBtn } from '@/components/signal';
 import { useOpenThread } from '@/components/thread-card';

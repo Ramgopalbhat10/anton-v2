@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { Activity, BellRing, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Plug, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { Activity, BellRing, Blocks, Box, Cpu, CreditCard, Folder, HardDrive, KeyRound, Layers, Link, Plug, Settings2, ShieldCheck, SquareTerminal, TriangleAlert } from '@/lib/icons';
 
 export type SectionGroup = 'anton' | 'infrastructure' | 'agent';
 
@@ -10,7 +10,7 @@ export const GROUPS: Array<{ id: SectionGroup; label: string; desc: string }> = 
 ];
 
 /** What names a settings page, without the page: the command palette lists these without loading any settings code. */
-export type SectionInfo = { id: string; group: SectionGroup; label: string; icon: LucideIcon; desc: string };
+export type SectionInfo = { id: string; group: SectionGroup; label: string; icon: IconComponent; desc: string };
 
 /** Every settings page, in nav order. A new page is one entry here and its page in `sections.tsx`. */
 export const SECTION_LIST: SectionInfo[] = [

@@ -1,5 +1,5 @@
 import { unrouted } from '../../core/model-route';
-import { CircleAlert, Plus, Send, Square } from 'lucide-react';
+import { CircleAlert, Plus, Send, Square } from '@/lib/icons';
 import type { ReactNode } from 'react';
 import { Mascot } from '@/components/mascot';
 import { MenuButton } from '@/components/nav';

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { Check } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Spinner } from '@/components/signal';

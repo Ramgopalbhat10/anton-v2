@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, Clock, Github, GitPullRequest, type LucideIcon, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from 'lucide-react';
+import { ArrowUpRight, Clock, Github, GitPullRequest, type IconComponent, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from '@/lib/icons';
 import { type ReactNode, useState } from 'react';
 import { Popover } from 'radix-ui';
 import { Markdown, InlineLinks } from '@/components/markdown';
@@ -28,7 +28,7 @@ export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?:
 	return <ThreadGlyph thread={thread} size={size} />;
 }
 
-type Step = { label: string; icon: LucideIcon; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' | 'PR' } | { stop: true } | { href: string });
+type Step = { label: string; icon: IconComponent; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' | 'PR' } | { stop: true } | { href: string });
 
 /** The next steps a thread offers in its state; each sends that instruction to the thread, as if you typed it. */
 export function nextSteps(thread: Session): Step[] {

@@ -1,4 +1,4 @@
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert } from '@/lib/icons';
 import { Component, type ErrorInfo, type ReactNode, Suspense } from 'react';
 import { Btn, Icon, Spinner } from '@/components/signal';
 import { cn } from '@/lib/utils';

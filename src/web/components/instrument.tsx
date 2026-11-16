@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { X } from 'lucide-react';
+import type { IconComponent } from '@/lib/icons';
+import { X } from '@/lib/icons';
 import { Fragment, type ReactNode } from 'react';
 import { Icon } from '@/components/signal';
 import { useDragScroll } from '@/lib/drag-scroll';
@@ -63,7 +63,7 @@ export function Status({ tone = 'neutral', color, pulse, children }: { tone?: To
 }
 
 /** A card's icon: a bare glyph in the tile's footprint, so titles still line up. */
-export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: LucideIcon; tone?: Tone; size?: number }) {
+export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: IconComponent; tone?: Tone; size?: number }) {
 	return (
 		<span
 			className={cn('inline-flex shrink-0 items-center justify-center', tone === 'neutral' ? 'text-(--text-2)' : TEXT[tone])}
@@ -89,7 +89,7 @@ export function Card({
 	as: As = 'section',
 	label,
 }: {
-	icon?: LucideIcon;
+	icon?: IconComponent;
 	title?: ReactNode;
 	sub?: ReactNode;
 	status?: ReactNode;
@@ -442,7 +442,7 @@ export function Chip({
 	children,
 	className,
 }: {
-	icon?: LucideIcon;
+	icon?: IconComponent;
 	/** Colours only the icon, for a chip that names a kind without shouting it. */
 	iconColor?: string;
 	tone?: Tone;

@@ -12,7 +12,7 @@ describe('pull request reply card', () => {
 		const card = screen.getByRole('link', { name: /Fix checkout/ });
 		const chip = within(card).getByLabelText('Pull request #42 merged');
 		expect(chip.textContent).toBe('#42');
-		expect(chip.querySelector('.lucide-git-merge')).toBeTruthy();
+		expect(chip.querySelector('.icon-git-merge')).toBeTruthy();
 		expect(card.textContent).not.toMatch(/merged/i);
 		expect(card.getAttribute('href')).toBe(url);
 	});
@@ -33,7 +33,7 @@ describe('pull request reply card', () => {
 		]);
 		expect(screen.getByLabelText('Pull request #42 open · checks pass').textContent).toBe('#42');
 		expect(screen.getByText('anton/fix → main')).toBeTruthy();
-		expect(screen.getByText('Checks passed').querySelector('.lucide-circle-check')).toBeTruthy();
+		expect(screen.getByText('Checks passed').querySelector('.icon-circle-check')).toBeTruthy();
 	});
 	it.each(['passed', 'pending', 'failed'] as const)('shows %s checks on a draft PR', (checks) => {
 		const url = 'https://github.com/acme/demo/pull/42';

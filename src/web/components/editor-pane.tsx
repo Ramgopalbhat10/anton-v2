@@ -1,5 +1,5 @@
-import { FileDiff, Files, GitBranch, PanelLeftOpen, X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { FileDiff, Files, GitBranch, PanelLeftOpen, X } from '@/lib/icons';
+import type { IconComponent } from '@/lib/icons';
 import { type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { Icon, IconBtn } from '@/components/signal';
@@ -17,7 +17,7 @@ const SIDE_BY_SIDE_MIN = 520;
 /** What the explorer lists: the repository's files, the work not pushed yet, or everything the branch changed. */
 export type ExplorerMode = 'files' | 'changes' | 'branch';
 
-const MODES: Array<{ mode: ExplorerMode; icon: LucideIcon; label: string }> = [
+const MODES: Array<{ mode: ExplorerMode; icon: IconComponent; label: string }> = [
 	{ mode: 'files', icon: Files, label: 'Files' },
 	{ mode: 'changes', icon: FileDiff, label: 'Changes not pushed' },
 	{ mode: 'branch', icon: GitBranch, label: 'Whole branch' },
